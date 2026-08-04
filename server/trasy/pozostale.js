@@ -10,9 +10,13 @@ const { db } = require('../baza');
 const rejestr = require('../rejestr');
 const przepisy = require('../logika/przepisy');
 const typyZdarzen = require('../logika/typy-zdarzen');
+const terminy = require('../logika/terminy');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
 const { asy } = require('../pomocnicze/odpowiedzi');
+
+/** Sprint bieżąco obsługiwany przez kreator - decyduje o `typy_w_kreatorze`. */
+const SPRINT_KREATORA = 2;
 
 const router = express.Router();
 
@@ -24,10 +28,12 @@ router.get(
   '/meta',
   asy((zad, odp) => {
     odp.json({
-      sprint: 1,
+      sprint: SPRINT_KREATORA,
       portal_wlaczony: konfiguracja.PORTAL_WLACZONY,
       typy_zdarzen: typyZdarzen.TYPY,
-      typy_w_kreatorze: typyZdarzen.dostepneWKreatorze(1).map((t) => t.kod),
+      typy_w_kreatorze: typyZdarzen.dostepneWKreatorze(SPRINT_KREATORA).map((t) => t.kod),
+      zrodla_sprawy: przepisy.ZRODLA_SPRAWY,
+      stany_sprawy: przepisy.STANY_SPRAWY,
       stawki_grosze: przepisy.STAWKI_GROSZE,
       stawki_maksymalne_grosze: przepisy.STAWKI_MAKSYMALNE_GROSZE,
       terminy: przepisy.TERMINY,
@@ -83,17 +89,41 @@ router.get(
 
     const integralnosc = rejestr.zweryfikujIntegralnosc(db());
 
+    // Sprawy w toku, posortowane po pozostalym czasie (sekcja 9 - pulpit,
+    // <=2 dni = wyroznienie --burgundy, po terminie = wyroznienie).
+    const dzis = czas.dzisIso();
+    const sprawyWiersze = db()
+      .prepare(
+        `SELECT sp.*, s.nazwa AS spolka_nazwa
+           FROM psa_sprawy sp
+           JOIN psa_spolki s ON s.id = sp.spolka_id
+          WHERE sp.stan IN ('nowa','weryfikacja','wstrzymana')`
+      )
+      .all();
+    const sprawy = sprawyWiersze
+      .map((s) => ({
+        id: s.id,
+        spolka_id: s.spolka_id,
+        spolka_nazwa: s.spolka_nazwa,
+        typ_nazwa: typyZdarzen.istnieje(s.typ_zdarzenia) ? typyZdarzen.typ(s.typ_zdarzenia).nazwa : s.typ_zdarzenia,
+        stan: s.stan,
+        termin: terminy.policzTermin(s, dzis),
+      }))
+      .sort((a, b) => {
+        if ((a.stan === 'wstrzymana') !== (b.stan === 'wstrzymana')) return a.stan === 'wstrzymana' ? 1 : -1;
+        return (a.termin.dni_pozostale ?? 999) - (b.termin.dni_pozostale ?? 999);
+      });
+
     odp.json({
       spolki,
-      liczniki,
+      liczniki: { ...liczniki, sprawy_w_toku: sprawy.length },
       integralnosc: {
         ok: integralnosc.ok,
         sprawdzono: integralnosc.sprawdzono,
         blad: integralnosc.blad,
       },
-      // Kolejka spraw wchodzi w sprincie 2 (`psa_sprawy`, terminy 7 dni).
-      sprawy: { dostepne: false, od_sprintu: 2, pozycje: [] },
-      dzisiaj: czas.dzisIso(),
+      sprawy: { dostepne: true, pozycje: sprawy },
+      dzisiaj: dzis,
     });
   })
 );

@@ -235,6 +235,280 @@ const PRZYGOTOWANIA = {
       podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
     };
   },
+
+  obciazenie(stan, we, kontekst) {
+    const emisja = wymagajEmisji(stan, we);
+    const data = kontekst.data_zdarzenia;
+    const akcjonariuszId = liczbaCalkowita(we.akcjonariusz_osoba_id, 'akcjonariusz, którego akcje są obciążane');
+    const zastawnikId = liczbaCalkowita(we.osoba_id, 'zastawnik lub użytkownik');
+    const typObciazenia = tekst(we.typ_obciazenia, 'rodzaj obciążenia', { wymagane: false, maks: 20 }) || 'zastaw';
+    if (!['zastaw', 'uzytkowanie'].includes(typObciazenia)) {
+      throw new BladKreatora('Rodzaj obciążenia musi być „zastaw” albo „uzytkowanie”.');
+    }
+    const zablokowane = zakresyZablokowane(stan, emisja.klucz, data);
+    const pulaRef = { wartosc: stanLogika.pula(stan, emisja.klucz, K.AKCJONARIUSZ, akcjonariuszId) };
+    const zakresy = przydzielPozycje(
+      pulaRef,
+      we,
+      `pakiet akcjonariusza w serii ${emisja.seria}`,
+      zablokowane
+    );
+    return {
+      emisja_zdarzenie_id: emisja.klucz,
+      seria: emisja.seria,
+      typ_obciazenia: typObciazenia,
+      akcjonariusz_osoba_id: akcjonariuszId,
+      akcjonariusz_nazwa: nazwaOsoby(kontekst.osoby.get(akcjonariuszId)),
+      osoba_id: zastawnikId,
+      osoba_nazwa: nazwaOsoby(kontekst.osoby.get(zastawnikId)),
+      zakresy,
+      ilosc: n.ilosc(zakresy),
+      prawo_glosu: we.prawo_glosu ? 1 : 0,
+      blokuje_rozporzadzanie: we.blokuje_rozporzadzanie === false ? 0 : 1,
+      opis: tekst(we.opis, 'opis', { wymagane: false, maks: 500 }),
+      podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+    };
+  },
+
+  wykreslenie_obciazenia(stan, we) {
+    const obciazenieId = liczbaCalkowita(we.obciazenie_zdarzenie_id, 'obciążenie do wykreślenia');
+    const cel = stan.obciazenia.find(
+      (o) => o.klucz === obciazenieId && o.data_do === null && o.typ !== 'zajecie'
+    );
+    if (!cel) {
+      throw new BladKreatora('Wskazane obciążenie nie istnieje w rejestrze albo zostało już wykreślone.');
+    }
+    return {
+      obciazenie_zdarzenie_id: obciazenieId,
+      typ_obciazenia: cel.typ,
+      seria: cel.seria,
+      akcjonariusz_osoba_id: cel.akcjonariusz_osoba_id,
+      osoba_id: cel.osoba_id,
+      numery: n.opisz(cel.zakresy),
+      podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+    };
+  },
+
+  prawo_glosu_zastawnika(stan, we) {
+    const obciazenieId = liczbaCalkowita(we.obciazenie_zdarzenie_id, 'obciążenie');
+    const cel = stan.obciazenia.find(
+      (o) => o.klucz === obciazenieId && o.data_do === null && o.typ !== 'zajecie'
+    );
+    if (!cel) {
+      throw new BladKreatora('Wskazane obciążenie nie istnieje w rejestrze albo zostało już wykreślone.');
+    }
+    return {
+      obciazenie_zdarzenie_id: obciazenieId,
+      typ_obciazenia: cel.typ,
+      seria: cel.seria,
+      osoba_id: cel.osoba_id,
+      akcjonariusz_osoba_id: cel.akcjonariusz_osoba_id,
+      prawo_glosu: we.prawo_glosu ? 1 : 0,
+    };
+  },
+
+  zajecie(stan, we, kontekst) {
+    const emisja = wymagajEmisji(stan, we);
+    const organId = we.osoba_id == null || we.osoba_id === '' ? null : liczbaCalkowita(we.osoba_id, 'organ egzekucyjny');
+
+    let zakresy;
+    let akcjonariuszId = null;
+    if (we.akcjonariusz_osoba_id != null && we.akcjonariusz_osoba_id !== '') {
+      akcjonariuszId = liczbaCalkowita(we.akcjonariusz_osoba_id, 'akcjonariusz, którego akcje są zajmowane');
+      const pulaRef = { wartosc: stanLogika.pula(stan, emisja.klucz, K.AKCJONARIUSZ, akcjonariuszId) };
+      // Zajecie jest z urzedu - obciazenia innych wierzycieli go nie blokuja.
+      zakresy = przydzielPozycje(pulaRef, we, `pakiet akcjonariusza w serii ${emisja.seria}`, []);
+    } else {
+      if (!Array.isArray(we.zakresy) || we.zakresy.length === 0) {
+        throw new BladKreatora('Bez wskazania akcjonariusza podaj wprost zajmowane numery akcji.');
+      }
+      zakresy = n.normalizuj(we.zakresy);
+    }
+
+    return {
+      emisja_zdarzenie_id: emisja.klucz,
+      seria: emisja.seria,
+      akcjonariusz_osoba_id: akcjonariuszId,
+      akcjonariusz_nazwa: akcjonariuszId == null ? null : nazwaOsoby(kontekst.osoby.get(akcjonariuszId)),
+      osoba_id: organId,
+      osoba_nazwa: organId == null ? null : nazwaOsoby(kontekst.osoby.get(organId)),
+      zakresy,
+      ilosc: n.ilosc(zakresy),
+      opis: tekst(we.opis, 'opis', { wymagane: false, maks: 500 }),
+    };
+  },
+
+  wykreslenie_zajecia(stan, we) {
+    const obciazenieId = liczbaCalkowita(we.obciazenie_zdarzenie_id, 'zajęcie do uchylenia');
+    const cel = stan.obciazenia.find(
+      (o) => o.klucz === obciazenieId && o.data_do === null && o.typ === 'zajecie'
+    );
+    if (!cel) {
+      throw new BladKreatora('Wskazane zajęcie nie istnieje w rejestrze albo zostało już uchylone.');
+    }
+    return {
+      obciazenie_zdarzenie_id: obciazenieId,
+      seria: cel.seria,
+      akcjonariusz_osoba_id: cel.akcjonariusz_osoba_id,
+      osoba_id: cel.osoba_id,
+      numery: n.opisz(cel.zakresy),
+      opis: tekst(we.opis, 'opis', { wymagane: false, maks: 500 }),
+    };
+  },
+
+  uprawnienie(stan, we, kontekst) {
+    if (we.wykresla_zdarzenie_id != null && we.wykresla_zdarzenie_id !== '') {
+      const celId = liczbaCalkowita(we.wykresla_zdarzenie_id, 'wykreślane uprawnienie');
+      const cel = stan.uprawnienia.find((u) => u.klucz === celId && u.status === 'aktywne');
+      if (!cel) {
+        throw new BladKreatora('Wskazane uprawnienie nie istnieje w rejestrze albo zostało już wykreślone.');
+      }
+      return {
+        wykresla_zdarzenie_id: celId,
+        tytul: cel.tytul,
+        podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+      };
+    }
+
+    const rodzaj = tekst(we.rodzaj, 'rodzaj', { wymagane: false, maks: 20 }) || 'uprawnienie';
+    if (!['uprawnienie', 'przywilej', 'obowiazek'].includes(rodzaj)) {
+      throw new BladKreatora('Rodzaj musi być: uprawnienie, przywilej albo obowiązek.');
+    }
+    const zakres = tekst(we.zakres, 'zakres', { wymagane: false, maks: 20 }) || 'spolka';
+    if (!['spolka', 'emisja', 'akcjonariusz'].includes(zakres)) {
+      throw new BladKreatora('Zakres musi być: spółka, emisja albo akcjonariusz.');
+    }
+    let emisjaKlucz = null;
+    let seria = null;
+    let osobaId = null;
+    if (zakres === 'emisja') {
+      const emisja = wymagajEmisji(stan, we);
+      emisjaKlucz = emisja.klucz;
+      seria = emisja.seria;
+    }
+    if (zakres === 'akcjonariusz') {
+      osobaId = liczbaCalkowita(we.osoba_id, 'akcjonariusz');
+    }
+    const tytul = tekst(we.tytul, 'tytuł', { wymagane: false, maks: 200 });
+    const tresc = tekst(we.tresc, 'treść', { wymagane: false, maks: 2000 });
+    if (!tytul && !tresc) {
+      throw new BladKreatora('Podaj tytuł albo treść uprawnienia.');
+    }
+    return {
+      rodzaj,
+      zakres,
+      emisja_zdarzenie_id: emisjaKlucz,
+      seria,
+      osoba_id: osobaId,
+      osoba_nazwa: osobaId == null ? null : nazwaOsoby(kontekst.osoby.get(osobaId)),
+      tytul,
+      tresc,
+      podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+    };
+  },
+
+  ograniczenie(stan, we) {
+    if (we.wykresla_zdarzenie_id != null && we.wykresla_zdarzenie_id !== '') {
+      const celId = liczbaCalkowita(we.wykresla_zdarzenie_id, 'wykreślane ograniczenie');
+      const cel = stan.ograniczenia.find((o) => o.klucz === celId && o.status === 'aktywne');
+      if (!cel) {
+        throw new BladKreatora('Wskazane ograniczenie nie istnieje w rejestrze albo zostało już wykreślone.');
+      }
+      return {
+        wykresla_zdarzenie_id: celId,
+        opis: cel.opis,
+        podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+      };
+    }
+
+    const zakres = tekst(we.zakres, 'zakres', { wymagane: false, maks: 20 }) || 'wszystkie';
+    if (!['wszystkie', 'emisja', 'zakres_numerow'].includes(zakres)) {
+      throw new BladKreatora('Zakres musi być: wszystkie, emisja albo zakres numerów.');
+    }
+    let emisjaKlucz = null;
+    let seria = null;
+    let zakresy = [];
+    if (zakres === 'emisja' || zakres === 'zakres_numerow') {
+      const emisja = wymagajEmisji(stan, we);
+      emisjaKlucz = emisja.klucz;
+      seria = emisja.seria;
+    }
+    if (zakres === 'zakres_numerow') {
+      if (!Array.isArray(we.zakresy) || we.zakresy.length === 0) {
+        throw new BladKreatora('Wskaż numery akcji objęte ograniczeniem.');
+      }
+      zakresy = n.normalizuj(we.zakresy);
+    }
+    return {
+      zakres,
+      emisja_zdarzenie_id: emisjaKlucz,
+      seria,
+      zakresy,
+      wymaga_zgody_spolki: we.wymaga_zgody_spolki ? 1 : 0,
+      prawo_pierwszenstwa: we.prawo_pierwszenstwa ? 1 : 0,
+      opis: tekst(we.opis, 'opis', { wymagane: false, maks: 500 }),
+      podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+    };
+  },
+
+  zmiana_danych_akcjonariusza(stan, we, kontekst) {
+    const osobaId = liczbaCalkowita(we.osoba_id, 'akcjonariusz');
+    const osoba = kontekst.osoby.get(osobaId);
+    if (!osoba) {
+      throw new BladKreatora('Wskazana osoba nie figuruje w kartotece.');
+    }
+    const dozwolone = [
+      'nazwisko', 'imie', 'nazwa',
+      'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu', 'nr_lokalu',
+      'adres_doreczen', 'adres_edoreczen', 'email', 'telefon', 'zgoda_email',
+    ];
+    const po = we.po && typeof we.po === 'object' ? we.po : {};
+    const zmienione = Object.keys(po).filter(
+      (k) => dozwolone.includes(k) && String(osoba[k] ?? '') !== String(po[k] ?? '')
+    );
+    if (zmienione.length === 0) {
+      throw new BladKreatora('Nie wskazano żadnej zmiany danych.');
+    }
+    return {
+      osoba_id: osobaId,
+      osoba_nazwa: nazwaOsoby(osoba),
+      przed: Object.fromEntries(zmienione.map((k) => [k, osoba[k] ?? null])),
+      po: Object.fromEntries(zmienione.map((k) => [k, po[k] ?? null])),
+      zmienione_pola: zmienione,
+      podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+    };
+  },
+
+  zobowiazanie(stan, we, kontekst) {
+    const akcjonariuszId = liczbaCalkowita(we.akcjonariusz_osoba_id, 'akcjonariusz składający oświadczenie');
+    const rodzaj = tekst(we.rodzaj, 'rodzaj zobowiązania', { wymagane: false, maks: 60 }) || 'przeniesienie';
+    let emisjaKlucz = null;
+    let seria = null;
+    let zakresy = [];
+    if (we.emisja_zdarzenie_id != null && we.emisja_zdarzenie_id !== '') {
+      const emisja = wymagajEmisji(stan, we);
+      emisjaKlucz = emisja.klucz;
+      seria = emisja.seria;
+      if (Array.isArray(we.zakresy) && we.zakresy.length > 0) zakresy = n.normalizuj(we.zakresy);
+    }
+    return {
+      akcjonariusz_osoba_id: akcjonariuszId,
+      akcjonariusz_nazwa: nazwaOsoby(kontekst.osoby.get(akcjonariuszId)),
+      rodzaj,
+      emisja_zdarzenie_id: emisjaKlucz,
+      seria,
+      zakresy,
+      tresc: tekst(we.tresc, 'treść oświadczenia', { wymagane: false, maks: 2000 }),
+      podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+    };
+  },
+
+  zdarzenie_inne(stan, we) {
+    return {
+      opis: tekst(we.opis, 'opis zdarzenia', { maks: 2000 }),
+      podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+    };
+  },
 };
 
 function wymagajEmisji(stan, we) {
@@ -277,6 +551,10 @@ function przygotuj(stan, { typ, data_zdarzenia, dane }, kontekst = {}) {
 function osobyWWejsciu(dane = {}) {
   const idki = new Set();
   if (dane.zbywca_osoba_id != null) idki.add(Number(dane.zbywca_osoba_id));
+  if (dane.osoba_id != null && dane.osoba_id !== '') idki.add(Number(dane.osoba_id));
+  if (dane.akcjonariusz_osoba_id != null && dane.akcjonariusz_osoba_id !== '') {
+    idki.add(Number(dane.akcjonariusz_osoba_id));
+  }
   for (const p of dane.pozycje || []) {
     if (p && p.osoba_id != null && p.osoba_id !== '') idki.add(Number(p.osoba_id));
     if (p && p.nabywca_osoba_id != null) idki.add(Number(p.nabywca_osoba_id));
@@ -284,4 +562,69 @@ function osobyWWejsciu(dane = {}) {
   return [...idki].filter((x) => Number.isInteger(x));
 }
 
-module.exports = { BladKreatora, przygotuj, osobyWWejsciu, zakresyZablokowane, nazwaOsoby };
+/**
+ * Dla zdarzen odwolujacych sie do ISTNIEJACEGO obciazenia (wykreslenie_*,
+ * prawo_glosu_zastawnika) wejscie z kreatora niesie tylko
+ * `obciazenie_zdarzenie_id` - strony (zastawnik, akcjonariusz) trzeba
+ * dociagnac ze stanu, zeby snapshot zdarzenia mial ich oznaczenia.
+ */
+function dodatkoweOsobyZReferencji(stan, typ, we = {}) {
+  const idki = new Set();
+  const typyOdwolujaceSieDoObciazenia = [
+    'wykreslenie_obciazenia',
+    'wykreslenie_zajecia',
+    'prawo_glosu_zastawnika',
+  ];
+  if (typyOdwolujaceSieDoObciazenia.includes(typ) && we.obciazenie_zdarzenie_id != null) {
+    const cel = stan.obciazenia.find((o) => o.klucz === Number(we.obciazenie_zdarzenie_id));
+    if (cel) {
+      if (cel.osoba_id != null) idki.add(cel.osoba_id);
+      if (cel.akcjonariusz_osoba_id != null) idki.add(cel.akcjonariusz_osoba_id);
+    }
+  }
+  return [...idki];
+}
+
+/**
+ * Przygotowuje tresc zdarzenia „sprostowanie” (endpoint `zdarzenia/:id/sprostuj`).
+ *
+ * Gdy podano `zamiast`, budujemy skorygowana tresc TYM SAMYM budowniczym co
+ * zdarzenie pierwotne, wzgledem stanu TUZ PRZED zdarzeniem pierwotnym
+ * (chronologicznie) - nie "bez niego w ogole". Roznica ma znaczenie, gdy
+ * cos juz od zdarzenia pierwotnego zalezy (np. `objecie` po `emisji`):
+ * wykluczenie calego zdarzenia z listy zrywaloby referencje downstream
+ * zdarzen w trakcie samego liczenia tresci; stan sprzed niego jest naturalna
+ * baza do pytania "jak to zdarzenie powinno bylo wygladac", bez tego problemu.
+ */
+function przygotujSprostowanie({ zdarzenia, zdarzeniePierwotneId, data_zdarzenia, uzasadnienie, zamiast }, kontekst = {}) {
+  const uzas = tekst(uzasadnienie, 'uzasadnienie sprostowania', { maks: 2000 });
+
+  if (!zamiast || !zamiast.typ) {
+    return { dane: { uzasadnienie: uzas } };
+  }
+  if (!PRZYGOTOWANIA[zamiast.typ]) {
+    throw new BladKreatora(`Sprostowanie na typ „${zamiast.typ}” nie jest obsługiwane przez kreator.`);
+  }
+
+  const posortowane = [...(zdarzenia || [])].sort(stanLogika.porownajZdarzenia);
+  const indeks = posortowane.findIndex((z) => Number(z.id) === Number(zdarzeniePierwotneId));
+  const przedPierwotnym = indeks === -1 ? posortowane : posortowane.slice(0, indeks);
+  const stanPrzedPierwotnym = stanLogika.odtworzStan(przedPierwotnym);
+
+  const tresc = PRZYGOTOWANIA[zamiast.typ](stanPrzedPierwotnym, zamiast.dane || {}, {
+    data_zdarzenia,
+    osoby: kontekst.osoby instanceof Map ? kontekst.osoby : new Map(),
+  });
+
+  return { dane: { zamiast: { typ: zamiast.typ, ...tresc }, uzasadnienie: uzas } };
+}
+
+module.exports = {
+  BladKreatora,
+  przygotuj,
+  przygotujSprostowanie,
+  osobyWWejsciu,
+  dodatkoweOsobyZReferencji,
+  zakresyZablokowane,
+  nazwaOsoby,
+};

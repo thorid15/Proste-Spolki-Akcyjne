@@ -72,6 +72,7 @@ const API = {
   get: (s) => zapytaj('GET', s),
   post: (s, c) => zapytaj('POST', s, c === undefined ? {} : c),
   put: (s, c) => zapytaj('PUT', s, c),
+  patch: (s, c) => zapytaj('PATCH', s, c === undefined ? {} : c),
 };
 
 /* ─────────────────────────────────────────────────────
@@ -164,12 +165,17 @@ function useTrasa() {
 /* ─────────────────────────────────────────────────────
    HAKI
    ───────────────────────────────────────────────────── */
-/** Pobranie danych z API ze stanem ładowania, błędu i odświeżaniem. */
+/**
+ * Pobranie danych z API ze stanem ładowania, błędu i odświeżaniem.
+ * `sciezka` fałszywa (np. `null`, dopóki zależne dane jeszcze się ładują)
+ * wstrzymuje zapytanie — zostaje w stanie `ladowanie: true` bez odpytywania API.
+ */
 function useDane(sciezka, zaleznosci = []) {
   const [stan, ustawStan] = useState({ dane: null, ladowanie: true, blad: null });
   const [znacznik, odswiez] = useState(0);
 
   useEffect(() => {
+    if (!sciezka) return undefined;
     let aktualne = true;
     ustawStan((p) => ({ ...p, ladowanie: true }));
     API.get(sciezka)

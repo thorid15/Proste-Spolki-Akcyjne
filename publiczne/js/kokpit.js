@@ -118,9 +118,61 @@ function TabelaAkcjonariatu({ akcjonariusze, razem }) {
   );
 }
 
+/** Sprostowanie jako czysta adnotacja — pełne wycofanie zdarzenia jest gestem
+    wyjątkowym, więc UI oferuje wyłącznie ścieżkę „uzasadnienie” (bez `zamiast`,
+    dla zdarzeń bez zależnych) — patrz README, sekcja o zakresie sprintu 2. */
+function ModalSprostowania({ zdarzenie, przyZamknieciu, przyZapisie }) {
+  const [uzasadnienie, ustawUzasadnienie] = useState('');
+  const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+
+  async function zapisz() {
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    try {
+      await API.post(`/api/psa/zdarzenia/${zdarzenie.id}/sprostuj`, { uzasadnienie });
+      przyZapisie();
+    } catch (e) {
+      ustawBlad(e.message);
+      ustawZapisywanie(false);
+    }
+  }
+
+  return (
+    <Modal
+      tytul={`Sprostowanie zdarzenia #${zdarzenie.id}`}
+      przyZamknieciu={przyZamknieciu}
+      szerokosc={560}
+      stopka={
+        <>
+          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          <button className="btn btn-primary" disabled={!uzasadnienie.trim() || zapisywanie} onClick={zapisz}>
+            {zapisywanie ? 'Zapisywanie…' : 'Zapisz sprostowanie'}
+          </button>
+        </>
+      }
+    >
+      <Komunikat odmiana="blad" tresc={blad} />
+      <Komunikat
+        odmiana="info"
+        tresc={
+          'Rejestr jest niezmienialny — sprostowanie jest NOWYM zdarzeniem wskazującym ' +
+          'zdarzenie prostowane. Bez treści zastępczej jest to pełne wycofanie tego zdarzenia ' +
+          '(nie ma czym go zastąpić) — możliwe tylko, gdy nic innego już od niego nie zależy.'
+        }
+      />
+      <Pole etykieta={`Prostowane zdarzenie: ${zdarzenie.podsumowanie || zdarzenie.typ}`} />
+      <Pole etykieta="Uzasadnienie" wymagane>
+        <textarea value={uzasadnienie} onChange={(z) => ustawUzasadnienie(z.target.value)} autoFocus />
+      </Pole>
+    </Modal>
+  );
+}
+
 function EkranKokpitu({ spolkaId }) {
   const [data, ustawDate] = useState(fmt.dzisIso());
   const [przeliczanie, ustawPrzeliczanie] = useState(null);
+  const [sprostowanie, ustawSprostowanie] = useState(null);
   const { dane, ladowanie, blad, odswiez } = useDane(
     `/api/psa/spolki/${spolkaId}?data=${data}`,
     [data]
@@ -263,7 +315,7 @@ function EkranKokpitu({ spolkaId }) {
         {uprawnienia.length === 0 ? (
           <Pusto
             tytul="Brak zarejestrowanych uprawnień"
-            opis="Uprawnienia, przywileje i obowiązki akcjonariuszy — kreator wchodzi w sprincie 2."
+            opis="Uprawnienia, przywileje i obowiązki akcjonariuszy zakładasz przez zdarzenie „Uprawnienie”."
           />
         ) : (
           <table className="tbl">
@@ -289,7 +341,7 @@ function EkranKokpitu({ spolkaId }) {
         {obciazenia.length === 0 ? (
           <Pusto
             tytul="Brak obciążeń i zajęć"
-            opis="Zastawy, użytkowanie i zajęcia egzekucyjne — kreator wchodzi w sprincie 2."
+            opis="Zastawy, użytkowanie i zajęcia egzekucyjne zakładasz przez odpowiednie zdarzenie w kreatorze."
           />
         ) : (
           <table className="tbl">
@@ -320,7 +372,7 @@ function EkranKokpitu({ spolkaId }) {
         {ograniczenia.length === 0 ? (
           <Pusto
             tytul="Brak ograniczeń"
-            opis="Ograniczenia z art. 300(33) § 1 pkt 10 KSH — kreator wchodzi w sprincie 2."
+            opis="Ograniczenia z art. 300(33) § 1 pkt 10 KSH zakładasz przez zdarzenie „Ograniczenie”."
           />
         ) : (
           <table className="tbl">
@@ -359,8 +411,15 @@ function EkranKokpitu({ spolkaId }) {
             <div className="os">
               {zdarzenia.map((z) => (
                 <div key={z.id} className="os-poz">
-                  <div className="os-data">
-                    {fmt.data(z.data_zdarzenia)} · zdarzenie #{z.id}
+                  <div className="row-b">
+                    <div className="os-data">
+                      {fmt.data(z.data_zdarzenia)} · zdarzenie #{z.id}
+                    </div>
+                    {z.typ !== 'sprostowanie' && (
+                      <button className="btn btn-sm bez-druku" onClick={() => ustawSprostowanie(z)}>
+                        Sprostuj
+                      </button>
+                    )}
                   </div>
                   <div className="os-tresc">
                     {z.podsumowanie || `Zdarzenie typu „${z.typ}”.`}
@@ -384,6 +443,17 @@ function EkranKokpitu({ spolkaId }) {
         Rejestru nie da się edytować ani skasować. Pomyłkę prostuje się zdarzeniem
         „sprostowanie”, które wskazuje zdarzenie prostowane — oba pozostają w łańcuchu.
       </div>
+
+      {sprostowanie && (
+        <ModalSprostowania
+          zdarzenie={sprostowanie}
+          przyZamknieciu={() => ustawSprostowanie(null)}
+          przyZapisie={() => {
+            ustawSprostowanie(null);
+            odswiez();
+          }}
+        />
+      )}
     </>
   );
 }

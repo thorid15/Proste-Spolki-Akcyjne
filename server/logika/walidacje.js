@@ -26,12 +26,19 @@ function dzisiajIso(dzisiaj) {
   return String(dzisiaj || new Date().toISOString().slice(0, 10)).slice(0, 10);
 }
 
-/** Wszystkie zakresy dotkniete zdarzeniem, per emisja. */
+/**
+ * Wszystkie zakresy dotkniete zdarzeniem, per emisja.
+ * Zakresy niosa albo `dane.pozycje[].zakresy` (objecie/przeniesienie/umorzenie),
+ * albo `dane.zakresy` wprost (obciazenie/zajecie - zdarzenie dotyczy jednej
+ * pozycji, bez tablicy `pozycje`).
+ */
 function dotknieteZakresy(dane) {
   const wynik = new Map();
   const klucz = dane.emisja_zdarzenie_id == null ? null : Number(dane.emisja_zdarzenie_id);
   if (klucz == null) return wynik;
-  const zakresy = n.normalizuj((dane.pozycje || []).flatMap((p) => p.zakresy || []));
+  const zPozycji = (dane.pozycje || []).flatMap((p) => p.zakresy || []);
+  const zBezposrednio = Array.isArray(dane.zakresy) ? dane.zakresy : [];
+  const zakresy = n.normalizuj([...zPozycji, ...zBezposrednio]);
   if (zakresy.length > 0) wynik.set(klucz, zakresy);
   return wynik;
 }
@@ -85,6 +92,10 @@ function sprawdzChronologie(stanPrzed, propozycja, bledy) {
 }
 
 function sprawdzObciazenia(stanPrzed, propozycja, bledy) {
+  // Zajecie jest z urzedu (art. 300(34) § 2 KSH) - nie jest "rozporzadzeniem"
+  // akcja, wiec nie blokuje go istniejace obciazenie. Kilku wierzycieli moze
+  // legalnie zajac te same akcje po kolei.
+  if (propozycja.typ === 'zajecie') return;
   const data = String(propozycja.data_zdarzenia || '');
   for (const [emisjaKlucz, zakresy] of dotknieteZakresy(propozycja.dane)) {
     const blokujace = stanLogika
@@ -154,6 +165,12 @@ function sprawdzAml(propozycja, osoby, bledy, ostrzezenia) {
   if (propozycja.typ === 'przeniesienie') {
     for (const p of dane.pozycje || []) nabywcy.add(Number(p.nabywca_osoba_id));
   }
+  // Obciazenie (zastaw/uzytkowanie) tworzy nowy tytul prawny do akcji na
+  // rzecz zastawnika/uzytkownika - traktujemy go jak nabywce dla celow AML.
+  // Zajecie jest z urzedu (organ egzekucyjny) - poza rezimem AML.
+  if (propozycja.typ === 'obciazenie' && dane.osoba_id != null) {
+    nabywcy.add(Number(dane.osoba_id));
+  }
 
   for (const id of nabywcy) {
     const osoba = osoby.get(id);
@@ -176,6 +193,10 @@ function sprawdzOsoby(propozycja, osoby, bledy) {
   const dane = propozycja.dane || {};
   const wymagane = new Set();
   if (dane.zbywca_osoba_id != null) wymagane.add(Number(dane.zbywca_osoba_id));
+  if (dane.osoba_id != null && dane.osoba_id !== '') wymagane.add(Number(dane.osoba_id));
+  if (dane.akcjonariusz_osoba_id != null && dane.akcjonariusz_osoba_id !== '') {
+    wymagane.add(Number(dane.akcjonariusz_osoba_id));
+  }
   for (const p of dane.pozycje || []) {
     if (p.osoba_id != null) wymagane.add(Number(p.osoba_id));
     if (p.nabywca_osoba_id != null) wymagane.add(Number(p.nabywca_osoba_id));
@@ -296,6 +317,148 @@ const PER_TYP = {
   },
 
   zmiana_danych_spolki() {},
+
+  obciazenie(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
+    if (!emisja) {
+      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
+      return;
+    }
+    if (Number(d.osoba_id) === Number(d.akcjonariusz_osoba_id)) {
+      bledy.push('Zastawnik (użytkownik) i akcjonariusz nie mogą być tą samą osobą.');
+    }
+    const pakiet = stanLogika.pula(stanPrzed, emisja.klucz, K.AKCJONARIUSZ, Number(d.akcjonariusz_osoba_id));
+    const zadane = n.normalizuj(d.zakresy || []);
+    const brakujace = n.roznica(zadane, pakiet);
+    if (brakujace.length > 0) {
+      bledy.push(
+        `Akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria} na dzień ${propozycja.data_zdarzenia}.`
+      );
+    }
+  },
+
+  wykreslenie_obciazenia(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    const cel = stanPrzed.obciazenia.find(
+      (o) => o.klucz === Number(d.obciazenie_zdarzenie_id) && o.data_do === null
+    );
+    if (!cel) {
+      bledy.push('Wskazane obciążenie nie istnieje w rejestrze albo zostało już wykreślone.');
+      return;
+    }
+    if (cel.typ === 'zajecie') {
+      bledy.push(
+        'Zajęcie egzekucyjne wykreśla się zdarzeniem „uchylenie zajęcia”, nie „wykreślenie obciążenia”.'
+      );
+    }
+  },
+
+  prawo_glosu_zastawnika(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    const cel = stanPrzed.obciazenia.find(
+      (o) => o.klucz === Number(d.obciazenie_zdarzenie_id) && o.data_do === null
+    );
+    if (!cel) {
+      bledy.push('Wskazane obciążenie nie istnieje w rejestrze albo zostało już wykreślone.');
+      return;
+    }
+    if (cel.typ === 'zajecie') {
+      bledy.push('Prawo głosu zastawnika dotyczy zastawu lub użytkowania, nie zajęcia egzekucyjnego.');
+    }
+  },
+
+  zajecie(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
+    if (!emisja) {
+      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
+      return;
+    }
+    const zadane = n.normalizuj(d.zakresy || []);
+    if (zadane.length === 0) {
+      bledy.push('Nie zidentyfikowano akcji objętych zajęciem.');
+      return;
+    }
+    if (d.akcjonariusz_osoba_id != null) {
+      const pakiet = stanLogika.pula(stanPrzed, emisja.klucz, K.AKCJONARIUSZ, Number(d.akcjonariusz_osoba_id));
+      const brakujace = n.roznica(zadane, pakiet);
+      if (brakujace.length > 0) {
+        bledy.push(
+          `Wskazany akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria} ` +
+            `na dzień ${propozycja.data_zdarzenia}.`
+        );
+      }
+    } else {
+      const brakujace = n.roznica(zadane, n.zakresEmisji(emisja));
+      if (brakujace.length > 0) {
+        bledy.push(`Numery ${n.opisz(brakujace)} wykraczają poza zakres emisji ${emisja.seria}.`);
+      }
+    }
+  },
+
+  wykreslenie_zajecia(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    const cel = stanPrzed.obciazenia.find(
+      (o) => o.klucz === Number(d.obciazenie_zdarzenie_id) && o.data_do === null && o.typ === 'zajecie'
+    );
+    if (!cel) {
+      bledy.push('Wskazane zajęcie nie istnieje w rejestrze albo zostało już uchylone.');
+    }
+  },
+
+  uprawnienie(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    if (d.wykresla_zdarzenie_id != null) {
+      const cel = stanPrzed.uprawnienia.find(
+        (u) => u.klucz === Number(d.wykresla_zdarzenie_id) && u.status === 'aktywne'
+      );
+      if (!cel) bledy.push('Wskazane uprawnienie nie istnieje w rejestrze albo zostało już wykreślone.');
+      return;
+    }
+    if (d.zakres === 'emisja' && !stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id))) {
+      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
+    }
+    if (!d.tytul && !d.tresc) {
+      bledy.push('Uprawnienie wymaga podania tytułu albo treści.');
+    }
+  },
+
+  ograniczenie(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    if (d.wykresla_zdarzenie_id != null) {
+      const cel = stanPrzed.ograniczenia.find(
+        (o) => o.klucz === Number(d.wykresla_zdarzenie_id) && o.status === 'aktywne'
+      );
+      if (!cel) bledy.push('Wskazane ograniczenie nie istnieje w rejestrze albo zostało już wykreślone.');
+      return;
+    }
+    if (
+      (d.zakres === 'emisja' || d.zakres === 'zakres_numerow') &&
+      !stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id))
+    ) {
+      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
+    }
+    if (d.zakres === 'zakres_numerow' && (!Array.isArray(d.zakresy) || d.zakresy.length === 0)) {
+      bledy.push('Wskaż numery akcji objęte ograniczeniem.');
+    }
+  },
+
+  zmiana_danych_akcjonariusza(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    if (!Array.isArray(d.zmienione_pola) || d.zmienione_pola.length === 0) {
+      bledy.push('Nie wskazano żadnej zmiany danych.');
+    }
+  },
+
+  zobowiazanie(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    if (d.emisja_zdarzenie_id != null && !stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id))) {
+      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
+    }
+  },
+
+  zdarzenie_inne() {},
 };
 
 /** Dwie pozycje jednego zdarzenia nie moga siegac po te same akcje. */

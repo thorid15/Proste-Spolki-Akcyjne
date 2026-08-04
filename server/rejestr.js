@@ -332,7 +332,14 @@ function przygotujPodglad(db, { spolkaId, typ, data_zdarzenia, wejscie, dzisiaj 
 
   const zdarzenia = wczytajZdarzenia(db, spolkaId);
   const stanPrzed = stanLogika.odtworzStan(zdarzenia);
-  const osoby = wczytajOsoby(db, kreator.osobyWWejsciu(wejscie || {}));
+  // Zdarzenia odwolujace sie do istniejacego obciazenia (wykreslenie_*,
+  // prawo_glosu_zastawnika) niosa w wejsciu tylko `obciazenie_zdarzenie_id` -
+  // strony trzeba dociagnac ze stanu, inaczej `sprawdzOsoby` nie znajdzie ich
+  // w kartotece mimo ze sa poprawne (patrz kreator.dodatkoweOsobyZReferencji).
+  const osoby = wczytajOsoby(db, [
+    ...kreator.osobyWWejsciu(wejscie || {}),
+    ...kreator.dodatkoweOsobyZReferencji(stanPrzed, typ, wejscie || {}),
+  ]);
 
   const dane = kreator.przygotuj(
     stanPrzed,
@@ -352,45 +359,175 @@ function przygotujPodglad(db, { spolkaId, typ, data_zdarzenia, wejscie, dzisiaj 
 }
 
 /**
+ * Rdzen wpisu: zdarzenie + pelne przeliczenie materializacji + (dla
+ * `zmiana_danych_akcjonariusza`) zastosowanie zmiany do `psa_osoby`.
+ *
+ * ZAKLADA, ze jest wywolywana wewnatrz juz otwartej transakcji - wolno ja
+ * zagniezdzac (np. `dokonajWpisuSprawy` otwiera JEDNA transakcje obejmujaca
+ * ten wpis oraz aktualizacje stanu sprawy).
+ */
+function _wykonajWpis(db, zlecenie) {
+  const podglad = przygotujPodglad(db, zlecenie);
+  if (!podglad.dopuszczalne) {
+    throw new BladWalidacji(podglad.bledy, podglad.ostrzezenia);
+  }
+
+  const zdarzenie = zapiszZdarzenie(db, {
+    spolka_id: zlecenie.spolkaId,
+    typ: zlecenie.typ,
+    data_zdarzenia: zlecenie.data_zdarzenia,
+    autor: zlecenie.autor,
+    sprawa_id: zlecenie.sprawa_id ?? null,
+    dane: podglad.dane,
+    zdarzenie_prostowane_id: zlecenie.zdarzenie_prostowane_id ?? null,
+    uzasadnienie: zlecenie.uzasadnienie ?? null,
+  });
+
+  // Zmiana danych akcjonariusza aktualizuje ZRODLO PRAWDY tych danych -
+  // kartoteke `psa_osoby` - jako efekt uboczny zapisu zdarzenia. Sama
+  // materializacja stanu akcji tego typu nie dotyczy (TYPY_BEZ_SKUTKU).
+  if (zlecenie.typ === 'zmiana_danych_akcjonariusza' && podglad.dane.po) {
+    const pola = Object.keys(podglad.dane.po);
+    db.prepare(
+      `UPDATE psa_osoby SET ${pola.map((k) => `${k} = @${k}`).join(', ')}, zaktualizowano = @zaktualizowano
+       WHERE id = @id`
+    ).run({ ...podglad.dane.po, zaktualizowano: czas.terazIso(), id: podglad.dane.osoba_id });
+  }
+
+  const { niezgodnosci } = zmaterializuj(db, zlecenie.spolkaId);
+  if (niezgodnosci.length > 0) {
+    // Nie powinno wystapic - walidacja sprawdza bilans przed zapisem.
+    // Jesli jednak wystapi, transakcja sie cofa i rejestr zostaje spojny.
+    throw new BladWalidacji(niezgodnosci.map((k) => `Bilans akcji: ${k}`));
+  }
+
+  db.prepare('UPDATE psa_spolki SET zaktualizowano = ? WHERE id = ?').run(
+    czas.terazIso(),
+    zlecenie.spolkaId
+  );
+
+  return {
+    zdarzenie,
+    ostrzezenia: podglad.ostrzezenia,
+    typ: typyZdarzen.typ(zlecenie.typ),
+  };
+}
+
+/**
  * Dokonuje wpisu: zdarzenie + pelne przeliczenie materializacji.
  * Cala operacja w jednej transakcji IMMEDIATE - albo rejestr zmienia sie
  * w calosci, albo wcale.
  */
 function dokonajWpisu(db, zlecenie) {
+  const transakcja = db.transaction(() => _wykonajWpis(db, zlecenie));
+  return transakcja.immediate();
+}
+
+/**
+ * Dokonuje wpisu w ramach WORKFLOW SPRAWY: sprawa musi byc w stanie
+ * `weryfikacja`; po wpisie przechodzi do `wpisana` ze wskazaniem zdarzenia.
+ * Typ zdarzenia jest ustalony przez sprawe (nie da sie go zmienic w locie).
+ *
+ * Generowanie i wysylka zawiadomien o wpisie NASTEPUJE POZA ta transakcja
+ * (patrz `server/zawiadomienia.js`) - to operacja sieciowa (e-mail), ktora
+ * nie moze trzymac otwartej transakcji SQLite i ktorej niepowodzenie nie
+ * jest powodem do cofniecia juz dokonanego, wazneg wpisu (art. 300(34) § 7
+ * KSH nakazuje powiadomienie jako obowiazek NASTEPCZY wobec wpisu).
+ */
+function dokonajWpisuSprawy(db, { sprawaId, data_zdarzenia, wejscie, autor }) {
   const transakcja = db.transaction(() => {
-    const podglad = przygotujPodglad(db, zlecenie);
-    if (!podglad.dopuszczalne) {
-      throw new BladWalidacji(podglad.bledy, podglad.ostrzezenia);
+    const sprawa = db.prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
+    if (!sprawa) throw new BladWalidacji(['Nie odnaleziono sprawy.']);
+    if (sprawa.stan !== 'weryfikacja') {
+      throw new BladWalidacji([
+        `Wpisu można dokonać wyłącznie ze stanu „weryfikacja” (sprawa jest w stanie „${sprawa.stan}”).`,
+      ]);
+    }
+
+    const wynik = _wykonajWpis(db, {
+      spolkaId: sprawa.spolka_id,
+      typ: sprawa.typ_zdarzenia,
+      data_zdarzenia,
+      wejscie,
+      autor,
+      sprawa_id: sprawaId,
+    });
+
+    db.prepare(
+      `UPDATE psa_sprawy SET stan = 'wpisana', zdarzenie_id = @zid, zaktualizowano = @teraz WHERE id = @id`
+    ).run({ zid: wynik.zdarzenie.id, teraz: czas.terazIso(), id: sprawaId });
+
+    return { sprawa: { ...sprawa, stan: 'wpisana', zdarzenie_id: wynik.zdarzenie.id }, wynik };
+  });
+
+  return transakcja.immediate();
+}
+
+/**
+ * Sprostowanie wczesniejszego zdarzenia (regula domenowa nr 1 - jedyna droga
+ * korekty). `zamiast` (opcjonalne) niesie skorygowana tresc - patrz
+ * `kreator.przygotujSprostowanie`.
+ */
+function dokonajSprostowania(db, { zdarzeniePierwotneId, uzasadnienie, zamiast, autor, data_zdarzenia }) {
+  const transakcja = db.transaction(() => {
+    const pierwotne = db.prepare('SELECT * FROM psa_zdarzenia WHERE id = ?').get(zdarzeniePierwotneId);
+    if (!pierwotne) throw new BladWalidacji(['Nie odnaleziono zdarzenia do sprostowania.']);
+    if (pierwotne.typ === 'sprostowanie') {
+      throw new BladWalidacji(['Nie prostuje się zdarzenia będącego sprostowaniem — wskaż zdarzenie źródłowe.']);
+    }
+    const jużSprostowane = db
+      .prepare('SELECT id FROM psa_zdarzenia WHERE zdarzenie_prostowane_id = ?')
+      .get(zdarzeniePierwotneId);
+    if (jużSprostowane) {
+      throw new BladWalidacji([`To zdarzenie zostało już sprostowane zdarzeniem #${jużSprostowane.id}.`]);
+    }
+    if (!uzasadnienie || !String(uzasadnienie).trim()) {
+      throw new BladWalidacji(['Sprostowanie wymaga uzasadnienia wskazującego, na czym polegała pomyłka.']);
+    }
+
+    const spolkaId = pierwotne.spolka_id;
+    const spolka = wczytajSpolke(db, spolkaId);
+    const zdarzenia = wczytajZdarzenia(db, spolkaId);
+    const dataZd = data_zdarzenia || pierwotne.data_zdarzenia;
+
+    const osoby = wczytajOsoby(
+      db,
+      zamiast ? kreator.osobyWWejsciu(zamiast.dane || {}) : []
+    );
+
+    const { dane } = kreator.przygotujSprostowanie(
+      { zdarzenia, zdarzeniePierwotneId, data_zdarzenia: dataZd, uzasadnienie, zamiast },
+      { osoby }
+    );
+
+    const propozycja = {
+      typ: 'sprostowanie',
+      data_zdarzenia: dataZd,
+      dane,
+      zdarzenie_prostowane_id: zdarzeniePierwotneId,
+    };
+    const wynikWalidacji = walidacje.sprawdz({ zdarzenia, propozycja, spolka, osoby });
+    if (!wynikWalidacji.dopuszczalne) {
+      throw new BladWalidacji(wynikWalidacji.bledy, wynikWalidacji.ostrzezenia);
     }
 
     const zdarzenie = zapiszZdarzenie(db, {
-      spolka_id: zlecenie.spolkaId,
-      typ: zlecenie.typ,
-      data_zdarzenia: zlecenie.data_zdarzenia,
-      autor: zlecenie.autor,
-      sprawa_id: zlecenie.sprawa_id ?? null,
-      dane: podglad.dane,
-      zdarzenie_prostowane_id: zlecenie.zdarzenie_prostowane_id ?? null,
-      uzasadnienie: zlecenie.uzasadnienie ?? null,
+      spolka_id: spolkaId,
+      typ: 'sprostowanie',
+      data_zdarzenia: dataZd,
+      autor,
+      dane,
+      zdarzenie_prostowane_id: zdarzeniePierwotneId,
+      uzasadnienie,
     });
 
-    const { niezgodnosci } = zmaterializuj(db, zlecenie.spolkaId);
+    const { niezgodnosci } = zmaterializuj(db, spolkaId);
     if (niezgodnosci.length > 0) {
-      // Nie powinno wystapic - walidacja sprawdza bilans przed zapisem.
-      // Jesli jednak wystapi, transakcja sie cofa i rejestr zostaje spojny.
       throw new BladWalidacji(niezgodnosci.map((k) => `Bilans akcji: ${k}`));
     }
+    db.prepare('UPDATE psa_spolki SET zaktualizowano = ? WHERE id = ?').run(czas.terazIso(), spolkaId);
 
-    db.prepare('UPDATE psa_spolki SET zaktualizowano = ? WHERE id = ?').run(
-      czas.terazIso(),
-      zlecenie.spolkaId
-    );
-
-    return {
-      zdarzenie,
-      ostrzezenia: podglad.ostrzezenia,
-      typ: typyZdarzen.typ(zlecenie.typ),
-    };
+    return { zdarzenie, ostrzezenia: wynikWalidacji.ostrzezenia };
   });
 
   return transakcja.immediate();
@@ -419,6 +556,8 @@ module.exports = {
   zmaterializuj,
   przygotujPodglad,
   dokonajWpisu,
+  dokonajWpisuSprawy,
+  dokonajSprostowania,
   przelicz,
   zweryfikujIntegralnosc,
 };

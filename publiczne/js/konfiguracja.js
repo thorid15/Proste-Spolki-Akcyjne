@@ -84,8 +84,8 @@ function EkranStawek() {
             </Para>
           </dl>
           <div className="podstawa-prawna odstep-g">
-            Liczenie terminu 7 dni z zawieszeniem na czas usuwania przeszkody wchodzi w sprincie 2
-            (<span className="mono">server/logika/terminy.js</span>).
+            Termin 7 dni liczony w <span className="mono">server/logika/terminy.js</span> —
+            zamrożony w stanie „wstrzymana”, po wznowieniu biegnie od nowa w pełnym wymiarze.
           </div>
         </Karta>
 
@@ -159,6 +159,8 @@ function EkranStawek() {
                 <td>
                   {dane.typy_w_kreatorze.includes(t.kod) ? (
                     <Znacznik odmiana="zielony">w kreatorze</Znacznik>
+                  ) : t.sprint <= dane.sprint ? (
+                    <Znacznik odmiana="neutralny">przez edycję danych spółki</Znacznik>
                   ) : (
                     <Znacznik odmiana="neutralny">sprint {t.sprint}</Znacznik>
                   )}

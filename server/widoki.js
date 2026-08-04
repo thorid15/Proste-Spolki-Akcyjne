@@ -203,6 +203,50 @@ function podsumujZdarzenie(z, osoby) {
       }.`;
     case 'zmiana_danych_spolki':
       return `Zmiana danych spółki: ${(d.zmienione_pola || []).join(', ') || 'bez wskazania pól'}.`;
+    case 'obciazenie':
+      return `Ustanowienie ${d.typ_obciazenia === 'uzytkowanie' ? 'użytkowania' : 'zastawu'} na ${
+        d.ilosc
+      } akcjach serii ${d.seria} (numery ${n.opisz(d.zakresy)}) na rzecz ${nazwa(d.osoba_id)}.`;
+    case 'wykreslenie_obciazenia':
+      return `Wykreślenie ${d.typ_obciazenia === 'uzytkowanie' ? 'użytkowania' : 'zastawu'} na akcjach ${
+        d.numery || n.opisz(d.zakresy)
+      } serii ${d.seria}.`;
+    case 'prawo_glosu_zastawnika':
+      return `${d.prawo_glosu ? 'Wpis' : 'Wykreślenie'} prawa głosu ${
+        d.typ_obciazenia === 'uzytkowanie' ? 'użytkownika' : 'zastawnika'
+      } ${nazwa(d.osoba_id)}.`;
+    case 'zajecie':
+      return `Zajęcie ${d.ilosc} akcji serii ${d.seria} (numery ${n.opisz(d.zakresy)})${
+        d.akcjonariusz_osoba_id != null ? ` należących do ${nazwa(d.akcjonariusz_osoba_id)}` : ''
+      }.`;
+    case 'wykreslenie_zajecia':
+      return `Uchylenie zajęcia akcji ${d.numery || n.opisz(d.zakresy)} serii ${d.seria}.`;
+    case 'uprawnienie':
+      return d.wykresla_zdarzenie_id != null
+        ? `Wykreślenie uprawnienia „${d.tytul || ''}” (zdarzenie #${d.wykresla_zdarzenie_id}).`
+        : `Ustanowienie ${d.rodzaj === 'przywilej' ? 'przywileju' : d.rodzaj === 'obowiazek' ? 'obowiązku' : 'uprawnienia'}${
+            d.tytul ? ` „${d.tytul}”` : ''
+          }${d.osoba_id != null ? ` na rzecz ${nazwa(d.osoba_id)}` : d.seria ? ` dla serii ${d.seria}` : ''}.`;
+    case 'ograniczenie':
+      return d.wykresla_zdarzenie_id != null
+        ? `Wykreślenie ograniczenia w rozporządzaniu akcjami (zdarzenie #${d.wykresla_zdarzenie_id}).`
+        : `Ustanowienie ograniczenia w rozporządzaniu akcjami${d.seria ? ` serii ${d.seria}` : ''}${
+            d.opis ? `: ${d.opis}` : ''
+          }.`;
+    case 'zmiana_danych_akcjonariusza':
+      return `Zmiana danych akcjonariusza ${nazwa(d.osoba_id)}: ${
+        (d.zmienione_pola || []).join(', ') || 'bez wskazania pól'
+      }.`;
+    case 'zobowiazanie':
+      return `Oświadczenie ${nazwa(d.akcjonariusz_osoba_id)} o zobowiązaniu do ${d.rodzaj || 'przeniesienia'} akcji${
+        d.seria ? ` serii ${d.seria}` : ''
+      }.`;
+    case 'zdarzenie_inne':
+      return d.opis || 'Inne zdarzenie.';
+    case 'sprostowanie':
+      return `Sprostowanie zdarzenia #${z.zdarzenie_prostowane_id}${
+        d.zamiast ? ` (skorygowana treść typu „${d.zamiast.typ}”)` : ''
+      }.`;
     default:
       return null;
   }

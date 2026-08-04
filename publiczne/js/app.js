@@ -9,7 +9,7 @@ const MENU = [
     grupa: 'Praca',
     pozycje: [
       { sciezka: '/', nazwa: 'Pulpit' },
-      { sciezka: '/sprawy', nazwa: 'Kolejka spraw', sprint: 2 },
+      { sciezka: '/sprawy', nazwa: 'Kolejka spraw' },
       { sciezka: '/spolki', nazwa: 'Spółki' },
       { sciezka: '/osoby', nazwa: 'Kartoteka osób' },
     ],
@@ -22,7 +22,7 @@ const MENU = [
     grupa: 'Konfiguracja',
     pozycje: [
       { sciezka: '/konfiguracja/stawki', nazwa: 'Stawki i terminy' },
-      { sciezka: '/konfiguracja/szablony', nazwa: 'Szablony dokumentów', sprint: 2 },
+      { sciezka: '/konfiguracja/szablony', nazwa: 'Szablony dokumentów', sprint: 4 },
       { sciezka: '/konfiguracja/uzytkownicy', nazwa: 'Użytkownicy', sprint: 3 },
     ],
   },
@@ -141,13 +141,20 @@ function Aplikacja() {
       const id = Number(segmenty[1]);
       if (!Number.isInteger(id)) return <NieZnaleziono />;
       if (segmenty.length === 2) return <EkranKokpitu spolkaId={id} />;
-      if (segmenty[2] === 'zdarzenie') return <EkranKreatora spolkaId={id} />;
+      if (segmenty[2] === 'zdarzenie') return <EkranNowejSprawy spolkaId={id} />;
       if (segmenty[2] === 'wydruk') {
         const data = zapytanie.get('data') || undefined;
         if (segmenty[3] === 'raport') return <EkranRaportu spolkaId={id} dataPoczatkowa={data} />;
         if (segmenty[3] === 'informacja') return <EkranInformacji spolkaId={id} dataPoczatkowa={data} />;
       }
       return <NieZnaleziono />;
+    }
+
+    if (segmenty[0] === 'sprawy') {
+      if (segmenty.length === 1) return <EkranKolejkiSpraw />;
+      const id = Number(segmenty[1]);
+      if (!Number.isInteger(id)) return <NieZnaleziono />;
+      return <EkranSprawy sprawaId={id} />;
     }
 
     if (segmenty[0] === 'osoby') return <EkranOsob />;

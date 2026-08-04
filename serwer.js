@@ -29,6 +29,8 @@ if (zastosowane.length > 0) {
 aplikacja.use('/api/wspolne', require('./server/trasy/wspolne'));
 aplikacja.use('/api/psa/spolki', require('./server/trasy/spolki'));
 aplikacja.use('/api/psa/osoby', require('./server/trasy/osoby'));
+aplikacja.use('/api/psa/sprawy', require('./server/trasy/sprawy'));
+aplikacja.use('/api/psa/zdarzenia', require('./server/trasy/zdarzenia'));
 aplikacja.use('/api/psa', require('./server/trasy/pozostale'));
 
 // ── Statyki ──────────────────────────────────────────────────────────────

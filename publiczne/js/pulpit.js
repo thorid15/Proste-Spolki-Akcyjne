@@ -69,16 +69,55 @@ function EkranPulpitu() {
 
       <div className="siatka-2">
         <div>
-          <Karta tight tytul="Sprawy w toku">
-            {sprawy.dostepne ? null : (
+          <Karta
+            tight
+            tytul="Sprawy w toku"
+            akcje={
+              <button className="btn btn-sm" onClick={() => idz('/sprawy')}>
+                Cała kolejka
+              </button>
+            }
+          >
+            {sprawy.pozycje.length === 0 ? (
               <Pusto
-                tytul="Obieg spraw wchodzi w sprincie 2"
-                opis={
-                  'Tutaj staną sprawy posortowane po pozostałym czasie, z terminem 7 dni ' +
-                  'z art. 300(34) § 1 KSH i zawieszeniem na czas usuwania przeszkody. ' +
-                  'W sprincie 1 wpisu dokonuje się wprost z kokpitu spółki.'
-                }
+                tytul="Brak spraw w toku"
+                opis="Nowe sprawy zakładasz z kokpitu spółki, przyciskiem „Nowe zdarzenie”."
               />
+            ) : (
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Spółka</th>
+                    <th>Zdarzenie</th>
+                    <th>Stan</th>
+                    <th className="prawo">Termin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sprawy.pozycje.slice(0, 8).map((s) => (
+                    <tr key={s.id} className="klikalny" onClick={() => idz(`/sprawy/${s.id}`)}>
+                      <td style={{ fontWeight: 500 }}>{s.spolka_nazwa}</td>
+                      <td className="przyciemnione">{s.typ_nazwa}</td>
+                      <td>
+                        <Znacznik odmiana={s.stan === 'wstrzymana' ? 'oliwka' : s.stan === 'weryfikacja' ? 'lupek' : 'neutralny'}>
+                          {s.stan === 'wstrzymana' ? 'wstrzymana' : s.stan === 'weryfikacja' ? 'w weryfikacji' : 'nowa'}
+                        </Znacznik>
+                      </td>
+                      <td className="prawo">
+                        {s.termin.zamrozony ? (
+                          <Znacznik odmiana="oliwka">zawieszony</Znacznik>
+                        ) : s.termin.po_terminie ? (
+                          <Znacznik odmiana="bordo">po terminie</Znacznik>
+                        ) : s.termin.pilny ? (
+                          <Znacznik odmiana="bordo">{s.termin.dni_pozostale} dz.</Znacznik>
+                        ) : (
+                          <span className="przyciemnione">{s.termin.dni_pozostale} dz.</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </Karta>
         </div>

@@ -228,6 +228,100 @@ const MIGRACJE = [
       END;
     `,
   },
+  {
+    wersja: 2,
+    nazwa: 'workflow spraw - psa_sprawy, psa_dokumenty, psa_wydane_dokumenty',
+    sql: `
+      -- ── Sprawy: workflow od zadania do wpisu (sekcja 7 specyfikacji) ────
+      -- Kolumny "wznowiona_od" i "dane_wejsciowe_json" sa rozszerzeniem
+      -- wobec katalogu z sekcji 5:
+      --   wznowiona_od        - dzien, od ktorego liczy sie NOWY, pelny
+      --                          siedmiodniowy termin po usunieciu przeszkody
+      --                          (server/logika/terminy.js, patrz komentarz
+      --                          tamze co do przyjetej interpretacji ustawy);
+      --   dane_wejsciowe_json - roboczy zapis kroku "co sie zmienia" kreatora,
+      --                          zeby pracownik mogl wrocic do sprawy bez
+      --                          utraty wprowadzonych danych (sekcja 9:
+      --                          "kazdy krok da sie cofnac bez utraty danych").
+      CREATE TABLE IF NOT EXISTS psa_sprawy (
+        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+        spolka_id             INTEGER NOT NULL REFERENCES psa_spolki(id),
+        typ_zdarzenia         TEXT NOT NULL,
+        zrodlo                TEXT NOT NULL CHECK (zrodlo IN ('portal','email','papier','z_urzedu')),
+        zadajacy_osoba_id     INTEGER REFERENCES psa_osoby(id),
+        zadajacy_opis         TEXT,
+        data_wplywu           TEXT NOT NULL,
+        stan                  TEXT NOT NULL DEFAULT 'nowa'
+                                CHECK (stan IN ('nowa','weryfikacja','wstrzymana','wpisana','odmowa','anulowana')),
+        termin_do             TEXT,
+        wstrzymana_od         TEXT,
+        wznowiona_od          TEXT,
+        dni_wstrzymania       INTEGER NOT NULL DEFAULT 0,
+        wymaga_powiadomienia  INTEGER NOT NULL DEFAULT 0 CHECK (wymaga_powiadomienia IN (0,1)),
+        zgoda_forma           TEXT,
+        zgoda_data            TEXT,
+        powiadomienie_wyslano TEXT,
+        zdarzenie_id          INTEGER REFERENCES psa_zdarzenia(id),
+        powod_odmowy          TEXT,
+        autor                 TEXT NOT NULL,
+        notatka                TEXT,
+        dane_wejsciowe_json   TEXT,
+        utworzono             TEXT NOT NULL,
+        zaktualizowano        TEXT
+      );
+
+      -- ── Dokumenty zalaczone do sprawy - pliki NA DYSKU, nie w bazie ─────
+      CREATE TABLE IF NOT EXISTS psa_dokumenty (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        sprawa_id      INTEGER NOT NULL REFERENCES psa_sprawy(id),
+        nazwa_pliku    TEXT NOT NULL,
+        sciezka        TEXT NOT NULL,
+        mime           TEXT,
+        rozmiar        INTEGER,
+        typ_dokumentu  TEXT NOT NULL
+                         CHECK (typ_dokumentu IN
+                           ('umowa_zbycia','uchwala','zgoda','postanowienie','pelnomocnictwo','inny')),
+        hash           TEXT,
+        wgral          TEXT NOT NULL,
+        utworzono      TEXT NOT NULL
+      );
+
+      -- ── Slad wysylki dokumentow wychodzacych ────────────────────────────
+      -- Kolumna „tresc_html” jest rozszerzeniem wobec katalogu z sekcji 5:
+      -- dokumenty generujemy jako deterministyczny HTML (bez bibliotek PDF,
+      -- sekcja 13), ktory sluzy JEDNOCZESNIE jako tresc e-maila i zapis
+      -- audytowy - stad trzymamy go wprost w bazie, a nie jako plik
+      -- wskazywany przez „sciezka_pdf”. Kolumna „sciezka_pdf” zostaje
+      -- w schemacie zgodnie ze specyfikacja, ale w tym sprincie pozostaje NULL.
+      CREATE TABLE IF NOT EXISTS psa_wydane_dokumenty (
+        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+        sprawa_id          INTEGER REFERENCES psa_sprawy(id),
+        spolka_id          INTEGER NOT NULL REFERENCES psa_spolki(id),
+        typ                TEXT NOT NULL
+                             CHECK (typ IN
+                               ('zawiadomienie_wpis','zawiadomienie_odmowa','informacja_z_rejestru',
+                                'wezwanie','raport','powiadomienie')),
+        odbiorca_osoba_id  INTEGER REFERENCES psa_osoby(id),
+        kanal              TEXT NOT NULL CHECK (kanal IN ('email','portal','papier')),
+        sciezka_pdf        TEXT,
+        tresc_html         TEXT,
+        wyslano            TEXT,
+        autor              TEXT NOT NULL,
+        utworzono          TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_sprawy_stan
+        ON psa_sprawy (stan, termin_do);
+      CREATE INDEX IF NOT EXISTS psa_ix_sprawy_spolka
+        ON psa_sprawy (spolka_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_dokumenty_sprawa
+        ON psa_dokumenty (sprawa_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_wydane_sprawa
+        ON psa_wydane_dokumenty (sprawa_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_wydane_spolka
+        ON psa_wydane_dokumenty (spolka_id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

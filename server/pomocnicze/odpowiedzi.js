@@ -84,11 +84,20 @@ function posrednikBledow(blad, zad, odp, dalej) {
       ostrzezenia: blad.ostrzezenia || [],
     });
   }
-  if (['BladZakresu', 'BladKreatora', 'BladStanu'].includes(blad.name)) {
+  if (['BladZakresu', 'BladKreatora', 'BladStanu', 'BladTerminu'].includes(blad.name)) {
     return odp.status(422).json({ blad: blad.message, bledy: [blad.message] });
   }
   if (blad.code === 'SQLITE_CONSTRAINT_UNIQUE') {
     return odp.status(409).json({ blad: 'Rekord o tych danych już istnieje.' });
+  }
+  // multer - blad limitu rozmiaru/liczby plikow ma czytelny kod, reszta
+  // (np. zly typ pliku) trafia tu jako zwykly Error z pomocnicze/odpowiedzi.
+  if (blad.name === 'MulterError') {
+    const komunikaty = {
+      LIMIT_FILE_SIZE: 'Plik jest za duży (limit 20 MB).',
+      LIMIT_FILE_COUNT: 'Za dużo plików w jednym żądaniu (limit 10).',
+    };
+    return odp.status(400).json({ blad: komunikaty[blad.code] || `Błąd przesyłania pliku: ${blad.message}` });
   }
 
   // Metadane techniczne - bez tresci zadania i bez danych osobowych.

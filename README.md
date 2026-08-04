@@ -3,7 +3,7 @@
 Moduł do prowadzenia rejestrów akcjonariuszy prostych spółek akcyjnych
 (art. 300³⁰ i nast. KSH) przez notariusza — Kancelaria Notarialna Łukasza Kozona.
 
-**Stan: sprint 1 ukończony** (rdzeń rejestru, bez workflow spraw i bez portalu klienta).
+**Stan: sprint 2 ukończony** (rdzeń rejestru + workflow spraw; bez portalu klienta).
 
 ---
 
@@ -11,9 +11,9 @@ Moduł do prowadzenia rejestrów akcjonariuszy prostych spółek akcyjnych
 
 ```bash
 npm install
-cp .env.przyklad .env      # uzupełnij dane kancelarii
+cp .env.przyklad .env      # uzupełnij dane kancelarii i (opcjonalnie) SMTP
 npm start                  # http://localhost:3005
-npm test                   # 45 testów
+npm test                   # 81 testów
 ```
 
 Migracje wykonują się automatycznie przy starcie i są idempotentne.
@@ -42,7 +42,25 @@ Poza planem sprintu, bo wymagały tego reguły krytyczne:
   z wydrukiem „informacja z rejestru” w wariancie dla innego akcjonariusza;
 - **odtwarzanie obciążeń, uprawnień i ograniczeń** ze zdarzeń — bez tego
   walidacje blokujące z sekcji 6 nie miałyby czego sprawdzać. Kreatorów dla
-  tych typów nie ma (wchodzą w sprincie 2), ale odczyt i blokady działają.
+  tych typów nie było w sprincie 1 (doszły w sprincie 2), ale odczyt i
+  blokady działały od początku.
+
+## Co powstało w sprincie 2
+
+| Punkt z planu | Stan |
+|---|---|
+| `psa_sprawy`, `psa_dokumenty`, `psa_wydane_dokumenty`; upload; kolejka na pulpicie | ✅ |
+| `logika/terminy.js` (7 dni z zawieszeniem) + testy | ✅ |
+| Checklisty per typ, ścieżka „uzasadnione wątpliwości”, AML jako bramka | ✅ |
+| Powiadomienie z art. 300³⁴ § 3, zawiadomienia o wpisie/odmowie, wezwanie | ✅ |
+| Pozostałe typy zdarzeń (obciążenia, zajęcia, uprawnienia, ograniczenia, sprostowanie) | ✅ |
+
+Kreator jest teraz **sprawa-bound**: „Nowe zdarzenie” zakłada sprawę (start
+licznika 7 dni), a kroki 3–4 działają na już istniejącej sprawie — ta sama
+ścieżka obsługuje świeżo założoną sprawę i wznowienie z kolejki (z zachowanym
+roboczym stanem formularza). Endpoint `POST /api/psa/spolki/:id/zdarzenia`
+z sprintu 1 zostaje jako szybka ścieżka wewnętrzna (np. zasiewanie danych),
+ale UI już go nie używa.
 
 ---
 
@@ -53,22 +71,28 @@ serwer.js                  punkt wejścia, port 3005
 server/
   konfiguracja.js          .env (własny parser — dotenv nie jest na liście zależności)
   baza.js                  better-sqlite3, WAL, foreign_keys
-  migracje.js              idempotentne, wyłącznie obiekty psa_*
-  rejestr.js               transakcje: zapis zdarzenia + materializacja
+  migracje.js              idempotentne, wyłącznie obiekty psa_* (v1 rdzeń, v2 sprawy)
+  rejestr.js               transakcje: zapis zdarzenia, materializacja, wpis sprawy, sprostowanie
   widoki.js                stan domenowy → struktura dla UI, Z MASKOWANIEM
+  zawiadomienia.js         generowanie + próba wysyłki dokumentów wychodzących (poza transakcją SQLite)
+  poczta.js                nodemailer; no-op z czytelnym powodem, gdy brak SMTP
   logika/                  czysta domena, zero dostępu do bazy
     przepisy.js            JEDYNE źródło wiedzy prawnej: terminy, stawki, maskowanie
     typy-zdarzen.js        katalog typów: checklisty, odpłatność, powiadomienia
     numery.js              algebra zakresów numerów akcji, przydział FIFO
-    stan.js                odbudowa stanu ze zdarzeń, kontrola bilansu
-    kreator.js             wejście z kreatora → treść zdarzenia (przydział numerów)
+    stan.js                odbudowa stanu ze zdarzeń, kontrola bilansu, sprostowania
+    terminy.js             termin 7 dni z zawieszeniem (art. 300³⁴ § 1 KSH)
+    kreator.js              wejście z kreatora → treść zdarzenia (przydział numerów, sprostowania)
     walidacje.js           walidacje BLOKUJĄCE
     lancuch.js             sha256, kanoniczny JSON, weryfikacja łańcucha
     maskowanie.js          art. 300³⁵ § 1¹
-  trasy/                   HTTP
+    dokumenty-tresc.js     deterministyczny HTML zawiadomień/wezwań (bez bibliotek PDF)
+  trasy/                   HTTP (spolki, osoby, sprawy, zdarzenia, pozostale, wspolne)
 publiczne/                 React 18 + Babel z CDN, bez bundlera
   wspolne/design.css       kanon wizualny kancelarii (wersja 1.1)
   style/psa.css            wyłącznie układ modułu, kolory tylko przez var(--…)
+  js/sprawy.js             kolejka + kokpit sprawy + kroki 3–4 kreatora (osadzone)
+  js/kreator.js            kroki 1–2 (zakłada sprawę) + formularze kroku 3 per typ
 testy/
 ```
 
@@ -116,6 +140,44 @@ wolnym numerze, przy czym „wolny” znaczy też: nieobjęty blokującym obcią
 inaczej kreator proponowałby akcje, których walidacja i tak nie przepuści.
 Ręczne wskazanie zakresu jest schowane pod przełącznikiem, dla przypadków takich
 jak przeniesienie konkretnych akcji obciążonych zastawem.
+
+### Termin 7 dni: zamrożenie, nie zaliczanie
+
+Ustawa: „nie później niż 7 dni od otrzymania żądania; przy przeszkodzie —
+7 dni od jej usunięcia”. Interpretacja przyjęta w `terminy.js`: w stanie
+`wstrzymana` zegar jest **zamrożony** (nie płynie), a po wznowieniu biegnie
+**pełne nowe 7 dni** od dnia usunięcia przeszkody — nie kontynuacja z zaliczeniem
+części terminu sprzed wstrzymania. To czytanie dosłowne brzmienia przepisu, nie
+doktryny „zawieszenia biegu terminu” z zaliczeniem. `dni_wstrzymania` w bazie
+jest wyłącznie skumulowaną statystyką do audytu — nie wpływa na `termin_do`.
+
+### Sprostowanie: podmiana w miejscu chronologicznym, nie na końcu
+
+Zdarzenie `sprostowanie` z treścią `zamiast` **nie** jest wstawiane osobno pod
+swoim własnym ID — podmienia treść zdarzenia prostowanego **dokładnie w jego
+pozycji** w chronologii. Dwa powody, oba wykryte testem integracyjnym podczas
+budowy:
+
+1. **Stabilność klucza.** Handlery czytają `zdarzenie.id` jako klucz struktury,
+   którą tworzą (`HANDLERY.emisja: klucz = Number(zdarzenie.id)`). Późniejsze
+   zdarzenia (np. `objecie`) odwołują się do tego klucza przez
+   `emisja_zdarzenie_id` wskazujący na ID zdarzenia **pierwotnego**. Gdyby
+   korekta wstawiała się pod ID sprostowania, każde takie odwołanie by się
+   zerwało.
+2. **Kolejność przetwarzania.** Sprostowanie ma zwykle późniejszy ID niż
+   zdarzenia między oryginałem a korektą (przy tej samej `data_zdarzenia`
+   decyduje ID). Wstawione na końcu, korekta przychodzi za późno — zdarzenia
+   pomiędzy nią a oryginałem przetworzyłyby się na starej, błędnej treści.
+
+Treść zastępczą (`zamiast`) liczymy względem stanu **tuż przed** zdarzeniem
+pierwotnym (chronologicznie), nie „bez niego w ogóle” — wykluczenie całego
+zdarzenia z listy zrywałoby referencje zdarzeń zależnych w trakcie samego
+liczenia treści (np. `objecie` po `emisji`). Stan sprzed jest naturalną bazą
+do pytania „jak to zdarzenie powinno było wyglądać”.
+
+Sprostowanie **bez** `zamiast` jest pełnym wycofaniem zdarzenia (nie ma czym
+go zastąpić) — działa tylko, gdy nic już od niego nie zależy (inaczej: błąd
+integralności referencyjnej, celowo).
 
 ---
 
@@ -178,17 +240,55 @@ Wszystkie świadome, wszystkie do zakwestionowania.
     i `nodemailer` dojdą razem ze sprintami, w których są potrzebne (2 i 3) —
     nie trzymamy zależności, których nikt nie wywołuje.
 
-12. **Krok 2 kreatora bez wgrywania plików.** `psa_dokumenty` i upload to
-    sprint 2. Na razie podstawa wpisu opisywana jest tekstem, który trafia do
-    treści zdarzenia.
+12. ~~Krok 2 kreatora bez wgrywania plików~~ — zrealizowane w sprincie 2
+    (upload przez multer, `psa_dokumenty`).
+
+13. **Dokumenty wychodzące jako HTML, nie PDF.** Zawiadomienia i wezwania są
+    deterministycznym HTML-em (`logika/dokumenty-tresc.js`) — ten sam tekst
+    idzie jako treść e-maila (nodemailer) i jako zapis audytowy w
+    `psa_wydane_dokumenty.tresc_html`. Kolumna `sciezka_pdf` zostaje w
+    schemacie zgodnie ze specyfikacją, ale w tym sprincie pozostaje `NULL` —
+    zgodnie z zakazem bibliotek PDF (sekcja 13), wydruk na kanale papierowym
+    pracownik robi z podglądu HTML przez `window.print()`.
+
+14. **Wysyłka e-mail jako no-op z czytelnym powodem, gdy brak SMTP.**
+    `.env.przyklad` nie ma domyślnie danych SMTP — `poczta.js` wtedy nie rzuca
+    wyjątku, tylko zwraca `{ wyslano: false, powod }`. Ślad w
+    `psa_wydane_dokumenty` i tak powstaje (`wyslano` zostaje `NULL` do czasu
+    faktycznej wysyłki) — dokument jest gotowy do ręcznego wysłania kanałem
+    papierowym.
+
+15. **Ścieżka `z_urzedu` pomija fazę „nowa”.** Sprawy `zajecie`/`wykreslenie_zajecia`
+    zakładają się wprost w stanie `weryfikacja` — organ egzekucyjny nie
+    „żąda” wpisu (nie ma fazy oczekiwania na żądającego), tylko przekazuje
+    kompletne zawiadomienie (art. 300³⁴ § 2 KSH: bez żądania, bez uprzedniego
+    powiadomienia, wolne od opłat).
+
+16. **`prawo_glosu_zastawnika` jest atrybutem bieżącym, bez własnej osi
+    czasu.** Zmienia `prawo_glosu` istniejącego obciążenia w miejscu — „stan
+    na dzień” z suwaka wiernie odtwarza skład akcjonariatu i to, które akcje
+    są obciążone (regułą domenową nr 3), ale nie odtwarza historycznej
+    wartości samego prawa głosu sprzed jego zmiany. Świadome uproszczenie:
+    to atrybut pomocniczy przy obciążeniu, nie fakt liczbowy wymagający
+    odtwarzania wstecz jak stan posiadania akcji.
+
+17. **UI sprostowania ogranicza się do adnotacji/wycofania (bez `zamiast`).**
+    API wspiera pełną podmianę treści (przetestowane), ale formularz w
+    kokpicie oferuje tylko uzasadnienie — strukturalna korekta z nową treścią
+    wymaga dziś wywołania API wprost. Świadome cięcie zakresu: 90% realnych
+    korekt to „ten wpis nie powinien był powstać”, nie zmiana treści.
 
 ---
 
 ## Czego świadomie nie ma
 
-Poza zakresem sprintu 1, zgodnie z planem: obieg spraw i termin 7 dni
-(`logika/terminy.js`), wgrywanie dokumentów, zawiadomienia i powiadomienia,
-pozostałe typy zdarzeń w kreatorze, portal klienta, opłaty.
+Poza zakresem sprintu 2, zgodnie z planem: portal klienta (sprint 3), opłaty
+i naliczenie roczne (sprint 4), migracja obecnych rejestrów z RN (sprint 4),
+zawiadomienie sądu o rozwiązaniu umowy i obsługa zapytań sądu — stuby `501`
+czekające na nowelizację (18.02.2027).
+
+Struktura pełnej podmiany treści przy sprostowaniu jest gotowa i przetestowana
+na poziomie API; brakuje jej wyłącznie formularza w UI (patrz odstępstwo 17).
 
 Poza zakresem modułu, zgodnie z sekcją 1: rejestry S.A. i S.K.A., walne
 zgromadzenia, dywidenda, e-voting, wysyłki do KRS w imieniu spółki.
@@ -207,7 +307,7 @@ Stuby `501` czekające na nowelizację: `/api/psa/sad/zapytania`,
 Nie blokują tego, co powstało, ale blokują kolejne kroki:
 
 1. **Wariant wdrożenia** (A: wszystko na VPS; B: rdzeń w kancelarii + skrzynka
-   podawcza) — blokuje sprint 3.
+   podawcza) — blokuje sprint 3. Nie zmieniło się w sprincie 2.
 2. **Weryfikacja brzmienia przepisów nowelizacji.** Pozycje oznaczone
    w `przepisy.js` jako `DO_WERYFIKACJI` nie mogą być podstawą walidacji
    blokującej, dopóki Łukasz nie potwierdzi tekstu ustawy. Dziś żadna z nich
@@ -234,7 +334,7 @@ warto to zrobić przed sprintem 2.
 npm test
 ```
 
-45 testów, bez zależności zewnętrznych (`node:test`), baza w pamięci.
+81 testów, bez zależności zewnętrznych (`node:test`), baza w pamięci lub plik tymczasowy.
 
 - `numery.test.js` — algebra zakresów, przydział FIFO, ręczne nadpisanie
 - `przeniesienie.test.js` — całość / część / wielu nabywców, pakiet nieciągły,
@@ -243,6 +343,20 @@ npm test
   skrótów (podmiana treści i usunięcie rekordu), append-only, walidacje blokujące
 - `reguly.test.js` — maskowanie, kartoteka wspólna, zakres podmiotowy,
   determinizm i jednoznaczność skrótu
+- `terminy.test.js` — termin 7 dni, zamrożenie w stanie wstrzymana, pełny
+  restart po wznowieniu, kumulacja `dni_wstrzymania`
+- `nowe-typy.test.js` — obciążenia (blokada rozporządzania, wykreślenie,
+  prawo głosu), zajęcie z urzędu, uprawnienia, ograniczenia (prawo
+  pierwszeństwa), zmiana danych akcjonariusza, sprostowanie (adnotacja,
+  podmiana treści, ochrona integralności referencyjnej, podwójne sprostowanie)
+- `sprawy-http.test.js` — pełny cykl HTTP: założenie sprawy → weryfikacja →
+  wpis z zawiadomieniem; wstrzymanie/wznowienie z wezwaniem; odmowa; ścieżka
+  z urzędu; AML jako bramka w workflow sprawy; upload i pobranie dokumentu
+  (w tym odrzucenie niedozwolonego rozszerzenia); sprostowanie przez
+  dedykowany endpoint
 
-UI sprawdzony w przeglądarce (Chromium): wszystkie ekrany, przejście kreatora do
-kroku 4 z tabelą przed/po i bramką checklisty, stan historyczny, oba wydruki.
+UI sprawdzony w przeglądarce (Chromium) po każdym sprincie: wszystkie ekrany,
+pełny cykl sprawy od założenia po wpis z podglądem przed/po i bramką
+checklisty, wstrzymanie/wznowienie z realnym przeliczeniem terminu, upload
+dokumentu, sprostowanie z kokpitu (potwierdzone: cofnięcie transferu akcji
+widoczne w tabeli akcjonariatu), kolejka i pulpit z realnymi danymi.

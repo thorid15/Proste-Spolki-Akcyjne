@@ -6,9 +6,17 @@
 
    Reguła domenowa nr 4: użytkownik NIGDY nie wpisuje numerów akcji w ścieżce
    podstawowej — podaje wyłącznie ilość, a aplikacja pokazuje wyliczony zakres
-   do potwierdzenia. Ręczne wskazanie numerów jest schowane pod przełącznikiem. */
+   do potwierdzenia. Ręczne wskazanie numerów jest schowane pod przełącznikiem.
+
+   Sprint 2: kreator jest teraz SPRAWA-BOUND. Kroki 1–2 (`EkranNowejSprawy`)
+   zakładają sprawę — start licznika 7 dni. Kroki 3–4 (`KreatorSprawy`,
+   w sprawy.js) działają na już istniejącej sprawie i są WSPÓLNE ze ścieżką
+   wznowienia sprawy z kolejki — stąd formularze krok 3 i tabela przed/po są
+   eksportowane do współdzielenia, a nie zamknięte w jednym komponencie ekranu. */
 
 const KROKI_ZDARZENIA = ['Co się stało', 'Podstawa', 'Co się zmienia', 'Weryfikacja i podgląd'];
+
+const NAZWY_GRUP = { akcje: 'Akcje', obciazenia: 'Obciążenia i zajęcia', prawa: 'Prawa i ograniczenia', dane: 'Dane', inne: 'Inne' };
 
 /** Jedna pozycja: osoba + ilość (+ opcjonalnie ręczny zakres numerów). */
 function PozycjaKreatora({
@@ -114,6 +122,20 @@ function przygotujPozycje(pozycje) {
   });
 }
 
+/** Zamienia pojedynczą pozycję (nie tablicę `pozycje`) z ewentualnym ręcznym zakresem. */
+function przygotujPojedyncza(dane) {
+  const wynik = { ...dane };
+  delete wynik.zakresy_tekst;
+  if (dane.zakresy_tekst && dane.zakresy_tekst.trim()) {
+    wynik.zakresy = parsujZakresy(dane.zakresy_tekst);
+    if (!wynik.ilosc) wynik.ilosc = wynik.zakresy.reduce((s, z) => s + (z.nr_do - z.nr_od + 1), 0);
+  }
+  if (wynik.ilosc !== undefined && wynik.ilosc !== null && wynik.ilosc !== '') {
+    wynik.ilosc = Number(wynik.ilosc);
+  }
+  return wynik;
+}
+
 /** Wybór emisji + podsumowanie tego, co w niej zostało. */
 function WyborEmisji({ emisje, bilans, wartosc, przyZmianie, tylkoZNieobjetymi }) {
   const lista = emisje.filter((e) => {
@@ -156,6 +178,37 @@ function WyborEmisji({ emisje, bilans, wartosc, przyZmianie, tylkoZNieobjetymi }
           {b.umorzone > 0 ? ` · umorzone: ${fmt.liczba(b.umorzone)}` : ''}
         </div>
       )}
+    </Pole>
+  );
+}
+
+/** Wybór aktywnego obciążenia/zajęcia spółki (do wykreślenia albo zmiany prawa głosu). */
+function WyborObciazenia({ obciazenia, wartosc, przyZmianie, tylkoTyp }) {
+  const lista = tylkoTyp ? obciazenia.filter((o) => o.typ === tylkoTyp) : obciazenia.filter((o) => o.typ !== 'zajecie');
+  if (lista.length === 0) {
+    return (
+      <Komunikat
+        odmiana="uwaga"
+        tresc={
+          tylkoTyp === 'zajecie'
+            ? 'Spółka nie ma zarejestrowanych aktywnych zajęć.'
+            : 'Spółka nie ma zarejestrowanych aktywnych obciążeń.'
+        }
+      />
+    );
+  }
+  return (
+    <Pole etykieta={tylkoTyp === 'zajecie' ? 'Zajęcie' : 'Obciążenie'} wymagane>
+      <select value={wartosc || ''} onChange={(z) => przyZmianie(Number(z.target.value))}>
+        <option value="">— wybierz —</option>
+        {lista.map((o) => (
+          <option key={o.klucz} value={o.klucz}>
+            {o.typ === 'zajecie' ? 'zajęcie' : o.typ} — seria {o.seria}, numery {o.numery}
+            {o.uprawniony ? ` — ${o.uprawniony.oznaczenie}` : ''}
+            {o.akcjonariusz ? ` (akcjonariusz: ${o.akcjonariusz.oznaczenie})` : ''}
+          </option>
+        ))}
+      </select>
     </Pole>
   );
 }
@@ -445,6 +498,356 @@ function KrokUmorzenie({ dane, ustawDane, spolka }) {
   );
 }
 
+/** Ustanowienie zastawu / użytkowania. */
+function KrokObciazenie({ dane, ustawDane, spolka }) {
+  const pole = (k) => ({ value: dane[k] ?? '', onChange: (z) => ustawDane({ ...dane, [k]: z.target.value }) });
+  return (
+    <>
+      <WyborEmisji
+        emisje={spolka.emisje} bilans={spolka.bilans} wartosc={dane.emisja_zdarzenie_id}
+        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k })}
+      />
+      {dane.emisja_zdarzenie_id && (
+        <>
+          <Pole etykieta="Rodzaj obciążenia">
+            <select value={dane.typ_obciazenia || 'zastaw'} onChange={(z) => ustawDane({ ...dane, typ_obciazenia: z.target.value })}>
+              <option value="zastaw">zastaw</option>
+              <option value="uzytkowanie">użytkowanie</option>
+            </select>
+          </Pole>
+          <Pole etykieta="Akcjonariusz, którego akcje są obciążane" wymagane>
+            <WyborOsoby wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id })} />
+          </Pole>
+          <Pole etykieta="Zastawnik / użytkownik" wymagane>
+            <WyborOsoby
+              wartosc={dane.osoba_id}
+              wyklucz={dane.akcjonariusz_osoba_id ? [Number(dane.akcjonariusz_osoba_id)] : []}
+              przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })}
+            />
+          </Pole>
+          <Pole etykieta="Liczba akcji" wymagane>
+            <input type="number" min="1" {...pole('ilosc')} />
+          </Pole>
+          <label className="chk">
+            <input type="checkbox" checked={dane.blokuje_rozporzadzanie !== false} onChange={(z) => ustawDane({ ...dane, blokuje_rozporzadzanie: z.target.checked })} />
+            <span className="chk-tresc">Obciążenie blokuje rozporządzanie akcjami (typowe dla zastawu)</span>
+          </label>
+          <label className="chk">
+            <input type="checkbox" checked={Boolean(dane.prawo_glosu)} onChange={(z) => ustawDane({ ...dane, prawo_glosu: z.target.checked })} />
+            <span className="chk-tresc">Zastawnikowi / użytkownikowi przysługuje od razu prawo głosu</span>
+          </label>
+          <Pole etykieta="Opis"><textarea {...pole('opis')} /></Pole>
+        </>
+      )}
+    </>
+  );
+}
+
+function KrokWykreslenieObciazenia({ dane, ustawDane, spolka }) {
+  return (
+    <WyborObciazenia
+      obciazenia={spolka.obciazenia}
+      wartosc={dane.obciazenie_zdarzenie_id}
+      przyZmianie={(k) => ustawDane({ ...dane, obciazenie_zdarzenie_id: k })}
+    />
+  );
+}
+
+function KrokPrawoGlosuZastawnika({ dane, ustawDane, spolka }) {
+  return (
+    <>
+      <WyborObciazenia
+        obciazenia={spolka.obciazenia}
+        wartosc={dane.obciazenie_zdarzenie_id}
+        przyZmianie={(k) => ustawDane({ ...dane, obciazenie_zdarzenie_id: k })}
+      />
+      <Pole etykieta="Prawo głosu">
+        <select
+          value={dane.prawo_glosu ? '1' : '0'}
+          onChange={(z) => ustawDane({ ...dane, prawo_glosu: z.target.value === '1' })}
+        >
+          <option value="1">przyznane</option>
+          <option value="0">cofnięte</option>
+        </select>
+      </Pole>
+    </>
+  );
+}
+
+function KrokZajecie({ dane, ustawDane, spolka }) {
+  const [reczne, ustawReczne] = useState(false);
+  return (
+    <>
+      <WyborEmisji
+        emisje={spolka.emisje} bilans={spolka.bilans} wartosc={dane.emisja_zdarzenie_id}
+        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k })}
+      />
+      {dane.emisja_zdarzenie_id && (
+        <>
+          <Pole etykieta="Organ egzekucyjny" podpowiedz="Komornik sądowy albo administracyjny organ egzekucyjny — z kartoteki.">
+            <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
+          </Pole>
+          <Pole etykieta="Akcjonariusz (dłużnik)" podpowiedz="Jeśli znany — numery dobiorą się automatycznie z jego pakietu.">
+            <WyborOsoby wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id, zakresy_tekst: '' })} />
+          </Pole>
+          {dane.akcjonariusz_osoba_id ? (
+            <Pole etykieta="Liczba akcji objętych zajęciem" wymagane>
+              <input type="number" min="1" value={dane.ilosc ?? ''} onChange={(z) => ustawDane({ ...dane, ilosc: z.target.value })} />
+            </Pole>
+          ) : (
+            <Pole etykieta="Numery zajmowanych akcji" wymagane podpowiedz='Zapis w postaci „1-100, 150-160”.'>
+              <input
+                type="text" className="mono" value={dane.zakresy_tekst || ''}
+                onChange={(z) => ustawDane({ ...dane, zakresy_tekst: z.target.value })}
+                placeholder="1-100"
+              />
+            </Pole>
+          )}
+          <Pole etykieta="Opis"><textarea value={dane.opis ?? ''} onChange={(z) => ustawDane({ ...dane, opis: z.target.value })} /></Pole>
+          <Komunikat odmiana="info" tresc="Zajęcie jest czynnością z urzędu — wolne od opłat, bez uprzedniego powiadomienia." />
+        </>
+      )}
+    </>
+  );
+}
+
+function KrokWykreslenieZajecia({ dane, ustawDane, spolka }) {
+  return (
+    <WyborObciazenia
+      obciazenia={spolka.obciazenia} tylkoTyp="zajecie"
+      wartosc={dane.obciazenie_zdarzenie_id}
+      przyZmianie={(k) => ustawDane({ ...dane, obciazenie_zdarzenie_id: k })}
+    />
+  );
+}
+
+function KrokUprawnienie({ dane, ustawDane, spolka }) {
+  const pole = (k) => ({ value: dane[k] ?? '', onChange: (z) => ustawDane({ ...dane, [k]: z.target.value }) });
+  const [wykresl, ustawWykresl] = useState(false);
+
+  if (wykresl || (spolka.uprawnienia.length > 0 && dane.wykresla_zdarzenie_id)) {
+    return (
+      <>
+        <Pole etykieta="Wykreślane uprawnienie" wymagane>
+          <select value={dane.wykresla_zdarzenie_id || ''} onChange={(z) => ustawDane({ ...dane, wykresla_zdarzenie_id: Number(z.target.value) })}>
+            <option value="">— wybierz —</option>
+            {spolka.uprawnienia.map((u) => (
+              <option key={u.klucz} value={u.klucz}>{u.tytul || u.rodzaj} — {u.osoba ? u.osoba.oznaczenie : (u.seria || 'cała spółka')}</option>
+            ))}
+          </select>
+        </Pole>
+        <button className="btn btn-sm" onClick={() => { ustawWykresl(false); ustawDane({ ...dane, wykresla_zdarzenie_id: null }); }}>
+          Zamiast tego ustanów nowe uprawnienie
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {spolka.uprawnienia.length > 0 && (
+        <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => ustawWykresl(true)}>
+          Zamiast tego wykreśl istniejące uprawnienie
+        </button>
+      )}
+      <div className="siatka-2">
+        <Pole etykieta="Rodzaj">
+          <select value={dane.rodzaj || 'uprawnienie'} onChange={(z) => ustawDane({ ...dane, rodzaj: z.target.value })}>
+            <option value="uprawnienie">uprawnienie</option>
+            <option value="przywilej">przywilej</option>
+            <option value="obowiazek">obowiązek</option>
+          </select>
+        </Pole>
+        <Pole etykieta="Zakres">
+          <select value={dane.zakres || 'spolka'} onChange={(z) => ustawDane({ ...dane, zakres: z.target.value, osoba_id: null, emisja_zdarzenie_id: null })}>
+            <option value="spolka">cała spółka</option>
+            <option value="emisja">seria akcji</option>
+            <option value="akcjonariusz">konkretny akcjonariusz</option>
+          </select>
+        </Pole>
+      </div>
+      {dane.zakres === 'emisja' && (
+        <WyborEmisji emisje={spolka.emisje} bilans={spolka.bilans} wartosc={dane.emisja_zdarzenie_id} przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k })} />
+      )}
+      {dane.zakres === 'akcjonariusz' && (
+        <Pole etykieta="Akcjonariusz" wymagane>
+          <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
+        </Pole>
+      )}
+      <Pole etykieta="Tytuł"><input type="text" {...pole('tytul')} /></Pole>
+      <Pole etykieta="Treść" podpowiedz="Podaj tytuł albo treść.">
+        <textarea {...pole('tresc')} />
+      </Pole>
+    </>
+  );
+}
+
+function KrokOgraniczenie({ dane, ustawDane, spolka }) {
+  const pole = (k) => ({ value: dane[k] ?? '', onChange: (z) => ustawDane({ ...dane, [k]: z.target.value }) });
+  const [wykresl, ustawWykresl] = useState(false);
+
+  if (wykresl) {
+    return (
+      <>
+        <Pole etykieta="Wykreślane ograniczenie" wymagane>
+          <select value={dane.wykresla_zdarzenie_id || ''} onChange={(z) => ustawDane({ ...dane, wykresla_zdarzenie_id: Number(z.target.value) })}>
+            <option value="">— wybierz —</option>
+            {spolka.ograniczenia.map((o) => (
+              <option key={o.klucz} value={o.klucz}>{o.opis || o.zakres} — {o.seria || 'cała spółka'}</option>
+            ))}
+          </select>
+        </Pole>
+        <button className="btn btn-sm" onClick={() => { ustawWykresl(false); ustawDane({ ...dane, wykresla_zdarzenie_id: null }); }}>
+          Zamiast tego ustanów nowe ograniczenie
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {spolka.ograniczenia.length > 0 && (
+        <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => ustawWykresl(true)}>
+          Zamiast tego wykreśl istniejące ograniczenie
+        </button>
+      )}
+      <Pole etykieta="Zakres">
+        <select value={dane.zakres || 'wszystkie'} onChange={(z) => ustawDane({ ...dane, zakres: z.target.value, emisja_zdarzenie_id: null, zakresy_tekst: '' })}>
+          <option value="wszystkie">wszystkie akcje spółki</option>
+          <option value="emisja">cała seria</option>
+          <option value="zakres_numerow">konkretny zakres numerów</option>
+        </select>
+      </Pole>
+      {(dane.zakres === 'emisja' || dane.zakres === 'zakres_numerow') && (
+        <WyborEmisji emisje={spolka.emisje} bilans={spolka.bilans} wartosc={dane.emisja_zdarzenie_id} przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k })} />
+      )}
+      {dane.zakres === 'zakres_numerow' && (
+        <Pole etykieta="Numery akcji" wymagane podpowiedz='Zapis w postaci „1-100, 150-160”.'>
+          <input type="text" className="mono" value={dane.zakresy_tekst || ''} onChange={(z) => ustawDane({ ...dane, zakresy_tekst: z.target.value })} placeholder="1-100" />
+        </Pole>
+      )}
+      <label className="chk">
+        <input type="checkbox" checked={Boolean(dane.wymaga_zgody_spolki)} onChange={(z) => ustawDane({ ...dane, wymaga_zgody_spolki: z.target.checked })} />
+        <span className="chk-tresc">Rozporządzenie akcjami wymaga zgody spółki</span>
+      </label>
+      <label className="chk">
+        <input type="checkbox" checked={Boolean(dane.prawo_pierwszenstwa)} onChange={(z) => ustawDane({ ...dane, prawo_pierwszenstwa: z.target.checked })} />
+        <span className="chk-tresc">Pozostali akcjonariusze mają prawo pierwszeństwa nabycia</span>
+      </label>
+      <Pole etykieta="Opis"><textarea {...pole('opis')} /></Pole>
+    </>
+  );
+}
+
+function KrokZmianaDanychAkcjonariusza({ dane, ustawDane }) {
+  const [osoba, ustawOsobe] = useState(null);
+  useEffect(() => {
+    if (dane.osoba_id) API.get(`/api/psa/osoby/${dane.osoba_id}`).then((o) => ustawOsobe(o.osoba)).catch(() => {});
+  }, [dane.osoba_id]);
+
+  const po = dane.po || {};
+  const ustawPo = (klucz, wartosc) => ustawDane({ ...dane, po: { ...po, [klucz]: wartosc } });
+  const POLA = [
+    ['email', 'E-mail'], ['telefon', 'Telefon'],
+    ['kod_pocztowy', 'Kod pocztowy'], ['miejscowosc', 'Miejscowość'],
+    ['ulica', 'Ulica'], ['nr_domu', 'Nr domu'], ['nr_lokalu', 'Nr lokalu'],
+    ['adres_doreczen', 'Adres do doręczeń'], ['adres_edoreczen', 'Adres do e-doręczeń'],
+  ];
+
+  return (
+    <>
+      <Pole etykieta="Akcjonariusz" wymagane>
+        <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id, po: {} })} />
+      </Pole>
+      {osoba && (
+        <>
+          <div className="fl" style={{ marginTop: 22 }}>Nowe dane</div>
+          <div className="siatka-2">
+            {POLA.map(([klucz, etykieta]) => (
+              <Pole key={klucz} etykieta={etykieta}>
+                <input
+                  type="text"
+                  value={po[klucz] ?? osoba[klucz] ?? ''}
+                  onChange={(z) => ustawPo(klucz, z.target.value)}
+                />
+              </Pole>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function KrokZobowiazanie({ dane, ustawDane, spolka }) {
+  const pole = (k) => ({ value: dane[k] ?? '', onChange: (z) => ustawDane({ ...dane, [k]: z.target.value }) });
+  return (
+    <>
+      <Pole etykieta="Akcjonariusz składający oświadczenie" wymagane>
+        <WyborOsoby wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id })} />
+      </Pole>
+      <Pole etykieta="Rodzaj zobowiązania">
+        <select value={dane.rodzaj || 'przeniesienie'} onChange={(z) => ustawDane({ ...dane, rodzaj: z.target.value })}>
+          <option value="przeniesienie">zobowiązanie do przeniesienia akcji</option>
+          <option value="obciążenie">zobowiązanie do obciążenia akcji</option>
+        </select>
+      </Pole>
+      <Pole etykieta="Której serii dotyczy (opcjonalnie)">
+        <select value={dane.emisja_zdarzenie_id || ''} onChange={(z) => ustawDane({ ...dane, emisja_zdarzenie_id: z.target.value ? Number(z.target.value) : null })}>
+          <option value="">— nie dotyczy konkretnej serii —</option>
+          {spolka.emisje.map((e) => <option key={e.klucz} value={e.klucz}>Seria {e.seria}</option>)}
+        </select>
+      </Pole>
+      <Pole etykieta="Treść oświadczenia"><textarea {...pole('tresc')} /></Pole>
+    </>
+  );
+}
+
+function KrokZdarzenieInne({ dane, ustawDane }) {
+  return (
+    <Pole etykieta="Opis zdarzenia" wymagane podpowiedz="Np. walne zgromadzenie, zmiana umowy spółki.">
+      <textarea value={dane.opis ?? ''} onChange={(z) => ustawDane({ ...dane, opis: z.target.value })} />
+    </Pole>
+  );
+}
+
+/** Dispatcher kroku 3 — jeden na typ zdarzenia. */
+const KROKI_TRESCI = {
+  emisja: KrokEmisja,
+  objecie: KrokObjecie,
+  przeniesienie: KrokPrzeniesienie,
+  umorzenie: KrokUmorzenie,
+  obciazenie: KrokObciazenie,
+  wykreslenie_obciazenia: KrokWykreslenieObciazenia,
+  prawo_glosu_zastawnika: KrokPrawoGlosuZastawnika,
+  zajecie: KrokZajecie,
+  wykreslenie_zajecia: KrokWykreslenieZajecia,
+  uprawnienie: KrokUprawnienie,
+  ograniczenie: KrokOgraniczenie,
+  zmiana_danych_akcjonariusza: KrokZmianaDanychAkcjonariusza,
+  zobowiazanie: KrokZobowiazanie,
+  zdarzenie_inne: KrokZdarzenieInne,
+};
+
+/** Zamienia stan formularza (`dane`) na treść żądania do API, per typ. */
+function zbudujDaneZdarzenia(typ, dane) {
+  const wynik = { ...dane, podstawa_opis: dane.podstawa_opis || null };
+  delete wynik.cena_zl;
+
+  if (typ === 'emisja') {
+    wynik.ilosc = Number(dane.ilosc);
+    wynik.nr_pierwszy = dane.nr_pierwszy ? Number(dane.nr_pierwszy) : 1;
+    wynik.cena_emisyjna_grosze =
+      dane.cena_zl === '' || dane.cena_zl === undefined ? null : Math.round(Number(dane.cena_zl) * 100);
+  }
+  if (dane.pozycje) wynik.pozycje = przygotujPozycje(dane.pozycje);
+  if (['obciazenie', 'zajecie'].includes(typ)) {
+    const pojedyncza = przygotujPojedyncza(dane);
+    Object.assign(wynik, pojedyncza);
+  }
+  return wynik;
+}
+
 /* ─────────────────────────────────────────────────────
    KROK 4 — porównanie przed/po
    ───────────────────────────────────────────────────── */
@@ -500,32 +903,28 @@ function TabelaPorownania({ tytul, tabela, odniesienie, wariant }) {
 }
 
 /* ─────────────────────────────────────────────────────
-   KREATOR
+   KROKI 1–2 — nowa sprawa (zakłada sprawę, start licznika 7 dni)
    ───────────────────────────────────────────────────── */
 
-function EkranKreatora({ spolkaId }) {
+function EkranNowejSprawy({ spolkaId }) {
   const [krok, ustawKrok] = useState(0);
   const [typ, ustawTyp] = useState(null);
-  const [dataZdarzenia, ustawDateZdarzenia] = useState(fmt.dzisIso());
+  const [zrodlo, ustawZrodlo] = useState('papier');
+  const [zadajacyOsobaId, ustawZadajacegoOsobaId] = useState(null);
+  const [zadajacyOpis, ustawZadajacegoOpis] = useState('');
+  const [dataWplywu, ustawDateWplywu] = useState(fmt.dzisIso());
   const [podstawaOpis, ustawPodstawaOpis] = useState('');
-  const [zadajacy, ustawZadajacy] = useState('');
-  const [dane, ustawDane] = useState({});
-  const [odhaczone, ustawOdhaczone] = useState({});
-  const [notatkaWatpliwosci, ustawNotatkeWatpliwosci] = useState('');
-  const [podglad, ustawPodglad] = useState(null);
-  const [ladowaniePodgladu, ustawLadowaniePodgladu] = useState(false);
+  const [pliki, ustawPliki] = useState([]);
+  const [typDokumentu, ustawTypDokumentu] = useState('inny');
   const [zapisywanie, ustawZapisywanie] = useState(false);
-  const [wynik, ustawWynik] = useState(null);
-  const [bladLokalny, ustawBladLokalny] = useState(null);
+  const [blad, ustawBlad] = useState(null);
 
   const meta = useDane('/api/psa/meta');
-  const spolka = useDane(`/api/psa/spolki/${spolkaId}?data=${dataZdarzenia}`, [dataZdarzenia]);
+  const spolkaDane = useDane(`/api/psa/spolki/${spolkaId}`);
 
-  const cokolwiekWpisano = Boolean(typ) || Object.keys(dane).length > 0;
-
+  const cokolwiekWpisano = Boolean(typ);
   useEscape(() => {
-    if (wynik) return;
-    if (!cokolwiekWpisano || window.confirm('Przerwać tworzenie zdarzenia? Wprowadzone dane przepadną.')) {
+    if (!cokolwiekWpisano || window.confirm('Przerwać zakładanie sprawy? Wprowadzone dane przepadną.')) {
       idz(`/spolki/${spolkaId}`);
     }
   });
@@ -535,167 +934,64 @@ function EkranKreatora({ spolkaId }) {
     return meta.dane.typy_zdarzen.find((t) => t.kod === typ) || null;
   }, [meta.dane, typ]);
 
-  /** Buduje treść żądania dla API z tego, co zebrał kreator. */
-  function zbudujDane() {
-    const wynikDanych = { ...dane, podstawa_opis: podstawaOpis || null };
-    delete wynikDanych.cena_zl;
+  useEffect(() => {
+    if (definicjaTypu && definicjaTypu.z_urzedu) ustawZrodlo('z_urzedu');
+    else if (definicjaTypu && zrodlo === 'z_urzedu') ustawZrodlo('papier');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typ]);
 
-    if (typ === 'emisja') {
-      wynikDanych.ilosc = Number(dane.ilosc);
-      wynikDanych.nr_pierwszy = dane.nr_pierwszy ? Number(dane.nr_pierwszy) : 1;
-      // Kwoty trzymamy w groszach — reguła domenowa nr 5.
-      wynikDanych.cena_emisyjna_grosze =
-        dane.cena_zl === '' || dane.cena_zl === undefined
-          ? null
-          : Math.round(Number(dane.cena_zl) * 100);
-    }
-    if (dane.pozycje) wynikDanych.pozycje = przygotujPozycje(dane.pozycje);
-    return wynikDanych;
-  }
-
-  async function wczytajPodglad() {
-    ustawLadowaniePodgladu(true);
-    ustawBladLokalny(null);
-    try {
-      const odpowiedz = await API.post(`/api/psa/spolki/${spolkaId}/zdarzenia/podglad`, {
-        typ,
-        data_zdarzenia: dataZdarzenia,
-        dane: zbudujDane(),
-      });
-      ustawPodglad(odpowiedz);
-    } catch (e) {
-      ustawBladLokalny(e.message);
-      ustawPodglad(null);
-    } finally {
-      ustawLadowaniePodgladu(false);
-    }
-  }
-
-  async function dokonajWpisu() {
+  async function zalozSprawe() {
     ustawZapisywanie(true);
-    ustawBladLokalny(null);
+    ustawBlad(null);
     try {
-      const odpowiedz = await API.post(`/api/psa/spolki/${spolkaId}/zdarzenia`, {
-        typ,
-        data_zdarzenia: dataZdarzenia,
-        dane: zbudujDane(),
-        uzasadnienie: notatkaWatpliwosci || null,
+      const odpowiedz = await API.post('/api/psa/sprawy', {
+        spolka_id: spolkaId,
+        typ_zdarzenia: typ,
+        zrodlo,
+        zadajacy_osoba_id: zadajacyOsobaId,
+        zadajacy_opis: zadajacyOpis || null,
+        data_wplywu: dataWplywu,
+        notatka: podstawaOpis || null,
       });
-      ustawWynik(odpowiedz);
+      const sprawaId = odpowiedz.sprawa.id;
+
+      if (pliki.length > 0) {
+        const formularz = new FormData();
+        formularz.append('typ_dokumentu', typDokumentu);
+        for (const plik of pliki) formularz.append('pliki', plik);
+        const naglowki = {};
+        const uzytkownik = pobierzUzytkownika();
+        if (uzytkownik) naglowki['X-User-Name'] = encodeURIComponent(uzytkownik);
+        await fetch(`/api/psa/sprawy/${sprawaId}/dokumenty`, { method: 'POST', headers: naglowki, body: formularz });
+      }
+
+      // Kreator prowadzi wprost do weryfikacji — kroki 3–4 (w EkranSprawy)
+      // wymagają tego stanu, żeby dokonać wpisu.
+      if (odpowiedz.sprawa.stan === 'nowa') {
+        await API.patch(`/api/psa/sprawy/${sprawaId}`, { akcja: 'weryfikuj' });
+      }
+
+      idz(`/sprawy/${sprawaId}`);
     } catch (e) {
-      ustawBladLokalny(null);
-      ustawPodglad((p) => ({ ...(p || {}), dopuszczalne: false, bledy: e.bledy, ostrzezenia: e.ostrzezenia }));
-    } finally {
+      ustawBlad(e.message);
       ustawZapisywanie(false);
     }
   }
 
-  function idzDoKroku(nowy) {
-    ustawBladLokalny(null);
-    if (nowy === 3) {
-      try {
-        zbudujDane();
-      } catch (e) {
-        ustawBladLokalny(e.message);
-        return;
-      }
-      ustawKrok(3);
-      wczytajPodglad();
-      return;
-    }
-    ustawKrok(nowy);
-  }
+  if (meta.ladowanie || spolkaDane.ladowanie) return <Spinner />;
 
-  if (meta.ladowanie || spolka.ladowanie) return <Spinner />;
-  if (spolka.blad) return <Komunikat odmiana="blad" tresc={spolka.blad.message} />;
-
-  /* ── Ekran po dokonaniu wpisu ─────────────────────────────────────── */
-  if (wynik) {
-    return (
-      <>
-        <div className="pasek-gorny">
-          <div>
-            <div className="tytul-strony">Wpis dokonany</div>
-            <div className="podtytul-strony">
-              Zdarzenie #{wynik.zdarzenie.id} · wpisano {fmt.dataCzas(wynik.zdarzenie.data_wpisu)} ·
-              autor: {wynik.zdarzenie.autor}
-            </div>
-          </div>
-        </div>
-
-        <Karta>
-          <Komunikat
-            odmiana="ok"
-            tytul={`${definicjaTypu.nazwa} — zdarzenie zapisane w rejestrze`}
-            tresc={`Skrót zdarzenia w łańcuchu: ${wynik.zdarzenie.hash_skrocony}…`}
-          />
-          <Komunikat odmiana="uwaga" tytul="Do sprawdzenia:" lista={wynik.ostrzezenia} />
-
-          <Komunikat
-            odmiana="info"
-            tytul="Co dalej"
-            lista={[
-              ...(wynik.dokumenty_do_wygenerowania.length
-                ? [
-                    'Zawiadomienie o wpisie do żądającego i do spółki (art. 300(34) § 7 KSH) — ' +
-                      'generowanie i wysyłka wchodzą w sprincie 2.',
-                  ]
-                : []),
-              ...(wynik.odplatne
-                ? ['Opłata za wpis do naliczenia — moduł rozliczeń wchodzi w sprincie 4.']
-                : ['Wpis wolny od opłat.']),
-            ]}
-          />
-
-          <div className="kreator-stopka">
-            <button className="btn" onClick={() => idz(`/spolki/${spolkaId}`)}>
-              Wróć do kokpitu spółki
-            </button>
-            <div className="kreator-stopka-prawa">
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  ustawWynik(null);
-                  ustawTyp(null);
-                  ustawDane({});
-                  ustawOdhaczone({});
-                  ustawPodglad(null);
-                  ustawKrok(0);
-                }}
-              >
-                Kolejne zdarzenie
-              </button>
-            </div>
-          </div>
-        </Karta>
-      </>
-    );
-  }
-
-  /* ── Checklista ───────────────────────────────────────────────────── */
-  const checklista = definicjaTypu ? definicjaTypu.checklista : [];
-  const wymagane = checklista.filter((p) => p.wymagana && !p.watpliwosci);
-  const wszystkoOdhaczone = wymagane.every((p) => odhaczone[p.kod]);
-  const sawatpliwosci = checklista.some((p) => p.watpliwosci && odhaczone[p.kod]);
-  const mozeWpisac =
-    podglad && podglad.dopuszczalne && wszystkoOdhaczone && (!sawatpliwosci || notatkaWatpliwosci.trim());
-
-  const mozeDalej =
-    krok === 0 ? Boolean(typ)
-      : krok === 1 ? Boolean(dataZdarzenia)
-        : krok === 2 ? true
-          : false;
+  const mozeDalej = krok === 0 ? Boolean(typ) : krok === 1 ? Boolean(zrodlo && dataWplywu) : false;
 
   return (
     <>
       <div className="okruszki">
         <button onClick={() => idz('/spolki')}>Spółki</button> →{' '}
-        <button onClick={() => idz(`/spolki/${spolkaId}`)}>{spolka.dane.spolka.nazwa}</button> → nowe zdarzenie
+        <button onClick={() => idz(`/spolki/${spolkaId}`)}>{spolkaDane.dane.spolka.nazwa}</button> → nowa sprawa
       </div>
 
       <div className="pasek-gorny">
         <div>
-          <div className="tytul-strony">Nowe zdarzenie</div>
+          <div className="tytul-strony">Nowa sprawa</div>
           <div className="podtytul-strony">
             {definicjaTypu ? definicjaTypu.nazwa : 'Wybierz, co się wydarzyło.'}
           </div>
@@ -703,211 +999,96 @@ function EkranKreatora({ spolkaId }) {
       </div>
 
       <Kroki kroki={KROKI_ZDARZENIA} biezacy={krok} />
-      <Komunikat odmiana="blad" tresc={bladLokalny} />
+      <Komunikat odmiana="blad" tresc={blad} />
 
       <Karta>
-        {/* KROK 1 — wybór typu */}
         {krok === 0 && (
           <>
             <div className="card-h">Co się wydarzyło?</div>
-            <div className="kafelki">
-              {meta.dane.typy_zdarzen
-                .filter((t) => meta.dane.typy_w_kreatorze.includes(t.kod))
-                .map((t) => (
-                  <button
-                    key={t.kod}
-                    className={`kafelek ${typ === t.kod ? 'wybrany' : ''}`}
-                    onClick={() => {
-                      ustawTyp(t.kod);
-                      ustawDane({});
-                      ustawOdhaczone({});
-                      ustawPodglad(null);
-                    }}
-                  >
-                    <span className="kafelek-symbol">{t.symbol}</span>
-                    <span style={{ minWidth: 0 }}>
-                      <span className="kafelek-nazwa">{t.opis_zdarzeniem}</span>
-                      <span className="kafelek-opis">{t.podpowiedz || t.nazwa}</span>
-                    </span>
-                  </button>
-                ))}
-            </div>
-            <Komunikat
-              odmiana="info"
-              tresc={
-                'Pozostałe typy zdarzeń — obciążenia, zajęcia egzekucyjne, uprawnienia, ' +
-                'ograniczenia, zmiana danych akcjonariusza i sprostowanie — wchodzą w sprincie 2.'
-              }
-            />
+            {Object.entries(NAZWY_GRUP).map(([grupa, nazwaGrupy]) => {
+              const typyGrupy = meta.dane.typy_zdarzen.filter(
+                (t) => t.grupa === grupa && meta.dane.typy_w_kreatorze.includes(t.kod)
+              );
+              if (typyGrupy.length === 0) return null;
+              return (
+                <div key={grupa} style={{ marginBottom: 22 }}>
+                  <div className="fl">{nazwaGrupy}</div>
+                  <div className="kafelki">
+                    {typyGrupy.map((t) => (
+                      <button
+                        key={t.kod}
+                        className={`kafelek ${typ === t.kod ? 'wybrany' : ''}`}
+                        onClick={() => ustawTyp(t.kod)}
+                      >
+                        <span className="kafelek-symbol">{t.symbol}</span>
+                        <span style={{ minWidth: 0 }}>
+                          <span className="kafelek-nazwa">{t.opis_zdarzeniem}</span>
+                          <span className="kafelek-opis">{t.podpowiedz || t.nazwa}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </>
         )}
 
-        {/* KROK 2 — podstawa */}
         {krok === 1 && (
           <>
             <div className="card-h">Podstawa wpisu</div>
-            <Pole
-              etykieta="Data zdarzenia"
-              wymagane
-              podpowiedz="Data z dokumentu — nie mylić z datą wpisu, którą ustawia system co do sekundy."
-            >
-              <input
-                type="date"
-                max={fmt.dzisIso()}
-                value={dataZdarzenia}
-                onChange={(z) => z.target.value && ustawDateZdarzenia(z.target.value)}
-              />
-            </Pole>
+            <div className="siatka-2">
+              <Pole
+                etykieta="Źródło żądania"
+                wymagane
+                podpowiedz={definicjaTypu && definicjaTypu.z_urzedu ? 'To zdarzenie zakłada się wyłącznie z urzędu.' : null}
+              >
+                <select value={zrodlo} onChange={(z) => ustawZrodlo(z.target.value)} disabled={Boolean(definicjaTypu && definicjaTypu.z_urzedu)}>
+                  {!definicjaTypu?.z_urzedu && <option value="papier">papierowo</option>}
+                  {!definicjaTypu?.z_urzedu && <option value="email">e-mail</option>}
+                  {!definicjaTypu?.z_urzedu && <option value="portal">portal (przyszły kanał)</option>}
+                  {definicjaTypu?.z_urzedu && <option value="z_urzedu">z urzędu</option>}
+                </select>
+              </Pole>
+              <Pole etykieta="Data wpływu" wymagane>
+                <input type="date" max={fmt.dzisIso()} value={dataWplywu} onChange={(z) => z.target.value && ustawDateWplywu(z.target.value)} />
+              </Pole>
+            </div>
 
-            <Pole
-              etykieta="Dokument stanowiący podstawę"
-              podpowiedz="Np. „umowa sprzedaży akcji z 12 marca 2026 r., podpisy notarialnie poświadczone”."
-            >
-              <textarea
-                value={podstawaOpis}
-                onChange={(z) => ustawPodstawaOpis(z.target.value)}
-                style={{ minHeight: 80 }}
-              />
-            </Pole>
-
-            <Pole etykieta="Żądający wpisu" podpowiedz="Spółka albo inna osoba mająca interes prawny — art. 300(34) § 1 KSH.">
-              <input type="text" value={zadajacy} onChange={(z) => ustawZadajacy(z.target.value)} />
-            </Pole>
-
-            <Komunikat
-              odmiana="info"
-              tytul="Wgrywanie plików wchodzi w sprincie 2"
-              tresc={
-                'Wraz z obiegiem spraw pojawi się tu przeciąganie dokumentów, podgląd PDF ' +
-                'i powiązanie sprawy z terminem 7 dni. Na razie opisz podstawę słownie — ' +
-                'opis trafi do treści zdarzenia.'
-              }
-            />
-          </>
-        )}
-
-        {/* KROK 3 — co się zmienia */}
-        {krok === 2 && (
-          <>
-            <div className="card-h">Co się zmienia</div>
-            {typ === 'emisja' && <KrokEmisja dane={dane} ustawDane={ustawDane} />}
-            {typ === 'objecie' && <KrokObjecie dane={dane} ustawDane={ustawDane} spolka={spolka.dane} />}
-            {typ === 'przeniesienie' && (
-              <KrokPrzeniesienie dane={dane} ustawDane={ustawDane} spolka={spolka.dane} />
-            )}
-            {typ === 'umorzenie' && (
-              <KrokUmorzenie dane={dane} ustawDane={ustawDane} spolka={spolka.dane} />
-            )}
-            {typ !== 'emisja' && (
-              <div className="podstawa-prawna odstep-g">
-                Numery akcji przydziela aplikacja — podajesz wyłącznie ilość. Wyliczony zakres
-                zobaczysz do potwierdzenia w następnym kroku.
-              </div>
-            )}
-          </>
-        )}
-
-        {/* KROK 4 — weryfikacja i podgląd */}
-        {krok === 3 && (
-          <>
-            <div className="card-h">Weryfikacja i podgląd</div>
-
-            {ladowaniePodgladu ? (
-              <Spinner />
-            ) : !podglad ? (
-              <Komunikat odmiana="blad" tresc="Nie udało się przygotować podglądu." />
-            ) : (
+            {zrodlo !== 'z_urzedu' && (
               <>
-                <Wyniki bledy={podglad.bledy} ostrzezenia={podglad.ostrzezenia} />
-
-                {podglad.po && (
-                  <>
-                    <div className="przed-po odstep-g">
-                      <TabelaPorownania
-                        tytul={`Przed — stan na ${fmt.data(dataZdarzenia)}`}
-                        tabela={podglad.przed}
-                        odniesienie={podglad.po}
-                        wariant="przed"
-                      />
-                      <TabelaPorownania
-                        tytul="Po dokonaniu wpisu"
-                        tabela={podglad.po}
-                        odniesienie={podglad.przed}
-                        wariant="po"
-                      />
-                    </div>
-                    <div className="podstawa-prawna" style={{ marginTop: 10 }}>
-                      Zielony — pozycja nowa · oliwkowy — zmieniona liczba akcji · bordowy — pozycja
-                      znika z rejestru.
-                    </div>
-                  </>
-                )}
-
-                <div className="rozdzielacz" />
-
-                <div className="fl">Checklista weryfikacji</div>
-                <div className="checklista">
-                  {checklista.map((p) => (
-                    <label key={p.kod} className={`chk ${p.watpliwosci ? 'chk-watpliwosci' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(odhaczone[p.kod])}
-                        onChange={(z) =>
-                          ustawOdhaczone((o) => ({ ...o, [p.kod]: z.target.checked }))
-                        }
-                      />
-                      <span className="chk-tresc">
-                        {p.tresc}
-                        {!p.wymagana && !p.watpliwosci && (
-                          <span className="przyciemnione"> (jeśli dotyczy)</span>
-                        )}
-                        {p.podstawa && <div className="podstawa-prawna">{p.podstawa}</div>}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-
-                {sawatpliwosci && (
-                  <Pole
-                    etykieta="Notatka o uzasadnionych wątpliwościach"
-                    wymagane
-                    podpowiedz="Wymagana. W sprincie 2 przełącznik skieruje sprawę na ścieżkę pogłębioną."
-                  >
-                    <textarea
-                      value={notatkaWatpliwosci}
-                      onChange={(z) => ustawNotatkeWatpliwosci(z.target.value)}
-                    />
-                  </Pole>
-                )}
-
-                {definicjaTypu.wymaga_powiadomienia === true && (
-                  <Komunikat
-                    odmiana="uwaga"
-                    tytul="Wymagane uprzednie powiadomienie"
-                    tresc={
-                      `Przed wpisem należy powiadomić ${definicjaTypu.kogo_powiadomic || 'zainteresowanego'} ` +
-                      'o treści zamierzonego wpisu — chyba że wyraził zgodę (art. 300(34) § 3 KSH). ' +
-                      'Generowanie i wysyłka powiadomienia wchodzą w sprincie 2; teraz potwierdzasz to na checkliście.'
-                    }
-                  />
-                )}
-
-                {definicjaTypu.dokumenty && definicjaTypu.dokumenty.length > 0 && (
-                  <Komunikat
-                    odmiana="info"
-                    tytul="Dokumenty do wygenerowania po wpisie"
-                    lista={['Zawiadomienie o wpisie — do żądającego i do spółki (sprint 2).']}
-                  />
-                )}
-
-                {!wszystkoOdhaczone && (
-                  <div className="podstawa-prawna">
-                    Przycisk „Dokonaj wpisu” pozostaje nieaktywny do czasu odhaczenia całej
-                    checklisty weryfikacji.
-                  </div>
-                )}
+                <Pole etykieta="Żądający wpisu" podpowiedz="Spółka albo inna osoba mająca interes prawny — art. 300(34) § 1 KSH.">
+                  <WyborOsoby wartosc={zadajacyOsobaId} przyZmianie={ustawZadajacegoOsobaId} />
+                </Pole>
+                <Pole etykieta="Opis żądającego" podpowiedz="Jeśli żądający nie jest wpisany do kartoteki.">
+                  <input type="text" value={zadajacyOpis} onChange={(z) => ustawZadajacegoOpis(z.target.value)} />
+                </Pole>
               </>
             )}
+
+            <Pole etykieta="Dokument stanowiący podstawę" podpowiedz="Np. „umowa sprzedaży akcji z 12 marca 2026 r., podpisy notarialnie poświadczone”.">
+              <textarea value={podstawaOpis} onChange={(z) => ustawPodstawaOpis(z.target.value)} style={{ minHeight: 80 }} />
+            </Pole>
+
+            <Pole etykieta="Dokumenty (opcjonalnie)">
+              <div className="row-g" style={{ flexWrap: 'wrap' }}>
+                <select value={typDokumentu} onChange={(z) => ustawTypDokumentu(z.target.value)} style={{ width: 'auto' }}>
+                  <option value="umowa_zbycia">umowa zbycia</option>
+                  <option value="uchwala">uchwała</option>
+                  <option value="zgoda">zgoda</option>
+                  <option value="postanowienie">postanowienie</option>
+                  <option value="pelnomocnictwo">pełnomocnictwo</option>
+                  <option value="inny">inny</option>
+                </select>
+                <input
+                  type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={(z) => ustawPliki([...z.target.files])}
+                />
+              </div>
+              {pliki.length > 0 && (
+                <div className="podpowiedz">{pliki.length} plik(ów): {pliki.map((p) => p.name).join(', ')}</div>
+              )}
+            </Pole>
           </>
         )}
 
@@ -916,35 +1097,23 @@ function EkranKreatora({ spolkaId }) {
             className="btn"
             onClick={() => {
               if (krok === 0) {
-                if (!cokolwiekWpisano || window.confirm('Przerwać tworzenie zdarzenia?')) {
-                  idz(`/spolki/${spolkaId}`);
-                }
+                if (!cokolwiekWpisano || window.confirm('Przerwać zakładanie sprawy?')) idz(`/spolki/${spolkaId}`);
               } else {
-                idzDoKroku(krok - 1);
+                ustawKrok((k) => k - 1);
               }
             }}
           >
             {krok === 0 ? 'Anuluj' : 'Wstecz'}
           </button>
-
           <div className="kreator-stopka-prawa">
-            {krok < 3 ? (
-              <button className="btn btn-primary" disabled={!mozeDalej} onClick={() => idzDoKroku(krok + 1)}>
+            {krok < 1 ? (
+              <button className="btn btn-primary" disabled={!mozeDalej} onClick={() => ustawKrok((k) => k + 1)}>
                 Dalej
               </button>
             ) : (
-              <>
-                <button className="btn" onClick={wczytajPodglad} disabled={ladowaniePodgladu}>
-                  Przelicz podgląd
-                </button>
-                <button
-                  className="btn btn-primary btn-lg"
-                  disabled={!mozeWpisac || zapisywanie}
-                  onClick={dokonajWpisu}
-                >
-                  {zapisywanie ? 'Zapisywanie…' : 'Dokonaj wpisu'}
-                </button>
-              </>
+              <button className="btn btn-primary btn-lg" disabled={!mozeDalej || zapisywanie} onClick={zalozSprawe}>
+                {zapisywanie ? 'Zakładanie sprawy…' : 'Załóż sprawę i przejdź dalej'}
+              </button>
             )}
           </div>
         </div>
@@ -953,4 +1122,10 @@ function EkranKreatora({ spolkaId }) {
   );
 }
 
-window.EkranKreatora = EkranKreatora;
+window.KROKI_ZDARZENIA = KROKI_ZDARZENIA;
+window.KROKI_TRESCI = KROKI_TRESCI;
+window.zbudujDaneZdarzenia = zbudujDaneZdarzenia;
+window.TabelaPorownania = TabelaPorownania;
+window.WyborEmisji = WyborEmisji;
+window.WyborObciazenia = WyborObciazenia;
+window.EkranNowejSprawy = EkranNowejSprawy;

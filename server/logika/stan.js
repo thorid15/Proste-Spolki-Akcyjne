@@ -387,6 +387,29 @@ const HANDLERY = {
     zamknijObciazenie(stan, zdarzenie, d);
   },
 
+  /**
+   * Wpis o prawie glosu zastawnika/uzytkownika (art. 300(33) § 1 pkt 7 KSH).
+   * Zmienia atrybut ISTNIEJACEGO obciazenia - nie tworzy nowego rekordu.
+   *
+   * UPROSZCZENIE: `prawo_glosu` jest atrybutem BIEZACYM obciazenia, bez
+   * wlasnej osi czasu (w odroznieniu od `data_od`/`data_do` calego
+   * obciazenia). "Stan na dzien" z suwaka w kokpicie wiernie odtwarza SKLAD
+   * akcjonariatu i to, KTORE akcje sa obciazone - nie odtwarza historycznej
+   * wartosci samego prawa glosu sprzed jego zmiany. Uzasadnienie: to atrybut
+   * pomocniczy przy obciazeniu, nie fakt liczbowy wymagajacy odtwarzania
+   * wstecz jak stan posiadania akcji (regula domenowa nr 3).
+   */
+  prawo_glosu_zastawnika(stan, zdarzenie, d) {
+    const klucz = Number(d.obciazenie_zdarzenie_id);
+    const cel = stan.obciazenia.find((o) => o.klucz === klucz && o.data_do === null);
+    if (!cel) {
+      throw new BladStanu(
+        `Zdarzenie #${zdarzenie.id} dotyczy obciążenia, którego nie ma w rejestrze (zdarzenie #${klucz}).`
+      );
+    }
+    cel.prawo_glosu = d.prawo_glosu ? 1 : 0;
+  },
+
   uprawnienie(stan, zdarzenie, d) {
     if (d.wykresla_zdarzenie_id != null) {
       const cel = stan.uprawnienia.find((u) => u.klucz === Number(d.wykresla_zdarzenie_id));
@@ -447,12 +470,16 @@ function zamknijObciazenie(stan, zdarzenie, d) {
   cel.zdarzenie_wykreslenia_id = Number(zdarzenie.id);
 }
 
-/** Typy, ktore nie zmieniaja struktur rejestru - trafiaja na os czasu. */
+/**
+ * Typy, ktore nie zmieniaja struktur rejestru - trafiaja na os czasu.
+ * `zmiana_danych_akcjonariusza` zmienia rekord `psa_osoby` (efekt uboczny
+ * poza materializacja stanu akcji, patrz `rejestr.js`), ale samego stanu
+ * akcji nie dotyka - stad tez trafia na os czasu bez skutku strukturalnego.
+ */
 const TYPY_BEZ_SKUTKU = new Set([
   'zmiana_danych_akcjonariusza',
   'zmiana_danych_spolki',
   'zobowiazanie',
-  'prawo_glosu_zastawnika',
   'zdarzenie_inne',
 ]);
 
@@ -462,41 +489,55 @@ const TYPY_BEZ_SKUTKU = new Set([
 
 /**
  * Odtwarza pelny stan rejestru z listy zdarzen jednej spolki.
- * Zdarzenia `sprostowanie` sa stosowane jako korekta: zdarzenie prostowane
- * jest POMIJANE, a w jego miejsce wchodzi tresc sprostowania (o ile ja niesie).
- * Nic nie jest kasowane - oba zdarzenia zostaja w lancuchu.
+ *
+ * Zdarzenia `sprostowanie` z tresc±a `zamiast` PODMIENIAJA tresc zdarzenia
+ * prostowanego DOKLADNIE W JEGO POZYCJI chronologicznej - nie wstawiamy ich
+ * osobno pod ich wlasnym ID. Dwa powody:
+ *   1. klucz struktury, ktora tworzy zdarzenie (np. HANDLERY.emisja:
+ *      `klucz: Number(zdarzenie.id)`), musi zostac STABILNY - pozniejsze
+ *      zdarzenia (np. `objecie`) odwoluja sie do niego przez ID PIERWOTNEGO
+ *      zdarzenia, nie sprostowania;
+ *   2. zdarzenia miedzy oryginalem a sprostowaniem (ktore czesto ma pozniejszy
+ *      ID przy tej samej `data_zdarzenia`) musza "widziec" juz skorygowana
+ *      strukture, inaczej korekta przychodzi za pozno w kolejnosci przetwarzania.
+ * Sprostowanie BEZ `zamiast` jest pelnym wycofaniem zdarzenia pierwotnego
+ * (nie ma czym go zastapic). Nic nie jest kasowane - wszystkie zdarzenia
+ * zostaja w lancuchu, samo sprostowanie trafia na os czasu.
  */
 function odtworzStan(zdarzenia) {
   const stan = pustyStan();
   const lista = [...(zdarzenia || [])].sort(porownajZdarzenia);
 
-  const sprostowane = new Set();
+  const podmiany = new Map(); // ID prostowanego zdarzenia -> { typ, tresc }
+  const wycofane = new Set(); // ID prostowanego zdarzenia bez tresci zastepczej
   for (const z of lista) {
-    if (z.typ === 'sprostowanie' && z.zdarzenie_prostowane_id != null) {
-      sprostowane.add(Number(z.zdarzenie_prostowane_id));
+    if (z.typ !== 'sprostowanie' || z.zdarzenie_prostowane_id == null) continue;
+    const d = dane(z);
+    if (d.zamiast && d.zamiast.typ) {
+      podmiany.set(Number(z.zdarzenie_prostowane_id), { typ: d.zamiast.typ, tresc: d.zamiast });
+    } else {
+      wycofane.add(Number(z.zdarzenie_prostowane_id));
     }
   }
 
   for (const zdarzenie of lista) {
-    if (sprostowane.has(Number(zdarzenie.id))) {
-      stan.pozostale.push({ ...zdarzenie, pominiete: true, powod: 'sprostowane' });
+    const id = Number(zdarzenie.id);
+
+    if (zdarzenie.typ === 'sprostowanie') {
+      // Skutek (jesli jest) zostal juz zastosowany w miejscu zdarzenia
+      // prostowanego, powyzej - samo sprostowanie idzie tylko na os czasu.
+      stan.pozostale.push(zdarzenie);
       continue;
     }
 
-    const d = dane(zdarzenie);
-    let typ = zdarzenie.typ;
-    let tresc = d;
-
-    if (typ === 'sprostowanie') {
-      // Sprostowanie moze podmieniac tresc prostowanego zdarzenia (`zamiast`)
-      // albo byc wylacznie adnotacja (np. korekta literowki w opisie).
-      if (!d.zamiast || !d.zamiast.typ) {
-        stan.pozostale.push(zdarzenie);
-        continue;
-      }
-      typ = d.zamiast.typ;
-      tresc = d.zamiast;
+    if (wycofane.has(id)) {
+      stan.pozostale.push({ ...zdarzenie, pominiete: true, powod: 'wycofane sprostowaniem' });
+      continue;
     }
+
+    const podmiana = podmiany.get(id);
+    const typ = podmiana ? podmiana.typ : zdarzenie.typ;
+    const tresc = podmiana ? podmiana.tresc : dane(zdarzenie);
 
     if (TYPY_BEZ_SKUTKU.has(typ)) {
       stan.pozostale.push(zdarzenie);
