@@ -1,0 +1,8 @@
+node_modules/
+dane/*.db
+dane/*.db-wal
+dane/*.db-shm
+dokumenty/
+.env
+*.log
+.DS_Store

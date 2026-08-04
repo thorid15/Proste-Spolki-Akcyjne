@@ -1,0 +1,20 @@
+{
+  "name": "psa-rejestr-akcjonariuszy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rejestr akcjonariuszy prostych spolek akcyjnych (art. 300(30) i nast. KSH) - Kancelaria Notarialna Lukasza Kozona",
+  "main": "serwer.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node serwer.js",
+    "dev": "node --watch serwer.js",
+    "test": "node --test \"testy/*.test.js\""
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
