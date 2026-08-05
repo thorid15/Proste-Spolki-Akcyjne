@@ -97,10 +97,7 @@ function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
       const formularz = new FormData();
       formularz.append('typ_dokumentu', typDokumentu);
       for (const plik of pliki) formularz.append('pliki', plik);
-      const naglowki = {};
-      const uzytkownik = pobierzUzytkownika();
-      if (uzytkownik) naglowki['X-User-Name'] = encodeURIComponent(uzytkownik);
-      const odp = await fetch(`/api/psa/sprawy/${sprawaId}/dokumenty`, { method: 'POST', headers: naglowki, body: formularz });
+      const odp = await fetch(`/api/psa/sprawy/${sprawaId}/dokumenty`, { method: 'POST', body: formularz });
       if (!odp.ok) {
         const tresc = await odp.json();
         throw new Error(tresc.blad || `Błąd ${odp.status}`);

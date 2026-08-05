@@ -5,31 +5,11 @@
 const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
 /* ─────────────────────────────────────────────────────
-   UŻYTKOWNIK
-   Sprint 1 nie ma logowania (konta wchodzą w sprincie 3). Tożsamość niesie
-   nagłówek X-User-Name — konwencja mastera. Nagłówki HTTP przenoszą tylko
-   ISO-8859-1, a nazwiska mają polskie znaki, więc kodujemy wartość procentowo.
-   ───────────────────────────────────────────────────── */
-const KLUCZ_UZYTKOWNIKA = 'psa.uzytkownik';
-
-function pobierzUzytkownika() {
-  try {
-    return localStorage.getItem(KLUCZ_UZYTKOWNIKA) || '';
-  } catch {
-    return '';
-  }
-}
-
-function zapiszUzytkownika(imie) {
-  try {
-    localStorage.setItem(KLUCZ_UZYTKOWNIKA, imie);
-  } catch {
-    /* tryb prywatny — działamy dalej, autor pozostanie na czas sesji */
-  }
-}
-
-/* ─────────────────────────────────────────────────────
    KLIENT API
+   Od sprintu 3 tożsamość niesie sesja w httpOnly cookie
+   (`pomocnicze/autoryzacja.js`), nie nagłówek `X-User-Name` — `fetch`
+   dołącza ciasteczka domyślnie przy żądaniach tego samego pochodzenia,
+   więc klient nie musi nic dokładać.
    ───────────────────────────────────────────────────── */
 class BladApi extends Error {
   constructor(komunikat, dane, status) {
@@ -44,8 +24,6 @@ class BladApi extends Error {
 
 async function zapytaj(metoda, sciezka, cialo) {
   const naglowki = {};
-  const uzytkownik = pobierzUzytkownika();
-  if (uzytkownik) naglowki['X-User-Name'] = encodeURIComponent(uzytkownik);
   if (cialo !== undefined) naglowki['Content-Type'] = 'application/json';
 
   const odpowiedz = await fetch(sciezka, {
@@ -203,8 +181,6 @@ function useEscape(obsluga) {
 
 window.API = API;
 window.BladApi = BladApi;
-window.pobierzUzytkownika = pobierzUzytkownika;
-window.zapiszUzytkownika = zapiszUzytkownika;
 window.fmt = { zlote, liczba, procent, data, dataCzas, odmien, AKCJE, dzisIso };
 window.idz = idz;
 window.useTrasa = useTrasa;

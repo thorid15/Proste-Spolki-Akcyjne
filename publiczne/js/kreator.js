@@ -959,10 +959,7 @@ function EkranNowejSprawy({ spolkaId }) {
         const formularz = new FormData();
         formularz.append('typ_dokumentu', typDokumentu);
         for (const plik of pliki) formularz.append('pliki', plik);
-        const naglowki = {};
-        const uzytkownik = pobierzUzytkownika();
-        if (uzytkownik) naglowki['X-User-Name'] = encodeURIComponent(uzytkownik);
-        await fetch(`/api/psa/sprawy/${sprawaId}/dokumenty`, { method: 'POST', headers: naglowki, body: formularz });
+        await fetch(`/api/psa/sprawy/${sprawaId}/dokumenty`, { method: 'POST', body: formularz });
       }
 
       // Kreator prowadzi wprost do weryfikacji — kroki 3–4 (w EkranSprawy)

@@ -23,14 +23,24 @@ const MENU = [
     pozycje: [
       { sciezka: '/konfiguracja/stawki', nazwa: 'Stawki i terminy' },
       { sciezka: '/konfiguracja/szablony', nazwa: 'Szablony dokumentów', sprint: 4 },
-      { sciezka: '/konfiguracja/uzytkownicy', nazwa: 'Użytkownicy', sprint: 3 },
+      { sciezka: '/konfiguracja/uzytkownicy', nazwa: 'Użytkownicy', admin: true },
     ],
   },
 ];
 
-function Sidebar({ sciezka, uzytkownik, przyZmianieUzytkownika }) {
+function Sidebar({ sciezka, uzytkownik, przyWylogowaniu }) {
   const aktywna = (poz) =>
     poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka);
+  const [wylogowywanie, ustawWylogowywanie] = useState(false);
+
+  async function wyloguj() {
+    ustawWylogowywanie(true);
+    try {
+      await API.post('/api/psa/auth/logout');
+    } finally {
+      przyWylogowaniu();
+    }
+  }
 
   return (
     <nav className="sidebar bez-druku">
@@ -42,73 +52,33 @@ function Sidebar({ sciezka, uzytkownik, przyZmianieUzytkownika }) {
       {MENU.map((g) => (
         <div className="sb-grupa" key={g.grupa}>
           <div className="sb-grupa-tytul">{g.grupa}</div>
-          {g.pozycje.map((poz) => (
-            <button
-              key={poz.sciezka}
-              className={`sb-poz ${aktywna(poz) ? 'aktywna' : ''} ${poz.sprint ? 'zablokowana' : ''}`}
-              disabled={Boolean(poz.sprint)}
-              title={poz.sprint ? `Wchodzi w sprincie ${poz.sprint}` : undefined}
-              onClick={() => !poz.sprint && idz(poz.sciezka)}
-            >
-              <span>{poz.nazwa}</span>
-              {poz.sprint && <span className="znacznik znacznik-neutralny">sprint {poz.sprint}</span>}
-            </button>
-          ))}
+          {g.pozycje
+            .filter((poz) => !poz.admin || uzytkownik.rola === 'admin')
+            .map((poz) => (
+              <button
+                key={poz.sciezka}
+                className={`sb-poz ${aktywna(poz) ? 'aktywna' : ''} ${poz.sprint ? 'zablokowana' : ''}`}
+                disabled={Boolean(poz.sprint)}
+                title={poz.sprint ? `Wchodzi w sprincie ${poz.sprint}` : undefined}
+                onClick={() => !poz.sprint && idz(poz.sciezka)}
+              >
+                <span>{poz.nazwa}</span>
+                {poz.sprint && <span className="znacznik znacznik-neutralny">sprint {poz.sprint}</span>}
+              </button>
+            ))}
         </div>
       ))}
 
       <div className="sb-stopka">
-        <div className="sb-grupa-tytul" style={{ padding: '0 0 6px' }}>Prowadzi czynności</div>
-        <button className="btn btn-sm" style={{ width: '100%' }} onClick={przyZmianieUzytkownika}>
-          {uzytkownik || 'Ustaw osobę'}
-        </button>
-        <div className="podpowiedz" style={{ marginTop: 8 }}>
-          Autor zapisywany przy każdym zdarzeniu. Logowanie wchodzi w sprincie 3.
+        <div className="sb-uzytkownik">{uzytkownik.imie}</div>
+        <div className="sb-uzytkownik-rola">
+          {uzytkownik.rola === 'admin' ? 'administrator' : 'pracownik'} · {uzytkownik.email}
         </div>
+        <button className="btn btn-sm" style={{ width: '100%' }} onClick={wyloguj} disabled={wylogowywanie}>
+          Wyloguj się
+        </button>
       </div>
     </nav>
-  );
-}
-
-/** Ustalenie autora czynności — bez tego nie da się dokonać wpisu. */
-function ModalUzytkownika({ wartosc, przyZapisie, przyZamknieciu }) {
-  const [imie, ustawImie] = useState(wartosc || '');
-  return (
-    <Modal
-      tytul="Kto prowadzi czynności?"
-      przyZamknieciu={wartosc ? przyZamknieciu : undefined}
-      szerokosc={470}
-      stopka={
-        <>
-          {wartosc && <button className="btn" onClick={przyZamknieciu}>Anuluj</button>}
-          <button
-            className="btn btn-primary"
-            disabled={!imie.trim()}
-            onClick={() => przyZapisie(imie.trim())}
-          >
-            Zapisz
-          </button>
-        </>
-      }
-    >
-      <Pole
-        etykieta="Imię i nazwisko"
-        wymagane
-        podpowiedz={
-          'Zapisujemy je przy każdym zdarzeniu rejestrowym jako autora wpisu. ' +
-          'Na start wpisu może dokonać każdy pracownik kancelarii — model ról ustalimy ' +
-          'po odpowiedzi izby notarialnej.'
-        }
-      >
-        <input
-          type="text"
-          value={imie}
-          autoFocus
-          onChange={(z) => ustawImie(z.target.value)}
-          onKeyDown={(z) => z.key === 'Enter' && imie.trim() && przyZapisie(imie.trim())}
-        />
-      </Pole>
-    </Modal>
   );
 }
 
@@ -126,8 +96,7 @@ function NieZnaleziono() {
 
 function Aplikacja() {
   const trasa = useTrasa();
-  const [uzytkownik, ustawUzytkownika] = useState(pobierzUzytkownika());
-  const [modalUzytkownika, ustawModalUzytkownika] = useState(!pobierzUzytkownika());
+  const sesja = useSesja();
 
   const { segmenty, zapytanie, sciezka } = trasa;
 
@@ -159,30 +128,22 @@ function Aplikacja() {
 
     if (segmenty[0] === 'osoby') return <EkranOsob />;
     if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'stawki') return <EkranStawek />;
+    if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'uzytkownicy') {
+      return sesja.uzytkownik.rola === 'admin' ? <EkranUzytkownikow /> : <NieZnaleziono />;
+    }
 
     return <NieZnaleziono />;
   }
 
+  if (sesja.ladowanie) return <Spinner />;
+  if (!sesja.zalogowany) {
+    return <EkranLogowania przyZalogowaniu={() => sesja.odswiez()} />;
+  }
+
   return (
     <div className="apka">
-      <Sidebar
-        sciezka={sciezka}
-        uzytkownik={uzytkownik}
-        przyZmianieUzytkownika={() => ustawModalUzytkownika(true)}
-      />
+      <Sidebar sciezka={sciezka} uzytkownik={sesja.uzytkownik} przyWylogowaniu={() => sesja.odswiez()} />
       <main className="tresc">{ekran()}</main>
-
-      {modalUzytkownika && (
-        <ModalUzytkownika
-          wartosc={uzytkownik}
-          przyZamknieciu={() => ustawModalUzytkownika(false)}
-          przyZapisie={(imie) => {
-            zapiszUzytkownika(imie);
-            ustawUzytkownika(imie);
-            ustawModalUzytkownika(false);
-          }}
-        />
-      )}
     </div>
   );
 }

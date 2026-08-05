@@ -167,6 +167,63 @@ function wezwanieDoUzupelnienia({ kancelaria, spolka, typZdarzenie, powodWstrzym
   });
 }
 
+/**
+ * art. 300(35) KSH — informacja z rejestru. `stan` to gotowy wynik
+ * `widoki.widokStanu()` — maskowanie jest juz zastosowane wzgledem roli
+ * odbiorcy, tu tylko ukladamy HTML (sekcja 10: czego NIE umieszczac na
+ * wydrukach — pole `uwagi`, checklisty, notatki AML, hash — widokStanu ich
+ * juz nie zwraca dla roli innej niz kancelaria).
+ */
+function informacjaZRejestru({ kancelaria, spolka, data, stan }) {
+  const wiersze = stan.akcjonariusze
+    .map((a) => {
+      const oznaczenie = a.osoba ? esc(a.osoba.oznaczenie) : 'nieznany';
+      const identyfikator = a.osoba && a.osoba.jawny_identyfikator ? ` · ${esc(a.osoba.jawny_identyfikator)}` : '';
+      const obciazone = a.obciazenia && a.obciazenia.length ? ' 🔒' : '';
+      return `
+        <tr>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca;">${oznaczenie}${identyfikator}${obciazone}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca;">${esc(a.seria)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; text-align: right;">${esc(a.ilosc)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; font-family: monospace; font-size: 11px;">${esc(a.numery)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; text-align: right;">${esc(a.procent)}%</td>
+        </tr>`;
+    })
+    .join('');
+
+  const tresc = `
+    <p>
+      Informacja z rejestru akcjonariuszy spółki <strong>${esc(spolka.nazwa)}</strong>
+      ${spolka.krs ? ` (KRS ${esc(spolka.krs)})` : ''}, sporządzona na podstawie art. 300(35)
+      Kodeksu spółek handlowych, według stanu na dzień <strong>${dataPl(data)}</strong>.
+    </p>
+    <table style="width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px;">
+      <thead>
+        <tr style="text-align: left; color: #6b6256; font-size: 11px; text-transform: uppercase;">
+          <th style="padding: 6px 8px;">Akcjonariusz</th>
+          <th style="padding: 6px 8px;">Seria</th>
+          <th style="padding: 6px 8px; text-align: right;">Ilość</th>
+          <th style="padding: 6px 8px;">Numery</th>
+          <th style="padding: 6px 8px; text-align: right;">Udział</th>
+        </tr>
+      </thead>
+      <tbody>${wiersze || '<tr><td colspan="5" style="padding:6px 8px;">Brak wpisanych akcjonariuszy.</td></tr>'}</tbody>
+    </table>
+    <p style="font-size: 12px; color: #6b6256;">
+      Razem akcji wyemitowanych i objętych: ${esc(stan.razem_akcji)}.
+      ${'🔒'} oznacza akcje obciążone zastawem, użytkowaniem lub zajęciem.
+    </p>
+    <p style="font-size: 11px; color: #9e9487;">
+      Dane osób innych niż wnioskujący mogą być częściowo zamaskowane zgodnie z art. 300(35) § 1(1) KSH.
+    </p>
+  `;
+  return szkielet({
+    tytul: 'Informacja z rejestru akcjonariuszy',
+    kancelaria,
+    tresc,
+  });
+}
+
 module.exports = {
   esc,
   dataPl,
@@ -174,4 +231,5 @@ module.exports = {
   zawiadomienieOdmowa,
   powiadomienieZamierzonegoWpisu,
   wezwanieDoUzupelnienia,
+  informacjaZRejestru,
 };

@@ -19,6 +19,7 @@ class BladZadania extends Error {
 
 const bledneZadanie = (k, s) => new BladZadania(400, k, s);
 const nieZnaleziono = (k = 'Nie odnaleziono zasobu.') => new BladZadania(404, k);
+const nieAutoryzowany = (k = 'Ta operacja wymaga zalogowania.') => new BladZadania(401, k);
 const brakUprawnien = (k = 'Brak uprawnień do tej operacji.') => new BladZadania(403, k);
 
 /** Opakowanie handlera - wyjatki trafiaja do wspolnego posrednika bledow. */
@@ -34,39 +35,17 @@ function asy(handler) {
 }
 
 /**
- * Naglowki HTTP przenosza wylacznie ISO-8859-1, a nazwiska notariuszy
- * i pracownikow maja polskie znaki - `fetch` odrzucilby taka wartosc.
- * Klient wysyla ja wiec zakodowana procentowo (`encodeURIComponent`).
- * Wartosc czysto ASCII przechodzi bez zmian.
- */
-function odkodujNaglowek(wartosc) {
-  const tekst = String(wartosc || '');
-  try {
-    return decodeURIComponent(tekst);
-  } catch {
-    return tekst;
-  }
-}
-
-/**
- * Autor czynnosci. Sprint 1 nie ma jeszcze logowania (sekcja 14 - konta
- * wchodza w sprincie 3), wiec zgodnie z konwencja mastera tozsamosc niesie
- * naglowek `X-User-Name`. Decyzja nr 3 z sekcji 15: na start wpisu moze
- * dokonac kazdy pracownik, z zapisem autora przy zdarzeniu - dlatego autor
- * jest WYMAGANY przy kazdej operacji zapisujacej.
+ * Autor czynnosci. Od sprintu 3 tozsamosc niesie sesja pracownika
+ * (`pomocnicze/autoryzacja.js`), nie naglowek `X-User-Name` - odstepstwo nr 2
+ * z sekcji 2 specyfikacji: dostep publiczny wyklucza identyfikacje samym
+ * imieniem. Decyzja nr 3 z sekcji 15: na start wpisu moze dokonac kazdy
+ * zalogowany pracownik, z zapisem autora przy zdarzeniu.
  */
 function autor(zad) {
-  const naglowek = zad.get('X-User-Name');
-  const imie = odkodujNaglowek(naglowek).trim();
-  if (!imie) {
-    throw bledneZadanie(
-      'Nie ustalono autora czynności. Wybierz osobę prowadzącą sprawę przed dokonaniem wpisu.'
-    );
+  if (!zad.uzytkownik) {
+    throw nieAutoryzowany('Ta operacja wymaga zalogowania.');
   }
-  if (imie.length > 120) {
-    throw bledneZadanie('Oznaczenie autora jest za długie.');
-  }
-  return imie;
+  return zad.uzytkownik.imie;
 }
 
 /** Posrednik bledow - ostatni w lancuchu. */
@@ -90,6 +69,9 @@ function posrednikBledow(blad, zad, odp, dalej) {
   if (blad.code === 'SQLITE_CONSTRAINT_UNIQUE') {
     return odp.status(409).json({ blad: 'Rekord o tych danych już istnieje.' });
   }
+  if (blad.name === 'BladOgraniczenia') {
+    return odp.status(429).json({ blad: blad.message });
+  }
   // multer - blad limitu rozmiaru/liczby plikow ma czytelny kod, reszta
   // (np. zly typ pliku) trafia tu jako zwykly Error z pomocnicze/odpowiedzi.
   if (blad.name === 'MulterError') {
@@ -107,9 +89,9 @@ function posrednikBledow(blad, zad, odp, dalej) {
 
 module.exports = {
   BladZadania,
-  odkodujNaglowek,
   bledneZadanie,
   nieZnaleziono,
+  nieAutoryzowany,
   brakUprawnien,
   asy,
   autor,

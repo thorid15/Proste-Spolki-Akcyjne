@@ -322,6 +322,46 @@ const MIGRACJE = [
         ON psa_wydane_dokumenty (spolka_id);
     `,
   },
+  {
+    wersja: 3,
+    nazwa: 'uwierzytelnianie - psa_uzytkownicy, psa_konta',
+    sql: `
+      -- ── Pracownicy kancelarii (sekcja 5) ────────────────────────────────
+      -- Admin = Lukasz, env ADMIN_EMAIL - konto zakladane automatycznie przy
+      -- pierwszym starcie serwera (server/trasy/auth.js: zapewnijAdmina).
+      CREATE TABLE IF NOT EXISTS psa_uzytkownicy (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        imie            TEXT NOT NULL,
+        email           TEXT NOT NULL UNIQUE,
+        hash_hasla      TEXT NOT NULL,
+        rola            TEXT NOT NULL DEFAULT 'pracownik' CHECK (rola IN ('admin','pracownik')),
+        aktywny         INTEGER NOT NULL DEFAULT 1 CHECK (aktywny IN (0,1)),
+        ostatnie_logowanie TEXT,
+        utworzono       TEXT NOT NULL
+      );
+
+      -- ── Konta portalowe: spolka albo akcjonariusz (sekcja 5, 8) ─────────
+      CREATE TABLE IF NOT EXISTS psa_konta (
+        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+        email              TEXT NOT NULL UNIQUE,
+        hash_hasla         TEXT NOT NULL,
+        rola               TEXT NOT NULL CHECK (rola IN ('spolka','akcjonariusz')),
+        spolka_id          INTEGER REFERENCES psa_spolki(id),
+        osoba_id           INTEGER REFERENCES psa_osoby(id),
+        aktywne            INTEGER NOT NULL DEFAULT 0 CHECK (aktywne IN (0,1)),
+        token_aktywacji    TEXT,
+        ostatnie_logowanie TEXT,
+        utworzono          TEXT NOT NULL,
+        CHECK ((rola = 'spolka') = (spolka_id IS NOT NULL)),
+        CHECK (osoba_id IS NOT NULL OR rola = 'spolka')
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_konta_spolka
+        ON psa_konta (spolka_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_konta_osoba
+        ON psa_konta (osoba_id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

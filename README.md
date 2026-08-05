@@ -3,7 +3,9 @@
 Moduł do prowadzenia rejestrów akcjonariuszy prostych spółek akcyjnych
 (art. 300³⁰ i nast. KSH) przez notariusza — Kancelaria Notarialna Łukasza Kozona.
 
-**Stan: sprint 2 ukończony** (rdzeń rejestru + workflow spraw; bez portalu klienta).
+**Stan: sprint 3 ukończony** (rdzeń rejestru + workflow spraw + logowanie
+i portal klienta). Portal jest gotowy funkcjonalnie, ale domyślnie
+**wyłączony** flagą `PORTAL_WLACZONY` — patrz „Do decyzji”.
 
 ---
 
@@ -11,12 +13,22 @@ Moduł do prowadzenia rejestrów akcjonariuszy prostych spółek akcyjnych
 
 ```bash
 npm install
-cp .env.przyklad .env      # uzupełnij dane kancelarii i (opcjonalnie) SMTP
+cp .env.przyklad .env      # uzupełnij dane kancelarii, ADMIN_EMAIL, SESJA_SEKRET, (opcjonalnie) SMTP
 npm start                  # http://localhost:3005
-npm test                   # 81 testów
+npm test                   # 113 testów
 ```
 
 Migracje wykonują się automatycznie przy starcie i są idempotentne.
+
+Przy pierwszym starcie z pustą tabelą `psa_uzytkownicy` serwer zakłada konto
+administratora z adresem `ADMIN_EMAIL` i **losowym hasłem tymczasowym,
+wypisanym jeden raz w logu startu** — trzeba je zapisać wtedy, bo nie da się
+go odzyskać (można za to wygenerować nowe przez „Resetuj hasło” w ekranie
+Użytkownicy, jako inny zalogowany admin, albo bezpośrednio w bazie).
+
+Kancelaria: `http://localhost:3005/` — wymaga zalogowania (e-mail + hasło).
+Portal klienta: `http://localhost:3005/portal` — osobna aplikacja, osobna
+sesja, aktywna tylko gdy `PORTAL_WLACZONY=true`.
 
 Front ładuje React 18 i Babel z CDN (`unpkg.com`, wersje przypięte) — maszyna
 uruchamiająca przeglądarkę musi mieć do niego dostęp. Bez bundlera, bez
@@ -62,6 +74,35 @@ roboczym stanem formularza). Endpoint `POST /api/psa/spolki/:id/zdarzenia`
 z sprintu 1 zostaje jako szybka ścieżka wewnętrzna (np. zasiewanie danych),
 ale UI już go nie używa.
 
+## Co powstało w sprincie 3
+
+| Punkt z planu | Stan |
+|---|---|
+| Decyzja o wariancie wdrożenia (sekcja 2) | ✅ **A — wszystko na VPS** |
+| Konta, logowanie, rate limiting | ✅ |
+| Podgląd rejestru z maskowaniem, złożenie żądania, statusy spraw (portal) | ✅ |
+
+Wariant A oznacza, że rejestr (dane osobowe akcjonariuszy) opuszcza serwer
+kancelarii — konsekwencje (TLS, kopie zapasowe offsite szyfrowane, umowa
+powierzenia z hostingiem, RODO) są infrastrukturalne/prawne, nie kodowe;
+odnotowane tu jako do zrobienia przed realnym wdrożeniem, nie zaimplementowane
+w tym sprincie.
+
+**Uwierzytelnianie zastępuje `X-User-Name` w całej aplikacji**, nie tylko
+w portalu — to była konsekwencja wariantu A (serwer wystawiony publicznie,
+identyfikacja samym imieniem przestaje mieć sens). Sesja jest **bezstanowa**:
+token HMAC-SHA256 (`logika/sesja.js`, `node:crypto`, zero nowych zależności)
+w httpOnly cookie, `SameSite=Lax`, `Secure` gdy połączenie idzie przez HTTPS
+(bezpośrednio albo za reverse proxy, `trust proxy`). Dwa niezależne ciasteczka,
+dwie niezależne sesje w tej samej przeglądarce: `psa_sesja` (pracownik) i
+`psa_sesja_portal` (konto klienta) — nigdy się nie mieszają.
+
+Portal jest **osobną aplikacją jednostronicową** (`publiczne/portal.html` +
+`publiczne/js/portal.js`), nie kolejną trasą w SPA kancelaryjnej — inna
+tożsamość, inny zestaw ekranów, inny model zaufania. Dzieli z kancelarią
+tylko `rdzen.js` i `ui.js` (klient API, formatowanie, komponenty wspólne),
+świadomie nie dzieli routingu ani stanu.
+
 ---
 
 ## Architektura
@@ -71,7 +112,7 @@ serwer.js                  punkt wejścia, port 3005
 server/
   konfiguracja.js          .env (własny parser — dotenv nie jest na liście zależności)
   baza.js                  better-sqlite3, WAL, foreign_keys
-  migracje.js              idempotentne, wyłącznie obiekty psa_* (v1 rdzeń, v2 sprawy)
+  migracje.js              idempotentne, wyłącznie obiekty psa_* (v1 rdzeń, v2 sprawy, v3 konta)
   rejestr.js               transakcje: zapis zdarzenia, materializacja, wpis sprawy, sprostowanie
   widoki.js                stan domenowy → struktura dla UI, Z MASKOWANIEM
   zawiadomienia.js         generowanie + próba wysyłki dokumentów wychodzących (poza transakcją SQLite)
@@ -86,13 +127,24 @@ server/
     walidacje.js           walidacje BLOKUJĄCE
     lancuch.js             sha256, kanoniczny JSON, weryfikacja łańcucha
     maskowanie.js          art. 300³⁵ § 1¹
-    dokumenty-tresc.js     deterministyczny HTML zawiadomień/wezwań (bez bibliotek PDF)
-  trasy/                   HTTP (spolki, osoby, sprawy, zdarzenia, pozostale, wspolne)
+    dokumenty-tresc.js     deterministyczny HTML zawiadomień/wezwań/informacji (bez bibliotek PDF)
+    hasla.js               bcrypt (hash, weryfikacja, siła hasła) — jedyna nowa zależność bezpieczeństwa
+    sesja.js                token sesji: HMAC-SHA256 bezstanowy, `node:crypto`, zero zależności
+    limiter.js              rate limiting logowania — własna implementacja, licznik w pamięci
+  pomocnicze/
+    autoryzacja.js          middleware sesji (pracownik / konto), guardy wymagajPracownika/wymagajAdmina/wymagajKonta
+    ciasteczka.js            parser/serializator ciasteczek — cookie-parser nie jest na liście zależności
+  trasy/                   HTTP (spolki, osoby, sprawy, zdarzenia, pozostale, wspolne, auth, portal)
 publiczne/                 React 18 + Babel z CDN, bez bundlera
   wspolne/design.css       kanon wizualny kancelarii (wersja 1.1)
   style/psa.css            wyłącznie układ modułu, kolory tylko przez var(--…)
+  index.html               SPA kancelaryjna
+  portal.html              SPA portalu klienta — OSOBNA aplikacja, osobna sesja
   js/sprawy.js             kolejka + kokpit sprawy + kroki 3–4 kreatora (osadzone)
   js/kreator.js            kroki 1–2 (zakłada sprawę) + formularze kroku 3 per typ
+  js/auth.js                sesja pracownika + ekran logowania (kancelaria)
+  js/uzytkownicy.js         zarządzanie kontami pracowników (tylko admin)
+  js/portal.js              cała aplikacja portalu klienta (logowanie, moje, rejestr, zgłoszenie, status, informacja)
 testy/
 ```
 
@@ -178,6 +230,44 @@ do pytania „jak to zdarzenie powinno było wyglądać”.
 Sprostowanie **bez** `zamiast` jest pełnym wycofaniem zdarzenia (nie ma czym
 go zastąpić) — działa tylko, gdy nic już od niego nie zależy (inaczej: błąd
 integralności referencyjnej, celowo).
+
+### Sesja bezstanowa: token niesie tylko tożsamość, stan czyta się z bazy
+
+`logika/sesja.js` podpisuje token HMAC-SHA256 (`base64url(payload).base64url(podpis)`,
+payload = `{ typ, id, exp }`) — nie JWT (żadnej nowej zależności), nie
+przechowuje żadnej sesji po stronie serwera. Przy **każdym** żądaniu
+middleware (`pomocnicze/autoryzacja.js`) odczytuje token, sprawdza podpis
+i termin ważności, po czym **na nowo** wczytuje rekord `psa_uzytkownicy`/`psa_konta`
+z bazy — dezaktywacja konta albo zmiana roli działa natychmiast, bez czekania
+na wygaśnięcie tokenu. Cena tej prostoty: wylogowanie kasuje ciasteczko po
+stronie przeglądarki (`Max-Age=0`), ale sam token pozostaje kryptograficznie
+ważny do naturalnego wygaśnięcia (12 h dla pracownika, 8 h dla konta portalu) —
+nie ma listy unieważnionych tokenów. Świadomy kompromis „minimum komplikacji”
+(por. sekcja 11 specyfikacji), akceptowalny przy tych czasach życia tokenu;
+gdyby był potrzebny natychmiastowy revoke, wymagałoby to magazynu sesji
+(Redis albo tabeli) — nie zaimplementowano, bo nikt o to nie prosił.
+
+### Rate limiting logowania: okno przesuwne w pamięci procesu
+
+`logika/limiter.js` liczy nieudane próby logowania per `IP + identyfikator`
+(nie sam IP — jeden adres NAT-owany całej kancelarii nie usypia się nawzajem;
+nie sam e-mail — atakujący nie blokuje cudzego konta z dowolnego adresu).
+Pięć nieudanych prób w 15 minutach → 429 z odliczeniem. Licznik jest w
+pamięci procesu (sekcja 11: „własna implementacja, licznik w pamięci”) —
+restart serwera go czyści, co przy tej skali ruchu jest akceptowalne.
+
+### Portal: co klient zbiera sam, a co robi pracownik
+
+Sekcja 9 mówi: „ten sam kreator, ale bez kroku weryfikacji”. Krok „co się
+zmienia” (krok 3) w kancelarii korzysta z `WyborOsoby` — wyszukiwarki **całej
+wspólnej kartoteki** `psa_osoby`, pokazującej m.in. status AML. Udostępnienie
+tego wyszukiwania portalowi ujawniałoby klientowi dane innych klientów
+kancelarii (nazwiska, status AML) — sprzeczne z regułą domenową nr 9 w duchu,
+jeśli nie w literze. Portal zbiera więc wyłącznie **krok 1 (typ) i krok 2
+(opis + dokumenty)** i zakłada sprawę w stanie `nowa`; krok „co się zmienia”
+i weryfikację wykonuje pracownik w kokpicie sprawy — dokładnie tak samo jak
+dla zgłoszeń przyjętych mailem czy papierowo. Udokumentowane jako odstępstwo
+18 niżej.
 
 ---
 
@@ -278,14 +368,42 @@ Wszystkie świadome, wszystkie do zakwestionowania.
     wymaga dziś wywołania API wprost. Świadome cięcie zakresu: 90% realnych
     korekt to „ten wpis nie powinien był powstać”, nie zmiana treści.
 
+18. **Portal zbiera tylko kroki 1–2 kreatora, nie krok 3 („co się zmienia”).**
+    Uzasadnienie pełne w „Jak działa” wyżej — krok 3 wymagałby udostępnienia
+    portalowi wyszukiwarki całej wspólnej kartoteki `psa_osoby` (z widocznym
+    statusem AML innych klientów). Zamiast tego klient opisuje zdarzenie
+    słownie (`opis`) i wgrywa dokumenty; pracownik dopełnia treść w kokpicie
+    sprawy, dokładnie jak dla zgłoszeń papierowych czy mailowych. Sprawa
+    startuje w stanie `nowa` niezależnie od źródła.
+
+19. **`PORTAL_WLACZONY` zostaje domyślnie `false` mimo ukończenia sprintu 3.**
+    Włączenie portalu to decyzja biznesowa/prawna (zgoda na wariant A,
+    umowa powierzenia z hostingiem, TLS), nie techniczna — flaga istnieje
+    właśnie po to, żeby kod mógł być gotowy wcześniej niż decyzja o jego
+    włączeniu.
+
+20. **Sesja zamiast `X-User-Name` obejmuje CAŁĄ aplikację, nie tylko portal.**
+    Konsekwencja wariantu A (sekcja 2): skoro serwer jest wystawiony
+    publicznie, identyfikacja pracownika samym imieniem przestaje mieć sens
+    również dla części kancelaryjnej. `autor(zad)` (dawniej czytający
+    nagłówek) dziś czyta `zad.uzytkownik.imie` wypełnione przez middleware
+    sesji — jedno miejsce zmiany, żadna trasa zapisująca zdarzenie nie
+    wymagała edycji.
+
 ---
 
 ## Czego świadomie nie ma
 
-Poza zakresem sprintu 2, zgodnie z planem: portal klienta (sprint 3), opłaty
-i naliczenie roczne (sprint 4), migracja obecnych rejestrów z RN (sprint 4),
-zawiadomienie sądu o rozwiązaniu umowy i obsługa zapytań sądu — stuby `501`
-czekające na nowelizację (18.02.2027).
+Poza zakresem sprintu 3, zgodnie z planem: opłaty i naliczenie roczne
+(sprint 4), migracja obecnych rejestrów z RN (sprint 4), zawiadomienie sądu
+o rozwiązaniu umowy i obsługa zapytań sądu — stuby `501` czekające na
+nowelizację (18.02.2027).
+
+Portal jest funkcjonalnie gotowy (patrz sprint 3 wyżej), ale za flagą
+`PORTAL_WLACZONY=false` domyślnie — patrz odstępstwo 19 i „Do decyzji”.
+Krok „co się zmienia” w zgłoszeniu portalowym świadomie zostaje po stronie
+pracownika (odstępstwo 18) — nie jest to luka do domknięcia, tylko trwały
+podział odpowiedzialności.
 
 Struktura pełnej podmiany treści przy sprostowaniu jest gotowa i przetestowana
 na poziomie API; brakuje jej wyłącznie formularza w UI (patrz odstępstwo 17).
@@ -306,25 +424,36 @@ Stuby `501` czekające na nowelizację: `/api/psa/sad/zapytania`,
 
 Nie blokują tego, co powstało, ale blokują kolejne kroki:
 
-1. **Wariant wdrożenia** (A: wszystko na VPS; B: rdzeń w kancelarii + skrzynka
-   podawcza) — blokuje sprint 3. Nie zmieniło się w sprincie 2.
-2. **Weryfikacja brzmienia przepisów nowelizacji.** Pozycje oznaczone
+1. ~~Wariant wdrożenia~~ — **rozstrzygnięte: A, wszystko na VPS** (decyzja
+   Łukasza, sprint 3). Konsekwencje do domknięcia PRZED realnym włączeniem
+   portalu na produkcji (infrastrukturalne/prawne, nie kodowe):
+   - TLS obowiązkowe (reverse proxy) — `trust proxy` już ustawione w kodzie;
+   - kopie zapasowe SQLite + katalogu dokumentów, szyfrowane, offsite;
+   - umowa powierzenia przetwarzania danych z dostawcą hostingu (RODO);
+   - decyzja, kiedy przełączyć `PORTAL_WLACZONY` na `true` i kogo zaprosić
+     jako pierwsze konta (`psa_konta`) — dziś zakładane wyłącznie ręcznie
+     w bazie, nie ma jeszcze ekranu zaproszeń/aktywacji (patrz niżej).
+2. **Aktywacja konta portalowego jest dziś ręczna.** Kolumna
+   `token_aktywacji` istnieje w schemacie (sekcja 5), ale nie ma jeszcze
+   przepływu „e-mail z linkiem aktywacyjnym” — konto zakłada się wprost
+   w bazie z gotowym hasłem. Do zrobienia przed realnym udostępnieniem
+   portalu klientom.
+3. **Weryfikacja brzmienia przepisów nowelizacji.** Pozycje oznaczone
    w `przepisy.js` jako `DO_WERYFIKACJI` nie mogą być podstawą walidacji
    blokującej, dopóki Łukasz nie potwierdzi tekstu ustawy. Dziś żadna z nich
    nią nie jest.
-3. **Kto może dokonać wpisu** — pytanie do izby. Na start: każdy zalogowany
+4. **Kto może dokonać wpisu** — pytanie do izby. Na start: każdy zalogowany
    pracownik, z zapisem autora przy zdarzeniu (tak to działa).
-4. **Stawki** — wpisane maksymalne (1200/100/50 zł) zgodnie z ustaleniem;
+5. **Stawki** — wpisane maksymalne (1200/100/50 zł) zgodnie z ustaleniem;
    obniżenie to zmiana trzech liczb w `przepisy.js`.
-5. **Integracja opłat z modułem Kasa** — rekomendacja: osobno, scalenie po
+6. **Integracja opłat z modułem Kasa** — rekomendacja: osobno, scalenie po
    ustabilizowaniu modułu.
-6. **Współwłasność akcji** — struktura przewidziana w `dane_json`, UI dopiero
+7. **Współwłasność akcji** — struktura przewidziana w `dane_json`, UI dopiero
    przy pierwszym przypadku.
 
 Otwarta kwestia techniczna: **plik `STANDARDY-KANCELARIA-4-1.md` nie był
 dostępny przy budowie.** Konwencje odtworzono ze specyfikacji modułu. Jeśli
-Kalkulator i Kasa układają katalogi inaczej, przemianowanie jest tanie —
-warto to zrobić przed sprintem 2.
+Kalkulator i Kasa układają katalogi inaczej, przemianowanie jest tanie.
 
 ---
 
@@ -334,7 +463,7 @@ warto to zrobić przed sprintem 2.
 npm test
 ```
 
-81 testów, bez zależności zewnętrznych (`node:test`), baza w pamięci lub plik tymczasowy.
+113 testów, bez zależności zewnętrznych (`node:test`), baza w pamięci lub plik tymczasowy.
 
 - `numery.test.js` — algebra zakresów, przydział FIFO, ręczne nadpisanie
 - `przeniesienie.test.js` — całość / część / wielu nabywców, pakiet nieciągły,
@@ -353,10 +482,42 @@ npm test
   wpis z zawiadomieniem; wstrzymanie/wznowienie z wezwaniem; odmowa; ścieżka
   z urzędu; AML jako bramka w workflow sprawy; upload i pobranie dokumentu
   (w tym odrzucenie niedozwolonego rozszerzenia); sprostowanie przez
-  dedykowany endpoint
+  dedykowany endpoint (sesja pracownika zakładana raz w `test.before`,
+  ciasteczko przekazywane do każdego zapytania)
+- `auth-logika.test.js` — hasła (hash/weryfikacja, ocena siły), sesja
+  (wystawienie/odczyt, odrzucenie sfałszowanej sygnatury, podmienionej
+  treści i tokenu wygasłego), rate limiter (blokada po przekroczeniu limitu,
+  niezależne liczniki per IP, czyszczenie po udanym logowaniu)
+- `auth-http.test.js` — bootstrap administratora z `ADMIN_EMAIL`, logowanie
+  (błędne/poprawne hasło), ochrona tras kancelaryjnych sesją, rate limiting
+  na `/auth/login` przez HTTP, admin zakłada pracownika (hasło tymczasowe
+  zwrócone raz), pracownik nie widzi listy użytkowników (403) ale ma dostęp
+  do rdzenia, admin nie może zablokować własnego konta, zmiana hasła
+  (błędne obecne, za krótkie nowe, poprawna zmiana + logowanie nowym),
+  wylogowanie kasuje ciasteczko (`Max-Age=0`)
+- `portal-http.test.js` — logowanie portalowe niezależne od sesji pracownika
+  (inne ciasteczko), „moje” dla roli spółka i akcjonariusz, maskowanie
+  w `rejestr/:spolkaId` (własne dane w pełni, dane współakcjonariusza
+  częściowo zamaskowane; konto spółki widzi wszystko), odrzucenie dostępu
+  do cudzej spółki (404), złożenie zgłoszenia (i odrzucenie typu `z_urzedu`),
+  scoping listy zgłoszeń (spółka widzi wszystkie o swoim rejestrze, inny
+  akcjonariusz — nic), upload dokumentu do własnej sprawy vs. odrzucenie
+  dla cudzej, generowanie informacji z rejestru + ślad audytowy w
+  `psa_wydane_dokumenty`, flaga `PORTAL_WLACZONY=false` → 503 na całym `/portal`
 
 UI sprawdzony w przeglądarce (Chromium) po każdym sprincie: wszystkie ekrany,
 pełny cykl sprawy od założenia po wpis z podglądem przed/po i bramką
 checklisty, wstrzymanie/wznowienie z realnym przeliczeniem terminu, upload
 dokumentu, sprostowanie z kokpitu (potwierdzone: cofnięcie transferu akcji
 widoczne w tabeli akcjonariatu), kolejka i pulpit z realnymi danymi.
+
+Sprint 3: ekran logowania (błędne hasło → komunikat, poprawne → pulpit
+z sesją w stopce sidebara), ekran Użytkownicy (założenie pracownika →
+hasło tymczasowe pokazane raz → wylogowanie → logowanie nowym pracownikiem
+→ pozycja „Użytkownicy” poprawnie ukryta dla roli innej niż admin), cała
+ścieżka portalu jako osobna aplikacja pod `/portal`: logowanie, „moje
+spółki” z posiadanymi akcjami, podgląd rejestru z widocznym maskowaniem
+danych współakcjonariusza, złożenie zgłoszenia, status zgłoszeń, otwarcie
+wygenerowanej informacji z rejestru w nowej karcie, wylogowanie. Zero
+błędów konsoli/strony poza spodziewanym `net::ERR_CONNECTION_RESET` na
+zablokowanych przez proxy środowiska Google Fonts.

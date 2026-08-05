@@ -23,12 +23,38 @@ process.env.KATALOG_DOKUMENTOW = path.join(__dirname, '..', 'dane', '.test-spraw
 fs.rmSync(process.env.KATALOG_DOKUMENTOW, { recursive: true, force: true });
 
 const app = require('../serwer');
+const { db } = require('../server/baza');
+const hasla = require('../server/logika/hasla');
 
 let serwer;
 let baza;
+let ciastkoSesji = '';
 
-test.before(() => {
+/** Loguje sie jako pracownik testowy i zwraca naglowek `Cookie` do dalszych zadan. */
+function ciasteczkoZOdpowiedzi(odp) {
+  const surowe = typeof odp.headers.getSetCookie === 'function' ? odp.headers.getSetCookie() : [odp.headers.get('set-cookie')];
+  return surowe.filter(Boolean).map((c) => c.split(';')[0]).join('; ');
+}
+
+test.before(async () => {
   serwer = app.listen(0);
+  baza = `http://localhost:${serwer.address().port}`;
+
+  const hash = await hasla.hashuj('HasloTestowe123');
+  db()
+    .prepare(
+      `INSERT INTO psa_uzytkownicy (imie, email, hash_hasla, rola, aktywny, utworzono)
+       VALUES ('Łukasz Kozon', 'notariusz@example-test.pl', ?, 'admin', 1, ?)`
+    )
+    .run(hash, new Date().toISOString());
+
+  const odpLogin = await fetch(`${baza}/api/psa/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'notariusz@example-test.pl', haslo: 'HasloTestowe123' }),
+  });
+  if (odpLogin.status !== 200) throw new Error(`Logowanie testowe nie powiodło się: ${odpLogin.status}`);
+  ciastkoSesji = ciasteczkoZOdpowiedzi(odpLogin);
 });
 
 test.after(() => {
@@ -39,11 +65,10 @@ test.after(() => {
   fs.rmSync(process.env.KATALOG_DOKUMENTOW, { recursive: true, force: true });
 });
 
-const AUTOR = { 'X-User-Name': encodeURIComponent('Łukasz Kozon') };
+const AUTOR = () => ({ Cookie: ciastkoSesji });
 
 async function zapytaj(metoda, sciezka, cialo) {
-  baza = baza || `http://localhost:${serwer.address().port}`;
-  const opcje = { method: metoda, headers: { ...AUTOR } };
+  const opcje = { method: metoda, headers: { ...AUTOR() } };
   if (cialo !== undefined) {
     opcje.headers['Content-Type'] = 'application/json';
     opcje.body = JSON.stringify(cialo);
@@ -266,7 +291,7 @@ test('upload dokumentu do sprawy i pobranie go z powrotem', async () => {
 
   const odpUpload = await fetch(`${baza}/api/psa/sprawy/${sprawaId}/dokumenty`, {
     method: 'POST',
-    headers: { ...AUTOR },
+    headers: { ...AUTOR() },
     body: formularz,
   });
   assert.equal(odpUpload.status, 201);
@@ -276,7 +301,7 @@ test('upload dokumentu do sprawy i pobranie go z powrotem', async () => {
 
   const dokumentId = uploadOdp.dokumenty[0].id;
   const odpPlik = await fetch(`${baza}/api/psa/sprawy/${sprawaId}/dokumenty/${dokumentId}`, {
-    headers: { ...AUTOR },
+    headers: { ...AUTOR() },
   });
   assert.equal(odpPlik.status, 200);
   const pobranaTresc = await odpPlik.text();
@@ -299,7 +324,7 @@ test('odrzuca plik o niedozwolonym rozszerzeniu', async () => {
 
   const odp = await fetch(`${baza}/api/psa/sprawy/${sprawaOdp.sprawa.id}/dokumenty`, {
     method: 'POST',
-    headers: { ...AUTOR },
+    headers: { ...AUTOR() },
     body: formularz,
   });
   assert.equal(odp.status, 400);

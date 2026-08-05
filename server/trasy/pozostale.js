@@ -14,6 +14,7 @@ const terminy = require('../logika/terminy');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
 const { asy } = require('../pomocnicze/odpowiedzi');
+const { wymagajPracownika } = require('../pomocnicze/autoryzacja');
 
 /** Sprint bieżąco obsługiwany przez kreator - decyduje o `typy_w_kreatorze`. */
 const SPRINT_KREATORA = 2;
@@ -55,6 +56,7 @@ router.get(
 /** Pulpit: spolki + dyskretny znacznik integralnosci + liczniki. */
 router.get(
   '/pulpit',
+  wymagajPracownika,
   asy((zad, odp) => {
     const spolki = db()
       .prepare(
@@ -134,6 +136,7 @@ router.get(
  */
 router.get(
   '/integralnosc',
+  wymagajPracownika,
   asy((zad, odp) => {
     const wynik = rejestr.zweryfikujIntegralnosc(db());
     odp.status(wynik.ok ? 200 : 409).json({
@@ -166,6 +169,7 @@ function stub(podstawa, opis) {
 
 router.all(
   '/sad/zapytania',
+  wymagajPracownika,
   stub(
     przepisy.PODSTAWY.ZAPYTANIE_SADU,
     'Obsługa zapytań sądu rejestrowego o wykaz akcjonariuszy.'
@@ -173,6 +177,7 @@ router.all(
 );
 router.all(
   '/sad/zawiadomienie-o-rozwiazaniu',
+  wymagajPracownika,
   stub(
     'art. 300(32) § 3 KSH',
     'Zawiadomienie sądu rejestrowego o wygaśnięciu lub rozwiązaniu umowy o prowadzenie rejestru ' +
