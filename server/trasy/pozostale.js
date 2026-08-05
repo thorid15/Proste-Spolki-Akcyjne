@@ -8,12 +8,14 @@ const express = require('express');
 
 const { db } = require('../baza');
 const rejestr = require('../rejestr');
+const widoki = require('../widoki');
+const dokumentyTresc = require('../logika/dokumenty-tresc');
 const przepisy = require('../logika/przepisy');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const terminy = require('../logika/terminy');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
-const { asy } = require('../pomocnicze/odpowiedzi');
+const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 const { wymagajPracownika } = require('../pomocnicze/autoryzacja');
 
 /** Sprint bieżąco obsługiwany przez kreator - decyduje o `typy_w_kreatorze`. */
@@ -151,38 +153,106 @@ router.get(
 );
 
 /**
- * Funkcje uruchamiane z wejsciem nowelizacji (18.02.2027) - sekcja 8.
- * Stub swiadomy: 501 z informacja, kiedy i na jakiej podstawie ruszy.
+ * Funkcje z nowelizacji (Dz.U. 2026 poz. 176, wejscie 18.02.2027) - sekcja 8.
+ * Bramkowane data: przed wejsciem w zycie zwracaja 501 z informacja, kiedy
+ * i na jakiej podstawie ruszaja - PO tej dacie wykonuja realna prace.
+ * Sekcja 15 decyzja nr 2: brzmienie przepisow DO_WERYFIKACJI (patrz flagi
+ * w `logika/przepisy.js`) nie moze byc podstawa walidacji BLOKUJACEJ - obie
+ * trasy nizej wylacznie GENERUJA DOKUMENT z juz istniejacych, potwierdzonych
+ * danych (stan rejestru, data zakonczenia umowy), nie oceniaja tresci
+ * przepisu, wiec ograniczenie to ich nie dotyczy.
  */
-function stub(podstawa, opis) {
-  return asy((zad, odp) => {
-    odp.status(501).json({
-      blad: 'Funkcja jeszcze nieuruchomiona.',
-      opis,
-      podstawa,
-      uruchomienie: przepisy.NOWELIZACJA.WEJSCIE_W_ZYCIE,
-      dziennik: przepisy.NOWELIZACJA.DZIENNIK,
-      wymaga_weryfikacji_brzmienia: true,
-    });
-  });
+function jeszczeNieaktywne(podstawa, opis) {
+  return {
+    blad: 'Funkcja jeszcze nieuruchomiona.',
+    opis,
+    podstawa,
+    uruchomienie: przepisy.NOWELIZACJA.WEJSCIE_W_ZYCIE,
+    dziennik: przepisy.NOWELIZACJA.DZIENNIK,
+    wymaga_weryfikacji_brzmienia: true,
+  };
 }
 
-router.all(
+/** art. 25da ustawy o KRS - sad pozyskuje wykaz akcjonariuszy bezposrednio od podmiotu prowadzacego rejestr. */
+router.post(
   '/sad/zapytania',
   wymagajPracownika,
-  stub(
-    przepisy.PODSTAWY.ZAPYTANIE_SADU,
-    'Obsługa zapytań sądu rejestrowego o wykaz akcjonariuszy.'
-  )
+  asy((zad, odp) => {
+    if (!przepisy.nowelizacjaObowiazuje(czas.dzisIso())) {
+      return odp
+        .status(501)
+        .json(jeszczeNieaktywne(przepisy.PODSTAWY.ZAPYTANIE_SADU, 'Obsługa zapytań sądu rejestrowego o wykaz akcjonariuszy.'));
+    }
+
+    const kto = autor(zad);
+    const spolkaId = Number((zad.body || {}).spolka_id);
+    const spolka = rejestr.wczytajSpolke(db(), spolkaId);
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+
+    const data = (zad.body || {}).data ? String((zad.body || {}).data) : czas.dzisIso();
+    if (!czas.poprawnaData(data)) throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD.');
+
+    const stan = widoki.widokStanu(db(), spolkaId, data, { rola: przepisy.ROLE_ODBIORCY.ORGAN });
+    const trescHtml = dokumentyTresc.wykazAkcjonariuszy({
+      kancelaria: konfiguracja.KANCELARIA,
+      spolka: stan.spolka,
+      data,
+      stan,
+      powod: `zapytanie sądu rejestrowego (${przepisy.PODSTAWY.ZAPYTANIE_SADU})${
+        (zad.body || {}).opis_wniosku ? ` — ${String((zad.body || {}).opis_wniosku).trim()}` : ''
+      }`,
+    });
+
+    db()
+      .prepare(
+        `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, kanal, tresc_html, autor, utworzono)
+         VALUES (?, 'wykaz_akcjonariuszy', 'papier', ?, ?, ?)`
+      )
+      .run(spolkaId, trescHtml, kto, czas.terazIso());
+
+    odp.json({ tresc_html: trescHtml });
+  })
 );
-router.all(
+
+/** art. 300(32) § 3 KSH - zawiadomienie sadu rejestrowego o wygasnieciu/rozwiazaniu umowy. */
+router.post(
   '/sad/zawiadomienie-o-rozwiazaniu',
   wymagajPracownika,
-  stub(
-    'art. 300(32) § 3 KSH',
-    'Zawiadomienie sądu rejestrowego o wygaśnięciu lub rozwiązaniu umowy o prowadzenie rejestru ' +
-      `(termin ${przepisy.TERMINY.ZAWIADOMIENIE_SADU_DNI} dni).`
-  )
+  asy((zad, odp) => {
+    if (!przepisy.nowelizacjaObowiazuje(czas.dzisIso())) {
+      return odp.status(501).json(
+        jeszczeNieaktywne(
+          'art. 300(32) § 3 KSH',
+          'Zawiadomienie sądu rejestrowego o wygaśnięciu lub rozwiązaniu umowy o prowadzenie rejestru ' +
+            `(termin ${przepisy.TERMINY.ZAWIADOMIENIE_SADU_DNI} dni).`
+        )
+      );
+    }
+
+    const kto = autor(zad);
+    const spolkaId = Number((zad.body || {}).spolka_id);
+    const spolka = rejestr.wczytajSpolke(db(), spolkaId);
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    if (!spolka.data_zakonczenia_umowy) {
+      throw bledneZadanie('Spółka nie ma ustawionej daty zakończenia umowy o prowadzenie rejestru.');
+    }
+
+    const trescHtml = dokumentyTresc.zawiadomienieSaduORozwiazaniu({
+      kancelaria: konfiguracja.KANCELARIA,
+      spolka,
+      dataZakonczenia: spolka.data_zakonczenia_umowy,
+      tryb: (zad.body || {}).tryb || 'rozwiązaniu',
+    });
+
+    db()
+      .prepare(
+        `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, kanal, tresc_html, autor, utworzono)
+         VALUES (?, 'zawiadomienie_sad_rozwiazanie', 'papier', ?, ?, ?)`
+      )
+      .run(spolkaId, trescHtml, kto, czas.terazIso());
+
+    odp.json({ tresc_html: trescHtml });
+  })
 );
 
 module.exports = router;

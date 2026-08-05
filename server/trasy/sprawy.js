@@ -272,7 +272,7 @@ router.post(
 
     const { data_zdarzenia, dane } = zad.body || {};
 
-    const { wynik } = rejestr.dokonajWpisuSprawy(db(), {
+    const { wynik, oplata } = rejestr.dokonajWpisuSprawy(db(), {
       sprawaId: id,
       data_zdarzenia,
       wejscie: dane || {},
@@ -314,6 +314,7 @@ router.post(
       },
       ostrzezenia: wynik.ostrzezenia,
       powiadomienia,
+      oplata,
     });
   })
 );

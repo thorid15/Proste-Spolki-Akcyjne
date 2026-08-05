@@ -362,6 +362,77 @@ const MIGRACJE = [
         ON psa_konta (osoba_id);
     `,
   },
+  {
+    wersja: 4,
+    nazwa: 'rozliczenia - psa_oplaty; wykaz akcjonariuszy i zawiadomienie sadu w wydanych dokumentach',
+    sql: `
+      -- ── Oplaty: prowadzenie rejestru (rocznie), wpis, informacja (sekcja 5, 8) ──
+      -- „okres” ma sens wylacznie dla typu 'prowadzenie' (rok jako TEXT, np.
+      -- "2026") - dla 'wpis' i 'informacja' zostaje NULL. Idempotencja
+      -- naliczenia rocznego (jedna oplata 'prowadzenie' na spolke+rok) jest
+      -- pilnowana w server/oplaty.js (sprawdz-przed-wstaw w transakcji), nie
+      -- unikalnym indeksem - status 'anulowana' musi pozwalac na ponowne
+      -- naliczenie, a warunkowy UNIQUE INDEX komplikowalby to bez potrzeby.
+      CREATE TABLE IF NOT EXISTS psa_oplaty (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        spolka_id        INTEGER NOT NULL REFERENCES psa_spolki(id),
+        sprawa_id        INTEGER REFERENCES psa_sprawy(id),
+        typ              TEXT NOT NULL CHECK (typ IN ('prowadzenie','wpis','informacja')),
+        okres            TEXT,
+        kwota_grosze     INTEGER NOT NULL,
+        status           TEXT NOT NULL DEFAULT 'naliczona'
+                           CHECK (status IN ('naliczona','zafakturowana','oplacona','anulowana')),
+        data_naliczenia  TEXT NOT NULL,
+        notatka          TEXT,
+        autor            TEXT NOT NULL,
+        utworzono        TEXT NOT NULL,
+        zaktualizowano   TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_oplaty_spolka
+        ON psa_oplaty (spolka_id, typ, okres);
+      CREATE INDEX IF NOT EXISTS psa_ix_oplaty_status
+        ON psa_oplaty (status);
+      CREATE INDEX IF NOT EXISTS psa_ix_oplaty_sprawa
+        ON psa_oplaty (sprawa_id);
+
+      -- ── Rozszerzenie katalogu wydanych dokumentow (nowelizacja) ──────────
+      -- SQLite nie pozwala zmienic CHECK-a przez ALTER TABLE - tabela nie
+      -- jest append-only (to nie psa_zdarzenia), wiec przepisujemy ja z
+      -- szerszym katalogiem "typ": dochodza 'wykaz_akcjonariuszy' (art. 476
+      -- § 1(1) KSH - przy wykresleniu spolki i jako odpowiedz na zapytanie
+      -- sadu, art. 25da ustawy o KRS) i 'zawiadomienie_sad_rozwiazanie'
+      -- (art. 300(32) § 3 KSH - zawiadomienie sadu o wygasnieciu/rozwiazaniu
+      -- umowy o prowadzenie rejestru).
+      CREATE TABLE psa_wydane_dokumenty_v4 (
+        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+        sprawa_id          INTEGER REFERENCES psa_sprawy(id),
+        spolka_id          INTEGER NOT NULL REFERENCES psa_spolki(id),
+        typ                TEXT NOT NULL
+                             CHECK (typ IN
+                               ('zawiadomienie_wpis','zawiadomienie_odmowa','informacja_z_rejestru',
+                                'wezwanie','raport','powiadomienie',
+                                'wykaz_akcjonariuszy','zawiadomienie_sad_rozwiazanie')),
+        odbiorca_osoba_id  INTEGER REFERENCES psa_osoby(id),
+        kanal              TEXT NOT NULL CHECK (kanal IN ('email','portal','papier')),
+        sciezka_pdf        TEXT,
+        tresc_html         TEXT,
+        wyslano            TEXT,
+        autor              TEXT NOT NULL,
+        utworzono          TEXT NOT NULL
+      );
+      INSERT INTO psa_wydane_dokumenty_v4
+        SELECT id, sprawa_id, spolka_id, typ, odbiorca_osoba_id, kanal, sciezka_pdf, tresc_html, wyslano, autor, utworzono
+          FROM psa_wydane_dokumenty;
+      DROP TABLE psa_wydane_dokumenty;
+      ALTER TABLE psa_wydane_dokumenty_v4 RENAME TO psa_wydane_dokumenty;
+
+      CREATE INDEX IF NOT EXISTS psa_ix_wydane_sprawa
+        ON psa_wydane_dokumenty (sprawa_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_wydane_spolka
+        ON psa_wydane_dokumenty (spolka_id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

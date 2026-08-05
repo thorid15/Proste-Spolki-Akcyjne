@@ -224,6 +224,83 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan }) {
   });
 }
 
+/**
+ * art. 476 § 1(1) KSH (nowelizacja) — wykaz akcjonariuszy. Dwa wyzwalacze,
+ * jeden dokument: wykreślenie spółki z rejestru przedsiębiorców ORAZ
+ * odpowiedź na zapytanie sądu rejestrowego (art. 25da ustawy o KRS, sąd
+ * pozyskuje wykaz bezpośrednio od podmiotu prowadzącego rejestr). `stan` to
+ * wynik `widoki.widokStanu()` dla ROLI KANCELARIA (bez maskowania) — sąd ma
+ * pełny wgląd, tak jak organy z art. 300(35) § 1(1) KSH.
+ */
+function wykazAkcjonariuszy({ kancelaria, spolka, data, stan, powod }) {
+  const wiersze = stan.akcjonariusze
+    .map((a) => {
+      const oznaczenie = a.osoba ? esc(a.osoba.oznaczenie) : 'nieznany';
+      const identyfikator = a.osoba && a.osoba.jawny_identyfikator ? ` · ${esc(a.osoba.jawny_identyfikator)}` : '';
+      const pesel = a.osoba && a.osoba.typ === 'fizyczna' && a.osoba.pesel ? ` · PESEL ${esc(a.osoba.pesel)}` : '';
+      return `
+        <tr>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca;">${oznaczenie}${identyfikator}${pesel}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca;">${esc(a.seria)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; text-align: right;">${esc(a.ilosc)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; font-family: monospace; font-size: 11px;">${esc(a.numery)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; text-align: right;">${esc(a.procent)}%</td>
+        </tr>`;
+    })
+    .join('');
+
+  const tresc = `
+    <p>
+      Wykaz akcjonariuszy spółki <strong>${esc(spolka.nazwa)}</strong>${spolka.krs ? ` (KRS ${esc(spolka.krs)})` : ''},
+      sporządzony na podstawie art. 476 § 1(1) Kodeksu spółek handlowych, według stanu na dzień
+      <strong>${dataPl(data)}</strong>.
+    </p>
+    ${powod ? `<p style="font-size: 12px; color: #6b6256;">Podstawa sporządzenia: ${esc(powod)}.</p>` : ''}
+    <table style="width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px;">
+      <thead>
+        <tr style="text-align: left; color: #6b6256; font-size: 11px; text-transform: uppercase;">
+          <th style="padding: 6px 8px;">Akcjonariusz</th>
+          <th style="padding: 6px 8px;">Seria</th>
+          <th style="padding: 6px 8px; text-align: right;">Ilość</th>
+          <th style="padding: 6px 8px;">Numery</th>
+          <th style="padding: 6px 8px; text-align: right;">Udział</th>
+        </tr>
+      </thead>
+      <tbody>${wiersze || '<tr><td colspan="5" style="padding:6px 8px;">Brak wpisanych akcjonariuszy.</td></tr>'}</tbody>
+    </table>
+    <p style="font-size: 12px; color: #6b6256;">Razem akcji wyemitowanych i objętych: ${esc(stan.razem_akcji)}.</p>
+  `;
+  return szkielet({
+    tytul: 'Wykaz akcjonariuszy',
+    kancelaria,
+    tresc,
+  });
+}
+
+/**
+ * art. 300(32) § 3 KSH (nowelizacja) — zawiadomienie sądu rejestrowego
+ * o wygaśnięciu lub rozwiązaniu umowy o prowadzenie rejestru, w terminie
+ * 7 dni (`przepisy.TERMINY.ZAWIADOMIENIE_SADU_DNI`).
+ */
+function zawiadomienieSaduORozwiazaniu({ kancelaria, spolka, dataZakonczenia, tryb }) {
+  const tresc = `
+    <p>Do Sądu Rejestrowego,</p>
+    <p>
+      działając jako podmiot prowadzący rejestr akcjonariuszy spółki
+      <strong>${esc(spolka.nazwa)}</strong>${spolka.krs ? ` (KRS ${esc(spolka.krs)})` : ''},
+      na podstawie art. 300(32) § 3 Kodeksu spółek handlowych zawiadamiam o
+      ${esc(tryb || 'rozwiązaniu')} umowy o prowadzenie rejestru akcjonariuszy tej spółki
+      z dniem <strong>${dataPl(dataZakonczenia)}</strong>.
+    </p>
+    <p style="margin-top: 24px;">Z poważaniem,<br>${esc(kancelaria.nazwa)}</p>
+  `;
+  return szkielet({
+    tytul: 'Zawiadomienie o rozwiązaniu umowy o prowadzenie rejestru',
+    kancelaria,
+    tresc,
+  });
+}
+
 module.exports = {
   esc,
   dataPl,
@@ -232,4 +309,6 @@ module.exports = {
   powiadomienieZamierzonegoWpisu,
   wezwanieDoUzupelnienia,
   informacjaZRejestru,
+  wykazAkcjonariuszy,
+  zawiadomienieSaduORozwiazaniu,
 };

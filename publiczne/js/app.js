@@ -16,7 +16,7 @@ const MENU = [
   },
   {
     grupa: 'Rozliczenia',
-    pozycje: [{ sciezka: '/oplaty', nazwa: 'Opłaty', sprint: 4 }],
+    pozycje: [{ sciezka: '/oplaty', nazwa: 'Opłaty' }],
   },
   {
     grupa: 'Konfiguracja',
@@ -111,6 +111,7 @@ function Aplikacja() {
       if (!Number.isInteger(id)) return <NieZnaleziono />;
       if (segmenty.length === 2) return <EkranKokpitu spolkaId={id} />;
       if (segmenty[2] === 'zdarzenie') return <EkranNowejSprawy spolkaId={id} />;
+      if (segmenty[2] === 'migracja') return <EkranMigracji spolkaId={id} />;
       if (segmenty[2] === 'wydruk') {
         const data = zapytanie.get('data') || undefined;
         if (segmenty[3] === 'raport') return <EkranRaportu spolkaId={id} dataPoczatkowa={data} />;
@@ -127,6 +128,7 @@ function Aplikacja() {
     }
 
     if (segmenty[0] === 'osoby') return <EkranOsob />;
+    if (segmenty[0] === 'oplaty') return <EkranOplat />;
     if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'stawki') return <EkranStawek />;
     if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'uzytkownicy') {
       return sesja.uzytkownik.rola === 'admin' ? <EkranUzytkownikow /> : <NieZnaleziono />;

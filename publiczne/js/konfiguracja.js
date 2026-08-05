@@ -60,7 +60,7 @@ function EkranStawek() {
         </table>
         <div style={{ padding: '14px 20px' }} className="podstawa-prawna">
           {dane.podstawy.TAKSA}. Kwoty przechowywane w groszach — reguła domenowa nr 5.
-          Naliczanie opłat wchodzi w sprincie 4.
+          Naliczanie opłat: ekran „Opłaty”.
         </div>
       </Karta>
 

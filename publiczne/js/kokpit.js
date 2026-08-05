@@ -229,6 +229,15 @@ function EkranKokpitu({ spolkaId }) {
           <button className="btn" onClick={() => idz(`/spolki/${spolkaId}/wydruk/informacja?data=${data}`)}>
             Informacja z rejestru
           </button>
+          {dane.liczba_zdarzen === 0 && (
+            <button
+              className="btn"
+              onClick={() => idz(`/spolki/${spolkaId}/migracja`)}
+              title="Wprowadzenie stanu przeniesionego z innego rejestru (np. Rejestrów Notarialnych), z datami historycznymi."
+            >
+              Migracja — stan otwarcia
+            </button>
+          )}
           <button className="btn btn-primary btn-lg" onClick={() => idz(`/spolki/${spolkaId}/zdarzenie`)}>
             Nowe zdarzenie
           </button>

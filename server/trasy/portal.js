@@ -27,6 +27,7 @@ const multer = require('multer');
 const { db } = require('../baza');
 const rejestr = require('../rejestr');
 const widoki = require('../widoki');
+const oplaty = require('../oplaty');
 const maskowanie = require('../logika/maskowanie');
 const przepisy = require('../logika/przepisy');
 const typyZdarzen = require('../logika/typy-zdarzen');
@@ -390,14 +391,25 @@ router.post(
       stan,
     });
 
+    const autorWpisu = `Portal — ${konto.email}`;
     db()
       .prepare(
         `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, odbiorca_osoba_id, kanal, tresc_html, wyslano, autor, utworzono)
          VALUES (?, 'informacja_z_rejestru', ?, 'portal', ?, ?, ?, ?)`
       )
-      .run(spolkaId, konto.osoba_id, trescHtml, czas.terazIso(), `Portal — ${konto.email}`, czas.terazIso());
+      .run(spolkaId, konto.osoba_id, trescHtml, czas.terazIso(), autorWpisu, czas.terazIso());
 
-    odp.json({ tresc_html: trescHtml });
+    // Odpłatność za informację z rejestru (sekcja 1 i 8) - samoobsługowe
+    // pobranie przez portal jest tak samo odpłatną czynnością jak żądanie
+    // papierowe/mailowe obsłużone przez pracownika.
+    const oplata = oplaty.naliczOplateInformacji(db(), {
+      spolkaId,
+      odbiorcaOsobaId: konto.osoba_id,
+      autor: autorWpisu,
+      notatka: `Informacja z rejestru — portal, ${data}`,
+    });
+
+    odp.json({ tresc_html: trescHtml, oplata });
   })
 );
 

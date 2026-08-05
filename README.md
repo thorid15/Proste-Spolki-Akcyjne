@@ -3,9 +3,10 @@
 Moduł do prowadzenia rejestrów akcjonariuszy prostych spółek akcyjnych
 (art. 300³⁰ i nast. KSH) przez notariusza — Kancelaria Notarialna Łukasza Kozona.
 
-**Stan: sprint 3 ukończony** (rdzeń rejestru + workflow spraw + logowanie
-i portal klienta). Portal jest gotowy funkcjonalnie, ale domyślnie
-**wyłączony** flagą `PORTAL_WLACZONY` — patrz „Do decyzji”.
+**Stan: sprint 4 ukończony** (rdzeń rejestru + workflow spraw + logowanie
+i portal klienta + rozliczenia + migracja spółek z innych rejestrów).
+Portal jest gotowy funkcjonalnie, ale domyślnie **wyłączony** flagą
+`PORTAL_WLACZONY` — patrz „Do decyzji”.
 
 ---
 
@@ -15,7 +16,7 @@ i portal klienta). Portal jest gotowy funkcjonalnie, ale domyślnie
 npm install
 cp .env.przyklad .env      # uzupełnij dane kancelarii, ADMIN_EMAIL, SESJA_SEKRET, (opcjonalnie) SMTP
 npm start                  # http://localhost:3005
-npm test                   # 113 testów
+npm test                   # 132 testy
 ```
 
 Migracje wykonują się automatycznie przy starcie i są idempotentne.
@@ -103,6 +104,43 @@ tożsamość, inny zestaw ekranów, inny model zaufania. Dzieli z kancelarią
 tylko `rdzen.js` i `ui.js` (klient API, formatowanie, komponenty wspólne),
 świadomie nie dzieli routingu ani stanu.
 
+## Co powstało w sprincie 4
+
+| Punkt z planu | Stan |
+|---|---|
+| `psa_oplaty`, naliczenie roczne, eksport zestawienia | ✅ |
+| Migracja obecnych rejestrów z RN (kreator „stan otwarcia”, z datami historycznymi) | ✅ |
+| Stuby `501` → implementacja: zawiadomienie sądu o rozwiązaniu umowy, obsługa zapytań sądu | ✅ (bramkowane datą nowelizacji) |
+| Migracja na wspólny `design.css` | poza zakresem tego repozytorium — patrz niżej |
+
+**Naliczanie opłat jest automatyczne w punktach, gdzie opłata faktycznie
+powstaje** — nie osobnym krokiem, który dałoby się pominąć:
+- **wpis** — naliczany wewnątrz `rejestr.dokonajWpisuSprawy`, w tej samej
+  transakcji SQLite co zapis zdarzenia, wyłącznie dla typów `odplatne: true`
+  z katalogu (`logika/typy-zdarzen.js`) — zajęcie i wykreślenie zajęcia są
+  z mocy ustawy wolne od opłat i nigdy nie generują wiersza w `psa_oplaty`;
+- **informacja z rejestru** — naliczana zarówno przy pobraniu przez portal
+  (`POST /api/psa/portal/informacja`), jak i przy ręcznym wpisie przez
+  pracownika (ekran Opłaty — patrz odstępstwo 21 niżej);
+- **prowadzenie rejestru** — WYŁĄCZNIE wsadowo, `POST /api/psa/oplaty/naliczenie-roczne`
+  (admin), idempotentne per spółka+rok — bezpieczne do uruchomienia
+  wielokrotnie (np. co miesiąc, żeby złapać nowo dodane spółki).
+
+**Ścieżka bezpośrednia `dokonajWpisu` (migracja „stan otwarcia”) świadomie
+NIE nalicza opłaty za wpis** — wprowadzenie już zaszłego stanu historycznego
+nie jest bieżącą czynnością odpłatną. To jedyny powód, dla którego ta
+sprzątnięta w sprincie 2 ścieżka (opisana tam jako „wewnętrzna, UI już jej
+nie używa”) wraca teraz do UI — z nowym, jawnym zastosowaniem.
+
+**Stuby sądowe implementują realną logikę, ale zostają bramkowane datą**
+(`przepisy.nowelizacjaObowiazuje`) — przed 18.02.2027 nadal zwracają `501`
+z informacją, kiedy ruszą; po tej dacie generują dokument (wykaz
+akcjonariuszy / zawiadomienie) i zapisują go w `psa_wydane_dokumenty`.
+Zgodnie z decyzją nr 2 z sekcji 15 specyfikacji, obie trasy WYŁĄCZNIE
+generują dokument z już potwierdzonych danych (stan rejestru, data
+zakończenia umowy) — nie oceniają treści przepisu, więc zakaz „walidacji
+blokującej opartej na brzmieniu DO_WERYFIKACJI” ich nie dotyczy.
+
 ---
 
 ## Architektura
@@ -112,8 +150,9 @@ serwer.js                  punkt wejścia, port 3005
 server/
   konfiguracja.js          .env (własny parser — dotenv nie jest na liście zależności)
   baza.js                  better-sqlite3, WAL, foreign_keys
-  migracje.js              idempotentne, wyłącznie obiekty psa_* (v1 rdzeń, v2 sprawy, v3 konta)
+  migracje.js              idempotentne, wyłącznie obiekty psa_* (v1 rdzeń, v2 sprawy, v3 konta, v4 opłaty)
   rejestr.js               transakcje: zapis zdarzenia, materializacja, wpis sprawy, sprostowanie
+  oplaty.js                naliczanie opłat (wpis/informacja/prowadzenie), naliczenie roczne, eksport CSV
   widoki.js                stan domenowy → struktura dla UI, Z MASKOWANIEM
   zawiadomienia.js         generowanie + próba wysyłki dokumentów wychodzących (poza transakcją SQLite)
   poczta.js                nodemailer; no-op z czytelnym powodem, gdy brak SMTP
@@ -134,7 +173,7 @@ server/
   pomocnicze/
     autoryzacja.js          middleware sesji (pracownik / konto), guardy wymagajPracownika/wymagajAdmina/wymagajKonta
     ciasteczka.js            parser/serializator ciasteczek — cookie-parser nie jest na liście zależności
-  trasy/                   HTTP (spolki, osoby, sprawy, zdarzenia, pozostale, wspolne, auth, portal)
+  trasy/                   HTTP (spolki, osoby, sprawy, zdarzenia, oplaty, pozostale, wspolne, auth, portal)
 publiczne/                 React 18 + Babel z CDN, bez bundlera
   wspolne/design.css       kanon wizualny kancelarii (wersja 1.1)
   style/psa.css            wyłącznie układ modułu, kolory tylko przez var(--…)
@@ -144,6 +183,8 @@ publiczne/                 React 18 + Babel z CDN, bez bundlera
   js/kreator.js            kroki 1–2 (zakłada sprawę) + formularze kroku 3 per typ
   js/auth.js                sesja pracownika + ekran logowania (kancelaria)
   js/uzytkownicy.js         zarządzanie kontami pracowników (tylko admin)
+  js/oplaty.js               ekran Opłaty: filtry, ręczny wpis, status, naliczenie roczne, eksport CSV
+  js/migracja.js             kreator „stan otwarcia” — ponownie używa KrokEmisja/KrokObjecie z kreator.js
   js/portal.js              cała aplikacja portalu klienta (logowanie, moje, rejestr, zgłoszenie, status, informacja)
 testy/
 ```
@@ -390,14 +431,36 @@ Wszystkie świadome, wszystkie do zakwestionowania.
     sesji — jedno miejsce zmiany, żadna trasa zapisująca zdarzenie nie
     wymagała edycji.
 
+21. **Opłata za „informację z rejestru” zamówioną przez kancelarię (nie
+    portal) jest ręcznym wpisem w ekranie Opłaty, nie automatycznym haczykiem
+    w `EkranInformacji`.** `EkranInformacji` (sprint 1) renderuje podgląd
+    „na żywo” z `/spolki/:id/stan` — czysto klientową ścieżkę bez żadnego
+    zapisu po stronie serwera; dopinanie do niej naliczenia zmieniałoby jej
+    naturę (podgląd → czynność z konsekwencją finansową) i wymagałoby
+    osobnego rozróżnienia „to był tylko podgląd” od „to była wydana
+    informacja”. Prostsze i bardziej zgodne z tym, jak faktycznie pracuje
+    sekretariat: pracownik wydaje informację (drukuje z `EkranInformacji`,
+    tak jak dotąd), a fakt wydania i opłatę odnotowuje jednym kliknięciem
+    w ekranie Opłaty (`+ Nowa opłata`, typ „informacja”, stawka
+    podpowiedziana z `przepisy.js`). Portal ma inny charakter — tam
+    „pobranie” i „wygenerowanie” są tym samym zdarzeniem, więc automatyczne
+    naliczenie w `POST /portal/informacja` jest bezpieczne i nie duplikuje
+    niczego.
+
+22. **Naliczenie roczne obejmuje każdą spółkę poza `wykreslona`, nie tylko
+    `aktywna`.** Spec nie rozstrzyga wprost, czy spółki `w_likwidacji` albo
+    `zawieszona` nadal podlegają opłacie za prowadzenie rejestru — przyjęto,
+    że umowa o prowadzenie rejestru (a nie status spółki w KRS) jest tym, co
+    rodzi obowiązek opłaty, więc tylko `wykreslona` (rejestr zakończony,
+    umowa najpewniej wygasła) jest wyłączona automatycznie. Do potwierdzenia
+    przez Łukasza — zmiana to jeden warunek SQL w `oplaty.naliczOplateRoczneWszystkie`.
+
 ---
 
 ## Czego świadomie nie ma
 
-Poza zakresem sprintu 3, zgodnie z planem: opłaty i naliczenie roczne
-(sprint 4), migracja obecnych rejestrów z RN (sprint 4), zawiadomienie sądu
-o rozwiązaniu umowy i obsługa zapytań sądu — stuby `501` czekające na
-nowelizację (18.02.2027).
+Sprint 4 był ostatnim zaplanowanym w specyfikacji (sekcja 14). Co zostaje
+świadomie poza zakresem CAŁEGO modułu, nie tylko tego sprintu:
 
 Portal jest funkcjonalnie gotowy (patrz sprint 3 wyżej), ale za flagą
 `PORTAL_WLACZONY=false` domyślnie — patrz odstępstwo 19 i „Do decyzji”.
@@ -408,15 +471,25 @@ podział odpowiedzialności.
 Struktura pełnej podmiany treści przy sprostowaniu jest gotowa i przetestowana
 na poziomie API; brakuje jej wyłącznie formularza w UI (patrz odstępstwo 17).
 
+**„Migracja na wspólny `design.css`” z planu sprintu 4 nie dotyczy tego
+repozytorium.** To zadanie z poziomu mastera — inne moduły kancelarii
+(Kalkulator, Kasa) mają migrację na `design.css` jako dług; PSA linkuje go
+poprawnie od pierwszego dnia (sekcja 2 specyfikacji, patrz architektura
+wyżej). Nie ma tu nic do zrobienia — modułów Kalkulator/Kasa nie ma w tym
+repozytorium.
+
+**Zawiadomienie sądu i obsługa zapytań sądu MAJĄ realną implementację**
+(sprint 4), ale zostają bramkowane datą wejścia w życie nowelizacji
+(18.02.2027) — do tego dnia `POST /api/psa/sad/zapytania` i
+`POST /api/psa/sad/zawiadomienie-o-rozwiazaniu` nadal zwracają `501`.
+Integracja z Kasą (§ decyzja nr 5, sekcja 15) — wciąż osobno, jak ustalono.
+
 Poza zakresem modułu, zgodnie z sekcją 1: rejestry S.A. i S.K.A., walne
 zgromadzenia, dywidenda, e-voting, wysyłki do KRS w imieniu spółki.
 
 Poza zakresem świadomie, zgodnie z sekcją 11: kwalifikowane znaczniki czasu,
 drzewa Merkle'a, publikacja skrótów, XAdES/PAdES, integracja z podpisem
 kwalifikowanym.
-
-Stuby `501` czekające na nowelizację: `/api/psa/sad/zapytania`,
-`/api/psa/sad/zawiadomienie-o-rozwiazaniu`.
 
 ---
 
@@ -447,9 +520,19 @@ Nie blokują tego, co powstało, ale blokują kolejne kroki:
 5. **Stawki** — wpisane maksymalne (1200/100/50 zł) zgodnie z ustaleniem;
    obniżenie to zmiana trzech liczb w `przepisy.js`.
 6. **Integracja opłat z modułem Kasa** — rekomendacja: osobno, scalenie po
-   ustabilizowaniu modułu.
+   ustabilizowaniu modułu. `psa_oplaty` jest dziś jedynym źródłem prawdy
+   o należnościach — bez eksportu/importu do Kasy, wyłącznie CSV ręcznie.
 7. **Współwłasność akcji** — struktura przewidziana w `dane_json`, UI dopiero
    przy pierwszym przypadku.
+8. **Czy „prowadzenie rejestru” jest należne za spółki `w_likwidacji` i
+   `zawieszona`, nie tylko `aktywna`.** Przyjęto na razie „tak, wszystkie poza
+   `wykreslona`” (odstępstwo 22) — do potwierdzenia.
+9. **Weryfikacja tekstu ustawy przed realnym użyciem stubów sądowych.**
+   Kod jest gotowy i bramkowany datą (18.02.2027), ale sama treść
+   dokumentów (`dokumenty-tresc.js: wykazAkcjonariuszy`,
+   `zawiadomienieSaduORozwiazaniu`) nie była jeszcze zestawiona z ostatecznym
+   brzmieniem znowelizowanych przepisów — do zrobienia razem z resztą
+   pozycji `DO_WERYFIKACJI` przed 18.02.2027, nie pilne dziś.
 
 Otwarta kwestia techniczna: **plik `STANDARDY-KANCELARIA-4-1.md` nie był
 dostępny przy budowie.** Konwencje odtworzono ze specyfikacji modułu. Jeśli
@@ -463,7 +546,7 @@ Kalkulator i Kasa układają katalogi inaczej, przemianowanie jest tanie.
 npm test
 ```
 
-113 testów, bez zależności zewnętrznych (`node:test`), baza w pamięci lub plik tymczasowy.
+132 testy, bez zależności zewnętrznych (`node:test`), baza w pamięci lub plik tymczasowy.
 
 - `numery.test.js` — algebra zakresów, przydział FIFO, ręczne nadpisanie
 - `przeniesienie.test.js` — całość / część / wielu nabywców, pakiet nieciągły,
@@ -504,6 +587,21 @@ npm test
   akcjonariusz — nic), upload dokumentu do własnej sprawy vs. odrzucenie
   dla cudzej, generowanie informacji z rejestru + ślad audytowy w
   `psa_wydane_dokumenty`, flaga `PORTAL_WLACZONY=false` → 503 na całym `/portal`
+- `oplaty.test.js` — jednostkowe: `stawkaGrosze`/`nowelizacjaObowiazuje` (czyste
+  funkcje z `przepisy.js`), naliczenie opłaty za wpis/informację ze stawką
+  z przepisów, idempotencja naliczenia rocznego per spółka+rok (w tym po
+  anulowaniu — nie blokuje ponownego naliczenia), naliczenie wsadowe pomija
+  spółki `wykreslona`, ręczny wpis z domyślną/nadpisaną kwotą, zmiana statusu,
+  eksport CSV (nagłówek, escaping przecinka i cudzysłowu, kwota w złotych)
+- `oplaty-http.test.js` — wpis odpłatny przez sprawę nalicza opłatę typu
+  „wpis”; zajęcie z urzędu (wolne od opłat) i migracja „stan otwarcia”
+  (ścieżka bezpośrednia) NIE naliczają; naliczenie roczne tylko dla admina
+  i idempotentne przez HTTP; walidacja ręcznego wpisu (typ, okres wymagany
+  dla „prowadzenie”); zmiana statusu; eksport CSV zwraca poprawny
+  `Content-Type` i BOM na surowych bajtach (nie na tekście zdekodowanym —
+  `.text()` domyślnie zdejmuje BOM); pobranie informacji przez portal
+  nalicza opłatę; stuby sądowe zwracają `501` przed nowelizacją; trasa
+  `/oplaty` wymaga sesji pracownika
 
 UI sprawdzony w przeglądarce (Chromium) po każdym sprincie: wszystkie ekrany,
 pełny cykl sprawy od założenia po wpis z podglądem przed/po i bramką
@@ -521,3 +619,12 @@ danych współakcjonariusza, złożenie zgłoszenia, status zgłoszeń, otwarcie
 wygenerowanej informacji z rejestru w nowej karcie, wylogowanie. Zero
 błędów konsoli/strony poza spodziewanym `net::ERR_CONNECTION_RESET` na
 zablokowanych przez proxy środowiska Google Fonts.
+
+Sprint 4: założenie nowej spółki → kreator „stan otwarcia” (emisja z datą
+historyczną 15.03.2019 → objęcie całości przez akcjonariusza z kartoteki →
+kokpit poprawnie pokazuje oś czasu z tą datą, nie dzisiejszą) → potwierdzenie,
+że migracja NIE zostawia śladu w Opłatach → realny wpis (umorzenie akcji)
+przez pełny workflow sprawy z checklistą → potwierdzenie, że TEN wpis
+naliczył opłatę typu „wpis” → ręczny wpis opłaty za informację z ekranu
+Opłaty → naliczenie roczne (admin) → zmiana statusu na „opłacona”. Zero
+błędów konsoli/strony poza tym samym spodziewanym `net::ERR_CONNECTION_RESET`.

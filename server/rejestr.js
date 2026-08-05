@@ -20,6 +20,7 @@ const stanLogika = require('./logika/stan');
 const walidacje = require('./logika/walidacje');
 const kreator = require('./logika/kreator');
 const typyZdarzen = require('./logika/typy-zdarzen');
+const oplaty = require('./oplaty');
 const czas = require('./pomocnicze/czas');
 
 class BladWalidacji extends Error {
@@ -457,7 +458,26 @@ function dokonajWpisuSprawy(db, { sprawaId, data_zdarzenia, wejscie, autor }) {
       `UPDATE psa_sprawy SET stan = 'wpisana', zdarzenie_id = @zid, zaktualizowano = @teraz WHERE id = @id`
     ).run({ zid: wynik.zdarzenie.id, teraz: czas.terazIso(), id: sprawaId });
 
-    return { sprawa: { ...sprawa, stan: 'wpisana', zdarzenie_id: wynik.zdarzenie.id }, wynik };
+    // Oplata za wpis (sekcja 1 i 8) - wylacznie dla typow odplatnych
+    // (zajecie/wykreslenie zajecia sa wolne od oplat z mocy art. 300(34) § 2
+    // KSH - `typ.odplatne` juz to koduje w katalogu). Sciezka bezposrednia
+    // `dokonajWpisu` (migracja "stan otwarcia") celowo NIE przechodzi tedy -
+    // wpisywanie historycznego stanu nie jest biezaca czynnoscia odplatna.
+    let naliczonaOplata = null;
+    if (wynik.typ.odplatne) {
+      naliczonaOplata = oplaty.naliczOplateWpisu(db, {
+        spolkaId: sprawa.spolka_id,
+        sprawaId,
+        typZdarzenia: wynik.typ.nazwa,
+        autor,
+      });
+    }
+
+    return {
+      sprawa: { ...sprawa, stan: 'wpisana', zdarzenie_id: wynik.zdarzenie.id },
+      wynik,
+      oplata: naliczonaOplata,
+    };
   });
 
   return transakcja.immediate();
