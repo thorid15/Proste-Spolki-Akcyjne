@@ -228,6 +228,62 @@ emisji — istniejący mechanizm z poprzednich sprintów, nie nowy endpoint).
 
 ---
 
+## Co powstało w sprincie 6 — warstwa wizualna
+
+> Zakres i zasada nadrzędna z `SESJA-PSA-5-INTERFEJS.md`: wyłącznie warstwa
+> prezentacji (CSS, komponenty React) — jeśli zmiana wymagała dotknięcia
+> `server/logika/`, tabel albo kontraktu endpointu, to znaczyło wyjście poza
+> zakres. Jedyny świadomie dopuszczony wyjątek: „stan na” z dokładnością do
+> minuty (2.3), bo bez porównania po `data_wpisu` zamiast `data_zdarzenia`
+> ten punkt planu w ogóle nie dało się zbudować.
+
+| Punkt z planu | Stan |
+|---|---|
+| 1.1 `design.css` przestrojony na wartości kanoniczne sesji (`--sb`, `--r`, `--r-sm`, `--przejscie`, `--panel`, `--burgundy-2`, `--tresc-szeroka`/`--tresc-waska`) | ✅ |
+| 1.2 restrukturyzacja `psa.css`, usunięcie lokalnych stylów zdublowanych z 1.0 | ✅ |
+| 1.3 powłoka aplikacji: `.app-topbar` (64px, sticky) osobno od `.sidebar` | ✅ |
+| 2.1 pasek serii — segmenty wg numeru akcji, kolor rotowany z palety, obciążenia jako kreskowanie, współwłasność ułamkowa | ✅ (bez dokładnego ułamka na etykiecie — patrz niżej) |
+| 2.2 tryb archiwalny jako stan całego ekranu (pigułka w topbarze, tło, przyciski mutujące znikają z DOM) | ✅ |
+| 2.3 „stan na” z dokładnością do minuty (`data_wpisu` zamiast `data_zdarzenia`) | ✅ |
+| 2.4 przełącznik uproszczony/szczegółowy, sekcje domyślnie zwinięte poza Historią | ✅ |
+| 3.1 kolejka spraw — starzenie jako pasek przy lewej krawędzi wiersza | ✅ |
+| 3.2 kreator — węższa kolumna treści, sticky stopka akcji | ✅ |
+| 3.3 portal klienta — parytet wizualny z kokpitem kancelarii | ✅ |
+| 3.4 wydruki — przegląd `@media print` po zmianach szkieletu | ✅ (bez zmian — już poprawny) |
+| 3.5 puste stany i mikrocopy — przegląd spójności | ✅ (bez zmian — już spójne) |
+| Testy: „stan na” z dokładnością do minuty | ✅ 5 testów |
+
+**Pasek serii i współwłasność ułamkowa — świadoma luka.** Sprint 5 wprowadził
+`czesc_licznik`/`czesc_mianownik`, ale `widoki.js` nigdy nie przekazywał tych
+pól do frontendu (tylko zsumowane `zakresy`/`procent`). Poszerzenie kontraktu
+`GET /api/psa/spolki/:id` o te pola byłoby wyjściem poza zakres tego sprintu
+(zasada nadrzędna wyżej — jedyny wyjątek to 2.3). Zamiast tego pasek wykrywa
+współwłasność POŚREDNIO: numer akcji, który pojawia się w `zakresy` więcej niż
+jednego akcjonariusza tej samej emisji, jest z definicji współwłasnością
+(reguła domenowa: ułamek zawsze dotyczy dokładnie jednego numeru). Pasek
+poprawnie pokazuje TAKI numer i listę współuprawnionych, ale nie dokładny
+ułamek (½, ⅓…) — bo tej wartości po prostu nie ma po stronie frontendu.
+Jeśli dokładny ułamek na pasku ma być pokazywany, to osobna decyzja: trzeba
+poszerzyć `akcjonariusze[]` w `widoki.js` o `czesci_ulamkowe` (pole już
+istnieje w `stan.js`, tylko nie jest przekazywane dalej).
+
+**Weryfikacja w przeglądarce — niemożliwa w tym środowisku, zastąpiona.**
+Proxy sandboksa blokuje `unpkg.com` (skąd ładują się React/Babel w
+`app.html`/`portal.html` — `<script src="https://unpkg.com/...">`), więc
+Playwright nie mógł uruchomić żadnego ekranu (`ERR_TUNNEL_CONNECTION_FAILED`,
+ten sam typ blokady co Google Fonts w sprincie 3). Zastępczo, po każdej fazie:
+składnia JSX każdego zmienionego pliku sprawdzona `@babel/core` +
+`@babel/preset-react` (`transformSync`, poza repozytorium, bo `unpkg.com`
+niedostępne, ale `registry.npmjs.org` tak), CSS sprawdzony programowo pod
+kątem zbalansowania nawiasów, `grep` po każdej fazie na hardkodowane kolory
+(same `var(--…)`), serwer uruchomiony i kluczowe trasy odpytane `curl`, oraz
+kluczowa logika komponentów (np. rozbicie paska serii na odcinki) uruchomiona
+poza przeglądarką przez transpilowany kod w piaskownicy `vm`. Pełna
+interaktywna weryfikacja w przeglądarce zostaje do zrobienia poza tym
+środowiskiem, zanim sprint 6 trafi na produkcję.
+
+---
+
 ## Architektura
 
 ```
@@ -602,12 +658,14 @@ Wszystkie świadome, wszystkie do zakwestionowania.
 
 ## Czego świadomie nie ma
 
-Sprint 6 (warstwa wizualna, `SESJA-PSA-5-INTERFEJS.md`) i sprint 7 (domknięcie
-domeny: warunkowa emisja, unieważnienie akcji, prawo pierwszeństwa jako
-osobna blokada, kanały powiadomień, zgłoszenie zmian danych przez zarząd,
-drugi zegar 7 dni, scalenie/split, uruchomienie portalu) zostają zaplanowane
-w `CLAUDE-PSA.md` sekcja 14 — nie w tym sprincie. Co zostaje poza zakresem
-CAŁEGO modułu, nie tylko dotychczasowych sprintów:
+Sprint 6 (warstwa wizualna, `SESJA-PSA-5-INTERFEJS.md`) gotowy — patrz sekcja
+wyżej, wraz ze świadomymi lukami (dokładny ułamek na pasku serii, pełna
+weryfikacja w przeglądarce). Sprint 7 (domknięcie domeny: warunkowa emisja,
+unieważnienie akcji, prawo pierwszeństwa jako osobna blokada, kanały
+powiadomień, zgłoszenie zmian danych przez zarząd, drugi zegar 7 dni,
+scalenie/split, uruchomienie portalu) zostaje zaplanowany w `CLAUDE-PSA.md`
+sekcja 14 — nie zaczęty. Co zostaje poza zakresem CAŁEGO modułu, nie tylko
+dotychczasowych sprintów:
 
 Portal jest funkcjonalnie gotowy (patrz sprint 3 wyżej), ale za flagą
 `PORTAL_WLACZONY=false` domyślnie — patrz odstępstwo 19 i „Do decyzji”.
@@ -706,7 +764,7 @@ Kalkulator i Kasa układają katalogi inaczej, przemianowanie jest tanie.
 npm test
 ```
 
-154 testy, bez zależności zewnętrznych (`node:test`), baza w pamięci lub plik tymczasowy.
+159 testów, bez zależności zewnętrznych (`node:test`), baza w pamięci lub plik tymczasowy.
 
 - `numery.test.js` — algebra zakresów, przydział FIFO, ręczne nadpisanie
 - `ulamki.test.js` — arytmetyka wymierna ułamkowych części akcji: 1/3+1/3+1/3=1
@@ -779,12 +837,25 @@ npm test
   `.text()` domyślnie zdejmuje BOM); pobranie informacji przez portal
   nalicza opłatę; stuby sądowe zwracają `501` przed nowelizacją; trasa
   `/oplaty` wymaga sesji pracownika
+- `stan-na-chwile.test.js` (sprint 6, faza 2.3) — rozpoznawanie formatu
+  `RRRR-MM-DDTGG:MM[:SS]` obok dotychczasowego `RRRR-MM-DD`; dwa wpisy tego
+  samego dnia dają dwa różne stany przy zapytaniu z godziną (rozróżnienie po
+  `data_wpisu`, nie `data_zdarzenia`); stan sprzed pierwszego wpisu jest
+  pusty; format bez godziny zachowuje dotychczasowe zachowanie (po
+  `data_zdarzenia`) — sprawdzone wprost, żeby żadna zmiana logiki domenowej
+  nie wpłynęła na istniejącą ścieżkę; chwila z sekundami równoważna chwili
+  bez sekund na tę samą minutę
 
-UI sprawdzony w przeglądarce (Chromium) po każdym sprincie: wszystkie ekrany,
+UI sprawdzony w przeglądarce (Chromium) po sprintach 1–5: wszystkie ekrany,
 pełny cykl sprawy od założenia po wpis z podglądem przed/po i bramką
 checklisty, wstrzymanie/wznowienie z realnym przeliczeniem terminu, upload
 dokumentu, sprostowanie z kokpitu (potwierdzone: cofnięcie transferu akcji
 widoczne w tabeli akcjonariatu), kolejka i pulpit z realnymi danymi.
+**Sprint 6 — wyjątek:** środowisko sesji, w której go wykonano, blokowało
+`unpkg.com` (skąd ładują się React/Babel), więc Playwright nie mógł
+uruchomić żadnego ekranu — zastępcza weryfikacja opisana w sekcji sprintu 6
+wyżej. Interaktywne sprawdzenie w przeglądarce zostaje do zrobienia przed
+produkcją.
 
 Sprint 3: ekran logowania (błędne hasło → komunikat, poprawne → pulpit
 z sesją w stopce sidebara), ekran Użytkownicy (założenie pracownika →
