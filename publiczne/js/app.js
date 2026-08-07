@@ -28,8 +28,12 @@ const MENU = [
   },
 ];
 
-/** Topbar 64px, sticky: wordmark modułu po lewej, pigułka użytkownika po prawej (faza 1.3). */
-function Topbar({ uzytkownik, przyWylogowaniu }) {
+/**
+ * Topbar 64px, sticky: wordmark modułu po lewej, pigułka użytkownika po
+ * prawej (faza 1.3). Gdy ekran zgłosi tryb archiwalny (faza 2.2 — „stan na"
+ * ≠ teraz), pigułka użytkownika ustępuje miejsca pigułce archiwalnej.
+ */
+function Topbar({ uzytkownik, przyWylogowaniu, archiwalny }) {
   const [wylogowywanie, ustawWylogowywanie] = useState(false);
   const inicjal = (uzytkownik.imie || '?').trim().charAt(0).toUpperCase();
 
@@ -45,12 +49,20 @@ function Topbar({ uzytkownik, przyWylogowaniu }) {
   return (
     <header className="app-topbar bez-druku">
       <div className="app-topbar-marka">Rejestr akcjonariuszy P.S.A.</div>
-      <div className="app-topbar-pigulka">
-        <span className="app-topbar-inicjal">{inicjal}</span>
-        <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{uzytkownik.imie}</span>
-        <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>
-          Wyloguj
-        </button>
+      <div className="row-g">
+        {archiwalny && (
+          <span className="pigulka-archiwalna">
+            Widok archiwalny — {archiwalny.opis}
+            <button className="btn btn-sm" onClick={archiwalny.powrot}>Wróć do dziś</button>
+          </span>
+        )}
+        <div className="app-topbar-pigulka">
+          <span className="app-topbar-inicjal">{inicjal}</span>
+          <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{uzytkownik.imie}</span>
+          <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>
+            Wyloguj
+          </button>
+        </div>
       </div>
     </header>
   );
@@ -107,8 +119,18 @@ function NieZnaleziono() {
 function Aplikacja() {
   const trasa = useTrasa();
   const sesja = useSesja();
+  // Tryb archiwalny (faza 2.2) - zglaszany przez ekran kokpitu, czytany przez
+  // Topbar (pigulka) i main-wrap (tlo). Zyje tutaj, nie w EkranKokpitu, bo
+  // pigulka jest w topbarze - poza poddrzewem, ktore kokpit renderuje.
+  const [archiwalny, ustawArchiwalny] = useState(null);
 
   const { segmenty, zapytanie, sciezka } = trasa;
+
+  // Zmiana trasy = koniec ewentualnego trybu archiwalnego poprzedniego ekranu.
+  useEffect(() => {
+    ustawArchiwalny(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sciezka]);
 
   function ekran() {
     if (segmenty.length === 0) return <EkranPulpitu />;
@@ -119,7 +141,7 @@ function Aplikacja() {
 
       const id = Number(segmenty[1]);
       if (!Number.isInteger(id)) return <NieZnaleziono />;
-      if (segmenty.length === 2) return <EkranKokpitu spolkaId={id} />;
+      if (segmenty.length === 2) return <EkranKokpitu spolkaId={id} ustawArchiwalny={ustawArchiwalny} />;
       if (segmenty[2] === 'zdarzenie') return <EkranNowejSprawy spolkaId={id} />;
       if (segmenty[2] === 'migracja') return <EkranMigracji spolkaId={id} />;
       if (segmenty[2] === 'wydruk') {
@@ -154,8 +176,8 @@ function Aplikacja() {
 
   return (
     <div className="apka">
-      <Topbar uzytkownik={sesja.uzytkownik} przyWylogowaniu={() => sesja.odswiez()} />
-      <div className="main-wrap">
+      <Topbar uzytkownik={sesja.uzytkownik} przyWylogowaniu={() => sesja.odswiez()} archiwalny={archiwalny} />
+      <div className={`main-wrap ${archiwalny ? 'archiwalny' : ''}`}>
         <Sidebar sciezka={sciezka} uzytkownik={sesja.uzytkownik} />
         <main className="tresc">{ekran()}</main>
       </div>

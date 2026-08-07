@@ -162,11 +162,18 @@ router.post(
   })
 );
 
-/** Kokpit spolki - jeden ekran: stan na dzis + historia + liczniki. */
+/**
+ * Kokpit spolki - jeden ekran: stan na dzis + historia + liczniki.
+ * `?data=` przyjmuje `RRRR-MM-DD` (koniec dnia) albo `RRRR-MM-DDTGG:MM[:SS]`
+ * (dokladnosc do minuty, po `data_wpisu` - sekcja 2.3 sesji interfejsowej).
+ */
 router.get(
   '/:id',
   asy((zad, odp) => {
     const id = Number(zad.params.id);
+    if (zad.query.data && !czas.poprawnaDataAlboChwila(zad.query.data)) {
+      throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD albo RRRR-MM-DDTGG:MM.');
+    }
     const stan = widoki.widokStanu(db(), id, zad.query.data);
     if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
 
@@ -238,14 +245,17 @@ router.put(
   })
 );
 
-/** Stan akcjonariatu na dowolny dzien, z maskowaniem wg roli odbiorcy. */
+/**
+ * Stan akcjonariatu na dowolny dzien albo chwile, z maskowaniem wg roli
+ * odbiorcy. `?data=` — patrz komentarz przy `GET /:id`.
+ */
 router.get(
   '/:id/stan',
   asy((zad, odp) => {
     const id = Number(zad.params.id);
     const data = zad.query.data ? String(zad.query.data) : czas.dzisIso();
-    if (!czas.poprawnaData(data)) {
-      throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD.');
+    if (!czas.poprawnaDataAlboChwila(data)) {
+      throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD albo RRRR-MM-DDTGG:MM.');
     }
 
     const rola = String(zad.query.rola || przepisy.ROLE_ODBIORCY.KANCELARIA);

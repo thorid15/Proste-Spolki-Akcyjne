@@ -36,26 +36,49 @@ function osobaDlaRoli(osoba, rola, odbiorcaOsobaId) {
 }
 
 /**
- * Pelny widok rejestru spolki na wskazany dzien.
+ * Pelny widok rejestru spolki na wskazany dzien albo chwile.
  *
- * @param {string} data  RRRR-MM-DD; domyslnie dzisiaj
+ * @param {string} data  `RRRR-MM-DD` (koniec dnia, zachowanie sprzed sprintu 6)
+ *                       ALBO `RRRR-MM-DDTGG:MM[:SS]` (dokladnosc do minuty -
+ *                       sekcja 2.3 SESJA-PSA-5-INTERFEJS.md, JEDYNA dozwolona
+ *                       zmiana poza warstwa prezentacji w tamtej sesji).
+ *                       Domyslnie dzisiaj (data-only).
  * @param {string} rola  `przepisy.ROLE_ODBIORCY`; domyslnie kancelaria
+ *
+ * Dwie odrebne semantyki, bo mieszaja dwa rozne pojecia czasu w rejestrze
+ * (regula domenowa 6): format daty porownuje po `data_zdarzenia` (kiedy
+ * czynnosc prawnie zaszla - pozwala np. na wpis z data historyczna wczesniej
+ * niz dzisiaj). Format z godzina porownuje po `data_wpisu` (kiedy WPIS trafil
+ * do rejestru) - odroznia dwa wpisy z tego samego dnia po kolejnosci
+ * rzeczywistego wprowadzenia, nie po deklarowanej dacie zdarzenia.
  */
 function widokStanu(db, spolkaId, data, opcje = {}) {
   const rola = opcje.rola || ROLE.KANCELARIA;
   const odbiorcaOsobaId = opcje.odbiorcaOsobaId ?? null;
-  const dzien = String(data || czas.dzisIso()).slice(0, 10);
+  const surowaData = String(data || czas.dzisIso());
+  const zChwila = surowaData.includes('T');
+  const dzien = surowaData.slice(0, 10);
 
   const spolka = rejestr.wczytajSpolke(db, spolkaId);
   if (!spolka) return null;
 
-  const zdarzenia = rejestr.wczytajZdarzenia(db, spolkaId);
-  const stan = stanLogika.odtworzStan(zdarzenia);
+  const wszystkieZdarzenia = rejestr.wczytajZdarzenia(db, spolkaId);
+  let stan;
+  let dzienDoFiltrow;
+  if (zChwila) {
+    const chwila = new Date(surowaData).getTime();
+    const doChwili = wszystkieZdarzenia.filter((z) => new Date(z.data_wpisu).getTime() <= chwila);
+    stan = stanLogika.odtworzStan(doChwili);
+    dzienDoFiltrow = null; // stan juz ograniczony do wpisow sprzed `chwila` - bez drugiego filtra po dacie
+  } else {
+    stan = stanLogika.odtworzStan(wszystkieZdarzenia);
+    dzienDoFiltrow = dzien;
+  }
   const osoby = rejestr.wczytajOsobySpolki(db, spolkaId);
 
-  const akcjonariat = stanLogika.akcjonariatNaDzien(stan, dzien);
-  const bilans = stanLogika.bilansNaDzien(stan, dzien);
-  const obciazenia = stanLogika.obciazeniaNaDzien(stan, dzien);
+  const akcjonariat = stanLogika.akcjonariatNaDzien(stan, dzienDoFiltrow);
+  const bilans = stanLogika.bilansNaDzien(stan, dzienDoFiltrow);
+  const obciazenia = stanLogika.obciazeniaNaDzien(stan, dzienDoFiltrow);
 
   const emisjeWgKlucza = new Map(stan.emisje.map((e) => [e.klucz, e]));
 

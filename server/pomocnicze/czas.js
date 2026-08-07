@@ -40,4 +40,25 @@ function poprawnaData(tekst) {
   );
 }
 
-module.exports = { terazIso, dzisIso, poprawnaData };
+/**
+ * Czy tekst jest poprawna chwila `RRRR-MM-DDTGG:MM` (opcjonalnie `:SS`) -
+ * „stan na" z dokladnoscia do minuty (sekcja 2.3 SESJA-PSA-5-INTERFEJS.md).
+ * Sama walidacja formatu i zakresu pol - bez stref, zgodnie z `data_wpisu`
+ * (czas lokalny kancelarii, `TZ` procesu).
+ */
+function poprawnaChwila(tekst) {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(String(tekst || ''));
+  if (!m) return false;
+  if (!poprawnaData(m[1])) return false;
+  const godz = Number(m[2]);
+  const min = Number(m[3]);
+  const sek = m[4] == null ? 0 : Number(m[4]);
+  return godz >= 0 && godz <= 23 && min >= 0 && min <= 59 && sek >= 0 && sek <= 59;
+}
+
+/** Czy tekst jest data (`RRRR-MM-DD`) albo chwila (`RRRR-MM-DDTGG:MM[:SS]`). */
+function poprawnaDataAlboChwila(tekst) {
+  return poprawnaData(tekst) || poprawnaChwila(tekst);
+}
+
+module.exports = { terazIso, dzisIso, poprawnaData, poprawnaChwila, poprawnaDataAlboChwila };

@@ -839,12 +839,19 @@ function sprawdzBilans(stan) {
 
 /** Przedzialy obowiazujace na dzien `data` (YYYY-MM-DD). */
 function przedzialyNaDzien(stan, data) {
+  // `data === null` - bez filtra po dacie: bierzemy doslownie to, co jest
+  // otwarte w `stan` (uzywane przy „stan na" z dokladnoscia do minuty -
+  // sekcja 2.3 SESJA-PSA-5-INTERFEJS.md - gdzie `stan` juz jest zbudowany
+  // WYLACZNIE ze zdarzen wpisanych do zadanej chwili, wiec dodatkowy filtr
+  // po `data_zdarzenia` bylby drugim, kolidujacym wymiarem czasu).
+  if (data === null) return otwarte(stan);
   const d = String(data).slice(0, 10);
   return stan.przedzialy.filter((p) => p.data_od <= d && (p.data_do === null || p.data_do > d));
 }
 
-/** Obciazenia obowiazujace na dzien `data`. */
+/** Obciazenia obowiazujace na dzien `data` (`null` = bez filtra, patrz `przedzialyNaDzien`). */
 function obciazeniaNaDzien(stan, data) {
+  if (data === null) return stan.obciazenia.filter((o) => o.data_do === null);
   const d = String(data).slice(0, 10);
   return stan.obciazenia.filter((o) => o.data_od <= d && (o.data_do === null || o.data_do > d));
 }

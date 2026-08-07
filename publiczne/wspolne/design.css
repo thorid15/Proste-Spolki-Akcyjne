@@ -356,7 +356,16 @@ textarea { resize: vertical; min-height: 110px; line-height: 1.65; }
    Kreskowanie obciążeń NAKŁADA się na kolor segmentu (nie zamiast).
    Tylko na ekranie — @media print go wyłącza (patrz psa.css).
    ───────────────────────────────────────────────────── */
-.pasek-serii { margin-bottom: 10px; }
+.pasek-serii { margin-bottom: 16px; }
+.pasek-serii-etykieta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+}
+.pasek-serii-etykieta strong { color: var(--ink); font-weight: 600; }
 .pasek-serii-wstega {
   display: flex;
   width: 100%;
@@ -375,6 +384,21 @@ textarea { resize: vertical; min-height: 110px; line-height: 1.65; }
 .pasek-serii-segment:hover { filter: brightness(0.94); }
 .pasek-serii-segment.nieobjete { background: var(--paper-3); cursor: default; }
 .pasek-serii-segment.nieobjete:hover { filter: none; }
+.pasek-serii-segment.umorzone {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--paper-3) 0px, var(--paper-3) 3px,
+    var(--line) 3px, var(--line) 6px
+  );
+  cursor: default;
+}
+.pasek-serii-segment.umorzone:hover { filter: none; }
+/* Rotacja kolorów akcjonariuszy — WYŁĄCZNIE tokeny z palety 1.0, cyklicznie. */
+.pasek-serii-segment.kolor-1 { background: var(--green-dark); }
+.pasek-serii-segment.kolor-2 { background: var(--slate); }
+.pasek-serii-segment.kolor-3 { background: var(--plum); }
+.pasek-serii-segment.kolor-4 { background: var(--olive); }
+.pasek-serii-segment.kolor-5 { background: var(--burgundy); }
 .pasek-serii-segment.obciazona::after {
   content: '';
   position: absolute; inset: 0;
@@ -383,6 +407,18 @@ textarea { resize: vertical; min-height: 110px; line-height: 1.65; }
     rgba(31,26,20,0.16) 0px, rgba(31,26,20,0.16) 3px,
     transparent 3px, transparent 8px
   );
+}
+/* Współwłasność ułamkowa jednego numeru (regułą jest, że dotyczy dokładnie
+   jednego numeru) — przy większej emisji taki wycinek bywa niewidoczny w
+   skali, więc segment dostaje własny wzór + pionowe kreski na krawędziach,
+   a pełna lista współuprawnionych wraz z numerem trafia pod pasek. */
+.pasek-serii-segment.wspolwlasnosc {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--ink-3) 0px, var(--ink-3) 2px,
+    var(--ink-4) 2px, var(--ink-4) 4px
+  );
+  min-width: 4px;
 }
 .pasek-serii-skala {
   display: flex;
@@ -396,8 +432,16 @@ textarea { resize: vertical; min-height: 110px; line-height: 1.65; }
   position: absolute;
   top: 0; bottom: 0;
   width: 1px;
-  background: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.85);
 }
+.pasek-serii-podzial.lewa { left: 0; }
+.pasek-serii-podzial.prawa { right: 0; }
+.pasek-serii-lista-wspolwlasnosci {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.pasek-serii-lista-wspolwlasnosci div + div { margin-top: 2px; }
 @media print { .pasek-serii { display: none !important; } }
 @media (prefers-reduced-motion: reduce) {
   .pasek-serii-segment { transition: none; }
