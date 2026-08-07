@@ -247,6 +247,9 @@
 }
 .krok.biezacy .krok-num { border-color: var(--paper); }
 
+/* Sticky (faza 3.2) — przy dłuższej checkliście (krok weryfikacji) przyciski
+   „Wstecz”/„Dalej”/„Dokonaj wpisu” zostają w zasięgu bez przewijania do
+   samego dołu. Tło `--surf` (jak `.card`), żeby treść nie prześwitywała. */
 .kreator-stopka {
   display: flex;
   align-items: center;
@@ -254,8 +257,13 @@
   gap: 12px;
   margin-top: 24px;
   padding-top: 20px;
+  padding-bottom: 16px;
   border-top: 1px solid var(--line-2);
+  position: sticky;
+  bottom: 0;
+  background: var(--surf);
 }
+@media print { .kreator-stopka { position: static; } }
 /* „Dalej” zawsze w tym samym miejscu — po prawej stronie stopki. */
 .kreator-stopka-prawa { display: flex; gap: 10px; margin-left: auto; }
 
@@ -481,6 +489,24 @@ tr.usuwany td { background: var(--burgundy-bg); text-decoration: line-through; }
 .zawijaj { white-space: normal; }
 .klikalny { cursor: pointer; }
 .klikalny:hover { background: var(--paper); }
+
+/* Portal klienta (faza 3.3) — ten sam język wizualny co .app-topbar strony
+   kancelaryjnej (sticky, tło surf, linia pod spodem), ale portal ma
+   dwuwierszowy blok informacyjny (tytuł + konto), stąd własna, nieco
+   wyższa odmiana zamiast wspólnej, jednowierszowej klasy. */
+.portal-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--surf);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Kolejka spraw (faza 3.1): starzenie jako wąski pasek przy lewej krawędzi
+   wiersza — osobna, wąska kolumna zamiast tła całego wiersza (tło zostaje
+   wolne dla stanu hover z .klikalny powyżej). */
+.wiersz-kolejki-pasek-glowka { width: 4px; padding: 0 !important; }
+.wiersz-kolejki-pasek { width: 4px; padding: 0 !important; }
 
 .ekran-logowania {
   min-height: 100vh; display: flex; align-items: center; justify-content: center;

@@ -88,7 +88,7 @@ const KARTY_NAWIGACJI = [
   { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
 ];
 
-function PortalLayout({ sciezka, konto, przyWylogowaniu, children }) {
+function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
   const [wylogowywanie, ustawWylogowywanie] = useState(false);
 
   async function wyloguj() {
@@ -102,7 +102,7 @@ function PortalLayout({ sciezka, konto, przyWylogowaniu, children }) {
 
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <header className="pasek-gorny bez-druku" style={{ padding: '14px 28px', borderBottom: '1px solid var(--line)' }}>
+      <header className="portal-topbar pasek-gorny bez-druku" style={{ padding: '14px 28px' }}>
         <div>
           <div className="tytul-strony" style={{ fontSize: 17 }}>Portal klienta — Rejestr akcjonariuszy P.S.A.</div>
           <div className="podpowiedz">{konto.email} · {konto.rola === 'spolka' ? 'konto spółki' : 'konto akcjonariusza'}</div>
@@ -120,7 +120,7 @@ function PortalLayout({ sciezka, konto, przyWylogowaniu, children }) {
           <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>Wyloguj się</button>
         </div>
       </header>
-      <main className="tresc" style={{ maxWidth: 980 }}>{children}</main>
+      <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
     </div>
   );
 }
@@ -337,6 +337,16 @@ const ZNACZNIK_STANU = {
   wpisana: 'zielony', odmowa: 'bordo', anulowana: 'neutralny',
 };
 
+/* Ten sam pasek starzenia co w kolejce spraw kancelarii (faza 3.1) —
+   spójność wizualna dla tego samego pojęcia po obu stronach portalu. */
+function kolorPaskaTerminuPortal(termin) {
+  if (!termin) return 'transparent';
+  if (termin.po_terminie) return 'var(--burgundy-2)';
+  if (termin.pilny) return 'var(--burgundy)';
+  if (termin.zamrozony) return 'var(--olive)';
+  return 'transparent';
+}
+
 function EkranSprawyPortal() {
   const { dane, ladowanie } = useDane('/api/psa/portal/zadania');
   if (ladowanie) return <Spinner />;
@@ -350,11 +360,19 @@ function EkranSprawyPortal() {
     <Karta tight tytul="Moje zgłoszenia">
       <table className="tbl">
         <thead>
-          <tr><th>Spółka</th><th>Rodzaj</th><th>Zgłoszono</th><th>Stan</th><th>Termin</th></tr>
+          <tr>
+            <th className="wiersz-kolejki-pasek-glowka" />
+            <th>Spółka</th><th>Rodzaj</th><th>Zgłoszono</th><th>Stan</th><th>Termin</th>
+          </tr>
         </thead>
         <tbody>
           {dane.sprawy.map((s) => (
             <tr key={s.id}>
+              <td
+                className="wiersz-kolejki-pasek"
+                style={{ background: kolorPaskaTerminuPortal(s.termin) }}
+                aria-hidden="true"
+              />
               <td>{s.spolka_nazwa}</td>
               <td>{s.typ_nazwa}</td>
               <td>{fmt.dataCzas(s.data_wplywu)}</td>
@@ -438,8 +456,17 @@ function AplikacjaPortal() {
     );
   }
 
+  // Te same proporcje treści co w aplikacji kancelaryjnej (faza 3.2/3.3):
+  // formularze (zgłoszenie, informacja) węższe niż listy/rejestr.
+  const waski = segmenty[0] === 'zgloszenie' || segmenty[0] === 'informacja';
+
   return (
-    <PortalLayout sciezka={sciezka === '/' ? '/' : `/${segmenty[0]}`} konto={sesja.konto} przyWylogowaniu={() => sesja.odswiez()}>
+    <PortalLayout
+      sciezka={sciezka === '/' ? '/' : `/${segmenty[0]}`}
+      waski={waski}
+      konto={sesja.konto}
+      przyWylogowaniu={() => sesja.odswiez()}
+    >
       {ekran()}
     </PortalLayout>
   );

@@ -126,6 +126,15 @@ function Aplikacja() {
 
   const { segmenty, zapytanie, sciezka } = trasa;
 
+  // Kreator i formularze dostają węższą kolumnę treści (faza 3.2) — jeden
+  // ekran, jedna kolumna pól, bez rozciągania na szerokość list/kokpitu.
+  // Kreator OSADZONY w kroku 3–4 sprawy (EkranSprawy) ma własną, lokalną
+  // szerokość (sprawy.js) — reszta tego ekranu (dokumenty, akcje) zostaje
+  // szeroka, więc tu się go nie uwzględnia.
+  const waski =
+    (segmenty[0] === 'spolki' && segmenty[1] === 'nowa') ||
+    (segmenty[0] === 'spolki' && segmenty.length >= 3 && (segmenty[2] === 'zdarzenie' || segmenty[2] === 'migracja'));
+
   // Zmiana trasy = koniec ewentualnego trybu archiwalnego poprzedniego ekranu.
   useEffect(() => {
     ustawArchiwalny(null);
@@ -179,7 +188,7 @@ function Aplikacja() {
       <Topbar uzytkownik={sesja.uzytkownik} przyWylogowaniu={() => sesja.odswiez()} archiwalny={archiwalny} />
       <div className={`main-wrap ${archiwalny ? 'archiwalny' : ''}`}>
         <Sidebar sciezka={sciezka} uzytkownik={sesja.uzytkownik} />
-        <main className="tresc">{ekran()}</main>
+        <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{ekran()}</main>
       </div>
     </div>
   );

@@ -21,6 +21,18 @@ function ZnacznikTerminu({ termin }) {
   return <Znacznik odmiana="neutralny">pozostało {termin.dni_pozostale} dz.</Znacznik>;
 }
 
+/* Starzenie sprawy w kolejce sygnalizujemy paskiem przy LEWEJ krawędzi
+   wiersza (kolumna 4px), nie tłem całego wiersza — tło zostaje wolne dla
+   hover/zaznaczenia. `--burgundy-2` (mocniejszy wariant) rozróżnia „po
+   terminie” od zwykłego „pilne”, zgodnie z komentarzem przy tym tokenie
+   w design.css (dodany w fazie 1.1 właśnie z myślą o tym miejscu). */
+function kolorPaskaTerminu(termin) {
+  if (termin.po_terminie) return 'var(--burgundy-2)';
+  if (termin.pilny) return 'var(--burgundy)';
+  if (termin.zamrozony) return 'var(--olive)';
+  return 'transparent';
+}
+
 /* ─────────────────────────────────────────────────────
    KOLEJKA
    ───────────────────────────────────────────────────── */
@@ -57,6 +69,7 @@ function EkranKolejkiSpraw() {
           <table className="tbl">
             <thead>
               <tr>
+                <th className="wiersz-kolejki-pasek-glowka" />
                 <th>Spółka</th><th>Zdarzenie</th><th>Źródło</th><th>Stan</th>
                 <th>Wpłynęła</th><th className="prawo">Termin</th>
               </tr>
@@ -64,6 +77,11 @@ function EkranKolejkiSpraw() {
             <tbody>
               {dane.sprawy.map((s) => (
                 <tr key={s.id} className="klikalny" onClick={() => idz(`/sprawy/${s.id}`)}>
+                  <td
+                    className="wiersz-kolejki-pasek"
+                    style={{ background: kolorPaskaTerminu(s.termin) }}
+                    aria-hidden="true"
+                  />
                   <td style={{ fontWeight: 500 }}>{s.spolka_nazwa}</td>
                   <td>{s.typ_nazwa}</td>
                   <td className="przyciemnione">{s.zrodlo === 'z_urzedu' ? 'z urzędu' : s.zrodlo}</td>
@@ -408,30 +426,32 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
 
   if (wynik) {
     return (
-      <Karta>
-        <Komunikat
-          odmiana="ok"
-          tytul={`${definicjaTypu.nazwa} — zdarzenie zapisane w rejestrze`}
-          tresc={`Skrót zdarzenia w łańcuchu: ${wynik.zdarzenie.hash_skrocony}…`}
-        />
-        <Komunikat odmiana="uwaga" tytul="Do sprawdzenia:" lista={wynik.ostrzezenia} />
-        {wynik.powiadomienia && wynik.powiadomienia.length > 0 && (
+      <div style={{ maxWidth: 'var(--tresc-waska)' }}>
+        <Karta>
           <Komunikat
-            odmiana="info"
-            tytul="Zawiadomienie o wpisie"
-            lista={wynik.powiadomienia.map((p) =>
-              p.blad
-                ? p.blad
-                : `${p.odbiorca}: ${p.wyslano ? 'wysłano e-mailem' : `nie wysłano — ${p.powod}`}`
-            )}
+            odmiana="ok"
+            tytul={`${definicjaTypu.nazwa} — zdarzenie zapisane w rejestrze`}
+            tresc={`Skrót zdarzenia w łańcuchu: ${wynik.zdarzenie.hash_skrocony}…`}
           />
-        )}
-        <div className="kreator-stopka">
-          <button className="btn btn-primary" onClick={() => idz(`/spolki/${sprawa.spolka_id}`)}>
-            Wróć do kokpitu spółki
-          </button>
-        </div>
-      </Karta>
+          <Komunikat odmiana="uwaga" tytul="Do sprawdzenia:" lista={wynik.ostrzezenia} />
+          {wynik.powiadomienia && wynik.powiadomienia.length > 0 && (
+            <Komunikat
+              odmiana="info"
+              tytul="Zawiadomienie o wpisie"
+              lista={wynik.powiadomienia.map((p) =>
+                p.blad
+                  ? p.blad
+                  : `${p.odbiorca}: ${p.wyslano ? 'wysłano e-mailem' : `nie wysłano — ${p.powod}`}`
+              )}
+            />
+          )}
+          <div className="kreator-stopka">
+            <button className="btn btn-primary" onClick={() => idz(`/spolki/${sprawa.spolka_id}`)}>
+              Wróć do kokpitu spółki
+            </button>
+          </div>
+        </Karta>
+      </div>
     );
   }
 
@@ -444,7 +464,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   const KrokTresci = KROKI_TRESCI[sprawa.typ_zdarzenia];
 
   return (
-    <>
+    <div style={{ maxWidth: 'var(--tresc-waska)' }}>
       <Kroki kroki={['Podstawa', 'Co się zmienia', 'Weryfikacja i podgląd']} biezacy={krok - 1} />
       <Karta>
       {krok === 2 && (
@@ -541,7 +561,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
         </div>
       </div>
       </Karta>
-    </>
+    </div>
   );
 }
 
