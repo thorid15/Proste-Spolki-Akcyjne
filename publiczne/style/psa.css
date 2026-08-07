@@ -5,25 +5,26 @@
 
 /* ─────────────────────────────────────────────────────
    SZKIELET
+   `.app-topbar` i `.main-wrap` (wysokość topbara, grid sidebar+treść)
+   są tokenami wspólnymi w design.css (1.2) — tu zostaje wyłącznie to,
+   co jest specyficzne dla modułu PSA.
    ───────────────────────────────────────────────────── */
-.apka {
-  display: grid;
-  grid-template-columns: var(--sb) minmax(0, 1fr);
-  min-height: 100vh;
-}
+.apka { display: flex; flex-direction: column; min-height: 100vh; }
 
 .sidebar {
   background: var(--paper-2);
   border-right: 1px solid var(--line);
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: 64px; /* pod app-topbar */
+  height: calc(100vh - 64px);
   display: flex;
   flex-direction: column;
   padding: 22px 0 14px;
   overflow-y: auto;
 }
 
+/* Blok kancelarii u góry sidebara (faza 1.3) — wordmark MODUŁU jest w topbarze,
+   ten blok pokazuje, CZYJ to rejestr (kancelaria prowadząca). */
 .sb-marka {
   padding: 0 22px 20px;
   border-bottom: 1px solid var(--line-2);
@@ -32,8 +33,8 @@
 .sb-marka-nazwa {
   font-family: var(--font-serif);
   font-feature-settings: var(--serif-features);
-  font-size: 19px;
-  line-height: 1.25;
+  font-size: 16px;
+  line-height: 1.3;
   color: var(--ink);
   letter-spacing: 0.01em;
 }
@@ -74,28 +75,24 @@
 }
 .sb-poz:hover { background: var(--paper-3); color: var(--ink); }
 .sb-poz.aktywna {
-  background: var(--surf);
-  color: var(--ink);
+  background: var(--burgundy-bg);
+  color: var(--burgundy);
   font-weight: 600;
-  border-left-color: var(--ink);
+  border-left-color: var(--burgundy);
 }
 .sb-poz.zablokowana { color: var(--ink-4); cursor: not-allowed; }
 .sb-poz.zablokowana:hover { background: none; color: var(--ink-4); }
-
-.sb-stopka {
-  margin-top: auto;
-  padding: 14px 22px 0;
-  border-top: 1px solid var(--line-2);
-}
 
 /* ─────────────────────────────────────────────────────
    TREŚĆ
    ───────────────────────────────────────────────────── */
 .tresc {
   padding: 30px 40px 72px;
-  max-width: var(--tresc-maks);
+  max-width: var(--tresc-szeroka); /* kokpit spółki i listy — sekcja 9.0 CLAUDE-PSA.md */
   width: 100%;
 }
+/* Kreator i formularze — węższa kolumna, jedna kolumna pól (sekcja 9.0). */
+.tresc.tresc-waska { max-width: var(--tresc-waska); }
 
 .pasek-gorny {
   display: flex;
@@ -459,7 +456,8 @@ tr.usuwany td { background: var(--burgundy-bg); text-decoration: line-through; }
 @media print {
   @page { margin: 16mm; }
   .apka { display: block; }
-  .sidebar, .pasek-gorny, .bez-druku, .btn, .okruszki { display: none !important; }
+  .main-wrap { display: block; }
+  .app-topbar, .sidebar, .pasek-gorny, .bez-druku, .btn, .okruszki { display: none !important; }
   .tresc { padding: 0; max-width: none; }
   body { background: var(--surf); font-size: 11.5pt; }
   .card, .sekcja { border: none; padding: 0; margin: 0; }
@@ -475,7 +473,8 @@ tr.usuwany td { background: var(--burgundy-bg); text-decoration: line-through; }
 .rozdzielacz { height: 1px; background: var(--line-2); margin: 20px 0; }
 .pion { display: flex; flex-direction: column; }
 .mono { font-family: var(--font-mono); font-size: 12px; }
-.prawo { text-align: right; }
+.prawo { text-align: right; font-variant-numeric: tabular-nums; }
+.licznik-wartosc { font-variant-numeric: tabular-nums; }
 .przyciemnione { color: var(--ink-4); }
 .male { font-size: 12px; }
 .odstep-g { margin-top: 16px; }

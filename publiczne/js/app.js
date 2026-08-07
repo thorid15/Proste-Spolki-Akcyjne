@@ -28,10 +28,10 @@ const MENU = [
   },
 ];
 
-function Sidebar({ sciezka, uzytkownik, przyWylogowaniu }) {
-  const aktywna = (poz) =>
-    poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka);
+/** Topbar 64px, sticky: wordmark modułu po lewej, pigułka użytkownika po prawej (faza 1.3). */
+function Topbar({ uzytkownik, przyWylogowaniu }) {
   const [wylogowywanie, ustawWylogowywanie] = useState(false);
+  const inicjal = (uzytkownik.imie || '?').trim().charAt(0).toUpperCase();
 
   async function wyloguj() {
     ustawWylogowywanie(true);
@@ -43,10 +43,30 @@ function Sidebar({ sciezka, uzytkownik, przyWylogowaniu }) {
   }
 
   return (
+    <header className="app-topbar bez-druku">
+      <div className="app-topbar-marka">Rejestr akcjonariuszy P.S.A.</div>
+      <div className="app-topbar-pigulka">
+        <span className="app-topbar-inicjal">{inicjal}</span>
+        <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{uzytkownik.imie}</span>
+        <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>
+          Wyloguj
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function Sidebar({ sciezka, uzytkownik }) {
+  const aktywna = (poz) =>
+    poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka);
+  const { dane } = useDane('/api/wspolne/kancelaria');
+  const kancelaria = dane && dane.kancelaria;
+
+  return (
     <nav className="sidebar bez-druku">
       <div className="sb-marka">
-        <div className="sb-marka-nazwa">Rejestr akcjonariuszy</div>
-        <div className="sb-marka-podpis">Proste spółki akcyjne</div>
+        <div className="sb-marka-nazwa">{kancelaria ? kancelaria.nazwa : 'Kancelaria Notarialna'}</div>
+        <div className="sb-marka-podpis">Podmiot prowadzący rejestr</div>
       </div>
 
       {MENU.map((g) => (
@@ -68,16 +88,6 @@ function Sidebar({ sciezka, uzytkownik, przyWylogowaniu }) {
             ))}
         </div>
       ))}
-
-      <div className="sb-stopka">
-        <div className="sb-uzytkownik">{uzytkownik.imie}</div>
-        <div className="sb-uzytkownik-rola">
-          {uzytkownik.rola === 'admin' ? 'administrator' : 'pracownik'} · {uzytkownik.email}
-        </div>
-        <button className="btn btn-sm" style={{ width: '100%' }} onClick={wyloguj} disabled={wylogowywanie}>
-          Wyloguj się
-        </button>
-      </div>
     </nav>
   );
 }
@@ -144,8 +154,11 @@ function Aplikacja() {
 
   return (
     <div className="apka">
-      <Sidebar sciezka={sciezka} uzytkownik={sesja.uzytkownik} przyWylogowaniu={() => sesja.odswiez()} />
-      <main className="tresc">{ekran()}</main>
+      <Topbar uzytkownik={sesja.uzytkownik} przyWylogowaniu={() => sesja.odswiez()} />
+      <div className="main-wrap">
+        <Sidebar sciezka={sciezka} uzytkownik={sesja.uzytkownik} />
+        <main className="tresc">{ekran()}</main>
+      </div>
     </div>
   );
 }

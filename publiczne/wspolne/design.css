@@ -1,11 +1,23 @@
-/* design.css — wersja 1.1 */
+/* design.css — wersja 1.2 */
 /* Kanon wizualny systemu kancelarii — ekstrakcja 1:1 z index.html Weryfikatora.
    Kolory WYŁĄCZNIE przez var(--…). Linki Google Fonts zostają w <head> modułu.
 
-   1.1 (moduł P.S.A.): dopisane tokeny układu, których wersja 1.0 nie miała —
-   --sb, --r/--r-sm/--r-xs, --przejscie, --tresc-maks. Zero zmian w 1.0:
-   dotychczasowe klasy i wartości pozostają nietknięte, więc Kalkulator i Kasa
-   mogą podmienić plik bez żadnych poprawek u siebie. */
+   1.1 (moduł P.S.A., sprint 1): dopisane tokeny układu, których wersja 1.0
+   nie miała — --sb, --r/--r-sm/--r-xs, --przejscie, --tresc-maks — wartości
+   dobrane wtedy ad-hoc z tego, co PSA akurat potrzebowało.
+
+   1.2 (sprint 6 — SESJA-PSA-5-INTERFEJS.md, faza 1.1): te same tokeny
+   PRZESTROJONE na wartości kanoniczne z sesji interfejsowej (--sb, --r,
+   --r-sm, --przejscie), dodane brakujące (--panel, --burgundy-2), i
+   --tresc-maks ROZDZIELONE na --tresc-szeroka/--tresc-waska (kokpit i
+   kreator mają różne szerokości treści, jeden token już nie wystarczał).
+   Świadoma zmiana wartości (nie tylko dopisanie) — jedyne odstępstwo od
+   zasady „nie ruszać istniejących reguł 1.0" z tej sesji, bo dotyczy
+   tokenów 1.1 (własnych PSA), nie reguł 1.0 (wspólnych z Kalkulatorem/Kasą).
+   Zero zmian w regułach z 1.0: dotychczasowe klasy i wartości stamtąd
+   (`.card`, `.btn`, pola formularza — z własnymi, literalnymi promieniami)
+   pozostają nietknięte, więc Kalkulator i Kasa wciąż mogą podmienić plik
+   bez żadnych poprawek u siebie. */
 
 /* ─────────────────────────────────────────────────────
    RESET + ZERO KURSYWY W CAŁEJ APLIKACJI
@@ -49,15 +61,22 @@ body { font-style: normal !important; }
   --sh-m: 0 2px 12px rgba(60, 45, 20, 0.05);
   --sh-l: 0 8px 32px rgba(60, 45, 20, 0.10);
 
-  /* ── Dodane w 1.1: tokeny układu ───────────────────────────
-     Wartości promieni odpowiadają temu, co 1.0 miało wpisane na sztywno
-     w .card (14px), input (10px) i .btn-sm — teraz są nazwane. */
-  --sb: 248px;          /* szerokość sidebara */
-  --r: 14px;            /* promień kart i modali */
-  --r-sm: 10px;         /* promień pól formularza */
+  /* ── Tokeny układu (1.1, przestrojone w 1.2 na wartości sesji interfejsowej) ── */
+  --sb: 260px;          /* szerokość sidebara */
+  --r: 10px;            /* promień komponentów układu PSA (sekcja, kafelek, licznik) */
+  --r-sm: 7px;          /* promień drobniejszych komponentów układu PSA */
   --r-xs: 6px;          /* promień drobnych znaczników */
-  --przejscie: 0.12s;   /* czas przejść — zgodny z .btn i polami 1.0 */
-  --tresc-maks: 1240px; /* maksymalna szerokość kolumny treści */
+  --przejscie: 150ms cubic-bezier(.4,0,.2,1); /* czas i krzywa przejść */
+
+  /* ── Dodane w 1.2: brakujące tokeny z SESJA-PSA-5-INTERFEJS.md ─── */
+  --panel:      #241a1b; /* ciemne tło (tryb archiwalny / akcenty odwrócone) */
+  --burgundy-2: #921f3f; /* bordo, mocniejszy wariant (aging po terminie) */
+
+  /* Szerokości treści — kokpit spółki i listy vs. kreator i formularze
+     (CLAUDE-PSA.md sekcja 9.0: świadome odstępstwo od max-width:1000px
+     z mastera — tabela akcjonariatu z paskiem serii się w nim nie mieści). */
+  --tresc-szeroka: 1180px;
+  --tresc-waska:   720px;
 }
 
 html, body { height: 100%; background: var(--paper); color: var(--ink); }
@@ -278,3 +297,134 @@ textarea { resize: vertical; min-height: 110px; line-height: 1.65; }
 .row-g { display: flex; align-items: center; gap: 10px; }
 .empty { text-align: center; padding: 64px 20px; color: var(--ink-4); }
 .empty-h { font-family: var(--font-serif); font-size: 22px; font-weight: 500; color: var(--ink-2); margin-bottom: 8px; letter-spacing: 0.01em; font-feature-settings: var(--serif-features); }
+
+/* ─────────────────────────────────────────────────────
+   1.2 — POWŁOKA APLIKACJI (topbar + sidebar + treść)
+   Dodane w sprincie 6 (SESJA-PSA-5-INTERFEJS.md, faza 1.3). Klasy modułowe
+   (`.sidebar`, `.tresc` itd.) zostają w psa.css — tu wyłącznie to, co jest
+   współdzielone przez konwencję układu: wysokość topbara i podstawowy
+   flex/grid szkieletu.
+   ───────────────────────────────────────────────────── */
+.app-topbar {
+  height: 64px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 24px;
+  background: var(--surf);
+  border-bottom: 1px solid var(--line);
+}
+.app-topbar-marka {
+  font-family: var(--font-serif);
+  font-feature-settings: var(--serif-features);
+  font-size: 17px;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+.app-topbar-pigulka {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px 5px 5px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.app-topbar-inicjal {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  flex-shrink: 0;
+}
+.main-wrap {
+  display: grid;
+  grid-template-columns: var(--sb) minmax(0, 1fr);
+  min-height: calc(100vh - 64px);
+}
+
+/* ─────────────────────────────────────────────────────
+   1.2 — PASEK SERII (element sygnaturowy, faza 2.1)
+   Czysty SVG/CSS, bez bibliotek wykresów. Kolejność segmentów wg numerów
+   akcji (nie nazwiska) — pasek odwzorowuje rzeczywisty układ numeracji.
+   Kreskowanie obciążeń NAKŁADA się na kolor segmentu (nie zamiast).
+   Tylko na ekranie — @media print go wyłącza (patrz psa.css).
+   ───────────────────────────────────────────────────── */
+.pasek-serii { margin-bottom: 10px; }
+.pasek-serii-wstega {
+  display: flex;
+  width: 100%;
+  height: 34px;
+  border-radius: var(--r-xs);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.pasek-serii-segment {
+  height: 100%;
+  position: relative;
+  cursor: pointer;
+  transition: filter var(--przejscie);
+  min-width: 2px;
+}
+.pasek-serii-segment:hover { filter: brightness(0.94); }
+.pasek-serii-segment.nieobjete { background: var(--paper-3); cursor: default; }
+.pasek-serii-segment.nieobjete:hover { filter: none; }
+.pasek-serii-segment.obciazona::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(31,26,20,0.16) 0px, rgba(31,26,20,0.16) 3px,
+    transparent 3px, transparent 8px
+  );
+}
+.pasek-serii-skala {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  margin-top: 5px;
+}
+.pasek-serii-podzial {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: rgba(255,255,255,0.6);
+}
+@media print { .pasek-serii { display: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .pasek-serii-segment { transition: none; }
+}
+
+/* ─────────────────────────────────────────────────────
+   1.2 — TRYB ARCHIWALNY jako stan całego ekranu (faza 2.2)
+   Aktywowany klasą `.archiwalny` na kontenerze `.main-wrap` (albo wyżej).
+   Wszystkie przyciski akcji ZNIKAJĄ Z DOM w tym trybie (komponent, nie CSS
+   `display:none`) — tu wyłącznie tło i pigułka.
+   ───────────────────────────────────────────────────── */
+.main-wrap.archiwalny,
+.tryb-archiwalny .tresc {
+  background: var(--paper-2);
+  transition: background var(--przejscie);
+}
+@media (prefers-reduced-motion: reduce) {
+  .main-wrap.archiwalny, .tryb-archiwalny .tresc { transition: none; }
+}
+.pigulka-archiwalna {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 999px;
+  background: var(--slate-bg);
+  color: var(--slate);
+  font-size: 12.5px;
+  font-weight: 600;
+}
