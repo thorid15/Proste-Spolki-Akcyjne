@@ -94,10 +94,10 @@ function EkranStawek() {
             odmiana="uwaga"
             tytul={`${dane.nowelizacja.DZIENNIK} — wejście w życie ${fmt.data(dane.nowelizacja.WEJSCIE_W_ZYCIE)}`}
             tresc={
-              'Brzmienie przepisów spisane z opracowań branżowych. Przed kodowaniem walidacji ' +
-              'opartych na konkretnych jednostkach redakcyjnych wymagana jest weryfikacja tekstu ' +
-              'ustawy. Rozwiązania addytywne — maskowanie danych wrażliwych i szerszy katalog ' +
-              'danych osobowych — są wdrożone od pierwszego dnia.'
+              'Jedyne źródło prawne modułu: PRZEPISY-PSA.md. Katalog danych rejestru (art. 300(33) ' +
+              '§ 1 pkt 1–11 KSH) nowelizacja NIE zmienia — jedyne rozwiązanie addytywne wdrożone od ' +
+              'pierwszego dnia to zakaz udostępniania PESEL-u, daty urodzenia i adresu zamieszkania ' +
+              'pozostałym akcjonariuszom (maskowanie).'
             }
           />
           <dl className="pary">
@@ -112,18 +112,6 @@ function EkranStawek() {
           </dl>
         </Karta>
       </div>
-
-      <Karta tytul="Formy zgody na wpis">
-        <div className="podstawa-prawna" style={{ marginBottom: 12 }}>
-          {dane.podstawy.UPRZEDNIE_POWIADOMIENIE} — zgoda zwalnia z obowiązku uprzedniego
-          powiadomienia osoby, której uprawnienia mają być wykreślone, zmienione lub obciążone.
-        </div>
-        <ul style={{ marginLeft: 18, fontSize: 13, lineHeight: 1.8 }}>
-          {dane.formy_zgody.map((f) => (
-            <li key={f.kod}>{f.nazwa}</li>
-          ))}
-        </ul>
-      </Karta>
 
       <Karta tytul="Katalog typów zdarzeń" tight>
         <table className="tbl">

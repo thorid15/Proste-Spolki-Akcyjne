@@ -23,12 +23,20 @@ const POLA_SPOLKI = [
   'ulica', 'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial', 'telefon', 'email', 'www',
   'status', 'komentarz_statusu', 'data_utworzenia_spolki', 'data_uchwaly_wyboru', 'data_umowy',
   'data_otwarcia_rejestru', 'data_zakonczenia_umowy', 'opis', 'uwagi',
+  // Sprint 5 (zgodnosc z ustawa):
+  'umowe_zawarl', 'umowe_zawarl_imie_nazwisko', 'dodatkowe_informacje_umowa_spolki',
 ];
 
 /** Pola, ktorych zmiana jest zdarzeniem rejestrowym (art. 300(33) § 1 KSH). */
 const POLA_REJESTROWE = [
   'krs', 'nip', 'regon', 'nazwa', 'kraj', 'kod_pocztowy', 'miejscowosc', 'ulica',
   'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial',
+  // art. 300(33) § 2 KSH - dodatkowe postanowienia umowy spolki o informacjach
+  // ujawnianych w rejestrze SA trescia rejestru. `umowe_zawarl*` NIE sa (to
+  // fakt administracyjny o zawarciu umowy o PROWADZENIE rejestru, art.
+  // 300(32) § 1(2) KSH - analogicznie do `data_umowy`, ktore tez nie jest
+  // POLE_REJESTROWE).
+  'dodatkowe_informacje_umowa_spolki',
 ];
 
 function wyczysc(cialo) {
@@ -61,6 +69,9 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   }
   if (dane.status && !Object.values(przepisy.STATUSY_SPOLKI).includes(dane.status)) {
     throw bledneZadanie(`Nieznany status spółki: „${dane.status}”.`);
+  }
+  if (dane.umowe_zawarl && !przepisy.UMOWE_ZAWARL.includes(dane.umowe_zawarl)) {
+    throw bledneZadanie(`Pole „umowe_zawarl” musi być jedną z wartości: ${przepisy.UMOWE_ZAWARL.join(', ')}.`);
   }
   // Regula domenowa nr 11 - rejestru nie prowadzimy dla S.A. ani S.K.A.
   if (dane.forma_prawna !== undefined) {
@@ -165,7 +176,7 @@ router.get(
       liczba_zdarzen: db()
         .prepare('SELECT COUNT(*) AS ile FROM psa_zdarzenia WHERE spolka_id = ?')
         .get(id).ile,
-      typy_zdarzen: typyZdarzen.dostepneWKreatorze(2),
+      typy_zdarzen: typyZdarzen.dostepneWKreatorze(5),
     });
   })
 );

@@ -352,6 +352,89 @@ const TYPY = [
     ],
     dokumenty: ['zawiadomienie_wpis'],
   },
+
+  // ── Typy sprintu 5 (zgodnosc z ustawa - ulamkowe czesci akcji) ─────────
+
+  {
+    kod: 'przeniesienie_ulamka',
+    nazwa: 'Przeniesienie ułamkowej części akcji',
+    opis_zdarzeniem: 'Ktoś zbył ułamkową część oznaczonej akcji',
+    podpowiedz: 'Współwłasność akcji — zbycie części ułamkowej pojedynczej, oznaczonej akcji.',
+    symbol: '½',
+    grupa: 'akcje',
+    sprint: 5,
+    odplatne: true,
+    wymaga_powiadomienia: true,
+    kogo_powiadomic: 'zbywcę',
+    podstawa_prawna: PODSTAWY.ULAMKOWE_CZESCI_AKCJI,
+    tworzy: ['wpis wspoluprawnienia do ułamka akcji'],
+    checklista: [
+      poz(
+        'dokument_podstawa',
+        'Przedłożono dokument stanowiący podstawę przejścia ułamkowej części akcji',
+        { podstawa: PODSTAWY.DOKUMENTY_PODSTAWA }
+      ),
+      poz('badanie_tresci_formy', 'Zbadano treść i formę dokumentu', {
+        podstawa: PODSTAWY.BADANIE_TRESCI_I_FORMY,
+      }),
+      poz(
+        'uzasadnione_watpliwosci',
+        'Zachodzą uzasadnione wątpliwości co do zgodności z prawem lub prawdziwości dokumentu',
+        { podstawa: PODSTAWY.BADANIE_TRESCI_I_FORMY, wymagana: false, watpliwosci: true }
+      ),
+      poz('aml', 'Wobec nabywcy zastosowano środki bezpieczeństwa finansowego (AML)'),
+      poz(
+        'pokrycie',
+        'Akcja jest w całości pokryta albo uzyskano zgodę spółki na zbycie akcji nie w pełni pokrytej',
+        { podstawa: PODSTAWY.NIEPELNE_POKRYCIE, wymagana: false }
+      ),
+      poz(
+        'zgoda_albo_powiadomienie',
+        'Zbywca wyraził zgodę albo wysłano mu powiadomienie o treści zamierzonego wpisu',
+        { podstawa: PODSTAWY.UPRZEDNIE_POWIADOMIENIE }
+      ),
+    ],
+    dokumenty: ['zawiadomienie_wpis'],
+  },
+  {
+    kod: 'przedstawiciel',
+    nazwa: 'Wspólny przedstawiciel współuprawnionych',
+    opis_zdarzeniem: 'Współuprawnieni do akcji wskazali wspólnego przedstawiciela',
+    podpowiedz: 'Współuprawnieni z akcji wykonują swoje prawa w spółce przez wspólnego przedstawiciela.',
+    symbol: '⚑',
+    grupa: 'akcje',
+    sprint: 5,
+    odplatne: true,
+    wymaga_powiadomienia: false,
+    podstawa_prawna: PODSTAWY.WSPOLNY_PRZEDSTAWICIEL,
+    tworzy: ['wzmianka o wspólnym przedstawicielu'],
+    checklista: [
+      poz(
+        'dokument_podstawa',
+        'Przedłożono oświadczenie współuprawnionych wskazujące wspólnego przedstawiciela'
+      ),
+    ],
+    dokumenty: ['zawiadomienie_wpis'],
+  },
+  {
+    kod: 'pokrycie_akcji',
+    nazwa: 'Wzmianka o pokryciu akcji',
+    opis_zdarzeniem: 'Zarząd stwierdził wniesienie wkładu na pokrycie akcji',
+    podpowiedz: 'Podstawą jest uchwała zarządu stwierdzająca wniesienie wkładu w całości albo w części.',
+    symbol: '✔',
+    grupa: 'akcje',
+    sprint: 5,
+    odplatne: true,
+    wymaga_powiadomienia: false,
+    podstawa_prawna: PODSTAWY.WZMIANKA_O_POKRYCIU,
+    tworzy: ['wzmianka o pokryciu'],
+    checklista: [
+      poz('uchwala_zarzadu', 'Przedłożono uchwałę zarządu stwierdzającą wniesienie wkładu', {
+        podstawa: PODSTAWY.POKRYCIE_WKLADOW,
+      }),
+    ],
+    dokumenty: ['zawiadomienie_wpis'],
+  },
 ];
 
 const WG_KODU = new Map(TYPY.map((t) => [t.kod, t]));

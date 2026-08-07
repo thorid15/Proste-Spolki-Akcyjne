@@ -133,7 +133,7 @@ test('wpis odplatny przez sprawe nalicza oplate typu wpis', async () => {
 test('zajecie z urzedu (wolne od oplat) NIE nalicza oplaty', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
   const emisja = await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'emisja', data_zdarzenia: '2026-01-01', dane: { seria: 'A', ilosc: 50 },
+    typ: 'emisja', data_zdarzenia: '2026-01-01', dane: { seria: 'A', ilosc: 50, data_wpisu_krs: '2026-01-01' },
   });
   await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
     typ: 'objecie', data_zdarzenia: '2026-01-01',
@@ -223,7 +223,7 @@ test('eksport CSV zwraca text/csv z naglowkiem BOM (Excel PL) i poprawna trescia
 test('portal: pobranie informacji z rejestru nalicza oplate', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
   const emisja = await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'emisja', data_zdarzenia: '2026-01-01', dane: { seria: 'A', ilosc: 20 },
+    typ: 'emisja', data_zdarzenia: '2026-01-01', dane: { seria: 'A', ilosc: 20, data_wpisu_krs: '2026-01-01' },
   });
   await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
     typ: 'objecie', data_zdarzenia: '2026-01-01',

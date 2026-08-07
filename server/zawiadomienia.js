@@ -13,6 +13,8 @@
 
 const dokTresc = require('./logika/dokumenty-tresc');
 const typyZdarzen = require('./logika/typy-zdarzen');
+const przepisy = require('./logika/przepisy');
+const widoki = require('./widoki');
 const poczta = require('./poczta');
 const czas = require('./pomocnicze/czas');
 const konfiguracja = require('./konfiguracja');
@@ -97,6 +99,36 @@ async function poWpisie(db, { sprawa, zdarzenie, spolka, osoby, podsumowanie, au
       autor,
     })),
   });
+
+  // art. 300(34) § 8 KSH — po zawiadomieniu o wpisie zarzad niezwlocznie
+  // sklada do sadu rejestrowego nowa liste akcjonariuszy. Przygotowujemy ja
+  // razem z zawiadomieniem, do podpisu wszystkich czlonkow zarzadu (CLAUDE-PSA.md
+  // sekcja 10) - nie skladamy jej sami do sadu, to obowiazek zarzadu.
+  const stanNaDzien = widoki.widokStanu(db, spolka.id, zdarzenie.data_zdarzenia, {
+    rola: przepisy.ROLE_ODBIORCY.SPOLKA,
+  });
+  if (stanNaDzien) {
+    const wykazHtml = dokTresc.wykazAkcjonariuszy({
+      kancelaria: konfiguracja.KANCELARIA,
+      spolka: stanNaDzien.spolka,
+      data: zdarzenie.data_zdarzenia,
+      stan: stanNaDzien,
+      powod: przepisy.PODSTAWY.LISTA_AKCJONARIUSZY_KRS,
+    });
+    wyniki.push({
+      odbiorca: 'spółka (lista akcjonariuszy do KRS)',
+      ...(await wyslijIZapisz(db, {
+        sprawaId: sprawa.id,
+        spolkaId: spolka.id,
+        typ: 'wykaz_akcjonariuszy',
+        odbiorcaOsobaId: null,
+        odbiorcaEmail: spolka.email,
+        temat: `Lista akcjonariuszy do zgłoszenia w KRS — ${spolka.nazwa}`,
+        html: wykazHtml,
+        autor,
+      })),
+    });
+  }
 
   return wyniki;
 }

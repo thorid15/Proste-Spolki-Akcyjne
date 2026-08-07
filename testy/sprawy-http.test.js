@@ -102,7 +102,7 @@ async function przygotujSpolke() {
 
   const [, emisja] = await zapytaj('POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
     typ: 'emisja', data_zdarzenia: '2026-01-10',
-    dane: { seria: 'A', ilosc: 100 },
+    dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
   });
   await zapytaj('POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
     typ: 'objecie', data_zdarzenia: '2026-01-10',
@@ -143,14 +143,17 @@ test('pelny cykl sprawy: nowa → weryfikacja → wpisana, z zawiadomieniem bez 
   assert.equal(wpisOdp.sprawa.zdarzenie_id, wpisOdp.zdarzenie.id);
 
   // Zawiadomienia probowaly sie wyslac (SMTP nieskonfigurowany w testach),
-  // ale slad w psa_wydane_dokumenty i tak powstal - do zadajacego i spolki.
-  assert.equal(wpisOdp.powiadomienia.length, 2);
+  // ale slad w psa_wydane_dokumenty i tak powstal - do zadajacego, spolki
+  // (zawiadomienie o wpisie) i spolki (lista akcjonariuszy do KRS, art.
+  // 300(34) § 8 KSH — generowana razem z zawiadomieniem, sprint 5).
+  assert.equal(wpisOdp.powiadomienia.length, 3);
   assert.equal(wpisOdp.powiadomienia.every((p) => p.wyslano === false), true);
   assert.match(wpisOdp.powiadomienia[0].powod, /SMTP|e-mail/i);
 
   const [, sprawaSzczegol] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
-  assert.equal(sprawaSzczegol.wydane_dokumenty.length, 2);
-  assert.equal(sprawaSzczegol.wydane_dokumenty[0].typ, 'zawiadomienie_wpis');
+  assert.equal(sprawaSzczegol.wydane_dokumenty.length, 3);
+  assert.equal(sprawaSzczegol.wydane_dokumenty.filter((d) => d.typ === 'zawiadomienie_wpis').length, 2);
+  assert.equal(sprawaSzczegol.wydane_dokumenty.some((d) => d.typ === 'wykaz_akcjonariuszy'), true);
 
   const [, kokpit] = await zapytaj('GET', `/api/psa/spolki/${spolkaId}`);
   const akcjonariat = new Map(kokpit.akcjonariusze.map((a) => [a.osoba.id, a.ilosc]));
@@ -238,9 +241,10 @@ test('zajecie (z urzedu) zaklada sprawe od razu w weryfikacji, bez zadajacego', 
     },
   });
   assert.equal(stWpis, 201);
-  // Brak zadajacego -> tylko jedno zawiadomienie, do spolki.
-  assert.equal(wpisOdp.powiadomienia.length, 1);
-  assert.equal(wpisOdp.powiadomienia[0].odbiorca, 'spółka');
+  // Brak zadajacego -> zawiadomienie do spolki + lista akcjonariuszy do KRS
+  // (art. 300(34) § 8 KSH, sprint 5), oba adresowane do spolki.
+  assert.equal(wpisOdp.powiadomienia.length, 2);
+  assert.equal(wpisOdp.powiadomienia.every((p) => p.odbiorca.startsWith('spółka')), true);
 });
 
 test('nie mozna zalozyc sprawy z_urzedu dla typu, ktory tego nie przewiduje', async () => {

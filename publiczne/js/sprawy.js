@@ -301,13 +301,15 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
           </button>
         </div>
         <div>
-          <Pole etykieta="Albo odnotuj zgodę">
-            <select value={forma} onChange={(z) => ustawForme(z.target.value)}>
-              <option value="">— forma zgody —</option>
-              {meta.dane && meta.dane.formy_zgody.map((f) => <option key={f.kod} value={f.kod}>{f.nazwa}</option>)}
-            </select>
+          <Pole etykieta="Albo odnotuj zgodę (opisz, w jaki sposób ją uzyskano)">
+            <input
+              type="text"
+              value={forma}
+              onChange={(z) => ustawForme(z.target.value)}
+              placeholder="np. oświadczenie e-mail z dnia…"
+            />
           </Pole>
-          <button className="btn btn-sm" disabled={!forma || wysylanie} onClick={odnotujZgode}>
+          <button className="btn btn-sm" disabled={!forma.trim() || wysylanie} onClick={odnotujZgode}>
             Odnotuj zgodę
           </button>
         </div>

@@ -433,6 +433,64 @@ const MIGRACJE = [
         ON psa_wydane_dokumenty (spolka_id);
     `,
   },
+  {
+    wersja: 5,
+    nazwa:
+      'zgodnosc z ustawa - ulamkowe czesci akcji, pokrycie, data_wpisu_krs, rodzaj akcji, ' +
+      'przedstawiciel wspoluprawnionych, charakter wpisu',
+    sql: `
+      -- ── Ulamkowe czesci akcji (regula domenowa 4a, art. 300(2) § 3 + art. 300(43) KSH) ──
+      -- SQLite pozwala dopisac kolumne z CHECK-iem odwolujacym sie do innych
+      -- kolumn tego samego wiersza (w tym juz istniejacych) - nie trzeba wiec
+      -- przepisywac calej tabeli jak w migracji 4. Kazdy ISTNIEJACY wiersz
+      -- dostaje przez DEFAULT wartosc 1/1 (akcja niepodzielona) - dokladnie
+      -- to, co CLAUDE-PSA.md sekcja 14 nazywa "migracja bezbolesna": na
+      -- 08.2026 zaden akcjonariat nie ma wspolwlasnosci ani ulamkow.
+      ALTER TABLE psa_stan_akcji ADD COLUMN czesc_mianownik INTEGER NOT NULL DEFAULT 1
+        CHECK (czesc_mianownik > 0);
+      ALTER TABLE psa_stan_akcji ADD COLUMN czesc_licznik INTEGER NOT NULL DEFAULT 1
+        CHECK (czesc_licznik BETWEEN 1 AND czesc_mianownik
+               AND (czesc_licznik = czesc_mianownik OR nr_od = nr_do));
+      -- Wspolny przedstawiciel wspolwlascicieli (art. 300(38) § 3 KSH) - brak
+      -- nie blokuje wpisu, tylko jest oznaczany (regula domenowa 4b).
+      ALTER TABLE psa_stan_akcji ADD COLUMN przedstawiciel_osoba_id INTEGER
+        REFERENCES psa_osoby(id);
+      -- Wzmianka o pokryciu (art. 300(33) § 1 pkt 9 KSH) - NULL = nieustalone
+      -- (rejestr przejety bez tej informacji albo jeszcze nie odnotowana
+      -- uchwala zarzadu z art. 300(9) § 2 KSH), nie "nie".
+      ALTER TABLE psa_stan_akcji ADD COLUMN pokryta TEXT
+        CHECK (pokryta IS NULL OR pokryta IN ('tak','nie','czesciowo'));
+
+      -- ── Emisje: KRS, rodzaj akcji, obowiazki wobec spolki (sekcja 5) ────
+      ALTER TABLE psa_emisje ADD COLUMN data_wpisu_krs TEXT;
+      ALTER TABLE psa_emisje ADD COLUMN rodzaj_akcji TEXT NOT NULL DEFAULT 'zwykla'
+        CHECK (rodzaj_akcji IN ('zwykla','uprzywilejowana','zalozycielska','niema'));
+      ALTER TABLE psa_emisje ADD COLUMN obowiazki_wobec_spolki TEXT;
+
+      -- Backfill: emisje zapisane PRZED wprowadzeniem blokady z art. 300(30) § 2
+      -- KSH juz istnieja w rejestrze jako fakt dokonany - ich akcje zostaly
+      -- objete, wiec spolka/emisja musiala juz byc wpisana do KRS. Blokada ma
+      -- dzialac na NOWE objecia, nie uniewazniac wsteczne historie. Nowe
+      -- emisje (po tej migracji) startuja z data_wpisu_krs = NULL, jak nakazuje
+      -- regula domenowa 12.
+      UPDATE psa_emisje SET data_wpisu_krs = data_emisji WHERE data_wpisu_krs IS NULL;
+
+      -- ── Spolka: kto zawarl umowe (art. 300(32) § 1(2) KSH), dodatkowe ──
+      -- informacje z umowy spolki (art. 300(33) § 2 KSH)
+      ALTER TABLE psa_spolki ADD COLUMN dodatkowe_informacje_umowa_spolki TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN umowe_zawarl TEXT
+        CHECK (umowe_zawarl IS NULL OR umowe_zawarl IN ('notariusz','zastepca','osoba_upowazniona'));
+      ALTER TABLE psa_spolki ADD COLUMN umowe_zawarl_imie_nazwisko TEXT;
+
+      -- ── Sprawa: charakter wpisu - konstytutywny/deklaratoryjny (art. 300(37) ──
+      -- § 2 KSH, regula domenowa 13). Sprawy zalatwione PRZED ta migracja
+      -- zostaja NULL ("nieustalone") - rozroznienie dotyczy wylacznie tresci
+      -- checklisty i zawiadomienia w chwili wpisu, nie da sie go sensownie
+      -- zrekonstruowac wstecz bez wgladu w kazda historyczna sprawe z osobna.
+      ALTER TABLE psa_sprawy ADD COLUMN charakter_wpisu TEXT
+        CHECK (charakter_wpisu IS NULL OR charakter_wpisu IN ('konstytutywny','deklaratoryjny'));
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

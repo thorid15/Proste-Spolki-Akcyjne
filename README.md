@@ -3,10 +3,13 @@
 Moduł do prowadzenia rejestrów akcjonariuszy prostych spółek akcyjnych
 (art. 300³⁰ i nast. KSH) przez notariusza — Kancelaria Notarialna Łukasza Kozona.
 
-**Stan: sprint 4 ukończony** (rdzeń rejestru + workflow spraw + logowanie
-i portal klienta + rozliczenia + migracja spółek z innych rejestrów).
+**Stan: sprint 5 ukończony** (rdzeń rejestru + workflow spraw + logowanie
+i portal klienta + rozliczenia + migracja spółek z innych rejestrów +
+zgodność z ustawą: ułamkowe części akcji, pokrycie, blokada wpisu przed KRS,
+wspólny przedstawiciel, wpis konstytutywny/deklaratoryjny).
 Portal jest gotowy funkcjonalnie, ale domyślnie **wyłączony** flagą
-`PORTAL_WLACZONY` — patrz „Do decyzji”.
+`PORTAL_WLACZONY` — patrz „Do decyzji”. Jedyne źródło prawne modułu:
+`PRZEPISY-PSA.md` (korzeń repozytorium).
 
 ---
 
@@ -16,7 +19,7 @@ Portal jest gotowy funkcjonalnie, ale domyślnie **wyłączony** flagą
 npm install
 cp .env.przyklad .env      # uzupełnij dane kancelarii, ADMIN_EMAIL, SESJA_SEKRET, (opcjonalnie) SMTP
 npm start                  # http://localhost:3005
-npm test                   # 132 testy
+npm test                   # 154 testy
 ```
 
 Migracje wykonują się automatycznie przy starcie i są idempotentne.
@@ -143,6 +146,88 @@ blokującej opartej na brzmieniu DO_WERYFIKACJI” ich nie dotyczy.
 
 ---
 
+## Co powstało w sprincie 5 — zgodność z ustawą
+
+> **Zamiana kolejności wobec pierwotnego planu.** Sprint interfejsowy
+> (`SESJA-PSA-5-INTERFEJS.md`) renderuje dokładnie te struktury, które zmienia
+> ten sprint — pasek serii, tabelę akcjonariatu, kreator przeniesienia.
+> Zrobienie interfejsu na modelu bez ułamków oznaczałoby przerabianie go
+> zaraz potem, więc ten sprint (zgodność z ustawą, sekcja 14 `CLAUDE-PSA.md`)
+> wykonano PRZED nim. `CLAUDE-PSA.md` i `PRZEPISY-PSA.md` (nowe, dedykowane
+> źródło prawne modułu — zastępuje odwołania do opracowań branżowych) leżą
+> w korzeniu repozytorium.
+
+| Punkt z planu | Stan |
+|---|---|
+| Ułamkowe części akcji: `czesc_licznik`/`czesc_mianownik`, arytmetyka wymierna, `CHECK`-i, niezmiennik bilansu per numer akcji, migracja 1/1 | ✅ |
+| Pokrycie akcji + blokada zbycia akcji nie w pełni pokrytej (art. 300⁴⁰) | ✅ |
+| `data_wpisu_krs` na emisji + twarda blokada wpisu akcji przed wpisem do KRS | ✅ |
+| `rodzaj_akcji`, obowiązki wobec spółki, dodatkowe informacje z umowy spółki | ✅ |
+| Wspólny przedstawiciel współuprawnionych (art. 300³⁸ § 3) | ✅ |
+| Rozróżnienie wpisu konstytutywnego i deklaratoryjnego (art. 300³⁷ § 2) | ✅ (obliczane i zapisywane; osobna treść zawiadomienia — patrz odstępstwo 27) |
+| Lista akcjonariuszy do KRS generowana z zawiadomieniem o wpisie (art. 300³⁴ § 8) | ✅ |
+| Korekty errat (4 pozycje — patrz niżej) | ✅ |
+| `przepisy.js` przepisany, każda reguła cytuje `PRZEPISY-PSA.md` | ✅ |
+| Testy: arytmetyka ułamków, bilans per numer, blokady, migracja 1/1 | ✅ |
+
+**Ułamkowe części akcji — architektura.** Akcja jest niepodzielna
+(art. 300² § 3), ale można być uprawnionym do ułamka jednej, oznaczonej
+akcji i nim rozporządzać (art. 300⁴³). Rozwiązanie: nowy moduł czysty
+`logika/ulamki.js` (NWD, skracanie, porównania przez mnożenie na krzyż,
+sumowanie przez wspólny mianownik — **wyłącznie `INTEGER`**, zero floatów)
+oraz **jeden, nowy, dedykowany typ zdarzenia** `przeniesienie_ulamka` — nie
+dotknięto istniejących handlerów `emisja`/`objecie`/`przeniesienie`/`umorzenie`
+w `stan.js`. Decyzja o zawężeniu zakresu (nie wynikająca wprost z
+`CLAUDE-PSA.md`, podjęta podczas implementacji): skoro cały istniejący stan
+na 08.2026 jest 1/1 (żadna spółka nie ma współwłasności), prościej i
+bezpieczniej dla dobrze przetestowanej logiki calo-akcyjnej jest **wykluczyć**
+wiersze ułamkowe z `stan.pula()` (funkcji, na której opierają się WSZYSTKIE
+zwykłe operacje), niż uczynić `otworz`/`zdejmij`/`przenies` świadome
+ułamków wszędzie. Efekt: zwykłe `przeniesienie`/`umorzenie`/`obciazenie` nie
+widzą akcji podzielonej ułamkowo jako w pełni należącej do jednego
+współuprawnionego — rozporządzać ułamkiem można wyłącznie przez
+`przeniesienie_ulamka`.
+
+**Niezmiennik bilansu, uogólniony.** Stara reguła: „każdy numer akcji należy
+do dokładnie jednego otwartego przedziału". Nowa: „dla każdego numeru akcji
+suma ułamków wszystkich uprawnionych wynosi dokładnie 1 (albo 0, gdy
+nieobjęta)" — szczególny przypadek starej reguły dla ułamka 1/1.
+Nakładanie się przedziałów różnych akcjonariuszy jest teraz dozwolone
+WYŁĄCZNIE gdy: (a) nakładający się zakres to dokładnie jeden numer (wiersz
+ułamkowy zawsze obejmuje jeden numer — wymuszone `CHECK`-iem, nie
+konwencją) i (b) suma ułamków wszystkich wierszy na tym numerze wynosi
+dokładnie 1. Każde inne nakładanie się pozostaje twardym błędem, tak jak
+przed sprintem 5.
+
+**`przeniesienie_ulamka` nie przechodzi przez `przenies()`.** Ten prymityw
+liczy w całych zakresach numerów. Handler zamiast tego: zamyka CAŁĄ
+dotychczasową pozycję zbywcy na wskazanym numerze (niezależnie od tego, czy
+była to część szerszego zakresu 1/1, czy już istniejący wiersz ułamkowy),
+odejmuje zbywany ułamek arytmetyką wymierną i otwiera z powrotem to, co
+zbywcy zostaje (jeśli cokolwiek), a nabywcy — sumę tego, co już miał (jeśli
+cokolwiek) i ułamka nabywanego. Pokrycie (`pokryta`) jest atrybutem SAMEJ
+AKCJI (wkład już wniesiony do spółki), nie osoby — przechodzi niezmienione
+na obie powstałe pozycje.
+
+**Migracja v5 nie przepisuje `psa_stan_akcji`.** W przeciwieństwie do
+migracji v4 (gdzie SQLite wymagał przepisania tabeli, żeby zmienić
+`CHECK`), tu wystarczyło `ALTER TABLE ADD COLUMN` — SQLite pozwala dopisać
+kolumnę z `CHECK`-iem odwołującym się do INNYCH, już istniejących kolumn
+tego samego wiersza (np. `czesc_licznik BETWEEN 1 AND czesc_mianownik AND
+(czesc_licznik = czesc_mianownik OR nr_od = nr_do)`), potwierdzone testem
+przed napisaniem migracji. Każdy istniejący wiersz dostaje przez `DEFAULT`
+wartość 1/1 — to jest cała „migracja” na poziomie danych.
+
+**`data_wpisu_krs`: backfill, nie pusty start.** Emisje zapisane PRZED tym
+sprintem już istnieją w rejestrze jako fakt dokonany (ich akcje zostały
+objęte), więc spółka/emisja musiała już być wpisana do KRS — migracja
+ustawia im `data_wpisu_krs = data_emisji`. Nowe emisje (po tym sprincie)
+startują z `NULL`, zgodnie z regułą domenową 12 — `objecie` jest wtedy
+twardo zablokowane do czasu uzupełnienia daty (sprostowaniem zdarzenia
+emisji — istniejący mechanizm z poprzednich sprintów, nie nowy endpoint).
+
+---
+
 ## Architektura
 
 ```
@@ -150,7 +235,7 @@ serwer.js                  punkt wejścia, port 3005
 server/
   konfiguracja.js          .env (własny parser — dotenv nie jest na liście zależności)
   baza.js                  better-sqlite3, WAL, foreign_keys
-  migracje.js              idempotentne, wyłącznie obiekty psa_* (v1 rdzeń, v2 sprawy, v3 konta, v4 opłaty)
+  migracje.js              idempotentne, wyłącznie obiekty psa_* (v1 rdzeń, v2 sprawy, v3 konta, v4 opłaty, v5 zgodność z ustawą)
   rejestr.js               transakcje: zapis zdarzenia, materializacja, wpis sprawy, sprostowanie
   oplaty.js                naliczanie opłat (wpis/informacja/prowadzenie), naliczenie roczne, eksport CSV
   widoki.js                stan domenowy → struktura dla UI, Z MASKOWANIEM
@@ -160,6 +245,7 @@ server/
     przepisy.js            JEDYNE źródło wiedzy prawnej: terminy, stawki, maskowanie
     typy-zdarzen.js        katalog typów: checklisty, odpłatność, powiadomienia
     numery.js              algebra zakresów numerów akcji, przydział FIFO
+    ulamki.js              arytmetyka wymierna ułamkowych części akcji — wyłącznie INTEGER (sprint 5)
     stan.js                odbudowa stanu ze zdarzeń, kontrola bilansu, sprostowania
     terminy.js             termin 7 dni z zawieszeniem (art. 300³⁴ § 1 KSH)
     kreator.js              wejście z kreatora → treść zdarzenia (przydział numerów, sprostowania)
@@ -455,12 +541,73 @@ Wszystkie świadome, wszystkie do zakwestionowania.
     umowa najpewniej wygasła) jest wyłączona automatycznie. Do potwierdzenia
     przez Łukasza — zmiana to jeden warunek SQL w `oplaty.naliczOplateRoczneWszystkie`.
 
+23. **`przeniesienie_ulamka` jako jedyny nowy typ zdarzenia tworzący/przenoszący
+    ułamki — istniejące handlery calo-akcyjne pozostają nietknięte.** Patrz
+    uzasadnienie w sekcji „Co powstało w sprincie 5". Konsekwencja: `pula()`
+    (współdzielona przez `walidacje.js` i `kreator.js`) wyklucza wiersze z
+    `czesc_licznik ≠ czesc_mianownik` — współuprawniony do ułamka nie może
+    zostać wzięty pod uwagę jako w pełni posiadający akcję przez zwykłe
+    `przeniesienie`/`umorzenie`/`obciazenie`.
+
+24. **`pokrycie_akcji` działa na poziomie (emisja, osoba), nie pojedynczego
+    numeru akcji.** Art. 300⁹ § 3 KSH: wkłady zalicza się równomiernie na
+    WSZYSTKIE akcje akcjonariusza, chyba że umowa spółki stanowi inaczej —
+    zdarzenie stempluje `pokryta` na wszystkich otwartych wierszach danej
+    osoby w danej emisji. Rozszerzenie na „wszystkie akcje we WSZYSTKICH
+    emisjach spółki" (dosłowne brzmienie „wszystkie akcje akcjonariusza")
+    uznano za przedwczesne bez realnego przypadku wielu emisji z różnym
+    stopniem pokrycia.
+
+25. **Backfill `data_wpisu_krs = data_emisji` dla emisji sprzed sprintu 5,
+    NIE `NULL`.** Patrz uzasadnienie w sekcji „Co powstało w sprincie 5" —
+    inaczej blokada z reguły domenowej 12 unieruchomiłaby `objecie` dla
+    każdej prowadzonej dziś spółki, mimo że jej akcje od dawna prawnie
+    istnieją.
+
+26. **Usunięto `przepisy.FORMY_ZGODY` i katalog form zgody na wpis w UI**
+    (poprawka erraty nr 3, `PRZEPISY-PSA.md` § 12 pkt 3). Pole „forma zgody"
+    w kroku odnotowania zgody (art. 300³⁴ § 3 KSH) jest dziś opisem
+    tekstowym, nie wyborem ze sztywnego słownika — bo taki słownik nie ma
+    podstawy w przepisach P.S.A.
+
+27. **Wpis konstytutywny/deklaratoryjny: obliczane i zapisywane na
+    `psa_sprawy.charakter_wpisu`, ale bez osobnego formularza/treści
+    zawiadomienia w UI.** `przepisy.charakterWpisu(typ, tytul_prawny)`
+    ustala charakter w chwili wpisu (żeby późniejsza zmiana katalogu
+    tytułów deklaratoryjnych nie przepisywała historii już załatwionych
+    spraw) — `objecie` jest deklaratoryjne z wyjątkiem `objecie_warunkowe`
+    (sprint 7), `przeniesienie` jest deklaratoryjne, gdy `tytul_prawny`
+    zawiera frazę wskazującą przejście z mocy prawa (dziedziczenie, zapis
+    windykacyjny, aport, połączenie/podział/przekształcenie). Sprawy
+    sprzed tego sprintu zostają `NULL` ("nieustalone") — nie rekonstruuje
+    się historii. Osobna treść zawiadomienia dla obu przypadków to
+    świadomie odłożony krok — dzisiejsza treść jest poprawna dla obu,
+    różni się tylko podstawą blokującą i checklistą, które już działają.
+
+28. **Lista akcjonariuszy do KRS generowana automatycznie z KAŻDYM
+    zawiadomieniem o wpisie, adresowana do spółki, nie składana przez nas
+    do sądu.** Art. 300³⁴ § 8 KSH nakłada obowiązek złożenia na ZARZĄD —
+    nasza rola to przygotowanie gotowego dokumentu (do podpisu wszystkich
+    członków zarządu), nie jego złożenie. Stąd trzeci wpis w
+    `psa_wydane_dokumenty` (`typ='wykaz_akcjonariuszy'`) przy każdym
+    `POST /sprawy/:id/wpisz` — patrz zaktualizowane liczby w testach.
+
+29. **Kreator ułamków/przedstawiciela/pokrycia dostępny wyłącznie w
+    kreatorze kancelaryjnym, NIE w portalu klienta** (decyzja nr 10,
+    sekcja 15 `CLAUDE-PSA.md`). `typyZdarzen.dostepneWKreatorze(5)` dla
+    tras kancelaryjnych, ale `trasy/portal.js` celowo zostaje przy `(2)` —
+    te trzy typy wymagają oceny pracownika, nie samoobsługi.
+
 ---
 
 ## Czego świadomie nie ma
 
-Sprint 4 był ostatnim zaplanowanym w specyfikacji (sekcja 14). Co zostaje
-świadomie poza zakresem CAŁEGO modułu, nie tylko tego sprintu:
+Sprint 6 (warstwa wizualna, `SESJA-PSA-5-INTERFEJS.md`) i sprint 7 (domknięcie
+domeny: warunkowa emisja, unieważnienie akcji, prawo pierwszeństwa jako
+osobna blokada, kanały powiadomień, zgłoszenie zmian danych przez zarząd,
+drugi zegar 7 dni, scalenie/split, uruchomienie portalu) zostają zaplanowane
+w `CLAUDE-PSA.md` sekcja 14 — nie w tym sprincie. Co zostaje poza zakresem
+CAŁEGO modułu, nie tylko dotychczasowych sprintów:
 
 Portal jest funkcjonalnie gotowy (patrz sprint 3 wyżej), ale za flagą
 `PORTAL_WLACZONY=false` domyślnie — patrz odstępstwo 19 i „Do decyzji”.
@@ -511,10 +658,13 @@ Nie blokują tego, co powstało, ale blokują kolejne kroki:
    przepływu „e-mail z linkiem aktywacyjnym” — konto zakłada się wprost
    w bazie z gotowym hasłem. Do zrobienia przed realnym udostępnieniem
    portalu klientom.
-3. **Weryfikacja brzmienia przepisów nowelizacji.** Pozycje oznaczone
-   w `przepisy.js` jako `DO_WERYFIKACJI` nie mogą być podstawą walidacji
-   blokującej, dopóki Łukasz nie potwierdzi tekstu ustawy. Dziś żadna z nich
-   nią nie jest.
+3. **Weryfikacja brzmienia przepisów nowelizacji.** Pozycje oznaczone w
+   `PRZEPISY-PSA.md` jako ⚠️ (poza wydrukiem KSH — Prawo o notariacie, AML,
+   taksa, art. 476 § 1¹ stosowany przez odesłanie) nie mogą być podstawą
+   walidacji blokującej, dopóki Łukasz nie potwierdzi tekstu ustaw źródłowych
+   (`PRZEPISY-PSA.md` § 13). Dziś żadna nowa reguła sprintu 5 na nich się nie
+   opiera; AML jako bramka (`niemozliwe` → blokada) jest wcześniejszym,
+   świadomym wyborem ze sprintu 2, sprint 5 go nie dodał ani nie rozszerzył.
 4. **Kto może dokonać wpisu** — pytanie do izby. Na start: każdy zalogowany
    pracownik, z zapisem autora przy zdarzeniu (tak to działa).
 5. **Stawki** — wpisane maksymalne (1200/100/50 zł) zgodnie z ustaleniem;
@@ -522,8 +672,12 @@ Nie blokują tego, co powstało, ale blokują kolejne kroki:
 6. **Integracja opłat z modułem Kasa** — rekomendacja: osobno, scalenie po
    ustabilizowaniu modułu. `psa_oplaty` jest dziś jedynym źródłem prawdy
    o należnościach — bez eksportu/importu do Kasy, wyłącznie CSV ręcznie.
-7. **Współwłasność akcji** — struktura przewidziana w `dane_json`, UI dopiero
-   przy pierwszym przypadku.
+7. ~~Współwłasność akcji~~ — **rozstrzygnięte i zbudowane w sprincie 5**
+   (ułamkowe części akcji, `logika/ulamki.js`, typ zdarzenia
+   `przeniesienie_ulamka`, wspólny przedstawiciel). Otwarte pozostaje
+   wyłącznie **zdefiniowanie osobnej treści zawiadomienia dla wpisu
+   deklaratoryjnego** (odstępstwo 27) — dzisiejsza treść jest poprawna, ale
+   nie rozróżnia charakteru wpisu w tekście.
 8. **Czy „prowadzenie rejestru” jest należne za spółki `w_likwidacji` i
    `zawieszona`, nie tylko `aktywna`.** Przyjęto na razie „tak, wszystkie poza
    `wykreslona`” (odstępstwo 22) — do potwierdzenia.
@@ -532,7 +686,13 @@ Nie blokują tego, co powstało, ale blokują kolejne kroki:
    dokumentów (`dokumenty-tresc.js: wykazAkcjonariuszy`,
    `zawiadomienieSaduORozwiazaniu`) nie była jeszcze zestawiona z ostatecznym
    brzmieniem znowelizowanych przepisów — do zrobienia razem z resztą
-   pozycji `DO_WERYFIKACJI` przed 18.02.2027, nie pilne dziś.
+   pozycji ⚠️ z `PRZEPISY-PSA.md` przed 18.02.2027, nie pilne dziś.
+10. **Osobna treść zawiadomienia dla wpisu deklaratoryjnego** (odstępstwo 27) —
+    `charakter_wpisu` jest już obliczany i zapisywany, ale zawiadomienie
+    o wpisie ma dziś jedną treść dla obu przypadków.
+11. **Rozszerzenie `pokrycie_akcji` na wszystkie emisje spółki naraz**
+    (odstępstwo 24) — dziś jedna emisja na zdarzenie; do potwierdzenia, czy
+    to wystarczające dla spółek z wieloma emisjami o różnym pokryciu.
 
 Otwarta kwestia techniczna: **plik `STANDARDY-KANCELARIA-4-1.md` nie był
 dostępny przy budowie.** Konwencje odtworzono ze specyfikacji modułu. Jeśli
@@ -546,9 +706,24 @@ Kalkulator i Kasa układają katalogi inaczej, przemianowanie jest tanie.
 npm test
 ```
 
-132 testy, bez zależności zewnętrznych (`node:test`), baza w pamięci lub plik tymczasowy.
+154 testy, bez zależności zewnętrznych (`node:test`), baza w pamięci lub plik tymczasowy.
 
 - `numery.test.js` — algebra zakresów, przydział FIFO, ręczne nadpisanie
+- `ulamki.test.js` — arytmetyka wymierna ułamkowych części akcji: 1/3+1/3+1/3=1
+  bez utraty precyzji, skracanie do postaci nieskracalnej (NWD=1), porównania
+  przez mnożenie na krzyż, suma przez wspólny mianownik, odejmowanie rzuca
+  przy próbie zejścia poniżej zera, walidacja zakresu licznika/mianownika
+- `sprint5.test.js` — niezmiennik bilansu per numer akcji (współwłasność
+  sumująca się do 1, błąd blokujący gdy nie sumuje się do 1), `pula()`
+  wyklucza wiersze ułamkowe, `przeniesienie_ulamka` odrzuca zbycie ponad
+  posiadany ułamek i ułamek rozciągnięty na więcej niż jeden numer,
+  `przedstawiciel` wymaga istniejącego uprawnionego, `pokrycie_akcji`
+  obejmuje wszystkie wiersze osoby w emisji, odtworzenie zdarzeń sprzed
+  sprintu 5 (bez pól ułamkowych) daje 1/1 — migracja bezbolesna, blokada
+  `objecie` bez `data_wpisu_krs` i jej zdjęcie sprostowaniem emisji, blokada
+  zbycia ułamka akcji nie w pełni pokrytej bez zgody spółki, pełny cykl
+  emisja→objęcie→przeniesienie_ulamka→przedstawiciel z materializacją do
+  `psa_stan_akcji`, odbudową stanu i integralnością łańcucha
 - `przeniesienie.test.js` — całość / część / wielu nabywców, pakiet nieciągły,
   łańcuch A→B→C, zachowanie daty nabycia reszty pakietu
 - `rejestr.test.js` — bilans, stan na dzień, odbudowa = stan bieżący, łańcuch
@@ -562,8 +737,10 @@ npm test
   pierwszeństwa), zmiana danych akcjonariusza, sprostowanie (adnotacja,
   podmiana treści, ochrona integralności referencyjnej, podwójne sprostowanie)
 - `sprawy-http.test.js` — pełny cykl HTTP: założenie sprawy → weryfikacja →
-  wpis z zawiadomieniem; wstrzymanie/wznowienie z wezwaniem; odmowa; ścieżka
-  z urzędu; AML jako bramka w workflow sprawy; upload i pobranie dokumentu
+  wpis z zawiadomieniem (do żądającego, do spółki i lista akcjonariuszy do
+  KRS — trzy dokumenty od sprintu 5); wstrzymanie/wznowienie z wezwaniem;
+  odmowa; ścieżka z urzędu (dwa dokumenty, oba do spółki — bez żądającego);
+  AML jako bramka w workflow sprawy; upload i pobranie dokumentu
   (w tym odrzucenie niedozwolonego rozszerzenia); sprostowanie przez
   dedykowany endpoint (sesja pracownika zakładana raz w `test.before`,
   ciasteczko przekazywane do każdego zapytania)
@@ -628,3 +805,18 @@ przez pełny workflow sprawy z checklistą → potwierdzenie, że TEN wpis
 naliczył opłatę typu „wpis” → ręczny wpis opłaty za informację z ekranu
 Opłaty → naliczenie roczne (admin) → zmiana statusu na „opłacona”. Zero
 błędów konsoli/strony poza tym samym spodziewanym `net::ERR_CONNECTION_RESET`.
+
+**Sprint 5 — weryfikacja UI w Playwright niewykonalna w tej sesji: środowisko
+zablokowało `unpkg.com` (React/Babel z CDN, `403` na poziomie proxy), nie
+tylko Google Fonts jak we wcześniejszych sprintach — bez tych trzech plików
+aplikacja się nie renderuje.** Zamiast tego zweryfikowano: (1) serwer startuje
+czysto z migracją v5 i pełnym zestawem tras; (2) wszystkie zmienione pliki
+JSX (`kreator.js`, `sprawy.js`, `konfiguracja.js`, `spolki.js`) parsują się
+bez błędu przez `@babel/core` z presetem `react` — ten sam silnik transformacji,
+którego używa `@babel/standalone` w przeglądarce; (3) pełny stos backendu
+(kreator → walidacje → stan → materializacja → integralność łańcucha) dla
+wszystkich trzech nowych typów zdarzeń przez `testy/sprint5.test.js`. Realna
+weryfikacja w przeglądarce (nowe kroki kreatora, pole daty KRS na emisji,
+komunikat blokady) pozostaje do zrobienia w środowisku z dostępem do CDN —
+nie jest to nowe ograniczenie tego sprintu, tylko brak możliwości obejścia
+znanego już wcześniej ograniczenia proxy tej konkretnej sesji.

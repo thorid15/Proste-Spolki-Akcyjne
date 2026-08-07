@@ -96,7 +96,8 @@ test.before(async () => {
   nowakId = dodajOsobe({ nazwisko: 'Nowak', imie: 'Anna', pesel: '85050512345', typ: 'fizyczna' });
 
   const emisja = rejestr.dokonajWpisu(db(), {
-    spolkaId, typ: 'emisja', data_zdarzenia: '2026-01-10', wejscie: { seria: 'A', ilosc: 100 }, autor: 'Test',
+    spolkaId, typ: 'emisja', data_zdarzenia: '2026-01-10',
+    wejscie: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
   });
   rejestr.dokonajWpisu(db(), {
     spolkaId, typ: 'objecie', data_zdarzenia: '2026-01-10',

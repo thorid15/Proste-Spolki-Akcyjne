@@ -20,6 +20,7 @@ const stanLogika = require('./logika/stan');
 const walidacje = require('./logika/walidacje');
 const kreator = require('./logika/kreator');
 const typyZdarzen = require('./logika/typy-zdarzen');
+const przepisy = require('./logika/przepisy');
 const oplaty = require('./oplaty');
 const czas = require('./pomocnicze/czas');
 
@@ -173,6 +174,9 @@ function zmaterializuj(db, spolkaId) {
       status: e.status,
       opis: e.opis,
       uwagi: e.uwagi,
+      data_wpisu_krs: e.data_wpisu_krs,
+      rodzaj_akcji: e.rodzaj_akcji,
+      obowiazki_wobec_spolki: e.obowiazki_wobec_spolki,
     };
     const istniejacyId = istniejace.get(Number(e.zdarzenie_id));
     if (istniejacyId) {
@@ -180,7 +184,9 @@ function zmaterializuj(db, spolkaId) {
         `UPDATE psa_emisje SET
            tytul=@tytul, podstawa_prawna=@podstawa_prawna, seria=@seria,
            nr_pierwszy=@nr_pierwszy, ilosc=@ilosc, cena_emisyjna_grosze=@cena_emisyjna_grosze,
-           waluta=@waluta, data_emisji=@data_emisji, status=@status, opis=@opis, uwagi=@uwagi
+           waluta=@waluta, data_emisji=@data_emisji, status=@status, opis=@opis, uwagi=@uwagi,
+           data_wpisu_krs=@data_wpisu_krs, rodzaj_akcji=@rodzaj_akcji,
+           obowiazki_wobec_spolki=@obowiazki_wobec_spolki
          WHERE id=@id`
       ).run({ ...wartosci, id: istniejacyId });
       idEmisji.set(e.klucz, istniejacyId);
@@ -190,10 +196,12 @@ function zmaterializuj(db, spolkaId) {
         .prepare(
           `INSERT INTO psa_emisje
              (spolka_id, zdarzenie_id, tytul, podstawa_prawna, seria, nr_pierwszy, ilosc,
-              cena_emisyjna_grosze, waluta, data_emisji, status, opis, uwagi)
+              cena_emisyjna_grosze, waluta, data_emisji, status, opis, uwagi,
+              data_wpisu_krs, rodzaj_akcji, obowiazki_wobec_spolki)
            VALUES
              (@spolka_id, @zdarzenie_id, @tytul, @podstawa_prawna, @seria, @nr_pierwszy, @ilosc,
-              @cena_emisyjna_grosze, @waluta, @data_emisji, @status, @opis, @uwagi)`
+              @cena_emisyjna_grosze, @waluta, @data_emisji, @status, @opis, @uwagi,
+              @data_wpisu_krs, @rodzaj_akcji, @obowiazki_wobec_spolki)`
         )
         .run(wartosci);
       idEmisji.set(e.klucz, Number(wynik.lastInsertRowid));
@@ -210,10 +218,12 @@ function zmaterializuj(db, spolkaId) {
   const wstawStan = db.prepare(
     `INSERT INTO psa_stan_akcji
        (spolka_id, emisja_id, kategoria, osoba_id, nr_od, nr_do, ilosc, tytul_nabycia,
-        zdarzenie_od_id, data_od, zdarzenie_do_id, data_do)
+        zdarzenie_od_id, data_od, zdarzenie_do_id, data_do,
+        czesc_licznik, czesc_mianownik, przedstawiciel_osoba_id, pokryta)
      VALUES
        (@spolka_id, @emisja_id, @kategoria, @osoba_id, @nr_od, @nr_do, @ilosc, @tytul_nabycia,
-        @zdarzenie_od_id, @data_od, @zdarzenie_do_id, @data_do)`
+        @zdarzenie_od_id, @data_od, @zdarzenie_do_id, @data_do,
+        @czesc_licznik, @czesc_mianownik, @przedstawiciel_osoba_id, @pokryta)`
   );
   for (const p of stan.przedzialy) {
     wstawStan.run({
@@ -229,6 +239,10 @@ function zmaterializuj(db, spolkaId) {
       data_od: p.data_od,
       zdarzenie_do_id: p.zdarzenie_do_id,
       data_do: p.data_do,
+      czesc_licznik: p.czesc_licznik ?? 1,
+      czesc_mianownik: p.czesc_mianownik ?? 1,
+      przedstawiciel_osoba_id: p.przedstawiciel_osoba_id ?? null,
+      pokryta: p.pokryta ?? null,
     });
   }
 
@@ -454,9 +468,15 @@ function dokonajWpisuSprawy(db, { sprawaId, data_zdarzenia, wejscie, autor }) {
       sprawa_id: sprawaId,
     });
 
+    // art. 300(37) § 2 KSH - regula domenowa 13. Ustalamy raz, w chwili
+    // wpisu, zeby pozniejsza zmiana katalogu tytulow deklaratoryjnych nie
+    // przepisywala historii juz zalatwionych spraw.
+    const daneZdarzenia = JSON.parse(wynik.zdarzenie.dane_json || '{}');
+    const charakterWpisu = przepisy.charakterWpisu(sprawa.typ_zdarzenia, daneZdarzenia.tytul_prawny);
+
     db.prepare(
-      `UPDATE psa_sprawy SET stan = 'wpisana', zdarzenie_id = @zid, zaktualizowano = @teraz WHERE id = @id`
-    ).run({ zid: wynik.zdarzenie.id, teraz: czas.terazIso(), id: sprawaId });
+      `UPDATE psa_sprawy SET stan = 'wpisana', zdarzenie_id = @zid, charakter_wpisu = @charakter, zaktualizowano = @teraz WHERE id = @id`
+    ).run({ zid: wynik.zdarzenie.id, charakter: charakterWpisu, teraz: czas.terazIso(), id: sprawaId });
 
     // Oplata za wpis (sekcja 1 i 8) - wylacznie dla typow odplatnych
     // (zajecie/wykreslenie zajecia sa wolne od oplat z mocy art. 300(34) § 2
@@ -474,7 +494,7 @@ function dokonajWpisuSprawy(db, { sprawaId, data_zdarzenia, wejscie, autor }) {
     }
 
     return {
-      sprawa: { ...sprawa, stan: 'wpisana', zdarzenie_id: wynik.zdarzenie.id },
+      sprawa: { ...sprawa, stan: 'wpisana', zdarzenie_id: wynik.zdarzenie.id, charakter_wpisu: charakterWpisu },
       wynik,
       oplata: naliczonaOplata,
     };

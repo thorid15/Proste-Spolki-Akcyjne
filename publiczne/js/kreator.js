@@ -249,9 +249,28 @@ function KrokEmisja({ dane, ustawDane }) {
           />
         </Pole>
       </div>
+      <div className="siatka-2">
+        <Pole etykieta="Rodzaj akcji" podpowiedz="art. 300(33) § 1 pkt 4 KSH">
+          <select value={dane.rodzaj_akcji || 'zwykla'} onChange={(z) => ustawDane({ ...dane, rodzaj_akcji: z.target.value })}>
+            <option value="zwykla">zwykła</option>
+            <option value="uprzywilejowana">uprzywilejowana</option>
+            <option value="zalozycielska">założycielska</option>
+            <option value="niema">niema</option>
+          </select>
+        </Pole>
+        <Pole
+          etykieta="Data wpisu emisji do KRS"
+          podpowiedz="Zostaw puste, jeśli spółka/emisja jeszcze nie ma wpisu do KRS — objęcie akcji będzie zablokowane do czasu uzupełnienia tej daty (art. 300(30) § 2 KSH)."
+        >
+          <input type="date" {...pole('data_wpisu_krs')} />
+        </Pole>
+      </div>
       <Pole etykieta="Tytuł emisji"><input type="text" {...pole('tytul')} placeholder="Emisja założycielska" /></Pole>
       <Pole etykieta="Podstawa prawna emisji" podpowiedz="Np. umowa spółki, uchwała walnego zgromadzenia z dnia…">
         <input type="text" {...pole('podstawa_prawna')} />
+      </Pole>
+      <Pole etykieta="Obowiązki wobec spółki związane z akcją" podpowiedz="art. 300(33) § 1 pkt 11 KSH — opcjonalne.">
+        <textarea {...pole('obowiazki_wobec_spolki')} />
       </Pole>
       <Pole etykieta="Opis"><textarea {...pole('opis')} /></Pole>
 
@@ -262,6 +281,12 @@ function KrokEmisja({ dane, ustawDane }) {
           'zdarzenie „Objęcie akcji” — kokpit przypomni o nim od razu po zapisaniu emisji.'
         }
       />
+      {!dane.data_wpisu_krs && (
+        <Komunikat
+          odmiana="uwaga"
+          tresc="Bez daty wpisu do KRS akcje z tej emisji formalnie nie istnieją — objęcie akcji będzie zablokowane (art. 300(30) § 2 KSH, sankcja art. 592 § 3 KSH). Datę można uzupełnić później sprostowaniem tego zdarzenia."
+        />
+      )}
     </>
   );
 }
@@ -811,6 +836,180 @@ function KrokZdarzenieInne({ dane, ustawDane }) {
   );
 }
 
+/**
+ * Przeniesienie ułamkowej części OZNACZONEJ akcji (art. 300(43) KSH) —
+ * regula domenowa 4a: przy ułamku użytkownik wskazuje KONKRETNY numer akcji
+ * i ułamek, nie ilość (wyjątek od reguły 4 obowiązującej resztę kreatora).
+ */
+function KrokPrzeniesienieUlamka({ dane, ustawDane, spolka }) {
+  const wSerii = spolka.akcjonariusze.filter((a) => a.emisja_klucz === Number(dane.emisja_zdarzenie_id));
+  const zbywca = wSerii.find((a) => a.osoba_id === Number(dane.zbywca_osoba_id));
+
+  return (
+    <>
+      <WyborEmisji
+        emisje={spolka.emisje}
+        bilans={spolka.bilans}
+        wartosc={dane.emisja_zdarzenie_id}
+        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k, zbywca_osoba_id: null })}
+      />
+
+      {dane.emisja_zdarzenie_id && (
+        <>
+          <Pole etykieta="Zbywca" wymagane>
+            {wSerii.length === 0 ? (
+              <Komunikat odmiana="uwaga" tresc="W tej serii nikt nie ma jeszcze akcji." />
+            ) : (
+              <select
+                value={dane.zbywca_osoba_id || ''}
+                onChange={(z) => ustawDane({ ...dane, zbywca_osoba_id: Number(z.target.value) })}
+              >
+                <option value="">— wybierz uprawnionego —</option>
+                {wSerii.map((a) => (
+                  <option key={a.osoba_id} value={a.osoba_id}>
+                    {a.osoba ? a.osoba.oznaczenie : `osoba #${a.osoba_id}`} — numery {a.numery}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Pole>
+          {zbywca && (
+            <Komunikat odmiana="info" tresc={`Zbywca posiada akcje serii ${zbywca.seria}, numery ${zbywca.numery}.`} />
+          )}
+
+          <div className="siatka-2">
+            <Pole etykieta="Numer akcji" wymagane podpowiedz="Ułamek zawsze dotyczy dokładnie jednego, oznaczonego numeru akcji.">
+              <input
+                type="number"
+                min="1"
+                value={dane.nr ?? ''}
+                onChange={(z) => ustawDane({ ...dane, nr: z.target.value })}
+              />
+            </Pole>
+            <Pole etykieta="Ułamek zbywanej części" wymagane>
+              <div className="row-g">
+                <input
+                  type="number"
+                  min="1"
+                  style={{ width: 80 }}
+                  value={dane.czesc_licznik ?? ''}
+                  onChange={(z) => ustawDane({ ...dane, czesc_licznik: z.target.value })}
+                  placeholder="1"
+                />
+                <span>/</span>
+                <input
+                  type="number"
+                  min="1"
+                  style={{ width: 80 }}
+                  value={dane.czesc_mianownik ?? ''}
+                  onChange={(z) => ustawDane({ ...dane, czesc_mianownik: z.target.value })}
+                  placeholder="3"
+                />
+              </div>
+            </Pole>
+          </div>
+
+          <Pole etykieta="Tytuł przejścia">
+            <select
+              value={dane.tytul_prawny || 'sprzedaż'}
+              onChange={(z) => ustawDane({ ...dane, tytul_prawny: z.target.value })}
+            >
+              <option value="sprzedaż">sprzedaż</option>
+              <option value="darowizna">darowizna</option>
+              <option value="dziedziczenie">dziedziczenie</option>
+              <option value="inne przejście">inne przejście</option>
+            </select>
+          </Pole>
+
+          <Pole etykieta="Nabywca" wymagane>
+            <WyborOsoby
+              wartosc={dane.nabywca_osoba_id}
+              przyZmianie={(id) => ustawDane({ ...dane, nabywca_osoba_id: id })}
+              wyklucz={[Number(dane.zbywca_osoba_id)].filter(Boolean)}
+            />
+          </Pole>
+
+          <label className="chk">
+            <input
+              type="checkbox"
+              checked={Boolean(dane.zgoda_spolki_niepelne_pokrycie)}
+              onChange={(z) => ustawDane({ ...dane, zgoda_spolki_niepelne_pokrycie: z.target.checked })}
+            />
+            <span className="chk-tresc">
+              Uzyskano zgodę spółki na zbycie akcji nie w pełni pokrytej
+              <div className="podstawa-prawna">Wymagane wyłącznie, gdy akcja nie jest w pełni pokryta — art. 300(40) § 1 KSH.</div>
+            </span>
+          </label>
+        </>
+      )}
+    </>
+  );
+}
+
+/** Wskazanie/zmiana wspólnego przedstawiciela współuprawnionych (art. 300(38) § 3 KSH). */
+function KrokPrzedstawiciel({ dane, ustawDane, spolka }) {
+  return (
+    <>
+      <WyborEmisji
+        emisje={spolka.emisje}
+        bilans={spolka.bilans}
+        wartosc={dane.emisja_zdarzenie_id}
+        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k })}
+      />
+      {dane.emisja_zdarzenie_id && (
+        <>
+          <Pole etykieta="Numer akcji" wymagane podpowiedz="Akcja objęta współwłasnością, dla której wskazywany jest przedstawiciel.">
+            <input type="number" min="1" value={dane.nr ?? ''} onChange={(z) => ustawDane({ ...dane, nr: z.target.value })} />
+          </Pole>
+          <Pole etykieta="Wspólny przedstawiciel" podpowiedz="Musi być jednym ze współuprawnionych z tej akcji. Zostaw puste, by usunąć wskazanie.">
+            <WyborOsoby
+              wartosc={dane.przedstawiciel_osoba_id}
+              przyZmianie={(id) => ustawDane({ ...dane, przedstawiciel_osoba_id: id })}
+            />
+          </Pole>
+          <Komunikat
+            odmiana="info"
+            tresc="Brak wspólnego przedstawiciela nie blokuje wpisu — spółka może wtedy składać oświadczenia wobec któregokolwiek ze współuprawnionych (art. 300(38) § 4 KSH)."
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+/** Wzmianka o pokryciu (art. 300(33) § 1 pkt 9 KSH) — podstawa: uchwała zarządu (art. 300(9) § 2 KSH). */
+function KrokPokrycieAkcji({ dane, ustawDane, spolka }) {
+  return (
+    <>
+      <WyborEmisji
+        emisje={spolka.emisje}
+        bilans={spolka.bilans}
+        wartosc={dane.emisja_zdarzenie_id}
+        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k })}
+      />
+      {dane.emisja_zdarzenie_id && (
+        <>
+          <Pole etykieta="Akcjonariusz" wymagane>
+            <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
+          </Pole>
+          <Pole etykieta="Wzmianka o pokryciu" wymagane>
+            <select value={dane.pokryta || ''} onChange={(z) => ustawDane({ ...dane, pokryta: z.target.value })}>
+              <option value="">— wybierz —</option>
+              <option value="tak">w całości pokryta</option>
+              <option value="czesciowo">pokryta częściowo</option>
+              <option value="nie">nie pokryta</option>
+            </select>
+          </Pole>
+          <Komunikat
+            odmiana="info"
+            tresc="Wkłady zalicza się równomiernie na pokrycie wszystkich akcji akcjonariusza w tej emisji (art. 300(9) § 3 KSH), chyba że umowa spółki stanowi inaczej."
+          />
+        </>
+      )}
+    </>
+  );
+}
+
 /** Dispatcher kroku 3 — jeden na typ zdarzenia. */
 const KROKI_TRESCI = {
   emisja: KrokEmisja,
@@ -827,6 +1026,9 @@ const KROKI_TRESCI = {
   zmiana_danych_akcjonariusza: KrokZmianaDanychAkcjonariusza,
   zobowiazanie: KrokZobowiazanie,
   zdarzenie_inne: KrokZdarzenieInne,
+  przeniesienie_ulamka: KrokPrzeniesienieUlamka,
+  przedstawiciel: KrokPrzedstawiciel,
+  pokrycie_akcji: KrokPokrycieAkcji,
 };
 
 /** Zamienia stan formularza (`dane`) na treść żądania do API, per typ. */
@@ -844,6 +1046,15 @@ function zbudujDaneZdarzenia(typ, dane) {
   if (['obciazenie', 'zajecie'].includes(typ)) {
     const pojedyncza = przygotujPojedyncza(dane);
     Object.assign(wynik, pojedyncza);
+  }
+  if (typ === 'przeniesienie_ulamka') {
+    wynik.nr = Number(dane.nr);
+    wynik.czesc_licznik = Number(dane.czesc_licznik);
+    wynik.czesc_mianownik = Number(dane.czesc_mianownik);
+  }
+  if (typ === 'przedstawiciel') {
+    wynik.nr = Number(dane.nr);
+    wynik.przedstawiciel_osoba_id = dane.przedstawiciel_osoba_id || null;
   }
   return wynik;
 }

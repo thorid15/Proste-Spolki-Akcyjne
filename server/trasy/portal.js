@@ -237,6 +237,9 @@ router.post(
     }
 
     const typZdarzenia = String(cialo.typ_zdarzenia || '');
+    // Celowo NIE bramkujemy sprintem 5: ulamkowe czesci akcji, wspolny
+    // przedstawiciel i wzmianka o pokryciu wymagaja oceny pracownika kancelarii
+    // (decyzja nr 10, sekcja 15 CLAUDE-PSA.md) - portal klienta ich nie oferuje.
     const typ = typyZdarzen
       .dostepneWKreatorze(2)
       .find((t) => t.kod === typZdarzenia && !t.z_urzedu);

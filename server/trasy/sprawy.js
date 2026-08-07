@@ -124,7 +124,7 @@ router.post(
     }
 
     const typZdarzenia = String(cialo.typ_zdarzenia || '');
-    if (!typyZdarzen.dostepneWKreatorze(2).some((t) => t.kod === typZdarzenia)) {
+    if (!typyZdarzen.dostepneWKreatorze(5).some((t) => t.kod === typZdarzenia)) {
       throw bledneZadanie(`Typ zdarzenia „${typZdarzenia}” nie jest dostępny w kreatorze.`);
     }
     const typ = typyZdarzen.typ(typZdarzenia);
@@ -451,8 +451,13 @@ router.patch(
 );
 
 /**
- * Odnotowanie zgody zamiast uprzedniego powiadomienia (art. 300(34) § 3 KSH,
- * forma zgody wg nowelizacji - patrz `przepisy.FORMY_ZGODY`, DO_WERYFIKACJI).
+ * Odnotowanie zgody zamiast uprzedniego powiadomienia (art. 300(34) § 3 KSH).
+ *
+ * PRZEPISY-PSA.md § 12 pkt 3 (poprawka erraty nr 3): § 3 NIE zawiera katalogu
+ * form zgody (podpis notarialnie poświadczony / w obecności osoby
+ * upoważnionej / kwalifikowany / zaufany / osobisty) - to regulacja spółki
+ * akcyjnej. W P.S.A. zgoda podlega ogólnym regułom - `forma` jest opisem
+ * tekstowym odnotowanym przez pracownika, nie wyborem ze sztywnego słownika.
  */
 router.post(
   '/:id/zgoda',
@@ -461,10 +466,7 @@ router.post(
     const sprawa = wczytajSprawe(id);
     if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
     const { forma, data } = zad.body || {};
-    if (!forma) throw bledneZadanie('Wskaż formę zgody.');
-    if (!przepisy.FORMY_ZGODY.some((f) => f.kod === forma)) {
-      throw bledneZadanie(`Nieznana forma zgody: „${forma}”.`);
-    }
+    if (!forma || !String(forma).trim()) throw bledneZadanie('Opisz, w jaki sposób udzielono zgody.');
     db()
       .prepare('UPDATE psa_sprawy SET zgoda_forma = ?, zgoda_data = ?, zaktualizowano = ? WHERE id = ?')
       .run(forma, data || czas.dzisIso(), czas.terazIso(), id);

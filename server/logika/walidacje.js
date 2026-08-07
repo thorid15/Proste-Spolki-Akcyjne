@@ -14,6 +14,7 @@
  */
 
 const n = require('./numery');
+const u = require('./ulamki');
 const stanLogika = require('./stan');
 const przepisy = require('./przepisy');
 const typyZdarzen = require('./typy-zdarzen');
@@ -30,7 +31,11 @@ function dzisiajIso(dzisiaj) {
  * Wszystkie zakresy dotkniete zdarzeniem, per emisja.
  * Zakresy niosa albo `dane.pozycje[].zakresy` (objecie/przeniesienie/umorzenie),
  * albo `dane.zakresy` wprost (obciazenie/zajecie - zdarzenie dotyczy jednej
- * pozycji, bez tablicy `pozycje`).
+ * pozycji, bez tablicy `pozycje`), albo `dane.nr` przy zdarzeniu ROZPORZADZAJACYM
+ * pojedynczym numerem (`przeniesienie_ulamka`, rozpoznawane po `zbywca_osoba_id`
+ * - regula domenowa 4a). `przedstawiciel`/`pokrycie_akcji` tez niosa `dane.nr`/
+ * numery, ale nie sa rozporzadzeniem akcja - obciazenia blokujace ich nie
+ * dotycza, wiec CELOWO nie trafiaja tutaj.
  */
 function dotknieteZakresy(dane) {
   const wynik = new Map();
@@ -38,7 +43,11 @@ function dotknieteZakresy(dane) {
   if (klucz == null) return wynik;
   const zPozycji = (dane.pozycje || []).flatMap((p) => p.zakresy || []);
   const zBezposrednio = Array.isArray(dane.zakresy) ? dane.zakresy : [];
-  const zakresy = n.normalizuj([...zPozycji, ...zBezposrednio]);
+  const zNumeru =
+    dane.zbywca_osoba_id != null && Number.isInteger(Number(dane.nr))
+      ? [{ nr_od: Number(dane.nr), nr_do: Number(dane.nr) }]
+      : [];
+  const zakresy = n.normalizuj([...zPozycji, ...zBezposrednio, ...zNumeru]);
   if (zakresy.length > 0) wynik.set(klucz, zakresy);
   return wynik;
 }
@@ -151,6 +160,55 @@ function sprawdzOgraniczenia(stanPrzed, propozycja, bledy, ostrzezenia) {
 }
 
 /**
+ * Zbycie akcji nie w pelni pokrytej wymaga zgody spolki (art. 300(40) § 1
+ * KSH) - dotyczy zarowno calych akcji (`przeniesienie`), jak i ich ulamkowych
+ * czesci (`przeniesienie_ulamka` - art. 300(43) KSH nakazuje stosowac
+ * przepisy o rozporzadzaniu akcja odpowiednio do ulamkow). `pokryta` rowna
+ * `null` (nieustalone) NIE blokuje - blokuje wylacznie WYKAZANY brak pelnego
+ * pokrycia ('nie'/'czesciowo'); regula nie moze wstecznie zablokowac calego
+ * historycznego rejestru sprzed wprowadzenia wzmianki o pokryciu.
+ */
+function sprawdzPokrycie(stanPrzed, propozycja, bledy) {
+  const d = propozycja.dane || {};
+  let emisjaKlucz;
+  let zbywcaId;
+  let zakresy;
+  if (propozycja.typ === 'przeniesienie') {
+    emisjaKlucz = Number(d.emisja_zdarzenie_id);
+    zbywcaId = Number(d.zbywca_osoba_id);
+    zakresy = n.normalizuj((d.pozycje || []).flatMap((p) => p.zakresy || []));
+  } else if (propozycja.typ === 'przeniesienie_ulamka') {
+    emisjaKlucz = Number(d.emisja_zdarzenie_id);
+    zbywcaId = Number(d.zbywca_osoba_id);
+    const nr = Number(d.nr);
+    zakresy = Number.isInteger(nr) ? [{ nr_od: nr, nr_do: nr }] : [];
+  } else {
+    return;
+  }
+  if (zakresy.length === 0) return;
+
+  const niepokryte = stanLogika
+    .otwarte(stanPrzed)
+    .filter(
+      (p) =>
+        p.emisja_klucz === emisjaKlucz &&
+        p.kategoria === K.AKCJONARIUSZ &&
+        Number(p.osoba_id) === zbywcaId &&
+        (p.pokryta === 'nie' || p.pokryta === 'czesciowo') &&
+        n.nakladaja([{ nr_od: p.nr_od, nr_do: p.nr_do }], zakresy)
+    );
+  if (niepokryte.length > 0 && !d.zgoda_spolki_niepelne_pokrycie) {
+    const dotkniete = n.normalizuj(
+      niepokryte.flatMap((p) => n.przeciecie([{ nr_od: p.nr_od, nr_do: p.nr_do }], zakresy))
+    );
+    bledy.push(
+      `Akcje ${n.opisz(dotkniete)} nie są w pełni pokryte — zbycie wymaga zgody spółki ` +
+        `(${przepisy.PODSTAWY.NIEPELNE_POKRYCIE}). Zgoda nie została odnotowana.`
+    );
+  }
+}
+
+/**
  * AML (notariusz jako instytucja obowiazana).
  * `niemozliwe` = przeszkoda wpisu -> blokada.
  * `brak`       = weryfikacja niewykonana -> ostrzezenie; checklista i tak
@@ -164,6 +222,9 @@ function sprawdzAml(propozycja, osoby, bledy, ostrzezenia) {
   }
   if (propozycja.typ === 'przeniesienie') {
     for (const p of dane.pozycje || []) nabywcy.add(Number(p.nabywca_osoba_id));
+  }
+  if (propozycja.typ === 'przeniesienie_ulamka' && dane.nabywca_osoba_id != null) {
+    nabywcy.add(Number(dane.nabywca_osoba_id));
   }
   // Obciazenie (zastaw/uzytkowanie) tworzy nowy tytul prawny do akcji na
   // rzecz zastawnika/uzytkownika - traktujemy go jak nabywce dla celow AML.
@@ -193,9 +254,13 @@ function sprawdzOsoby(propozycja, osoby, bledy) {
   const dane = propozycja.dane || {};
   const wymagane = new Set();
   if (dane.zbywca_osoba_id != null) wymagane.add(Number(dane.zbywca_osoba_id));
+  if (dane.nabywca_osoba_id != null) wymagane.add(Number(dane.nabywca_osoba_id));
   if (dane.osoba_id != null && dane.osoba_id !== '') wymagane.add(Number(dane.osoba_id));
   if (dane.akcjonariusz_osoba_id != null && dane.akcjonariusz_osoba_id !== '') {
     wymagane.add(Number(dane.akcjonariusz_osoba_id));
+  }
+  if (dane.przedstawiciel_osoba_id != null && dane.przedstawiciel_osoba_id !== '') {
+    wymagane.add(Number(dane.przedstawiciel_osoba_id));
   }
   for (const p of dane.pozycje || []) {
     if (p.osoba_id != null) wymagane.add(Number(p.osoba_id));
@@ -231,6 +296,15 @@ const PER_TYP = {
     if (!emisja) {
       bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
       return;
+    }
+    // Regula domenowa 12: akcje nie istnieja przed wpisem SPOLKI ALBO EMISJI
+    // do KRS (art. 300(30) § 2 KSH) - sankcja karna z art. 592 § 3 KSH wobec
+    // zarzadu. Twarda blokada, nie ostrzezenie.
+    if (!emisja.data_wpisu_krs) {
+      bledy.push(
+        `Emisja serii ${emisja.seria} nie ma wpisu do KRS — akcje z tej emisji jeszcze nie istnieją ` +
+          `(${przepisy.PODSTAWY.WPIS_WARUNEK_KRS}) i nie mogą zostać objęte.`
+      );
     }
     const dostepne = stanLogika.pula(stanPrzed, emisja.klucz, K.NIEOBJETA, null);
     const zadane = n.normalizuj((d.pozycje || []).flatMap((p) => p.zakresy || []));
@@ -459,6 +533,83 @@ const PER_TYP = {
   },
 
   zdarzenie_inne() {},
+
+  przeniesienie_ulamka(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
+    if (!emisja) {
+      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
+      return;
+    }
+    if (!emisja.data_wpisu_krs) {
+      bledy.push(
+        `Emisja serii ${emisja.seria} nie ma wpisu do KRS — akcje z tej emisji jeszcze nie istnieją ` +
+          `(${przepisy.PODSTAWY.WPIS_WARUNEK_KRS}).`
+      );
+    }
+    const zbywcaId = Number(d.zbywca_osoba_id);
+    const nabywcaId = Number(d.nabywca_osoba_id);
+    if (zbywcaId === nabywcaId) {
+      bledy.push('Zbywca i nabywca to ta sama osoba — takie przeniesienie nie zmienia rejestru.');
+    }
+    const nr = Number(d.nr);
+    if (!Number.isInteger(nr) || nr < 1) {
+      bledy.push('Wskaż numer akcji, której dotyczy przeniesienie ułamkowej części.');
+      return;
+    }
+    let czesc;
+    try {
+      czesc = u.waliduj({ licznik: d.czesc_licznik, mianownik: d.czesc_mianownik });
+    } catch (e) {
+      bledy.push(e.message);
+      return;
+    }
+    const zbywcaMa = stanLogika.ulamekOsobyNaNumerze(stanPrzed, emisja.klucz, zbywcaId, nr);
+    if (!u.mniejszyRowny(czesc, zbywcaMa)) {
+      bledy.push(
+        `Zbywca posiada ${u.opisz(zbywcaMa)} akcji nr ${nr} serii ${emisja.seria} na dzień ` +
+          `${propozycja.data_zdarzenia} — nie może zbyć ${u.opisz(czesc)}.`
+      );
+    }
+  },
+
+  przedstawiciel(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
+    if (!emisja) {
+      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
+      return;
+    }
+    const nr = Number(d.nr);
+    const wlasciciele = stanLogika
+      .otwarte(stanPrzed)
+      .filter((p) => p.emisja_klucz === emisja.klucz && p.kategoria === K.AKCJONARIUSZ && p.nr_od <= nr && nr <= p.nr_do);
+    if (wlasciciele.length === 0) {
+      bledy.push(`Akcja nr ${nr} serii ${emisja.seria} nie ma obecnie żadnego uprawnionego.`);
+      return;
+    }
+    if (d.przedstawiciel_osoba_id != null && !wlasciciele.some((w) => Number(w.osoba_id) === Number(d.przedstawiciel_osoba_id))) {
+      bledy.push('Wskazany przedstawiciel musi być jednym ze współuprawnionych z tej akcji.');
+    }
+  },
+
+  pokrycie_akcji(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
+    if (!emisja) {
+      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
+      return;
+    }
+    if (!przepisy.STANY_POKRYCIA.includes(d.pokryta)) {
+      bledy.push(`Wzmianka o pokryciu musi być jedną z wartości: ${przepisy.STANY_POKRYCIA.join(', ')}.`);
+    }
+    const maAkcje = stanLogika
+      .otwarte(stanPrzed)
+      .some((p) => p.emisja_klucz === emisja.klucz && p.kategoria === K.AKCJONARIUSZ && Number(p.osoba_id) === Number(d.osoba_id));
+    if (!maAkcje) {
+      bledy.push('Wskazany akcjonariusz nie posiada akcji tej emisji.');
+    }
+  },
 };
 
 /** Dwie pozycje jednego zdarzenia nie moga siegac po te same akcje. */
@@ -534,6 +685,7 @@ function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map(), dzisia
   sprawdzChronologie(stanPrzed, propozycja, bledy);
   sprawdzObciazenia(stanPrzed, propozycja, bledy);
   sprawdzOgraniczenia(stanPrzed, propozycja, bledy, ostrzezenia);
+  sprawdzPokrycie(stanPrzed, propozycja, bledy);
   sprawdzAml(propozycja, osoby, bledy, ostrzezenia);
 
   // Warstwa druga: bilans calego rejestru po zdarzeniu. Nawet jesli kontrole

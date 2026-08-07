@@ -19,7 +19,7 @@ const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpo
 const { wymagajPracownika } = require('../pomocnicze/autoryzacja');
 
 /** Sprint bieżąco obsługiwany przez kreator - decyduje o `typy_w_kreatorze`. */
-const SPRINT_KREATORA = 2;
+const SPRINT_KREATORA = 5;
 
 const router = express.Router();
 
@@ -46,7 +46,10 @@ router.get(
       aml_statusy: przepisy.AML_STATUSY,
       role_odbiorcy: przepisy.ROLE_ODBIORCY,
       organy_uprawnione: przepisy.ORGANY_UPRAWNIONE,
-      formy_zgody: przepisy.FORMY_ZGODY,
+      rodzaje_akcji: przepisy.RODZAJE_AKCJI,
+      stany_pokrycia: przepisy.STANY_POKRYCIA,
+      umowe_zawarl: przepisy.UMOWE_ZAWARL,
+      charakter_wpisu: przepisy.CHARAKTER_WPISU,
       podstawy: przepisy.PODSTAWY,
       nowelizacja: przepisy.NOWELIZACJA,
       pola_wrazliwe: przepisy.POLA_WRAZLIWE,
@@ -156,11 +159,11 @@ router.get(
  * Funkcje z nowelizacji (Dz.U. 2026 poz. 176, wejscie 18.02.2027) - sekcja 8.
  * Bramkowane data: przed wejsciem w zycie zwracaja 501 z informacja, kiedy
  * i na jakiej podstawie ruszaja - PO tej dacie wykonuja realna prace.
- * Sekcja 15 decyzja nr 2: brzmienie przepisow DO_WERYFIKACJI (patrz flagi
- * w `logika/przepisy.js`) nie moze byc podstawa walidacji BLOKUJACEJ - obie
- * trasy nizej wylacznie GENERUJA DOKUMENT z juz istniejacych, potwierdzonych
- * danych (stan rejestru, data zakonczenia umowy), nie oceniaja tresci
- * przepisu, wiec ograniczenie to ich nie dotyczy.
+ * PRZEPISY-PSA.md § 13: pozycje ⚠️ (poza wydrukiem KSH) nie moga byc podstawa
+ * walidacji BLOKUJACEJ - obie trasy nizej wylacznie GENERUJA DOKUMENT z juz
+ * istniejacych, potwierdzonych danych (stan rejestru, data zakonczenia
+ * umowy), nie oceniaja tresci niezweryfikowanego przepisu, wiec ograniczenie
+ * to ich nie dotyczy.
  */
 function jeszczeNieaktywne(podstawa, opis) {
   return {

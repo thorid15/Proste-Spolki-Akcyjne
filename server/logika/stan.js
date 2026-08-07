@@ -22,6 +22,7 @@
  */
 
 const n = require('./numery');
+const u = require('./ulamki');
 const przepisy = require('./przepisy');
 
 const K = przepisy.KATEGORIE_AKCJI;
@@ -125,18 +126,55 @@ function przedzialyPuli(stan, emisjaKlucz, kategoria, osobaId) {
   );
 }
 
-/** Zakresy dostepne w danej puli (suma otwartych przedzialow). */
+/**
+ * Zakresy dostepne w danej puli (suma otwartych przedzialow) - DO ZWYKLYCH
+ * operacji calo-akcyjnych (objecie/przeniesienie/umorzenie/obciazenie/zajecie).
+ *
+ * Wyklucza wiersze ulamkowe (czesc != 1/1): wspoluprawniony do 1/3 akcji nie
+ * moze rozporzadzac nia tak, jakby mial cala - do tego sluzy WYLACZNIE
+ * `przeniesienie_ulamka` (regula domenowa 4a, scope-narrowing decyzja
+ * architektoniczna sprintu 5 - patrz README).
+ */
 function pula(stan, emisjaKlucz, kategoria, osobaId) {
   return n.normalizuj(
-    przedzialyPuli(stan, emisjaKlucz, kategoria, osobaId).map((p) => ({
-      nr_od: p.nr_od,
-      nr_do: p.nr_do,
-    }))
+    przedzialyPuli(stan, emisjaKlucz, kategoria, osobaId)
+      .filter((p) => (p.czesc_licznik ?? 1) === (p.czesc_mianownik ?? 1))
+      .map((p) => ({
+        nr_od: p.nr_od,
+        nr_do: p.nr_do,
+      }))
   );
 }
 
-function otworz(stan, { emisjaKlucz, kategoria, osobaId, zakresy, data, zdarzenieId, tytul }) {
-  for (const z of n.normalizuj(zakresy)) {
+/** Suma ulamkow, jakie dana osoba posiada na WSKAZANYM (pojedynczym) numerze akcji. */
+function ulamekOsobyNaNumerze(stan, emisjaKlucz, osobaId, nr) {
+  const wiersze = otwarte(stan).filter(
+    (p) =>
+      p.emisja_klucz === emisjaKlucz &&
+      p.kategoria === K.AKCJONARIUSZ &&
+      Number(p.osoba_id) === Number(osobaId) &&
+      p.nr_od <= nr &&
+      nr <= p.nr_do
+  );
+  let suma = u.ZERO;
+  for (const w of wiersze) {
+    suma = u.suma(suma, { licznik: w.czesc_licznik ?? 1, mianownik: w.czesc_mianownik ?? 1 });
+  }
+  return suma;
+}
+
+function otworz(
+  stan,
+  { emisjaKlucz, kategoria, osobaId, zakresy, data, zdarzenieId, tytul, czesc, przedstawiciel, pokryta }
+) {
+  const cz = czesc ? u.waliduj(czesc) : u.JEDEN;
+  const znormalizowane = n.normalizuj(zakresy);
+  if (!u.jestJeden(cz) && (znormalizowane.length !== 1 || znormalizowane[0].nr_od !== znormalizowane[0].nr_do)) {
+    throw new BladStanu(
+      `Ułamek akcji ${u.opisz(cz)} musi obejmować dokładnie jeden numer akcji (regula domenowa 4a).`
+    );
+  }
+  for (const z of znormalizowane) {
     stan.przedzialy.push({
       emisja_klucz: emisjaKlucz,
       kategoria,
@@ -148,6 +186,10 @@ function otworz(stan, { emisjaKlucz, kategoria, osobaId, zakresy, data, zdarzeni
       data_do: null,
       zdarzenie_do_id: null,
       tytul_nabycia: tytul || null,
+      czesc_licznik: cz.licznik,
+      czesc_mianownik: cz.mianownik,
+      przedstawiciel_osoba_id: przedstawiciel == null ? null : Number(przedstawiciel),
+      pokryta: pokryta || null,
     });
   }
 }
@@ -212,6 +254,7 @@ function przenies(stan, opcje) {
     data: opcje.data,
     zdarzenieId: opcje.zdarzenieId,
     tytul: opcje.tytul,
+    pokryta: opcje.pokryta,
   });
 }
 
@@ -268,6 +311,13 @@ const HANDLERY = {
       status: przepisy.STATUSY_EMISJI.AKTYWNA,
       opis: d.opis || null,
       uwagi: d.uwagi || null,
+      // art. 300(30) § 2 KSH: NULL dopoki emisja nie ma wpisu do KRS - blokuje
+      // `objecie` (regula domenowa 12, walidacje.js).
+      data_wpisu_krs: d.data_wpisu_krs || null,
+      // art. 300(33) § 1 pkt 4 KSH.
+      rodzaj_akcji: d.rodzaj_akcji || 'zwykla',
+      // art. 300(33) § 1 pkt 11 KSH.
+      obowiazki_wobec_spolki: d.obowiazki_wobec_spolki || null,
     });
     otworz(stan, {
       emisjaKlucz: Number(zdarzenie.id),
@@ -292,6 +342,10 @@ const HANDLERY = {
         data: zdarzenie.data_zdarzenia,
         zdarzenieId: Number(zdarzenie.id),
         tytul: 'objęcie akcji',
+        // art. 300(33) § 1 pkt 9 KSH - wzmianka o pokryciu; NULL (nieustalone)
+        // dopoki nie dojdzie osobne zdarzenie `pokrycie_akcji` na podstawie
+        // uchwaly zarzadu (art. 300(9) § 2 KSH).
+        pokryta: poz.pokryta || null,
       });
     }
   },
@@ -332,6 +386,123 @@ const HANDLERY = {
     const wszystkieUmorzone =
       n.ilosc(pula(stan, emisja.klucz, K.UMORZONA, null)) === emisja.ilosc;
     if (wszystkieUmorzone) emisja.status = przepisy.STATUSY_EMISJI.UMORZONA;
+  },
+
+  /**
+   * Przeniesienie ulamkowej czesci OZNACZONEJ akcji (art. 300(43) KSH).
+   * JEDYNA droga tworzenia i przenoszenia ulamkow (regula domenowa 4a) - nie
+   * przechodzi przez `przenies`/`pula`, bo te licza w calych numerach.
+   *
+   * Zamyka CALA dotychczasowa pozycje zbywcy na numerze `nr` (jakikolwiek by
+   * nie byl jej ulamek - czesc szerszego zakresu 1/1 albo juz istniejacy
+   * wiersz ulamkowy), po czym otwiera z powrotem to, co zbywcy zostaje.
+   * Nabywca dostaje sume swojego dotychczasowego ulamka na tym numerze
+   * (0, gdy jeszcze nic nie mial) i ulamka nabywanego.
+   */
+  przeniesienie_ulamka(stan, zdarzenie, d) {
+    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
+    const nr = Number(d.nr);
+    const zbywcaId = Number(d.zbywca_osoba_id);
+    const nabywcaId = Number(d.nabywca_osoba_id);
+    const czesc = u.waliduj({ licznik: d.czesc_licznik, mianownik: d.czesc_mianownik });
+
+    const zbywcaMa = ulamekOsobyNaNumerze(stan, emisja.klucz, zbywcaId, nr);
+    if (!u.mniejszyRowny(czesc, zbywcaMa)) {
+      throw new BladStanu(
+        `Zbywca posiada ${u.opisz(zbywcaMa)} akcji nr ${nr} serii ${emisja.seria} — ` +
+          `nie może zbyć ${u.opisz(czesc)} (zdarzenie #${zdarzenie.id}).`
+      );
+    }
+    // Pokrycie (art. 300(33) § 1 pkt 9 KSH) jest atrybutem SAMEJ AKCJI (wklad
+    // juz wniesiony do spolki), nie osoby - przechodzi wraz z ulamkiem
+    // niezmienione, zarowno na czesc, ktora zostaje u zbywcy, jak i na czesc
+    // nabywana.
+    const pokrytaObecnie =
+      (otwarte(stan).find(
+        (p) => p.emisja_klucz === emisja.klucz && p.kategoria === K.AKCJONARIUSZ && Number(p.osoba_id) === zbywcaId && p.nr_od <= nr && nr <= p.nr_do
+      ) || {}).pokryta ?? null;
+
+    zdejmij(stan, {
+      emisjaKlucz: emisja.klucz,
+      kategoria: K.AKCJONARIUSZ,
+      osobaId: zbywcaId,
+      zakresy: [{ nr_od: nr, nr_do: nr }],
+      data: zdarzenie.data_zdarzenia,
+      zdarzenieId: Number(zdarzenie.id),
+    });
+    const zostajeZbywcy = u.roznica(zbywcaMa, czesc);
+    if (!u.jestZero(zostajeZbywcy)) {
+      otworz(stan, {
+        emisjaKlucz: emisja.klucz,
+        kategoria: K.AKCJONARIUSZ,
+        osobaId: zbywcaId,
+        zakresy: [{ nr_od: nr, nr_do: nr }],
+        data: zdarzenie.data_zdarzenia,
+        zdarzenieId: Number(zdarzenie.id),
+        tytul: 'pozostała część po przeniesieniu ułamka',
+        czesc: zostajeZbywcy,
+        pokryta: pokrytaObecnie,
+      });
+    }
+
+    const nabywcaMialJuz = ulamekOsobyNaNumerze(stan, emisja.klucz, nabywcaId, nr);
+    if (!u.jestZero(nabywcaMialJuz)) {
+      zdejmij(stan, {
+        emisjaKlucz: emisja.klucz,
+        kategoria: K.AKCJONARIUSZ,
+        osobaId: nabywcaId,
+        zakresy: [{ nr_od: nr, nr_do: nr }],
+        data: zdarzenie.data_zdarzenia,
+        zdarzenieId: Number(zdarzenie.id),
+      });
+    }
+    otworz(stan, {
+      emisjaKlucz: emisja.klucz,
+      kategoria: K.AKCJONARIUSZ,
+      osobaId: nabywcaId,
+      zakresy: [{ nr_od: nr, nr_do: nr }],
+      data: zdarzenie.data_zdarzenia,
+      zdarzenieId: Number(zdarzenie.id),
+      tytul: d.tytul_prawny || 'przeniesienie ułamkowej części akcji',
+      czesc: u.suma(nabywcaMialJuz, czesc),
+      pokryta: pokrytaObecnie,
+    });
+  },
+
+  /** Wskazanie/zmiana wspolnego przedstawiciela wspoluprawnionych (art. 300(38) § 3 KSH). */
+  przedstawiciel(stan, zdarzenie, d) {
+    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
+    const nr = Number(d.nr);
+    const przedstawicielId = d.przedstawiciel_osoba_id == null ? null : Number(d.przedstawiciel_osoba_id);
+    const wiersze = otwarte(stan).filter(
+      (p) => p.emisja_klucz === emisja.klucz && p.kategoria === K.AKCJONARIUSZ && p.nr_od <= nr && nr <= p.nr_do
+    );
+    if (wiersze.length === 0) {
+      throw new BladStanu(
+        `Zdarzenie #${zdarzenie.id}: akcja nr ${nr} serii ${emisja.seria} nie ma obecnie żadnego uprawnionego.`
+      );
+    }
+    for (const w of wiersze) w.przedstawiciel_osoba_id = przedstawicielId;
+  },
+
+  /**
+   * Wzmianka o pokryciu (art. 300(33) § 1 pkt 9 KSH) - podstawa: uchwala
+   * zarzadu z art. 300(9) § 2 KSH. Zaliczana rownomiernie na wszystkie akcje
+   * akcjonariusza W TEJ EMISJI (art. 300(9) § 3 KSH) - stad zakres zdarzenia
+   * to (emisja, osoba), nie pojedynczy numer.
+   */
+  pokrycie_akcji(stan, zdarzenie, d) {
+    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
+    const osobaId = Number(d.osoba_id);
+    const wiersze = otwarte(stan).filter(
+      (p) => p.emisja_klucz === emisja.klucz && p.kategoria === K.AKCJONARIUSZ && Number(p.osoba_id) === osobaId
+    );
+    if (wiersze.length === 0) {
+      throw new BladStanu(
+        `Zdarzenie #${zdarzenie.id}: wskazany akcjonariusz nie posiada akcji emisji ${emisja.seria}.`
+      );
+    }
+    for (const w of wiersze) w.pokryta = d.pokryta;
   },
 
   // Ponizsze typy nie maja jeszcze kreatora (sprint 2), ale ich odtwarzanie
@@ -588,22 +759,49 @@ function sprawdzBilans(stan) {
       }
     }
 
-    // Nakladanie sie akcjonariuszy miedzy soba.
+    // Nakladanie sie akcjonariuszy miedzy soba - DOZWOLONE wylacznie jako
+    // wspoluprawnienie do JEDNEGO numeru akcji, gdy ulamki wszystkich
+    // wspoluprawnionych sumuja sie dokladnie do 1 (regula domenowa 3 + 4a,
+    // art. 300(31) § 2 KSH). Zakres nakladania sie szerszy niz jeden numer
+    // jest zawsze bledem - poprawny wiersz ulamkowy obejmuje dokladnie jeden
+    // numer (CHECK w schemacie), wiec taki przypadek nie moze byc
+    // wspolwlasnoscia.
     const wgOsoby = new Map();
     for (const p of przedzialy.filter((p) => p.kategoria === K.AKCJONARIUSZ)) {
       if (!wgOsoby.has(p.osoba_id)) wgOsoby.set(p.osoba_id, []);
       wgOsoby.get(p.osoba_id).push({ nr_od: p.nr_od, nr_do: p.nr_do });
     }
     const osoby = [...wgOsoby.entries()];
+    const numeryDoSprawdzeniaUlamkow = new Set();
     for (let i = 0; i < osoby.length; i += 1) {
       for (let j = i + 1; j < osoby.length; j += 1) {
         const wspolne = n.przeciecie(osoby[i][1], osoby[j][1]);
-        if (wspolne.length > 0) {
-          bledy.push(
-            `Seria ${emisja.seria}: akcje ${n.opisz(wspolne)} są przypisane jednocześnie dwóm akcjonariuszom ` +
-              `(osoby #${osoby[i][0]} i #${osoby[j][0]}).`
-          );
+        for (const w of wspolne) {
+          if (w.nr_od !== w.nr_do) {
+            bledy.push(
+              `Seria ${emisja.seria}: akcje ${n.opisz([w])} są przypisane jednocześnie dwóm akcjonariuszom ` +
+                `(osoby #${osoby[i][0]} i #${osoby[j][0]}) poza ramami dopuszczalnej współwłasności ` +
+                `(obejmuje więcej niż jeden numer akcji).`
+            );
+          } else {
+            numeryDoSprawdzeniaUlamkow.add(w.nr_od);
+          }
         }
+      }
+    }
+    for (const nr of numeryDoSprawdzeniaUlamkow) {
+      const wlasciciele = przedzialy.filter(
+        (p) => p.kategoria === K.AKCJONARIUSZ && p.nr_od <= nr && nr <= p.nr_do
+      );
+      let sumaUlamkow = u.ZERO;
+      for (const w of wlasciciele) {
+        sumaUlamkow = u.suma(sumaUlamkow, { licznik: w.czesc_licznik ?? 1, mianownik: w.czesc_mianownik ?? 1 });
+      }
+      if (!u.rowne(sumaUlamkow, u.JEDEN)) {
+        bledy.push(
+          `Seria ${emisja.seria}: suma ułamków współuprawnionych do akcji nr ${nr} wynosi ${u.opisz(sumaUlamkow)}, ` +
+            `a powinna wynosić dokładnie 1 (art. 300(31) § 2 KSH).`
+        );
       }
     }
 
@@ -673,11 +871,24 @@ function akcjonariatNaDzien(stan, data) {
         emisja_klucz: p.emisja_klucz,
         seria: emisjeWgKlucza.get(p.emisja_klucz)?.seria || null,
         zakresy: [],
+        // Wiersze ulamkowe (czesc != 1/1) - surowe dane per numer, zeby
+        // warstwa prezentacji (sprint 6) mogla policzyc dokladny udzial bez
+        // odgadywania z samych zakresow. Domenowo wystarczy, ze sa QUERYOWALNE
+        // (regula domenowa 4a: "procent zaokraglany WYLACZNIE przy wyswietlaniu").
+        czesci_ulamkowe: [],
         data_najstarszego_nabycia: p.data_od,
       });
     }
     const g = grupy.get(klucz);
     g.zakresy.push({ nr_od: p.nr_od, nr_do: p.nr_do });
+    if ((p.czesc_licznik ?? 1) !== (p.czesc_mianownik ?? 1)) {
+      g.czesci_ulamkowe.push({
+        nr: p.nr_od,
+        czesc_licznik: p.czesc_licznik,
+        czesc_mianownik: p.czesc_mianownik,
+        przedstawiciel_osoba_id: p.przedstawiciel_osoba_id ?? null,
+      });
+    }
     if (p.data_od < g.data_najstarszego_nabycia) g.data_najstarszego_nabycia = p.data_od;
   }
 
@@ -696,7 +907,12 @@ function akcjonariatNaDzien(stan, data) {
     return {
       ...g,
       zakresy,
+      // UWAGA: `ilosc` liczy numery akcji DOTKNIETE (choc czesciowo) - dla
+      // wiersza ulamkowego to nadal "1 numer", nie ulamek. Dokladny udzial
+      // wymierny jest w `czesci_ulamkowe`. Precyzyjne przeliczenie procentu
+      // na podstawie ulamkow to zadanie warstwy prezentacji (sprint 6).
       ilosc: n.ilosc(zakresy),
+      wspolwlasnosc: g.czesci_ulamkowe.length > 0,
       obciazenia: moje,
     };
   });
@@ -762,6 +978,7 @@ module.exports = {
   bilansNaDzien,
   ostatniaDataNaAkcjach,
   pula,
+  ulamekOsobyNaNumerze,
   otwarte,
   znajdzEmisje,
   porownajZdarzenia,

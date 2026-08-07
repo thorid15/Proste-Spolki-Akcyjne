@@ -61,13 +61,21 @@ function dodajOsobe(db, nadpisania = {}) {
   return Number(wynik.lastInsertRowid);
 }
 
-/** Skrot: dokonuje wpisu i zwraca zapisane zdarzenie. */
+/**
+ * Skrot: dokonuje wpisu i zwraca zapisane zdarzenie.
+ *
+ * Emisje domyslnie dostaja `data_wpisu_krs` rowna dacie zdarzenia - wiekszosc
+ * testow sprawdza logike NIEZWIAZANA z regula domenowa 12 (blokada wpisu akcji
+ * przed wpisem emisji do KRS, sprint 5) i zaklada, ze akcje juz istnieja.
+ * Testy TEJ konkretnej blokady nadpisuja `data_wpisu_krs: null` wprost.
+ */
 function wpis(db, spolkaId, typ, data, wejscie, opcje = {}) {
+  const wejscieFinalne = typ === 'emisja' ? { data_wpisu_krs: data, ...wejscie } : wejscie;
   return rejestr.dokonajWpisu(db, {
     spolkaId,
     typ,
     data_zdarzenia: data,
-    wejscie,
+    wejscie: wejscieFinalne,
     autor: opcje.autor || 'Test',
     dzisiaj: opcje.dzisiaj || '2026-12-31',
   });

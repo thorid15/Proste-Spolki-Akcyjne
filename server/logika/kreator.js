@@ -19,6 +19,7 @@
  */
 
 const n = require('./numery');
+const u = require('./ulamki');
 const stanLogika = require('./stan');
 const przepisy = require('./przepisy');
 
@@ -110,6 +111,10 @@ const PRZYGOTOWANIA = {
       we.cena_emisyjna_grosze == null || we.cena_emisyjna_grosze === ''
         ? null
         : liczbaCalkowita(we.cena_emisyjna_grosze, 'cena emisyjna (grosze)', { min: 0 });
+    const rodzajAkcji = tekst(we.rodzaj_akcji, 'rodzaj akcji', { wymagane: false, maks: 20 }) || 'zwykla';
+    if (!przepisy.RODZAJE_AKCJI.includes(rodzajAkcji)) {
+      throw new BladKreatora(`Rodzaj akcji musi być jednym z: ${przepisy.RODZAJE_AKCJI.join(', ')}.`);
+    }
     return {
       seria,
       tytul: tekst(we.tytul, 'tytuł emisji', { wymagane: false, maks: 200 }),
@@ -120,6 +125,15 @@ const PRZYGOTOWANIA = {
       waluta: tekst(we.waluta, 'waluta', { wymagane: false, maks: 3 }) || przepisy.WALUTA_DOMYSLNA,
       opis: tekst(we.opis, 'opis', { wymagane: false, maks: 2000 }),
       uwagi: tekst(we.uwagi, 'uwagi', { wymagane: false, maks: 2000 }),
+      // art. 300(30) § 2 KSH - NULL dopoki emisja nie ma wpisu do KRS; blokuje
+      // `objecie` (regula domenowa 12). Data wpisywana poczatkowo albo
+      // pozniej, sprostowaniem tego zdarzenia emisji.
+      data_wpisu_krs: tekst(we.data_wpisu_krs, 'data wpisu do KRS', { wymagane: false, maks: 10 }),
+      rodzaj_akcji: rodzajAkcji,
+      obowiazki_wobec_spolki: tekst(we.obowiazki_wobec_spolki, 'obowiązki wobec spółki', {
+        wymagane: false,
+        maks: 2000,
+      }),
     };
   },
 
@@ -137,11 +151,19 @@ const PRZYGOTOWANIA = {
         `pula akcji nieobjętych serii ${emisja.seria}`,
         zablokowane
       );
+      let pokryta = null;
+      if (p.pokryta != null && p.pokryta !== '') {
+        pokryta = tekst(p.pokryta, 'wzmianka o pokryciu', { maks: 20 });
+        if (!przepisy.STANY_POKRYCIA.includes(pokryta)) {
+          throw new BladKreatora(`Wzmianka o pokryciu musi być jedną z wartości: ${przepisy.STANY_POKRYCIA.join(', ')}.`);
+        }
+      }
       return {
         osoba_id: osobaId,
         osoba_nazwa: nazwaOsoby(kontekst.osoby.get(osobaId)),
         ilosc: n.ilosc(zakresy),
         zakresy,
+        pokryta,
       };
     });
 
@@ -185,6 +207,10 @@ const PRZYGOTOWANIA = {
       podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
       zgoda_spolki: we.zgoda_spolki ? 1 : 0,
       pierwszenstwo_wyczerpane: we.pierwszenstwo_wyczerpane ? 1 : 0,
+      // art. 300(40) § 1 KSH - zgoda spolki na zbycie akcji nie w pelni
+      // pokrytej. Odrebna od `zgoda_spolki` powyzej (ta dotyczy ograniczen
+      // z art. 300(39)/300(42) - inna podstawa prawna, inny fakt).
+      zgoda_spolki_niepelne_pokrycie: we.zgoda_spolki_niepelne_pokrycie ? 1 : 0,
       pozycje,
     };
   },
@@ -224,6 +250,80 @@ const PRZYGOTOWANIA = {
       tryb: tekst(we.tryb, 'tryb umorzenia', { wymagane: false, maks: 60 }) || 'dobrowolne',
       podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
       pozycje,
+    };
+  },
+
+  /**
+   * Przeniesienie ulamkowej czesci OZNACZONEJ akcji (art. 300(43) KSH).
+   * Wyjatek od reguly domenowej 4 ("uzytkownik podaje wylacznie ilosc") -
+   * przy ulamku uzytkownik wskazuje KONKRETNY numer akcji i ulamek, bo
+   * ulamek jest z definicji przypisany do jednego, oznaczonego numeru.
+   */
+  przeniesienie_ulamka(stan, we, kontekst) {
+    const emisja = wymagajEmisji(stan, we);
+    const zbywcaId = liczbaCalkowita(we.zbywca_osoba_id, 'zbywca');
+    const nabywcaId = liczbaCalkowita(we.nabywca_osoba_id, 'nabywca');
+    const nr = liczbaCalkowita(we.nr, 'numer akcji');
+    const zakresEmisji = n.zakresEmisji(emisja);
+    if (!n.zawiera(zakresEmisji, [{ nr_od: nr, nr_do: nr }])) {
+      throw new BladKreatora(`Numer ${nr} wykracza poza zakres emisji ${emisja.seria} (${n.opisz(zakresEmisji)}).`);
+    }
+    const czesc = u.waliduj({
+      licznik: liczbaCalkowita(we.czesc_licznik, 'licznik ułamka', { min: 1 }),
+      mianownik: liczbaCalkowita(we.czesc_mianownik, 'mianownik ułamka', { min: 1 }),
+    });
+    return {
+      emisja_zdarzenie_id: emisja.klucz,
+      seria: emisja.seria,
+      nr,
+      zbywca_osoba_id: zbywcaId,
+      zbywca_nazwa: nazwaOsoby(kontekst.osoby.get(zbywcaId)),
+      nabywca_osoba_id: nabywcaId,
+      nabywca_nazwa: nazwaOsoby(kontekst.osoby.get(nabywcaId)),
+      czesc_licznik: czesc.licznik,
+      czesc_mianownik: czesc.mianownik,
+      tytul_prawny: tekst(we.tytul_prawny, 'tytuł prawny', { wymagane: false, maks: 100 }) || 'sprzedaż',
+      podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+      zgoda_spolki_niepelne_pokrycie: we.zgoda_spolki_niepelne_pokrycie ? 1 : 0,
+    };
+  },
+
+  /** Wskazanie/zmiana wspolnego przedstawiciela wspoluprawnionych (art. 300(38) § 3 KSH). */
+  przedstawiciel(stan, we, kontekst) {
+    const emisja = wymagajEmisji(stan, we);
+    const nr = liczbaCalkowita(we.nr, 'numer akcji');
+    const przedstawicielId =
+      we.przedstawiciel_osoba_id == null || we.przedstawiciel_osoba_id === ''
+        ? null
+        : liczbaCalkowita(we.przedstawiciel_osoba_id, 'przedstawiciel');
+    return {
+      emisja_zdarzenie_id: emisja.klucz,
+      seria: emisja.seria,
+      nr,
+      przedstawiciel_osoba_id: przedstawicielId,
+      przedstawiciel_nazwa: przedstawicielId == null ? null : nazwaOsoby(kontekst.osoby.get(przedstawicielId)),
+      podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+    };
+  },
+
+  /**
+   * Wzmianka o pokryciu (art. 300(33) § 1 pkt 9 KSH) - podstawa: uchwala
+   * zarzadu o wniesieniu wkladu (art. 300(9) § 2 KSH).
+   */
+  pokrycie_akcji(stan, we, kontekst) {
+    const emisja = wymagajEmisji(stan, we);
+    const osobaId = liczbaCalkowita(we.osoba_id, 'akcjonariusz');
+    const pokryta = tekst(we.pokryta, 'wzmianka o pokryciu', { maks: 20 });
+    if (!przepisy.STANY_POKRYCIA.includes(pokryta)) {
+      throw new BladKreatora(`Wzmianka o pokryciu musi być jedną z wartości: ${przepisy.STANY_POKRYCIA.join(', ')}.`);
+    }
+    return {
+      emisja_zdarzenie_id: emisja.klucz,
+      seria: emisja.seria,
+      osoba_id: osobaId,
+      osoba_nazwa: nazwaOsoby(kontekst.osoby.get(osobaId)),
+      pokryta,
+      podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
     };
   },
 
@@ -551,9 +651,13 @@ function przygotuj(stan, { typ, data_zdarzenia, dane }, kontekst = {}) {
 function osobyWWejsciu(dane = {}) {
   const idki = new Set();
   if (dane.zbywca_osoba_id != null) idki.add(Number(dane.zbywca_osoba_id));
+  if (dane.nabywca_osoba_id != null) idki.add(Number(dane.nabywca_osoba_id));
   if (dane.osoba_id != null && dane.osoba_id !== '') idki.add(Number(dane.osoba_id));
   if (dane.akcjonariusz_osoba_id != null && dane.akcjonariusz_osoba_id !== '') {
     idki.add(Number(dane.akcjonariusz_osoba_id));
+  }
+  if (dane.przedstawiciel_osoba_id != null && dane.przedstawiciel_osoba_id !== '') {
+    idki.add(Number(dane.przedstawiciel_osoba_id));
   }
   for (const p of dane.pozycje || []) {
     if (p && p.osoba_id != null && p.osoba_id !== '') idki.add(Number(p.osoba_id));
