@@ -112,7 +112,11 @@ router.get(
         id: s.id,
         spolka_id: s.spolka_id,
         spolka_nazwa: s.spolka_nazwa,
+        // Typ surowy obok nazwy — pulpit dobiera po nim ikonę wiersza
+        // (sesja 6, faza 1). Data wpływu jako druga informacja w wierszu.
+        typ_zdarzenia: s.typ_zdarzenia,
         typ_nazwa: typyZdarzen.istnieje(s.typ_zdarzenia) ? typyZdarzen.typ(s.typ_zdarzenia).nazwa : s.typ_zdarzenia,
+        data_wplywu: s.data_wplywu,
         stan: s.stan,
         termin: terminy.policzTermin(s, dzis),
       }))

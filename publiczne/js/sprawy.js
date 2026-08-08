@@ -21,77 +21,94 @@ function ZnacznikTerminu({ termin }) {
   return <Znacznik odmiana="neutralny">pozostało {termin.dni_pozostale} dz.</Znacznik>;
 }
 
-/* Starzenie sprawy w kolejce sygnalizujemy paskiem przy LEWEJ krawędzi
-   wiersza (kolumna 4px), nie tłem całego wiersza — tło zostaje wolne dla
-   hover/zaznaczenia. `--burgundy-2` (mocniejszy wariant) rozróżnia „po
-   terminie” od zwykłego „pilne”, zgodnie z komentarzem przy tym tokenie
-   w design.css (dodany w fazie 1.1 właśnie z myślą o tym miejscu). */
-function kolorPaskaTerminu(termin) {
-  if (termin.po_terminie) return 'var(--burgundy-2)';
-  if (termin.pilny) return 'var(--burgundy)';
-  if (termin.zamrozony) return 'var(--olive)';
-  return 'transparent';
-}
+/* Starzenie sprawy niesie teraz pigułka terminu w wierszu (`TerminPigulka`
+   z pulpit.js) — mosiądz dla pilnych, czerwień wyłącznie po terminie.
+   Pasek przy krawędzi wiersza zniknął razem z tabelą kolejki. */
 
 /* ─────────────────────────────────────────────────────
    KOLEJKA
    ───────────────────────────────────────────────────── */
 function EkranKolejkiSpraw() {
   const [pokazZakonczone, ustawPokazZakonczone] = useState(false);
+  const [szukaj, ustawSzukaj] = useState('');
   const zapytanie = pokazZakonczone ? 'stan=wpisana,odmowa,anulowana' : '';
   const { dane, ladowanie } = useDane(`/api/psa/sprawy?${zapytanie}`, [pokazZakonczone]);
 
+  const wszystkie = (dane && dane.sprawy) || [];
+  const fraza = szukaj.trim().toLowerCase();
+  const sprawy = fraza
+    ? wszystkie.filter(
+        (s) =>
+          (s.spolka_nazwa || '').toLowerCase().includes(fraza) ||
+          (s.typ_nazwa || '').toLowerCase().includes(fraza)
+      )
+    : wszystkie;
+
   return (
     <>
-      <div className="pasek-gorny">
-        <div>
-          <div className="tytul-strony">Kolejka spraw</div>
-          <div className="podtytul-strony">
-            Sprawy posortowane po pozostałym czasie — termin 7 dni z art. 300(34) § 1 KSH.
-          </div>
-        </div>
-        <button className="btn btn-sm" onClick={() => ustawPokazZakonczone((p) => !p)}>
-          {pokazZakonczone ? 'Pokaż sprawy w toku' : 'Pokaż zakończone'}
-        </button>
+      <div className="pasek-narzedzi">
+        <Szukajka wartosc={szukaj} przyZmianie={ustawSzukaj} placeholder="Szukaj po spółce albo rodzaju zdarzenia…" />
+        <select
+          value={pokazZakonczone ? 'zakonczone' : 'wtoku'}
+          onChange={(z) => ustawPokazZakonczone(z.target.value === 'zakonczone')}
+        >
+          <option value="wtoku">Sprawy w toku</option>
+          <option value="zakonczone">Sprawy zakończone</option>
+        </select>
+        <span className="podstawa-prawna" style={{ marginLeft: 'auto' }}>
+          {fmt.liczba(sprawy.length)} {fmt.odmien(sprawy.length, 'sprawa', 'sprawy', 'spraw')}
+        </span>
       </div>
 
       {ladowanie ? (
         <Spinner />
-      ) : !dane.sprawy.length ? (
+      ) : sprawy.length === 0 ? (
         <Karta>
           <Pusto
-            tytul={pokazZakonczone ? 'Brak zakończonych spraw' : 'Kolejka jest pusta'}
-            opis={!pokazZakonczone && 'Nowe sprawy zakładasz z kokpitu spółki, przyciskiem „Nowe zdarzenie”.'}
+            ikona={pokazZakonczone ? 'archiwum' : 'sprawdz'}
+            tytul={
+              fraza
+                ? 'Nic nie pasuje do wyszukiwania'
+                : pokazZakonczone
+                ? 'Brak zakończonych spraw'
+                : 'Kolejka jest pusta'
+            }
+            opis={
+              fraza
+                ? 'Zmień frazę albo przełącz się na inny zbiór spraw.'
+                : pokazZakonczone
+                ? 'Sprawy zakończone pojawią się tu po pierwszym wpisie albo odmowie.'
+                : 'Żadna sprawa nie czeka na wpis. Nowe zakładasz z kokpitu spółki.'
+            }
+            akcja={
+              !fraza && !pokazZakonczone ? (
+                <button className="btn" onClick={() => idz('/spolki')}>Przejdź do spółek</button>
+              ) : null
+            }
           />
         </Karta>
       ) : (
-        <Karta tight>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th className="wiersz-kolejki-pasek-glowka" />
-                <th>Spółka</th><th>Zdarzenie</th><th>Źródło</th><th>Stan</th>
-                <th>Wpłynęła</th><th className="prawo">Termin</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dane.sprawy.map((s) => (
-                <tr key={s.id} className="klikalny" onClick={() => idz(`/sprawy/${s.id}`)}>
-                  <td
-                    className="wiersz-kolejki-pasek"
-                    style={{ background: kolorPaskaTerminu(s.termin) }}
-                    aria-hidden="true"
-                  />
-                  <td style={{ fontWeight: 500 }}>{s.spolka_nazwa}</td>
-                  <td>{s.typ_nazwa}</td>
-                  <td className="przyciemnione">{s.zrodlo === 'z_urzedu' ? 'z urzędu' : s.zrodlo}</td>
-                  <td><Znacznik odmiana={ODMIANY_STANU_SPRAWY[s.stan]}>{NAZWY_STANU_SPRAWY[s.stan]}</Znacznik></td>
-                  <td className="przyciemnione">{fmt.data(s.data_wplywu)}</td>
-                  <td className="prawo"><ZnacznikTerminu termin={s.termin} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <Karta scisla>
+          <div className="lista-wierszy">
+            {sprawy.map((s) => (
+              <WierszListy
+                key={s.id}
+                ikona={IKONY_ZDARZEN[s.typ_zdarzenia] || 'sprawy'}
+                tytul={s.typ_nazwa}
+                podtytul={`${s.spolka_nazwa} · ${s.zrodlo === 'z_urzedu' ? 'z urzędu' : s.zrodlo}`}
+                przyKlik={() => idz(`/sprawy/${s.id}`)}
+                prawo={
+                  <>
+                    <Pigulka odmiana={s.stan === 'wpisana' ? 'rejestr' : s.stan === 'odmowa' ? 'sygnal' : undefined}>
+                      {NAZWY_STANU_SPRAWY[s.stan] || s.stan}
+                    </Pigulka>
+                    {!['wpisana', 'odmowa', 'anulowana'].includes(s.stan) && <TerminPigulka termin={s.termin} />}
+                  </>
+                }
+                data={fmt.data(s.data_wplywu)}
+              />
+            ))}
+          </div>
         </Karta>
       )}
     </>

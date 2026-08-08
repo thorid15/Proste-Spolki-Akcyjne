@@ -45,6 +45,66 @@ window.fmt.dataSlownie = dataSlownie;
 window.fmt.zakresNumerow = zakresNumerow;
 window.fmt.dodajDniIso = dodajDniIso;
 
+
+/* ═════════════════════════════════════════════════════
+   IKONY
+   Rysowane ręcznie jako ścieżki SVG — sesja zabrania dokładania
+   bibliotek ikon. Jeden zestaw, jedna siatka 24×24, jedna grubość
+   kreski; kolor zawsze dziedziczony (`currentColor`), więc ikona
+   przejmuje barwę kontekstu i nie trzeba jej nigdzie kolorować.
+   ═════════════════════════════════════════════════════ */
+
+const SCIEZKI_IKON = {
+  pulpit: 'M3 10.5 12 3l9 7.5M5.5 9.5V20h13V9.5',
+  sprawy: 'M4 4h11l5 5v11H4zM15 4v5h5M8 13h8M8 17h5',
+  spolki: 'M4 20V6l7-3v17M11 20h9V10l-9-3M7 9v.01M7 13v.01M7 17v.01M15 12v.01M15 16v.01',
+  osoby: 'M8 11a3.2 3.2 0 1 0 0-6.4A3.2 3.2 0 0 0 8 11ZM2.5 20v-1.4A4.6 4.6 0 0 1 7.1 14h1.8a4.6 4.6 0 0 1 4.6 4.6V20M16 4.8a3.2 3.2 0 0 1 0 6.2M17.5 14.2A4.6 4.6 0 0 1 21.5 18.7V20',
+  akcje: 'M3.5 8.5 12 4.5l8.5 4-8.5 4zM3.5 12.5 12 16.5l8.5-4M3.5 16.5 12 20.5l8.5-4',
+  oplaty: 'M5 4h14v16l-2.3-1.6L14.4 20l-2.4-1.6L9.6 20l-2.3-1.6L5 20zM9 9h6M9 13h6',
+  stawki: 'M4 7h9M17 7h3M4 12h3M11 12h9M4 17h7M15 17h5M15 5v4M9 10v4M13 15v4',
+  szablony: 'M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h4',
+  uzytkownicy: 'M9 11.5a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8ZM3 20v-1.5A4.5 4.5 0 0 1 7.5 14h3a4.5 4.5 0 0 1 4.5 4.5V20M18 8.5v5M20.5 11h-5',
+  podglad: 'M4 5h7v6H4zM13 5h7v4h-7zM13 11h7v8h-7zM4 13h7v6H4z',
+  szukaj: 'M11 18.5a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15ZM20.5 20.5l-4.2-4.2',
+  dzwonek: 'M18 8.8a6 6 0 1 0-12 0c0 5-2 6.4-2 6.4h16s-2-1.4-2-6.4M13.7 19a2 2 0 0 1-3.4 0',
+  plus: 'M12 5v14M5 12h14',
+  strzalkaPrawo: 'm9 5 7 7-7 7',
+  strzalkaLewo: 'm15 5-7 7 7 7',
+  strzalkaDol: 'm6 9 6 6 6-6',
+  kalendarz: 'M5 6h14v14H5zM5 10h14M9 3v4M15 3v4',
+  wyloguj: 'M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 8l-4 4 4 4M6 12h10',
+  dokument: 'M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h4',
+  zdarzenie: 'M3 12h4l2.5-7 5 14L17 12h4',
+  zegar: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3.2 1.9',
+  wykres: 'M3 20h18M6 16l4-4.5 3.5 3L20 7',
+  sprawdz: 'm5 12.5 4.5 4.5L19 7',
+  ostrzezenie: 'M12 4 2.8 20h18.4zM12 10v4M12 17.5v.01',
+  archiwum: 'M3 6h18v4H3zM5 10v10h14V10M10 14h4',
+  pobierz: 'M12 4v11m0 0 4-4m-4 4-4-4M4 19h16',
+  wiecej: 'M6 12v.01M12 12v.01M18 12v.01',
+  znak: 'M12 2.5 20.5 7v10L12 21.5 3.5 17V7zM12 8.5 16 11v5l-4 2.2L8 16v-5z',
+  pusto: 'M4 7h16v13H4zM4 7l2-3h12l2 3M12 11v5M9.5 13.5h5',
+};
+
+/**
+ * Ikona. `nazwa` z `SCIEZKI_IKON`, `rozmiar` w pikselach (domyślnie 18).
+ * `aria-hidden`, bo ikony w tej aplikacji zawsze towarzyszą tekstowi —
+ * nigdy nie są jedynym nośnikiem znaczenia.
+ */
+function Ikona({ nazwa, rozmiar = 18, grubosc = 1.75 }) {
+  const d = SCIEZKI_IKON[nazwa];
+  if (!d) return null;
+  return (
+    <svg
+      width={rozmiar} height={rozmiar} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={grubosc} strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false"
+    >
+      <path d={d} />
+    </svg>
+  );
+}
+
 /* ═════════════════════════════════════════════════════
    PRYMITYWY
    ═════════════════════════════════════════════════════ */
@@ -102,9 +162,10 @@ function Komunikat({ odmiana = 'info', tytul, tresc, lista }) {
 }
 
 /** Pusty stan (2.7): zdanie mówiące CO ZROBIĆ plus przycisk. Nigdy „Brak danych". */
-function Pusto({ tytul, opis, akcja }) {
+function Pusto({ tytul, opis, akcja, ikona = 'pusto' }) {
   return (
     <div className="pusto">
+      {ikona && <div className="pusto-ikona"><Ikona nazwa={ikona} rozmiar={22} /></div>}
       <div className="pusto-tytul">{tytul}</div>
       {opis && <div className="pusto-opis">{opis}</div>}
       {akcja}
@@ -134,7 +195,7 @@ function Sekcja({ tytul, licznik, domyslnieOtwarta = false, akcje, children }) {
     <div className="sekcja">
       <button className="sekcja-naglowek" onClick={() => ustawOtwarta((o) => !o)}>
         <span className="sekcja-tytul">
-          <span className={`strzalka ${otwarta ? 'otwarta' : ''}`}>▶</span>
+          <span className={`strzalka ${otwarta ? 'otwarta' : ''}`}><Ikona nazwa="strzalkaPrawo" rozmiar={14} /></span>
           {tytul}
           {licznik !== undefined && licznik !== null && <Pigulka>{licznik}</Pigulka>}
         </span>
@@ -166,6 +227,185 @@ function NaglowekStrony({ tytul, kontekst, akcje }) {
         {kontekst && <div className="naglowek-strony-kontekst">{kontekst}</div>}
       </div>
       {akcje && <div className="naglowek-strony-akcje bez-druku">{akcje}</div>}
+    </div>
+  );
+}
+
+
+/* ═════════════════════════════════════════════════════
+   KOMPONENTY UKŁADU
+   ═════════════════════════════════════════════════════ */
+
+/**
+ * Kafel statystyki: etykieta, liczba, zmiana pod spodem, ikona w kwadracie.
+ * Kafelek ikony ma jeden wspólny odcień dla wszystkich kafli — kolor w tej
+ * aplikacji niesie znaczenie, a tutaj nie miałby żadnego (patrz nagłówek
+ * rejestr.css). Kafle rozróżnia ikona i liczba, nie barwa.
+ */
+function Kafel({ etykieta, wartosc, delta, deltaOdmiana, ikona, przyKlik }) {
+  const tresc = (
+    <>
+      <div style={{ minWidth: 0 }}>
+        <div className="kafel-etykieta">{etykieta}</div>
+        <div className="kafel-wartosc">{wartosc}</div>
+        {delta && <div className={`kafel-delta ${deltaOdmiana || ''}`}>{delta}</div>}
+      </div>
+      {ikona && <div className="kafel-ikona"><Ikona nazwa={ikona} rozmiar={20} /></div>}
+    </>
+  );
+  if (przyKlik) {
+    return (
+      <button className="kafel" onClick={przyKlik} style={{ cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
+        {tresc}
+      </button>
+    );
+  }
+  return <div className="kafel">{tresc}</div>;
+}
+
+/** Wiersz listy z kafelkiem ikony — aktywne sprawy, dokumenty, powiadomienia. */
+function WierszListy({ ikona, tytul, podtytul, prawo, data, przyKlik }) {
+  return (
+    <button className="wiersz" onClick={przyKlik} disabled={!przyKlik}>
+      {ikona && <span className="wiersz-ikona"><Ikona nazwa={ikona} rozmiar={17} /></span>}
+      <span className="wiersz-tresc">
+        <span className="wiersz-tytul" style={{ display: 'block' }}>{tytul}</span>
+        {podtytul && <span className="wiersz-podtytul" style={{ display: 'block' }}>{podtytul}</span>}
+      </span>
+      <span className="wiersz-prawo">
+        {prawo}
+        {data && <span className="wiersz-data">{data}</span>}
+      </span>
+    </button>
+  );
+}
+
+/** Zakładki wewnątrz ekranu szczegółu. */
+function Zakladki({ zakladki, biezaca, przyZmianie }) {
+  return (
+    <div className="zakladki" role="tablist">
+      {zakladki.map((z) => (
+        <button
+          key={z.kod}
+          role="tab"
+          aria-selected={z.kod === biezaca}
+          className={`zakladka ${z.kod === biezaca ? 'aktywna' : ''}`}
+          onClick={() => przyZmianie(z.kod)}
+        >
+          {z.nazwa}
+          {z.licznik !== undefined && z.licznik !== null && <Pigulka>{z.licznik}</Pigulka>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Pasek metryki: pary etykieta/wartość w jednym rzędzie, pod tytułem ekranu. */
+function Metryka({ pozycje }) {
+  return (
+    <div className="metryka">
+      {pozycje.filter(Boolean).map((p, i) => (
+        <div className="metryka-poz" key={i}>
+          <div className="metryka-etykieta">{p.etykieta}</div>
+          <div className={`metryka-wartosc ${p.dane ? 'dane' : ''}`}>{p.wartosc || '—'}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Pole szukania z ikoną w środku — używane w paskach narzędzi list. */
+function Szukajka({ wartosc, przyZmianie, placeholder = 'Szukaj…' }) {
+  return (
+    <div className="szukajka">
+      <Ikona nazwa="szukaj" rozmiar={16} />
+      <input type="search" value={wartosc} placeholder={placeholder} onChange={(z) => przyZmianie(z.target.value)} />
+    </div>
+  );
+}
+
+/** Lista szybkich akcji w prawej szynie. */
+function SzybkieAkcje({ akcje }) {
+  return (
+    <div className="szybkie">
+      {akcje.map((a) => (
+        <button key={a.nazwa} className="szybkie-poz" onClick={a.przyKlik}>
+          <Ikona nazwa={a.ikona || 'plus'} rozmiar={16} />
+          <span>{a.nazwa}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Stronicowanie tabeli: zakres po lewej, numery po prawej. */
+function Stronicowanie({ strona, stron, odPozycji, doPozycji, razem, przyZmianie }) {
+  if (stron <= 1) {
+    return (
+      <div className="stronicowanie">
+        <span>{razem === 0 ? 'Brak pozycji' : `${odPozycji}–${doPozycji} z ${razem}`}</span>
+      </div>
+    );
+  }
+  // Przy wielu stronach pokazujemy okno wokół bieżącej, z wielokropkiem.
+  const numery = [];
+  const dodaj = (n) => { if (!numery.includes(n)) numery.push(n); };
+  dodaj(1);
+  for (let n = strona - 1; n <= strona + 1; n += 1) if (n > 1 && n < stron) dodaj(n);
+  dodaj(stron);
+  numery.sort((a, b) => a - b);
+
+  return (
+    <div className="stronicowanie">
+      <span>{odPozycji}–{doPozycji} z {razem}</span>
+      <div className="strony">
+        <button className="strona" disabled={strona === 1} onClick={() => przyZmianie(strona - 1)} aria-label="Poprzednia strona">
+          <Ikona nazwa="strzalkaLewo" rozmiar={14} />
+        </button>
+        {numery.map((n, i) => (
+          <React.Fragment key={n}>
+            {i > 0 && numery[i - 1] !== n - 1 && <span className="wyciszony">…</span>}
+            <button className={`strona ${n === strona ? 'aktywna' : ''}`} onClick={() => przyZmianie(n)}>{n}</button>
+          </React.Fragment>
+        ))}
+        <button className="strona" disabled={strona === stron} onClick={() => przyZmianie(strona + 1)} aria-label="Następna strona">
+          <Ikona nazwa="strzalkaPrawo" rozmiar={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Wykres iskrowy — czysty SVG, bez bibliotek wykresów.
+ * `punkty` to tablica liczb; skala dobiera się do zakresu danych.
+ */
+function Iskra({ punkty, podpisy }) {
+  if (!punkty || punkty.length < 2) return null;
+  const SZ = 600;
+  const WY = 64;
+  const margines = 4;
+  const maks = Math.max(...punkty);
+  const min = Math.min(...punkty);
+  const rozpietosc = maks - min || 1;
+  const x = (i) => (i / (punkty.length - 1)) * SZ;
+  const y = (v) => WY - margines - ((v - min) / rozpietosc) * (WY - margines * 2);
+
+  const linia = punkty.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const wypelnienie = `${linia} L${SZ},${WY} L0,${WY} Z`;
+
+  return (
+    <div>
+      <svg className="iskra" viewBox={`0 0 ${SZ} ${WY}`} preserveAspectRatio="none" aria-hidden="true">
+        <path className="iskra-wypelnienie" d={wypelnienie} />
+        <path className="iskra-linia" d={linia} vectorEffect="non-scaling-stroke" />
+        <circle className="iskra-punkt" cx={x(punkty.length - 1)} cy={y(punkty[punkty.length - 1])} r="3" />
+      </svg>
+      {podpisy && (
+        <div className="rzad-rozdzielony" style={{ marginTop: 'var(--od-4)' }}>
+          {podpisy.map((p, i) => <span key={i} className="podstawa-prawna">{p}</span>)}
+        </div>
+      )}
     </div>
   );
 }
@@ -625,16 +865,16 @@ function PaletaPolecen({ przyZamknieciu }) {
   const pozycje = useMemo(() => {
     const lista = [];
     for (const s of wyniki.spolki) {
-      lista.push({ grupa: 'Spółki', etykieta: s.nazwa, meta: s.krs ? `KRS ${s.krs}` : '', idz: `/spolki/${s.id}` });
+      lista.push({ grupa: 'Spółki', ikona: 'spolki', etykieta: s.nazwa, meta: s.krs ? `KRS ${s.krs}` : '', idz: `/spolki/${s.id}` });
     }
     for (const o of wyniki.osoby) {
-      lista.push({ grupa: 'Osoby', etykieta: o.oznaczenie, meta: o.jawny_identyfikator || '', idz: '/osoby' });
+      lista.push({ grupa: 'Osoby', ikona: 'osoby', etykieta: o.oznaczenie, meta: o.jawny_identyfikator || '', idz: '/osoby' });
     }
     if (pytanie.trim().length < 2) {
-      lista.push({ grupa: 'Polecenia', etykieta: 'Kolejka spraw', meta: '', idz: '/sprawy' });
-      lista.push({ grupa: 'Polecenia', etykieta: 'Spółki', meta: '', idz: '/spolki' });
-      lista.push({ grupa: 'Polecenia', etykieta: 'Kartoteka osób', meta: '', idz: '/osoby' });
-      lista.push({ grupa: 'Polecenia', etykieta: 'Nowa spółka', meta: '', idz: '/spolki/nowa' });
+      lista.push({ grupa: 'Polecenia', ikona: 'sprawy', etykieta: 'Kolejka spraw', meta: '', idz: '/sprawy' });
+      lista.push({ grupa: 'Polecenia', ikona: 'spolki', etykieta: 'Spółki', meta: '', idz: '/spolki' });
+      lista.push({ grupa: 'Polecenia', ikona: 'osoby', etykieta: 'Kartoteka osób', meta: '', idz: '/osoby' });
+      lista.push({ grupa: 'Polecenia', ikona: 'plus', etykieta: 'Nowa spółka', meta: '', idz: '/spolki/nowa' });
     }
     return lista;
   }, [wyniki, pytanie]);
@@ -658,14 +898,17 @@ function PaletaPolecen({ przyZamknieciu }) {
       onMouseDown={(z) => { if (z.target === z.currentTarget) przyZamknieciu(); }}
     >
       <div className="paleta">
-        <input
-          className="paleta-pole"
-          autoFocus
-          value={pytanie}
-          placeholder="Szukaj spółki, osoby albo sprawy…"
-          onChange={(z) => ustawPytanie(z.target.value)}
-          onKeyDown={klawisz}
-        />
+        <div className="paleta-pole-rzad">
+          <Ikona nazwa="szukaj" rozmiar={20} />
+          <input
+            className="paleta-pole"
+            autoFocus
+            value={pytanie}
+            placeholder="Szukaj spółki, osoby albo sprawy…"
+            onChange={(z) => ustawPytanie(z.target.value)}
+            onKeyDown={klawisz}
+          />
+        </div>
         <div className="paleta-wyniki">
           {pozycje.length === 0 && pytanie.trim().length >= 2 && (
             <div className="paleta-poz wyciszony">Nic nie pasuje do „{pytanie.trim()}".</div>
@@ -681,7 +924,8 @@ function PaletaPolecen({ przyZamknieciu }) {
                   onMouseDown={(z) => { z.preventDefault(); uruchom(p); }}
                   onMouseEnter={() => ustawPodswietlony(i)}
                 >
-                  <span>{p.etykieta}</span>
+                  <Ikona nazwa={p.ikona || 'strzalkaPrawo'} rozmiar={16} />
+                  <span className="paleta-poz-etykieta">{p.etykieta}</span>
                   {p.meta && <span className="paleta-poz-meta">{p.meta}</span>}
                 </button>
               </React.Fragment>
@@ -714,6 +958,15 @@ function usePaletaPolecen() {
   return { otwarta, otworz: () => ustawOtwarta(true), zamknij: () => ustawOtwarta(false) };
 }
 
+window.Ikona = Ikona;
+window.Kafel = Kafel;
+window.WierszListy = WierszListy;
+window.Zakladki = Zakladki;
+window.Metryka = Metryka;
+window.Szukajka = Szukajka;
+window.SzybkieAkcje = SzybkieAkcje;
+window.Stronicowanie = Stronicowanie;
+window.Iskra = Iskra;
 window.Spinner = Spinner;
 window.Karta = Karta;
 window.Pigulka = Pigulka;

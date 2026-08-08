@@ -39,14 +39,12 @@ function EkranPodgladu() {
   const [osoba, ustawOsobe] = useState(null);
   const [modal, ustawModal] = useState(false);
   const [paleta, ustawPaleta] = useState(false);
+  const [zakladka, ustawZakladke] = useState('przeglad');
+  const [fraza, ustawFraze] = useState('');
+  const [strona, ustawStrone] = useState(2);
 
   return (
     <>
-      <NaglowekStrony
-        tytul="Podgląd systemu"
-        kontekst="Katalog komponentów modułu — paleta, typografia, pola, tabele i stany."
-      />
-
       <BlokPodgladu tytul="Paleta" opis="Jeden kolor = jedno znaczenie w całej aplikacji.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 'var(--od-16)' }}>
           <ProbkaKoloru token="atrament" opis="tekst główny, linie osi" />
@@ -260,6 +258,116 @@ function EkranPodgladu() {
             opis="Nowe sprawy zakładasz z kokpitu spółki, przyciskiem „Nowe zdarzenie”."
             akcja={<button className="btn btn-glowny">Przejdź do spółek</button>}
           />
+        </Karta>
+      </BlokPodgladu>
+
+      <BlokPodgladu tytul="Kafle statystyk" opis="Jeden odcień kafelka ikony dla wszystkich — kolor tutaj nic by nie znaczył.">
+        <div className="kafle">
+          <Kafel etykieta="Prowadzone rejestry" wartosc="24" delta="bilans akcji zgodny" deltaOdmiana="dodatnia" ikona="spolki" />
+          <Kafel etykieta="Sprawy w toku" wartosc="7" delta="2 pilne" deltaOdmiana="uwaga" ikona="sprawy" />
+          <Kafel etykieta="Akcjonariusze" wartosc="156" delta="212 osób w kartotece" ikona="osoby" />
+          <Kafel etykieta="Zdarzenia rejestrowe" wartosc="1 204" delta="łańcuch nieprzerwany" deltaOdmiana="dodatnia" ikona="zdarzenie" />
+        </div>
+      </BlokPodgladu>
+
+      <BlokPodgladu tytul="Wiersze listy" opis="Wiersz jest celem kliknięcia, nie siatką do czytania.">
+        <Karta scisla tytul="Sprawy w toku" akcje={<button className="karta-link">Cała kolejka</button>}>
+          <div className="lista-wierszy">
+            <WierszListy
+              ikona="zdarzenie" tytul="Przeniesienie akcji" podtytul="HERMES DATA & SOFTWARE SOLUTIONS P.S.A."
+              przyKlik={() => {}} data="22.05.2026"
+              prawo={<><Pigulka>w weryfikacji</Pigulka><Pigulka odmiana="mosiadz">2 dz.</Pigulka></>}
+            />
+            <WierszListy
+              ikona="akcje" tytul="Emisja akcji" podtytul="Innovate P.S.A."
+              przyKlik={() => {}} data="20.05.2026"
+              prawo={<><Pigulka>nowa</Pigulka><Pigulka odmiana="sygnal">po terminie</Pigulka></>}
+            />
+            <WierszListy
+              ikona="ostrzezenie" tytul="Zastaw na akcjach" podtytul="Future Investments P.S.A."
+              przyKlik={() => {}} data="18.05.2026"
+              prawo={<Pigulka odmiana="rejestr">wpisana</Pigulka>}
+            />
+          </div>
+        </Karta>
+      </BlokPodgladu>
+
+      <BlokPodgladu tytul="Zakładki, metryka, pasek narzędzi">
+        <Karta>
+          <Zakladki
+            zakladki={[
+              { kod: 'przeglad', nazwa: 'Przegląd' },
+              { kod: 'akcjonariusze', nazwa: 'Akcjonariusze', licznik: 12 },
+              { kod: 'akcje', nazwa: 'Akcje' },
+              { kod: 'historia', nazwa: 'Historia zmian', licznik: 4 },
+            ]}
+            biezaca={zakladka}
+            przyZmianie={ustawZakladke}
+          />
+          <Metryka
+            pozycje={[
+              { etykieta: 'Numer KRS', wartosc: '0001114217', dane: true },
+              { etykieta: 'NIP', wartosc: '5842817145', dane: true },
+              { etykieta: 'Siedziba', wartosc: 'Gdańsk' },
+              { etykieta: 'Umowa o prowadzenie rejestru', wartosc: '26.07.2024', dane: true },
+              { etykieta: 'Akcje w obrocie', wartosc: '100' },
+            ]}
+          />
+          <div className="rozdzielacz" />
+          <div className="pasek-narzedzi" style={{ marginBottom: 0 }}>
+            <Szukajka wartosc={fraza} przyZmianie={ustawFraze} placeholder="Szukaj spółki…" />
+            <select defaultValue="wszystkie">
+              <option value="wszystkie">Status: wszystkie</option>
+              <option value="aktywna">aktywna</option>
+            </select>
+          </div>
+        </Karta>
+      </BlokPodgladu>
+
+      <BlokPodgladu tytul="Stronicowanie i wykres iskrowy">
+        <Karta scisla>
+          <div style={{ padding: 'var(--od-24)' }}>
+            <div className="etykieta" style={{ marginBottom: 'var(--od-8)' }}>Zdarzenia w ostatnich tygodniach</div>
+            <Iskra punkty={[4, 6, 5, 9, 7, 12, 10, 14, 11, 16, 15, 19]} podpisy={['22 kwi', '20 maj']} />
+          </div>
+          <Stronicowanie strona={strona} stron={5} odPozycji={(strona - 1) * 12 + 1} doPozycji={strona * 12} razem={58} przyZmianie={ustawStrone} />
+        </Karta>
+      </BlokPodgladu>
+
+      <BlokPodgladu tytul="Karta wyróżniona i szybkie akcje">
+        <div className="siatka-2">
+          <Karta tytul="Szybkie akcje">
+            <SzybkieAkcje
+              akcje={[
+                { nazwa: 'Dodaj spółkę', ikona: 'spolki', przyKlik: () => {} },
+                { nazwa: 'Dodaj osobę do kartoteki', ikona: 'osoby', przyKlik: () => {} },
+                { nazwa: 'Przejdź do kolejki spraw', ikona: 'sprawy', przyKlik: () => {} },
+              ]}
+            />
+          </Karta>
+          <div className="karta-akcent">
+            <div className="karta-akcent-tytul">Rejestru nie da się cofnąć</div>
+            <div className="karta-akcent-tresc">
+              Każde zdarzenie niesie skrót poprzedniego — realizacja obowiązku
+              z art. 300³¹ § 4 KSH.
+            </div>
+            <button className="btn btn-maly">Zobacz rejestry</button>
+          </div>
+        </div>
+      </BlokPodgladu>
+
+      <BlokPodgladu tytul="Ikony" opis="Rysowane ręcznie, jedna siatka 24×24, kolor dziedziczony.">
+        <Karta>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 'var(--od-16)' }}>
+            {Object.keys(SCIEZKI_IKON).map((n) => (
+              <div key={n} style={{ textAlign: 'center' }}>
+                <div className="wiersz-ikona" style={{ margin: '0 auto var(--od-4)' }}>
+                  <Ikona nazwa={n} rozmiar={18} />
+                </div>
+                <div className="podstawa-prawna">{n}</div>
+              </div>
+            ))}
+          </div>
         </Karta>
       </BlokPodgladu>
 

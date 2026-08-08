@@ -224,6 +224,8 @@ function EkranNowejSpolki() {
 function EkranSpolek() {
   const [szukaj, ustawSzukaj] = useState('');
   const [zapytanie, ustawZapytanie] = useState('');
+  const [status, ustawStatus] = useState('wszystkie');
+  const [strona, ustawStrone] = useState(1);
   const { dane, ladowanie } = useDane(`/api/psa/spolki?q=${encodeURIComponent(zapytanie)}`);
 
   useEffect(() => {
@@ -233,80 +235,112 @@ function EkranSpolek() {
 
   const spolki = (dane && dane.spolki) || [];
 
+  // Filtrowanie i stronicowanie po stronie klienta: endpoint zwraca komplet,
+  // a przy 500 rejestrach lista i tak mieści się w jednym zapytaniu.
+  const widoczne = spolki.filter((s) => status === 'wszystkie' || s.status === status);
+  const NA_STRONE = 12;
+  const stron = Math.max(Math.ceil(widoczne.length / NA_STRONE), 1);
+  const biezaca = Math.min(strona, stron);
+  const wycinek = widoczne.slice((biezaca - 1) * NA_STRONE, biezaca * NA_STRONE);
+
   return (
     <>
-      <div className="pasek-gorny">
-        <div>
-          <div className="tytul-strony">Spółki</div>
-          <div className="podtytul-strony">Rejestry akcjonariuszy prowadzone przez kancelarię.</div>
-        </div>
-        <button className="btn btn-primary" onClick={() => idz('/spolki/nowa')}>
-          Dodaj spółkę
-        </button>
-      </div>
-
-      <div style={{ marginBottom: 18, maxWidth: 460 }}>
-        <input
-          type="text"
+      <div className="pasek-narzedzi">
+        <Szukajka
+          wartosc={szukaj}
+          przyZmianie={(v) => { ustawSzukaj(v); ustawStrone(1); }}
           placeholder="Szukaj po nazwie, numerze KRS lub NIP…"
-          value={szukaj}
-          onChange={(z) => ustawSzukaj(z.target.value)}
         />
+        <select value={status} onChange={(z) => { ustawStatus(z.target.value); ustawStrone(1); }}>
+          <option value="wszystkie">Status: wszystkie</option>
+          <option value="aktywna">aktywna</option>
+          <option value="w_likwidacji">w likwidacji</option>
+          <option value="zawieszona">zawieszona</option>
+          <option value="wykreslona">wykreślona</option>
+        </select>
+        <span className="podstawa-prawna" style={{ marginLeft: 'auto' }}>
+          {widoczne.length === spolki.length
+            ? `${fmt.liczba(spolki.length)} ${fmt.odmien(spolki.length, 'rejestr', 'rejestry', 'rejestrów')}`
+            : `${fmt.liczba(widoczne.length)} z ${fmt.liczba(spolki.length)}`}
+        </span>
+        <button className="btn btn-glowny" onClick={() => idz('/spolki/nowa')}>
+          <Ikona nazwa="plus" rozmiar={16} /> Dodaj spółkę
+        </button>
       </div>
 
       {ladowanie ? (
         <Spinner />
-      ) : spolki.length === 0 ? (
+      ) : widoczne.length === 0 ? (
         <Karta>
           <Pusto
-            tytul="Brak spółek"
-            opis={zapytanie ? 'Żadna spółka nie pasuje do wyszukiwania.' : 'Dodaj pierwszą spółkę.'}
+            ikona="spolki"
+            tytul={zapytanie || status !== 'wszystkie' ? 'Nic nie pasuje do filtrów' : 'Nie prowadzisz jeszcze żadnego rejestru'}
+            opis={
+              zapytanie || status !== 'wszystkie'
+                ? 'Zmień frazę wyszukiwania albo status, żeby zobaczyć więcej.'
+                : 'Dodaj spółkę, żeby otworzyć dla niej rejestr akcjonariuszy.'
+            }
             akcja={
-              !zapytanie && (
-                <button className="btn btn-primary" onClick={() => idz('/spolki/nowa')}>
-                  Dodaj spółkę
+              zapytanie || status !== 'wszystkie' ? (
+                <button className="btn" onClick={() => { ustawSzukaj(''); ustawStatus('wszystkie'); }}>
+                  Wyczyść filtry
+                </button>
+              ) : (
+                <button className="btn btn-glowny" onClick={() => idz('/spolki/nowa')}>
+                  <Ikona nazwa="plus" rozmiar={16} /> Dodaj spółkę
                 </button>
               )
             }
           />
         </Karta>
       ) : (
-        <Karta tight>
-          <table className="tbl">
+        <Karta scisla>
+          <table className="tabela">
             <thead>
               <tr>
                 <th>Spółka</th>
                 <th>Status</th>
-                <th className="prawo">Serie</th>
-                <th className="prawo">Akcjonariusze</th>
-                <th className="prawo">Akcje</th>
+                <th className="do-prawej">Serie</th>
+                <th className="do-prawej">Akcjonariusze</th>
+                <th className="do-prawej">Akcje</th>
                 <th>Ostatnie zdarzenie</th>
+                <th className="kol-strzalka" />
               </tr>
             </thead>
             <tbody>
-              {spolki.map((s) => (
-                <tr key={s.id} className="klikalny" onClick={() => idz(`/spolki/${s.id}`)}>
+              {wycinek.map((s) => (
+                <tr key={s.id} className="klikalna" onClick={() => idz(`/spolki/${s.id}`)}>
                   <td>
                     <div style={{ fontWeight: 500 }}>{s.nazwa}</div>
-                    <div className="podpowiedz" style={{ marginTop: 2 }}>
+                    <div className="wiersz-podtytul">
                       {s.krs ? `KRS ${s.krs}` : 'bez numeru KRS'}
                       {s.miejscowosc ? ` · ${s.miejscowosc}` : ''}
                     </div>
                   </td>
                   <td><StatusSpolki status={s.status} /></td>
-                  <td className="prawo">{fmt.liczba(s.liczba_emisji)}</td>
-                  <td className="prawo">{fmt.liczba(s.liczba_akcjonariuszy)}</td>
-                  <td className="prawo">{fmt.liczba(s.liczba_akcji)}</td>
-                  <td className="przyciemnione">{fmt.data(s.ostatnie_zdarzenie)}</td>
+                  <td className="do-prawej">{fmt.liczba(s.liczba_emisji)}</td>
+                  <td className="do-prawej">{fmt.liczba(s.liczba_akcjonariuszy)}</td>
+                  <td className="do-prawej">{fmt.liczba(s.liczba_akcji)}</td>
+                  <td className="kol-dane wyciszony">{fmt.data(s.ostatnie_zdarzenie)}</td>
+                  <td className="kol-strzalka"><Ikona nazwa="strzalkaPrawo" rozmiar={15} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
+          <Stronicowanie
+            strona={biezaca}
+            stron={stron}
+            odPozycji={(biezaca - 1) * NA_STRONE + 1}
+            doPozycji={Math.min(biezaca * NA_STRONE, widoczne.length)}
+            razem={widoczne.length}
+            przyZmianie={ustawStrone}
+          />
         </Karta>
       )}
     </>
   );
 }
+
 
 window.EkranSpolek = EkranSpolek;
 window.EkranNowejSpolki = EkranNowejSpolki;

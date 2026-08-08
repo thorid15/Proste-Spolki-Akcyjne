@@ -1,19 +1,22 @@
 /* rejestr.css — tożsamość wizualna modułu Rejestr akcjonariuszy P.S.A.
-   Sesja SESJA-PSA-6-INTERFEJS.md, faza 1.
+   Sesja SESJA-PSA-6-INTERFEJS.md, faza 1 (wersja 2 — po uwagach do detalu).
 
    Ten moduł NIE używa `design.css`. Tamten plik jest kanonem dla wewnętrznych
    narzędzi kancelarii (Kalkulator, Kasa, Weryfikator). Rejestr akcjonariuszy
    to produkt publiczny — widzą go zarządy spółek i inwestorzy, konkuruje
    z aplikacjami domów maklerskich — więc dostaje własną tożsamość.
-   Wspólna zostaje wyłącznie rodzina szeryfowa (EB Garamond), jako cichy
-   łącznik z resztą systemu kancelarii.
+   Wspólna zostaje wyłącznie rodzina szeryfowa (EB Garamond).
 
    ZASADA NADRZĘDNA: jeden kolor = jedno znaczenie w całej aplikacji.
      zieleń   = „rejestr" (stan aktywny, akcja główna, pasma osi) — NIGDY „sukces"
      mosiądz  = „czas" (playhead, terminy, obciążenia)            — NIGDY „błąd"
      czerwień = wyłącznie po terminie, odmowa, akcje destrukcyjne — NIC więcej
 
-   Wartości spoza skal stopni i odstępów (sekcja 2.2) są w tym pliku błędem. */
+   Dlatego kafle statystyk mają JEDEN wspólny odcień kafelka z ikoną, a nie
+   cztery różne — kolor tutaj nic by nie znaczył, a złamałby regułę wyżej.
+   Rozróżnia je ikona i liczba, nie barwa.
+
+   Wartości spoza skal stopni i odstępów są w tym pliku błędem. */
 
 /* ─────────────────────────────────────────────────────
    RESET
@@ -22,27 +25,31 @@
 em, i, cite, blockquote, address, dfn, var { font-style: normal; }
 
 :root {
-  /* ── Paleta (2.1) — mosiężna tabliczka + zieleń druku zabezpieczonego ── */
-  --atrament:    #14181C;  /* tekst główny, linie osi */
-  --atrament-2:  #565E68;  /* tekst drugorzędny */
-  --atrament-3:  #8A929C;  /* etykiety, wyciszone */
-  --papier:      #F6F7F5;  /* tło aplikacji — chłodna biel, NIE krem */
-  --karta:       #FFFFFF;  /* powierzchnie */
-  --linia:       #E3E5E1;  /* linie, siatka */
-  --rejestr:     #1F4D3D;  /* kolor instytucjonalny */
-  --rejestr-2:   #2E6B54;  /* hover, druga warstwa */
-  --rejestr-tlo: #E8EFEA;  /* delikatne tła */
-  --mosiadz:     #A97C3F;  /* „teraz", playhead, termin, obciążenia */
-  --mosiadz-tlo: #F5EDE0;
-  --sygnal:      #A32B22;  /* po terminie, odmowa, akcje destrukcyjne */
-  --sygnal-tlo:  #F7E9E7;
+  /* ── Paleta — mosiężna tabliczka + zieleń druku zabezpieczonego ── */
+  --atrament:    #14181C;
+  --atrament-2:  #565E68;
+  --atrament-3:  #8A929C;
+  --tlo-strony:  #EEF0EC;  /* pod pływającym panelem aplikacji */
+  --papier:      #F6F7F5;  /* tło obszaru treści */
+  --papier-2:    #FBFBFA;  /* subtelne wypełnienia wewnątrz kart */
+  --karta:       #FFFFFF;
+  --linia:       #E6E8E3;
+  --linia-2:     #F0F1EE;  /* linie wewnątrz kart — słabsze */
+  --rejestr:     #1F4D3D;
+  --rejestr-2:   #2E6B54;
+  --rejestr-3:   #4A8A6E;  /* akcenty na ciemnym tle */
+  --rejestr-tlo: #E8EFEA;
+  --mosiadz:     #A97C3F;
+  --mosiadz-tlo: #F7EFE2;
+  --sygnal:      #A32B22;
+  --sygnal-tlo:  #F9EBE9;
 
-  /* ── Kroje (2.2) — trzy role, trzy kroje ── */
+  /* ── Kroje — trzy role, trzy kroje ── */
   --font-display: 'EB Garamond', 'Iowan Old Style', Georgia, serif;
   --font-ui:      'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-dane:    'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
 
-  /* ── Skala stopni (2.2) — nic spoza tej listy ── */
+  /* ── Skala stopni — nic spoza tej listy ── */
   --st-40: 40px;
   --st-28: 28px;
   --st-20: 20px;
@@ -50,7 +57,7 @@ em, i, cite, blockquote, address, dfn, var { font-style: normal; }
   --st-13: 13px;
   --st-11: 11px;
 
-  /* ── Skala odstępów (2.2) — nic spoza tej listy ── */
+  /* ── Skala odstępów — nic spoza tej listy ── */
   --od-4:  4px;
   --od-8:  8px;
   --od-12: 12px;
@@ -59,27 +66,33 @@ em, i, cite, blockquote, address, dfn, var { font-style: normal; }
   --od-40: 40px;
   --od-64: 64px;
 
-  /* ── Układ (2.3) ── */
-  --szyna:  220px;   /* szyna nawigacji */
-  --tresc:  1240px;  /* wyśrodkowany kontener treści */
+  /* ── Układ ── */
+  --szyna:  244px;
+  --tresc:  1240px;
+  --topbar: 72px;
 
-  /* ── Promienie i cienie ── */
-  --r:    8px;
-  --r-sm: 6px;
+  /* ── Promienie ── */
+  --r-lg: 16px;  /* panel aplikacji, karty */
+  --r:    12px;  /* kafle, pola, przyciski większe */
+  --r-sm: 8px;   /* przyciski, kafelki ikon */
+  --r-xs: 6px;
   --r-pigulka: 999px;
-  --cien-s: 0 1px 2px rgba(20, 24, 28, 0.04);
-  --cien-m: 0 2px 12px rgba(20, 24, 28, 0.06);
-  --cien-l: 0 8px 32px rgba(20, 24, 28, 0.12);
 
-  /* ── Ruch (2.8) — trzy animacje w całej aplikacji, nic poza nimi ── */
-  --ruch-pasma:  180ms ease-out;  /* 1. przejście pasm osi przy zmianie playheadu */
-  --ruch-wiersz: 140ms ease-out;  /* 2. wysunięcie szczegółu wiersza */
-  --ruch-paleta: 120ms ease-out;  /* 3. pojawienie się palety poleceń */
+  /* ── Cienie — miękkie i płytkie; głębia z warstw, nie z ciemności ── */
+  --cien-s: 0 1px 2px rgba(20, 24, 28, 0.04);
+  --cien-m: 0 2px 8px rgba(20, 24, 28, 0.05);
+  --cien-l: 0 12px 40px rgba(20, 24, 28, 0.10);
+  --cien-panel: 0 1px 3px rgba(20, 24, 28, 0.04), 0 12px 32px rgba(20, 24, 28, 0.05);
+
+  /* ── Ruch ── */
+  --ruch-pasma:  180ms ease-out;
+  --ruch-wiersz: 140ms ease-out;
+  --ruch-paleta: 120ms ease-out;
 }
 
 html, body { height: 100%; }
 body {
-  background: var(--papier);
+  background: var(--tlo-strony);
   color: var(--atrament);
   font-family: var(--font-ui);
   font-size: var(--st-15);
@@ -93,40 +106,27 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--linia); border-radius: var(--r-sm); }
 ::-webkit-scrollbar-thumb:hover { background: var(--atrament-3); }
-
 ::selection { background: var(--rejestr-tlo); color: var(--rejestr); }
 
 /* ─────────────────────────────────────────────────────
-   TYPOGRAFIA (2.2)
+   TYPOGRAFIA
    Display wyłącznie dla nazw spółek i tytułów ekranów.
-   Dane (numery akcji, KRS, NIP, daty w tabelach, skróty) zawsze w monie.
+   Dane (numery akcji, KRS, NIP, daty w tabelach) zawsze w monie.
    ───────────────────────────────────────────────────── */
-.display {
-  font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  line-height: 1.2;
-}
 .tytul-ekranu { font-family: var(--font-display); font-size: var(--st-28); font-weight: 500; line-height: 1.2; }
 .tytul-duzy   { font-family: var(--font-display); font-size: var(--st-40); font-weight: 500; line-height: 1.15; }
 .tytul-sekcji { font-family: var(--font-display); font-size: var(--st-20); font-weight: 500; line-height: 1.3; }
 
-/* Dane maszynowe. `AZ 96–100` to identyfikator, nie liczba — w monie ustawia
-   się w kolumnie i da się porównać wzrokiem. */
 .dane {
   font-family: var(--font-dane);
   font-size: var(--st-13);
   font-variant-ligatures: none;
   letter-spacing: -0.01em;
 }
-/* Ilości i procenty: Inter Tight z tabular-nums (NIE mono — to liczby, nie identyfikatory). */
 .liczba { font-variant-numeric: tabular-nums; }
-
 .etykieta {
-  font-size: var(--st-11);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  font-size: var(--st-11); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--atrament-3);
 }
 .drugorzedny { color: var(--atrament-2); }
@@ -135,97 +135,181 @@ body {
 .podstawa-prawna { font-size: var(--st-11); color: var(--atrament-3); line-height: 1.5; }
 
 /* ─────────────────────────────────────────────────────
-   POWŁOKA (2.3)
-   Koniec z treścią przyklejoną do lewej krawędzi przy pustej prawej połowie.
+   POWŁOKA — pływający panel aplikacji
+   Aplikacja nie rozlewa się po krawędziach okna: siedzi w zaokrąglonym
+   panelu na przygaszonym tle strony. Dzięki temu treść ma ramę, a szyna
+   nawigacji nie dotyka krawędzi ekranu.
    ───────────────────────────────────────────────────── */
-.powloka { display: grid; grid-template-columns: var(--szyna) minmax(0, 1fr); min-height: 100vh; }
+.powloka {
+  display: grid;
+  grid-template-columns: var(--szyna) minmax(0, 1fr);
+  max-width: 1680px;
+  margin: var(--od-16) auto;
+  min-height: calc(100vh - var(--od-16) * 2);
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r-lg);
+  box-shadow: var(--cien-panel);
+  overflow: hidden;
+}
+@media (max-width: 900px) {
+  .powloka { grid-template-columns: minmax(0, 1fr); margin: 0; border-radius: 0; border: none; }
+  .szyna { display: none; }
+}
 
 .szyna {
   background: var(--karta);
-  border-right: 1px solid var(--linia);
+  border-right: 1px solid var(--linia-2);
   position: sticky;
   top: 0;
-  height: 100vh;
+  height: calc(100vh - var(--od-16) * 2);
   overflow-y: auto;
-  padding: var(--od-24) 0 var(--od-16);
+  padding: var(--od-24) var(--od-12) var(--od-16);
   display: flex;
   flex-direction: column;
 }
-.szyna-marka { padding: 0 var(--od-16) var(--od-24); }
-.szyna-marka-nazwa {
-  font-family: var(--font-display);
-  font-size: var(--st-20);
-  line-height: 1.25;
-  color: var(--atrament);
+
+/* Marka: znak w kwadracie + nazwa. Znak rysowany SVG, nie plikiem. */
+.szyna-marka { display: flex; align-items: center; gap: var(--od-12); padding: 0 var(--od-8) var(--od-24); }
+.szyna-znak {
+  width: 32px; height: 32px; flex-shrink: 0;
+  border-radius: var(--r-sm);
+  background: var(--rejestr);
+  color: var(--karta);
+  display: flex; align-items: center; justify-content: center;
 }
+.szyna-marka-nazwa { font-family: var(--font-display); font-size: var(--st-20); line-height: 1.1; }
 .szyna-marka-podpis {
-  font-size: var(--st-11);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--atrament-3);
-  margin-top: var(--od-4);
+  font-size: var(--st-11); text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--atrament-3); margin-top: 1px;
 }
+
 .szyna-grupa { margin-bottom: var(--od-24); }
 .szyna-grupa-tytul {
-  font-size: var(--st-11);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  font-size: var(--st-11); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--atrament-3);
-  padding: 0 var(--od-16) var(--od-8);
+  padding: 0 var(--od-12) var(--od-8);
 }
-/* Stan aktywny: zielony pasek 2px na LEWEJ krawędzi + pogrubienie.
-   Świadomie NIE wypełnione tło (2.3). */
+/* Stan aktywny: miękka zielona pigułka. Ikona przejmuje kolor tekstu. */
 .szyna-poz {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--od-8);
+  display: flex; align-items: center; gap: var(--od-12);
   width: 100%;
-  padding: var(--od-8) var(--od-16);
-  font-family: inherit;
-  font-size: var(--st-13);
+  padding: var(--od-8) var(--od-12);
+  margin-bottom: 2px;
+  border-radius: var(--r-sm);
+  font-family: inherit; font-size: var(--st-13);
   color: var(--atrament-2);
-  background: none;
-  border: none;
-  border-left: 2px solid transparent;
-  cursor: pointer;
-  text-align: left;
+  background: none; border: none;
+  cursor: pointer; text-align: left;
+  transition: background var(--ruch-wiersz), color var(--ruch-wiersz);
 }
-.szyna-poz:hover { color: var(--atrament); }
+.szyna-poz svg { flex-shrink: 0; opacity: 0.75; }
+.szyna-poz:hover:not(:disabled) { background: var(--papier); color: var(--atrament); }
 .szyna-poz.aktywna {
+  background: var(--rejestr-tlo);
   color: var(--rejestr);
   font-weight: 600;
-  border-left-color: var(--rejestr);
 }
+.szyna-poz.aktywna svg { opacity: 1; }
+.szyna-poz-etykieta { flex: 1; min-width: 0; }
 .szyna-poz.zablokowana { color: var(--atrament-3); cursor: not-allowed; }
-.szyna-poz.zablokowana:hover { color: var(--atrament-3); }
-.szyna-stopka { margin-top: auto; padding: var(--od-16) var(--od-16) 0; border-top: 1px solid var(--linia); }
+.szyna-poz.zablokowana:hover { background: none; color: var(--atrament-3); }
 
-/* Treść wyśrodkowana — nie przyklejona do lewej. */
-.tresc {
-  max-width: var(--tresc);
-  margin-inline: auto;
-  width: 100%;
-  padding: var(--od-40);
+/* Karta pomocy na dole szyny — jedyne miejsce z tłem w kolorze rejestru. */
+.szyna-pomoc {
+  margin-top: auto;
+  background: var(--rejestr-tlo);
+  border-radius: var(--r);
+  padding: var(--od-16);
+}
+.szyna-pomoc-tytul { font-weight: 600; font-size: var(--st-13); color: var(--rejestr); margin-bottom: var(--od-4); }
+.szyna-pomoc-tresc { font-size: var(--st-11); color: var(--atrament-2); line-height: 1.5; margin-bottom: var(--od-12); }
+
+/* ── Topbar: powitanie po lewej, narzędzia po prawej ── */
+.obszar { display: flex; flex-direction: column; min-width: 0; background: var(--papier); }
+.topbar {
+  min-height: var(--topbar);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--od-24);
+  padding: var(--od-16) var(--od-40);
+  background: var(--karta);
+  border-bottom: 1px solid var(--linia-2);
+}
+.topbar-tytul { font-family: var(--font-display); font-size: var(--st-28); line-height: 1.15; }
+.topbar-podtytul { font-size: var(--st-13); color: var(--atrament-2); margin-top: 2px; }
+.topbar-narzedzia { display: flex; align-items: center; gap: var(--od-8); flex-shrink: 0; }
+
+.ikonka-btn {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r-sm);
+  background: none; border: 1px solid transparent;
+  color: var(--atrament-2); cursor: pointer;
+  position: relative;
+}
+.ikonka-btn:hover { background: var(--papier); border-color: var(--linia); color: var(--atrament); }
+.ikonka-btn-znacznik {
+  position: absolute; top: 5px; right: 5px;
+  min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: var(--r-pigulka);
+  background: var(--mosiadz); color: var(--karta);
+  font-size: 9px; font-weight: 700; line-height: 15px; text-align: center;
+  border: 2px solid var(--karta);
+  box-sizing: content-box;
 }
 
-/* Nagłówek strony bez belki na całą szerokość: tytuł serifem, pod nim jedno
-   zdanie kontekstu, akcje po prawej. Bez powtarzania nazwy modułu. */
+.uzytkownik {
+  display: flex; align-items: center; gap: var(--od-8);
+  padding: var(--od-4) var(--od-8) var(--od-4) var(--od-4);
+  border-radius: var(--r-pigulka);
+  border: 1px solid var(--linia);
+  background: var(--karta);
+  cursor: pointer;
+  font: inherit; color: var(--atrament);
+}
+.uzytkownik:hover { background: var(--papier); }
+.awatar {
+  width: 30px; height: 30px; flex-shrink: 0;
+  border-radius: var(--r-pigulka);
+  background: var(--rejestr); color: var(--karta);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--st-11); font-weight: 700; letter-spacing: 0.02em;
+}
+.uzytkownik-menu {
+  position: absolute; top: calc(100% + var(--od-8)); right: 0;
+  min-width: 200px; z-index: 120;
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  box-shadow: var(--cien-l);
+  padding: var(--od-8);
+}
+.uzytkownik-menu-naglowek { padding: var(--od-8); border-bottom: 1px solid var(--linia-2); margin-bottom: var(--od-4); }
+.uzytkownik-menu button {
+  display: flex; align-items: center; gap: var(--od-8);
+  width: 100%; text-align: left;
+  padding: var(--od-8); border-radius: var(--r-sm);
+  background: none; border: none; cursor: pointer;
+  font: inherit; font-size: var(--st-13); color: var(--atrament-2);
+}
+.uzytkownik-menu button:hover { background: var(--papier); color: var(--atrament); }
+
+.tresc { max-width: var(--tresc); margin-inline: auto; width: 100%; padding: var(--od-24) var(--od-40) var(--od-64); }
+.tresc-szeroka { max-width: none; }
+
+/* Nagłówek strony wewnątrz treści (gdy topbar niesie tylko powitanie). */
 .naglowek-strony {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--od-24);
-  margin-bottom: var(--od-24);
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--od-24); margin-bottom: var(--od-24);
 }
 .naglowek-strony-kontekst { color: var(--atrament-2); font-size: var(--st-13); margin-top: var(--od-4); }
 .naglowek-strony-akcje { display: flex; gap: var(--od-8); flex-shrink: 0; }
 
-.okruszki { font-size: var(--st-13); color: var(--atrament-3); margin-bottom: var(--od-12); }
+.okruszki { display: flex; align-items: center; gap: var(--od-8); font-size: var(--st-13); color: var(--atrament-3); margin-bottom: var(--od-12); }
 .okruszki button {
   background: none; border: none; padding: 0; cursor: pointer;
-  font: inherit; color: var(--atrament-2); text-decoration: underline;
+  font: inherit; color: var(--atrament-2);
 }
 .okruszki button:hover { color: var(--rejestr); }
 
@@ -233,34 +317,27 @@ body {
    PRZYCISKI
    ───────────────────────────────────────────────────── */
 .btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--od-8);
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--od-8);
   padding: var(--od-8) var(--od-16);
-  font-family: inherit;
-  font-size: var(--st-13);
-  font-weight: 500;
+  font-family: inherit; font-size: var(--st-13); font-weight: 500;
   color: var(--atrament);
   background: var(--karta);
   border: 1px solid var(--linia);
-  border-radius: var(--r);
-  cursor: pointer;
-  white-space: nowrap;
+  border-radius: var(--r-sm);
+  cursor: pointer; white-space: nowrap;
+  transition: background var(--ruch-wiersz), border-color var(--ruch-wiersz);
 }
 .btn:hover:not(:disabled) { border-color: var(--atrament-3); }
 .btn:focus-visible { outline: 2px solid var(--rejestr); outline-offset: 2px; }
 .btn:disabled { color: var(--atrament-3); cursor: not-allowed; background: var(--papier); }
+.btn svg { flex-shrink: 0; }
 
-.btn-glowny { background: var(--rejestr); border-color: var(--rejestr); color: var(--karta); }
+.btn-glowny { background: var(--rejestr); border-color: var(--rejestr); color: var(--karta); box-shadow: var(--cien-s); }
 .btn-glowny:hover:not(:disabled) { background: var(--rejestr-2); border-color: var(--rejestr-2); }
-.btn-glowny:disabled { background: var(--linia); border-color: var(--linia); color: var(--atrament-3); }
-
-/* Czerwień wyłącznie dla akcji destrukcyjnych — patrz zasada nadrzędna. */
-.btn-sygnal { color: var(--sygnal); border-color: var(--linia); }
+.btn-glowny:disabled { background: var(--linia); border-color: var(--linia); color: var(--atrament-3); box-shadow: none; }
+.btn-sygnal { color: var(--sygnal); }
 .btn-sygnal:hover:not(:disabled) { border-color: var(--sygnal); background: var(--sygnal-tlo); }
-
-.btn-duzy { padding: var(--od-12) var(--od-24); font-size: var(--st-15); }
+.btn-duzy { padding: var(--od-12) var(--od-24); font-size: var(--st-15); border-radius: var(--r); }
 .btn-maly { padding: var(--od-4) var(--od-12); font-size: var(--st-11); }
 .btn-cichy { background: none; border-color: transparent; }
 .btn-cichy:hover:not(:disabled) { background: var(--papier); border-color: var(--linia); }
@@ -271,95 +348,212 @@ body {
 .karta {
   background: var(--karta);
   border: 1px solid var(--linia);
-  border-radius: var(--r);
+  border-radius: var(--r-lg);
   padding: var(--od-24);
   margin-bottom: var(--od-16);
 }
-.karta.scisla { padding: 0; }
+.karta.scisla { padding: 0; overflow: hidden; }
 .karta-naglowek {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--od-16);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--od-16);
   padding: var(--od-16) var(--od-24);
-  border-bottom: 1px solid var(--linia);
+  border-bottom: 1px solid var(--linia-2);
 }
 .karta-tytul { font-family: var(--font-display); font-size: var(--st-20); font-weight: 500; }
+.karta-link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: var(--st-13); font-weight: 500; color: var(--rejestr);
+}
+.karta-link:hover { color: var(--rejestr-2); text-decoration: underline; }
+
+/* ── Kafel statystyki: etykieta, liczba, delta + ikona w kwadracie ── */
+.kafle { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--od-16); margin-bottom: var(--od-16); }
+@media (max-width: 1200px) { .kafle { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px)  { .kafle { grid-template-columns: minmax(0, 1fr); } }
+.kafel {
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r-lg);
+  padding: var(--od-16) var(--od-24);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--od-12);
+}
+.kafel-etykieta { font-size: var(--st-13); color: var(--atrament-2); }
+.kafel-wartosc {
+  font-family: var(--font-display);
+  font-size: var(--st-40); line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  margin: var(--od-4) 0;
+}
+.kafel-delta { font-size: var(--st-11); color: var(--atrament-3); }
+.kafel-delta.dodatnia { color: var(--rejestr-2); }
+.kafel-delta.uwaga { color: var(--mosiadz); }
+.kafel-ikona {
+  width: 40px; height: 40px; flex-shrink: 0;
+  border-radius: var(--r); /* jeden odcień dla wszystkich — patrz nagłówek pliku */
+  background: var(--rejestr-tlo); color: var(--rejestr);
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ── Wiersz listy z kafelkiem ikony (aktywne sprawy, dokumenty) ── */
+.lista-wierszy { display: flex; flex-direction: column; }
+.wiersz {
+  display: flex; align-items: center; gap: var(--od-12);
+  padding: var(--od-12) var(--od-24);
+  border-bottom: 1px solid var(--linia-2);
+  background: none; border-left: none; border-right: none; border-top: none;
+  width: 100%; text-align: left; font: inherit; color: var(--atrament);
+  cursor: pointer;
+  transition: background var(--ruch-wiersz);
+}
+.wiersz:last-child { border-bottom: none; }
+.wiersz:hover { background: var(--papier); }
+.wiersz-ikona {
+  width: 36px; height: 36px; flex-shrink: 0;
+  border-radius: var(--r-sm);
+  background: var(--papier); color: var(--atrament-2);
+  display: flex; align-items: center; justify-content: center;
+}
+.wiersz-tresc { flex: 1; min-width: 0; }
+.wiersz-tytul { font-size: var(--st-13); font-weight: 500; }
+.wiersz-podtytul { font-size: var(--st-11); color: var(--atrament-3); margin-top: 1px; font-family: var(--font-dane); }
+.wiersz-prawo { display: flex; align-items: center; gap: var(--od-16); flex-shrink: 0; }
+.wiersz-data { font-size: var(--st-11); color: var(--atrament-3); font-family: var(--font-dane); }
+
+/* ── Lista szybkich akcji ── */
+.szybkie { display: flex; flex-direction: column; gap: 2px; }
+.szybkie-poz {
+  display: flex; align-items: center; gap: var(--od-12);
+  padding: var(--od-8) var(--od-12);
+  border-radius: var(--r-sm);
+  background: none; border: none; cursor: pointer;
+  font: inherit; font-size: var(--st-13); color: var(--atrament-2);
+  text-align: left; width: 100%;
+}
+.szybkie-poz:hover { background: var(--papier); color: var(--rejestr); }
+.szybkie-poz svg { color: var(--atrament-3); flex-shrink: 0; }
+.szybkie-poz:hover svg { color: var(--rejestr); }
+
+/* ── Karta wyróżniona (ciemna, na akcent w prawej szynie) ── */
+.karta-akcent {
+  background: var(--rejestr);
+  border: none;
+  border-radius: var(--r-lg);
+  padding: var(--od-24);
+  color: var(--karta);
+  position: relative;
+  overflow: hidden;
+}
+.karta-akcent-tytul { font-family: var(--font-display); font-size: var(--st-20); line-height: 1.25; margin-bottom: var(--od-8); }
+.karta-akcent-tresc { font-size: var(--st-13); color: rgba(255, 255, 255, 0.78); margin-bottom: var(--od-16); }
+.karta-akcent .btn {
+  background: var(--karta); border-color: var(--karta); color: var(--rejestr); font-weight: 600;
+}
+.karta-akcent .btn:hover { background: var(--rejestr-tlo); border-color: var(--rejestr-tlo); }
+/* Sygnet w tle — geometryczny, rysowany gradientem, bez pliku graficznego. */
+.karta-akcent::after {
+  content: '';
+  position: absolute; right: -40px; bottom: -40px;
+  width: 160px; height: 160px; border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.10), transparent 70%);
+}
 
 /* ─────────────────────────────────────────────────────
-   POLA (2.6) — projekt od nowa
+   ZAKŁADKI
+   ───────────────────────────────────────────────────── */
+.zakladki {
+  display: flex; gap: var(--od-24);
+  border-bottom: 1px solid var(--linia);
+  margin-bottom: var(--od-24);
+}
+.zakladka {
+  padding: var(--od-12) 0;
+  background: none; border: none; cursor: pointer;
+  font: inherit; font-size: var(--st-13); color: var(--atrament-2);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: flex; align-items: center; gap: var(--od-8);
+}
+.zakladka:hover { color: var(--atrament); }
+.zakladka.aktywna { color: var(--rejestr); font-weight: 600; border-bottom-color: var(--rejestr); }
+
+/* ── Pasek metryki: kilka par etykieta/wartość w rzędzie ── */
+.metryka { display: flex; flex-wrap: wrap; gap: var(--od-40); padding: var(--od-16) 0; }
+.metryka-poz { min-width: 0; }
+.metryka-etykieta { font-size: var(--st-11); color: var(--atrament-3); margin-bottom: 2px; }
+.metryka-wartosc { font-size: var(--st-15); font-weight: 500; }
+.metryka-wartosc.dane { font-family: var(--font-dane); font-size: var(--st-13); }
+
+/* ─────────────────────────────────────────────────────
+   PASEK NARZĘDZI (szukaj + filtry)
+   ───────────────────────────────────────────────────── */
+.pasek-narzedzi {
+  display: flex; align-items: center; gap: var(--od-12);
+  flex-wrap: wrap; margin-bottom: var(--od-16);
+}
+.szukajka { position: relative; flex: 1; min-width: 220px; max-width: 360px; }
+.szukajka svg { position: absolute; left: var(--od-12); top: 50%; transform: translateY(-50%); color: var(--atrament-3); pointer-events: none; }
+/* Selektor z atrybutem, bo `input[type="search"]` niżej w pliku ma tę samą
+   specyficzność i nadpisywałby sam padding lewy, wsuwając tekst pod lupę. */
+.szukajka input[type="search"] { padding-left: var(--od-40); }
+.pasek-narzedzi select { width: auto; min-width: 150px; }
+
+/* ─────────────────────────────────────────────────────
+   POLA
    Etykieta ZAWSZE nad polem, nigdy jako placeholder.
    ───────────────────────────────────────────────────── */
 .pole { margin-bottom: var(--od-16); }
 .pole-etykieta {
   display: block;
-  font-size: var(--st-11);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--atrament-2);
-  margin-bottom: var(--od-8);
+  font-size: var(--st-11); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--atrament-2); margin-bottom: var(--od-8);
 }
 .pole-wymagane { color: var(--sygnal); }
 .pole-podpowiedz { font-size: var(--st-11); color: var(--atrament-3); margin-top: var(--od-4); line-height: 1.5; }
-/* Komunikat błędu mówi CO POPRAWIĆ; pole nie czyści się przy błędzie. */
 .pole-blad { font-size: var(--st-11); color: var(--sygnal); margin-top: var(--od-4); }
-/* Data słownie pod polem — potwierdzenie, że system zrozumiał wpis. */
 .pole-echo { font-size: var(--st-11); color: var(--rejestr); margin-top: var(--od-4); }
 
 input[type="text"], input[type="email"], input[type="password"], input[type="number"],
 input[type="search"], input[type="date"], input[type="time"], select, textarea {
   width: 100%;
   padding: var(--od-8) var(--od-12);
-  font-family: inherit;
-  font-size: var(--st-15);
+  font-family: inherit; font-size: var(--st-15);
   color: var(--atrament);
   background: var(--karta);
   border: 1px solid var(--linia);
-  border-radius: var(--r);
+  border-radius: var(--r-sm);
   outline: none;
 }
 input:focus, select:focus, textarea:focus {
   border-color: var(--rejestr);
   box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10);
 }
-input:disabled, select:disabled, textarea:disabled {
-  background: var(--papier);
-  color: var(--atrament-3);
-  cursor: not-allowed;
-}
+input:disabled, select:disabled, textarea:disabled { background: var(--papier); color: var(--atrament-3); cursor: not-allowed; }
 input.bledne, select.bledne, textarea.bledne { border-color: var(--sygnal); }
 input.bledne:focus, textarea.bledne:focus { box-shadow: 0 0 0 3px rgba(163, 43, 34, 0.10); }
 textarea { min-height: 88px; resize: vertical; line-height: 1.55; }
 input::placeholder, textarea::placeholder { color: var(--atrament-3); }
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238A929C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--od-12) center;
+  padding-right: var(--od-40);
+}
 
-/* Pole daty segmentowe DD.MM.RRRR (2.6) — trzy sekcje, przejście automatyczne,
-   tylko cyfry, strzałki góra/dół zmieniają wartość sekcji. Kalendarz NIE
-   otwiera się sam przy fokusie — jest za małym przyciskiem obok. */
-.pole-daty { display: flex; align-items: center; gap: var(--od-8); }
+/* Pole daty segmentowe DD.MM.RRRR */
+.pole-daty { display: flex; align-items: center; gap: var(--od-8); flex-wrap: wrap; }
 .data-segmenty {
-  display: inline-flex;
-  align-items: center;
+  display: inline-flex; align-items: center;
   padding: var(--od-8) var(--od-12);
   background: var(--karta);
   border: 1px solid var(--linia);
-  border-radius: var(--r);
-  font-family: var(--font-dane);
-  font-size: var(--st-15);
+  border-radius: var(--r-sm);
+  font-family: var(--font-dane); font-size: var(--st-15);
 }
 .data-segmenty:focus-within { border-color: var(--rejestr); box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10); }
 .data-segmenty.bledne { border-color: var(--sygnal); }
-.data-segment {
-  border: none;
-  background: none;
-  font: inherit;
-  color: var(--atrament);
-  text-align: center;
-  padding: 0;
-  outline: none;
-}
-.data-segment::-webkit-outer-spin-button,
-.data-segment::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.data-segment { border: none; background: none; font: inherit; color: var(--atrament); text-align: center; padding: 0; outline: none; }
+.data-segment::-webkit-outer-spin-button, .data-segment::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .data-segment[data-szer="2"] { width: 2.2ch; }
 .data-segment[data-szer="4"] { width: 4.2ch; }
 .data-segment:focus { background: var(--rejestr-tlo); border-radius: 2px; }
@@ -368,132 +562,102 @@ input::placeholder, textarea::placeholder { color: var(--atrament-3); }
 
 .kalendarz-kotwica { position: relative; display: inline-flex; }
 .kalendarz-popover {
-  position: absolute;
-  top: calc(100% + var(--od-4));
-  left: 0;
-  z-index: 60;
+  position: absolute; top: calc(100% + var(--od-4)); left: 0; z-index: 60;
   background: var(--karta);
   border: 1px solid var(--linia);
   border-radius: var(--r);
   box-shadow: var(--cien-l);
-  padding: var(--od-12);
-  width: 260px;
+  padding: var(--od-12); width: 268px;
 }
-.kalendarz-pasek {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: var(--od-8);
-}
+.kalendarz-pasek { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--od-8); }
 .kalendarz-miesiac { font-size: var(--st-13); font-weight: 600; }
 .kalendarz-siatka { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
-.kalendarz-dzien-tygodnia {
-  font-size: var(--st-11); color: var(--atrament-3); text-align: center;
-  padding: var(--od-4) 0; font-weight: 600;
-}
+.kalendarz-dzien-tygodnia { font-size: var(--st-11); color: var(--atrament-3); text-align: center; padding: var(--od-4) 0; font-weight: 600; }
 .kalendarz-dzien {
   aspect-ratio: 1;
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-dane);
-  font-size: var(--st-11);
+  font-family: var(--font-dane); font-size: var(--st-11);
   background: none; border: none; border-radius: var(--r-sm);
   color: var(--atrament); cursor: pointer;
 }
 .kalendarz-dzien:hover:not(:disabled) { background: var(--rejestr-tlo); }
 .kalendarz-dzien.wybrany { background: var(--rejestr); color: var(--karta); font-weight: 600; }
-.kalendarz-dzien.dzis { border: 1px solid var(--mosiadz); }
+.kalendarz-dzien.dzis { box-shadow: inset 0 0 0 1px var(--mosiadz); }
 .kalendarz-dzien:disabled { color: var(--atrament-3); cursor: not-allowed; }
 .kalendarz-dzien.pusty { visibility: hidden; }
-
-/* Pigułki „dziś"/„wczoraj" przy dacie zdarzenia. */
 .pigulki-skrotow { display: flex; gap: var(--od-4); }
 
-/* Liczby akcji i kwoty (2.6): do prawej, w monie, separator tysięcy na bieżąco,
-   jednostka jako sufiks WEWNĄTRZ pola, nie jako osobna etykieta. */
+/* Liczby i kwoty: do prawej, w monie, jednostka jako sufiks w polu */
 .pole-liczbowe {
-  display: flex;
-  align-items: center;
+  display: flex; align-items: center;
   background: var(--karta);
   border: 1px solid var(--linia);
-  border-radius: var(--r);
+  border-radius: var(--r-sm);
   padding-right: var(--od-12);
 }
 .pole-liczbowe:focus-within { border-color: var(--rejestr); box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10); }
 .pole-liczbowe.bledne { border-color: var(--sygnal); }
-.pole-liczbowe input {
-  border: none; box-shadow: none; text-align: right;
-  font-family: var(--font-dane);
-  background: none;
-}
+.pole-liczbowe input { border: none; box-shadow: none; text-align: right; font-family: var(--font-dane); background: none; }
 .pole-liczbowe input:focus { box-shadow: none; }
 .pole-liczbowe-sufiks { font-size: var(--st-13); color: var(--atrament-3); padding-left: var(--od-8); white-space: nowrap; }
 
-/* Wybór z kartoteki (2.6) — podpowiedzi od trzeciego znaku. */
+/* Wybór z kartoteki */
 .kartoteka { position: relative; }
 .kartoteka-lista {
-  position: absolute;
-  top: calc(100% + var(--od-4));
-  left: 0; right: 0;
-  z-index: 60;
+  position: absolute; top: calc(100% + var(--od-4)); left: 0; right: 0; z-index: 60;
   background: var(--karta);
   border: 1px solid var(--linia);
   border-radius: var(--r);
   box-shadow: var(--cien-l);
-  max-height: 280px;
-  overflow-y: auto;
+  max-height: 280px; overflow-y: auto; padding: var(--od-4);
 }
 .kartoteka-poz {
   display: block; width: 100%; text-align: left;
   padding: var(--od-8) var(--od-12);
+  border-radius: var(--r-sm);
   background: none; border: none; cursor: pointer;
   font: inherit; color: var(--atrament);
-  border-bottom: 1px solid var(--linia);
 }
-.kartoteka-poz:last-child { border-bottom: none; }
 .kartoteka-poz:hover, .kartoteka-poz.podswietlona { background: var(--rejestr-tlo); }
-.kartoteka-poz-meta { font-size: var(--st-11); color: var(--atrament-3); margin-top: 2px; }
+.kartoteka-poz-meta { font-size: var(--st-11); color: var(--atrament-3); margin-top: 1px; }
 .kartoteka-wybrana {
   display: flex; align-items: center; justify-content: space-between; gap: var(--od-8);
   padding: var(--od-8) var(--od-12);
   background: var(--rejestr-tlo);
-  border: 1px solid var(--rejestr);
-  border-radius: var(--r);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
 }
 
-/* Checkbox / radio */
-.checklista { display: flex; flex-direction: column; gap: var(--od-4); }
 .chk { display: flex; align-items: flex-start; gap: var(--od-12); padding: var(--od-8) 0; cursor: pointer; }
 .chk input[type="checkbox"], .chk input[type="radio"] {
   width: 16px; height: 16px; margin-top: 2px; flex-shrink: 0;
   accent-color: var(--rejestr); cursor: pointer;
 }
 .chk-tresc { font-size: var(--st-13); line-height: 1.5; }
+.checklista { display: flex; flex-direction: column; gap: var(--od-4); }
 
 /* ─────────────────────────────────────────────────────
-   TABELE (2.7)
-   Nagłówek przyklejony, wiersz 44px, BEZ zebry, cały wiersz odnośnikiem.
+   TABELE
+   Nagłówek przyklejony, wiersz 44 px, bez zebry, cały wiersz odnośnikiem.
    ───────────────────────────────────────────────────── */
 .tabela { width: 100%; border-collapse: collapse; }
 .tabela th {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--karta); /* tło PEŁNE, nie przezroczyste — inaczej treść prześwituje */
+  position: sticky; top: 0; z-index: 10;
+  background: var(--karta);
   text-align: left;
-  font-size: var(--st-11);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  font-size: var(--st-11); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--atrament-3);
-  padding: var(--od-12) var(--od-16);
+  padding: var(--od-12) var(--od-24);
   border-bottom: 1px solid var(--linia);
   white-space: nowrap;
 }
 .tabela th.sortowalna { cursor: pointer; user-select: none; }
 .tabela th.sortowalna:hover { color: var(--atrament); }
-.tabela th .strzalka-sort { margin-left: var(--od-4); color: var(--rejestr); }
 .tabela td {
   height: 44px;
-  padding: var(--od-8) var(--od-16);
-  border-bottom: 1px solid var(--linia);
+  padding: var(--od-8) var(--od-24);
+  border-bottom: 1px solid var(--linia-2);
   font-size: var(--st-13);
   vertical-align: middle;
 }
@@ -502,31 +666,47 @@ input::placeholder, textarea::placeholder { color: var(--atrament-3); }
 .tabela tr.klikalna:hover td { background: var(--papier); }
 .tabela .do-prawej { text-align: right; font-variant-numeric: tabular-nums; }
 .tabela .kol-dane { font-family: var(--font-dane); font-size: var(--st-13); }
+.tabela .kol-strzalka { width: 40px; color: var(--atrament-3); text-align: right; }
+.tabela tr.klikalna:hover .kol-strzalka { color: var(--rejestr); }
 .tabela tfoot td { font-weight: 600; border-top: 1px solid var(--atrament); border-bottom: none; }
 
+/* Stronicowanie */
+.stronicowanie {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--od-16);
+  padding: var(--od-12) var(--od-24);
+  border-top: 1px solid var(--linia-2);
+  font-size: var(--st-13); color: var(--atrament-2);
+}
+.strony { display: flex; align-items: center; gap: var(--od-4); }
+.strona {
+  min-width: 30px; height: 30px; padding: 0 var(--od-8);
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r-sm);
+  background: none; border: 1px solid transparent;
+  font: inherit; font-size: var(--st-13); color: var(--atrament-2);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.strona:hover:not(:disabled):not(.aktywna) { background: var(--papier); border-color: var(--linia); }
+.strona.aktywna { background: var(--rejestr); border-color: var(--rejestr); color: var(--karta); font-weight: 600; }
+.strona:disabled { color: var(--atrament-3); cursor: not-allowed; }
+
 /* ─────────────────────────────────────────────────────
-   PIGUŁKI
+   PIGUŁKI I KOMUNIKATY
    ───────────────────────────────────────────────────── */
 .pigulka {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--od-4);
-  padding: 2px var(--od-8);
+  display: inline-flex; align-items: center; gap: var(--od-4);
+  padding: 3px var(--od-8);
   border-radius: var(--r-pigulka);
-  font-size: var(--st-11);
-  font-weight: 600;
-  white-space: nowrap;
-  background: var(--papier);
-  color: var(--atrament-2);
+  font-size: var(--st-11); font-weight: 600; white-space: nowrap;
+  background: var(--papier); color: var(--atrament-2);
   border: 1px solid var(--linia);
 }
 .pigulka-rejestr { background: var(--rejestr-tlo); color: var(--rejestr); border-color: transparent; }
 .pigulka-mosiadz { background: var(--mosiadz-tlo); color: var(--mosiadz); border-color: transparent; }
 .pigulka-sygnal  { background: var(--sygnal-tlo);  color: var(--sygnal);  border-color: transparent; }
+.pigulka-kropka { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
-/* ─────────────────────────────────────────────────────
-   KOMUNIKATY
-   ───────────────────────────────────────────────────── */
 .komunikat {
   padding: var(--od-12) var(--od-16);
   border-radius: var(--r);
@@ -543,96 +723,96 @@ input::placeholder, textarea::placeholder { color: var(--atrament-3); }
 .komunikat-blad    { background: var(--sygnal-tlo);  color: var(--sygnal); }
 
 /* ─────────────────────────────────────────────────────
-   MODAL
+   NAKŁADKI
    ───────────────────────────────────────────────────── */
 .nakladka {
   position: fixed; inset: 0; z-index: 200;
-  background: rgba(20, 24, 28, 0.4);
+  background: rgba(20, 24, 28, 0.32);
+  backdrop-filter: blur(2px);
   display: flex; align-items: center; justify-content: center;
   padding: var(--od-24);
 }
 .modal {
   background: var(--karta);
-  border-radius: var(--r);
+  border-radius: var(--r-lg);
   box-shadow: var(--cien-l);
-  width: 100%;
-  max-width: 560px;
-  max-height: 85vh;
-  overflow-y: auto;
-  padding: var(--od-24);
+  width: 100%; max-width: 560px; max-height: 85vh;
+  overflow-y: auto; padding: var(--od-24);
 }
 .modal-tytul { font-family: var(--font-display); font-size: var(--st-20); margin-bottom: var(--od-16); }
 .modal-stopka {
   display: flex; justify-content: flex-end; gap: var(--od-8);
   margin-top: var(--od-24); padding-top: var(--od-16);
-  border-top: 1px solid var(--linia);
+  border-top: 1px solid var(--linia-2);
 }
 
-/* ─────────────────────────────────────────────────────
-   PALETA POLECEŃ (2.3) — Ctrl/⌘+K
-   Przy 500 rejestrach wpisanie nazwy spółki jest szybsze niż każda lista.
-   ───────────────────────────────────────────────────── */
+/* Paleta poleceń — Ctrl/⌘+K */
 .paleta-nakladka {
   position: fixed; inset: 0; z-index: 300;
-  background: rgba(20, 24, 28, 0.4);
+  background: rgba(20, 24, 28, 0.32);
+  backdrop-filter: blur(2px);
   display: flex; align-items: flex-start; justify-content: center;
   padding-top: 12vh;
 }
 .paleta {
   background: var(--karta);
-  border-radius: var(--r);
+  border-radius: var(--r-lg);
   box-shadow: var(--cien-l);
-  width: 100%;
-  max-width: 560px;
-  overflow: hidden;
+  width: 100%; max-width: 600px; overflow: hidden;
   animation: paleta-wejscie var(--ruch-paleta);
 }
 @keyframes paleta-wejscie {
   from { opacity: 0; transform: translateY(-8px); }
   to   { opacity: 1; transform: none; }
 }
+.paleta-pole-rzad { display: flex; align-items: center; gap: var(--od-12); padding: 0 var(--od-16); border-bottom: 1px solid var(--linia-2); }
+.paleta-pole-rzad svg { color: var(--atrament-3); flex-shrink: 0; }
 .paleta-pole {
-  width: 100%;
-  padding: var(--od-16);
-  font-size: var(--st-20);
-  border: none;
-  border-bottom: 1px solid var(--linia);
-  border-radius: 0;
-  outline: none;
+  width: 100%; padding: var(--od-16) 0;
+  font-size: var(--st-20); border: none; border-radius: 0; outline: none;
 }
-.paleta-pole:focus { box-shadow: none; border-color: var(--linia); }
-.paleta-wyniki { max-height: 380px; overflow-y: auto; }
+.paleta-pole:focus { box-shadow: none; }
+.paleta-wyniki { max-height: 380px; overflow-y: auto; padding: var(--od-8); }
 .paleta-grupa {
   font-size: var(--st-11); font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.1em; color: var(--atrament-3);
-  padding: var(--od-12) var(--od-16) var(--od-4);
+  letter-spacing: 0.08em; color: var(--atrament-3);
+  padding: var(--od-8) var(--od-12) var(--od-4);
 }
 .paleta-poz {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--od-12);
+  display: flex; align-items: center; gap: var(--od-12);
   width: 100%; text-align: left;
-  padding: var(--od-8) var(--od-16);
+  padding: var(--od-8) var(--od-12);
+  border-radius: var(--r-sm);
   background: none; border: none; cursor: pointer;
   font: inherit; color: var(--atrament);
 }
 .paleta-poz.podswietlona { background: var(--rejestr-tlo); }
+.paleta-poz svg { color: var(--atrament-3); flex-shrink: 0; }
+.paleta-poz.podswietlona svg { color: var(--rejestr); }
+.paleta-poz-etykieta { flex: 1; min-width: 0; }
 .paleta-poz-meta { font-size: var(--st-11); color: var(--atrament-3); font-family: var(--font-dane); }
 .paleta-stopka {
   padding: var(--od-8) var(--od-16);
-  border-top: 1px solid var(--linia);
+  border-top: 1px solid var(--linia-2);
   font-size: var(--st-11); color: var(--atrament-3);
   display: flex; gap: var(--od-16);
 }
 .klawisz {
   font-family: var(--font-dane); font-size: var(--st-11);
   padding: 1px var(--od-4);
-  background: var(--papier); border: 1px solid var(--linia); border-radius: var(--r-sm);
+  background: var(--papier); border: 1px solid var(--linia); border-radius: var(--r-xs);
 }
 
 /* ─────────────────────────────────────────────────────
-   PUSTY STAN (2.7)
-   Zdanie mówiące CO ZROBIĆ plus przycisk — nigdy „Brak danych".
+   PUSTY STAN — zdanie mówiące CO ZROBIĆ, nigdy „Brak danych"
    ───────────────────────────────────────────────────── */
 .pusto { text-align: center; padding: var(--od-40) var(--od-24); }
+.pusto-ikona {
+  width: 48px; height: 48px; margin: 0 auto var(--od-16);
+  border-radius: var(--r);
+  background: var(--papier); color: var(--atrament-3);
+  display: flex; align-items: center; justify-content: center;
+}
 .pusto-tytul { font-family: var(--font-display); font-size: var(--st-20); margin-bottom: var(--od-8); }
 .pusto-opis { color: var(--atrament-2); font-size: var(--st-13); margin-bottom: var(--od-16); }
 
@@ -642,19 +822,19 @@ input::placeholder, textarea::placeholder { color: var(--atrament-3); }
 .sekcja {
   background: var(--karta);
   border: 1px solid var(--linia);
-  border-radius: var(--r);
+  border-radius: var(--r-lg);
   margin-bottom: var(--od-12);
   overflow: hidden;
 }
 .sekcja-naglowek {
   display: flex; align-items: center; justify-content: space-between; gap: var(--od-12);
-  width: 100%; padding: var(--od-12) var(--od-24);
+  width: 100%; padding: var(--od-16) var(--od-24);
   background: none; border: none; cursor: pointer;
   font: inherit; color: var(--atrament); text-align: left;
 }
 .sekcja-naglowek:hover { background: var(--papier); }
 .sekcja-tytul { display: flex; align-items: center; gap: var(--od-8); font-weight: 600; font-size: var(--st-13); }
-.strzalka { color: var(--atrament-3); font-size: var(--st-11); display: inline-block; }
+.strzalka { color: var(--atrament-3); display: inline-flex; transition: transform var(--ruch-wiersz); }
 .strzalka.otwarta { transform: rotate(90deg); }
 
 /* ─────────────────────────────────────────────────────
@@ -664,13 +844,12 @@ input::placeholder, textarea::placeholder { color: var(--atrament-3); }
 .krok {
   display: flex; align-items: center; gap: var(--od-8);
   padding: var(--od-8) var(--od-16);
-  font-size: var(--st-13);
-  color: var(--atrament-3);
+  font-size: var(--st-13); color: var(--atrament-3);
   border-bottom: 2px solid var(--linia);
   flex: 1;
 }
 .krok.biezacy { color: var(--rejestr); border-bottom-color: var(--rejestr); font-weight: 600; }
-.krok.zrobiony { color: var(--atrament-2); border-bottom-color: var(--rejestr-2); }
+.krok.zrobiony { color: var(--atrament-2); border-bottom-color: var(--rejestr-3); }
 .krok-numer {
   width: 20px; height: 20px; border-radius: var(--r-pigulka);
   border: 1px solid currentColor;
@@ -681,33 +860,24 @@ input::placeholder, textarea::placeholder { color: var(--atrament-3); }
 
 .stopka-kreatora {
   display: flex; align-items: center; justify-content: space-between; gap: var(--od-12);
-  margin-top: var(--od-24); padding-top: var(--od-16);
-  border-top: 1px solid var(--linia);
-  position: sticky; bottom: 0;
-  background: var(--karta);
-  padding-bottom: var(--od-16);
+  margin-top: var(--od-24); padding-top: var(--od-16); padding-bottom: var(--od-16);
+  border-top: 1px solid var(--linia-2);
+  position: sticky; bottom: 0; background: var(--karta);
 }
 .stopka-kreatora-prawa { display: flex; gap: var(--od-8); margin-left: auto; }
 
-/* ─────────────────────────────────────────────────────
-   KAFELKI WYBORU (kreator zdarzenia — faza 3)
-   Tytuł i opis ROZDZIELONE, stała wysokość, kategoria jako pigułka w rogu.
-   Własna nazwa klasy (`-wyboru`), żeby nie nadpisać kafelków starego
-   kreatora, zanim faza 3 go przepisze.
-   ───────────────────────────────────────────────────── */
+/* Kafelki wyboru typu zdarzenia (kreator — faza 3) */
 .kafelki-wyboru { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--od-12); }
 @media (max-width: 900px) { .kafelki-wyboru { grid-template-columns: minmax(0, 1fr); } }
 .kafelek-wyboru {
   position: relative;
   display: flex; flex-direction: column; gap: var(--od-4);
-  text-align: left;
-  padding: var(--od-16);
+  text-align: left; padding: var(--od-16);
   min-height: 96px;
   background: var(--karta);
   border: 1px solid var(--linia);
   border-radius: var(--r);
-  cursor: pointer;
-  font: inherit;
+  cursor: pointer; font: inherit;
 }
 .kafelek-wyboru:hover { border-color: var(--atrament-3); }
 .kafelek-wyboru.wybrany { border-color: var(--rejestr); box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10); }
@@ -722,11 +892,17 @@ input::placeholder, textarea::placeholder { color: var(--atrament-3); }
 .rzad-rozdzielony { display: flex; align-items: center; justify-content: space-between; gap: var(--od-12); }
 .pion { display: flex; flex-direction: column; }
 .siatka-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--od-16); }
-@media (max-width: 900px) { .siatka-2 { grid-template-columns: minmax(0, 1fr); } }
-.rozdzielacz { height: 1px; background: var(--linia); margin: var(--od-16) 0; }
+/* Główna kolumna + prawa szyna (pulpit, kokpit) */
+.siatka-tresc { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--od-16); align-items: start; }
+.siatka-tresc-prawa { position: sticky; top: var(--od-24); display: flex; flex-direction: column; gap: var(--od-16); }
+@media (max-width: 1200px) {
+  .siatka-2 { grid-template-columns: minmax(0, 1fr); }
+  .siatka-tresc { grid-template-columns: minmax(0, 1fr); }
+  .siatka-tresc-prawa { position: static; }
+}
+.rozdzielacz { height: 1px; background: var(--linia-2); margin: var(--od-16) 0; }
 .zawijaj { white-space: normal; }
 
-/* Ładowanie */
 .ladowanie { display: flex; justify-content: center; padding: var(--od-40); }
 .spin {
   width: 20px; height: 20px;
@@ -737,8 +913,16 @@ input::placeholder, textarea::placeholder { color: var(--atrament-3); }
 }
 @keyframes obrot { to { transform: rotate(360deg); } }
 
+/* Wykres iskrowy — czysty SVG, bez bibliotek */
+.iskra { width: 100%; height: 64px; display: block; }
+.iskra-linia { fill: none; stroke: var(--rejestr); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.iskra-wypelnienie { fill: var(--rejestr-tlo); opacity: 0.6; }
+.iskra-punkt { fill: var(--rejestr); }
+.iskra-siatka { stroke: var(--linia-2); stroke-width: 1; }
+.iskra-podpis { font-family: var(--font-dane); font-size: 9px; fill: var(--atrament-3); }
+
 /* ─────────────────────────────────────────────────────
-   RUCH — wyłączany globalnie przy prefers-reduced-motion (2.5, 2.8)
+   RUCH — wyłączany globalnie przy prefers-reduced-motion
    ───────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -751,13 +935,13 @@ input::placeholder, textarea::placeholder { color: var(--atrament-3); }
 /* ─────────────────────────────────────────────────────
    DRUK — szczegóły wydruku w fazie 4
    ───────────────────────────────────────────────────── */
-.bez-druku { }
 @media print {
-  .szyna, .bez-druku, .btn, .okruszki, .paleta-nakladka { display: none !important; }
-  .powloka { display: block; }
+  .szyna, .topbar, .bez-druku, .btn, .okruszki, .paleta-nakladka, .stronicowanie { display: none !important; }
+  .powloka { display: block; margin: 0; border: none; border-radius: 0; box-shadow: none; max-width: none; }
+  .obszar { background: var(--karta); }
   .tresc { max-width: none; padding: 0; }
   body { background: var(--karta); }
-  .karta, .sekcja { border: none; padding: 0; margin: 0; }
+  .karta, .sekcja { border: none; padding: 0; margin: 0; box-shadow: none; }
   .tabela th { background: none; border-bottom: 1px solid var(--atrament); }
   .tabela tr { break-inside: avoid; }
 }

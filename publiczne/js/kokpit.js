@@ -268,29 +268,25 @@ function EkranKokpitu({ spolkaId, ustawArchiwalny }) {
   return (
     <>
       <div className="okruszki bez-druku">
-        <button onClick={() => idz('/spolki')}>Spółki</button> → {spolka.nazwa}
+        <button onClick={() => idz('/spolki')}>Spółki</button>
+        <Ikona nazwa="strzalkaPrawo" rozmiar={13} />
+        <span>{spolka.nazwa}</span>
       </div>
 
-      <div className="pasek-gorny">
-        <div>
-          <div className="tytul-strony">{spolka.nazwa}</div>
-          <div className="podtytul-strony">
-            {spolka.krs ? `KRS ${spolka.krs}` : 'bez numeru KRS'}
-            {spolka.nip ? ` · NIP ${spolka.nip}` : ''}
-            {spolka.miejscowosc ? ` · ${spolka.miejscowosc}` : ''}
-            {spolka.data_umowy ? ` · umowa o prowadzenie rejestru z ${fmt.data(spolka.data_umowy)}` : ''}
-          </div>
-          <div className="row-g" style={{ marginTop: 10 }}>
+      <div className="naglowek-strony">
+        <div style={{ minWidth: 0 }}>
+          <div className="rzad" style={{ gap: 'var(--od-12)', flexWrap: 'wrap' }}>
+            <h1 className="tytul-ekranu">{spolka.nazwa}</h1>
             <StatusSpolki status={spolka.status} />
-            <span className="podstawa-prawna">
-              rejestr prowadzi {spolka.organ_prowadzacy || 'Kancelaria Notarialna Łukasz Kozon'} —
-              art. 300(31) § 1 KSH
-            </span>
+          </div>
+          <div className="naglowek-strony-kontekst">
+            Rejestr prowadzi {spolka.organ_prowadzacy || 'Kancelaria Notarialna Łukasz Kozon'} —
+            art. 300³¹ § 1 KSH
           </div>
         </div>
-        <div className="row-g bez-druku">
+        <div className="naglowek-strony-akcje">
           <button className="btn" onClick={() => idz(`/spolki/${spolkaId}/wydruk/raport?data=${data}`)}>
-            Raport spółki
+            <Ikona nazwa="dokument" rozmiar={16} /> Raport
           </button>
           <button className="btn" onClick={() => idz(`/spolki/${spolkaId}/wydruk/informacja?data=${data}`)}>
             Informacja z rejestru
@@ -307,12 +303,28 @@ function EkranKokpitu({ spolkaId, ustawArchiwalny }) {
             </button>
           )}
           {!wstecz && (
-            <button className="btn btn-primary btn-lg" onClick={() => idz(`/spolki/${spolkaId}/zdarzenie`)}>
-              Nowe zdarzenie
+            <button className="btn btn-glowny" onClick={() => idz(`/spolki/${spolkaId}/zdarzenie`)}>
+              <Ikona nazwa="plus" rozmiar={16} /> Nowe zdarzenie
             </button>
           )}
         </div>
       </div>
+
+      {/* Metryka rejestru — te same dane, które sesja przewiduje w prawej
+          kolumnie kokpitu (faza 2); do czasu przebudowy układu stoją paskiem
+          pod nagłówkiem, żeby nie trzeba ich było szukać w sekcjach. */}
+      <Karta>
+        <Metryka
+          pozycje={[
+            { etykieta: 'Numer KRS', wartosc: spolka.krs, dane: true },
+            { etykieta: 'NIP', wartosc: spolka.nip, dane: true },
+            { etykieta: 'Siedziba', wartosc: spolka.miejscowosc },
+            { etykieta: 'Umowa o prowadzenie rejestru', wartosc: fmt.data(spolka.data_umowy), dane: true },
+            { etykieta: 'Akcje w obrocie', wartosc: fmt.liczba(dane.razem_akcji) },
+            { etykieta: 'Zdarzenia', wartosc: fmt.liczba(dane.liczba_zdarzen) },
+          ]}
+        />
+      </Karta>
 
       {dane.niezgodnosci && dane.niezgodnosci.length > 0 && (
         <Komunikat
@@ -324,7 +336,7 @@ function EkranKokpitu({ spolkaId, ustawArchiwalny }) {
 
       {przeliczanie && (
         <Komunikat
-          odmiana={przeliczanie.ok ? 'ok' : 'blad'}
+          odmiana={przeliczanie.ok ? 'rejestr' : 'blad'}
           tresc={przeliczanie.komunikat}
           lista={przeliczanie.niezgodnosci}
         />

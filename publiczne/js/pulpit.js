@@ -1,20 +1,43 @@
-/* pulpit.js — dwie kolumny: sprawy w toku i spółki (sekcja 9 specyfikacji). */
+/* pulpit.js — ekran startowy.
+   Sesja SESJA-PSA-6-INTERFEJS.md, faza 1.
 
-function ZnacznikIntegralnosci({ integralnosc }) {
-  if (!integralnosc) return null;
-  if (integralnosc.ok) {
-    return (
-      <span className="podstawa-prawna" title="Łańcuch skrótów zdarzeń zweryfikowany">
-        ✓ łańcuch nieprzerwany ({fmt.liczba(integralnosc.sprawdzono)})
-      </span>
-    );
-  }
-  return (
-    <Znacznik odmiana="bordo">
-      łańcuch zerwany przy zdarzeniu #{integralnosc.blad && integralnosc.blad.id}
-    </Znacznik>
-  );
+   Zadanie ekranu (brief, sekcja 1): wiedzieć, co ma termin, i wejść w to
+   jednym kliknięciem. Stąd układ: cztery liczby na górze, po nich sprawy
+   w toku jako lista wierszy (a nie tabela — wiersz ma być celem kliknięcia,
+   nie siatką do czytania), a w prawej szynie szybkie akcje i tempo pracy. */
+
+const NAZWY_STANU_PULPIT = {
+  nowa: 'nowa',
+  weryfikacja: 'w weryfikacji',
+  wstrzymana: 'wstrzymana',
+  spor: 'spór',
+};
+
+/** Pigułka terminu. Mosiądz = czas, czerwień wyłącznie po terminie. */
+function TerminPigulka({ termin }) {
+  if (!termin) return null;
+  if (termin.zamrozony) return <Pigulka odmiana="mosiadz">termin zawieszony</Pigulka>;
+  if (termin.po_terminie) return <Pigulka odmiana="sygnal">po terminie</Pigulka>;
+  if (termin.pilny) return <Pigulka odmiana="mosiadz">{termin.dni_pozostale} dz.</Pigulka>;
+  return <Pigulka>{termin.dni_pozostale} dz.</Pigulka>;
 }
+
+const IKONY_ZDARZEN = {
+  emisja: 'akcje',
+  objecie: 'akcje',
+  przeniesienie: 'zdarzenie',
+  przeniesienie_ulamka: 'zdarzenie',
+  umorzenie: 'archiwum',
+  obciazenie: 'ostrzezenie',
+  zajecie: 'ostrzezenie',
+  wykreslenie_obciazenia: 'sprawdz',
+  wykreslenie_zajecia: 'sprawdz',
+  uprawnienie: 'dokument',
+  ograniczenie: 'dokument',
+  pokrycie_akcji: 'sprawdz',
+  przedstawiciel: 'osoby',
+  zmiana_danych_akcjonariusza: 'osoby',
+};
 
 function EkranPulpitu() {
   const { dane, ladowanie, blad } = useDane('/api/psa/pulpit');
@@ -23,19 +46,13 @@ function EkranPulpitu() {
   if (blad) return <Komunikat odmiana="blad" tytul="Nie udało się wczytać pulpitu" tresc={blad.message} />;
 
   const { spolki, liczniki, integralnosc, sprawy } = dane;
+  const wToku = sprawy.pozycje || [];
+  const poTerminie = wToku.filter((s) => s.termin && s.termin.po_terminie).length;
+  const pilne = wToku.filter((s) => s.termin && s.termin.pilny && !s.termin.po_terminie).length;
+  const nieobjete = spolki.reduce((suma, s) => suma + (s.akcje_nieobjete || 0), 0);
 
   return (
     <>
-      <div className="pasek-gorny">
-        <div>
-          <div className="tytul-strony">Pulpit</div>
-          <div className="podtytul-strony">
-            Rejestry akcjonariuszy prostych spółek akcyjnych prowadzone przez kancelarię.
-          </div>
-        </div>
-        <ZnacznikIntegralnosci integralnosc={integralnosc} />
-      </div>
-
       {!integralnosc.ok && (
         <Komunikat
           odmiana="blad"
@@ -48,130 +65,132 @@ function EkranPulpitu() {
         />
       )}
 
-      <div className="siatka-4" style={{ marginBottom: 22 }}>
-        <div className="licznik">
-          <div className="licznik-wartosc">{fmt.liczba(liczniki.spolki)}</div>
-          <div className="licznik-etykieta">Prowadzone rejestry</div>
-        </div>
-        <div className="licznik">
-          <div className="licznik-wartosc">{fmt.liczba(liczniki.akcjonariusze)}</div>
-          <div className="licznik-etykieta">Akcjonariusze</div>
-        </div>
-        <div className="licznik">
-          <div className="licznik-wartosc">{fmt.liczba(liczniki.osoby)}</div>
-          <div className="licznik-etykieta">Osoby w kartotece</div>
-        </div>
-        <div className="licznik">
-          <div className="licznik-wartosc">{fmt.liczba(liczniki.zdarzenia)}</div>
-          <div className="licznik-etykieta">Zdarzenia rejestrowe</div>
-        </div>
+      <div className="kafle">
+        <Kafel
+          etykieta="Prowadzone rejestry"
+          wartosc={fmt.liczba(liczniki.spolki)}
+          delta={nieobjete > 0 ? `${fmt.AKCJE(nieobjete)} bez objęcia` : 'bilans akcji zgodny'}
+          deltaOdmiana={nieobjete > 0 ? 'uwaga' : 'dodatnia'}
+          ikona="spolki"
+          przyKlik={() => idz('/spolki')}
+        />
+        <Kafel
+          etykieta="Sprawy w toku"
+          wartosc={fmt.liczba(wToku.length)}
+          delta={
+            poTerminie > 0
+              ? `${poTerminie} po terminie`
+              : pilne > 0
+              ? `${pilne} ${fmt.odmien(pilne, 'pilna', 'pilne', 'pilnych')}`
+              : 'żadna nie goni terminu'
+          }
+          deltaOdmiana={poTerminie > 0 ? '' : pilne > 0 ? 'uwaga' : 'dodatnia'}
+          ikona="sprawy"
+          przyKlik={() => idz('/sprawy')}
+        />
+        <Kafel
+          etykieta="Akcjonariusze"
+          wartosc={fmt.liczba(liczniki.akcjonariusze)}
+          delta={`${fmt.liczba(liczniki.osoby)} ${fmt.odmien(liczniki.osoby, 'osoba', 'osoby', 'osób')} w kartotece`}
+          ikona="osoby"
+          przyKlik={() => idz('/osoby')}
+        />
+        <Kafel
+          etykieta="Zdarzenia rejestrowe"
+          wartosc={fmt.liczba(liczniki.zdarzenia)}
+          delta={
+            integralnosc.ok
+              ? `łańcuch nieprzerwany (${fmt.liczba(integralnosc.sprawdzono)})`
+              : 'łańcuch zerwany'
+          }
+          deltaOdmiana={integralnosc.ok ? 'dodatnia' : ''}
+          ikona="zdarzenie"
+        />
       </div>
 
-      <div className="siatka-2">
-        <div>
+      <div className="siatka-tresc">
+        <div style={{ minWidth: 0 }}>
           <Karta
-            tight
+            scisla
             tytul="Sprawy w toku"
-            akcje={
-              <button className="btn btn-sm" onClick={() => idz('/sprawy')}>
-                Cała kolejka
-              </button>
-            }
+            akcje={<button className="karta-link" onClick={() => idz('/sprawy')}>Cała kolejka</button>}
           >
-            {sprawy.pozycje.length === 0 ? (
+            {wToku.length === 0 ? (
               <Pusto
-                tytul="Brak spraw w toku"
-                opis="Nowe sprawy zakładasz z kokpitu spółki, przyciskiem „Nowe zdarzenie”."
+                ikona="sprawdz"
+                tytul="Kolejka jest pusta"
+                opis="Żadna sprawa nie czeka na wpis. Nowe zakładasz z kokpitu spółki."
+                akcja={<button className="btn" onClick={() => idz('/spolki')}>Przejdź do spółek</button>}
               />
             ) : (
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Spółka</th>
-                    <th>Zdarzenie</th>
-                    <th>Stan</th>
-                    <th className="prawo">Termin</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sprawy.pozycje.slice(0, 8).map((s) => (
-                    <tr key={s.id} className="klikalny" onClick={() => idz(`/sprawy/${s.id}`)}>
-                      <td style={{ fontWeight: 500 }}>{s.spolka_nazwa}</td>
-                      <td className="przyciemnione">{s.typ_nazwa}</td>
-                      <td>
-                        <Znacznik odmiana={s.stan === 'wstrzymana' ? 'oliwka' : s.stan === 'weryfikacja' ? 'lupek' : 'neutralny'}>
-                          {s.stan === 'wstrzymana' ? 'wstrzymana' : s.stan === 'weryfikacja' ? 'w weryfikacji' : 'nowa'}
-                        </Znacznik>
-                      </td>
-                      <td className="prawo">
-                        {s.termin.zamrozony ? (
-                          <Znacznik odmiana="oliwka">zawieszony</Znacznik>
-                        ) : s.termin.po_terminie ? (
-                          <Znacznik odmiana="bordo">po terminie</Znacznik>
-                        ) : s.termin.pilny ? (
-                          <Znacznik odmiana="bordo">{s.termin.dni_pozostale} dz.</Znacznik>
-                        ) : (
-                          <span className="przyciemnione">{s.termin.dni_pozostale} dz.</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="lista-wierszy">
+                {wToku.slice(0, 6).map((s) => (
+                  <WierszListy
+                    key={s.id}
+                    ikona={IKONY_ZDARZEN[s.typ_zdarzenia] || 'sprawy'}
+                    tytul={s.typ_nazwa}
+                    podtytul={s.spolka_nazwa}
+                    przyKlik={() => idz(`/sprawy/${s.id}`)}
+                    prawo={
+                      <>
+                        <Pigulka>{NAZWY_STANU_PULPIT[s.stan] || s.stan}</Pigulka>
+                        <TerminPigulka termin={s.termin} />
+                      </>
+                    }
+                    data={fmt.data(s.data_wplywu)}
+                  />
+                ))}
+              </div>
             )}
           </Karta>
-        </div>
 
-        <div>
           <Karta
-            tight
+            scisla
             tytul="Spółki"
-            akcje={
-              <button className="btn btn-sm" onClick={() => idz('/spolki/nowa')}>
-                Dodaj spółkę
-              </button>
-            }
+            akcje={<button className="karta-link" onClick={() => idz('/spolki')}>Wszystkie</button>}
           >
             {spolki.length === 0 ? (
               <Pusto
-                tytul="Brak spółek"
-                opis="Dodaj pierwszą spółkę, aby otworzyć dla niej rejestr akcjonariuszy."
+                ikona="spolki"
+                tytul="Nie prowadzisz jeszcze żadnego rejestru"
+                opis="Dodaj spółkę, żeby otworzyć dla niej rejestr akcjonariuszy."
                 akcja={
-                  <button className="btn btn-primary" onClick={() => idz('/spolki/nowa')}>
-                    Dodaj spółkę
+                  <button className="btn btn-glowny" onClick={() => idz('/spolki/nowa')}>
+                    <Ikona nazwa="plus" rozmiar={16} /> Dodaj spółkę
                   </button>
                 }
               />
             ) : (
-              <table className="tbl">
+              <table className="tabela">
                 <thead>
                   <tr>
                     <th>Spółka</th>
-                    <th className="prawo">Akcjonariusze</th>
-                    <th className="prawo">Akcje</th>
+                    <th className="do-prawej">Akcjonariusze</th>
+                    <th className="do-prawej">Akcje</th>
                     <th>Ostatnie zdarzenie</th>
+                    <th className="kol-strzalka" />
                   </tr>
                 </thead>
                 <tbody>
-                  {spolki.map((s) => (
-                    <tr key={s.id} className="klikalny" onClick={() => idz(`/spolki/${s.id}`)}>
+                  {spolki.slice(0, 6).map((s) => (
+                    <tr key={s.id} className="klikalna" onClick={() => idz(`/spolki/${s.id}`)}>
                       <td>
                         <div style={{ fontWeight: 500 }}>{s.nazwa}</div>
-                        <div className="podpowiedz" style={{ marginTop: 2 }}>
+                        <div className="wiersz-podtytul">
                           {s.krs ? `KRS ${s.krs}` : 'bez numeru KRS'}
-                          {s.status !== 'aktywna' ? ` · ${NAZWY_STATUSU[s.status] || s.status}` : ''}
                         </div>
                       </td>
-                      <td className="prawo">{fmt.liczba(s.liczba_akcjonariuszy)}</td>
-                      <td className="prawo">
+                      <td className="do-prawej">{fmt.liczba(s.liczba_akcjonariuszy)}</td>
+                      <td className="do-prawej">
                         {fmt.liczba(s.liczba_akcji)}
                         {s.akcje_nieobjete > 0 && (
-                          <div className="podpowiedz" style={{ color: 'var(--olive)' }}>
+                          <div className="podstawa-prawna" style={{ color: 'var(--mosiadz)' }}>
                             {fmt.liczba(s.akcje_nieobjete)} nieobjętych
                           </div>
                         )}
                       </td>
-                      <td className="przyciemnione">{fmt.data(s.ostatnie_zdarzenie)}</td>
+                      <td className="kol-dane wyciszony">{fmt.data(s.ostatnie_zdarzenie)}</td>
+                      <td className="kol-strzalka"><Ikona nazwa="strzalkaPrawo" rozmiar={15} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -179,6 +198,59 @@ function EkranPulpitu() {
             )}
           </Karta>
         </div>
+
+        <aside className="siatka-tresc-prawa bez-druku">
+          <Karta tytul="Szybkie akcje">
+            <SzybkieAkcje
+              akcje={[
+                { nazwa: 'Dodaj spółkę', ikona: 'spolki', przyKlik: () => idz('/spolki/nowa') },
+                { nazwa: 'Dodaj osobę do kartoteki', ikona: 'osoby', przyKlik: () => idz('/osoby') },
+                { nazwa: 'Przejdź do kolejki spraw', ikona: 'sprawy', przyKlik: () => idz('/sprawy') },
+                { nazwa: 'Nalicz opłaty', ikona: 'oplaty', przyKlik: () => idz('/oplaty') },
+              ]}
+            />
+          </Karta>
+
+          <div className="karta-akcent">
+            <div className="karta-akcent-tytul">Rejestru nie da się cofnąć</div>
+            <div className="karta-akcent-tresc">
+              Każde zdarzenie niesie skrót poprzedniego. Zmiana wpisu wstecz jest
+              niemożliwa bez przepisania całej historii — to realizacja obowiązku
+              zapewnienia integralności z art. 300³¹ § 4 KSH.
+            </div>
+            <button className="btn btn-maly" onClick={() => idz('/spolki')}>
+              Zobacz rejestry
+            </button>
+          </div>
+
+          {wToku.length > 0 && (
+            <Karta tytul="Terminy">
+              <div className="pion" style={{ gap: 'var(--od-12)' }}>
+                <div className="rzad-rozdzielony">
+                  <span className="male drugorzedny">Po terminie</span>
+                  <strong className="liczba" style={{ color: poTerminie ? 'var(--sygnal)' : 'inherit' }}>
+                    {poTerminie}
+                  </strong>
+                </div>
+                <div className="rzad-rozdzielony">
+                  <span className="male drugorzedny">Zostały ≤ 2 dni</span>
+                  <strong className="liczba" style={{ color: pilne ? 'var(--mosiadz)' : 'inherit' }}>
+                    {pilne}
+                  </strong>
+                </div>
+                <div className="rzad-rozdzielony">
+                  <span className="male drugorzedny">W spokojnym biegu</span>
+                  <strong className="liczba">{wToku.length - poTerminie - pilne}</strong>
+                </div>
+              </div>
+              <div className="rozdzielacz" />
+              <div className="podstawa-prawna">
+                Siedem dni to termin maksymalny — ustawa nakazuje działać niezwłocznie
+                (art. 300³⁴ § 1 KSH).
+              </div>
+            </Karta>
+          )}
+        </aside>
       </div>
     </>
   );
