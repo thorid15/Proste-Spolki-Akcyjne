@@ -1,5 +1,10 @@
-/* ui.js — komponenty wspólne. Klasy pochodzą z /wspolne/design.css
-   (.card, .btn, .tbl, .modal, .fl, .empty) i /style/psa.css. */
+/* ui.js — komponenty zastane, stopniowo zastępowane przez `ui-rejestr.js`.
+
+   Sesja SESJA-PSA-6-INTERFEJS.md, faza 1: prymitywy (Karta, Pole, Modal,
+   Sekcja, Komunikat, Pusto, Spinner) są już nadpisane nowszymi wersjami
+   z `ui-rejestr.js`, ładowanego zaraz po tym pliku. Zostaje tu wyłącznie to,
+   czego nowy system jeszcze nie ma: Znacznik, StatusSpolki, StatusAml,
+   Wyniki, WyborOsoby. Plik zniknie, gdy fazy 2-4 przepiszą swoje ekrany. */
 
 function Spinner() {
   return (

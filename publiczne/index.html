@@ -5,25 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Rejestr akcjonariuszy P.S.A. — Kancelaria Notarialna Łukasza Kozona</title>
 
-  <!-- Linki Google Fonts zostają w <head> modułu (design.css, wersja 1.1) -->
+  <!-- Trzy role, trzy kroje (SESJA-PSA-6-INTERFEJS.md, sekcja 2.2):
+       EB Garamond — display, Inter Tight — interfejs, IBM Plex Mono — dane. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap">
+        href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600&family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap&subset=latin-ext">
 
-  <link rel="stylesheet" href="/wspolne/design.css">
+  <!-- Kolejność ma znaczenie: warstwa przejściowa i style zastane ładują się
+       PRZED `rejestr.css`, żeby przy kolizji nazw wygrywał nowy system. -->
+  <link rel="stylesheet" href="/style/zgodnosc.css">
   <link rel="stylesheet" href="/style/psa.css">
+  <link rel="stylesheet" href="/style/rejestr.css">
 
-  <!-- Wersje przypięte (sekcja 13 specyfikacji) — bez bundlera -->
-  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js" crossorigin></script>
+  <!-- Wersje przypięte (sekcja 13 specyfikacji) — bez bundlera.
+       Serwowane LOKALNIE z /vendor zamiast z unpkg: rejestr akcjonariuszy
+       musi wstawać także wtedy, gdy kancelaria nie ma internetu albo CDN
+       jest niedostępny. Te same wersje, te same pliki, tylko bez sieci. -->
+  <script src="/vendor/react.production.min.js"></script>
+  <script src="/vendor/react-dom.production.min.js"></script>
+  <script src="/vendor/babel.min.js"></script>
 </head>
 <body>
   <div id="korzen"></div>
 
   <script type="text/babel" data-presets="react" src="/js/rdzen.js"></script>
   <script type="text/babel" data-presets="react" src="/js/ui.js"></script>
+  <!-- ui-rejestr.js ładuje się PO ui.js: nadpisuje prymitywy nową wersją. -->
+  <script type="text/babel" data-presets="react" src="/js/ui-rejestr.js"></script>
+  <script type="text/babel" data-presets="react" src="/js/podglad.js"></script>
   <script type="text/babel" data-presets="react" src="/js/pulpit.js"></script>
   <script type="text/babel" data-presets="react" src="/js/osoby.js"></script>
   <script type="text/babel" data-presets="react" src="/js/spolki.js"></script>

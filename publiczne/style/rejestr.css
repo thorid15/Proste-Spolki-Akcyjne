@@ -1,0 +1,763 @@
+/* rejestr.css — tożsamość wizualna modułu Rejestr akcjonariuszy P.S.A.
+   Sesja SESJA-PSA-6-INTERFEJS.md, faza 1.
+
+   Ten moduł NIE używa `design.css`. Tamten plik jest kanonem dla wewnętrznych
+   narzędzi kancelarii (Kalkulator, Kasa, Weryfikator). Rejestr akcjonariuszy
+   to produkt publiczny — widzą go zarządy spółek i inwestorzy, konkuruje
+   z aplikacjami domów maklerskich — więc dostaje własną tożsamość.
+   Wspólna zostaje wyłącznie rodzina szeryfowa (EB Garamond), jako cichy
+   łącznik z resztą systemu kancelarii.
+
+   ZASADA NADRZĘDNA: jeden kolor = jedno znaczenie w całej aplikacji.
+     zieleń   = „rejestr" (stan aktywny, akcja główna, pasma osi) — NIGDY „sukces"
+     mosiądz  = „czas" (playhead, terminy, obciążenia)            — NIGDY „błąd"
+     czerwień = wyłącznie po terminie, odmowa, akcje destrukcyjne — NIC więcej
+
+   Wartości spoza skal stopni i odstępów (sekcja 2.2) są w tym pliku błędem. */
+
+/* ─────────────────────────────────────────────────────
+   RESET
+   ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+em, i, cite, blockquote, address, dfn, var { font-style: normal; }
+
+:root {
+  /* ── Paleta (2.1) — mosiężna tabliczka + zieleń druku zabezpieczonego ── */
+  --atrament:    #14181C;  /* tekst główny, linie osi */
+  --atrament-2:  #565E68;  /* tekst drugorzędny */
+  --atrament-3:  #8A929C;  /* etykiety, wyciszone */
+  --papier:      #F6F7F5;  /* tło aplikacji — chłodna biel, NIE krem */
+  --karta:       #FFFFFF;  /* powierzchnie */
+  --linia:       #E3E5E1;  /* linie, siatka */
+  --rejestr:     #1F4D3D;  /* kolor instytucjonalny */
+  --rejestr-2:   #2E6B54;  /* hover, druga warstwa */
+  --rejestr-tlo: #E8EFEA;  /* delikatne tła */
+  --mosiadz:     #A97C3F;  /* „teraz", playhead, termin, obciążenia */
+  --mosiadz-tlo: #F5EDE0;
+  --sygnal:      #A32B22;  /* po terminie, odmowa, akcje destrukcyjne */
+  --sygnal-tlo:  #F7E9E7;
+
+  /* ── Kroje (2.2) — trzy role, trzy kroje ── */
+  --font-display: 'EB Garamond', 'Iowan Old Style', Georgia, serif;
+  --font-ui:      'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-dane:    'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+
+  /* ── Skala stopni (2.2) — nic spoza tej listy ── */
+  --st-40: 40px;
+  --st-28: 28px;
+  --st-20: 20px;
+  --st-15: 15px;
+  --st-13: 13px;
+  --st-11: 11px;
+
+  /* ── Skala odstępów (2.2) — nic spoza tej listy ── */
+  --od-4:  4px;
+  --od-8:  8px;
+  --od-12: 12px;
+  --od-16: 16px;
+  --od-24: 24px;
+  --od-40: 40px;
+  --od-64: 64px;
+
+  /* ── Układ (2.3) ── */
+  --szyna:  220px;   /* szyna nawigacji */
+  --tresc:  1240px;  /* wyśrodkowany kontener treści */
+
+  /* ── Promienie i cienie ── */
+  --r:    8px;
+  --r-sm: 6px;
+  --r-pigulka: 999px;
+  --cien-s: 0 1px 2px rgba(20, 24, 28, 0.04);
+  --cien-m: 0 2px 12px rgba(20, 24, 28, 0.06);
+  --cien-l: 0 8px 32px rgba(20, 24, 28, 0.12);
+
+  /* ── Ruch (2.8) — trzy animacje w całej aplikacji, nic poza nimi ── */
+  --ruch-pasma:  180ms ease-out;  /* 1. przejście pasm osi przy zmianie playheadu */
+  --ruch-wiersz: 140ms ease-out;  /* 2. wysunięcie szczegółu wiersza */
+  --ruch-paleta: 120ms ease-out;  /* 3. pojawienie się palety poleceń */
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--papier);
+  color: var(--atrament);
+  font-family: var(--font-ui);
+  font-size: var(--st-15);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-style: normal;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--linia); border-radius: var(--r-sm); }
+::-webkit-scrollbar-thumb:hover { background: var(--atrament-3); }
+
+::selection { background: var(--rejestr-tlo); color: var(--rejestr); }
+
+/* ─────────────────────────────────────────────────────
+   TYPOGRAFIA (2.2)
+   Display wyłącznie dla nazw spółek i tytułów ekranów.
+   Dane (numery akcji, KRS, NIP, daty w tabelach, skróty) zawsze w monie.
+   ───────────────────────────────────────────────────── */
+.display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+.tytul-ekranu { font-family: var(--font-display); font-size: var(--st-28); font-weight: 500; line-height: 1.2; }
+.tytul-duzy   { font-family: var(--font-display); font-size: var(--st-40); font-weight: 500; line-height: 1.15; }
+.tytul-sekcji { font-family: var(--font-display); font-size: var(--st-20); font-weight: 500; line-height: 1.3; }
+
+/* Dane maszynowe. `AZ 96–100` to identyfikator, nie liczba — w monie ustawia
+   się w kolumnie i da się porównać wzrokiem. */
+.dane {
+  font-family: var(--font-dane);
+  font-size: var(--st-13);
+  font-variant-ligatures: none;
+  letter-spacing: -0.01em;
+}
+/* Ilości i procenty: Inter Tight z tabular-nums (NIE mono — to liczby, nie identyfikatory). */
+.liczba { font-variant-numeric: tabular-nums; }
+
+.etykieta {
+  font-size: var(--st-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--atrament-3);
+}
+.drugorzedny { color: var(--atrament-2); }
+.wyciszony   { color: var(--atrament-3); }
+.male        { font-size: var(--st-13); }
+.podstawa-prawna { font-size: var(--st-11); color: var(--atrament-3); line-height: 1.5; }
+
+/* ─────────────────────────────────────────────────────
+   POWŁOKA (2.3)
+   Koniec z treścią przyklejoną do lewej krawędzi przy pustej prawej połowie.
+   ───────────────────────────────────────────────────── */
+.powloka { display: grid; grid-template-columns: var(--szyna) minmax(0, 1fr); min-height: 100vh; }
+
+.szyna {
+  background: var(--karta);
+  border-right: 1px solid var(--linia);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: var(--od-24) 0 var(--od-16);
+  display: flex;
+  flex-direction: column;
+}
+.szyna-marka { padding: 0 var(--od-16) var(--od-24); }
+.szyna-marka-nazwa {
+  font-family: var(--font-display);
+  font-size: var(--st-20);
+  line-height: 1.25;
+  color: var(--atrament);
+}
+.szyna-marka-podpis {
+  font-size: var(--st-11);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--atrament-3);
+  margin-top: var(--od-4);
+}
+.szyna-grupa { margin-bottom: var(--od-24); }
+.szyna-grupa-tytul {
+  font-size: var(--st-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--atrament-3);
+  padding: 0 var(--od-16) var(--od-8);
+}
+/* Stan aktywny: zielony pasek 2px na LEWEJ krawędzi + pogrubienie.
+   Świadomie NIE wypełnione tło (2.3). */
+.szyna-poz {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--od-8);
+  width: 100%;
+  padding: var(--od-8) var(--od-16);
+  font-family: inherit;
+  font-size: var(--st-13);
+  color: var(--atrament-2);
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.szyna-poz:hover { color: var(--atrament); }
+.szyna-poz.aktywna {
+  color: var(--rejestr);
+  font-weight: 600;
+  border-left-color: var(--rejestr);
+}
+.szyna-poz.zablokowana { color: var(--atrament-3); cursor: not-allowed; }
+.szyna-poz.zablokowana:hover { color: var(--atrament-3); }
+.szyna-stopka { margin-top: auto; padding: var(--od-16) var(--od-16) 0; border-top: 1px solid var(--linia); }
+
+/* Treść wyśrodkowana — nie przyklejona do lewej. */
+.tresc {
+  max-width: var(--tresc);
+  margin-inline: auto;
+  width: 100%;
+  padding: var(--od-40);
+}
+
+/* Nagłówek strony bez belki na całą szerokość: tytuł serifem, pod nim jedno
+   zdanie kontekstu, akcje po prawej. Bez powtarzania nazwy modułu. */
+.naglowek-strony {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--od-24);
+  margin-bottom: var(--od-24);
+}
+.naglowek-strony-kontekst { color: var(--atrament-2); font-size: var(--st-13); margin-top: var(--od-4); }
+.naglowek-strony-akcje { display: flex; gap: var(--od-8); flex-shrink: 0; }
+
+.okruszki { font-size: var(--st-13); color: var(--atrament-3); margin-bottom: var(--od-12); }
+.okruszki button {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; color: var(--atrament-2); text-decoration: underline;
+}
+.okruszki button:hover { color: var(--rejestr); }
+
+/* ─────────────────────────────────────────────────────
+   PRZYCISKI
+   ───────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--od-8);
+  padding: var(--od-8) var(--od-16);
+  font-family: inherit;
+  font-size: var(--st-13);
+  font-weight: 500;
+  color: var(--atrament);
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { border-color: var(--atrament-3); }
+.btn:focus-visible { outline: 2px solid var(--rejestr); outline-offset: 2px; }
+.btn:disabled { color: var(--atrament-3); cursor: not-allowed; background: var(--papier); }
+
+.btn-glowny { background: var(--rejestr); border-color: var(--rejestr); color: var(--karta); }
+.btn-glowny:hover:not(:disabled) { background: var(--rejestr-2); border-color: var(--rejestr-2); }
+.btn-glowny:disabled { background: var(--linia); border-color: var(--linia); color: var(--atrament-3); }
+
+/* Czerwień wyłącznie dla akcji destrukcyjnych — patrz zasada nadrzędna. */
+.btn-sygnal { color: var(--sygnal); border-color: var(--linia); }
+.btn-sygnal:hover:not(:disabled) { border-color: var(--sygnal); background: var(--sygnal-tlo); }
+
+.btn-duzy { padding: var(--od-12) var(--od-24); font-size: var(--st-15); }
+.btn-maly { padding: var(--od-4) var(--od-12); font-size: var(--st-11); }
+.btn-cichy { background: none; border-color: transparent; }
+.btn-cichy:hover:not(:disabled) { background: var(--papier); border-color: var(--linia); }
+
+/* ─────────────────────────────────────────────────────
+   KARTY
+   ───────────────────────────────────────────────────── */
+.karta {
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  padding: var(--od-24);
+  margin-bottom: var(--od-16);
+}
+.karta.scisla { padding: 0; }
+.karta-naglowek {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--od-16);
+  padding: var(--od-16) var(--od-24);
+  border-bottom: 1px solid var(--linia);
+}
+.karta-tytul { font-family: var(--font-display); font-size: var(--st-20); font-weight: 500; }
+
+/* ─────────────────────────────────────────────────────
+   POLA (2.6) — projekt od nowa
+   Etykieta ZAWSZE nad polem, nigdy jako placeholder.
+   ───────────────────────────────────────────────────── */
+.pole { margin-bottom: var(--od-16); }
+.pole-etykieta {
+  display: block;
+  font-size: var(--st-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--atrament-2);
+  margin-bottom: var(--od-8);
+}
+.pole-wymagane { color: var(--sygnal); }
+.pole-podpowiedz { font-size: var(--st-11); color: var(--atrament-3); margin-top: var(--od-4); line-height: 1.5; }
+/* Komunikat błędu mówi CO POPRAWIĆ; pole nie czyści się przy błędzie. */
+.pole-blad { font-size: var(--st-11); color: var(--sygnal); margin-top: var(--od-4); }
+/* Data słownie pod polem — potwierdzenie, że system zrozumiał wpis. */
+.pole-echo { font-size: var(--st-11); color: var(--rejestr); margin-top: var(--od-4); }
+
+input[type="text"], input[type="email"], input[type="password"], input[type="number"],
+input[type="search"], input[type="date"], input[type="time"], select, textarea {
+  width: 100%;
+  padding: var(--od-8) var(--od-12);
+  font-family: inherit;
+  font-size: var(--st-15);
+  color: var(--atrament);
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  outline: none;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--rejestr);
+  box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10);
+}
+input:disabled, select:disabled, textarea:disabled {
+  background: var(--papier);
+  color: var(--atrament-3);
+  cursor: not-allowed;
+}
+input.bledne, select.bledne, textarea.bledne { border-color: var(--sygnal); }
+input.bledne:focus, textarea.bledne:focus { box-shadow: 0 0 0 3px rgba(163, 43, 34, 0.10); }
+textarea { min-height: 88px; resize: vertical; line-height: 1.55; }
+input::placeholder, textarea::placeholder { color: var(--atrament-3); }
+
+/* Pole daty segmentowe DD.MM.RRRR (2.6) — trzy sekcje, przejście automatyczne,
+   tylko cyfry, strzałki góra/dół zmieniają wartość sekcji. Kalendarz NIE
+   otwiera się sam przy fokusie — jest za małym przyciskiem obok. */
+.pole-daty { display: flex; align-items: center; gap: var(--od-8); }
+.data-segmenty {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--od-8) var(--od-12);
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  font-family: var(--font-dane);
+  font-size: var(--st-15);
+}
+.data-segmenty:focus-within { border-color: var(--rejestr); box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10); }
+.data-segmenty.bledne { border-color: var(--sygnal); }
+.data-segment {
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--atrament);
+  text-align: center;
+  padding: 0;
+  outline: none;
+}
+.data-segment::-webkit-outer-spin-button,
+.data-segment::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.data-segment[data-szer="2"] { width: 2.2ch; }
+.data-segment[data-szer="4"] { width: 4.2ch; }
+.data-segment:focus { background: var(--rejestr-tlo); border-radius: 2px; }
+.data-segment::placeholder { color: var(--atrament-3); }
+.data-rozdzielacz { color: var(--atrament-3); padding: 0 1px; }
+
+.kalendarz-kotwica { position: relative; display: inline-flex; }
+.kalendarz-popover {
+  position: absolute;
+  top: calc(100% + var(--od-4));
+  left: 0;
+  z-index: 60;
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  box-shadow: var(--cien-l);
+  padding: var(--od-12);
+  width: 260px;
+}
+.kalendarz-pasek {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--od-8);
+}
+.kalendarz-miesiac { font-size: var(--st-13); font-weight: 600; }
+.kalendarz-siatka { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.kalendarz-dzien-tygodnia {
+  font-size: var(--st-11); color: var(--atrament-3); text-align: center;
+  padding: var(--od-4) 0; font-weight: 600;
+}
+.kalendarz-dzien {
+  aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-dane);
+  font-size: var(--st-11);
+  background: none; border: none; border-radius: var(--r-sm);
+  color: var(--atrament); cursor: pointer;
+}
+.kalendarz-dzien:hover:not(:disabled) { background: var(--rejestr-tlo); }
+.kalendarz-dzien.wybrany { background: var(--rejestr); color: var(--karta); font-weight: 600; }
+.kalendarz-dzien.dzis { border: 1px solid var(--mosiadz); }
+.kalendarz-dzien:disabled { color: var(--atrament-3); cursor: not-allowed; }
+.kalendarz-dzien.pusty { visibility: hidden; }
+
+/* Pigułki „dziś"/„wczoraj" przy dacie zdarzenia. */
+.pigulki-skrotow { display: flex; gap: var(--od-4); }
+
+/* Liczby akcji i kwoty (2.6): do prawej, w monie, separator tysięcy na bieżąco,
+   jednostka jako sufiks WEWNĄTRZ pola, nie jako osobna etykieta. */
+.pole-liczbowe {
+  display: flex;
+  align-items: center;
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  padding-right: var(--od-12);
+}
+.pole-liczbowe:focus-within { border-color: var(--rejestr); box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10); }
+.pole-liczbowe.bledne { border-color: var(--sygnal); }
+.pole-liczbowe input {
+  border: none; box-shadow: none; text-align: right;
+  font-family: var(--font-dane);
+  background: none;
+}
+.pole-liczbowe input:focus { box-shadow: none; }
+.pole-liczbowe-sufiks { font-size: var(--st-13); color: var(--atrament-3); padding-left: var(--od-8); white-space: nowrap; }
+
+/* Wybór z kartoteki (2.6) — podpowiedzi od trzeciego znaku. */
+.kartoteka { position: relative; }
+.kartoteka-lista {
+  position: absolute;
+  top: calc(100% + var(--od-4));
+  left: 0; right: 0;
+  z-index: 60;
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  box-shadow: var(--cien-l);
+  max-height: 280px;
+  overflow-y: auto;
+}
+.kartoteka-poz {
+  display: block; width: 100%; text-align: left;
+  padding: var(--od-8) var(--od-12);
+  background: none; border: none; cursor: pointer;
+  font: inherit; color: var(--atrament);
+  border-bottom: 1px solid var(--linia);
+}
+.kartoteka-poz:last-child { border-bottom: none; }
+.kartoteka-poz:hover, .kartoteka-poz.podswietlona { background: var(--rejestr-tlo); }
+.kartoteka-poz-meta { font-size: var(--st-11); color: var(--atrament-3); margin-top: 2px; }
+.kartoteka-wybrana {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--od-8);
+  padding: var(--od-8) var(--od-12);
+  background: var(--rejestr-tlo);
+  border: 1px solid var(--rejestr);
+  border-radius: var(--r);
+}
+
+/* Checkbox / radio */
+.checklista { display: flex; flex-direction: column; gap: var(--od-4); }
+.chk { display: flex; align-items: flex-start; gap: var(--od-12); padding: var(--od-8) 0; cursor: pointer; }
+.chk input[type="checkbox"], .chk input[type="radio"] {
+  width: 16px; height: 16px; margin-top: 2px; flex-shrink: 0;
+  accent-color: var(--rejestr); cursor: pointer;
+}
+.chk-tresc { font-size: var(--st-13); line-height: 1.5; }
+
+/* ─────────────────────────────────────────────────────
+   TABELE (2.7)
+   Nagłówek przyklejony, wiersz 44px, BEZ zebry, cały wiersz odnośnikiem.
+   ───────────────────────────────────────────────────── */
+.tabela { width: 100%; border-collapse: collapse; }
+.tabela th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--karta); /* tło PEŁNE, nie przezroczyste — inaczej treść prześwituje */
+  text-align: left;
+  font-size: var(--st-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--atrament-3);
+  padding: var(--od-12) var(--od-16);
+  border-bottom: 1px solid var(--linia);
+  white-space: nowrap;
+}
+.tabela th.sortowalna { cursor: pointer; user-select: none; }
+.tabela th.sortowalna:hover { color: var(--atrament); }
+.tabela th .strzalka-sort { margin-left: var(--od-4); color: var(--rejestr); }
+.tabela td {
+  height: 44px;
+  padding: var(--od-8) var(--od-16);
+  border-bottom: 1px solid var(--linia);
+  font-size: var(--st-13);
+  vertical-align: middle;
+}
+.tabela tbody tr:last-child td { border-bottom: none; }
+.tabela tr.klikalna { cursor: pointer; }
+.tabela tr.klikalna:hover td { background: var(--papier); }
+.tabela .do-prawej { text-align: right; font-variant-numeric: tabular-nums; }
+.tabela .kol-dane { font-family: var(--font-dane); font-size: var(--st-13); }
+.tabela tfoot td { font-weight: 600; border-top: 1px solid var(--atrament); border-bottom: none; }
+
+/* ─────────────────────────────────────────────────────
+   PIGUŁKI
+   ───────────────────────────────────────────────────── */
+.pigulka {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--od-4);
+  padding: 2px var(--od-8);
+  border-radius: var(--r-pigulka);
+  font-size: var(--st-11);
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--papier);
+  color: var(--atrament-2);
+  border: 1px solid var(--linia);
+}
+.pigulka-rejestr { background: var(--rejestr-tlo); color: var(--rejestr); border-color: transparent; }
+.pigulka-mosiadz { background: var(--mosiadz-tlo); color: var(--mosiadz); border-color: transparent; }
+.pigulka-sygnal  { background: var(--sygnal-tlo);  color: var(--sygnal);  border-color: transparent; }
+
+/* ─────────────────────────────────────────────────────
+   KOMUNIKATY
+   ───────────────────────────────────────────────────── */
+.komunikat {
+  padding: var(--od-12) var(--od-16);
+  border-radius: var(--r);
+  font-size: var(--st-13);
+  margin-bottom: var(--od-16);
+  border: 1px solid transparent;
+  line-height: 1.55;
+}
+.komunikat-tytul { font-weight: 600; margin-bottom: var(--od-4); }
+.komunikat ul { margin: var(--od-8) 0 0 var(--od-16); }
+.komunikat-info    { background: var(--papier);      border-color: var(--linia); }
+.komunikat-rejestr { background: var(--rejestr-tlo); color: var(--rejestr); }
+.komunikat-uwaga   { background: var(--mosiadz-tlo); color: var(--mosiadz); }
+.komunikat-blad    { background: var(--sygnal-tlo);  color: var(--sygnal); }
+
+/* ─────────────────────────────────────────────────────
+   MODAL
+   ───────────────────────────────────────────────────── */
+.nakladka {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(20, 24, 28, 0.4);
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--od-24);
+}
+.modal {
+  background: var(--karta);
+  border-radius: var(--r);
+  box-shadow: var(--cien-l);
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: var(--od-24);
+}
+.modal-tytul { font-family: var(--font-display); font-size: var(--st-20); margin-bottom: var(--od-16); }
+.modal-stopka {
+  display: flex; justify-content: flex-end; gap: var(--od-8);
+  margin-top: var(--od-24); padding-top: var(--od-16);
+  border-top: 1px solid var(--linia);
+}
+
+/* ─────────────────────────────────────────────────────
+   PALETA POLECEŃ (2.3) — Ctrl/⌘+K
+   Przy 500 rejestrach wpisanie nazwy spółki jest szybsze niż każda lista.
+   ───────────────────────────────────────────────────── */
+.paleta-nakladka {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(20, 24, 28, 0.4);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 12vh;
+}
+.paleta {
+  background: var(--karta);
+  border-radius: var(--r);
+  box-shadow: var(--cien-l);
+  width: 100%;
+  max-width: 560px;
+  overflow: hidden;
+  animation: paleta-wejscie var(--ruch-paleta);
+}
+@keyframes paleta-wejscie {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+.paleta-pole {
+  width: 100%;
+  padding: var(--od-16);
+  font-size: var(--st-20);
+  border: none;
+  border-bottom: 1px solid var(--linia);
+  border-radius: 0;
+  outline: none;
+}
+.paleta-pole:focus { box-shadow: none; border-color: var(--linia); }
+.paleta-wyniki { max-height: 380px; overflow-y: auto; }
+.paleta-grupa {
+  font-size: var(--st-11); font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--atrament-3);
+  padding: var(--od-12) var(--od-16) var(--od-4);
+}
+.paleta-poz {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--od-12);
+  width: 100%; text-align: left;
+  padding: var(--od-8) var(--od-16);
+  background: none; border: none; cursor: pointer;
+  font: inherit; color: var(--atrament);
+}
+.paleta-poz.podswietlona { background: var(--rejestr-tlo); }
+.paleta-poz-meta { font-size: var(--st-11); color: var(--atrament-3); font-family: var(--font-dane); }
+.paleta-stopka {
+  padding: var(--od-8) var(--od-16);
+  border-top: 1px solid var(--linia);
+  font-size: var(--st-11); color: var(--atrament-3);
+  display: flex; gap: var(--od-16);
+}
+.klawisz {
+  font-family: var(--font-dane); font-size: var(--st-11);
+  padding: 1px var(--od-4);
+  background: var(--papier); border: 1px solid var(--linia); border-radius: var(--r-sm);
+}
+
+/* ─────────────────────────────────────────────────────
+   PUSTY STAN (2.7)
+   Zdanie mówiące CO ZROBIĆ plus przycisk — nigdy „Brak danych".
+   ───────────────────────────────────────────────────── */
+.pusto { text-align: center; padding: var(--od-40) var(--od-24); }
+.pusto-tytul { font-family: var(--font-display); font-size: var(--st-20); margin-bottom: var(--od-8); }
+.pusto-opis { color: var(--atrament-2); font-size: var(--st-13); margin-bottom: var(--od-16); }
+
+/* ─────────────────────────────────────────────────────
+   SEKCJE ZWIJANE
+   ───────────────────────────────────────────────────── */
+.sekcja {
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  margin-bottom: var(--od-12);
+  overflow: hidden;
+}
+.sekcja-naglowek {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--od-12);
+  width: 100%; padding: var(--od-12) var(--od-24);
+  background: none; border: none; cursor: pointer;
+  font: inherit; color: var(--atrament); text-align: left;
+}
+.sekcja-naglowek:hover { background: var(--papier); }
+.sekcja-tytul { display: flex; align-items: center; gap: var(--od-8); font-weight: 600; font-size: var(--st-13); }
+.strzalka { color: var(--atrament-3); font-size: var(--st-11); display: inline-block; }
+.strzalka.otwarta { transform: rotate(90deg); }
+
+/* ─────────────────────────────────────────────────────
+   KROKI KREATORA
+   ───────────────────────────────────────────────────── */
+.kroki { display: flex; gap: var(--od-8); margin-bottom: var(--od-24); }
+.krok {
+  display: flex; align-items: center; gap: var(--od-8);
+  padding: var(--od-8) var(--od-16);
+  font-size: var(--st-13);
+  color: var(--atrament-3);
+  border-bottom: 2px solid var(--linia);
+  flex: 1;
+}
+.krok.biezacy { color: var(--rejestr); border-bottom-color: var(--rejestr); font-weight: 600; }
+.krok.zrobiony { color: var(--atrament-2); border-bottom-color: var(--rejestr-2); }
+.krok-numer {
+  width: 20px; height: 20px; border-radius: var(--r-pigulka);
+  border: 1px solid currentColor;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--st-11); font-weight: 600; flex-shrink: 0;
+}
+.krok.biezacy .krok-numer { background: var(--rejestr); color: var(--karta); border-color: var(--rejestr); }
+
+.stopka-kreatora {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--od-12);
+  margin-top: var(--od-24); padding-top: var(--od-16);
+  border-top: 1px solid var(--linia);
+  position: sticky; bottom: 0;
+  background: var(--karta);
+  padding-bottom: var(--od-16);
+}
+.stopka-kreatora-prawa { display: flex; gap: var(--od-8); margin-left: auto; }
+
+/* ─────────────────────────────────────────────────────
+   KAFELKI WYBORU (kreator zdarzenia — faza 3)
+   Tytuł i opis ROZDZIELONE, stała wysokość, kategoria jako pigułka w rogu.
+   Własna nazwa klasy (`-wyboru`), żeby nie nadpisać kafelków starego
+   kreatora, zanim faza 3 go przepisze.
+   ───────────────────────────────────────────────────── */
+.kafelki-wyboru { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--od-12); }
+@media (max-width: 900px) { .kafelki-wyboru { grid-template-columns: minmax(0, 1fr); } }
+.kafelek-wyboru {
+  position: relative;
+  display: flex; flex-direction: column; gap: var(--od-4);
+  text-align: left;
+  padding: var(--od-16);
+  min-height: 96px;
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  cursor: pointer;
+  font: inherit;
+}
+.kafelek-wyboru:hover { border-color: var(--atrament-3); }
+.kafelek-wyboru.wybrany { border-color: var(--rejestr); box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10); }
+.kafelek-wyboru-tytul { font-weight: 600; font-size: var(--st-15); color: var(--atrament); padding-right: var(--od-64); }
+.kafelek-wyboru-opis { font-size: var(--st-11); color: var(--atrament-2); line-height: 1.5; }
+.kafelek-wyboru-kategoria { position: absolute; top: var(--od-12); right: var(--od-12); }
+
+/* ─────────────────────────────────────────────────────
+   UKŁADY POMOCNICZE
+   ───────────────────────────────────────────────────── */
+.rzad { display: flex; align-items: center; gap: var(--od-8); }
+.rzad-rozdzielony { display: flex; align-items: center; justify-content: space-between; gap: var(--od-12); }
+.pion { display: flex; flex-direction: column; }
+.siatka-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--od-16); }
+@media (max-width: 900px) { .siatka-2 { grid-template-columns: minmax(0, 1fr); } }
+.rozdzielacz { height: 1px; background: var(--linia); margin: var(--od-16) 0; }
+.zawijaj { white-space: normal; }
+
+/* Ładowanie */
+.ladowanie { display: flex; justify-content: center; padding: var(--od-40); }
+.spin {
+  width: 20px; height: 20px;
+  border: 2px solid var(--linia);
+  border-top-color: var(--rejestr);
+  border-radius: 50%;
+  animation: obrot 700ms linear infinite;
+}
+@keyframes obrot { to { transform: rotate(360deg); } }
+
+/* ─────────────────────────────────────────────────────
+   RUCH — wyłączany globalnie przy prefers-reduced-motion (2.5, 2.8)
+   ───────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────
+   DRUK — szczegóły wydruku w fazie 4
+   ───────────────────────────────────────────────────── */
+.bez-druku { }
+@media print {
+  .szyna, .bez-druku, .btn, .okruszki, .paleta-nakladka { display: none !important; }
+  .powloka { display: block; }
+  .tresc { max-width: none; padding: 0; }
+  body { background: var(--karta); }
+  .karta, .sekcja { border: none; padding: 0; margin: 0; }
+  .tabela th { background: none; border-bottom: 1px solid var(--atrament); }
+  .tabela tr { break-inside: avoid; }
+}

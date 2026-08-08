@@ -1,99 +1,13 @@
-/* psa.css — układ modułu Rejestr akcjonariuszy P.S.A.
-   Wyłącznie rozkład i komponenty własne modułu. Kolory, typografia, przyciski,
-   pola, karty, tabele i modale pochodzą z /wspolne/design.css — tutaj NIE
-   powtarzamy tokenów ani nie hardkodujemy barw (każda wartość przez var(--…)). */
+/* psa.css — komponenty własne modułu, jeszcze nieprzepisane na nowy system.
 
-/* ─────────────────────────────────────────────────────
-   SZKIELET
-   `.app-topbar` i `.main-wrap` (wysokość topbara, grid sidebar+treść)
-   są tokenami wspólnymi w design.css (1.2) — tu zostaje wyłącznie to,
-   co jest specyficzne dla modułu PSA.
-   ───────────────────────────────────────────────────── */
-.apka { display: flex; flex-direction: column; min-height: 100vh; }
+   Sesja SESJA-PSA-6-INTERFEJS.md, faza 1: szkielet aplikacji (powłoka, szyna
+   nawigacji, kontener treści) przeniesiony do `rejestr.css` — stąd zniknął
+   z tego pliku. Zostaje wyłącznie to, czego kolejne fazy jeszcze nie tknęły:
+   drobne komponenty, kroki kreatora, kokpit i wydruk.
 
-.sidebar {
-  background: var(--paper-2);
-  border-right: 1px solid var(--line);
-  position: sticky;
-  top: 64px; /* pod app-topbar */
-  height: calc(100vh - 64px);
-  display: flex;
-  flex-direction: column;
-  padding: 22px 0 14px;
-  overflow-y: auto;
-}
-
-/* Blok kancelarii u góry sidebara (faza 1.3) — wordmark MODUŁU jest w topbarze,
-   ten blok pokazuje, CZYJ to rejestr (kancelaria prowadząca). */
-.sb-marka {
-  padding: 0 22px 20px;
-  border-bottom: 1px solid var(--line-2);
-  margin-bottom: 18px;
-}
-.sb-marka-nazwa {
-  font-family: var(--font-serif);
-  font-feature-settings: var(--serif-features);
-  font-size: 16px;
-  line-height: 1.3;
-  color: var(--ink);
-  letter-spacing: 0.01em;
-}
-.sb-marka-podpis {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ink-4);
-  margin-top: 7px;
-}
-
-.sb-grupa { margin-bottom: 20px; }
-.sb-grupa-tytul {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--ink-4);
-  padding: 0 22px 9px;
-}
-
-.sb-poz {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  padding: 9px 22px;
-  font-family: inherit;
-  font-size: 13.5px;
-  color: var(--ink-2);
-  background: none;
-  border: none;
-  border-left: 2px solid transparent;
-  cursor: pointer;
-  text-align: left;
-  transition: background var(--przejscie), color var(--przejscie);
-}
-.sb-poz:hover { background: var(--paper-3); color: var(--ink); }
-.sb-poz.aktywna {
-  background: var(--burgundy-bg);
-  color: var(--burgundy);
-  font-weight: 600;
-  border-left-color: var(--burgundy);
-}
-.sb-poz.zablokowana { color: var(--ink-4); cursor: not-allowed; }
-.sb-poz.zablokowana:hover { background: none; color: var(--ink-4); }
-
-/* ─────────────────────────────────────────────────────
-   TREŚĆ
-   ───────────────────────────────────────────────────── */
-.tresc {
-  padding: 30px 40px 72px;
-  max-width: var(--tresc-szeroka); /* kokpit spółki i listy — sekcja 9.0 CLAUDE-PSA.md */
-  width: 100%;
-}
-/* Kreator i formularze — węższa kolumna, jedna kolumna pól (sekcja 9.0). */
-.tresc.tresc-waska { max-width: var(--tresc-waska); }
-
+   Kolory WYŁĄCZNIE przez var(--…). Stare nazwy tokenów (--ink, --paper,
+   --burgundy…) są przemapowane na nową paletę w `zgodnosc.css` — ten plik
+   zniknie razem z nim, gdy fazy 2–4 przepiszą swoje ekrany. */
 .pasek-gorny {
   display: flex;
   align-items: flex-start;
@@ -111,19 +25,6 @@
   line-height: 1.2;
 }
 .podtytul-strony { color: var(--ink-3); font-size: 13.5px; margin-top: 6px; }
-.okruszki {
-  font-size: 12px;
-  color: var(--ink-4);
-  margin-bottom: 8px;
-}
-.okruszki button {
-  background: none; border: none; padding: 0; cursor: pointer;
-  font: inherit; color: var(--ink-3); text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.okruszki button:hover { color: var(--ink); }
-
-.siatka-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
 .siatka-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
 .siatka-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 1100px) {
@@ -180,73 +81,6 @@
   white-space: nowrap;
 }
 
-.komunikat {
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: 13px 16px;
-  font-size: 13px;
-  line-height: 1.55;
-  margin-bottom: 14px;
-}
-.komunikat-blad  { background: var(--burgundy-bg); border-color: var(--burgundy); color: var(--burgundy); }
-.komunikat-uwaga { background: var(--olive-bg);    border-color: var(--olive);    color: var(--olive); }
-.komunikat-ok    { background: var(--green-bg);    border-color: var(--green-dark); color: var(--green-dark); }
-.komunikat-info  { background: var(--paper);       border-color: var(--line);     color: var(--ink-2); }
-.komunikat ul { margin: 6px 0 0 18px; }
-.komunikat li { margin-bottom: 4px; }
-.komunikat-tytul { font-weight: 600; margin-bottom: 4px; }
-
-.podpowiedz {
-  font-size: 12px;
-  color: var(--ink-4);
-  margin-top: 6px;
-  line-height: 1.5;
-}
-.podstawa-prawna {
-  font-size: 11.5px;
-  color: var(--ink-4);
-  letter-spacing: 0.01em;
-}
-
-/* ─────────────────────────────────────────────────────
-   KREATOR — kroki
-   ───────────────────────────────────────────────────── */
-.kroki {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  margin-bottom: 26px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surf);
-  padding: 5px;
-  overflow: hidden;
-}
-.krok {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  font-size: 12.5px;
-  color: var(--ink-4);
-  white-space: nowrap;
-  min-width: 0;
-}
-.krok-nazwa { overflow: hidden; text-overflow: ellipsis; }
-.krok.zrobiony { color: var(--ink-3); }
-.krok.biezacy { background: var(--ink); color: var(--paper); font-weight: 600; }
-.krok-num {
-  width: 19px; height: 19px; flex-shrink: 0;
-  border-radius: 50%;
-  border: 1px solid currentColor;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700;
-}
-.krok.biezacy .krok-num { border-color: var(--paper); }
-
 /* Sticky (faza 3.2) — przy dłuższej checkliście (krok weryfikacji) przyciski
    „Wstecz”/„Dalej”/„Dokonaj wpisu” zostają w zasięgu bez przewijania do
    samego dołu. Tło `--surf` (jak `.card`), żeby treść nie prześwitywała. */
@@ -301,20 +135,6 @@
 .kafelek-opis { font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
 
 /* Checklista weryfikacji */
-.checklista { display: flex; flex-direction: column; gap: 2px; }
-.chk {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  padding: 11px 12px;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  transition: background var(--przejscie);
-}
-.chk:hover { background: var(--paper); }
-.chk input { margin-top: 2px; width: 15px; height: 15px; accent-color: var(--ink); flex-shrink: 0; cursor: pointer; }
-.chk-tresc { font-size: 13px; line-height: 1.5; color: var(--ink-2); }
-.chk-watpliwosci { border: 1px dashed var(--olive); background: var(--olive-bg); }
 .chk-watpliwosci .chk-tresc { color: var(--olive); }
 
 /* Pozycje kreatora (nabywcy / obejmujący) */
@@ -366,30 +186,7 @@ tr.usuwany td { background: var(--burgundy-bg); text-decoration: line-through; }
   background: var(--surf);
 }
 .suwak-dnia.wstecz { border-color: var(--slate); background: var(--slate-bg); }
-
-.sekcja { border: 1px solid var(--line); border-radius: var(--r); background: var(--surf); margin-bottom: 16px; }
-.sekcja-naglowek {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  padding: 15px 24px;
-  background: none;
-  border: none;
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-.sekcja-tytul {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.12em; color: var(--ink-3);
-}
-.sekcja-tresc { padding: 0 24px 22px; }
 .sekcja-tresc.bez-marginesu { padding: 0; }
-.strzalka { color: var(--ink-4); transition: transform var(--przejscie); font-size: 11px; }
-.strzalka.otwarta { transform: rotate(90deg); }
 
 .os { position: relative; padding-left: 26px; }
 .os::before {
@@ -477,16 +274,11 @@ tr.usuwany td { background: var(--burgundy-bg); text-decoration: line-through; }
 /* ─────────────────────────────────────────────────────
    DROBIAZGI
    ───────────────────────────────────────────────────── */
-.ladowanie { display: flex; align-items: center; justify-content: center; padding: 80px 0; }
-.rozdzielacz { height: 1px; background: var(--line-2); margin: 20px 0; }
-.pion { display: flex; flex-direction: column; }
 .mono { font-family: var(--font-mono); font-size: 12px; }
 .prawo { text-align: right; font-variant-numeric: tabular-nums; }
 .licznik-wartosc { font-variant-numeric: tabular-nums; }
 .przyciemnione { color: var(--ink-4); }
-.male { font-size: 12px; }
 .odstep-g { margin-top: 16px; }
-.zawijaj { white-space: normal; }
 .klikalny { cursor: pointer; }
 .klikalny:hover { background: var(--paper); }
 

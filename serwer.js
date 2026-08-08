@@ -53,8 +53,8 @@ aplikacja.use('/api/psa/oplaty', autoryzacja.wymagajPracownika, require('./serve
 aplikacja.use('/api/psa', require('./server/trasy/pozostale'));
 
 // ── Statyki ──────────────────────────────────────────────────────────────
-// `design.css` serwujemy pod /wspolne/design.css - tak, jak linkuja go
-// pozostale moduly kancelarii (sekcja 2 specyfikacji).
+// Moduł ma wlasna tozsamosc wizualna w /style/rejestr.css (sesja 6, faza 1) -
+// `design.css` zostal z niego wygaszony i nie jest juz serwowany.
 // Portal klienta to OSOBNA aplikacja jednostronicowa (wlasny routing na
 // hashu, wlasna sesja) - jawny routing na wypadek koncowego "/", ktorego
 // `express.static` z opcja `extensions` nie rozwiazuje do pliku.

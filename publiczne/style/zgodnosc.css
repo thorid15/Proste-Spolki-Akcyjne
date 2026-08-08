@@ -1,0 +1,172 @@
+/* zgodnosc.css — WARSTWA PRZEJŚCIOWA, do skasowania.
+   Sesja SESJA-PSA-6-INTERFEJS.md, faza 1.
+
+   Po co ten plik istnieje
+   ───────────────────────
+   Faza 1 wygasza `design.css` w tym module (sesja, faza 1). Ale ekrany
+   przepisywane są fazami: kokpit w fazie 2, rejestracja spółki i kreator
+   w fazie 3, wydruki w fazie 4. Ekrany, których żadna faza nie dotyka
+   wprost (pulpit, kolejka spraw, kartoteka osób, opłaty, konfiguracja,
+   użytkownicy, portal), nadal używają nazw klas i tokenów z `design.css`.
+
+   Gdyby po prostu odpiąć `design.css`, te ekrany zostałyby bez stylów.
+   Gdyby zostawić `design.css` podpięty, połowa aplikacji świeciłaby starą
+   kremowo-burgundową paletą obok nowej — czyli dokładnie to, czego sesja
+   zakazuje w sekcji 4.
+
+   Rozwiązanie: stare nazwy (tokeny i klasy) przemapowane na NOWĄ paletę
+   i nowe skale z `rejestr.css`. Żadnej wartości koloru nie ma tu wprost —
+   wszystko przez `var(--…)` wskazujące na tokeny nowego systemu. Efekt:
+   ekrany jeszcze nieprzepisane od razu wyglądają jak reszta aplikacji,
+   a `design.css` znika z modułu w całości.
+
+   Jak ten plik ma zniknąć
+   ───────────────────────
+   Każda kolejna faza przepisuje swoje ekrany na komponenty z
+   `ui-rejestr.js` i klasy z `rejestr.css`. Gdy ostatni ekran przestanie
+   używać starych nazw, ten plik kasuje się w całości. NIE dopisywać tu
+   nowych reguł — nowe rzeczy idą do `rejestr.css`. */
+
+:root {
+  /* ── Stare nazwy tokenów → nowa paleta ── */
+  --paper:     var(--papier);
+  --paper-2:   var(--papier);
+  --paper-3:   var(--linia);
+  --surf:      var(--karta);
+  --ink:       var(--atrament);
+  --ink-2:     var(--atrament-2);
+  --ink-3:     var(--atrament-2);
+  --ink-4:     var(--atrament-3);
+  --line:      var(--linia);
+  --line-2:    var(--linia);
+
+  /* Stare akcenty znaczeniowo mapowane na nowe: kolor instytucjonalny to
+     teraz zieleń rejestru, „czas/uwaga" to mosiądz, „błąd" to sygnał. */
+  --burgundy:     var(--rejestr);
+  --burgundy-bg:  var(--rejestr-tlo);
+  --burgundy-2:   var(--sygnal);
+  --olive:        var(--mosiadz);
+  --olive-bg:     var(--mosiadz-tlo);
+  --slate:        var(--atrament-2);
+  --slate-bg:     var(--papier);
+  --plum:         var(--rejestr-2);
+  --plum-bg:      var(--rejestr-tlo);
+  --green-dark:   var(--rejestr);
+  --green-bg:     var(--rejestr-tlo);
+  --panel:        var(--atrament);
+
+  --sh-s: var(--cien-s);
+  --sh-m: var(--cien-m);
+  --sh-l: var(--cien-l);
+
+  --sb: var(--szyna);
+  --r-xs: var(--r-sm);
+  --przejscie: var(--ruch-wiersz);
+  --tresc-maks:    var(--tresc);
+  --tresc-szeroka: var(--tresc);
+  --tresc-waska:   720px;
+
+  --font-serif: var(--font-display);
+  --font-sans:  var(--font-ui);
+  --font-mono:  var(--font-dane);
+  --serif-features: "liga", "kern";
+}
+
+/* ── Stare komponenty z design.css, odbudowane na nowych tokenach ── */
+
+.card {
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  padding: var(--od-24);
+  margin-bottom: var(--od-16);
+}
+.card.tight { padding: 0; }
+.card-h {
+  font-family: var(--font-display);
+  font-size: var(--st-20);
+  font-weight: 500;
+  margin-bottom: var(--od-16);
+}
+.card-label {
+  display: flex; align-items: center; gap: var(--od-8);
+  padding: var(--od-16) var(--od-24);
+  border-bottom: 1px solid var(--linia);
+  font-size: var(--st-11); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--atrament-3);
+}
+
+.btn-primary { background: var(--rejestr); border-color: var(--rejestr); color: var(--karta); }
+.btn-primary:hover:not(:disabled) { background: var(--rejestr-2); border-color: var(--rejestr-2); }
+.btn-primary:disabled { background: var(--linia); border-color: var(--linia); color: var(--atrament-3); }
+.btn-sm { padding: var(--od-4) var(--od-12); font-size: var(--st-11); }
+.btn-lg { padding: var(--od-12) var(--od-24); font-size: var(--st-15); }
+.btn-danger { color: var(--sygnal); }
+.btn-danger:hover:not(:disabled) { border-color: var(--sygnal); background: var(--sygnal-tlo); }
+
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th {
+  text-align: left;
+  font-size: var(--st-11); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--atrament-3);
+  padding: var(--od-12) var(--od-16);
+  border-bottom: 1px solid var(--linia);
+  background: var(--karta);
+  white-space: nowrap;
+}
+.tbl td {
+  padding: var(--od-12) var(--od-16);
+  border-bottom: 1px solid var(--linia);
+  font-size: var(--st-13);
+  vertical-align: middle;
+}
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tfoot td { font-weight: 600; border-top: 1px solid var(--atrament); }
+
+.frow { margin-bottom: var(--od-16); }
+.fl {
+  display: block;
+  font-size: var(--st-11); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--atrament-2);
+  margin-bottom: var(--od-8);
+}
+.podpowiedz { font-size: var(--st-11); color: var(--atrament-3); margin-top: var(--od-4); line-height: 1.5; }
+
+.znacznik {
+  display: inline-flex; align-items: center; gap: var(--od-4);
+  padding: 2px var(--od-8);
+  border-radius: var(--r-pigulka);
+  font-size: var(--st-11); font-weight: 600; white-space: nowrap;
+  background: var(--papier); color: var(--atrament-2);
+  border: 1px solid var(--linia);
+}
+.znacznik-neutralny { background: var(--papier); color: var(--atrament-2); }
+.znacznik-zielony   { background: var(--rejestr-tlo); color: var(--rejestr); border-color: transparent; }
+.znacznik-bordo     { background: var(--sygnal-tlo);  color: var(--sygnal);  border-color: transparent; }
+.znacznik-oliwka    { background: var(--mosiadz-tlo); color: var(--mosiadz); border-color: transparent; }
+.znacznik-lupek     { background: var(--papier); color: var(--atrament-2); }
+
+.komunikat-ok { background: var(--rejestr-tlo); color: var(--rejestr); }
+
+.empty { text-align: center; padding: var(--od-40) var(--od-24); }
+.empty-h { font-family: var(--font-display); font-size: var(--st-20); margin-bottom: var(--od-8); }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(20, 24, 28, 0.4);
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--od-24);
+}
+.overlay .modal { max-width: 560px; }
+.modal-title { font-family: var(--font-display); font-size: var(--st-20); margin-bottom: var(--od-16); }
+.modal-foot {
+  display: flex; justify-content: flex-end; gap: var(--od-8);
+  margin-top: var(--od-24); padding-top: var(--od-16);
+  border-top: 1px solid var(--linia);
+}
+
+.row-g { display: flex; align-items: center; gap: var(--od-8); }
+.row-b { display: flex; align-items: center; justify-content: space-between; gap: var(--od-12); }

@@ -1,20 +1,8 @@
-/* spolki.js — lista spółek i dodawanie spółki w trzech krokach (z pobraniem z KRS). */
+/* spolki.js — lista spółek i dodawanie spółki w trzech krokach (z pobraniem z KRS).
 
-function Kroki({ kroki, biezacy }) {
-  return (
-    <div className="kroki">
-      {kroki.map((nazwa, i) => (
-        <div
-          key={nazwa}
-          className={`krok ${i === biezacy ? 'biezacy' : ''} ${i < biezacy ? 'zrobiony' : ''}`}
-        >
-          <span className="krok-num">{i < biezacy ? '✓' : i + 1}</span>
-          <span className="krok-nazwa">{nazwa}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
+   `Kroki` przeniesione do `ui-rejestr.js` (sesja 6, faza 1) — wskaźnik kroków
+   jest komponentem systemu, nie tego ekranu. Ekran rejestracji spółki dostaje
+   nowy kształt w fazie 3. */
 
 const PUSTA_SPOLKA = {
   krs: '', nip: '', regon: '', nazwa: '', forma_prawna: 'PROSTA SPÓŁKA AKCYJNA',
@@ -320,6 +308,5 @@ function EkranSpolek() {
   );
 }
 
-window.Kroki = Kroki;
 window.EkranSpolek = EkranSpolek;
 window.EkranNowejSpolki = EkranNowejSpolki;
