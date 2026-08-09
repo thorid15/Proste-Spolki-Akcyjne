@@ -622,6 +622,60 @@ const MIGRACJE = [
         ON psa_stan_akcji (osoba_id, data_do);
     `,
   },
+  {
+    wersja: 8,
+    nazwa: 'szablony dokumentow wychodzacych - wersjonowane, bez edycji po wydaniu',
+    sql: `
+      -- ── Szablony dokumentow (sesja 6, faza 4) ───────────────────────────
+      -- Wersjonowane i NIEZMIENIALNE. Redakcja szablonu nie nadpisuje
+      -- poprzedniej tresci, tylko zaklada kolejna wersje - inaczej nie dalo by
+      -- sie odtworzyc, jak brzmial dokument wydany pol roku temu. Ta sama
+      -- logika co przy psa_zdarzenia, z tego samego powodu: dokument wychodzacy
+      -- wywoluje skutki, wiec jego podstawa musi byc odtwarzalna.
+      CREATE TABLE IF NOT EXISTS psa_szablony (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        kod              TEXT NOT NULL,
+        wersja           INTEGER NOT NULL,
+        tytul            TEXT NOT NULL,
+        tresc            TEXT NOT NULL,
+        opis             TEXT,
+        podstawa_prawna  TEXT,
+        -- Dokladnie jedna wersja danego kodu jest aktywna (indeks czesciowy
+        -- nizej). Aktywnosc to JEDYNE pole, ktore wolno zmieniac - zmiana
+        -- aktywnej wersji jest decyzja redakcyjna, nie edycja tresci.
+        aktywna          INTEGER NOT NULL DEFAULT 0 CHECK (aktywna IN (0,1)),
+        wbudowany        INTEGER NOT NULL DEFAULT 0 CHECK (wbudowany IN (0,1)),
+        autor            TEXT NOT NULL,
+        utworzono        TEXT NOT NULL,
+        UNIQUE (kod, wersja)
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS psa_ix_szablony_aktywny
+        ON psa_szablony (kod) WHERE aktywna = 1;
+
+      -- Zakaz edycji tresci i tytulu istniejacej wersji - odpowiednik
+      -- wyzwalaczy chroniacych psa_zdarzenia. Zmiana aktywnosci przechodzi.
+      CREATE TRIGGER IF NOT EXISTS psa_szablony_bez_edycji_tresci
+      BEFORE UPDATE OF tresc, tytul, kod, wersja ON psa_szablony
+      BEGIN
+        SELECT RAISE(ABORT,
+          'Szablon jest niezmienialny - zamiast edycji zaloz kolejna wersje.');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS psa_szablony_bez_delete
+      BEFORE DELETE ON psa_szablony
+      BEGIN
+        SELECT RAISE(ABORT,
+          'Szablonu nie usuwa sie - wersja moze byc podstawa wydanego dokumentu.');
+      END;
+
+      -- ── Slad, z ktorej wersji szablonu powstal wydany dokument ──────────
+      -- Bez tego "brak edycji po wydaniu" jest deklaracja bez pokrycia: nie
+      -- dalo by sie wskazac, ktora tresc podpisano.
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN szablon_kod TEXT;
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN szablon_wersja INTEGER;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
