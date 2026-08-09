@@ -804,7 +804,7 @@ function EkranKokpitu({ spolkaId }) {
               tresc={
                 `${fmt.AKCJE(nieobjete)} czeka na wpis objęcia. Zadaniem podmiotu prowadzącego ` +
                 'rejestr jest zapewnienie zgodności liczby akcji zarejestrowanych z liczbą ' +
-                'wyemitowanych (art. 300(31) § 3 KSH).'
+                'wyemitowanych (art. 300(31) § 2 KSH).'
               }
             />
           )}

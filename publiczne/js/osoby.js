@@ -73,7 +73,7 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
           </div>
           <Komunikat
             odmiana="info"
-            tresc="Podaj PESEL albo datę urodzenia — art. 300(33) § 1 pkt 5 KSH w brzmieniu nowelizacji. Oba pola są danymi wrażliwymi: inni akcjonariusze ich nie zobaczą."
+            tresc="Treścią rejestru są wyłącznie nazwisko, imię i adres (art. 300(33) § 1 pkt 5 KSH). PESEL i data urodzenia są dobrowolne — służą identyfikacji na potrzeby AML. Inni akcjonariusze ich nie zobaczą."
           />
         </>
       ) : (
@@ -83,7 +83,7 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
             <Pole etykieta="Numer we właściwym rejestrze">
               <input type="text" {...pole('numer_w_rejestrze')} />
             </Pole>
-            <Pole etykieta="Nazwa rejestru" podpowiedz="art. 300(33) § 1 pkt 6 KSH">
+            <Pole etykieta="Nazwa rejestru" podpowiedz="KRS, rejestr zagraniczny, inny — dane pomocnicze do identyfikacji podmiotu.">
               <input type="text" {...pole('nazwa_rejestru')} />
             </Pole>
           </div>

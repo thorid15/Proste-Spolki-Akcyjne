@@ -149,10 +149,25 @@ function Pigulka({ odmiana, children }) {
   return <span className={`pigulka ${odmiana ? `pigulka-${odmiana}` : ''}`}>{children}</span>;
 }
 
+/**
+ * Komunikat błędu bywa renderowany na GÓRZE długiego formularza, a przycisk
+ * zapisu jest na jego DOLE — po nieudanym zapisie użytkownik zostaje przy
+ * przycisku i nie widzi powodu odmowy (w modalu osoby komunikat lądował 446 px
+ * ponad krawędzią okna). Dlatego błąd sam przewija się w pole widzenia.
+ * Dotyczy wyłącznie odmiany „blad": pozostałe są tłem, nie odpowiedzią na akcję.
+ */
 function Komunikat({ odmiana = 'info', tytul, tresc, lista }) {
+  const ref = useRef(null);
+  const sygnatura = odmiana === 'blad' ? `${tytul || ''}|${tresc || ''}|${(lista || []).join('|')}` : '';
+
+  useEffect(() => {
+    if (!sygnatura || !ref.current) return;
+    ref.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [sygnatura]);
+
   if (!tresc && (!lista || lista.length === 0)) return null;
   return (
-    <div className={`komunikat komunikat-${odmiana}`}>
+    <div className={`komunikat komunikat-${odmiana}`} ref={ref}>
       {tytul && <div className="komunikat-tytul">{tytul}</div>}
       {tresc && <div>{tresc}</div>}
       {lista && lista.length > 0 && (

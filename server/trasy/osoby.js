@@ -55,13 +55,13 @@ function sprawdzOsobe(dane, { czesciowe = false } = {}) {
 
   if (typ === 'fizyczna') {
     if (!czesciowe && !dane.nazwisko) throw bledneZadanie('Nazwisko jest wymagane.');
-    // Nowelizacja, art. 300(33) § 1 pkt 5: PESEL ALBO data urodzenia.
-    if (!czesciowe && !dane.pesel && !dane.data_urodzenia) {
-      throw bledneZadanie(
-        'Dla osoby fizycznej podaj numer PESEL albo datę urodzenia ' +
-          `(${przepisy.PODSTAWY.KATALOG_DANYCH}).`
-      );
-    }
+    // PESEL i data urodzenia sa DOBROWOLNE. Art. 300(33) § 1 pkt 5 KSH wymaga
+    // dla osoby fizycznej wylacznie nazwiska i imienia oraz adresu - nie
+    // zawiera PESEL-u ani daty urodzenia. Wczesniejsza wersja blokowala tu
+    // zapis, przenoszac mechanicznie art. 328(3) KSH dotyczacy SPOLKI AKCYJNEJ
+    // (PRZEPISY-PSA.md sekcja 12 pkt 2 wymienia ten blad wprost).
+    // Oba pola zbieramy nadal - sluza identyfikacji na potrzeby AML i sa
+    // maskowane wobec pozostalych akcjonariuszy (art. 300(35) § 1(1) KSH).
   }
   if (typ === 'prawna' && !czesciowe && !dane.nazwa) {
     throw bledneZadanie('Nazwa podmiotu jest wymagana.');
