@@ -169,14 +169,10 @@ function NieZnaleziono() {
 }
 
 /** Tytuł i podtytuł topbara dla bieżącej trasy. */
-function opisTrasy(segmenty, uzytkownik) {
-  const godzina = new Date().getHours();
-  const powitanie = godzina < 5 ? 'Dobrej nocy' : godzina < 18 ? 'Dzień dobry' : 'Dobry wieczór';
-  const imie = (uzytkownik.imie || '').trim().split(/\s+/)[0];
-
+function opisTrasy(segmenty) {
   if (segmenty.length === 0) {
     return {
-      tytul: `${powitanie}${imie ? `, ${imie}` : ''}!`,
+      tytul: 'Pulpit',
       podtytul: 'Rejestry akcjonariuszy prostych spółek akcyjnych prowadzone przez kancelarię.',
     };
   }
@@ -252,7 +248,7 @@ function Aplikacja() {
     (segmenty[0] === 'sprawy' && segmenty.length >= 2);
   const opis = wlasnyNaglowek
     ? { tytul: 'Rejestr akcjonariuszy', podtytul: null }
-    : opisTrasy(segmenty, sesja.uzytkownik);
+    : opisTrasy(segmenty);
 
   return (
     <div className="powloka">
