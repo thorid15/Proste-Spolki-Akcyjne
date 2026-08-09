@@ -491,6 +491,60 @@ const MIGRACJE = [
         CHECK (charakter_wpisu IS NULL OR charakter_wpisu IN ('konstytutywny','deklaratoryjny'));
     `,
   },
+  {
+    wersja: 6,
+    nazwa:
+      'kreator rejestracji spolki - rozszerzony import KRS, ograniczenia z umowy spolki ' +
+      '(zgoda spolki, pierwszenstwo, zakaz glosu zastawnika, ograniczenia dziedziczenia)',
+    sql: `
+      -- ── Spolka: pola z rozszerzonego importu KRS (sesja 6, faza 3) ──────
+      -- Mapowanie API KRS jest OBRONNE (server/trasy/krs.js) - kazde z tych
+      -- pol moze zostac puste, jesli odpowiedz API nie zawiera odpowiadajacej
+      -- rubryki; wpis recznie uzupelnia brakujace pola w kreatorze.
+      ALTER TABLE psa_spolki ADD COLUMN data_ostatniego_wpisu_krs TEXT;
+      -- Wysokosc kapitalu akcyjnego (Dzial 1, Rubryka 8.1) w groszach - jak
+      -- pozostale kwoty w rejestrze (np. psa_emisje.cena_emisyjna_grosze).
+      ALTER TABLE psa_spolki ADD COLUMN kapital_akcyjny_grosze INTEGER;
+      -- Adres do doreczen elektronicznych wpisany do Bazy Adresow
+      -- Elektronicznych (Dzial 1, Rubryka 2.5) - format "AE:PL-#####-#####-...".
+      ALTER TABLE psa_spolki ADD COLUMN adres_edorecze TEXT;
+      -- Sklad organu reprezentujacego (Dzial 2, Rubryka 1, Podrubryka 1) -
+      -- tablica JSON [{nazwisko, imiona, funkcja}] wylacznie informacyjna,
+      -- do podgladu w kreatorze; rejestr akcjonariuszy nie prowadzi wlasnej
+      -- ewidencji osob w organach spolki.
+      ALTER TABLE psa_spolki ADD COLUMN sklad_organu_json TEXT;
+
+      -- ── Ograniczenia z umowy spolki wczytywane przy przyjeciu spolki ───
+      -- (WYTYCZNE-MERYTORYCZNE-PSA.md sekcja 3 i 11 - bez tego art. 300(34)
+      -- § 6 KSH jest niewykonalny). Dwie z czterech kategorii NIE maja
+      -- wlasnego cyklu zycia w rejestrze (nie dotycza konkretnej emisji ani
+      -- akcji, tylko sa faktem o tresci umowy spolki), wiec zyja jako pola
+      -- informacyjne na spolce, nie jako zdarzenie:
+      --   * zakaz prawa glosu zastawnika/uzytkownika (art. 300(23) § 2 KSH) -
+      --     umowa spolki moze go zakazac wprost albo uzaleznic od zgody
+      --     organu spolki; bramka dla przyszlego zdarzenia
+      --     prawo_glosu_zastawnika (server/logika/kreator.js).
+      ALTER TABLE psa_spolki ADD COLUMN zakaz_glosu_zastawnika_umowa TEXT
+        CHECK (zakaz_glosu_zastawnika_umowa IS NULL
+               OR zakaz_glosu_zastawnika_umowa IN ('zakazane','wymaga_zgody_organu'));
+      --   * ograniczenie podzialu akcji miedzy spadkobiercow (art. 300(41)
+      --     § 3 KSH) - tresc klauzuli, NULL = umowa spolki nie ogranicza.
+      ALTER TABLE psa_spolki ADD COLUMN ograniczenie_dziedziczenia_umowa TEXT;
+
+      -- Pozostale dwie kategorie (zgoda spolki na zbycie, prawo
+      -- pierwszenstwa) MAJA juz reprezentacje jako zdarzenie ograniczenie
+      -- / tabela psa_ograniczenia (sprint 2) - dopisujemy tylko brakujace
+      -- pola kompletnosci postanowienia o zgodzie spolki (art. 300(39) § 1,
+      -- 3 KSH): bez terminu wskazania nabywcy, ceny i terminu zaplaty
+      -- ograniczenie jest bezskuteczne (WYTYCZNE-MERYTORYCZNE-PSA.md sekcja
+      -- 11 - "brak kompletu oznacza brak ograniczenia"), wiec
+      -- server/logika/kreator.js NIE ustawia wymaga_zgody_spolki=1, dopoki
+      -- wszystkie trzy nie sa podane.
+      ALTER TABLE psa_ograniczenia ADD COLUMN zgoda_termin_wskazania_dni INTEGER;
+      ALTER TABLE psa_ograniczenia ADD COLUMN zgoda_cena_opis TEXT;
+      ALTER TABLE psa_ograniczenia ADD COLUMN zgoda_termin_zaplaty_dni INTEGER;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

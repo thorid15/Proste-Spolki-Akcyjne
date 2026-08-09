@@ -345,6 +345,11 @@ const PRZYGOTOWANIA = {
     if (!['zastaw', 'uzytkowanie'].includes(typObciazenia)) {
       throw new BladKreatora('Rodzaj obciążenia musi być „zastaw” albo „uzytkowanie”.');
     }
+    if (we.prawo_glosu && kontekst.spolka && kontekst.spolka.zakaz_glosu_zastawnika_umowa === 'zakazane') {
+      throw new BladKreatora(
+        `Umowa spółki zakazuje przyznawania prawa głosu zastawnikowi lub użytkownikowi (${przepisy.PODSTAWY.ZAKAZ_GLOSU_ZASTAWNIKA}).`
+      );
+    }
     const zablokowane = zakresyZablokowane(stan, emisja.klucz, data);
     const pulaRef = { wartosc: stanLogika.pula(stan, emisja.klucz, K.AKCJONARIUSZ, akcjonariuszId) };
     const zakresy = przydzielPozycje(
@@ -389,13 +394,18 @@ const PRZYGOTOWANIA = {
     };
   },
 
-  prawo_glosu_zastawnika(stan, we) {
+  prawo_glosu_zastawnika(stan, we, kontekst) {
     const obciazenieId = liczbaCalkowita(we.obciazenie_zdarzenie_id, 'obciążenie');
     const cel = stan.obciazenia.find(
       (o) => o.klucz === obciazenieId && o.data_do === null && o.typ !== 'zajecie'
     );
     if (!cel) {
       throw new BladKreatora('Wskazane obciążenie nie istnieje w rejestrze albo zostało już wykreślone.');
+    }
+    if (we.prawo_glosu && kontekst.spolka && kontekst.spolka.zakaz_glosu_zastawnika_umowa === 'zakazane') {
+      throw new BladKreatora(
+        `Umowa spółki zakazuje przyznawania prawa głosu zastawnikowi lub użytkownikowi (${przepisy.PODSTAWY.ZAKAZ_GLOSU_ZASTAWNIKA}).`
+      );
     }
     return {
       obciazenie_zdarzenie_id: obciazenieId,
@@ -539,12 +549,51 @@ const PRZYGOTOWANIA = {
       }
       zakresy = n.normalizuj(we.zakresy);
     }
+    // Kompletnosc postanowienia o zgodzie spolki (art. 300(39) § 1, 3 KSH,
+    // WYTYCZNE-MERYTORYCZNE-PSA.md sekcja 11): bez terminu wskazania innego
+    // nabywcy, sposobu ustalenia ceny i terminu zaplaty postanowienie jest
+    // BEZSKUTECZNE - "akcja moze byc zbyta bez ograniczenia". Nie zapisujemy
+    // wiec polowicznego ograniczenia, ktore myliloby pozniejszy wpis
+    // przeniesienia; albo komplet trzech pol, albo wymaga_zgody_spolki=0.
+    let zgodaTerminWskazaniaDni = null;
+    let zgodaCenaOpis = null;
+    let zgodaTerminZaplatyDni = null;
+    const wymagaZgody = Boolean(we.wymaga_zgody_spolki);
+    if (wymagaZgody) {
+      const brakujace = [];
+      if (we.zgoda_termin_wskazania_dni == null || we.zgoda_termin_wskazania_dni === '') {
+        brakujace.push('termin wskazania innego nabywcy');
+      }
+      if (!String(we.zgoda_cena_opis || '').trim()) brakujace.push('sposób ustalenia ceny');
+      if (we.zgoda_termin_zaplaty_dni == null || we.zgoda_termin_zaplaty_dni === '') {
+        brakujace.push('termin zapłaty');
+      }
+      if (brakujace.length > 0) {
+        throw new BladKreatora(
+          `Zgoda spółki na zbycie wymaga kompletu trzech elementów (${przepisy.PODSTAWY.ZGODA_SPOLKI_NA_ZBYCIE}) — ` +
+            `brakuje: ${brakujace.join(', ')}. Bez kompletu postanowienie jest bezskuteczne — ` +
+            'odznacz „wymaga zgody spółki” albo uzupełnij brakujące pola.'
+        );
+      }
+      zgodaTerminWskazaniaDni = liczbaCalkowita(we.zgoda_termin_wskazania_dni, 'termin wskazania innego nabywcy');
+      if (zgodaTerminWskazaniaDni > 31) {
+        throw new BladKreatora(
+          `Termin na wskazanie innego nabywcy nie może być dłuższy niż miesiąc (${przepisy.PODSTAWY.ZGODA_SPOLKI_NA_ZBYCIE}).`
+        );
+      }
+      zgodaCenaOpis = tekst(we.zgoda_cena_opis, 'sposób ustalenia ceny', { maks: 300 });
+      zgodaTerminZaplatyDni = liczbaCalkowita(we.zgoda_termin_zaplaty_dni, 'termin zapłaty');
+    }
+
     return {
       zakres,
       emisja_zdarzenie_id: emisjaKlucz,
       seria,
       zakresy,
-      wymaga_zgody_spolki: we.wymaga_zgody_spolki ? 1 : 0,
+      wymaga_zgody_spolki: wymagaZgody && zgodaTerminWskazaniaDni != null ? 1 : 0,
+      zgoda_termin_wskazania_dni: zgodaTerminWskazaniaDni,
+      zgoda_cena_opis: zgodaCenaOpis,
+      zgoda_termin_zaplaty_dni: zgodaTerminZaplatyDni,
       prawo_pierwszenstwa: we.prawo_pierwszenstwa ? 1 : 0,
       opis: tekst(we.opis, 'opis', { wymagane: false, maks: 500 }),
       podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
@@ -644,6 +693,7 @@ function przygotuj(stan, { typ, data_zdarzenia, dane }, kontekst = {}) {
   return budowniczy(stan, dane || {}, {
     data_zdarzenia,
     osoby: kontekst.osoby instanceof Map ? kontekst.osoby : new Map(),
+    spolka: kontekst.spolka || null,
   });
 }
 

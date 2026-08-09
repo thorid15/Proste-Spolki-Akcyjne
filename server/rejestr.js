@@ -305,11 +305,13 @@ function zmaterializuj(db, spolkaId) {
 
   const wstawOgraniczenie = db.prepare(
     `INSERT INTO psa_ograniczenia
-       (spolka_id, zakres, emisja_id, nr_od, nr_do, wymaga_zgody_spolki, prawo_pierwszenstwa,
-        opis, zdarzenie_id, status, data_wykreslenia)
+       (spolka_id, zakres, emisja_id, nr_od, nr_do, wymaga_zgody_spolki,
+        zgoda_termin_wskazania_dni, zgoda_cena_opis, zgoda_termin_zaplaty_dni,
+        prawo_pierwszenstwa, opis, zdarzenie_id, status, data_wykreslenia)
      VALUES
-       (@spolka_id, @zakres, @emisja_id, @nr_od, @nr_do, @wymaga_zgody_spolki, @prawo_pierwszenstwa,
-        @opis, @zdarzenie_id, @status, @data_wykreslenia)`
+       (@spolka_id, @zakres, @emisja_id, @nr_od, @nr_do, @wymaga_zgody_spolki,
+        @zgoda_termin_wskazania_dni, @zgoda_cena_opis, @zgoda_termin_zaplaty_dni,
+        @prawo_pierwszenstwa, @opis, @zdarzenie_id, @status, @data_wykreslenia)`
   );
   for (const o of stan.ograniczenia) {
     const zakresy = o.zakresy && o.zakresy.length > 0 ? o.zakresy : [{ nr_od: null, nr_do: null }];
@@ -321,6 +323,9 @@ function zmaterializuj(db, spolkaId) {
         nr_od: z.nr_od,
         nr_do: z.nr_do,
         wymaga_zgody_spolki: o.wymaga_zgody_spolki,
+        zgoda_termin_wskazania_dni: o.zgoda_termin_wskazania_dni ?? null,
+        zgoda_cena_opis: o.zgoda_cena_opis ?? null,
+        zgoda_termin_zaplaty_dni: o.zgoda_termin_zaplaty_dni ?? null,
         prawo_pierwszenstwa: o.prawo_pierwszenstwa,
         opis: o.opis,
         zdarzenie_id: o.zdarzenie_id,
@@ -359,7 +364,7 @@ function przygotujPodglad(db, { spolkaId, typ, data_zdarzenia, wejscie, dzisiaj 
   const dane = kreator.przygotuj(
     stanPrzed,
     { typ, data_zdarzenia, dane: wejscie },
-    { osoby }
+    { osoby, spolka }
   );
 
   const wynik = walidacje.sprawdz({
@@ -435,6 +440,70 @@ function _wykonajWpis(db, zlecenie) {
  */
 function dokonajWpisu(db, zlecenie) {
   const transakcja = db.transaction(() => _wykonajWpis(db, zlecenie));
+  return transakcja.immediate();
+}
+
+/**
+ * Podstawia w `wartosc` odwolania do zdarzen z TEJ SAMEJ partii otwarcia
+ * rejestru (patrz `otworzRejestr`). Kreator nie zna ID emisji, dopoki nie
+ * zostanie zapisana - zamiast liczby wysyla znacznik
+ * `{ __odwolanie_do_partii: 'emisja-A' }`, ktory tu zamieniamy na prawdziwe
+ * `zdarzenie.id` przydzielone przez baze chwile wczesniej, W TEJ SAMEJ
+ * transakcji. Przechodzi rekurencyjnie tablice i obiekty - odwolanie moze
+ * siedziec na dowolnej glebokosci (np. `dane.emisja_zdarzenie_id`).
+ */
+function podstawKluczePartii(wartosc, idPartii) {
+  if (wartosc == null || typeof wartosc !== 'object') return wartosc;
+  if (Array.isArray(wartosc)) return wartosc.map((v) => podstawKluczePartii(v, idPartii));
+  if (typeof wartosc.__odwolanie_do_partii === 'string') {
+    const id = idPartii.get(wartosc.__odwolanie_do_partii);
+    if (id == null) {
+      throw new BladWalidacji([
+        `Zdarzenie odwołuje się do „${wartosc.__odwolanie_do_partii}” z tej samej partii otwarcia ` +
+          'rejestru, ale taki klucz tymczasowy nie występuje we wcześniejszych zdarzeniach.',
+      ]);
+    }
+    return id;
+  }
+  const wynik = {};
+  for (const [klucz, v] of Object.entries(wartosc)) wynik[klucz] = podstawKluczePartii(v, idPartii);
+  return wynik;
+}
+
+/**
+ * Otwiera rejestr spolki: zapisuje KOMPLET zdarzen zalozycielskich (emisja,
+ * objecie, opcjonalnie ograniczenie z umowy spolki) w JEDNEJ transakcji -
+ * sesja 6, faza 3. Bez tego rejestr moglby utknac w polowicznym stanie
+ * (np. emisja zapisana, objecie odrzucone przez bilans) - "otwarcie
+ * rejestru" ma byc niepodzielne, tak jak pojedynczy wpis w `dokonajWpisu`.
+ *
+ * `_wykonajWpis` jest bezpieczna do zagniezdzania w juz otwartej transakcji
+ * (patrz jej wlasny komentarz) - ten sam wzorzec, ktorym `dokonajWpisuSprawy`
+ * laczy jeden wpis z dodatkowymi skutkami ubocznymi w jednej transakcji.
+ *
+ * Kazdy element `zdarzenia` moze niesc opcjonalny `klucz_tymczasowy` (np.
+ * `"emisja-A"`) - kolejne zdarzenia w TEJ SAMEJ partii odwoluja sie do jego
+ * prawdziwego ID przez `{ __odwolanie_do_partii: 'emisja-A' }` gdziekolwiek
+ * w `dane` (patrz `podstawKluczePartii`).
+ */
+function otworzRejestr(db, spolkaId, { zdarzenia, autor, dzisiaj }) {
+  const transakcja = db.transaction(() => {
+    const idPartii = new Map();
+    const zapisane = [];
+    for (const z of zdarzenia) {
+      const wynik = _wykonajWpis(db, {
+        spolkaId,
+        typ: z.typ,
+        data_zdarzenia: z.data_zdarzenia,
+        wejscie: podstawKluczePartii(z.dane, idPartii),
+        dzisiaj,
+        autor,
+      });
+      if (z.klucz_tymczasowy) idPartii.set(z.klucz_tymczasowy, wynik.zdarzenie.id);
+      zapisane.push(wynik);
+    }
+    return zapisane;
+  });
   return transakcja.immediate();
 }
 
@@ -596,6 +665,7 @@ module.exports = {
   zmaterializuj,
   przygotujPodglad,
   dokonajWpisu,
+  otworzRejestr,
   dokonajWpisuSprawy,
   dokonajSprostowania,
   przelicz,

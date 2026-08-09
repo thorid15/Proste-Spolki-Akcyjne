@@ -27,15 +27,18 @@ function dodajSpolke(db, nadpisania = {}) {
     data_umowy: '2026-01-02',
     opis: null,
     uwagi: null,
+    zakaz_glosu_zastawnika_umowa: null,
     utworzono: czas.terazIso(),
     ...nadpisania,
   };
   const wynik = db
     .prepare(
       `INSERT INTO psa_spolki
-         (krs, nip, regon, nazwa, forma_prawna, status, data_umowy, opis, uwagi, utworzono)
+         (krs, nip, regon, nazwa, forma_prawna, status, data_umowy, opis, uwagi,
+          zakaz_glosu_zastawnika_umowa, utworzono)
        VALUES
-         (@krs, @nip, @regon, @nazwa, @forma_prawna, @status, @data_umowy, @opis, @uwagi, @utworzono)`
+         (@krs, @nip, @regon, @nazwa, @forma_prawna, @status, @data_umowy, @opis, @uwagi,
+          @zakaz_glosu_zastawnika_umowa, @utworzono)`
     )
     .run(dane);
   return Number(wynik.lastInsertRowid);

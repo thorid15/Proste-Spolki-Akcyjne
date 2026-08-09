@@ -31,11 +31,32 @@ function zeSciezek(zrodlo, sciezki) {
  * Mapowanie jest OBRONNE - struktura odpowiedzi bywa rozna dla roznych
  * rejestrow, a brak pojedynczego pola nie moze wywrocic calosci.
  */
+/**
+ * Pola dopisane w sesji 6, fazie 3 (import rozszerzony) NIE zostaly
+ * zweryfikowane wprost przeciwko zywej odpowiedzi API - srodowisko
+ * deweloperskie, w ktorym powstal ten kod, nie mialo dostepu sieciowego do
+ * api-krs.ms.gov.pl. Kandydaci scieżek sa oparte o realny odpis (PDF Rubryka
+ * 2.5/8.1/Dzial 2 Rubryka 1) i konwencje juz potwierdzonych pol powyzej
+ * (`naglowekA`, `dzial1.siedzibaIAdres`), ale sa NAJLEPSZYM PRZYBLIZENIEM,
+ * nie potwierdzonym faktem. Dlatego krok 1 kreatora rejestracji spolki
+ * ZAWSZE pokazuje surowy JSON obok zmapowanego podgladu (sekcja 3 sesji) -
+ * to wlasciwe miejsce weryfikacji, na zywych danych, nie ten komentarz.
+ * Brakujace pole = wpis reczny (bez zmian w tej regule).
+ */
 function zmapuj(odpowiedz, numerKrs) {
   const dane = zeSciezek(odpowiedz, ['odpis.dane', 'dane']) || {};
   const naglowek = zeSciezek(odpowiedz, ['odpis.naglowekA', 'naglowekA']) || {};
   const podmiot = zeSciezek(dane, ['dzial1.danePodmiotu']) || {};
   const adres = zeSciezek(dane, ['dzial1.siedzibaIAdres']) || {};
+  const kapital = zeSciezek(dane, ['dzial1.kapitalSpolki', 'dzial1.kapital']) || {};
+  const reprezentacja =
+    zeSciezek(dane, ['dzial2.reprezentacja', 'dzial2.organReprezentujacy']) || [];
+
+  const kapitalZlote = zeSciezek(kapital, [
+    'wysokoscKapitaluAkcyjnego',
+    'wysokoscKapitalu',
+    'kapitalAkcyjny',
+  ]);
 
   return {
     krs: numerKrs,
@@ -55,6 +76,29 @@ function zmapuj(odpowiedz, numerKrs) {
       zeSciezek(naglowek, ['oznaczenieSaduPrzechowujacegoAkta', 'sadRejestrowy']) || null,
     data_utworzenia_spolki:
       zeSciezek(naglowek, ['dataRejestracjiWKRS', 'dataRejestracji']) || null,
+    // ── Rozszerzony import (faza 3) — patrz zastrzeżenie w komentarzu wyżej.
+    data_ostatniego_wpisu_krs:
+      zeSciezek(naglowek, [
+        'dataDokonaniaOstatniegoWpisu',
+        'ostatniWpis.dataDokonaniaWpisu',
+        'dataWpisu',
+      ]) || null,
+    adres_edorecze:
+      zeSciezek(adres, [
+        'adresDorReczenElektronicznych',
+        'adresDoreczenElektronicznych',
+        'aeDoreczenia',
+      ]) || null,
+    kapital_akcyjny_grosze: kapitalZlote != null ? Math.round(Number(kapitalZlote) * 100) : null,
+    sklad_organu: Array.isArray(reprezentacja)
+      ? reprezentacja
+          .map((osoba) => ({
+            nazwisko: zeSciezek(osoba, ['nazwisko', 'nazwaLubFirma']) || null,
+            imiona: zeSciezek(osoba, ['imiona']) || null,
+            funkcja: zeSciezek(osoba, ['funkcjaWOrganieReprezentujacym', 'funkcja']) || null,
+          }))
+          .filter((o) => o.nazwisko || o.imiona)
+      : [],
   };
 }
 
@@ -114,7 +158,7 @@ async function pobierzZKrs(numerKrs) {
   // Regula domenowa nr 11: rejestru nie prowadzimy dla S.A. ani S.K.A.
   const ocena = przepisy.ocenFormePrawna(dane.forma_prawna);
   if (dane.forma_prawna && !ocena.dozwolona) {
-    return { znaleziono: true, dane, dopuszczalna: false, komunikat: ocena.powod };
+    return { znaleziono: true, dane, surowa: tresc, dopuszczalna: false, komunikat: ocena.powod };
   }
   if (!dane.forma_prawna) {
     ostrzezenia.push(
@@ -122,7 +166,10 @@ async function pobierzZKrs(numerKrs) {
     );
   }
 
-  return { znaleziono: true, dane, dopuszczalna: true, ostrzezenia };
+  // `surowa` niesie NIEPRZETWORZONA odpowiedz API - krok 1 kreatora (faza 3)
+  // pokazuje ja obok zmapowanego podgladu, zeby dalo sie sprawdzic mapowanie
+  // na zywych danych (patrz zastrzezenie przy `zmapuj`).
+  return { znaleziono: true, dane, surowa: tresc, dopuszczalna: true, ostrzezenia };
 }
 
 module.exports = { pobierzZKrs, zmapuj };

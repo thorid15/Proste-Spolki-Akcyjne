@@ -25,6 +25,10 @@ const POLA_SPOLKI = [
   'data_otwarcia_rejestru', 'data_zakonczenia_umowy', 'opis', 'uwagi',
   // Sprint 5 (zgodnosc z ustawa):
   'umowe_zawarl', 'umowe_zawarl_imie_nazwisko', 'dodatkowe_informacje_umowa_spolki',
+  // Sesja 6, faza 3 (kreator rejestracji spolki - rozszerzony import KRS,
+  // ograniczenia z umowy spolki bez wlasnego cyklu zycia w rejestrze):
+  'data_ostatniego_wpisu_krs', 'kapital_akcyjny_grosze', 'adres_edorecze', 'sklad_organu_json',
+  'zakaz_glosu_zastawnika_umowa', 'ograniczenie_dziedziczenia_umowa',
 ];
 
 /** Pola, ktorych zmiana jest zdarzeniem rejestrowym (art. 300(33) § 1 KSH). */
@@ -61,7 +65,7 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   }
   for (const pole of [
     'data_utworzenia_spolki', 'data_uchwaly_wyboru', 'data_umowy',
-    'data_otwarcia_rejestru', 'data_zakonczenia_umowy',
+    'data_otwarcia_rejestru', 'data_zakonczenia_umowy', 'data_ostatniego_wpisu_krs',
   ]) {
     if (dane[pole] && !czas.poprawnaData(dane[pole])) {
       throw bledneZadanie(`Pole „${pole}” musi być datą w formacie RRRR-MM-DD.`);
@@ -72,6 +76,12 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   }
   if (dane.umowe_zawarl && !przepisy.UMOWE_ZAWARL.includes(dane.umowe_zawarl)) {
     throw bledneZadanie(`Pole „umowe_zawarl” musi być jedną z wartości: ${przepisy.UMOWE_ZAWARL.join(', ')}.`);
+  }
+  if (
+    dane.zakaz_glosu_zastawnika_umowa &&
+    !['zakazane', 'wymaga_zgody_organu'].includes(dane.zakaz_glosu_zastawnika_umowa)
+  ) {
+    throw bledneZadanie('Pole „zakaz_glosu_zastawnika_umowa” musi być: zakazane albo wymaga_zgody_organu.');
   }
   // Regula domenowa nr 11 - rejestru nie prowadzimy dla S.A. ani S.K.A.
   if (dane.forma_prawna !== undefined) {
@@ -378,6 +388,48 @@ router.post(
       ostrzezenia: wynik.ostrzezenia,
       dokumenty_do_wygenerowania: wynik.typ.dokumenty || [],
       odplatne: wynik.typ.odplatne,
+    });
+  })
+);
+
+/**
+ * OTWARCIE REJESTRU (sesja 6, faza 3, krok 4 kreatora rejestracji spolki).
+ * Zapisuje KOMPLET zdarzen zalozycielskich (emisja, objecie, opcjonalnie
+ * ograniczenie z umowy spolki) w jednej transakcji - patrz
+ * `rejestr.otworzRejestr`. Spolka musi juz istniec (krok 1-2 zapisuja ja
+ * przez `POST /`) - ta trasa dotyczy WYLACZNIE poczatkowego stanu akcji,
+ * nie danych samej spolki.
+ */
+router.post(
+  '/:id/otworz-rejestr',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    if (!rejestr.wczytajSpolke(db(), id)) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const kto = autor(zad);
+    const zdarzenia = Array.isArray(zad.body && zad.body.zdarzenia) ? zad.body.zdarzenia : [];
+    if (zdarzenia.length === 0) {
+      throw bledneZadanie('Otwarcie rejestru wymaga co najmniej jednego zdarzenia (emisji).');
+    }
+    for (const z of zdarzenia) {
+      if (!z || !z.typ) throw bledneZadanie('Każde zdarzenie otwarcia rejestru musi mieć typ.');
+      if (!czas.poprawnaData(z.data_zdarzenia)) {
+        throw bledneZadanie('Data każdego zdarzenia musi mieć format RRRR-MM-DD.');
+      }
+    }
+
+    const wyniki = rejestr.otworzRejestr(db(), id, {
+      zdarzenia,
+      autor: kto,
+      dzisiaj: czas.dzisIso(),
+    });
+
+    odp.status(201).json({
+      zdarzenia: wyniki.map((w) => ({
+        id: w.zdarzenie.id,
+        typ: w.zdarzenie.typ,
+        data_zdarzenia: w.zdarzenie.data_zdarzenia,
+        hash_skrocony: w.zdarzenie.hash.slice(0, 12),
+      })),
     });
   })
 );
