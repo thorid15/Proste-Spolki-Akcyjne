@@ -158,12 +158,20 @@ const PRZYGOTOWANIA = {
           throw new BladKreatora(`Wzmianka o pokryciu musi być jedną z wartości: ${przepisy.STANY_POKRYCIA.join(', ')}.`);
         }
       }
+      // Wklad w postaci pracy lub uslug (art. 300(9) § 1 KSH dopuszcza taki
+      // wklad w P.S.A., inaczej niz w S.A.) - rodzaj i czas swiadczenia
+      // wymagane przez kreator rejestracji spolki (sesja 6, faza 3).
+      // Puste pola = wklad pieniezny albo aport, bez dodatkowej tresci.
+      const rodzajSwiadczenia = tekst(p.rodzaj_swiadczenia, 'rodzaj świadczenia', { wymagane: false, maks: 300 });
+      const czasSwiadczenia = tekst(p.czas_swiadczenia, 'czas świadczenia', { wymagane: false, maks: 100 });
       return {
         osoba_id: osobaId,
         osoba_nazwa: nazwaOsoby(kontekst.osoby.get(osobaId)),
         ilosc: n.ilosc(zakresy),
         zakresy,
         pokryta,
+        rodzaj_swiadczenia: rodzajSwiadczenia,
+        czas_swiadczenia: czasSwiadczenia,
       };
     });
 
