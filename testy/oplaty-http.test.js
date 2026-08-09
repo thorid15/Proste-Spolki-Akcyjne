@@ -111,7 +111,7 @@ test('wpis odplatny przez sprawe nalicza oplate typu wpis', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
 
   const [, sprawaOdp] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'emisja', zrodlo: 'papier',
+    spolka_id: spolkaId, typ_zdarzenia: 'emisja', zrodlo: 'papier', zadajacy_rola: 'spolka',
   });
   const sprawaId = sprawaOdp.sprawa.id;
   await zapytaj(ciastkoAdmina, 'PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'weryfikuj' });

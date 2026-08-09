@@ -545,6 +545,83 @@ const MIGRACJE = [
       ALTER TABLE psa_ograniczenia ADD COLUMN zgoda_termin_zaplaty_dni INTEGER;
     `,
   },
+  {
+    wersja: 7,
+    nazwa:
+      'uniewaznienie akcji orzeczeniem sadu (art. 300(51) KSH) jako odrebna kategoria ' +
+      'oraz charakter zadajacego wpisu (art. 300(34) § 1 KSH)',
+    sql: `
+      -- ── Sprawa: w jakim charakterze zadajacy wystepuje o wpis ───────────
+      -- Art. 300(34) § 1 KSH dopuszcza wpis "na zadanie spolki lub innej osoby
+      -- majacej interes prawny". Dotad zapisywalismy KTO zada (zadajacy_osoba_id)
+      -- i wolny opis, ale nie W JAKIM CHARAKTERZE - a to wlasnie ocena interesu
+      -- prawnego, ktora nalezy do podmiotu prowadzacego rejestr i powinna
+      -- zostawic slad nadajacy sie do kontroli.
+      --
+      -- Sprawy sprzed tej migracji zostaja NULL ("nieustalone"): charakteru
+      -- zadajacego nie da sie zrekonstruowac wstecz bez wgladu w akta kazdej
+      -- sprawy z osobna, a zgadywanie go zafalszowaloby zapis o tresci
+      -- ocennej. Kolumna jest wiec dobrowolna na poziomie schematu -
+      -- wymagalnosc egzekwuje warstwa trasy dla NOWYCH spraw.
+      ALTER TABLE psa_sprawy ADD COLUMN zadajacy_rola TEXT
+        CHECK (zadajacy_rola IS NULL OR zadajacy_rola IN
+          ('akcjonariusz','zbywca','nabywca','zastawnik','uzytkownik',
+           'uprawniony_do_zaskarzenia','spolka','inna'));
+
+      -- ── Stan akcji: kategoria "uniewazniona" (art. 300(51) KSH) ─────────
+      -- SQLite nie pozwala zmienic CHECK w miejscu, wiec przepisujemy tabele -
+      -- ta sama sciezka co w migracji 4 dla psa_wydane_dokumenty.
+      --
+      -- psa_stan_akcji jest MATERIALIZACJA odtwarzana ze zdarzen
+      -- (server/rejestr.js kasuje i buduje ja na nowo przy kazdym wpisie),
+      -- wiec przepisanie jest bezpieczne: zadne dane zrodlowe tu nie mieszkaja.
+      -- Kopiujemy mimo to komplet wierszy, zeby rejestry spolek bez nowych
+      -- zdarzen nie zostaly z pusta materializacja do czasu kolejnego wpisu.
+      CREATE TABLE psa_stan_akcji_v7 (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        spolka_id        INTEGER NOT NULL REFERENCES psa_spolki(id),
+        emisja_id        INTEGER NOT NULL REFERENCES psa_emisje(id),
+        kategoria        TEXT NOT NULL
+          CHECK (kategoria IN ('nieobjeta','akcjonariusz','umorzona','uniewazniona')),
+        osoba_id         INTEGER REFERENCES psa_osoby(id),
+        nr_od            INTEGER NOT NULL,
+        nr_do            INTEGER NOT NULL,
+        ilosc            INTEGER NOT NULL,
+        tytul_nabycia    TEXT,
+        zdarzenie_od_id  INTEGER NOT NULL REFERENCES psa_zdarzenia(id),
+        data_od          TEXT NOT NULL,
+        zdarzenie_do_id  INTEGER REFERENCES psa_zdarzenia(id),
+        data_do          TEXT,
+        czesc_mianownik  INTEGER NOT NULL DEFAULT 1 CHECK (czesc_mianownik > 0),
+        czesc_licznik    INTEGER NOT NULL DEFAULT 1
+          CHECK (czesc_licznik BETWEEN 1 AND czesc_mianownik
+                 AND (czesc_licznik = czesc_mianownik OR nr_od = nr_do)),
+        przedstawiciel_osoba_id INTEGER REFERENCES psa_osoby(id),
+        pokryta          TEXT CHECK (pokryta IS NULL OR pokryta IN ('tak','nie','czesciowo')),
+        CHECK (nr_do >= nr_od),
+        CHECK ((kategoria = 'akcjonariusz') = (osoba_id IS NOT NULL))
+      );
+
+      INSERT INTO psa_stan_akcji_v7
+        (id, spolka_id, emisja_id, kategoria, osoba_id, nr_od, nr_do, ilosc,
+         tytul_nabycia, zdarzenie_od_id, data_od, zdarzenie_do_id, data_do,
+         czesc_mianownik, czesc_licznik, przedstawiciel_osoba_id, pokryta)
+      SELECT
+         id, spolka_id, emisja_id, kategoria, osoba_id, nr_od, nr_do, ilosc,
+         tytul_nabycia, zdarzenie_od_id, data_od, zdarzenie_do_id, data_do,
+         czesc_mianownik, czesc_licznik, przedstawiciel_osoba_id, pokryta
+      FROM psa_stan_akcji;
+
+      DROP TABLE psa_stan_akcji;
+      ALTER TABLE psa_stan_akcji_v7 RENAME TO psa_stan_akcji;
+
+      -- Indeksy gina razem z tabela - odtwarzamy je pod tymi samymi nazwami.
+      CREATE INDEX IF NOT EXISTS psa_ix_stan_spolka
+        ON psa_stan_akcji (spolka_id, data_od, data_do);
+      CREATE INDEX IF NOT EXISTS psa_ix_stan_osoba
+        ON psa_stan_akcji (osoba_id, data_do);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

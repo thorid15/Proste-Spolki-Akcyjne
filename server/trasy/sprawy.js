@@ -124,7 +124,7 @@ router.post(
     }
 
     const typZdarzenia = String(cialo.typ_zdarzenia || '');
-    if (!typyZdarzen.dostepneWKreatorze(5).some((t) => t.kod === typZdarzenia)) {
+    if (!typyZdarzen.dostepneWKreatorze().some((t) => t.kod === typZdarzenia)) {
       throw bledneZadanie(`Typ zdarzenia „${typZdarzenia}” nie jest dostępny w kreatorze.`);
     }
     const typ = typyZdarzen.typ(typZdarzenia);
@@ -147,6 +147,29 @@ router.post(
       throw bledneZadanie('Wskazany żądający nie figuruje w kartotece.');
     }
 
+    // W jakim charakterze zadajacy wystepuje o wpis (art. 300(34) § 1 KSH -
+    // "spolka lub inna osoba majaca interes prawny"). Sciezka z urzedu nie ma
+    // zadajacego z definicji (art. 300(34) § 2 KSH), wiec roli nie wymagamy.
+    const zadajacyOpis = cialo.zadajacy_opis ? String(cialo.zadajacy_opis).trim() : null;
+    const zadajacyRola = cialo.zadajacy_rola ? String(cialo.zadajacy_rola).trim() : null;
+    if (zadajacyRola && !Object.values(przepisy.ROLE_ZADAJACEGO).includes(zadajacyRola)) {
+      throw bledneZadanie(`Nieznany charakter żądającego: „${zadajacyRola}”.`);
+    }
+    if (!typ.z_urzedu && !zadajacyRola) {
+      throw bledneZadanie(
+        'Wskaż, w jakim charakterze żądający występuje o wpis — wpisu dokonuje się na żądanie ' +
+          `spółki albo innej osoby mającej interes prawny (${przepisy.PODSTAWY.TRYB_WPISU}).`
+      );
+    }
+    // Katalog nie jest zamkniety, ale "inna osoba" wymaga WYKAZANIA interesu
+    // prawnego - inaczej pozycja stalaby sie furtka omijajaca cala kontrole.
+    if (zadajacyRola === przepisy.ROLA_ZADAJACEGO_WYMAGA_UZASADNIENIA && !zadajacyOpis) {
+      throw bledneZadanie(
+        'Przy żądającym spoza katalogu opisz jego interes prawny w dokonaniu wpisu ' +
+          `(${przepisy.PODSTAWY.TRYB_WPISU}).`
+      );
+    }
+
     const dataWplywu = cialo.data_wplywu || czas.terazIso();
     // Sciezka z urzedu pomija faze oczekiwania na zadajacego - startuje
     // wprost w weryfikacji (patrz komentarz na gorze pliku).
@@ -157,7 +180,8 @@ router.post(
       typ_zdarzenia: typZdarzenia,
       zrodlo,
       zadajacy_osoba_id: zadajacyOsobaId,
-      zadajacy_opis: cialo.zadajacy_opis ? String(cialo.zadajacy_opis).trim() : null,
+      zadajacy_opis: zadajacyOpis,
+      zadajacy_rola: zadajacyRola,
       data_wplywu: dataWplywu,
       stan: stanPoczatkowy,
       wymaga_powiadomienia: typ.wymaga_powiadomienia === true ? 1 : 0,

@@ -17,7 +17,7 @@
  * do bazy i bez efektow ubocznych.
  */
 
-const { TERMINY, PROGI_TERMINU } = require('./przepisy');
+const { TERMINY, PROGI_TERMINU, CEL_WEWNETRZNY } = require('./przepisy');
 
 const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -59,9 +59,17 @@ function dniMiedzy(od, doDnia) {
 /**
  * Wylicza stan terminu sprawy na dany dzień.
  *
+ * Zwraca DWA zegary. `termin_do` to termin USTAWOWY z art. 300(34) § 1 KSH —
+ * jego przekroczenie narusza ustawę. `cel_do` to cel WEWNĘTRZNY kancelarii,
+ * wynikający z nakazu działania „niezwłocznie": jego przekroczenie nie jest
+ * naruszeniem ustawy, tylko sygnałem, że sprawa leży dłużej, niż obiecujemy.
+ * Kolejka wyróżnia sprawę już po przekroczeniu celu — dlatego oba biegną
+ * od tej samej chwili i zamarzają razem.
+ *
  * @param {object} sprawa   { data_wplywu, stan, wstrzymana_od, wznowiona_od }
  * @param {string} dzisiaj  RRRR-MM-DD
- * @returns {{ zamrozony, wstrzymana_od, termin_do, dni_pozostale, po_terminie, pilny }}
+ * @returns {{ zamrozony, wstrzymana_od, termin_do, dni_pozostale, po_terminie,
+ *            pilny, cel_do, dni_do_celu, po_celu }}
  */
 function policzTermin(sprawa, dzisiaj) {
   const dzis = sprawdzDate(dzisiaj, 'dzisiaj');
@@ -75,12 +83,17 @@ function policzTermin(sprawa, dzisiaj) {
       dni_pozostale: null,
       po_terminie: false,
       pilny: false,
+      cel_do: null,
+      dni_do_celu: null,
+      po_celu: false,
     };
   }
 
   const startBiegu = sprawa.wznowiona_od || sprawa.data_wplywu;
   const terminDo = dodajDni(startBiegu, TERMINY.WPIS_DNI);
   const dniPozostale = dniMiedzy(dzis, terminDo);
+  const celDo = dodajDni(startBiegu, CEL_WEWNETRZNY.WPIS_DNI);
+  const dniDoCelu = dniMiedzy(dzis, celDo);
 
   return {
     zamrozony: false,
@@ -89,6 +102,9 @@ function policzTermin(sprawa, dzisiaj) {
     dni_pozostale: dniPozostale,
     po_terminie: dniPozostale < 0,
     pilny: dniPozostale >= 0 && dniPozostale <= PROGI_TERMINU.PILNE_DNI,
+    cel_do: celDo,
+    dni_do_celu: dniDoCelu,
+    po_celu: dniDoCelu < 0,
   };
 }
 

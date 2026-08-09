@@ -13,12 +13,21 @@ const NAZWY_STANU_PULPIT = {
   spor: 'spór',
 };
 
-/** Pigułka terminu. Mosiądz = czas, czerwień wyłącznie po terminie. */
+/**
+ * Pigułka terminu. Mosiądz = czas, czerwień WYŁĄCZNIE po terminie ustawowym.
+ *
+ * Dwa zegary: cel wewnętrzny kancelarii i termin z art. 300(34) § 1 KSH.
+ * Wyróżnienie zaczyna się po przekroczeniu CELU, a nie dopiero pod koniec
+ * terminu ustawowego — „niezwłocznie" znaczy krócej niż siedem dni. Liczba
+ * na pigułce to zawsze dni do terminu ustawowego: to ona wiąże prawnie.
+ * Przekroczenie samego celu nie jest naruszeniem ustawy, więc nigdy nie
+ * dostaje czerwieni.
+ */
 function TerminPigulka({ termin }) {
   if (!termin) return null;
   if (termin.zamrozony) return <Pigulka odmiana="mosiadz">termin zawieszony</Pigulka>;
   if (termin.po_terminie) return <Pigulka odmiana="sygnal">po terminie</Pigulka>;
-  if (termin.pilny) return <Pigulka odmiana="mosiadz">{termin.dni_pozostale} dz.</Pigulka>;
+  if (termin.po_celu) return <Pigulka odmiana="mosiadz">po celu · {termin.dni_pozostale} dz.</Pigulka>;
   return <Pigulka>{termin.dni_pozostale} dz.</Pigulka>;
 }
 
@@ -28,6 +37,7 @@ const IKONY_ZDARZEN = {
   przeniesienie: 'zdarzenie',
   przeniesienie_ulamka: 'zdarzenie',
   umorzenie: 'archiwum',
+  uniewaznienie: 'ostrzezenie',
   zobowiazanie: 'dokument',
   obciazenie: 'ostrzezenie',
   zajecie: 'ostrzezenie',
@@ -53,7 +63,9 @@ function EkranPulpitu() {
   const { spolki, liczniki, integralnosc, sprawy } = dane;
   const wToku = sprawy.pozycje || [];
   const poTerminie = wToku.filter((s) => s.termin && s.termin.po_terminie).length;
-  const pilne = wToku.filter((s) => s.termin && s.termin.pilny && !s.termin.po_terminie).length;
+  // Wczesny sygnal to przekroczenie CELU wewnetrznego, nie zblizanie sie do
+  // siodmego dnia - po to cel istnieje, zeby ostrzegal wczesniej niz ustawa.
+  const poCelu = wToku.filter((s) => s.termin && s.termin.po_celu && !s.termin.po_terminie).length;
   const nieobjete = spolki.reduce((suma, s) => suma + (s.akcje_nieobjete || 0), 0);
 
   return (
@@ -85,11 +97,11 @@ function EkranPulpitu() {
           delta={
             poTerminie > 0
               ? `${poTerminie} po terminie`
-              : pilne > 0
-              ? `${pilne} ${fmt.odmien(pilne, 'pilna', 'pilne', 'pilnych')}`
-              : 'żadna nie goni terminu'
+              : poCelu > 0
+              ? `${poCelu} po celu`
+              : 'wszystkie w celu'
           }
-          deltaOdmiana={poTerminie > 0 ? '' : pilne > 0 ? 'uwaga' : 'dodatnia'}
+          deltaOdmiana={poTerminie > 0 ? '' : poCelu > 0 ? 'uwaga' : 'dodatnia'}
           ikona="sprawy"
           przyKlik={() => idz('/sprawy')}
         />
@@ -238,20 +250,20 @@ function EkranPulpitu() {
                   </strong>
                 </div>
                 <div className="rzad-rozdzielony">
-                  <span className="male drugorzedny">Zostały ≤ 2 dni</span>
-                  <strong className="liczba" style={{ color: pilne ? 'var(--mosiadz)' : 'inherit' }}>
-                    {pilne}
+                  <span className="male drugorzedny">Po celu wewnętrznym</span>
+                  <strong className="liczba" style={{ color: poCelu ? 'var(--mosiadz)' : 'inherit' }}>
+                    {poCelu}
                   </strong>
                 </div>
                 <div className="rzad-rozdzielony">
-                  <span className="male drugorzedny">W spokojnym biegu</span>
-                  <strong className="liczba">{wToku.length - poTerminie - pilne}</strong>
+                  <span className="male drugorzedny">W celu</span>
+                  <strong className="liczba">{wToku.length - poTerminie - poCelu}</strong>
                 </div>
               </div>
               <div className="rozdzielacz" />
               <div className="podstawa-prawna">
-                Siedem dni to termin maksymalny — ustawa nakazuje działać niezwłocznie
-                (art. 300³⁴ § 1 KSH).
+                Cel wewnętrzny to 3 dni. Siedem dni to termin maksymalny — ustawa nakazuje
+                działać niezwłocznie (art. 300³⁴ § 1 KSH).
               </div>
             </Karta>
           )}

@@ -353,6 +353,40 @@ const TYPY = [
     dokumenty: ['zawiadomienie_wpis'],
   },
 
+  {
+    kod: 'uniewaznienie',
+    nazwa: 'Unieważnienie akcji orzeczeniem sądu',
+    opis_zdarzeniem: 'Sąd unieważnił akcje',
+    podpowiedz:
+      'Skutek niewniesienia wkładu — orzeczenie sądu, nie uchwała spółki. To co innego niż umorzenie.',
+    symbol: '✕',
+    grupa: 'akcje',
+    sprint: 6,
+    odplatne: true,
+    // Podstawa jest orzeczenie sadu, ktore juz wywolalo skutek - wpis go
+    // ujawnia. Uprzedzanie akcjonariusza o "zamierzonym wpisie" byloby
+    // bezprzedmiotowe: nie ma tu nic do uzgodnienia ani do zgody.
+    wymaga_powiadomienia: false,
+    podstawa_prawna: PODSTAWY.UNIEWAZNIENIE_AKCJI,
+    tworzy: ['wykreślenie akcjonariusza', 'wpis akcji unieważnionych'],
+    checklista: [
+      poz('orzeczenie', 'Przedłożono orzeczenie sądu unieważniające akcje', {
+        podstawa: PODSTAWY.UNIEWAZNIENIE_AKCJI,
+      }),
+      poz('prawomocnosc', 'Orzeczenie jest prawomocne'),
+      poz('badanie_tresci_formy', 'Zbadano treść i formę dokumentu', {
+        podstawa: PODSTAWY.BADANIE_TRESCI_I_FORMY,
+      }),
+      poz(
+        'uzasadnione_watpliwosci',
+        'Zachodzą uzasadnione wątpliwości co do zgodności z prawem lub prawdziwości dokumentu',
+        { podstawa: PODSTAWY.BADANIE_TRESCI_I_FORMY, wymagana: false, watpliwosci: true }
+      ),
+      poz('identyfikacja_akcji', 'Orzeczenie identyfikuje akcje objęte unieważnieniem'),
+    ],
+    dokumenty: ['zawiadomienie_wpis'],
+  },
+
   // ── Typy sprintu 5 (zgodnosc z ustawa - ulamkowe czesci akcji) ─────────
 
   {
@@ -449,8 +483,16 @@ function istnieje(kod) {
   return WG_KODU.has(kod);
 }
 
+/**
+ * Do ktorego sprintu wlacznie kreator oferuje typy zdarzen.
+ *
+ * JEDNO miejsce - wczesniej numer byl zapisany osobno w trzech trasach, przez
+ * co typ dodany w nowym sprincie znikal z kreatora mimo poprawnej definicji.
+ */
+const SPRINT_KREATORA = 6;
+
 /** Typy dostepne w kreatorze do wskazanego sprintu wlacznie. */
-function dostepneWKreatorze(sprint = 1) {
+function dostepneWKreatorze(sprint = SPRINT_KREATORA) {
   return TYPY.filter((t) => t.sprint <= sprint && t.kreator !== false);
 }
 
@@ -473,6 +515,7 @@ function pozycjeWymagane(kod) {
 
 module.exports = {
   TYPY,
+  SPRINT_KREATORA,
   typ,
   istnieje,
   dostepneWKreatorze,

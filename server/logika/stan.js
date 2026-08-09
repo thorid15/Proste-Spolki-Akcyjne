@@ -389,6 +389,35 @@ const HANDLERY = {
   },
 
   /**
+   * Uniewaznienie akcji ORZECZENIEM SADU (art. 300(51) KSH) - za niewykonanie
+   * albo nienalezyte wykonanie zobowiazania do wniesienia wkladow.
+   *
+   * Mechanika przejscia jest ta sama co przy umorzeniu (akcje trwale
+   * wychodza z obrotu, zostajac w bilansie serii), ale kategoria docelowa
+   * jest ODREBNA. Nie wolno tego zlewac z umorzeniem: umorzenie jest
+   * czynnoscia SPOLKI (uchwala, zmiana umowy spolki, splata - art. 300(44)
+   * i 300(45)), uniewaznienie jest orzeczeniem SADU, bez splaty i bez zmiany
+   * umowy spolki. Rejestr i wydruk dla sadu musza je rozroznic.
+   */
+  uniewaznienie(stan, zdarzenie, d) {
+    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
+    for (const poz of d.pozycje || []) {
+      const zKategorii = poz.osoba_id == null ? K.NIEOBJETA : K.AKCJONARIUSZ;
+      przenies(stan, {
+        emisjaKlucz: emisja.klucz,
+        zKategorii,
+        zOsoby: poz.osoba_id == null ? null : Number(poz.osoba_id),
+        doKategorii: K.UNIEWAZNIONA,
+        doOsoby: null,
+        zakresy: poz.zakresy,
+        data: zdarzenie.data_zdarzenia,
+        zdarzenieId: Number(zdarzenie.id),
+        tytul: 'unieważnienie orzeczeniem sądu',
+      });
+    }
+  },
+
+  /**
    * Przeniesienie ulamkowej czesci OZNACZONEJ akcji (art. 300(43) KSH).
    * JEDYNA droga tworzenia i przenoszenia ulamkow (regula domenowa 4a) - nie
    * przechodzi przez `przenies`/`pula`, bo te licza w calych numerach.
@@ -746,12 +775,16 @@ function sprawdzBilans(stan) {
     const nieobjete = jako(K.NIEOBJETA);
     const przypisane = jako(K.AKCJONARIUSZ);
     const umorzone = jako(K.UMORZONA);
+    const uniewaznione = jako(K.UNIEWAZNIONA);
 
-    // Nakladanie sie kategorii.
+    // Nakladanie sie kategorii - kazda para musi byc rozlaczna.
     const pary = [
       ['nieobjęte', nieobjete, 'przypisane akcjonariuszom', przypisane],
       ['nieobjęte', nieobjete, 'umorzone', umorzone],
+      ['nieobjęte', nieobjete, 'unieważnione', uniewaznione],
       ['przypisane akcjonariuszom', przypisane, 'umorzone', umorzone],
+      ['przypisane akcjonariuszom', przypisane, 'unieważnione', uniewaznione],
+      ['umorzone', umorzone, 'unieważnione', uniewaznione],
     ];
     for (const [nazwaA, a, nazwaB, b] of pary) {
       const wspolne = n.przeciecie(a, b);
@@ -809,12 +842,12 @@ function sprawdzBilans(stan) {
     }
 
     // Szczelnosc pokrycia.
-    const razem = n.suma(n.suma(nieobjete, przypisane), umorzone);
+    const razem = n.suma(n.suma(n.suma(nieobjete, przypisane), umorzone), uniewaznione);
     const brakujace = n.roznica(zakresEmisji, razem);
     if (brakujace.length > 0) {
       bledy.push(
         `Seria ${emisja.seria}: akcje ${n.opisz(brakujace)} wypadły z rejestru — ` +
-          `nie są ani nieobjęte, ani przypisane, ani umorzone.`
+          `nie są ani nieobjęte, ani przypisane, ani umorzone, ani unieważnione.`
       );
     }
     const nadmiarowe = n.roznica(razem, zakresEmisji);
@@ -825,8 +858,9 @@ function sprawdzBilans(stan) {
       );
     }
 
-    // Kontrola liczbowa - art. 300(31) § 3 KSH.
-    const suma = n.ilosc(nieobjete) + n.ilosc(przypisane) + n.ilosc(umorzone);
+    // Kontrola liczbowa - art. 300(31) § 2 KSH.
+    const suma =
+      n.ilosc(nieobjete) + n.ilosc(przypisane) + n.ilosc(umorzone) + n.ilosc(uniewaznione);
     if (suma !== emisja.ilosc) {
       bledy.push(
         `Seria ${emisja.seria}: suma akcji w rejestrze (${suma}) nie odpowiada liczbie wyemitowanych (${emisja.ilosc}).`
@@ -936,7 +970,7 @@ function akcjonariatNaDzien(stan, data) {
   return { pozycje, razem_akcji: razem };
 }
 
-/** Podsumowanie serii na dany dzien - do kontroli z art. 300(31) § 3 KSH. */
+/** Podsumowanie serii na dany dzien - do kontroli z art. 300(31) § 2 KSH. */
 function bilansNaDzien(stan, data) {
   const przedzialy = przedzialyNaDzien(stan, data);
   return stan.emisje.map((e) => {
@@ -949,6 +983,7 @@ function bilansNaDzien(stan, data) {
     const nieobjete = jako(K.NIEOBJETA);
     const przypisane = jako(K.AKCJONARIUSZ);
     const umorzone = jako(K.UMORZONA);
+    const uniewaznione = jako(K.UNIEWAZNIONA);
     return {
       emisja_klucz: e.klucz,
       seria: e.seria,
@@ -958,7 +993,11 @@ function bilansNaDzien(stan, data) {
       przypisane: n.ilosc(przypisane),
       umorzone: n.ilosc(umorzone),
       umorzone_zakresy: umorzone,
-      w_obrocie: e.ilosc - n.ilosc(umorzone),
+      uniewaznione: n.ilosc(uniewaznione),
+      uniewaznione_zakresy: uniewaznione,
+      // Poza obrotem sa i umorzone, i uniewaznione - roznica miedzy nimi jest
+      // prawna (uchwala spolki vs orzeczenie sadu), nie bilansowa.
+      w_obrocie: e.ilosc - n.ilosc(umorzone) - n.ilosc(uniewaznione),
     };
   });
 }

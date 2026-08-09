@@ -84,6 +84,19 @@ function EkranStawek() {
           <div className="podstawa-prawna odstep-g">
             Termin 7 dni zamrożony w stanie „wstrzymana” — po wznowieniu biegnie od nowa w pełnym wymiarze.
           </div>
+
+          <div className="rozdzielacz" />
+
+          <dl className="pary">
+            <Para etykieta="Cel wewnętrzny kancelarii">
+              {dane.cel_wewnetrzny.WPIS_DNI} dni kalendarzowe od wpływu żądania
+            </Para>
+          </dl>
+          <div className="podstawa-prawna">
+            Nie jest terminem ustawowym. Art. 300(34) § 1 KSH nakazuje działać „niezwłocznie”, a siedem
+            dni tylko domyka ten obowiązek od góry — cel wyprzedza termin ustawowy i to on uruchamia
+            wyróżnienie w kolejce. Jego przekroczenie nie narusza ustawy.
+          </div>
         </Karta>
 
         <Karta tytul="Nowelizacja">

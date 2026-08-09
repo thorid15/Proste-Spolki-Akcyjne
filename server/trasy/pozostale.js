@@ -19,7 +19,7 @@ const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpo
 const { wymagajPracownika } = require('../pomocnicze/autoryzacja');
 
 /** Sprint bieżąco obsługiwany przez kreator - decyduje o `typy_w_kreatorze`. */
-const SPRINT_KREATORA = 5;
+const SPRINT_KREATORA = typyZdarzen.SPRINT_KREATORA;
 
 const router = express.Router();
 
@@ -41,6 +41,7 @@ router.get(
       stawki_maksymalne_grosze: przepisy.STAWKI_MAKSYMALNE_GROSZE,
       terminy: przepisy.TERMINY,
       progi_terminu: przepisy.PROGI_TERMINU,
+      cel_wewnetrzny: przepisy.CEL_WEWNETRZNY,
       statusy_spolki: przepisy.STATUSY_SPOLKI,
       statusy_emisji: przepisy.STATUSY_EMISJI,
       aml_statusy: przepisy.AML_STATUSY,

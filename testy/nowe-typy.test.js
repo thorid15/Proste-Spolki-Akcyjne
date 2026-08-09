@@ -359,3 +359,45 @@ test('lancuch skrotow pozostaje ciagly po zdarzeniach nowych typow', () => {
   });
   assert.equal(rejestr.zweryfikujIntegralnosc(db).ok, true);
 });
+
+test('uniewaznienie akcji orzeczeniem sadu (art. 300(51) KSH) — odrebna kategoria, nie umorzenie', () => {
+  const { db, spolka, kowalski, emisjaId } = scenariusz();
+
+  wpis(db, spolka, 'uniewaznienie', '2026-03-01', {
+    emisja_zdarzenie_id: emisjaId,
+    sad: 'Sąd Okręgowy w Krakowie',
+    sygnatura: 'IX GC 123/26',
+    data_orzeczenia: '2026-02-10',
+    pozycje: [{ osoba_id: kowalski, ilosc: 30 }],
+  });
+
+  const stan = stanBiezacy(db, spolka);
+  const bilans = stanLogika.bilansNaDzien(stan, '2026-03-01')[0];
+
+  assert.equal(bilans.uniewaznione, 30, '30 akcji uniewaznionych');
+  assert.equal(bilans.umorzone, 0, 'uniewaznienie NIE jest umorzeniem');
+  assert.equal(bilans.przypisane, 70, 'akcjonariuszowi zostaje 70');
+  assert.equal(bilans.w_obrocie, 70, 'uniewaznione wychodza z obrotu tak jak umorzone');
+  assert.equal(bilans.wyemitowane, 100, 'liczba wyemitowanych sie nie zmienia');
+
+  // Niezmiennik bilansu z art. 300(31) § 2 KSH musi sie domykac z czwarta kategoria.
+  assert.deepEqual(stanLogika.sprawdzBilans(stan), [], 'bilans bez zastrzezen');
+});
+
+test('uniewaznienie: nie mozna uniewaznic akcji, ktorych akcjonariusz nie ma', () => {
+  const { db, spolka, kowalski, emisjaId } = scenariusz();
+  assert.throws(
+    () =>
+      wpis(db, spolka, 'uniewaznienie', '2026-03-01', {
+        emisja_zdarzenie_id: emisjaId,
+        pozycje: [{ osoba_id: kowalski, ilosc: 150 }],
+      }),
+    /Brak pokrycia: żądano 150 akcji/i
+  );
+});
+
+test('uniewaznienie jest wpisem deklaratoryjnym — skutek wywoluje orzeczenie, nie wpis', () => {
+  const przepisy = require('../server/logika/przepisy');
+  assert.equal(przepisy.charakterWpisu('uniewaznienie'), przepisy.CHARAKTER_WPISU.DEKLARATORYJNY);
+  assert.equal(przepisy.charakterWpisu('umorzenie'), przepisy.CHARAKTER_WPISU.KONSTYTUTYWNY);
+});

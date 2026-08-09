@@ -117,7 +117,7 @@ test('pelny cykl sprawy: nowa → weryfikacja → wpisana, z zawiadomieniem bez 
 
   const [stZal, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
     spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_opis: 'Zbywca akcji',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'zbywca', zadajacy_opis: 'Zbywca akcji',
   });
   assert.equal(stZal, 201);
   assert.equal(sprawaOdp.sprawa.stan, 'nowa');
@@ -164,7 +164,7 @@ test('pelny cykl sprawy: nowa → weryfikacja → wpisana, z zawiadomieniem bez 
 test('nie mozna dokonac wpisu przed przejsciem sprawy do weryfikacji', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
   const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'email', zadajacy_osoba_id: kowalski.id,
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'email', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
   });
   const [status, odp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/wpisz`, {
     data_zdarzenia: '2026-02-01',
@@ -177,7 +177,7 @@ test('nie mozna dokonac wpisu przed przejsciem sprawy do weryfikacji', async () 
 test('wstrzymanie zamraza termin, wznowienie liczy pelne 7 dni od nowa i wysyla wezwanie', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
   const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id,
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
   });
   const sprawaId = sprawaOdp.sprawa.id;
   await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'weryfikuj' });
@@ -201,7 +201,7 @@ test('wstrzymanie zamraza termin, wznowienie liczy pelne 7 dni od nowa i wysyla 
 test('odmowa wpisu wymaga przyczyny i wysyla zawiadomienie do zadajacego', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
   const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'email', zadajacy_osoba_id: kowalski.id,
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'email', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
   });
   const sprawaId = sprawaOdp.sprawa.id;
   await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'weryfikuj' });
@@ -263,7 +263,7 @@ test('AML jako bramka: niemozliwe blokuje wpis takze w workflow sprawy', async (
   });
 
   const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id,
+    spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'zbywca',
   });
   await zapytaj('PATCH', `/api/psa/sprawy/${sprawaOdp.sprawa.id}`, { akcja: 'weryfikuj' });
 
@@ -284,7 +284,7 @@ test('AML jako bramka: niemozliwe blokuje wpis takze w workflow sprawy', async (
 test('upload dokumentu do sprawy i pobranie go z powrotem', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
   const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id,
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
   });
   const sprawaId = sprawaOdp.sprawa.id;
 
@@ -319,7 +319,7 @@ test('upload dokumentu do sprawy i pobranie go z powrotem', async () => {
 test('odrzuca plik o niedozwolonym rozszerzeniu', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
   const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id,
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
   });
 
   const formularz = new FormData();
@@ -365,4 +365,49 @@ test('sprostowanie bez uzasadnienia jest odrzucane na poziomie API', async () =>
 test('integralnosc lancucha pozostaje ok po calym cyklu operacji', async () => {
   const [, odp] = await zapytaj('GET', '/api/psa/integralnosc');
   assert.equal(odp.ok, true);
+});
+
+test('charakter zadajacego: wymagany, ze slownika, a „inna osoba” wymaga uzasadnienia', async () => {
+  const { spolkaId, kowalski } = await przygotujSpolke();
+
+  // Brak charakteru - art. 300(34) § 1 KSH wymaga ustalenia interesu prawnego.
+  const [stBrak, odpBrak] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id,
+  });
+  assert.equal(stBrak, 400);
+  assert.match(odpBrak.blad, /w jakim charakterze/i);
+
+  // Wartosc spoza slownika.
+  const [stObca] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'komornik',
+  });
+  assert.equal(stObca, 400);
+
+  // "inna osoba" BEZ wykazania interesu prawnego - odrzucone.
+  const [stInna, odpInna] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'inna',
+  });
+  assert.equal(stInna, 400);
+  assert.match(odpInna.blad, /interes prawny/i);
+
+  // "inna osoba" Z uzasadnieniem - katalog nie jest zamkniety, wiec przechodzi.
+  const [stOk, odpOk] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'inna',
+    zadajacy_opis: 'Wierzyciel akcjonariusza z tytulu wykonalnego',
+  });
+  assert.equal(stOk, 201);
+  assert.equal(odpOk.sprawa.zadajacy_rola, 'inna');
+});
+
+test('sciezka z urzedu nie wymaga charakteru zadajacego (art. 300(34) § 2 KSH)', async () => {
+  const { spolkaId } = await przygotujSpolke();
+  const [st, odp] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'zajecie', zrodlo: 'z_urzedu',
+  });
+  assert.equal(st, 201);
+  assert.equal(odp.sprawa.zadajacy_rola, null);
 });

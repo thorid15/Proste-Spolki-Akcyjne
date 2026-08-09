@@ -71,8 +71,26 @@ const TERMINY = {
 
 /** Progi ostrzegania o zblizajacym sie terminie (sekcja 9 - pulpit). */
 const PROGI_TERMINU = {
-  /** <= tyle dni do konca terminu = wyroznienie kolorem --burgundy */
+  /** <= tyle dni do konca terminu USTAWOWEGO = sprawa pilna. */
   PILNE_DNI: 2,
+};
+
+/**
+ * Cel wewnetrzny kancelarii - NIE jest terminem ustawowym.
+ *
+ * Art. 300(34) § 1 KSH nakazuje dokonac wpisu "niezwlocznie, ale nie pozniej
+ * niz w terminie siedmiu dni". Siedem dni to SUFIT, nie cel: samo
+ * "niezwlocznie" znaczy krocej. Kolejka spraw pokazuje obie wartosci i
+ * wyrozna sprawe po przekroczeniu celu, a nie dopiero pod koniec terminu
+ * ustawowego.
+ *
+ * Wartosc jest zobowiazaniem HANDLOWYM (regulamin, umowa ze spolka), nie
+ * ustawowym - jej przekroczenie nie narusza ustawy i nie moze byc
+ * prezentowane jak naruszenie. Dni KALENDARZOWE, spojnie z terminem
+ * ustawowym liczonym w `terminy.js`.
+ */
+const CEL_WEWNETRZNY = {
+  WPIS_DNI: 3,
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -263,6 +281,44 @@ const ZRODLA_SPRAWY = {
   Z_URZEDU: 'z_urzedu',
 };
 
+/**
+ * W jakim charakterze zadajacy wystepuje o wpis.
+ *
+ * Art. 300(34) § 1 KSH: wpisu dokonuje sie "na zadanie spolki lub innej osoby
+ * majacej INTERES PRAWNY". Ocena interesu prawnego nalezy do podmiotu
+ * prowadzacego rejestr i musi zostawic slad - stad slownik zamiast wolnego
+ * pola. Katalog NIE jest zamkniety (ustawa mowi "innej osoby majacej interes
+ * prawny"), dlatego pozycja INNA zostaje - ale wymaga uzasadnienia.
+ */
+const ROLE_ZADAJACEGO = {
+  AKCJONARIUSZ: 'akcjonariusz',
+  ZBYWCA: 'zbywca',
+  NABYWCA: 'nabywca',
+  ZASTAWNIK: 'zastawnik',
+  UZYTKOWNIK: 'uzytkownik',
+  /** Osoby i organy uprawnione do zaskarzenia uchwal walnego zgromadzenia. */
+  UPRAWNIONY_DO_ZASKARZENIA: 'uprawniony_do_zaskarzenia',
+  SPOLKA: 'spolka',
+  /** Poza katalogiem - wymaga wykazania interesu prawnego w polu opisowym. */
+  INNA: 'inna',
+};
+
+/** Rola, przy ktorej opis interesu prawnego jest OBOWIAZKOWY. */
+const ROLA_ZADAJACEGO_WYMAGA_UZASADNIENIA = ROLE_ZADAJACEGO.INNA;
+
+/** Etykiety do interfejsu i na zawiadomienia - jezykiem czynnosci, nie kodem. */
+const OPISY_ROL_ZADAJACEGO = {
+  [ROLE_ZADAJACEGO.AKCJONARIUSZ]: 'akcjonariusz',
+  [ROLE_ZADAJACEGO.ZBYWCA]: 'zbywca akcji',
+  [ROLE_ZADAJACEGO.NABYWCA]: 'nabywca akcji',
+  [ROLE_ZADAJACEGO.ZASTAWNIK]: 'zastawnik',
+  [ROLE_ZADAJACEGO.UZYTKOWNIK]: 'użytkownik akcji',
+  [ROLE_ZADAJACEGO.UPRAWNIONY_DO_ZASKARZENIA]:
+    'osoba albo organ uprawniony do zaskarżenia uchwały walnego zgromadzenia',
+  [ROLE_ZADAJACEGO.SPOLKA]: 'spółka',
+  [ROLE_ZADAJACEGO.INNA]: 'inna osoba mająca interes prawny',
+};
+
 /** Kategorie, w ktorych moze znalezc sie kazdy numer akcji (materializacja - podstawa niezmiennika bilansu). */
 const KATEGORIE_AKCJI = {
   /** Wyemitowana, jeszcze nieobjeta przez zadnego akcjonariusza. */
@@ -271,6 +327,16 @@ const KATEGORIE_AKCJI = {
   AKCJONARIUSZ: 'akcjonariusz',
   /** Umorzona - trwale poza obrotem, nadal w bilansie serii. */
   UMORZONA: 'umorzona',
+  /**
+   * Uniewazniona ORZECZENIEM SADU za niewykonanie zobowiazania do wniesienia
+   * wkladow (art. 300(51) KSH). Skutek dla bilansu ten sam co umorzenie -
+   * trwale poza obrotem - ale to ODREBNA instytucja i nie wolno jej zlewac
+   * z umorzeniem: umorzenie jest czynnoscia SPOLKI (uchwala, stanowi zmiane
+   * umowy spolki, wiaze sie ze splata - art. 300(44)-(45)), uniewaznienie
+   * jest orzeczeniem SADU, bez splaty i bez zmiany umowy spolki. Rozroznienie
+   * musi byc widoczne w rejestrze i na wydruku dla sadu.
+   */
+  UNIEWAZNIONA: 'uniewazniona',
 };
 
 /** PRZEPISY-PSA.md art. 300(33) § 1 pkt 4 🟢 - rodzaj danej akcji. */
@@ -329,6 +395,11 @@ const TYTULY_DEKLARATORYJNE_PRZENIESIENIA = [
 function charakterWpisu(typZdarzenia, tytulPrawny) {
   if (typZdarzenia === 'objecie') return CHARAKTER_WPISU.DEKLARATORYJNY;
   if (typZdarzenia === 'objecie_warunkowe') return CHARAKTER_WPISU.KONSTYTUTYWNY;
+  // Uniewaznienie (art. 300(51) KSH) wywoluje ORZECZENIE SADU - akcje przestaja
+  // istniec z chwila jego uprawomocnienia, a nie z chwila wpisu. Art. 300(37)
+  // § 1 dotyczy nabycia akcji i ustanowienia ograniczonego prawa rzeczowego,
+  // wiec tutaj nie ma zastosowania: wpis wylacznie ujawnia stan juz zaszly.
+  if (typZdarzenia === 'uniewaznienie') return CHARAKTER_WPISU.DEKLARATORYJNY;
   if (typZdarzenia === 'przeniesienie') {
     const tekst = String(tytulPrawny || '').trim().toLowerCase();
     if (TYTULY_DEKLARATORYJNE_PRZENIESIENIA.some((fraza) => tekst.includes(fraza))) {
@@ -366,6 +437,7 @@ const PODSTAWY = {
   JAWNOSC_REJESTRU: 'art. 300(35) § 1 KSH',
   MASKOWANIE: 'art. 300(35) § 1(1) KSH',
   ZAPYTANIA_ORGANOW: 'art. 300(35) § 4 KSH',
+  UNIEWAZNIENIE_AKCJI: 'art. 300(51) KSH',
   ULAMKOWE_CZESCI_AKCJI: 'art. 300(2) § 3 oraz art. 300(43) KSH',
   POKRYCIE_WKLADOW: 'art. 300(9) § 2-3 KSH',
   WNIESIENIE_WKLADOW_TERMIN: 'art. 300(9) § 1 KSH',
@@ -454,6 +526,7 @@ function ocenFormePrawna(formaPrawna) {
 module.exports = {
   TERMINY,
   PROGI_TERMINU,
+  CEL_WEWNETRZNY,
   STAWKI_GROSZE,
   STAWKI_MAKSYMALNE_GROSZE,
   STAWKI_DO_WERYFIKACJI,
@@ -473,6 +546,9 @@ module.exports = {
   STATUSY_EMISJI,
   STANY_SPRAWY,
   ZRODLA_SPRAWY,
+  ROLE_ZADAJACEGO,
+  ROLA_ZADAJACEGO_WYMAGA_UZASADNIENIA,
+  OPISY_ROL_ZADAJACEGO,
   KATEGORIE_AKCJI,
   RODZAJE_AKCJI,
   STANY_POKRYCIA,

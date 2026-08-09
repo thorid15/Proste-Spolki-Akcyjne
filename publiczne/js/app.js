@@ -177,7 +177,7 @@ function opisTrasy(segmenty) {
     };
   }
   const wg = {
-    sprawy: { tytul: 'Kolejka spraw', podtytul: 'Termin siedmiu dni z art. 300³⁴ § 1 KSH — sprawy posortowane po pozostałym czasie.' },
+    sprawy: { tytul: 'Kolejka spraw', podtytul: 'Cel wewnętrzny 3 dni, termin ustawowy 7 dni (art. 300³⁴ § 1 KSH) — sprawy posortowane po pozostałym czasie.' },
     spolki: { tytul: 'Spółki', podtytul: 'Rejestry prowadzone przez kancelarię.' },
     osoby: { tytul: 'Kartoteka osób', podtytul: 'Wspólna dla wszystkich prowadzonych rejestrów — jeden inwestor wpisywany raz.' },
     oplaty: { tytul: 'Opłaty', podtytul: 'Naliczenia za czynności rejestrowe i prowadzenie rejestru.' },

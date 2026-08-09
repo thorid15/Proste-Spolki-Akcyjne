@@ -390,6 +390,36 @@ const PER_TYP = {
     sprawdzRozlacznoscPozycji(d.pozycje, bledy);
   },
 
+  /**
+   * Uniewaznienie akcji orzeczeniem sadu (art. 300(51) KSH) - kontrola tych
+   * samych pul co przy umorzeniu: unieważnić można wyłącznie akcje, które na
+   * dzień zdarzenia rzeczywiście są w rejestrze pod wskazanym tytułem.
+   */
+  uniewaznienie(stanPrzed, propozycja, kontekst, bledy) {
+    const d = propozycja.dane || {};
+    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
+    if (!emisja) {
+      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
+      return;
+    }
+    for (const p of d.pozycje || []) {
+      const zakresy = n.normalizuj(p.zakresy || []);
+      const pula =
+        p.osoba_id == null
+          ? stanLogika.pula(stanPrzed, emisja.klucz, K.NIEOBJETA, null)
+          : stanLogika.pula(stanPrzed, emisja.klucz, K.AKCJONARIUSZ, Number(p.osoba_id));
+      const brakujace = n.roznica(zakresy, pula);
+      if (brakujace.length > 0) {
+        bledy.push(
+          p.osoba_id == null
+            ? `Akcje ${n.opisz(brakujace)} serii ${emisja.seria} nie są nieobjęte — nie można ich unieważnić w tym trybie.`
+            : `Akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria} na dzień ${propozycja.data_zdarzenia}.`
+        );
+      }
+    }
+    sprawdzRozlacznoscPozycji(d.pozycje, bledy);
+  },
+
   zmiana_danych_spolki() {},
 
   obciazenie(stanPrzed, propozycja, kontekst, bledy) {

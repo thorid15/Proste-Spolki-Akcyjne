@@ -14,11 +14,36 @@ const ODMIANY_STANU_SPRAWY = {
   wpisana: 'zielony', odmowa: 'bordo', anulowana: 'neutralny',
 };
 
+/* Charakter żądającego (art. 300(34) § 1 KSH) — lustro słownika z
+   server/logika/przepisy.js. Trzymamy własną kopię etykiet, bo widok sprawy
+   nie pobiera katalogu reguł. */
+const OPISY_ROL_ZADAJACEGO = {
+  akcjonariusz: 'akcjonariusz',
+  zbywca: 'zbywca akcji',
+  nabywca: 'nabywca akcji',
+  zastawnik: 'zastawnik',
+  uzytkownik: 'użytkownik akcji',
+  uprawniony_do_zaskarzenia: 'uprawniony do zaskarżenia uchwały walnego zgromadzenia',
+  spolka: 'spółka',
+  inna: 'inna osoba mająca interes prawny',
+};
+
+/** Widok sprawy — pełniejszy niż pigułka w kolejce: nazywa oba zegary wprost. */
 function ZnacznikTerminu({ termin }) {
   if (termin.zamrozony) return <Znacznik odmiana="oliwka">termin zawieszony</Znacznik>;
-  if (termin.po_terminie) return <Znacznik odmiana="bordo">po terminie</Znacznik>;
-  if (termin.pilny) return <Znacznik odmiana="bordo">pozostały {termin.dni_pozostale} dz.</Znacznik>;
-  return <Znacznik odmiana="neutralny">pozostało {termin.dni_pozostale} dz.</Znacznik>;
+  if (termin.po_terminie) return <Znacznik odmiana="bordo">po terminie ustawowym</Znacznik>;
+  if (termin.po_celu) {
+    return (
+      <Znacznik odmiana="oliwka">
+        po celu wewnętrznym · do terminu ustawowego {termin.dni_pozostale} dz.
+      </Znacznik>
+    );
+  }
+  return (
+    <Znacznik odmiana="neutralny">
+      do celu {termin.dni_do_celu} dz. · do terminu ustawowego {termin.dni_pozostale} dz.
+    </Znacznik>
+  );
 }
 
 /* Starzenie sprawy niesie teraz pigułka terminu w wierszu (`TerminPigulka`
@@ -630,6 +655,7 @@ function EkranSprawy({ sprawaId }) {
           <div className="podtytul-strony">
             {spolka.nazwa} · wpłynęła {fmt.data(sprawa.data_wplywu)} · {sprawa.zrodlo === 'z_urzedu' ? 'z urzędu' : sprawa.zrodlo}
             {zadajacy ? ` · żądający: ${zadajacy.oznaczenie}` : ''}
+            {sprawa.zadajacy_rola ? ` (${OPISY_ROL_ZADAJACEGO[sprawa.zadajacy_rola] || sprawa.zadajacy_rola})` : ''}
           </div>
           <div className="row-g" style={{ marginTop: 10 }}>
             <Znacznik odmiana={ODMIANY_STANU_SPRAWY[sprawa.stan]}>{NAZWY_STANU_SPRAWY[sprawa.stan]}</Znacznik>

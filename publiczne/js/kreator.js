@@ -523,6 +523,114 @@ function KrokUmorzenie({ dane, ustawDane, spolka }) {
   );
 }
 
+/**
+ * Unieważnienie akcji orzeczeniem sądu (art. 300(51) KSH).
+ *
+ * Wybór akcji jak przy umorzeniu, ale podstawą jest ORZECZENIE SĄDU, nie
+ * uchwała spółki — stąd sąd, sygnatura i data orzeczenia zamiast trybu.
+ */
+function KrokUniewaznienie({ dane, ustawDane, spolka }) {
+  const pozycje = dane.pozycje || [{}];
+  const ustawPozycje = (p) => ustawDane({ ...dane, pozycje: p });
+  const wSerii = spolka.akcjonariusze.filter(
+    (a) => a.emisja_klucz === Number(dane.emisja_zdarzenie_id)
+  );
+
+  return (
+    <>
+      <Komunikat
+        odmiana="uwaga"
+        tresc="To nie jest umorzenie. Umorzenie jest czynnością spółki (uchwała, zmiana umowy spółki, spłata); unieważnienie orzeka sąd za niewniesienie wkładu — bez spłaty i bez zmiany umowy spółki."
+      />
+
+      <WyborEmisji
+        emisje={spolka.emisje}
+        bilans={spolka.bilans}
+        wartosc={dane.emisja_zdarzenie_id}
+        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k, pozycje: [{}] })}
+      />
+
+      {dane.emisja_zdarzenie_id && (
+        <>
+          <div className="siatka-2">
+            <Pole etykieta="Sąd, który wydał orzeczenie">
+              <input
+                type="text"
+                value={dane.sad ?? ''}
+                onChange={(z) => ustawDane({ ...dane, sad: z.target.value })}
+              />
+            </Pole>
+            <Pole etykieta="Sygnatura akt">
+              <input
+                type="text"
+                value={dane.sygnatura ?? ''}
+                onChange={(z) => ustawDane({ ...dane, sygnatura: z.target.value })}
+              />
+            </Pole>
+          </div>
+          <Pole etykieta="Data orzeczenia" podpowiedz="Data uprawomocnienia — to ona wywołuje skutek, nie data wpisu.">
+            <PoleDaty
+              wartosc={dane.data_orzeczenia || ''}
+              przyZmianie={(v) => ustawDane({ ...dane, data_orzeczenia: v })}
+            />
+          </Pole>
+
+          <div className="fl" style={{ marginTop: 22 }}>Czyje akcje są unieważniane</div>
+          {pozycje.map((p, i) => (
+            <div className="pozycja" key={i}>
+              <Pole etykieta="Akcjonariusz" wymagane>
+                <select
+                  value={p.osoba_id ?? ''}
+                  onChange={(z) =>
+                    ustawPozycje(
+                      pozycje.map((x, j) =>
+                        j === i
+                          ? { ...x, osoba_id: z.target.value === '' ? null : Number(z.target.value) }
+                          : x
+                      )
+                    )
+                  }
+                >
+                  <option value="">— wybierz —</option>
+                  {wSerii.map((a) => (
+                    <option key={a.osoba_id} value={a.osoba_id}>
+                      {a.osoba ? a.osoba.oznaczenie : `osoba #${a.osoba_id}`} — {fmt.liczba(a.ilosc)} akcji
+                    </option>
+                  ))}
+                </select>
+              </Pole>
+              <Pole etykieta="Liczba akcji" wymagane>
+                <input
+                  type="number"
+                  min="1"
+                  value={p.ilosc ?? ''}
+                  onChange={(z) =>
+                    ustawPozycje(pozycje.map((x, j) => (j === i ? { ...x, ilosc: z.target.value } : x)))
+                  }
+                />
+              </Pole>
+              {pozycje.length > 1 ? (
+                <button
+                  className="btn btn-maly btn-sygnal"
+                  style={{ marginBottom: 16 }}
+                  onClick={() => ustawPozycje(pozycje.filter((_, j) => j !== i))}
+                >
+                  Usuń
+                </button>
+              ) : (
+                <span />
+              )}
+            </div>
+          ))}
+          <button className="btn btn-maly odstep-g" onClick={() => ustawPozycje([...pozycje, {}])}>
+            + Kolejna pozycja
+          </button>
+        </>
+      )}
+    </>
+  );
+}
+
 /** Ustanowienie zastawu / użytkowania. */
 function KrokObciazenie({ dane, ustawDane, spolka }) {
   const pole = (k) => ({ value: dane[k] ?? '', onChange: (z) => ustawDane({ ...dane, [k]: z.target.value }) });
@@ -1016,6 +1124,7 @@ const KROKI_TRESCI = {
   objecie: KrokObjecie,
   przeniesienie: KrokPrzeniesienie,
   umorzenie: KrokUmorzenie,
+  uniewaznienie: KrokUniewaznienie,
   obciazenie: KrokObciazenie,
   wykreslenie_obciazenia: KrokWykreslenieObciazenia,
   prawo_glosu_zastawnika: KrokPrawoGlosuZastawnika,
@@ -1123,6 +1232,7 @@ function EkranNowejSprawy({ spolkaId }) {
   const [zrodlo, ustawZrodlo] = useState('papier');
   const [zadajacyOsobaId, ustawZadajacegoOsobaId] = useState(null);
   const [zadajacyOpis, ustawZadajacegoOpis] = useState('');
+  const [zadajacyRola, ustawZadajacegoRole] = useState('');
   const [dataWplywu, ustawDateWplywu] = useState(fmt.dzisIso());
   const [podstawaOpis, ustawPodstawaOpis] = useState('');
   const [pliki, ustawPliki] = useState([]);
@@ -1160,6 +1270,7 @@ function EkranNowejSprawy({ spolkaId }) {
         typ_zdarzenia: typ,
         zrodlo,
         zadajacy_osoba_id: zadajacyOsobaId,
+        zadajacy_rola: zadajacyRola || null,
         zadajacy_opis: zadajacyOpis || null,
         data_wplywu: dataWplywu,
         notatka: podstawaOpis || null,
@@ -1188,7 +1299,19 @@ function EkranNowejSprawy({ spolkaId }) {
 
   if (meta.ladowanie || spolkaDane.ladowanie) return <Spinner />;
 
-  const mozeDalej = krok === 0 ? Boolean(typ) : krok === 1 ? Boolean(zrodlo && dataWplywu) : false;
+  // Charakter zadajacego jest wymagany poza sciezka z urzedu (art. 300(34)
+  // § 1 vs § 2 KSH), a "inna osoba" dodatkowo wymaga wykazania interesu
+  // prawnego. Blokujemy tu, zeby uzytkownik dowiedzial sie o tym przed
+  // wyslaniem formularza, a nie z bledu serwera.
+  const zadajacyKompletny =
+    zrodlo === 'z_urzedu' ||
+    (Boolean(zadajacyRola) && (zadajacyRola !== 'inna' || Boolean(zadajacyOpis.trim())));
+  const mozeDalej =
+    krok === 0
+      ? Boolean(typ)
+      : krok === 1
+      ? Boolean(zrodlo && dataWplywu && zadajacyKompletny)
+      : false;
 
   return (
     <>
@@ -1267,7 +1390,34 @@ function EkranNowejSprawy({ spolkaId }) {
                 <Pole etykieta="Żądający wpisu" podpowiedz="Spółka albo inna osoba mająca interes prawny — art. 300(34) § 1 KSH.">
                   <WyborOsoby wartosc={zadajacyOsobaId} przyZmianie={ustawZadajacegoOsobaId} />
                 </Pole>
-                <Pole etykieta="Opis żądającego" podpowiedz="Jeśli żądający nie jest wpisany do kartoteki.">
+                <Pole
+                  etykieta="W jakim charakterze"
+                  wymagane
+                  podpowiedz="Ocena interesu prawnego należy do podmiotu prowadzącego rejestr — zostaje zapisana w aktach sprawy."
+                >
+                  <select value={zadajacyRola} onChange={(z) => ustawZadajacegoRole(z.target.value)}>
+                    <option value="">— wybierz —</option>
+                    <option value="akcjonariusz">akcjonariusz</option>
+                    <option value="zbywca">zbywca akcji</option>
+                    <option value="nabywca">nabywca akcji</option>
+                    <option value="zastawnik">zastawnik</option>
+                    <option value="uzytkownik">użytkownik akcji</option>
+                    <option value="uprawniony_do_zaskarzenia">
+                      uprawniony do zaskarżenia uchwały walnego zgromadzenia
+                    </option>
+                    <option value="spolka">spółka</option>
+                    <option value="inna">inna osoba mająca interes prawny</option>
+                  </select>
+                </Pole>
+                <Pole
+                  etykieta={zadajacyRola === 'inna' ? 'Interes prawny żądającego' : 'Opis żądającego'}
+                  wymagane={zadajacyRola === 'inna'}
+                  podpowiedz={
+                    zadajacyRola === 'inna'
+                      ? 'Katalog nie jest zamknięty, ale interes prawny trzeba wykazać — art. 300(34) § 1 KSH.'
+                      : 'Jeśli żądający nie jest wpisany do kartoteki.'
+                  }
+                >
                   <input type="text" value={zadajacyOpis} onChange={(z) => ustawZadajacegoOpis(z.target.value)} />
                 </Pole>
               </>

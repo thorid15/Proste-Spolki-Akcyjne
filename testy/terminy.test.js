@@ -88,3 +88,43 @@ test('dodajDni i dniMiedzy są spójne ze sobą', () => {
   assert.equal(terminy.dniMiedzy('2026-02-25', '2026-03-04'), 7);
   assert.equal(terminy.dniMiedzy('2026-03-04', '2026-02-25'), -7);
 });
+
+test('cel wewnętrzny biegnie obok terminu ustawowego i ostrzega wcześniej', () => {
+  const sprawa = { data_wplywu: '2026-01-01', stan: 'weryfikacja' };
+
+  // Cel 3 dni, termin ustawowy 7 dni - oba od dnia wplywu.
+  assert.equal(terminy.policzTermin(sprawa, '2026-01-01').cel_do, '2026-01-04');
+  assert.equal(terminy.policzTermin(sprawa, '2026-01-01').termin_do, '2026-01-08');
+
+  // W celu.
+  const wCelu = terminy.policzTermin(sprawa, '2026-01-03');
+  assert.equal(wCelu.po_celu, false, '1 dzien do celu');
+  assert.equal(wCelu.dni_do_celu, 1);
+  assert.equal(wCelu.po_terminie, false);
+
+  // Po celu, ale wciaz w terminie ustawowym - to NIE jest naruszenie ustawy.
+  const poCelu = terminy.policzTermin(sprawa, '2026-01-06');
+  assert.equal(poCelu.po_celu, true);
+  assert.equal(poCelu.po_terminie, false, 'przekroczenie celu nie jest przekroczeniem terminu');
+  assert.equal(poCelu.dni_pozostale, 2, 'do terminu ustawowego zostaly 2 dni');
+
+  // Cel ostrzega WCZESNIEJ niz prog "pilne" (2 dni do terminu ustawowego).
+  const wczesniej = terminy.policzTermin(sprawa, '2026-01-05');
+  assert.equal(wczesniej.po_celu, true, 'cel juz przekroczony');
+  assert.equal(wczesniej.pilny, false, 'a prog pilnosci jeszcze nie');
+});
+
+test('wstrzymanie zamraża oba zegary, wznowienie liczy oba od nowa', () => {
+  let sprawa = { data_wplywu: '2026-01-01', stan: 'weryfikacja', dni_wstrzymania: 0 };
+
+  sprawa = { ...sprawa, ...terminy.wstrzymaj(sprawa, '2026-01-02') };
+  const zamrozony = terminy.policzTermin(sprawa, '2026-01-20');
+  assert.equal(zamrozony.cel_do, null, 'cel zamrożony razem z terminem');
+  assert.equal(zamrozony.po_celu, false);
+
+  sprawa = { ...sprawa, ...terminy.wznow(sprawa, '2026-01-20') };
+  const poWznowieniu = terminy.policzTermin(sprawa, '2026-01-20');
+  assert.equal(poWznowieniu.cel_do, '2026-01-23', 'cel biegnie od nowa od dnia wznowienia');
+  assert.equal(poWznowieniu.termin_do, '2026-01-27');
+  assert.equal(poWznowieniu.po_celu, false);
+});

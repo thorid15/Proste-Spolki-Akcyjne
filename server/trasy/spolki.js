@@ -193,7 +193,7 @@ router.get(
       liczba_zdarzen: db()
         .prepare('SELECT COUNT(*) AS ile FROM psa_zdarzenia WHERE spolka_id = ?')
         .get(id).ile,
-      typy_zdarzen: typyZdarzen.dostepneWKreatorze(5),
+      typy_zdarzen: typyZdarzen.dostepneWKreatorze(),
     });
   })
 );

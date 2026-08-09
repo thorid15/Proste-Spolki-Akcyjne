@@ -262,6 +262,54 @@ const PRZYGOTOWANIA = {
   },
 
   /**
+   * Uniewaznienie akcji orzeczeniem sadu (art. 300(51) KSH).
+   *
+   * Wybor akcji przebiega tak samo jak przy umorzeniu, ale podstawa jest
+   * ORZECZENIE SADU, nie uchwala spolki - stad `sygnatura` i `sad` zamiast
+   * `tryb`. Nie ma tu odpowiednika umorzenia dobrowolnego i przymusowego:
+   * uniewaznienie zawsze zapada bez zgody akcjonariusza.
+   */
+  uniewaznienie(stan, we, kontekst) {
+    const emisja = wymagajEmisji(stan, we);
+    const data = kontekst.data_zdarzenia;
+    const zablokowane = zakresyZablokowane(stan, emisja.klucz, data);
+
+    const pozycje = wymagajPozycji(we).map((p) => {
+      const zNieobjetych = p.osoba_id == null || p.osoba_id === '';
+      const osobaId = zNieobjetych ? null : liczbaCalkowita(p.osoba_id, 'akcjonariusz');
+      const pulaRef = {
+        wartosc: zNieobjetych
+          ? stanLogika.pula(stan, emisja.klucz, K.NIEOBJETA, null)
+          : stanLogika.pula(stan, emisja.klucz, K.AKCJONARIUSZ, osobaId),
+      };
+      const zakresy = przydzielPozycje(
+        pulaRef,
+        p,
+        zNieobjetych
+          ? `pula akcji nieobjętych serii ${emisja.seria}`
+          : `pakiet akcjonariusza w serii ${emisja.seria}`,
+        zablokowane
+      );
+      return {
+        osoba_id: osobaId,
+        osoba_nazwa: osobaId == null ? null : nazwaOsoby(kontekst.osoby.get(osobaId)),
+        ilosc: n.ilosc(zakresy),
+        zakresy,
+      };
+    });
+
+    return {
+      emisja_zdarzenie_id: emisja.klucz,
+      seria: emisja.seria,
+      sad: tekst(we.sad, 'sąd, który wydał orzeczenie', { wymagane: false, maks: 200 }),
+      sygnatura: tekst(we.sygnatura, 'sygnatura akt', { wymagane: false, maks: 60 }),
+      data_orzeczenia: we.data_orzeczenia || null,
+      podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),
+      pozycje,
+    };
+  },
+
+  /**
    * Przeniesienie ulamkowej czesci OZNACZONEJ akcji (art. 300(43) KSH).
    * Wyjatek od reguly domenowej 4 ("uzytkownik podaje wylacznie ilosc") -
    * przy ulamku uzytkownik wskazuje KONKRETNY numer akcji i ulamek, bo
