@@ -27,7 +27,7 @@ const MENU = [
     grupa: 'Konfiguracja',
     pozycje: [
       { sciezka: '/konfiguracja/stawki', nazwa: 'Stawki i terminy', ikona: 'stawki' },
-      { sciezka: '/konfiguracja/szablony', nazwa: 'Szablony dokumentów', ikona: 'szablony', faza: 4 },
+      { sciezka: '/konfiguracja/szablony', nazwa: 'Szablony dokumentów', ikona: 'szablony', admin: true },
       { sciezka: '/konfiguracja/uzytkownicy', nazwa: 'Użytkownicy', ikona: 'uzytkownicy', admin: true },
       { sciezka: '/podglad', nazwa: 'Podgląd systemu', ikona: 'podglad' },
     ],
@@ -182,7 +182,7 @@ function opisTrasy(segmenty) {
     osoby: { tytul: 'Kartoteka osób', podtytul: 'Wspólna dla wszystkich prowadzonych rejestrów — jeden inwestor wpisywany raz.' },
     oplaty: { tytul: 'Opłaty', podtytul: 'Naliczenia za czynności rejestrowe i prowadzenie rejestru.' },
     podglad: { tytul: 'Podgląd systemu', podtytul: 'Katalog komponentów modułu — paleta, typografia, pola, tabele i stany.' },
-    konfiguracja: { tytul: 'Konfiguracja', podtytul: 'Stawki, terminy i użytkownicy modułu.' },
+    konfiguracja: { tytul: 'Konfiguracja', podtytul: 'Stawki, terminy, szablony dokumentów i użytkownicy modułu.' },
   };
   return wg[segmenty[0]] || { tytul: 'Rejestr akcjonariuszy', podtytul: null };
 }
@@ -232,6 +232,9 @@ function Aplikacja() {
     if (segmenty[0] === 'osoby') return <EkranOsob />;
     if (segmenty[0] === 'oplaty') return <EkranOplat />;
     if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'stawki') return <EkranStawek />;
+    if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'szablony') {
+      return sesja.uzytkownik.rola === 'admin' ? <EkranSzablonow /> : <NieZnaleziono />;
+    }
     if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'uzytkownicy') {
       return sesja.uzytkownik.rola === 'admin' ? <EkranUzytkownikow /> : <NieZnaleziono />;
     }

@@ -52,9 +52,9 @@ test('liczebniki: miliony, liczby zlozone i ujemne', () => {
 });
 
 test('data slownie', () => {
-  assert.equal(s.dataSlownie('2026-08-09'), '9 sierpnia 2026 r.');
-  assert.equal(s.dataSlownie('2026-01-01'), '1 stycznia 2026 r.');
-  assert.equal(s.dataSlownie('2026-12-31'), '31 grudnia 2026 r.');
+  assert.equal(s.dataSlownie('2026-08-09'), '9 sierpnia 2026');
+  assert.equal(s.dataSlownie('2026-01-01'), '1 stycznia 2026');
+  assert.equal(s.dataSlownie('2026-12-31'), '31 grudnia 2026');
   assert.equal(s.dataSlownie('bzdura'), null);
 });
 
@@ -90,7 +90,7 @@ test('sufiks _slownie zapisuje liczbe i date slowami', () => {
     ilosc: 120,
     data: '2026-08-09',
   });
-  assert.equal(w.html, '120 (sto dwadzieścia) akcji, dnia 9 sierpnia 2026 r.');
+  assert.equal(w.html, '120 (sto dwadzieścia) akcji, dnia 9 sierpnia 2026');
   assert.deepEqual(w.brakujace, []);
 });
 

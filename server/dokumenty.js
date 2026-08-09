@@ -141,6 +141,11 @@ function ramka({ tytul, kancelaria, tresc, podstawaPrawna, dataSporzadzenia }) {
     .map((w) => `<div style="font-size:12px; color:#6b6256;">${e(w)}</div>`)
     .join('');
   const kontakt = [kancelaria.telefon, kancelaria.email].filter(Boolean).join(' · ');
+  // Bez miejscowosci nie zostawiamy wiodacego przecinka („, dnia 9 sierpnia").
+  const dataSlowna = szablony.dataSlownie(dataSporzadzenia);
+  const miejsceIData = [kancelaria.miejscowosc, `dnia ${dataSlowna || dataSporzadzenia} r.`]
+    .filter(Boolean)
+    .join(', ');
 
   return `<!doctype html>
 <html lang="pl"><head><meta charset="utf-8"><title>${e(tytul)}</title></head>
@@ -153,7 +158,7 @@ function ramka({ tytul, kancelaria, tresc, podstawaPrawna, dataSporzadzenia }) {
     ${kontakt ? `<div style="font-size:12px; color:#6b6256;">${e(kontakt)}</div>` : ''}
   </div>
   <div style="text-align:right; font-size:12px; color:#6b6256; margin-bottom:16px;">
-    ${e(kancelaria.miejscowosc || '')}, dnia ${e(szablony.dataSlownie(dataSporzadzenia) || dataSporzadzenia)}
+    ${e(miejsceIData)}
   </div>
   <h1 style="font-size:21px; font-weight:500; margin:0 0 18px;">${e(tytul)}</h1>
   ${tresc}

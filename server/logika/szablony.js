@@ -126,14 +126,21 @@ const MIESIACE = [
   'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia',
 ];
 
-/** Data ISO słownie: „9 sierpnia 2026 r.". */
+/**
+ * Data ISO słownie: „9 sierpnia 2026" — BEZ skrótu „r." i bez kropki.
+ *
+ * Interpunkcję stawia autor szablonu (`{{data_slownie}} r.`), bo tylko on wie,
+ * czy data kończy zdanie, czy stoi w jego środku. Gdyby funkcja dokładała „r."
+ * sama, szablon wyglądałby na pozbawiony kropki i redagujący dopisywałby ją
+ * z powrotem, dając „r.".
+ */
 function dataSlownie(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
   if (!m) return null;
   const [, rok, mies, dzien] = m;
   const idx = Number(mies) - 1;
   if (idx < 0 || idx > 11) return null;
-  return `${Number(dzien)} ${MIESIACE[idx]} ${Number(rok)} r.`;
+  return `${Number(dzien)} ${MIESIACE[idx]} ${Number(rok)}`;
 }
 
 /** Wartość zapisana słownie: data albo liczba. `null`, gdy ani jedno, ani drugie. */

@@ -45,10 +45,10 @@ const SZABLONY = [
       Zawiadamiam, że w rejestrze akcjonariuszy spółki {{spolka_nazwa}} z siedzibą
       w {{spolka_siedziba}}, wpisanej do Krajowego Rejestru Sądowego pod numerem
       {{spolka_krs}}, dokonano wpisu na podstawie żądania złożonego dnia
-      {{data_wplywu_slownie}}.
+      {{data_wplywu_slownie}} r.
     </p>
     <p><strong>Treść wpisu:</strong> {{podsumowanie}}</p>
-    <p>Data zdarzenia: {{data_zdarzenia_slownie}}. Data dokonania wpisu: {{data_wpisu_slownie}}.</p>
+    <p>Data zdarzenia: {{data_zdarzenia_slownie}} r. Data dokonania wpisu: {{data_wpisu_slownie}} r.</p>
     <p>
       Wobec spółki za akcjonariusza uważa się wyłącznie osobę wpisaną do rejestru
       akcjonariuszy (art. 300(38) § 1 Kodeksu spółek handlowych).
@@ -63,11 +63,11 @@ const SZABLONY = [
     <p>Zarząd spółki {{spolka_nazwa}}</p>
     <p>
       Zawiadamiam, że w prowadzonym przeze mnie rejestrze akcjonariuszy spółki
-      {{spolka_nazwa}} dokonano dnia {{data_wpisu_slownie}} wpisu o następującej treści:
+      {{spolka_nazwa}} dokonano dnia {{data_wpisu_slownie}} r. wpisu o następującej treści:
     </p>
     <p><strong>{{podsumowanie}}</strong></p>
     <p>
-      W załączeniu przekazuję listę akcjonariuszy według stanu na dzień {{data_stanu_slownie}}.
+      W załączeniu przekazuję listę akcjonariuszy według stanu na dzień {{data_stanu_slownie}} r.
       Po otrzymaniu niniejszego zawiadomienia zarząd niezwłocznie składa do sądu rejestrowego
       nową listę akcjonariuszy, podpisaną przez wszystkich członków zarządu
       (art. 300(34) § 8 Kodeksu spółek handlowych).
@@ -102,7 +102,7 @@ const SZABLONY = [
     <p>
       Lista akcjonariuszy spółki {{spolka_nazwa}} z siedzibą w {{spolka_siedziba}},
       wpisanej do Krajowego Rejestru Sądowego pod numerem {{spolka_krs}}, sporządzona
-      na podstawie rejestru akcjonariuszy według stanu na dzień {{data_stanu_slownie}}.
+      na podstawie rejestru akcjonariuszy według stanu na dzień {{data_stanu_slownie}} r.
     </p>
     <table style="width:100%; border-collapse:collapse; margin-top:14px;">
       <thead>
@@ -164,7 +164,7 @@ const SZABLONY = [
     <p>{{odbiorca_nazwa}}</p>
     <p>
       W związku z żądaniem wpisu do rejestru akcjonariuszy spółki {{spolka_nazwa}},
-      złożonym dnia {{data_wplywu_slownie}}, zawiadamiam, że dokonanie wpisu wymaga
+      złożonym dnia {{data_wplywu_slownie}} r., zawiadamiam, że dokonanie wpisu wymaga
       uprzedniego usunięcia następującej przeszkody:
     </p>
     <p><strong>{{opis_przeszkody}}</strong></p>
@@ -187,7 +187,7 @@ const SZABLONY = [
     <p>{{odbiorca_nazwa}}</p>
     <p>
       Zawiadamiam, że nie dokonano wpisu do rejestru akcjonariuszy spółki
-      {{spolka_nazwa}}, o który wystąpiono dnia {{data_wplywu_slownie}}.
+      {{spolka_nazwa}}, o który wystąpiono dnia {{data_wplywu_slownie}} r.
     </p>
     <p><strong>Przyczyny niedokonania wpisu:</strong></p>
     <p>{{powod_odmowy}}</p>
@@ -208,7 +208,7 @@ const SZABLONY = [
     <p>
       Informacja z rejestru akcjonariuszy spółki {{spolka_nazwa}} z siedzibą
       w {{spolka_siedziba}}, KRS {{spolka_krs}}, sporządzona według stanu na dzień
-      {{data_stanu_slownie}}.
+      {{data_stanu_slownie}} r.
     </p>
     <table style="width:100%; border-collapse:collapse; margin-top:14px;">
       <thead>
@@ -252,7 +252,7 @@ const SZABLONY = [
     <p>
       Informacja z rejestru akcjonariuszy spółki {{spolka_nazwa}} z siedzibą
       w {{spolka_siedziba}}, KRS {{spolka_krs}}, sporządzona według stanu na dzień
-      {{data_stanu_slownie}}.
+      {{data_stanu_slownie}} r.
     </p>
     <table style="width:100%; border-collapse:collapse; margin-top:14px;">
       <thead>
@@ -296,7 +296,7 @@ const SZABLONY = [
     <p>
       W odpowiedzi na żądanie w sprawie o sygnaturze {{sygnatura}}, przekazuję informację
       z rejestru akcjonariuszy spółki {{spolka_nazwa}} z siedzibą w {{spolka_siedziba}},
-      KRS {{spolka_krs}}, według stanu na dzień {{data_stanu_slownie}}.
+      KRS {{spolka_krs}}, według stanu na dzień {{data_stanu_slownie}} r.
     </p>
     <table style="width:100%; border-collapse:collapse; margin-top:14px;">
       <thead>
@@ -334,7 +334,7 @@ const SZABLONY = [
     podstawa_prawna: 'art. 300(31) § 5 KSH',
     tresc: `
     <p style="text-align:center;"><strong>UCHWAŁA AKCJONARIUSZY<br>spółki {{spolka_nazwa}}</strong></p>
-    <p style="text-align:center;">z dnia {{data_uchwaly_slownie}}<br>
+    <p style="text-align:center;">z dnia {{data_uchwaly_slownie}} r.<br>
       w sprawie wyboru podmiotu prowadzącego rejestr akcjonariuszy</p>
     <p><strong>§ 1.</strong> Akcjonariusze spółki {{spolka_nazwa}} z siedzibą
       w {{spolka_siedziba}} wybierają {{kancelaria_nazwa}} — {{notariusz}} — na podmiot
@@ -355,7 +355,7 @@ const SZABLONY = [
     tresc: `
     <p style="text-align:center;"><strong>UMOWA O PROWADZENIE REJESTRU AKCJONARIUSZY</strong></p>
     <p>
-      zawarta dnia {{data_umowy_slownie}} w {{miejscowosc_kancelarii}} pomiędzy:
+      zawarta dnia {{data_umowy_slownie}} r. w {{miejscowosc_kancelarii}} pomiędzy:
       spółką {{spolka_nazwa}} z siedzibą w {{spolka_siedziba}}, KRS {{spolka_krs}},
       zwaną dalej <strong>Spółką</strong>, a {{kancelaria_nazwa}}, w imieniu której działa
       {{notariusz}}, zwanym dalej <strong>Podmiotem prowadzącym rejestr</strong>.
@@ -366,7 +366,7 @@ const SZABLONY = [
       Podmiot prowadzący rejestr zobowiązuje się do prowadzenia rejestru akcjonariuszy
       Spółki na zasadach określonych w art. 300(31)–300(35) Kodeksu spółek handlowych
       oraz w niniejszej umowie. Podstawą zawarcia umowy jest uchwała akcjonariuszy
-      z dnia {{data_uchwaly_slownie}}.
+      z dnia {{data_uchwaly_slownie}} r.
     </p>
 
     <p><strong>§ 2. Techniczny sposób prowadzenia rejestru</strong></p>
@@ -426,7 +426,7 @@ const SZABLONY = [
     <p style="text-align:center;"><strong>OŚWIADCZENIE ZARZĄDU</strong></p>
     <p>
       Zarząd spółki {{spolka_nazwa}} z siedzibą w {{spolka_siedziba}}, KRS {{spolka_krs}},
-      oświadcza, że dnia {{data_umowy_slownie}} spółka zawarła umowę o prowadzenie rejestru
+      oświadcza, że dnia {{data_umowy_slownie}} r. spółka zawarła umowę o prowadzenie rejestru
       akcjonariuszy z {{kancelaria_nazwa}}.
     </p>
     <p>
@@ -451,8 +451,8 @@ const SZABLONY = [
     tresc: `
     <p>
       Lista osób uprawnionych do uczestnictwa w walnym zgromadzeniu spółki
-      {{spolka_nazwa}}, zwołanym na dzień {{data_wz_slownie}}, sporządzona według stanu
-      rejestru akcjonariuszy na dzień {{data_stanu_slownie}} — to jest na dzień
+      {{spolka_nazwa}}, zwołanym na dzień {{data_wz_slownie}} r., sporządzona według stanu
+      rejestru akcjonariuszy na dzień {{data_stanu_slownie}} r. — to jest na dzień
       przypadający trzy dni przed dniem walnego zgromadzenia.
     </p>
     <table style="width:100%; border-collapse:collapse; margin-top:14px;">
