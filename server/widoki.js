@@ -114,6 +114,9 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
       zakresy: p.zakresy,
       numery: n.opisz(p.zakresy),
       procent: p.procent,
+      // Pozycje ulamkowe per numer akcji - raport zapisuje je wprost
+      // („1/3 akcji nr 96"), bo na wydruku dla sadu skrot bylby nieczytelny.
+      czesci_ulamkowe: p.czesci_ulamkowe || [],
       data_nabycia: p.data_najstarszego_nabycia,
       obciazenia: p.obciazenia.map((o) => ({
         typ: o.typ,

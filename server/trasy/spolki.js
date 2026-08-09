@@ -272,6 +272,83 @@ router.put(
 );
 
 /**
+ * Eksport ROBOCZY akcjonariatu do CSV (faza 4).
+ *
+ * Świadomie CSV, nie XLSX: master zabrania nowych zależności, a złożenie
+ * arkusza XLSX bez biblioteki oznacza ręczne budowanie archiwum ZIP z kilkoma
+ * dokumentami XML - nieproporcjonalnie dużo kodu do utrzymania jak na eksport
+ * pomocniczy. CSV z BOM otwiera się w Excelu bez ustawień.
+ *
+ * Pierwszy wiersz pliku niesie ZASTRZEŻENIE, że eksport nie jest informacją
+ * z rejestru w rozumieniu art. 300(35) KSH. Ma być widoczne od razu po
+ * otwarciu, bo arkusz wygląda jak dokument i bywa dalej przesyłany.
+ */
+router.get(
+  '/:id/stan.csv',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const data = zad.query.data ? String(zad.query.data) : czas.dzisIso();
+    if (!czas.poprawnaDataAlboChwila(data)) {
+      throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD albo RRRR-MM-DDTGG:MM.');
+    }
+
+    const stan = widoki.widokStanu(db(), id, data, {
+      rola: przepisy.ROLE_ODBIORCY.KANCELARIA,
+      odbiorcaOsobaId: null,
+    });
+    if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
+
+    const pole = (w) => {
+      const t = String(w == null ? '' : w);
+      return /[",;\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+    };
+
+    const linie = [
+      [
+        'UWAGA: eksport roboczy. Nie stanowi informacji z rejestru akcjonariuszy ' +
+          'w rozumieniu art. 300(35) Kodeksu spolek handlowych.',
+      ].map(pole).join(','),
+      [`Spolka: ${stan.spolka.nazwa}`, `KRS: ${stan.spolka.krs || ''}`, `Stan na: ${data}`]
+        .map(pole).join(','),
+      '',
+      ['lp', 'akcjonariusz', 'identyfikator', 'seria', 'liczba_akcji', 'numery', 'udzial_procent', 'obciazenia', 'czesci_ulamkowe']
+        .join(','),
+    ];
+
+    stan.akcjonariusze.forEach((a, i) => {
+      linie.push(
+        [
+          i + 1,
+          a.osoba ? a.osoba.oznaczenie : `osoba #${a.osoba_id}`,
+          (a.osoba && a.osoba.jawny_identyfikator) || '',
+          a.seria,
+          a.ilosc,
+          a.numery,
+          a.procent,
+          a.obciazenia
+            .map((o) => `${o.typ === 'zajecie' ? 'zajecie' : o.typ} ${o.numery}`)
+            .join('; '),
+          (a.czesci_ulamkowe || [])
+            .map((u) => `${u.czesc_licznik}/${u.czesc_mianownik} akcji nr ${u.nr}`)
+            .join('; '),
+        ].map(pole).join(',')
+      );
+    });
+
+    linie.push('');
+    linie.push([`Razem akcji: ${stan.razem_akcji}`].map(pole).join(','));
+
+    const BOM = '﻿';
+    odp.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    odp.setHeader(
+      'Content-Disposition',
+      `attachment; filename="rejestr-roboczy-${id}-${String(data).slice(0, 10)}.csv"`
+    );
+    odp.send(BOM + linie.join('\n'));
+  })
+);
+
+/**
  * Stan akcjonariatu na dowolny dzien albo chwile, z maskowaniem wg roli
  * odbiorcy. `?data=` — patrz komentarz przy `GET /:id`.
  */

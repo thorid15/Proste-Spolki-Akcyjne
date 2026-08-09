@@ -23,6 +23,94 @@ function NaglowekWydruku({ tytul, podtytul, kancelaria }) {
   );
 }
 
+/* ─────────────────────────────────────────────────────
+   RAPORT Z REJESTRU — dokument kancelaryjny (faza 4)
+   ───────────────────────────────────────────────────── */
+
+/** Data i godzina sporządzenia - raport jest zdjęciem stanu w konkretnej chwili. */
+function sporzadzonoTeraz() {
+  const t = new Date();
+  const dwa = (n) => String(n).padStart(2, '0');
+  return `${dwa(t.getDate())}.${dwa(t.getMonth() + 1)}.${t.getFullYear()}, godz. ${dwa(t.getHours())}:${dwa(t.getMinutes())}`;
+}
+
+/**
+ * Miejsce na logotyp samorządu notarialnego.
+ *
+ * Pliki dostarcza kancelaria (SESJA-PSA-6-INTERFEJS.md, faza 4). Znaków
+ * samorządu NIE generujemy, nie odtwarzamy ani nie pobieramy z sieci — do
+ * czasu dostarczenia plików widać ramkę o właściwych proporcjach z opisem,
+ * czego brakuje.
+ */
+function LogoSamorzadu({ zrodlo, opis }) {
+  return (
+    <div className="raport-logo" title={opis}>
+      {zrodlo ? <img src={zrodlo} alt={opis} /> : opis}
+    </div>
+  );
+}
+
+function NaglowekRaportu({ tytul, podtytul, kancelaria, sporzadzono, logoNotariat, logoIzba }) {
+  return (
+    <div className="raport-naglowek">
+      <div className="raport-logotypy">
+        <LogoSamorzadu zrodlo={logoNotariat} opis="Notariat Rzeczypospolitej Polskiej" />
+        <LogoSamorzadu zrodlo={logoIzba} opis="Izba Notarialna w Gdańsku" />
+      </div>
+      <div>
+        <h1 className="raport-tytul">{tytul}</h1>
+        {podtytul && <div className="raport-podtytul">{podtytul}</div>}
+      </div>
+      <div className="raport-kancelaria">
+        <strong>{kancelaria ? kancelaria.nazwa : '—'}</strong>
+        {kancelaria && kancelaria.adres && <div>{kancelaria.adres}</div>}
+        {kancelaria && kancelaria.miejscowosc && <div>{kancelaria.miejscowosc}</div>}
+        <div style={{ marginTop: 4 }}>podmiot prowadzący rejestr</div>
+        <div>sporządzono {sporzadzono}</div>
+      </div>
+    </div>
+  );
+}
+
+function SekcjaRaportu({ tytul, children }) {
+  return (
+    <div className="raport-sekcja">
+      <div className="raport-sekcja-tytul">{tytul}</div>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Stopka raportu.
+ *
+ * `numeracjaStron`: przeglądarki nie wspierają liczników stron w polach
+ * marginesowych `@page`, a bibliotek PDF ten moduł nie używa. Numerację
+ * dokłada więc mechanizm druku przeglądarki (nagłówki i stopki w oknie
+ * drukowania) — tutaj dbamy o to, żeby KAŻDA strona dała się zidentyfikować
+ * po treści: oznaczenie spółki i dzień stanu są w nagłówku sekcji.
+ */
+function StopkaRaportu({ spolka, data, oznaczenie }) {
+  return (
+    <>
+      <div className="raport-stopka">
+        <div>
+          Dokument stanowi informację z rejestru akcjonariuszy w rozumieniu art. 300(35) § 3
+          Kodeksu spółek handlowych.
+        </div>
+        <div style={{ marginTop: 4 }}>
+          Rejestr akcjonariuszy spółki {spolka} prowadzony na podstawie art. 300(31) § 1 Kodeksu
+          spółek handlowych. Stan na dzień {fmt.data(data)}.
+        </div>
+        {oznaczenie && <div style={{ marginTop: 4 }}>Oznaczenie dokumentu: {oznaczenie}</div>}
+      </div>
+      <div className="raport-podpis">
+        <div className="raport-podpis-linia">podpis i pieczęć notariusza</div>
+      </div>
+    </>
+  );
+}
+
 function Para({ etykieta, children }) {
   return (
     <>
@@ -102,6 +190,86 @@ function TabelaAkcjonariuszyWydruk({ akcjonariusze, razem, pokazObciazenia = tru
   );
 }
 
+/**
+ * Tabela akcjonariuszy w raporcie kancelaryjnym.
+ *
+ * Trzy różnice wobec tabeli ekranowej:
+ *  - kolumna udziału procentowego (art. 300(93) § 1 KSH — liczba głosów idzie
+ *    za liczbą akcji, więc udział jest informacją, nie ozdobą),
+ *  - wiersz obciążony niesie pigułkę, żeby nie trzeba było czytać ostatniej
+ *    kolumny do końca,
+ *  - pozycje ułamkowe zapisane wprost: „1/3 akcji nr 96". Skrót byłby
+ *    nieczytelny dla sądu, który aplikacji nie zna.
+ */
+function TabelaAkcjonariuszyRaport({ akcjonariusze, razem }) {
+  if (akcjonariusze.length === 0) {
+    return <div className="wyciszony">Na wskazany dzień rejestr nie wykazuje akcjonariuszy.</div>;
+  }
+  return (
+    <table className="tabela">
+      <thead>
+        <tr>
+          <th>Lp.</th>
+          <th>Akcjonariusz</th>
+          <th>Seria</th>
+          <th className="do-prawej">Liczba akcji</th>
+          <th>Numery akcji</th>
+          <th className="do-prawej">Udział</th>
+          <th>Obciążenia</th>
+        </tr>
+      </thead>
+      <tbody>
+        {akcjonariusze.map((a, i) => {
+          const ulamki = a.czesci_ulamkowe || [];
+          return (
+            <tr key={`${a.osoba_id}-${a.emisja_klucz}`}>
+              <td className="kol-dane">{i + 1}</td>
+              <td>
+                <div>{a.osoba ? a.osoba.oznaczenie : `osoba #${a.osoba_id}`}</div>
+                {a.osoba && a.osoba.jawny_identyfikator && (
+                  <div className="podstawa-prawna">{a.osoba.jawny_identyfikator}</div>
+                )}
+                {ulamki.length > 0 && (
+                  <div className="podstawa-prawna raport-ulamek">
+                    {ulamki
+                      .map((u) => `${u.czesc_licznik}/${u.czesc_mianownik} akcji nr ${u.nr}`)
+                      .join('; ')}
+                  </div>
+                )}
+              </td>
+              <td>{a.seria}</td>
+              <td className="do-prawej kol-dane">{fmt.liczba(a.ilosc)}</td>
+              <td className="kol-dane">{a.numery}</td>
+              <td className="do-prawej kol-dane">{fmt.procent(a.procent)}</td>
+              <td>
+                {a.obciazenia.length === 0 ? (
+                  '—'
+                ) : (
+                  <>
+                    <Pigulka odmiana="mosiadz">obciążone</Pigulka>{' '}
+                    {a.obciazenia
+                      .map((o) => `${o.typ === 'zajecie' ? 'zajęcie' : o.typ} ${o.numery}`)
+                      .join('; ')}
+                  </>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colSpan={3} style={{ fontWeight: 600 }}>Razem</td>
+          <td className="do-prawej kol-dane" style={{ fontWeight: 600 }}>{fmt.liczba(razem)}</td>
+          <td />
+          <td className="do-prawej kol-dane" style={{ fontWeight: 600 }}>100%</td>
+          <td />
+        </tr>
+      </tfoot>
+    </table>
+  );
+}
+
 function PaskiWydruku({ spolkaId, data, ustawDate, dzieci }) {
   return (
     <div className="pasek-gorny bez-druku">
@@ -124,6 +292,17 @@ function EkranRaportu({ spolkaId, dataPoczatkowa }) {
   const stan = useDane(`/api/psa/spolki/${spolkaId}/stan?data=${data}`, [data]);
   const rdzen = useDane('/api/wspolne/kancelaria');
 
+  const nazwaSpolki = stan.dane && stan.dane.spolka ? stan.dane.spolka.nazwa : null;
+
+  /* Nazwa pliku PDF proponowana przez przeglądarkę bierze się z `document.title`
+     — bez tego zapisany raport nazywałby się „Rejestr akcjonariuszy P.S.A.". */
+  useEffect(() => {
+    if (!nazwaSpolki) return undefined;
+    const poprzedni = document.title;
+    document.title = `Rejestr ${nazwaSpolki} ${data}`;
+    return () => { document.title = poprzedni; };
+  }, [nazwaSpolki, data]);
+
   if (stan.ladowanie || rdzen.ladowanie) return <Spinner />;
   if (stan.blad) return <Komunikat odmiana="blad" tresc={stan.blad.message} />;
 
@@ -136,17 +315,26 @@ function EkranRaportu({ spolkaId, dataPoczatkowa }) {
 
   return (
     <>
-      <PaskiWydruku spolkaId={spolkaId} data={data} ustawDate={ustawDate} />
+      <PaskiWydruku
+        spolkaId={spolkaId}
+        data={data}
+        ustawDate={ustawDate}
+        dzieci={
+          <a className="btn" href={`/api/psa/spolki/${spolkaId}/stan.csv?data=${data}`}>
+            Eksport roboczy CSV
+          </a>
+        }
+      />
 
-      <div className="wydruk">
-        <NaglowekWydruku
-          tytul="Raport spółki"
-          podtytul={`Rejestr akcjonariuszy — stan na dzień ${fmt.data(data)}`}
+      <div className="raport">
+        <NaglowekRaportu
+          tytul="Rejestr akcjonariuszy"
+          podtytul={`${d.spolka.nazwa} — stan na dzień ${fmt.data(data)}`}
           kancelaria={kancelaria}
+          sporzadzono={sporzadzonoTeraz()}
         />
 
-        <div className="wydruk-sekcja">
-          <div className="wydruk-sekcja-tytul">Spółka</div>
+        <SekcjaRaportu tytul="Spółka">
           <dl className="pary">
             <Para etykieta="Firma">{d.spolka.nazwa}</Para>
             <Para etykieta="Forma prawna">{d.spolka.forma_prawna}</Para>
@@ -159,10 +347,9 @@ function EkranRaportu({ spolkaId, dataPoczatkowa }) {
             </Para>
             <Para etykieta="Status">{NAZWY_STATUSU[d.spolka.status] || d.spolka.status}</Para>
           </dl>
-        </div>
+        </SekcjaRaportu>
 
-        <div className="wydruk-sekcja">
-          <div className="wydruk-sekcja-tytul">Podmiot prowadzący rejestr</div>
+        <SekcjaRaportu tytul={<>Podmiot prowadzący rejestr</>}>
           <dl className="pary">
             <Para etykieta="Podmiot">{kancelaria ? kancelaria.nazwa : '—'}</Para>
             <Para etykieta="Podstawa prowadzenia">art. 300(31) § 1 KSH</Para>
@@ -170,19 +357,17 @@ function EkranRaportu({ spolkaId, dataPoczatkowa }) {
             <Para etykieta="Data umowy o prowadzenie rejestru">{fmt.data(d.spolka.data_umowy)}</Para>
             <Para etykieta="Data otwarcia rejestru">{fmt.data(d.spolka.data_otwarcia_rejestru)}</Para>
           </dl>
-        </div>
+        </SekcjaRaportu>
 
         {d.spolka.opis && (
-          <div className="wydruk-sekcja">
-            <div className="wydruk-sekcja-tytul">Opis</div>
+          <SekcjaRaportu tytul={<>Opis</>}>
             <div style={{ fontSize: 13, lineHeight: 1.6 }}>{d.spolka.opis}</div>
-          </div>
+          </SekcjaRaportu>
         )}
 
         {d.uprawnienia.length > 0 && (
-          <div className="wydruk-sekcja">
-            <div className="wydruk-sekcja-tytul">Uprawnienia, przywileje i obowiązki</div>
-            <table className="tbl">
+          <SekcjaRaportu tytul={<>Uprawnienia, przywileje i obowiązki</>}>
+            <table className="tabela">
               <thead>
                 <tr><th>Rodzaj</th><th>Dotyczy</th><th>Tytuł</th><th>Treść</th><th>Od dnia</th></tr>
               </thead>
@@ -198,20 +383,19 @@ function EkranRaportu({ spolkaId, dataPoczatkowa }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </SekcjaRaportu>
         )}
 
-        <div className="wydruk-sekcja">
-          <div className="wydruk-sekcja-tytul">Emisje akcji</div>
+        <SekcjaRaportu tytul={<>Emisje akcji</>}>
           {d.emisje.length === 0 ? (
-            <div className="przyciemnione">Rejestr nie wykazuje emisji.</div>
+            <div className="wyciszony">Rejestr nie wykazuje emisji.</div>
           ) : (
-            <table className="tbl">
+            <table className="tabela">
               <thead>
                 <tr>
                   <th>Seria</th><th>Tytuł</th><th>Podstawa</th><th>Numery</th>
-                  <th className="prawo">Wyemitowane</th><th className="prawo">Umorzone</th>
-                  <th className="prawo">W obrocie</th><th className="prawo">Cena emisyjna</th><th>Data</th>
+                  <th className="do-prawej">Wyemitowane</th><th className="do-prawej">Umorzone</th>
+                  <th className="do-prawej">W obrocie</th><th className="do-prawej">Cena emisyjna</th><th>Data</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,11 +406,11 @@ function EkranRaportu({ spolkaId, dataPoczatkowa }) {
                       <td style={{ fontWeight: 600 }}>{e.seria}</td>
                       <td>{e.tytul || '—'}</td>
                       <td>{e.podstawa_prawna || '—'}</td>
-                      <td className="numery">{e.zakres}</td>
-                      <td className="prawo">{fmt.liczba(e.ilosc)}</td>
-                      <td className="prawo">{fmt.liczba(b.umorzone || 0)}</td>
-                      <td className="prawo">{fmt.liczba(b.w_obrocie || 0)}</td>
-                      <td className="prawo">{fmt.zlote(e.cena_emisyjna_grosze)}</td>
+                      <td className="kol-dane">{e.zakres}</td>
+                      <td className="do-prawej">{fmt.liczba(e.ilosc)}</td>
+                      <td className="do-prawej">{fmt.liczba(b.umorzone || 0)}</td>
+                      <td className="do-prawej">{fmt.liczba(b.w_obrocie || 0)}</td>
+                      <td className="do-prawej">{fmt.zlote(e.cena_emisyjna_grosze)}</td>
                       <td>{fmt.data(e.data_emisji)}</td>
                     </tr>
                   );
@@ -234,17 +418,15 @@ function EkranRaportu({ spolkaId, dataPoczatkowa }) {
               </tbody>
             </table>
           )}
-        </div>
+        </SekcjaRaportu>
 
-        <div className="wydruk-sekcja">
-          <div className="wydruk-sekcja-tytul">Akcjonariusze na dzień {fmt.data(data)}</div>
-          <TabelaAkcjonariuszyWydruk akcjonariusze={d.akcjonariusze} razem={d.razem_akcji} />
-        </div>
+        <SekcjaRaportu tytul={<>Akcjonariusze na dzień {fmt.data(data)}</>}>
+          <TabelaAkcjonariuszyRaport akcjonariusze={d.akcjonariusze} razem={d.razem_akcji} />
+        </SekcjaRaportu>
 
         {d.obciazenia.length > 0 && (
-          <div className="wydruk-sekcja">
-            <div className="wydruk-sekcja-tytul">Obciążenia i zajęcia</div>
-            <table className="tbl">
+          <SekcjaRaportu tytul={<>Obciążenia i zajęcia</>}>
+            <table className="tabela">
               <thead>
                 <tr><th>Typ</th><th>Seria</th><th>Numery</th><th>Uprawniony</th><th>Prawo głosu</th><th>Od dnia</th></tr>
               </thead>
@@ -253,7 +435,7 @@ function EkranRaportu({ spolkaId, dataPoczatkowa }) {
                   <tr key={o.klucz}>
                     <td>{o.typ === 'zajecie' ? 'zajęcie' : o.typ}</td>
                     <td>{o.seria}</td>
-                    <td className="numery">{o.numery}</td>
+                    <td className="kol-dane">{o.numery}</td>
                     <td>{o.uprawniony ? o.uprawniony.oznaczenie : '—'}</td>
                     <td>{o.prawo_glosu ? 'tak' : 'nie'}</td>
                     <td>{fmt.data(o.data_od)}</td>
@@ -261,10 +443,10 @@ function EkranRaportu({ spolkaId, dataPoczatkowa }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </SekcjaRaportu>
         )}
 
-        <StopkaWydruku data={data} />
+        <StopkaRaportu spolka={d.spolka.nazwa} data={data} />
       </div>
     </>
   );

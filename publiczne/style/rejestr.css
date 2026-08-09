@@ -1101,3 +1101,138 @@ select {
   .tabela th { background: none; border-bottom: 1px solid var(--atrament); }
   .tabela tr { break-inside: avoid; }
 }
+
+/* ─────────────────────────────────────────────────────
+   RAPORT Z REJESTRU — dokument kancelaryjny (faza 4)
+
+   Zastępuje wygląd wydruku z systemu zewnętrznego: zamiast niebieskich
+   belek — nagłówki serifem na tle rejestru, zamiast luźnej listy —
+   sekcje o wyraźnej hierarchii. Struktura treści zostaje bez zmian.
+   ───────────────────────────────────────────────────── */
+
+.raport {
+  background: var(--karta);
+  color: var(--atrament);
+  /* Margines robimy paddingiem, nie @page — inaczej tła nagłówków sekcji
+     urywałyby się na krawędzi obszaru drukowalnego. */
+  padding: 18mm 16mm;
+  max-width: 210mm;
+  margin: 0 auto;
+}
+
+/* ── Nagłówek: logotypy samorządu, tytuł, dane kancelarii ── */
+.raport-naglowek {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--od-16);
+  align-items: start;
+  padding-bottom: var(--od-12);
+  border-bottom: 2px solid var(--atrament);
+}
+
+/* Miejsca na pliki dostarczane przez kancelarię — celowo NIE rysujemy
+   żadnego godła ani orła: znaki samorządu notarialnego nie mogą być
+   odtwarzane ani generowane. Do czasu dostarczenia plików widać ramkę
+   o właściwych proporcjach. */
+.raport-logotypy { display: flex; gap: var(--od-8); align-items: flex-start; }
+
+.raport-logo {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--linia);
+  border-radius: 4px;
+  font-size: 7px;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--atrament-3);
+  letter-spacing: 0.02em;
+  padding: 3px;
+}
+.raport-logo img { max-width: 100%; max-height: 100%; }
+
+.raport-tytul {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.2;
+  margin: 0;
+}
+.raport-podtytul {
+  font-size: var(--st-13);
+  color: var(--atrament-3);
+  margin-top: 3px;
+}
+.raport-kancelaria {
+  text-align: right;
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  line-height: 1.5;
+}
+.raport-kancelaria strong {
+  display: block;
+  color: var(--atrament);
+  font-size: var(--st-13);
+  font-weight: 600;
+}
+
+/* ── Sekcje ── */
+.raport-sekcja { margin-top: var(--od-24); break-inside: avoid; }
+.raport-sekcja-tytul {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--rejestr-tlo);
+  color: var(--rejestr);
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: var(--od-8);
+}
+
+.raport .tabela { font-size: var(--st-11); }
+.raport .tabela th {
+  background: none;
+  border-bottom: 1px solid var(--atrament);
+  color: var(--atrament-2);
+}
+.raport .tabela td { padding-top: 5px; padding-bottom: 5px; }
+.raport .tabela tr { break-inside: avoid; }
+
+/* Ułamkowa część akcji — „1/3 akcji nr 96". Zapis wprost, bez skrótów:
+   na wydruku dla sądu musi być czytelny bez znajomości aplikacji. */
+.raport-ulamek { font-variant-numeric: tabular-nums; }
+
+/* ── Stopka ── */
+.raport-stopka {
+  margin-top: var(--od-24);
+  padding-top: var(--od-12);
+  border-top: 1px solid var(--linia);
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  line-height: 1.6;
+}
+.raport-podpis {
+  margin-top: 26mm;
+  display: flex;
+  justify-content: flex-end;
+  break-inside: avoid;
+}
+.raport-podpis-linia {
+  width: 62mm;
+  border-top: 1px solid var(--atrament-3);
+  padding-top: 5px;
+  text-align: center;
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+}
+
+@media print {
+  /* Margines niesie `.raport` paddingiem — patrz komentarz wyżej. */
+  @page { margin: 0; }
+  /* Tła nagłówków sekcji i pigułek muszą wyjść na papier. */
+  html, body, .raport { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .raport { padding: 16mm 15mm; max-width: none; }
+  /* Oś akcji nie trafia na wydruk — kreskowanie ginie na druku
+     czarno-białym (SESJA-PSA-6-INTERFEJS.md, faza 4). */
+  .os-akcji, .raport-bez-druku { display: none !important; }
+}
