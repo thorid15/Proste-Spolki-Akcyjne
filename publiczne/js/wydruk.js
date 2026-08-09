@@ -108,16 +108,10 @@ function PaskiWydruku({ spolkaId, data, ustawDate, dzieci }) {
       <div className="row-g" style={{ flexWrap: 'wrap' }}>
         <button className="btn" onClick={() => idz(`/spolki/${spolkaId}`)}>← Kokpit spółki</button>
         <span className="fl" style={{ marginBottom: 0 }}>Stan na dzień</span>
-        <input
-          type="date"
-          value={data}
-          max={fmt.dzisIso()}
-          onChange={(z) => z.target.value && ustawDate(z.target.value)}
-          style={{ width: 'auto' }}
-        />
+        <PoleDaty wartosc={data} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDate(v)} />
         {dzieci}
       </div>
-      <button className="btn btn-primary" onClick={() => window.print()}>Drukuj</button>
+      <button className="btn btn-glowny" onClick={() => window.print()}>Drukuj</button>
     </div>
   );
 }

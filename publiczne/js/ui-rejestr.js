@@ -84,6 +84,7 @@ const SCIEZKI_IKON = {
   wiecej: 'M6 12v.01M12 12v.01M18 12v.01',
   znak: 'M12 2.5 20.5 7v10L12 21.5 3.5 17V7zM12 8.5 16 11v5l-4 2.2L8 16v-5z',
   pusto: 'M4 7h16v13H4zM4 7l2-3h12l2 3M12 11v5M9.5 13.5h5',
+  popraw: 'M4.5 12a7.5 7.5 0 1 0 2.4-5.5M4.5 4v4.5H9',
 };
 
 /**

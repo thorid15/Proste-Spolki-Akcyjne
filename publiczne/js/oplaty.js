@@ -184,13 +184,7 @@ function EkranOplat() {
   return (
     <>
       <div className="pasek-gorny">
-        <div>
-          <div className="tytul-strony">Opłaty</div>
-          <div className="podtytul-strony">
-            Prowadzenie rejestru, wpisy i informacje — wg taksy z{' '}
-            <span className="mono">server/logika/przepisy.js</span>. Integracja z modułem Kasa: osobno na razie.
-          </div>
-        </div>
+        <div />
         <div className="row-g">
           {sesja.uzytkownik && sesja.uzytkownik.rola === 'admin' && (
             <button className="btn" onClick={() => ustawModalRoczne(true)}>Nalicz opłaty roczne</button>
@@ -198,7 +192,7 @@ function EkranOplat() {
           <a className="btn" href={`/api/psa/oplaty/eksport${parametry.toString() ? `?${parametry}` : ''}`}>
             Eksportuj CSV
           </a>
-          <button className="btn btn-primary" onClick={() => ustawModalNowa(true)}>+ Nowa opłata</button>
+          <button className="btn btn-glowny" onClick={() => ustawModalNowa(true)}>+ Nowa opłata</button>
         </div>
       </div>
 

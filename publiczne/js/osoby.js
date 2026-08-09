@@ -68,7 +68,7 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
           <div className="siatka-2">
             <Pole etykieta="PESEL"><input type="text" {...pole('pesel')} maxLength={11} /></Pole>
             <Pole etykieta="Data urodzenia">
-              <input type="date" {...pole('data_urodzenia')} />
+              <PoleDaty wartosc={dane.data_urodzenia || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))} />
             </Pole>
           </div>
           <Komunikat
@@ -139,7 +139,9 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
             <option value="niemozliwe">niemożliwe do zastosowania</option>
           </select>
         </Pole>
-        <Pole etykieta="Data weryfikacji AML"><input type="date" {...pole('aml_data')} /></Pole>
+        <Pole etykieta="Data weryfikacji AML">
+          <PoleDaty wartosc={dane.aml_data || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, aml_data: v }))} />
+        </Pole>
       </div>
       <Pole etykieta="Notatka AML" podpowiedz="Nigdy nie trafia na wydruki dla klienta.">
         <textarea {...pole('aml_notatka')} style={{ minHeight: 70 }} />
@@ -166,26 +168,11 @@ function EkranOsob() {
 
   return (
     <>
-      <div className="pasek-gorny">
-        <div>
-          <div className="tytul-strony">Kartoteka osób</div>
-          <div className="podtytul-strony">
-            Jeden inwestor w wielu spółkach wpisany raz. Dane wrażliwe — PESEL, data urodzenia,
-            adres — nie są pokazywane innym akcjonariuszom.
-          </div>
-        </div>
-        <button className="btn btn-primary" onClick={() => ustawFormularz({})}>
+      <div className="pasek-narzedzi">
+        <Szukajka wartosc={szukaj} przyZmianie={ustawSzukaj} placeholder="Szukaj po nazwisku, PESEL, NIP, e-mailu…" />
+        <button className="btn btn-glowny" style={{ marginLeft: 'auto' }} onClick={() => ustawFormularz({})}>
           Nowa osoba
         </button>
-      </div>
-
-      <div style={{ marginBottom: 18, maxWidth: 460 }}>
-        <input
-          type="text"
-          placeholder="Szukaj po nazwisku, nazwie, numerze PESEL, NIP lub adresie e-mail…"
-          value={szukaj}
-          onChange={(z) => ustawSzukaj(z.target.value)}
-        />
       </div>
 
       {ladowanie ? (
@@ -201,7 +188,7 @@ function EkranOsob() {
             }
             akcja={
               !zapytanie && (
-                <button className="btn btn-primary" onClick={() => ustawFormularz({})}>
+                <button className="btn btn-glowny" onClick={() => ustawFormularz({})}>
                   Nowa osoba
                 </button>
               )
@@ -209,15 +196,15 @@ function EkranOsob() {
           />
         </Karta>
       ) : (
-        <Karta tight>
-          <table className="tbl">
+        <Karta scisla>
+          <table className="tabela">
             <thead>
               <tr>
                 <th>Oznaczenie</th>
                 <th>Rodzaj</th>
                 <th>Identyfikator jawny</th>
                 <th>AML</th>
-                <th className="prawo">Spółki</th>
+                <th className="do-prawej">Spółki</th>
                 <th />
               </tr>
             </thead>
@@ -225,14 +212,14 @@ function EkranOsob() {
               {osoby.map((o) => (
                 <tr key={o.id}>
                   <td style={{ fontWeight: 500 }}>{o.oznaczenie}</td>
-                  <td className="przyciemnione">
+                  <td className="wyciszony">
                     {o.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
                   </td>
-                  <td className="mono">{o.jawny_identyfikator || '—'}</td>
+                  <td className="kol-dane">{o.jawny_identyfikator || '—'}</td>
                   <td><StatusAml status={o.aml_status} /></td>
-                  <td className="prawo">{o.liczba_spolek || 0}</td>
-                  <td className="prawo">
-                    <button className="btn btn-sm" onClick={() => ustawFormularz(o)}>
+                  <td className="do-prawej">{o.liczba_spolek || 0}</td>
+                  <td className="do-prawej">
+                    <button className="btn btn-maly" onClick={() => ustawFormularz(o)}>
                       Otwórz
                     </button>
                   </td>

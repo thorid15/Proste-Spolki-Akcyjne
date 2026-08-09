@@ -135,7 +135,7 @@ function EkranMigracji({ spolkaId }) {
 
       <Karta tytul={krok === 1 ? '1. Emisja — pula wyemitowanych akcji' : '2. Objęcie — kto obecnie posiada akcje'}>
         <Pole etykieta="Data zdarzenia (historyczna)" wymagane>
-          <input type="date" value={dataZdarzenia} onChange={(z) => ustawDateZdarzenia(z.target.value)} />
+          <PoleDaty wartosc={dataZdarzenia} przyZmianie={(v) => v && ustawDateZdarzenia(v)} />
         </Pole>
 
         {krok === 1 && <KrokEmisja dane={daneEmisja} ustawDane={ustawDaneEmisja} />}

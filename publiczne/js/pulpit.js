@@ -28,15 +28,20 @@ const IKONY_ZDARZEN = {
   przeniesienie: 'zdarzenie',
   przeniesienie_ulamka: 'zdarzenie',
   umorzenie: 'archiwum',
+  zobowiazanie: 'dokument',
   obciazenie: 'ostrzezenie',
   zajecie: 'ostrzezenie',
   wykreslenie_obciazenia: 'sprawdz',
   wykreslenie_zajecia: 'sprawdz',
+  prawo_glosu_zastawnika: 'sprawdz',
   uprawnienie: 'dokument',
   ograniczenie: 'dokument',
   pokrycie_akcji: 'sprawdz',
   przedstawiciel: 'osoby',
   zmiana_danych_akcjonariusza: 'osoby',
+  zmiana_danych_spolki: 'spolki',
+  zdarzenie_inne: 'wiecej',
+  sprostowanie: 'popraw',
 };
 
 function EkranPulpitu() {

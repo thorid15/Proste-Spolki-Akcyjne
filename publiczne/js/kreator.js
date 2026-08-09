@@ -262,7 +262,7 @@ function KrokEmisja({ dane, ustawDane }) {
           etykieta="Data wpisu emisji do KRS"
           podpowiedz="Zostaw puste, jeśli spółka/emisja jeszcze nie ma wpisu do KRS — objęcie akcji będzie zablokowane do czasu uzupełnienia tej daty (art. 300(30) § 2 KSH)."
         >
-          <input type="date" {...pole('data_wpisu_krs')} />
+          <PoleDaty wartosc={dane.data_wpisu_krs || ''} przyZmianie={(v) => ustawDane({ ...dane, data_wpisu_krs: v })} />
         </Pole>
       </div>
       <Pole etykieta="Tytuł emisji"><input type="text" {...pole('tytul')} placeholder="Emisja założycielska" /></Pole>
@@ -1071,12 +1071,12 @@ function TabelaPorownania({ tytul, tabela, odniesienie, wariant }) {
   return (
     <div>
       <div className="przed-po-tytul">{tytul}</div>
-      <table className="tbl">
+      <table className="tabela">
         <thead>
           <tr>
             <th>Akcjonariusz</th>
             <th>Seria</th>
-            <th className="prawo">Akcje</th>
+            <th className="do-prawej">Akcje</th>
             <th>Numery</th>
           </tr>
         </thead>
@@ -1090,21 +1090,21 @@ function TabelaPorownania({ tytul, tabela, odniesienie, wariant }) {
               <tr key={klucz(p)} className={klasa}>
                 <td>{p.oznaczenie}</td>
                 <td>{p.seria}</td>
-                <td className="prawo">{fmt.liczba(p.ilosc)}</td>
-                <td className="numery">{p.numery}</td>
+                <td className="do-prawej kol-dane">{fmt.liczba(p.ilosc)}</td>
+                <td className="kol-dane wyciszony">{p.numery}</td>
               </tr>
             );
           })}
           {tabela.pozycje.length === 0 && (
             <tr>
-              <td colSpan={4} className="przyciemnione">Brak akcjonariuszy.</td>
+              <td colSpan={4} className="wyciszony">Brak akcjonariuszy.</td>
             </tr>
           )}
         </tbody>
         <tfoot>
           <tr>
             <td colSpan={2} style={{ fontWeight: 600 }}>Razem</td>
-            <td className="prawo" style={{ fontWeight: 600 }}>{fmt.liczba(tabela.razem_akcji)}</td>
+            <td className="do-prawej kol-dane" style={{ fontWeight: 600 }}>{fmt.liczba(tabela.razem_akcji)}</td>
             <td />
           </tr>
         </tfoot>
@@ -1221,18 +1221,17 @@ function EkranNowejSprawy({ spolkaId }) {
               return (
                 <div key={grupa} style={{ marginBottom: 22 }}>
                   <div className="fl">{nazwaGrupy}</div>
-                  <div className="kafelki">
+                  <div className="kafelki-wyboru">
                     {typyGrupy.map((t) => (
                       <button
                         key={t.kod}
-                        className={`kafelek ${typ === t.kod ? 'wybrany' : ''}`}
+                        className={`kafelek-wyboru ${typ === t.kod ? 'wybrany' : ''}`}
                         onClick={() => ustawTyp(t.kod)}
                       >
-                        <span className="kafelek-symbol">{t.symbol}</span>
-                        <span style={{ minWidth: 0 }}>
-                          <span className="kafelek-nazwa">{t.opis_zdarzeniem}</span>
-                          <span className="kafelek-opis">{t.podpowiedz || t.nazwa}</span>
-                        </span>
+                        <Ikona nazwa={IKONY_ZDARZEN[t.kod] || 'zdarzenie'} rozmiar={20} />
+                        <span className="kafelek-wyboru-tytul">{t.opis_zdarzeniem}</span>
+                        <span className="kafelek-wyboru-opis">{t.podpowiedz || t.nazwa}</span>
+                        <span className="kafelek-wyboru-kategoria"><Pigulka>{nazwaGrupy}</Pigulka></span>
                       </button>
                     ))}
                   </div>
@@ -1259,7 +1258,7 @@ function EkranNowejSprawy({ spolkaId }) {
                 </select>
               </Pole>
               <Pole etykieta="Data wpływu" wymagane>
-                <input type="date" max={fmt.dzisIso()} value={dataWplywu} onChange={(z) => z.target.value && ustawDateWplywu(z.target.value)} />
+                <PoleDaty wartosc={dataWplywu} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDateWplywu(v)} skroty />
               </Pole>
             </div>
 

@@ -1,7 +1,7 @@
 /* konfiguracja.js — podgląd stawek i terminów.
 
-   Wszystko pochodzi z server/logika/przepisy.js. Front NIE powiela stawek ani
-   terminów — zmiana prawa to edycja jednego pliku po stronie serwera. */
+   Front NIE powiela stawek ani terminów — wszystko wczytywane z API, żeby
+   zmiana prawa po stronie serwera od razu znalazła odbicie tutaj. */
 
 function EkranStawek() {
   const { dane, ladowanie } = useDane('/api/psa/meta');
@@ -23,33 +23,31 @@ function EkranStawek() {
         <div>
           <div className="tytul-strony">Stawki i terminy</div>
           <div className="podtytul-strony">
-            Cała wiedza prawna modułu mieszka w jednym pliku:{' '}
-            <span className="mono">server/logika/przepisy.js</span>. Zmiana prawa = edycja tego pliku
-            i nowe testy.
+            Wysokość taksy notarialnej i terminy ustawowe stosowane w rejestrze — bez ingerencji w treść.
           </div>
         </div>
       </div>
 
-      <Karta tight tytul="Taksa notarialna">
-        <table className="tbl">
+      <Karta scisla tytul="Taksa notarialna">
+        <table className="tabela">
           <thead>
             <tr>
               <th>Czynność</th>
               <th>Jednostka</th>
-              <th className="prawo">Stawka kancelarii</th>
-              <th className="prawo">Maksimum z rozporządzenia</th>
+              <th className="do-prawej">Stawka kancelarii</th>
+              <th className="do-prawej">Maksimum z rozporządzenia</th>
             </tr>
           </thead>
           <tbody>
             {pozycje.map((p) => (
               <tr key={p.kod}>
                 <td style={{ fontWeight: 500 }}>{p.nazwa}</td>
-                <td className="przyciemnione">{p.jednostka}</td>
-                <td className="prawo" style={{ fontWeight: 600 }}>{fmt.zlote(p.stawka)}</td>
-                <td className="prawo przyciemnione">
+                <td className="wyciszony">{p.jednostka}</td>
+                <td className="do-prawej kol-dane">{fmt.zlote(p.stawka)}</td>
+                <td className="do-prawej kol-dane wyciszony">
                   {fmt.zlote(p.maks)}
                   {p.stawka < p.maks && (
-                    <div className="podpowiedz" style={{ color: 'var(--green-dark)' }}>
+                    <div className="podpowiedz" style={{ color: 'var(--rejestr)' }}>
                       stawka obniżona
                     </div>
                   )}
@@ -84,8 +82,7 @@ function EkranStawek() {
             </Para>
           </dl>
           <div className="podstawa-prawna odstep-g">
-            Termin 7 dni liczony w <span className="mono">server/logika/terminy.js</span> —
-            zamrożony w stanie „wstrzymana”, po wznowieniu biegnie od nowa w pełnym wymiarze.
+            Termin 7 dni zamrożony w stanie „wstrzymana” — po wznowieniu biegnie od nowa w pełnym wymiarze.
           </div>
         </Karta>
 
@@ -94,10 +91,9 @@ function EkranStawek() {
             odmiana="uwaga"
             tytul={`${dane.nowelizacja.DZIENNIK} — wejście w życie ${fmt.data(dane.nowelizacja.WEJSCIE_W_ZYCIE)}`}
             tresc={
-              'Jedyne źródło prawne modułu: PRZEPISY-PSA.md. Katalog danych rejestru (art. 300(33) ' +
-              '§ 1 pkt 1–11 KSH) nowelizacja NIE zmienia — jedyne rozwiązanie addytywne wdrożone od ' +
-              'pierwszego dnia to zakaz udostępniania PESEL-u, daty urodzenia i adresu zamieszkania ' +
-              'pozostałym akcjonariuszom (maskowanie).'
+              'Katalog danych rejestru (art. 300(33) § 1 pkt 1–11 KSH) nowelizacja NIE zmienia — jedyne ' +
+              'rozwiązanie addytywne wdrożone od pierwszego dnia to zakaz udostępniania PESEL-u, daty ' +
+              'urodzenia i adresu zamieszkania pozostałym akcjonariuszom (maskowanie).'
             }
           />
           <dl className="pary">
@@ -113,8 +109,8 @@ function EkranStawek() {
         </Karta>
       </div>
 
-      <Karta tytul="Katalog typów zdarzeń" tight>
-        <table className="tbl">
+      <Karta tytul="Katalog typów zdarzeń" scisla>
+        <table className="tabela">
           <thead>
             <tr>
               <th>Typ</th>
@@ -129,13 +125,11 @@ function EkranStawek() {
               <tr key={t.kod}>
                 <td>
                   <span className="row-g">
-                    <span className="kafelek-symbol" style={{ width: 26, height: 26, fontSize: 13 }}>
-                      {t.symbol}
-                    </span>
+                    <Ikona nazwa={IKONY_ZDARZEN[t.kod] || 'zdarzenie'} rozmiar={18} />
                     <span style={{ fontWeight: 500 }}>{t.nazwa}</span>
                   </span>
                 </td>
-                <td className="zawijaj przyciemnione">{t.opis_zdarzeniem}</td>
+                <td className="zawijaj wyciszony">{t.opis_zdarzeniem}</td>
                 <td>{t.odplatne ? 'tak' : <Znacznik odmiana="zielony">wolny od opłat</Znacznik>}</td>
                 <td>
                   {t.wymaga_powiadomienia === true

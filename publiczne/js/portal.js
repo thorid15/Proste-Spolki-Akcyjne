@@ -188,7 +188,7 @@ function EkranRejestrPortal({ spolkaId }) {
           <Karta tytul={dane.spolka.nazwa}>
             <div className="row-g" style={{ marginBottom: 4 }}>
               <label className="fl" style={{ margin: 0 }}>Stan na dzień</label>
-              <input type="date" value={dataStan} onChange={(z) => ustawDataStan(z.target.value)} />
+              <PoleDaty wartosc={dataStan} przyZmianie={(v) => v && ustawDataStan(v)} />
             </div>
           </Karta>
 
@@ -422,9 +422,9 @@ function EkranInformacjaPortal({ spolkaId }) {
         </div>
         <Komunikat odmiana="blad" tresc={blad} />
         <Pole etykieta="Stan na dzień" wymagane>
-          <input type="date" value={data} onChange={(z) => ustawData(z.target.value)} />
+          <PoleDaty wartosc={data} przyZmianie={(v) => v && ustawData(v)} />
         </Pole>
-        <button className="btn btn-primary" onClick={pobierz} disabled={pobieranie}>
+        <button className="btn btn-glowny" onClick={pobierz} disabled={pobieranie}>
           {pobieranie ? 'Przygotowywanie…' : 'Otwórz informację'}
         </button>
       </Karta>

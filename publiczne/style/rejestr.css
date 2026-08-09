@@ -333,6 +333,7 @@ body {
   border: 1px solid var(--linia);
   border-radius: var(--r-sm);
   cursor: pointer; white-space: nowrap;
+  text-decoration: none;
   transition: background var(--ruch-wiersz), border-color var(--ruch-wiersz);
 }
 .btn:hover:not(:disabled) { border-color: var(--atrament-3); }
@@ -676,6 +677,12 @@ select {
 .tabela .kol-dane { font-family: var(--font-dane); font-size: var(--st-13); }
 .tabela .kol-strzalka { width: 40px; color: var(--atrament-3); text-align: right; }
 .tabela tr.klikalna:hover .kol-strzalka { color: var(--rejestr); }
+/* Tabela porownania przed/po (kreator, krok weryfikacji) - przybywajaca pozycja
+   w zieleni rejestru, ubywajaca w czerwieni (jedyny dozwolony przypadek uzycia
+   sygnalu - to destrukcyjna zmiana), nie w dziedziczonym po psa.css burgundzie. */
+.tabela tr.nowy td { background: var(--rejestr-tlo); }
+.tabela tr.usuwany td { background: var(--sygnal-tlo); text-decoration: line-through; color: var(--atrament-2); }
+.tabela tr.zmieniony td { background: var(--mosiadz-tlo); }
 .tabela tfoot td { font-weight: 600; border-top: 1px solid var(--atrament); border-bottom: none; }
 
 /* Stronicowanie */

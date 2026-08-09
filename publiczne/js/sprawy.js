@@ -498,7 +498,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
         <>
           <div className="card-h">Co się zmienia</div>
           <Pole etykieta="Data zdarzenia" wymagane podpowiedz="Data z dokumentu.">
-            <input type="date" max={fmt.dzisIso()} value={dataZdarzenia} onChange={(z) => z.target.value && ustawDateZdarzenia(z.target.value)} />
+            <PoleDaty wartosc={dataZdarzenia} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDateZdarzenia(v)} skroty />
           </Pole>
           {KrokTresci ? (
             <KrokTresci dane={dane} ustawDane={ustawDane} spolka={spolka} />
