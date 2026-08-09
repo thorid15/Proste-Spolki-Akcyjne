@@ -188,6 +188,22 @@ router.get(
   })
 );
 
+/**
+ * Pełna historia przedziałów własnościowych — dane dla osi akcji (sesja 6,
+ * faza 2.1/2.4). Osobna trasa od `GET /:id`, żeby kontrakt kokpitu (używany
+ * też gdzie indziej) zostawał nietknięty — to dokłada się wyłącznie tam,
+ * gdzie się faktycznie rysuje wykres.
+ */
+router.get(
+  '/:id/os-akcji',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const os = widoki.widokOsiAkcji(db(), id);
+    if (!os) throw nieZnaleziono('Nie odnaleziono spółki.');
+    odp.json(os);
+  })
+);
+
 /** Zmiana danych spolki - tworzy zdarzenie `zmiana_danych_spolki`. */
 router.put(
   '/:id',

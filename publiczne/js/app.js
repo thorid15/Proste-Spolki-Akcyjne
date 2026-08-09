@@ -220,7 +220,10 @@ function Aplikacja() {
     }
 
     if (segmenty[0] === 'sprawy') {
-      if (segmenty.length === 1) return <EkranKolejkiSpraw />;
+      if (segmenty.length === 1) {
+        const spolkaId = zapytanie.get('spolka_id') ? Number(zapytanie.get('spolka_id')) : null;
+        return <EkranKolejkiSpraw spolkaId={spolkaId} />;
+      }
       const id = Number(segmenty[1]);
       if (!Number.isInteger(id)) return <NieZnaleziono />;
       return <EkranSprawy sprawaId={id} />;

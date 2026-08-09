@@ -170,6 +170,94 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
   };
 }
 
+/**
+ * Pełna historia przedziałów własnościowych spółki — dane dla osi akcji
+ * (element sygnaturowy kokpitu, sesja SESJA-PSA-6-INTERFEJS.md, faza 2.4).
+ *
+ * W odróżnieniu od `widokStanu` (przekrój na jeden dzień/chwilę), ten widok
+ * zwraca WSZYSTKIE przedziały i obciążenia — otwarte i zamknięte — z ich
+ * datami `data_od`/`data_do` (`null` = wciąż otwarty), żeby wykres mógł
+ * narysować pełną oś czasu jako poziome pasma. To czysto prezentacyjna
+ * projekcja `stan.przedzialy`/`stan.obciazenia`, które `stanLogika` i tak
+ * już liczy do wewnętrznego użytku (`przedzialyNaDzien` itd.) — zero nowej
+ * logiki domenowej, zero zmian w `stan.js`.
+ */
+function widokOsiAkcji(db, spolkaId, opcje = {}) {
+  const rola = opcje.rola || ROLE.KANCELARIA;
+  const odbiorcaOsobaId = opcje.odbiorcaOsobaId ?? null;
+
+  const spolka = rejestr.wczytajSpolke(db, spolkaId);
+  if (!spolka) return null;
+
+  const zdarzeniaSurowe = rejestr.wczytajZdarzenia(db, spolkaId);
+  const stan = stanLogika.odtworzStan(zdarzeniaSurowe);
+  const osoby = rejestr.wczytajOsobySpolki(db, spolkaId);
+
+  const osobaSkrocona = (id) => (id == null ? null : osobaDlaRoli(osoby.get(Number(id)), rola, odbiorcaOsobaId));
+
+  return {
+    spolka: spolkaDlaRoli(spolka, rola),
+
+    emisje: stan.emisje.map((e) => ({
+      klucz: e.klucz,
+      seria: e.seria,
+      nr_pierwszy: e.nr_pierwszy,
+      ilosc: e.ilosc,
+      status: e.status,
+    })),
+
+    // Pasmo = jeden ciągły przedział numerów u jednego posiadacza (albo
+    // nieobjęty/umorzony) między dwoma zdarzeniami. Ten sam akcjonariusz po
+    // częściowym zbyciu to DWA pasma (zamknięte stare + otwarte nowe) —
+    // stan.js rozbija je już przy zdejmowaniu z puli, tu tylko przepisujemy.
+    pasma: stan.przedzialy.map((p) => ({
+      emisja_klucz: p.emisja_klucz,
+      kategoria: p.kategoria,
+      osoba_id: p.osoba_id,
+      osoba: osobaSkrocona(p.osoba_id),
+      nr_od: p.nr_od,
+      nr_do: p.nr_do,
+      data_od: p.data_od,
+      data_do: p.data_do,
+      zdarzenie_od_id: p.zdarzenie_od_id,
+      zdarzenie_do_id: p.zdarzenie_do_id,
+      czesc_licznik: p.czesc_licznik,
+      czesc_mianownik: p.czesc_mianownik,
+      przedstawiciel_osoba_id: p.przedstawiciel_osoba_id,
+      przedstawiciel: osobaSkrocona(p.przedstawiciel_osoba_id),
+    })),
+
+    obciazenia: stan.obciazenia.map((o) => ({
+      klucz: o.klucz,
+      typ: o.typ,
+      emisja_klucz: o.emisja_klucz,
+      zakresy: o.zakresy,
+      osoba_id: o.osoba_id,
+      uprawniony: osobaSkrocona(o.osoba_id),
+      akcjonariusz_osoba_id: o.akcjonariusz_osoba_id,
+      prawo_glosu: Boolean(o.prawo_glosu),
+      blokuje_rozporzadzanie: Boolean(o.blokuje_rozporzadzanie),
+      data_od: o.data_od,
+      data_do: o.data_do,
+      // Te same id, co przy pasmach — pozwalają wykresowi zmapować
+      // obciążenie na tę samą oś ordynalną zdarzeń (zamiast po dacie,
+      // która przy kilku wpisach tego samego dnia byłaby niejednoznaczna).
+      zdarzenie_od_id: o.zdarzenie_ustanowienia_id,
+      zdarzenie_do_id: o.zdarzenie_wykreslenia_id,
+    })),
+
+    // Rosnąco (najstarsze pierwsze) — to kolejność, w jakiej porusza się
+    // playhead (2.5: tyle położeń, ile zdarzeń, zatrzaskiwanie na dacie).
+    zdarzenia: [...zdarzeniaSurowe].sort(stanLogika.porownajZdarzenia).map((z) => ({
+      id: z.id,
+      typ: z.typ,
+      data_zdarzenia: z.data_zdarzenia,
+      data_wpisu: z.data_wpisu,
+      podsumowanie: podsumujZdarzenie(z, osoby),
+    })),
+  };
+}
+
 /** Historia zdarzen spolki - os czasu w kokpicie. */
 function widokZdarzen(db, spolkaId, { limit = null } = {}) {
   const zdarzenia = rejestr.wczytajZdarzenia(db, spolkaId);
@@ -275,4 +363,4 @@ function podsumujZdarzenie(z, osoby) {
   }
 }
 
-module.exports = { widokStanu, widokZdarzen, podsumujZdarzenie, ROLE };
+module.exports = { widokStanu, widokZdarzen, widokOsiAkcji, podsumujZdarzenie, ROLE };

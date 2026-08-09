@@ -28,11 +28,13 @@ function ZnacznikTerminu({ termin }) {
 /* ─────────────────────────────────────────────────────
    KOLEJKA
    ───────────────────────────────────────────────────── */
-function EkranKolejkiSpraw() {
+function EkranKolejkiSpraw({ spolkaId }) {
   const [pokazZakonczone, ustawPokazZakonczone] = useState(false);
   const [szukaj, ustawSzukaj] = useState('');
-  const zapytanie = pokazZakonczone ? 'stan=wpisana,odmowa,anulowana' : '';
-  const { dane, ladowanie } = useDane(`/api/psa/sprawy?${zapytanie}`, [pokazZakonczone]);
+  const parametry = new URLSearchParams();
+  if (pokazZakonczone) parametry.set('stan', 'wpisana,odmowa,anulowana');
+  if (spolkaId) parametry.set('spolka_id', spolkaId);
+  const { dane, ladowanie } = useDane(`/api/psa/sprawy?${parametry.toString()}`, [pokazZakonczone, spolkaId]);
 
   const wszystkie = (dane && dane.sprawy) || [];
   const fraza = szukaj.trim().toLowerCase();
@@ -46,6 +48,14 @@ function EkranKolejkiSpraw() {
 
   return (
     <>
+      {spolkaId && wszystkie.length > 0 && (
+        <div className="pasek-narzedzi">
+          <Pigulka odmiana="rejestr">Tylko: {wszystkie[0].spolka_nazwa}</Pigulka>
+          <button className="btn btn-sm" onClick={() => idz('/sprawy')} style={{ marginLeft: 'auto' }}>
+            Pokaż wszystkie sprawy
+          </button>
+        </div>
+      )}
       <div className="pasek-narzedzi">
         <Szukajka wartosc={szukaj} przyZmianie={ustawSzukaj} placeholder="Szukaj po spółce albo rodzaju zdarzenia…" />
         <select

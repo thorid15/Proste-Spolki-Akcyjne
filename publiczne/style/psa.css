@@ -163,56 +163,7 @@ tr.usuwany td { background: var(--burgundy-bg); text-decoration: line-through; }
 /* ─────────────────────────────────────────────────────
    KOKPIT SPÓŁKI
    ───────────────────────────────────────────────────── */
-.suwak-dnia {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  background: var(--surf);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  padding: 16px 22px;
-  margin-bottom: 22px;
-}
-.suwak-dnia input[type='range'] { flex: 1; min-width: 200px; accent-color: var(--ink); }
-.suwak-dnia input[type='date'] {
-  width: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: 8px 12px;
-  font-family: var(--font-sans);
-  font-size: 13px;
-  color: var(--ink);
-  background: var(--surf);
-}
-.suwak-dnia.wstecz { border-color: var(--slate); background: var(--slate-bg); }
 .sekcja-tresc.bez-marginesu { padding: 0; }
-
-.os { position: relative; padding-left: 26px; }
-.os::before {
-  content: '';
-  position: absolute;
-  left: 5px; top: 6px; bottom: 6px;
-  width: 1px;
-  background: var(--line);
-}
-.os-poz { position: relative; padding: 0 0 20px; }
-.os-poz::before {
-  content: '';
-  position: absolute;
-  left: -25px; top: 6px;
-  width: 9px; height: 9px;
-  border-radius: 50%;
-  background: var(--surf);
-  border: 1.5px solid var(--ink-3);
-}
-.os-poz.sprostowane::before { border-color: var(--ink-4); background: var(--paper-3); }
-.os-data {
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.08em; color: var(--ink-4); margin-bottom: 3px;
-}
-.os-tresc { font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
-.os-meta { font-size: 11.5px; color: var(--ink-4); margin-top: 4px; }
 
 /* ─────────────────────────────────────────────────────
    WYDRUK

@@ -39,6 +39,14 @@ em, i, cite, blockquote, address, dfn, var { font-style: normal; }
   --rejestr-2:   #2E6B54;
   --rejestr-3:   #4A8A6E;  /* akcenty na ciemnym tle */
   --rejestr-tlo: #E8EFEA;
+  /* Warianty jasności ZIELENI REJESTRU — wyłącznie do rozróżniania
+     akcjonariuszy na osi akcji (2.4: „każdy akcjonariusz w innym stopniu
+     jasności tej samej zieleni, nie w tęczy kolorów"). Ten sam odcień,
+     rosnąca jasność; --rejestr/-2/-3 wyżej pełnią już tę rolę jako
+     pierwsze trzy warianty. */
+  --rejestr-cien-4: #6BA88C;
+  --rejestr-cien-5: #8FC4AB;
+  --rejestr-cien-6: #B5DDC9;
   --mosiadz:     #A97C3F;
   --mosiadz-tlo: #F7EFE2;
   --sygnal:      #A32B22;
@@ -933,10 +941,151 @@ select {
 }
 
 /* ─────────────────────────────────────────────────────
+   OŚ AKCJI (faza 2.1/2.4/2.5) — element sygnaturowy kokpitu.
+   Wykres numer akcji (pionowo) × czas (poziomo), jeden SVG na spółkę,
+   emisje jako sekcje ułożone pionowo ze wspólną osią czasu. Playhead
+   zatrzaskuje się na zdarzeniach — tyle położeń, ile zdarzeń, plus „dziś".
+   Czysty SVG, bez bibliotek wykresów.
+   ───────────────────────────────────────────────────── */
+.os-akcji { margin-bottom: var(--od-16); }
+.os-akcji-svg { width: 100%; height: auto; display: block; }
+.os-akcji-etykieta-seria {
+  font-family: var(--font-dane);
+  font-size: 10.5px;
+  fill: var(--atrament-2);
+}
+.os-akcji-etykieta-seria tspan.przyciemniona { fill: var(--atrament-3); }
+.os-akcji-pasmo {
+  cursor: pointer;
+  transition: opacity var(--ruch-pasma), x var(--ruch-pasma), width var(--ruch-pasma);
+}
+.os-akcji-pasmo:hover { opacity: 0.85; }
+.os-akcji-pasmo.niekliknieta { cursor: default; }
+.os-akcji-oś-czasu-linia { stroke: var(--linia); stroke-width: 1; }
+.os-akcji-znacznik {
+  fill: var(--mosiadz);
+  cursor: pointer;
+}
+.os-akcji-znacznik-obwodka {
+  fill: none;
+  stroke: var(--mosiadz);
+  stroke-width: 1.5;
+}
+.os-akcji-playhead-linia {
+  stroke: var(--mosiadz);
+  stroke-width: 1.5;
+  transition: x1 var(--ruch-pasma), x2 var(--ruch-pasma);
+}
+.os-akcji-playhead-uchwyt {
+  fill: var(--mosiadz);
+  cursor: ew-resize;
+  transition: cx var(--ruch-pasma);
+}
+@media (prefers-reduced-motion: reduce) {
+  .os-akcji-pasmo, .os-akcji-playhead-linia, .os-akcji-playhead-uchwyt { transition: none; }
+}
+
+/* Sterowanie playheadem pod wykresem — suwak zostaje (2.5), ale ma tyle
+   dyskretnych położeń, ile spółka ma zdarzeń, nie tysiąc pikseli. */
+.os-akcji-sterowanie {
+  display: flex;
+  align-items: center;
+  gap: var(--od-12);
+  margin-top: var(--od-8);
+  flex-wrap: wrap;
+}
+.os-akcji-suwak { flex: 1; min-width: 160px; accent-color: var(--mosiadz); }
+.os-akcji-etykieta-chwili {
+  font-size: var(--st-13);
+  font-weight: 500;
+  white-space: nowrap;
+  min-width: 0;
+}
+.os-akcji-pusto {
+  padding: var(--od-40) var(--od-24);
+  text-align: center;
+  color: var(--atrament-3);
+  font-size: var(--st-13);
+}
+
+/* Lista współwłasności ułamkowej pod wykresem — pozycje niewidoczne
+   w skali (2.4: „pasmo o wysokości jednej akcji") trafiają tu w pełnej
+   precyzji (dokładny ułamek, nie tylko lista współuprawnionych). */
+.os-akcji-wspolwlasnosc {
+  margin-top: var(--od-8);
+  padding-top: var(--od-8);
+  border-top: 1px solid var(--linia-2);
+  font-size: var(--st-13);
+  color: var(--atrament-2);
+}
+.os-akcji-wspolwlasnosc div + div { margin-top: 3px; }
+
+/* Pigułka „stan na…” w archiwum, wspólna z trybem archiwalnym (2.5). */
+.pigulka-archiwalna {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--od-8);
+  padding: 5px var(--od-8) 5px var(--od-12);
+  border-radius: var(--r-pigulka);
+  background: var(--mosiadz-tlo);
+  color: var(--mosiadz);
+  font-size: var(--st-11);
+  font-weight: 600;
+}
+.siatka-tresc.archiwalny {
+  background: var(--mosiadz-tlo);
+  margin: calc(var(--od-24) * -1) calc(var(--od-40) * -1) calc(var(--od-64) * -1);
+  padding: var(--od-24) var(--od-40) var(--od-64);
+  transition: background var(--ruch-pasma);
+}
+@media (prefers-reduced-motion: reduce) { .siatka-tresc.archiwalny { transition: none; } }
+
+/* ─────────────────────────────────────────────────────
+   OŚ CZASU ZDARZEŃ — sekcja „Historia zdarzeń" w kokpicie.
+   Pionowa linia z kropkami, nie tabela: to zapis chronologiczny, nie dane
+   do sortowania/porównywania kolumnami.
+   ───────────────────────────────────────────────────── */
+.zdarzenia-czas { position: relative; padding-left: 28px; }
+.zdarzenia-czas::before {
+  content: '';
+  position: absolute; left: 5px; top: 6px; bottom: 6px;
+  width: 1px;
+  background: var(--linia);
+}
+.zdarzenie-poz { position: relative; padding-bottom: var(--od-24); }
+.zdarzenie-poz:last-child { padding-bottom: 0; }
+.zdarzenie-poz::before {
+  content: '';
+  position: absolute; left: -28px; top: 4px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--karta);
+  border: 2px solid var(--rejestr-3);
+}
+.zdarzenie-poz.sprostowane::before { border-color: var(--atrament-3); background: var(--linia-2); }
+.zdarzenie-data {
+  font-family: var(--font-dane);
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  margin-bottom: 2px;
+}
+.zdarzenie-tresc { font-size: var(--st-13); color: var(--atrament-2); line-height: 1.55; }
+.zdarzenie-meta { font-size: var(--st-11); color: var(--atrament-3); margin-top: var(--od-4); }
+
+/* ─────────────────────────────────────────────────────
+   METRYKA BOCZNA — prawa, przyklejona kolumna kokpitu (2.4).
+   ───────────────────────────────────────────────────── */
+.metryka-pion { display: flex; flex-direction: column; gap: var(--od-12); }
+.metryka-pion-poz { display: flex; flex-direction: column; gap: 2px; }
+.metryka-pion-etykieta { font-size: var(--st-11); color: var(--atrament-3); }
+.metryka-pion-wartosc { font-size: var(--st-13); font-weight: 500; }
+.metryka-pion-wartosc.dane { font-family: var(--font-dane); font-size: var(--st-13); }
+
+/* ─────────────────────────────────────────────────────
    DRUK — szczegóły wydruku w fazie 4
    ───────────────────────────────────────────────────── */
 @media print {
-  .szyna, .topbar, .bez-druku, .btn, .okruszki, .paleta-nakladka, .stronicowanie { display: none !important; }
+  .szyna, .topbar, .bez-druku, .btn, .okruszki, .paleta-nakladka, .stronicowanie, .os-akcji { display: none !important; }
   .powloka { display: block; margin: 0; border: none; border-radius: 0; box-shadow: none; max-width: none; }
   .obszar { background: var(--karta); }
   .tresc { max-width: none; padding: 0; }
