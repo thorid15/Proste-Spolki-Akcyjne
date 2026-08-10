@@ -349,3 +349,69 @@ z obecnym wydrukiem, pełny wynik testów, brak błędów w konsoli.
 - Nie generować ani nie pobierać logotypów samorządu notarialnego.
 - Nie opierać reguł prawnych na źródłach innych niż `PRZEPISY-PSA.md`.
 - Nie zostawiać czerwonych testów po żadnej fazie.
+
+---
+
+## 5. Do rozstrzygnięcia po fazie 4
+
+### 5.1. Mechanizm generowania pism na realnych danych ⏳ DECYZJA ODŁOŻONA
+
+Faza 4 dała **magazyn i silnik** szablonów: treść w bazie, wersjonowana i
+niezmienialna, edytor z podglądem, ślad wydania w `psa_wydane_dokumenty`
+wraz z numerem wersji szablonu. Czego **NIE** dała: ścieżki „przygotuj
+zawiadomienie dla tej spółki i tego akcjonariusza". Szablony renderują się
+dziś wyłącznie w podglądzie, na danych zmyślonych — `dokumenty.renderuj`
+nie jest wołane poza testami.
+
+Do zaprojektowania (kolejna sesja), z podziałem na dwa tryby:
+
+**Automat — pismo powstaje samo, bo tak nakazuje ustawa:**
+- **po wpisie** → zawiadomienie do żądającego i do spółki, niezwłocznie
+  (art. 300(34) § 7 KSH); dziś robi to `server/zawiadomienia.js` na
+  sztywnej treści z `logika/dokumenty-tresc.js`, z pominięciem szablonów,
+- **przed wpisem** → powiadomienie o treści zamierzonego wpisu dla osoby,
+  której uprawnienia mają być wykreślone, zmienione lub obciążone
+  (art. 300(34) § 3 KSH), chyba że wyraziła zgodę,
+- **przy wstrzymaniu** → wezwanie do usunięcia przeszkody (art. 300(34) § 1),
+- **przy niedokonaniu wpisu** → zawiadomienie z podaniem przyczyn
+  (art. 300(34) § 7 zd. 2).
+
+**Na żądanie — pismo wystawia pracownik:**
+- informacja z rejestru w trzech wariantach odbiorcy (art. 300(35) § 3),
+- lista akcjonariuszy do sądu (art. 300(34) § 8), lista uprawnionych na WZ
+  (art. 300(91)), umowa, uchwała o wyborze, oświadczenie zarządu.
+
+Kluczowe pytanie projektowe: **czy automat ma przejść na szablony z bazy.**
+Dziś działa na treści zaszytej w kodzie. Przełączenie daje spójność (jedno
+miejsce redakcji) kosztem ruszenia działającego workflow spraw — dlatego
+faza 4 świadomie tego nie tknęła.
+
+Poza tym do rozstrzygnięcia: skąd biorą się wzory (kancelaria dostarcza
+gotowe pisma vs redakcja w aplikacji) i jaki ma być edytor — dziś jest to
+pole na surowy HTML, co nie nadaje się do wklejania dokumentów z Worda.
+Brakuje też **listy pól dostępnych** do wstawienia: edytor pokazuje
+wyłącznie klucze już użyte, więc wstawianie nowych miejsc jest zgadywanką.
+
+### 5.2. Szablony wbudowane to BRUDNOPISY
+
+Trzynaście szablonów zasianych w fazie 4 napisał wykonawca na podstawie
+`PRZEPISY-PSA.md`. **Nie są wzorami kancelaryjnymi i nie były weryfikowane
+pod kątem praktyki notarialnej.** Służą wyłącznie za rusztowanie do czasu
+wgrania wzorów kancelarii. Zasiew nigdy nie nadpisuje wersji istniejącej,
+więc po wgraniu własnej redakcji znikają z obiegu.
+
+### 5.3. Numeracja stron na wydruku — zablokowana ograniczeniem
+
+Przeglądarki nie wspierają liczników stron w polach marginesowych `@page`,
+a sekcja 4 zabrania bibliotek PDF. Numerację dokłada dziś mechanizm druku
+przeglądarki. Realizacja „strona X z Y" na papierze wymagałaby zgody na
+zależność — do świadomej decyzji, nie do obejścia.
+
+### 5.4. Zawiadomienie o sporze — pominięte świadomie
+
+Pozycja z tabeli fazy 4 z podstawą „wykładnia". `PRZEPISY-PSA.md` nie zna
+instytucji sporu (zero wystąpień), a `WYTYCZNE-MERYTORYCZNE-PSA.md`
+sekcja 3 nie wskazuje przy niej jednostki redakcyjnej — wbrew zasadzie
+z własnej preambuły. Zamiast nowego pisma: wariant przyczyny w istniejącym
+zawiadomieniu o niedokonaniu wpisu (art. 300(34) § 7 zd. 2), wskazujący
+drogę sądową. Do decyzji.

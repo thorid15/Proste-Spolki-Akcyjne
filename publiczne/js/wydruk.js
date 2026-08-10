@@ -90,7 +90,7 @@ function SekcjaRaportu({ tytul, children }) {
  * drukowania) — tutaj dbamy o to, żeby KAŻDA strona dała się zidentyfikować
  * po treści: oznaczenie spółki i dzień stanu są w nagłówku sekcji.
  */
-function StopkaRaportu({ spolka, data, oznaczenie }) {
+function StopkaRaportu({ spolka, data, oznaczenie, dodatek }) {
   return (
     <>
       <div className="raport-stopka">
@@ -103,6 +103,7 @@ function StopkaRaportu({ spolka, data, oznaczenie }) {
           spółek handlowych. Stan na dzień {fmt.data(data)}.
         </div>
         {oznaczenie && <div style={{ marginTop: 4 }}>Oznaczenie dokumentu: {oznaczenie}</div>}
+        {dodatek && <div style={{ marginTop: 4 }}>{dodatek}</div>}
       </div>
       <div className="raport-podpis">
         <div className="raport-podpis-linia">podpis i pieczęć notariusza</div>
@@ -523,25 +524,30 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
         }
       />
 
+      {/* Podpowiedź dla pracownika, nie treść dokumentu — na papierze ta sama
+          informacja jest w stopce, więc baner nie drukuje się (`bez-druku`). */}
       {rola === 'akcjonariusz' && (
-        <Komunikat
-          odmiana={zamaskowane ? 'ok' : 'info'}
-          tytul="Maskowanie danych wrażliwych"
-          tresc={
-            'Pozostali akcjonariusze nie mają dostępu do numeru PESEL, daty urodzenia ani adresu ' +
-            'zamieszkania — art. 300(35) § 1(1) KSH. Dane własne odbiorcy pokazujemy w całości.'
-          }
-        />
+        <div className="bez-druku">
+          <Komunikat
+            odmiana={zamaskowane ? 'ok' : 'info'}
+            tytul="Maskowanie danych wrażliwych"
+            tresc={
+              'Pozostali akcjonariusze nie mają dostępu do numeru PESEL, daty urodzenia ani adresu ' +
+              'zamieszkania — art. 300(35) § 1(1) KSH. Dane własne odbiorcy pokazujemy w całości.'
+            }
+          />
+        </div>
       )}
 
-      <div className="wydruk">
-        <NaglowekWydruku
+      <div className="raport">
+        <NaglowekRaportu
           tytul="Informacja z rejestru akcjonariuszy"
-          podtytul={`art. 300(35) KSH · stan na dzień ${fmt.data(data)}`}
+          podtytul={`${d.spolka.nazwa} — stan na dzień ${fmt.data(data)}`}
           kancelaria={kancelaria}
+          sporzadzono={sporzadzonoTeraz()}
         />
 
-        <div className="wydruk-sekcja">
+        <div className="raport-sekcja">
           <dl className="pary">
             <Para etykieta="Spółka">{d.spolka.nazwa}</Para>
             <Para etykieta="Numer KRS">{d.spolka.krs}</Para>
@@ -551,40 +557,40 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
           </dl>
         </div>
 
-        <div className="wydruk-sekcja">
-          <div className="wydruk-sekcja-tytul">Akcjonariusze</div>
-          <TabelaAkcjonariuszyWydruk akcjonariusze={d.akcjonariusze} razem={d.razem_akcji} />
-        </div>
+        <SekcjaRaportu tytul="Akcjonariusze">
+          <TabelaAkcjonariuszyRaport akcjonariusze={d.akcjonariusze} razem={d.razem_akcji} />
+        </SekcjaRaportu>
 
-        <div className="wydruk-sekcja">
-          <div className="wydruk-sekcja-tytul">Serie akcji</div>
-          <table className="tbl">
+        <SekcjaRaportu tytul="Serie akcji">
+          <table className="tabela">
             <thead>
               <tr>
                 <th>Seria</th><th>Numery</th>
-                <th className="prawo">Wyemitowane</th>
-                <th className="prawo">Umorzone</th>
-                <th className="prawo">W obrocie</th>
+                <th className="do-prawej">Wyemitowane</th>
+                <th className="do-prawej">Umorzone</th>
+                <th className="do-prawej">W obrocie</th>
               </tr>
             </thead>
             <tbody>
               {d.bilans.map((b) => (
                 <tr key={b.emisja_klucz}>
                   <td style={{ fontWeight: 600 }}>{b.seria}</td>
-                  <td className="numery">
+                  <td className="kol-dane">
                     {(d.emisje.find((e) => e.klucz === b.emisja_klucz) || {}).zakres}
                   </td>
-                  <td className="prawo">{fmt.liczba(b.wyemitowane)}</td>
-                  <td className="prawo">{fmt.liczba(b.umorzone)}</td>
-                  <td className="prawo">{fmt.liczba(b.w_obrocie)}</td>
+                  <td className="do-prawej">{fmt.liczba(b.wyemitowane)}</td>
+                  <td className="do-prawej">{fmt.liczba(b.umorzone)}</td>
+                  <td className="do-prawej">{fmt.liczba(b.w_obrocie)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </SekcjaRaportu>
 
-        <StopkaWydruku
+        <StopkaRaportu
+          spolka={d.spolka.nazwa}
           data={data}
+          oznaczenie={`odbiorca: ${opisOdbiorcy}`}
           dodatek={
             zamaskowane
               ? 'Numery PESEL, daty urodzenia i adresy zamieszkania pozostałych akcjonariuszy ' +
