@@ -852,6 +852,54 @@ const MIGRACJE = [
         ON psa_wydane_dokumenty (spolka_id);
     `,
   },
+  {
+    wersja: 14,
+    nazwa: 'wzor 04 (zadanie dokonania wpisu): typ w katalogu wydanych dokumentow',
+    sql: `
+      -- ── Rozszerzenie katalogu wydanych dokumentow, jeszcze raz ──────────
+      -- Wzor 04 (zadanie dokonania wpisu, art. 300(34) § 1 i § 4 KSH) zostal
+      -- pominiety przy podziale prac na bloki A3/A5 (sesja 8) - nie idzie
+      -- automatem (nie jest reakcja na przejscie stanu sprawy) i nie jest
+      -- jednorazowym dokumentem spolki (dotyczy KONKRETNEJ sprawy, danych
+      -- zadajacego z tej sprawy) - wykryte dopiero przy A7. Wystawia sie go
+      -- ze sprawy, wiec "sprawa_id" jest tu ZAWSZE ustawione (w odroznieniu
+      -- od pieciu wzorow z migracji 13, ktore sa zawsze "sprawa_id IS NULL").
+      CREATE TABLE psa_wydane_dokumenty_v14 (
+        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+        sprawa_id          INTEGER REFERENCES psa_sprawy(id),
+        spolka_id          INTEGER NOT NULL REFERENCES psa_spolki(id),
+        typ                TEXT NOT NULL
+                             CHECK (typ IN
+                               ('zawiadomienie_wpis','zawiadomienie_odmowa','informacja_z_rejestru',
+                                'wezwanie','raport','powiadomienie',
+                                'wykaz_akcjonariuszy','zawiadomienie_sad_rozwiazanie',
+                                'umowa_rejestru','informacja_rodo','uchwala_wyboru','klauzula_zbycia',
+                                'zadanie_wpisu')),
+        odbiorca_osoba_id  INTEGER REFERENCES psa_osoby(id),
+        kanal              TEXT NOT NULL CHECK (kanal IN ('email','portal','papier')),
+        sciezka_pdf        TEXT,
+        tresc_html         TEXT,
+        sciezka_plik       TEXT,
+        szablon_kod        TEXT,
+        szablon_wersja     INTEGER,
+        szablon_hash       TEXT,
+        wyslano            TEXT,
+        autor              TEXT NOT NULL,
+        utworzono          TEXT NOT NULL
+      );
+      INSERT INTO psa_wydane_dokumenty_v14
+        SELECT id, sprawa_id, spolka_id, typ, odbiorca_osoba_id, kanal, sciezka_pdf, tresc_html,
+               sciezka_plik, szablon_kod, szablon_wersja, szablon_hash, wyslano, autor, utworzono
+          FROM psa_wydane_dokumenty;
+      DROP TABLE psa_wydane_dokumenty;
+      ALTER TABLE psa_wydane_dokumenty_v14 RENAME TO psa_wydane_dokumenty;
+
+      CREATE INDEX IF NOT EXISTS psa_ix_wydane_sprawa
+        ON psa_wydane_dokumenty (sprawa_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_wydane_spolka
+        ON psa_wydane_dokumenty (spolka_id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

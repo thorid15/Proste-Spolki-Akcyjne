@@ -15,12 +15,12 @@ Prototyp jest domknięty, gdy Łukasz może **na własnych dwóch rejestrach**:
 1. wprowadzić stan otwarcia z prawdziwych danych — ✅ *jest* (kreator migracji),
 2. prowadzić bieżące wpisy przez kolejkę spraw — ✅ *jest* (sprinty 1–5),
 3. **wygenerować prawdziwe pismo z własnego wzoru, dla konkretnej spółki
-   i konkretnego akcjonariusza** — ❌ *brak, blok A*,
+   i konkretnego akcjonariusza** — ✅ *jest* (blok A, zamknięty A0–A7),
 4. wydać informację z rejestru i raport — ✅ *jest* (sesja 6, faza 4),
 5. naliczyć i rozliczyć opłaty — ✅ *jest* (sprint 4),
 6. odnotować weryfikację AML z datą przeglądu — ⚠️ *częściowo, blok B*.
 
-Punkt 3 jest jedynym, który blokuje sens testu. Reszta to uzupełnienia.
+Punkt 3 był jedynym, który blokował sens testu — domknięty. Zostaje blok B (uzupełnienia).
 
 ---
 
@@ -146,7 +146,7 @@ każdą taką zmianę odnotowujemy przy wzorze, którego dotyczy.
 | A4 | ✅ **ZROBIONE** — `server/zawiadomienia.js` przepisany na wzory .docx. Klient dostaje plik jako załącznik maila (treść maila to krótkie wprowadzenie + podgląd tekstowy, `poczta.js` obsługuje teraz `zalaczniki`). Plik zapisywany na dysku obok załączników sprawy, hash i ścieżka w `psa_wydane_dokumenty` (migracja v11). Brakujące klucze NIE blokują wysyłki (widoczne „—" w piśmie), ale wracają w odpowiedzi API i pokazują się w UI jako lista do sprawdzenia. Sprawdzone end-to-end: prawdziwy wpis → prawdziwe pismo na dysku, poprawny tekst prawny, poprawne dane z rejestru | A3, D3 |
 | A5 | ✅ **ZROBIONE** — pięć wzorów jednorazowych (01 umowa, 02 RODO, 03 uchwała, 08 lista dla sądu, 10 klauzula zbycia) wystawianych z poziomu spółki (`GET/POST /api/psa/spolki/:id/dokumenty/...`) — wszystkie pięć to dokumenty spółki, nie sprawy, więc przycisk jest tylko w kokpicie spółki (karta „Dokumenty"), zgodnie z naturą tych pism. `server/logika/kontekst-pisma.js` dobudowuje kontekst per wzór: 01/02/08 w całości z kartoteki i konfiguracji (`platnik_vat` — migracja v12 — i stawki z `przepisy.STAWKI_GROSZE`), 03/10 przyjmują dodatkowo dane ad hoc z formularza (wynik głosowania, strony i treść klauzuli zbycia — to zdarzenia poza rejestrem, więc nie mają schematu w bazie). Podgląd na REALNYCH danych spółki bez zapisu; wystawienie zapisuje plik `.docx` na dysku i wiersz w `psa_wydane_dokumenty` (migracja v13 rozszerza `typ` o `umowa_rejestru`/`informacja_rodo`/`uchwala_wyboru`/`klauzula_zbycia` — wzór 08 współdzieli istniejący typ `wykaz_akcjonariuszy` z automatem KRS, bo to ten sam dokument prawny wystawiany na żądanie zamiast automatem) z hashem wzoru, `sprawa_id = NULL`. Sprawdzone end-to-end na realnych danych: 22 testy kontekstu + 8 testów HTTP + przejście przez wszystkie 5 wzorów w przeglądarce (podgląd, wystawienie, pobranie pliku), bez błędów konsoli | A3 |
 | A6 | ✅ **ZROBIONE** — ekran Konfiguracja → Szablony dokumentów czyta z dysku: lista z walidacją, szczegóły (klucze/sekcje/ostrzeżenia), podgląd na danych próbnych (tekst + pobranie `.docx`), sekcja „Wszystkie dostępne klucze" (pełny słownik, nie tylko użyte) | A2 |
-| A7 | Test: każdy z dziesięciu wzorów renderuje się na realnym rejestrze bez ani jednego nieuzupełnionego klucza | A1–A5 |
+| A7 | ✅ **ZROBIONE** — test end-to-end (`testy/a7-wszystkie-wzory-e2e.test.js`) prowadzi PRAWDZIWE żądania HTTP przez API na jednym, realistycznie wypełnionym rejestrze (spółka z kompletem pól, dwie osoby, otwarcie rejestru, pełen cykl sprawy: weryfikacja → powiadomienie → wstrzymanie → wznowienie → wpis, plus druga sprawa zakończona odmową) i sprawdza, że KAŻDE z dziesięciu pism wystawionych po drodze ma `brakujace: []`. Odkrycie po drodze: **wzór 04 (żądanie dokonania wpisu) nie miał żadnej ścieżki wystawienia** — nie pasował do podziału automat/na-żądanie-ze-spółki z A3/A5 (dotyczy danych KONKRETNEJ sprawy, nie spółki). Dobudowany w całości w ramach A7: `kontekst-pisma.js: zadanieWpisu()` (dane żądającego z kartoteki, podstawa dokumentowa i załączniki z bloku B3/`psa_dokumenty`, opcjonalna zgoda innej osoby — ad hoc, jak zbywca/nabywca w A5, bo rejestr nie ma pola „kto wyraża zgodę"), trasy `GET/POST /api/psa/sprawy/:id/dokumenty/...` (migracja v14 dodaje typ `zadanie_wpisu`), przycisk „Wystaw żądanie wpisu" w ekranie sprawy (`ModalWystawDokumentu` z A5 uogólniony o `bazowyUrl`/`kontekstNazwa`, żeby działał i ze spółki, i ze sprawy). Sprawdzone: 4 nowe testy jednostkowe kontekstu, 2 nowe testy HTTP tras sprawy, pełny e2e test (10/10 wzorów bez braków), przejście przez UI w przeglądarce — bez błędów konsoli. Pełny pakiet: 309/309 | A1–A5 |
 
 ---
 

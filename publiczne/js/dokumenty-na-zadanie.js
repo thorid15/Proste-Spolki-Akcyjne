@@ -11,6 +11,7 @@ const OPISY_PODPOWIEDZI_WZOROW = {
   '03': 'Wynik głosowania nie ma miejsca w rejestrze (to nie jest zdarzenie rejestrowe) — wpisz go poniżej.',
   '08': 'Adresatem jest sąd rejestrowy spółki. Adres sądu nie jest w rejestrze — możesz go wpisać poniżej.',
   '10': 'Wskaż zbywcę i nabywcę z kartoteki oraz treść klauzuli dotyczącej tej konkretnej transakcji.',
+  '04': 'W całości automatyczny — dane żądającego, podstawa wpisu i załączniki pochodzą z tej sprawy.',
 };
 
 /** Pola ad hoc dla wzoru 03 (uchwała) — dane głosowania, którego rejestr nie przechowuje. */
@@ -69,8 +70,14 @@ function PolaKlauzuli({ klauzula, ustawKlauzule, zbywcaId, ustawZbywce, nabywcaI
   );
 }
 
-function ModalWystawDokumentu({ spolkaId, przyZamknieciu }) {
-  const { dane: lista, ladowanie: ladowanieListy } = useDane(`/api/psa/spolki/${spolkaId}/dokumenty/wystaw`);
+/**
+ * `bazowyUrl` domyślnie wskazuje na wzory wystawiane ZE SPÓŁKI (blok A5);
+ * ekran sprawy (wzór 04, blok A7) podaje `/api/psa/sprawy/:id` zamiast.
+ * `kontekstNazwa` to tylko etykieta w podglądzie ("na realnych danych …").
+ */
+function ModalWystawDokumentu({ spolkaId, bazowyUrl, kontekstNazwa = 'spółki', przyZamknieciu }) {
+  const url = bazowyUrl || `/api/psa/spolki/${spolkaId}`;
+  const { dane: lista, ladowanie: ladowanieListy } = useDane(`${url}/dokumenty/wystaw`);
   const [kod, ustawKod] = useState(null);
   const [uchwala, ustawUchwale] = useState({});
   const [adresat, ustawAdresat] = useState({ nazwa: '', adres: '' });
@@ -93,7 +100,7 @@ function ModalWystawDokumentu({ spolkaId, przyZamknieciu }) {
     ustawLadowanie(true);
     ustawBlad(null);
     try {
-      ustawPodglad(await API.post(`/api/psa/spolki/${spolkaId}/dokumenty/${kod}/podglad`, cialoZadania()));
+      ustawPodglad(await API.post(`${url}/dokumenty/${kod}/podglad`, cialoZadania()));
     } catch (e) {
       ustawBlad(e.message);
     } finally {
@@ -105,7 +112,7 @@ function ModalWystawDokumentu({ spolkaId, przyZamknieciu }) {
     ustawLadowanie(true);
     ustawBlad(null);
     try {
-      ustawWystawiony(await API.post(`/api/psa/spolki/${spolkaId}/dokumenty/${kod}`, cialoZadania()));
+      ustawWystawiony(await API.post(`${url}/dokumenty/${kod}`, cialoZadania()));
     } catch (e) {
       ustawBlad(e.message);
     } finally {
@@ -127,7 +134,7 @@ function ModalWystawDokumentu({ spolkaId, przyZamknieciu }) {
         {wystawiony.brakujace.length > 0 && (
           <Komunikat odmiana="uwaga" tytul="Do sprawdzenia — puste pola w piśmie" lista={wystawiony.brakujace} />
         )}
-        <a className="btn btn-glowny" href={`/api/psa/spolki/${spolkaId}/wydane/${wystawiony.id}/plik`}>
+        <a className="btn btn-glowny" href={`${url}/wydane/${wystawiony.id}/plik`}>
           Pobierz plik .docx
         </a>
       </Modal>
@@ -191,7 +198,7 @@ function ModalWystawDokumentu({ spolkaId, przyZamknieciu }) {
           {podglad.brakujace.length > 0 && (
             <Komunikat odmiana="uwaga" tytul="Puste pola przy tych danych" lista={podglad.brakujace} />
           )}
-          <Karta scisla tytul="Treść na realnych danych spółki">
+          <Karta scisla tytul={`Treść na realnych danych ${kontekstNazwa}`}>
             <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--czcionka-dane, monospace)', fontSize: 12, lineHeight: 1.6, margin: 0 }}>
               {podglad.tekst}
             </pre>

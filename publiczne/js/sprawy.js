@@ -730,6 +730,7 @@ function EkranSprawy({ sprawaId }) {
   // zrobiloby to zniknac ekran podsumowania wpisu (widoczny tylko, gdy
   // sprawa.stan==='weryfikacja').
   const [wlasnieWpisano, ustawWlasnieWpisano] = useState(false);
+  const [wystawianieZadania, ustawWystawianieZadania] = useState(false);
   // Krok 3/4 kreatora potrzebuje "bogatego" widoku spółki (emisje, bilans,
   // akcjonariusze, obciążenia, uprawnienia, ograniczenia) — ten sam kształt,
   // co kokpit spółki. Endpoint sprawy zwraca tylko surowy rekord spółki.
@@ -784,10 +785,29 @@ function EkranSprawy({ sprawaId }) {
 
       <PanelDokumentow sprawaId={sprawa.id} dokumenty={dokumenty} odswiez={odswiez} />
 
+      <Karta tytul="Żądanie dokonania wpisu">
+        <div className="metryka-pion" style={{ padding: '0 24px 20px' }}>
+          <div className="male wyciszony">Formalizuje żądanie z danymi żądającego, podstawą wpisu i załącznikami tej sprawy.</div>
+          <button className="btn btn-maly" onClick={() => ustawWystawianieZadania(true)}>
+            Wystaw żądanie wpisu
+          </button>
+        </div>
+      </Karta>
+      {wystawianieZadania && (
+        <ModalWystawDokumentu
+          bazowyUrl={`/api/psa/sprawy/${sprawa.id}`}
+          kontekstNazwa="sprawy"
+          przyZamknieciu={() => {
+            ustawWystawianieZadania(false);
+            odswiez();
+          }}
+        />
+      )}
+
       {wydane_dokumenty.length > 0 && (
         <Sekcja tytul="Wydane dokumenty" licznik={wydane_dokumenty.length}>
           <table className="tbl" style={{ margin: '0 24px', width: 'calc(100% - 48px)' }}>
-            <thead><tr><th>Typ</th><th>Kanał</th><th>Wysłano</th><th>Autor</th></tr></thead>
+            <thead><tr><th>Typ</th><th>Kanał</th><th>Wysłano</th><th>Autor</th><th></th></tr></thead>
             <tbody>
               {wydane_dokumenty.map((w) => (
                 <tr key={w.id}>
@@ -795,6 +815,11 @@ function EkranSprawy({ sprawaId }) {
                   <td className="przyciemnione">{w.kanal}</td>
                   <td>{w.wyslano ? fmt.dataCzas(w.wyslano) : <span className="przyciemnione">nie wysłano</span>}</td>
                   <td className="przyciemnione">{w.autor}</td>
+                  <td>
+                    {w.szablon_kod && (
+                      <a href={`/api/psa/sprawy/${sprawa.id}/wydane/${w.id}/plik`}>Pobierz .docx</a>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

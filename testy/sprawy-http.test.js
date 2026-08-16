@@ -507,3 +507,57 @@ test('spolka: siedziba w miejscowniku i dane reprezentanta umowy sie zapisuja', 
   });
   assert.equal(stZla, 400);
 });
+
+// ─────────────────────────────────────────────────────────────
+// Wzór 04 — żądanie dokonania wpisu, na żądanie ze SPRAWY (blok A7)
+// ─────────────────────────────────────────────────────────────
+
+test('sprawa: wzor 04 - lista wzorow, podglad bez zapisu, wystawienie z zapisem i plikiem do pobrania', async () => {
+  const { spolkaId, kowalski } = await przygotujSpolke();
+  const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
+    dokument_rodzaj: 'uchwala', dokument_data: '2026-01-15',
+  });
+  const sprawaId = sprawaOdp.sprawa.id;
+
+  const [stLista, listaOdp] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}/dokumenty/wystaw`);
+  assert.equal(stLista, 200);
+  assert.deepEqual(listaOdp.wzory, [{ kod: '04', nazwa: 'Żądanie dokonania wpisu' }]);
+
+  const [stPodglad, podgladOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/dokumenty/04/podglad`);
+  assert.equal(stPodglad, 200);
+  assert.match(podgladOdp.tekst, /ŻĄDANIE DOKONANIA WPISU/);
+  const [, szczegolPrzedWystawieniem] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
+  assert.equal(szczegolPrzedWystawieniem.wydane_dokumenty.length, 0, 'podglad nie zostawia sladu');
+
+  const [stWystaw, wystawOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/dokumenty/04`);
+  assert.equal(stWystaw, 201);
+  assert.ok(wystawOdp.id);
+
+  const wiersz = db().prepare('SELECT * FROM psa_wydane_dokumenty WHERE id = ?').get(wystawOdp.id);
+  assert.equal(wiersz.typ, 'zadanie_wpisu');
+  assert.equal(wiersz.sprawa_id, sprawaId);
+  assert.equal(wiersz.szablon_kod, '04');
+  assert.ok(wiersz.szablon_hash.length > 0);
+  assert.ok(wiersz.sciezka_plik);
+
+  const odpPlik = await fetch(`${baza}/api/psa/sprawy/${sprawaId}/wydane/${wystawOdp.id}/plik`, { headers: { ...AUTOR() } });
+  assert.equal(odpPlik.status, 200);
+  assert.match(odpPlik.headers.get('content-type'), /wordprocessingml/);
+  const bufor = Buffer.from(await odpPlik.arrayBuffer());
+  assert.equal(bufor.readUInt32LE(0), 0x04034b50, 'poprawne archiwum ZIP');
+
+  const [, szczegol] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
+  assert.equal(szczegol.wydane_dokumenty.length, 1);
+});
+
+test('sprawa: nieznany kod wzoru na trasach dokumentow daje 404', async () => {
+  const { spolkaId, kowalski } = await przygotujSpolke();
+  const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
+  });
+  const [status] = await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/dokumenty/99/podglad`);
+  assert.equal(status, 404);
+});

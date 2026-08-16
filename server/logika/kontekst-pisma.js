@@ -15,6 +15,11 @@
  *   03 — uchwała o wyborze notariusza       08 — lista akcjonariuszy do sądu
  *   10 — klauzula do umowy zbycia akcji
  *
+ * Jeden wystawia się NA ŻĄDANIE, ze SPRAWY (nie ze spółki — dotyczy danych
+ * konkretnego żądającego i konkretnego zdarzenia; wykryty jako brakujący
+ * dopiero przy A7, bo nie pasował do podziału na automat/spółkę z A3/A5):
+ *   04 — żądanie dokonania wpisu (art. 300(34) § 1 i § 4 KSH)
+ *
  * Klucz, którego tu NIE MA (np. `dokument_rodzaj` przy sprawie bez
  * wskazanego dokumentu), po prostu nie trafia do zwracanego obiektu —
  * renderer (`logika/docx.js`) sam dopisze go do listy braków. Ten moduł
@@ -58,6 +63,36 @@ function adresPelny(podmiot) {
   const ulica = [podmiot.ulica, numer && `nr ${numer}`].filter(Boolean).join(' ');
   const kodMiasto = [podmiot.kod_pocztowy, podmiot.miejscowosc].filter(Boolean).join(' ');
   return [kodMiasto, ulica && `ulica ${ulica}`].filter(Boolean).join(', ') || null;
+}
+
+/**
+ * Adres zamieszkania/siedziby BEZ podstawiania adresu do doręczeń — w
+ * odróżnieniu od `adresPelny`, wzór 04 ma OBA jako osobne placeholdery
+ * (`zadajacy_adres` i `zadajacy_adres_doreczen`), więc nie mogą się cicho
+ * zlać w jedno, gdy `adres_doreczen` jest ustawiony.
+ */
+function adresZamieszkaniaPelny(osoba) {
+  if (!osoba) return null;
+  const numer = [osoba.nr_domu, osoba.nr_lokalu].filter(Boolean).join('/');
+  const ulica = [osoba.ulica, numer && `nr ${numer}`].filter(Boolean).join(' ');
+  const kodMiasto = [osoba.kod_pocztowy, osoba.miejscowosc].filter(Boolean).join(' ');
+  return [kodMiasto, ulica && `ulica ${ulica}`].filter(Boolean).join(', ') || null;
+}
+
+/**
+ * Identyfikator do dokumentu WEWNĘTRZNEGO kancelarii (żądanie wpisu, wzór
+ * 04) — w odróżnieniu od `logika/maskowanie.js: jawnyIdentyfikator` (do
+ * pism WYCHODZĄCYCH, gdzie PESEL jest celowo ukryty przed osobami trzecimi)
+ * tu notariusz identyfikuje samą stronę czynności, więc PESEL jest właściwy.
+ */
+function identyfikatorWewnetrzny(osoba) {
+  if (!osoba) return null;
+  if (osoba.typ === 'prawna') {
+    if (osoba.numer_w_rejestrze) return `${osoba.nazwa_rejestru || 'KRS'} ${osoba.numer_w_rejestrze}`;
+    if (osoba.nip) return `NIP ${osoba.nip}`;
+    return null;
+  }
+  return osoba.pesel ? `PESEL ${osoba.pesel}` : null;
 }
 
 /**
@@ -403,11 +438,59 @@ function klauzulaZbycia({ spolka, klauzula, zbywca, nabywca }) {
   };
 }
 
+/**
+ * Wzór 04 — żądanie dokonania wpisu (art. 300(34) § 1 i § 4 KSH). Jedyny
+ * z dziesięciu wzorów, który dokumentuje stronę ŻĄDAJĄCĄ wpisu, nie
+ * kancelarię — wystawia się go dla KONKRETNEJ sprawy, z danych zapisanych
+ * przy jej założeniu (`sprawa.zadajacy_osoba_id`, `dokument_rodzaj`/
+ * `dokument_data` z bloku B3, załączniki z `psa_dokumenty`).
+ *
+ * Sekcja IV („Zgoda na dokonanie wpisu") dotyczy tylko wpisów, które
+ * wykreślają, zmieniają albo obciążają uprawnienia INNEJ osoby — aplikacja
+ * nie ma dziś pola „kto wyraża zgodę" w schemacie sprawy (`zgoda_forma`/
+ * `zgoda_data` zapisują tylko ŻE i JAK zgoda wpłynęła, nie OD KOGO), więc
+ * notariusz wskazuje tę osobę wprost przy wystawianiu — tak jak zbywcę
+ * i nabywcę przy klauzuli zbycia (wzór 10, blok A5).
+ */
+function zadanieWpisu({ spolka, sprawa, zadajacy, osoby, dokumenty, zgadzajacy, dzis }) {
+  const formyZg = formyOsobowe.formyZgadzajacego(zgadzajacy ? zgadzajacy.plec : null) || {};
+  return {
+    ...kancelariaKlucze(),
+    ...spolkaKlucze(spolka),
+    zadanie_data: dataPl(dzis),
+    zadajacy_mianownik: mianownik(zadajacy),
+    zadajacy_identyfikator: identyfikatorWewnetrzny(zadajacy),
+    zadajacy_adres: adresZamieszkaniaPelny(zadajacy),
+    zadajacy_adres_doreczen: zadajacy ? zadajacy.adres_doreczen || adresZamieszkaniaPelny(zadajacy) : null,
+    zadajacy_email: zadajacy ? zadajacy.email || null : null,
+    zadajacy_rola: sprawa.zadajacy_rola ? przepisy.OPISY_ROL_ZADAJACEGO[sprawa.zadajacy_rola] : null,
+    sposob_doreczen: zadajacy && zadajacy.email
+      ? `na adres poczty elektronicznej ${zadajacy.email}`
+      : 'listownie na adres do doręczeń',
+    // psa_osoby.zgoda_email jest bool (zgoda na komunikacje mailowa i na
+    // ujawnienie adresu w rejestrze) - wzor cytuje to jako zdanie, nie liczbe.
+    zgoda_email: zadajacy ? (zadajacy.zgoda_email ? 'Wyrażam zgodę' : 'Nie wyrażam zgody') : null,
+    wpis_opis: wpisOpisZDraftu(sprawa, osoby),
+    dokument_rodzaj: sprawa.dokument_rodzaj ? przepisy.OPISY_RODZAJOW_DOKUMENTU[sprawa.dokument_rodzaj] : null,
+    dokument_data: dataPl(sprawa.dokument_data),
+    podstawa_dokument: sprawa.dokument_rodzaj ? [{}] : [],
+    zalaczniki: (dokumenty || []).map((d) => ({
+      zalacznik_opis: `${przepisy.OPISY_RODZAJOW_DOKUMENTU[d.typ_dokumentu] || 'inny dokument'} (${d.nazwa_pliku})`,
+    })),
+    zgadzajacy_mianownik: zgadzajacy ? mianownik(zgadzajacy) : null,
+    zgadzajacy_identyfikator: zgadzajacy ? identyfikatorWewnetrzny(zgadzajacy) : null,
+    zgadzajacy_podpisany: formyZg.zgadzajacy_podpisany || null,
+    zgoda: zgadzajacy ? [{}] : [],
+  };
+}
+
 module.exports = {
   dataPl,
   godzina,
   mianownik,
   adresPelny,
+  adresZamieszkaniaPelny,
+  identyfikatorWewnetrzny,
   sadRejestrowyPelny,
   kancelariaKlucze,
   spolkaKlucze,
@@ -425,4 +508,5 @@ module.exports = {
   uchwalaWyboru,
   listaAkcjonariuszyDoSadu,
   klauzulaZbycia,
+  zadanieWpisu,
 };

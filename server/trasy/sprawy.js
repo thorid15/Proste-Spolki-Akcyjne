@@ -33,6 +33,9 @@ const konfiguracja = require('../konfiguracja');
 const { nastepnyNumerSprawy } = require('../logika/znak-sprawy');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
+const wzoryDysk = require('../logika/wzory-dysk');
+const docx = require('../logika/docx');
+const kontekstPisma = require('../logika/kontekst-pisma');
 
 const router = express.Router();
 
@@ -240,7 +243,7 @@ router.get(
       .all(id);
     const wydaneDokumenty = db()
       .prepare(
-        `SELECT id, typ, odbiorca_osoba_id, kanal, wyslano, autor, utworzono
+        `SELECT id, typ, odbiorca_osoba_id, kanal, wyslano, autor, utworzono, szablon_kod
            FROM psa_wydane_dokumenty WHERE sprawa_id = ? ORDER BY id DESC`
       )
       .all(id);
@@ -655,6 +658,116 @@ router.post(
   })
 );
 
+// ─────────────────────────────────────────────────────────────
+// Wzór 04 — żądanie dokonania wpisu, na żądanie ze SPRAWY (blok A7)
+// ─────────────────────────────────────────────────────────────
+//
+// Zarejestrowane PRZED `/:id/dokumenty/:dokumentId` niżej — Express dopasowuje
+// trasy w kolejności rejestracji, więc `GET /:id/dokumenty/wystaw` musiałby
+// inaczej trafić w ogólny wzorzec `:dokumentId` (dopasowałby się jako id
+// dokumentu „wystaw”, którego oczywiście nie ma, i skończyłby 404-ką).
+
+const WZOR_ZADANIA = { '04': { nazwa: 'Żądanie dokonania wpisu', typ: 'zadanie_wpisu' } };
+
+function budujKontekstZadania(sprawa, cialo) {
+  const spolka = rejestr.wczytajSpolke(db(), sprawa.spolka_id);
+  const zadajacy = sprawa.zadajacy_osoba_id
+    ? db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(sprawa.zadajacy_osoba_id)
+    : null;
+  const dokumenty = db().prepare('SELECT * FROM psa_dokumenty WHERE sprawa_id = ? ORDER BY id').all(sprawa.id);
+  const zgadzajacy = cialo.zgadzajacy_osoba_id
+    ? db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(Number(cialo.zgadzajacy_osoba_id))
+    : null;
+  const osoby = new Map([
+    ...rejestr.wczytajOsoby(db(), sprawa.zadajacy_osoba_id ? [sprawa.zadajacy_osoba_id] : []),
+    ...rejestr.wczytajOsobySpolki(db(), sprawa.spolka_id),
+  ]);
+  return kontekstPisma.zadanieWpisu({ spolka, sprawa, zadajacy, osoby, dokumenty, zgadzajacy, dzis: czas.dzisIso() });
+}
+
+/** Lista wzorów dostępnych do wystawienia dla tej sprawy — dziś tylko żądanie wpisu. */
+router.get(
+  '/:id/dokumenty/wystaw',
+  asy((zad, odp) => {
+    const sprawa = wczytajSprawe(Number(zad.params.id));
+    if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
+    odp.json({ wzory: Object.entries(WZOR_ZADANIA).map(([kod, w]) => ({ kod, nazwa: w.nazwa })) });
+  })
+);
+
+/** Podgląd na REALNYCH danych sprawy — przed wystawieniem, bez zapisu. */
+router.post(
+  '/:id/dokumenty/:kod/podglad',
+  asy((zad, odp) => {
+    const sprawa = wczytajSprawe(Number(zad.params.id));
+    if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
+    if (!WZOR_ZADANIA[zad.params.kod]) throw nieZnaleziono(`Nie ma wzoru o kodzie „${zad.params.kod}".`);
+
+    const dane = budujKontekstZadania(sprawa, zad.body || {});
+    const wynik = wzoryDysk.wypelnij(zad.params.kod, dane);
+    odp.json({
+      tekst: docx.tekst(wynik.plik),
+      brakujace: wynik.brakujace,
+      bledy: wynik.bledy,
+      ostrzezenia: wynik.ostrzezenia,
+    });
+  })
+);
+
+/** Wystawia dokument: renderuje, zapisuje plik na dysku i ślad w psa_wydane_dokumenty. */
+router.post(
+  '/:id/dokumenty/:kod',
+  asy((zad, odp) => {
+    const sprawa = wczytajSprawe(Number(zad.params.id));
+    if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
+    const opisWzoru = WZOR_ZADANIA[zad.params.kod];
+    if (!opisWzoru) throw nieZnaleziono(`Nie ma wzoru o kodzie „${zad.params.kod}".`);
+    const kto = autor(zad);
+
+    const dane = budujKontekstZadania(sprawa, zad.body || {});
+    const wynik = wzoryDysk.wypelnij(zad.params.kod, dane);
+
+    const katalog = path.join(
+      konfiguracja.KATALOG_DOKUMENTOW,
+      `spolka_${sprawa.spolka_id}`,
+      `sprawa_${sprawa.id}`,
+      'wydane'
+    );
+    fs.mkdirSync(katalog, { recursive: true });
+    const nazwaPliku = `${wynik.nazwa.replace(/\s+/g, '-')}.docx`;
+    const nazwaZapisu = `${crypto.randomUUID()}-${nazwaPliku}`;
+    fs.writeFileSync(path.join(katalog, nazwaZapisu), wynik.plik);
+    const sciezkaWzgledna = path.relative(konfiguracja.KATALOG_DOKUMENTOW, path.join(katalog, nazwaZapisu));
+
+    const wpis = db()
+      .prepare(
+        `INSERT INTO psa_wydane_dokumenty
+           (sprawa_id, spolka_id, typ, odbiorca_osoba_id, kanal, tresc_html,
+            sciezka_plik, szablon_kod, szablon_hash, wyslano, autor, utworzono)
+         VALUES (@sprawa_id, @spolka_id, @typ, @odbiorca_osoba_id, 'papier', @tresc_html,
+                 @sciezka_plik, @szablon_kod, @szablon_hash, NULL, @autor, @utworzono)`
+      )
+      .run({
+        sprawa_id: sprawa.id,
+        spolka_id: sprawa.spolka_id,
+        typ: opisWzoru.typ,
+        odbiorca_osoba_id: sprawa.zadajacy_osoba_id || null,
+        tresc_html: docx.tekst(wynik.plik),
+        sciezka_plik: sciezkaWzgledna,
+        szablon_kod: zad.params.kod,
+        szablon_hash: wynik.hash,
+        autor: kto,
+        utworzono: czas.terazIso(),
+      });
+
+    odp.status(201).json({
+      id: Number(wpis.lastInsertRowid),
+      brakujace: wynik.brakujace,
+      bledy: wynik.bledy,
+    });
+  })
+);
+
 /** Pobranie pliku - endpoint sprawdzajacy istnienie sprawy, poza katalogiem publicznym. */
 router.get(
   '/:id/dokumenty/:dokumentId',
@@ -687,6 +800,30 @@ router.get(
       .get(Number(zad.params.wydanyId), sprawa.id);
     if (!wydany) throw nieZnaleziono('Nie odnaleziono dokumentu.');
     odp.json({ wydany });
+  })
+);
+
+/** Pobranie pliku wystawionego dla sprawy — obejmuje też pisma automatu (blok A4). */
+router.get(
+  '/:id/wydane/:wydanyId/plik',
+  asy((zad, odp) => {
+    const sprawa = wczytajSprawe(Number(zad.params.id));
+    if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
+    const wydany = db()
+      .prepare('SELECT * FROM psa_wydane_dokumenty WHERE id = ? AND sprawa_id = ?')
+      .get(Number(zad.params.wydanyId), sprawa.id);
+    if (!wydany || !wydany.sciezka_plik) throw nieZnaleziono('Nie odnaleziono pliku.');
+
+    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, wydany.sciezka_plik);
+    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+    odp.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+    odp.setHeader('Content-Disposition', `attachment; filename="${path.basename(pelnaSciezka).replace(/^[^-]+-/, '')}"`);
+    odp.sendFile(pelnaSciezka);
   })
 );
 

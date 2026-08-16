@@ -363,3 +363,88 @@ test('klauzulaZbycia: zbywca i nabywca to dwie rozne osoby z kartoteki', () => {
 
   bezBrakow('10', dane);
 });
+
+// ─────────────────────────────────────────────────────────────
+// Wzór 04 — żądanie dokonania wpisu (wystawiane ze SPRAWY, blok A7)
+// ─────────────────────────────────────────────────────────────
+
+const ZADAJACY_PELNY = {
+  ...ZADAJACY,
+  typ: 'fizyczna',
+  pesel: '88081105939',
+  email: 'jan.kowalski@example.pl',
+  zgoda_email: 1,
+};
+
+const DOKUMENTY_SPRAWY = [{ typ_dokumentu: 'umowa_zbycia', nazwa_pliku: 'umowa-zbycia.pdf' }];
+
+test('zadanieWpisu: dane zadajacego, podstawa dokumentowa i zalaczniki z realnej sprawy', () => {
+  const dane = kontekst.zadanieWpisu({
+    spolka: SPOLKA,
+    sprawa: { ...SPRAWA, zadajacy_rola: 'nabywca' },
+    zadajacy: ZADAJACY_PELNY,
+    osoby: new Map(),
+    dokumenty: DOKUMENTY_SPRAWY,
+    dzis: '2026-08-13',
+  });
+  assert.equal(dane.zadajacy_mianownik, 'Jan Kowalski');
+  assert.equal(dane.zadajacy_identyfikator, 'PESEL 88081105939');
+  assert.equal(dane.zadajacy_rola, przepisy.OPISY_ROL_ZADAJACEGO.nabywca);
+  assert.equal(dane.sposob_doreczen, 'na adres poczty elektronicznej jan.kowalski@example.pl');
+  assert.equal(dane.zgoda_email, 'Wyrażam zgodę');
+  assert.deepEqual(dane.podstawa_dokument, [{}]);
+  assert.equal(dane.zalaczniki.length, 1);
+  assert.match(dane.zalaczniki[0].zalacznik_opis, /umowa zbycia akcji.*umowa-zbycia\.pdf/);
+  assert.deepEqual(dane.zgoda, [], 'bez wskazanego zgadzajacego sekcja IV zostaje wylaczona');
+
+  bezBrakow('04', dane);
+});
+
+test('zadanieWpisu: adres do doreczen inny niz adres zamieszkania, gdy wskazany osobno', () => {
+  const dane = kontekst.zadanieWpisu({
+    spolka: SPOLKA,
+    sprawa: { ...SPRAWA, zadajacy_rola: 'akcjonariusz' },
+    zadajacy: { ...ZADAJACY_PELNY, adres_doreczen: 'skrytka pocztowa 12' },
+    osoby: new Map(),
+    dokumenty: DOKUMENTY_SPRAWY,
+    dzis: '2026-08-13',
+  });
+  assert.equal(dane.zadajacy_adres, '80-180 Gdańsk, ulica Kwiatowa nr 4/2', 'adres zamieszkania NIE ustepuje adresowi do doreczen (w odroznieniu od adresPelny)');
+  assert.equal(dane.zadajacy_adres_doreczen, 'skrytka pocztowa 12');
+});
+
+test('zadanieWpisu: zgoda innej osoby (sekcja IV) - formy zalezne od plci zgadzajacego', () => {
+  const zgadzajaca = { typ: 'fizyczna', imie: 'Anna', nazwisko: 'Nowak', pesel: '85050512309', plec: 'kobieta' };
+  const dane = kontekst.zadanieWpisu({
+    spolka: SPOLKA,
+    sprawa: { ...SPRAWA, zadajacy_rola: 'nabywca' },
+    zadajacy: ZADAJACY_PELNY,
+    osoby: new Map(),
+    dokumenty: DOKUMENTY_SPRAWY,
+    zgadzajacy: zgadzajaca,
+    dzis: '2026-08-13',
+  });
+  assert.equal(dane.zgadzajacy_mianownik, 'Anna Nowak');
+  assert.equal(dane.zgadzajacy_identyfikator, 'PESEL 85050512309');
+  assert.equal(dane.zgadzajacy_podpisany, 'podpisana');
+  assert.deepEqual(dane.zgoda, [{}]);
+
+  bezBrakow('04', dane);
+});
+
+test('zadanieWpisu: bez dokumentu bedacego podstawa wpisu sekcja "podstawa_dokument" jest pusta, nie brakiem', () => {
+  const dane = kontekst.zadanieWpisu({
+    spolka: SPOLKA,
+    sprawa: { ...SPRAWA, zadajacy_rola: 'akcjonariusz', dokument_rodzaj: null, dokument_data: null },
+    zadajacy: ZADAJACY_PELNY,
+    osoby: new Map(),
+    dokumenty: [],
+    dzis: '2026-08-13',
+  });
+  assert.deepEqual(dane.podstawa_dokument, []);
+  assert.deepEqual(dane.zalaczniki, []);
+  const wynik = wzoryDysk.wypelnij('04', dane);
+  assert.deepEqual(wynik.bledy, []);
+  assert.ok(!wynik.brakujace.includes('podstawa_dokument (sekcja)'));
+  assert.ok(!wynik.brakujace.includes('zalaczniki (sekcja)'));
+});
