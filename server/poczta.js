@@ -33,9 +33,12 @@ function pobierzTransport() {
 }
 
 /**
+ * @param {{ filename: string, content: Buffer }[]} [zalaczniki] - np. wypelniony
+ *   wzor .docx (blok A4 sesji 8) - klient dostaje gotowy plik do podpisu,
+ *   nie musi go odtwarzac z tresci maila.
  * @returns {Promise<{ wyslano: boolean, powod: string|null }>}
  */
-async function wyslij({ do: adresat, temat, html }) {
+async function wyslij({ do: adresat, temat, html, zalaczniki }) {
   if (!adresat) {
     return { wyslano: false, powod: 'Odbiorca nie ma adresu e-mail w kartotece — wyślij pismo papierowo.' };
   }
@@ -52,6 +55,7 @@ async function wyslij({ do: adresat, temat, html }) {
       to: adresat,
       subject: temat,
       html,
+      attachments: zalaczniki && zalaczniki.length ? zalaczniki : undefined,
     });
     return { wyslano: true, powod: null };
   } catch (e) {

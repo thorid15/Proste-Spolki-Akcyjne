@@ -488,7 +488,6 @@ router.patch(
           sprawa: { ...sprawa, stan: 'odmowa', powod_odmowy: opisKoncowy, powod_odmowy_kod: kod },
           spolka,
           osoby,
-          powodOdmowy: opisKoncowy,
           autor: kto,
         });
       } catch (e) {
@@ -554,16 +553,13 @@ router.post(
     if (!odbiorca) throw bledneZadanie('Wskazana osoba nie figuruje w kartotece.');
 
     const spolka = rejestr.wczytajSpolke(db(), sprawa.spolka_id);
-    const dane = sprawa.dane_wejsciowe_json ? JSON.parse(sprawa.dane_wejsciowe_json) : null;
-    const podsumowanie = dane
-      ? `Zamierzony wpis dotyczy: ${typyZdarzen.typ(sprawa.typ_zdarzenia).opis_zdarzeniem}.`
-      : null;
+    const osoby = rejestr.wczytajOsoby(db(), sprawa.zadajacy_osoba_id ? [sprawa.zadajacy_osoba_id] : []);
 
     const wysylka = await zawiadomienia.powiadomienieUprzednie(db(), {
       sprawa,
       spolka,
+      osoby,
       odbiorca,
-      podsumowanie,
       autor: kto,
     });
 

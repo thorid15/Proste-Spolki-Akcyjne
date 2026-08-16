@@ -774,6 +774,24 @@ const MIGRACJE = [
       ALTER TABLE psa_sprawy ADD COLUMN termin_usuniecia TEXT;
     `,
   },
+  {
+    wersja: 11,
+    nazwa: 'automat pism na wzorach .docx (sesja 8, blok A4): sciezka pliku i skrot wzoru',
+    sql: `
+      -- ── Wydany dokument: gdzie lezy PLIK i z jakiego BRZMIENIA wzoru powstal ──
+      -- Automat wypelnia teraz prawdziwy .docx z wzory/ (blok A1) zamiast
+      -- HTML-a skladanego w locie - plik zapisujemy na dysku obok zalacznikow
+      -- do sprawy (server/trasy/sprawy.js: ten sam KATALOG_DOKUMENTOW), a
+      -- sciezke i skrot tresci wzoru (nie mylic z "szablon_wersja" z migracji
+      -- 8 - tamto liczylo wersje w bazie, tu liczymy hash pliku z dysku)
+      -- zapisujemy tutaj. "tresc_html" zostaje uzywana jak dotad - dla
+      -- listow generowanych na starym mechanizmie (np. wykaz akcjonariuszy,
+      -- blok A5) trzyma HTML, dla nowych trzyma czysty tekst wyciagniety
+      -- z .docx (podglad bez otwierania pliku).
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN sciezka_plik TEXT;
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN szablon_hash TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

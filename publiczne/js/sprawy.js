@@ -588,11 +588,14 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
             <Komunikat
               odmiana="info"
               tytul="Zawiadomienie o wpisie"
-              lista={wynik.powiadomienia.map((p) =>
-                p.blad
-                  ? p.blad
-                  : `${p.odbiorca}: ${p.wyslano ? 'wysłano e-mailem' : `nie wysłano — ${p.powod}`}`
-              )}
+              lista={wynik.powiadomienia.map((p) => {
+                if (p.blad) return p.blad;
+                const stan = p.wyslano ? 'wysłano e-mailem' : `nie wysłano — ${p.powod}`;
+                const braki = p.brakujace && p.brakujace.length
+                  ? ` (do sprawdzenia — puste pola w piśmie: ${p.brakujace.join(', ')})`
+                  : '';
+                return `${p.odbiorca}: ${stan}${braki}`;
+              })}
             />
           )}
           <div className="kreator-stopka">

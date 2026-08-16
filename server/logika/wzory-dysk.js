@@ -91,11 +91,18 @@ function analizuj(kod) {
   };
 }
 
-/** Wypełnia wzór danymi. Zwraca też skrót pliku źródłowego, do śladu wydania. */
+/**
+ * Wypełnia wzór danymi.
+ *
+ * `plik` w zwróconym obiekcie to WYNIKOWY bufor (ten sam klucz, co
+ * w `logika/docx.js`, celowo) — nazwa pliku ŹRÓDŁOWEGO (do etykiet w UI,
+ * nie do zapisu) to `plikZrodlowy`, żeby te dwie zupełnie różne rzeczy
+ * (nazwa tekstowa kontra bajty gotowego dokumentu) nie nosiły tej samej nazwy.
+ */
 function wypelnij(kod, dane) {
-  const { plik, nazwa, bufor, hash } = wczytaj(kod);
+  const { plik: plikZrodlowy, nazwa, bufor, hash } = wczytaj(kod);
   const wynik = docx.wypelnij(bufor, dane);
-  return { kod, plik, nazwa, hash, ...wynik };
+  return { kod, plikZrodlowy, nazwa, hash, ...wynik };
 }
 
 module.exports = { KATALOG_WZOROW, listaWzorow, wczytaj, analizuj, wypelnij };

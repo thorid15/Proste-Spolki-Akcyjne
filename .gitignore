@@ -2,6 +2,7 @@ node_modules/
 dane/*.db
 dane/*.db-wal
 dane/*.db-shm
+dane/.manual-check-dokumenty/
 dokumenty/
 .env
 *.log
