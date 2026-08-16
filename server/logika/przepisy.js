@@ -380,6 +380,22 @@ const OPISY_PRZYCZYN_ODMOWY_WPISU = {
 /** Przy tej przyczynie opis w `powod_odmowy` jest OBOWIĄZKOWY. */
 const PRZYCZYNA_ODMOWY_WYMAGA_OPISU = PRZYCZYNY_ODMOWY_WPISU.INNA;
 
+/**
+ * Organ zarzadzajacy spolki - K.s.h. art. 300(63) i nast. dopuszczaja w P.S.A.
+ * albo klasyczny zarzad, albo (struktura monistyczna) rade dyrektorow. Wzory
+ * pism zwracaja sie do wlasciwego organu wprost z nazwy (blok A3 sesji 8).
+ */
+const ORGANY_SPOLKI = {
+  ZARZAD: 'zarzad',
+  RADA_DYREKTOROW: 'rada_dyrektorow',
+};
+
+/** `spolka_organ` / `spolka_organ_czlonkowie` na potrzeby wzorow pism. */
+const OPISY_ORGANOW = {
+  [ORGANY_SPOLKI.ZARZAD]: { organ: 'Zarząd', czlonkowie: 'członków zarządu' },
+  [ORGANY_SPOLKI.RADA_DYREKTOROW]: { organ: 'Rada Dyrektorów', czlonkowie: 'członków rady dyrektorów' },
+};
+
 /** Kategorie, w ktorych moze znalezc sie kazdy numer akcji (materializacja - podstawa niezmiennika bilansu). */
 const KATEGORIE_AKCJI = {
   /** Wyemitowana, jeszcze nieobjeta przez zadnego akcjonariusza. */
@@ -615,6 +631,8 @@ module.exports = {
   PRZYCZYNY_ODMOWY_WPISU,
   OPISY_PRZYCZYN_ODMOWY_WPISU,
   PRZYCZYNA_ODMOWY_WYMAGA_OPISU,
+  ORGANY_SPOLKI,
+  OPISY_ORGANOW,
   KATEGORIE_AKCJI,
   RODZAJE_AKCJI,
   STANY_POKRYCIA,

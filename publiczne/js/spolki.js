@@ -15,6 +15,7 @@ const PUSTA_SPOLKA = {
   data_utworzenia_spolki: '', data_ostatniego_wpisu_krs: '', adres_edorecze: '',
   kapital_akcyjny_grosze: null,
   status: 'aktywna', opis: '', uwagi: '',
+  organ_rodzaj: '',
   data_uchwaly_wyboru: '', data_umowy: '', data_otwarcia_rejestru: '',
   umowe_zawarl: '', umowe_zawarl_imie_nazwisko: '', dodatkowe_informacje_umowa_spolki: '',
   zakaz_glosu_zastawnika_umowa: '', ograniczenie_dziedziczenia_umowa: '',
@@ -355,6 +356,16 @@ function EkranNowejSpolki() {
               wymagane
             >
               <input type="text" {...pole('forma_prawna')} />
+            </Pole>
+            <Pole
+              etykieta="Organ zarządzający"
+              podpowiedz="P.S.A. może mieć zarząd albo (struktura monistyczna) radę dyrektorów — decyduje umowa spółki. Widoczne na pismach jako adresat po stronie spółki."
+            >
+              <select {...pole('organ_rodzaj')}>
+                <option value="">— nie ustalono —</option>
+                <option value="zarzad">Zarząd</option>
+                <option value="rada_dyrektorow">Rada Dyrektorów</option>
+              </select>
             </Pole>
             <div className="siatka-2">
               <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>

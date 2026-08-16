@@ -748,6 +748,32 @@ const MIGRACJE = [
       ALTER TABLE psa_spolki ADD COLUMN reprezentant_reprezentacja TEXT;
     `,
   },
+  {
+    wersja: 10,
+    nazwa: 'kontekst automatu pism (sesja 8, blok A3): organ spolki, ' +
+      'sposob i termin usuniecia przeszkody',
+    sql: `
+      -- ── Spolka: rodzaj organu zarzadzajacego ─────────────────────────────
+      -- P.S.A. moze miec albo zarzad, albo (struktura monistyczna) rade
+      -- dyrektorow - K.s.h. art. 300(63) i nast. Wzory pism licza sie z tym,
+      -- KTO w imieniu spolki odbiera zawiadomienie o wpisie ("Zarzad spolki"
+      -- kontra "Rada Dyrektorow spolki"), a aplikacja dotad tego nie
+      -- rozrozniala. Dobrowolne na poziomie schematu - bez wskazania wzory
+      -- zostawiaja to pole do uzupelnienia recznie, zamiast zgadywac.
+      ALTER TABLE psa_spolki ADD COLUMN organ_rodzaj TEXT
+        CHECK (organ_rodzaj IS NULL OR organ_rodzaj IN ('zarzad','rada_dyrektorow'));
+
+      -- ── Sprawa: sposob i termin usuniecia przeszkody ─────────────────────
+      -- Dotad przy wstrzymaniu zapisywalismy WYLACZNIE przeszkode (wolny
+      -- tekst w "notatka") - wezwanie do usuniecia (wzor 06) potrzebuje
+      -- dodatkowo, CO konkretnie ma zrobic zadajacy i DO KIEDY. Ustawa nie
+      -- narzuca liczby dni na usuniecie przeszkody (inaczej niz sam wpis -
+      -- art. 300(34) § 1 KSH), wiec to notariusz wskazuje termin wprost,
+      -- zamiast aplikacja miala go zgadywac.
+      ALTER TABLE psa_sprawy ADD COLUMN sposob_usuniecia TEXT;
+      ALTER TABLE psa_sprawy ADD COLUMN termin_usuniecia TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

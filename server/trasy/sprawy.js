@@ -378,7 +378,7 @@ router.patch(
     if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
     const spolka = rejestr.wczytajSpolke(db(), sprawa.spolka_id);
     const dzis = czas.dzisIso();
-    const { akcja, powod, powod_odmowy, powod_odmowy_kod } = zad.body || {};
+    const { akcja, powod, powod_odmowy, powod_odmowy_kod, sposob_usuniecia, termin_usuniecia } = zad.body || {};
 
     if (akcja === 'weryfikuj') {
       if (sprawa.stan !== 'nowa') {
@@ -399,15 +399,23 @@ router.patch(
       if (!powod || !String(powod).trim()) {
         throw bledneZadanie('Wstrzymanie wymaga wskazania przeszkody.');
       }
+      if (termin_usuniecia && !czas.poprawnaData(termin_usuniecia)) {
+        throw bledneZadanie('Termin usunięcia przeszkody musi mieć format RRRR-MM-DD.');
+      }
+      const sposobUsuniecia = sposob_usuniecia ? String(sposob_usuniecia).trim() : null;
+      const terminUsuniecia = termin_usuniecia || null;
       const poprawki = terminy.wstrzymaj(sprawa, dzis);
       db()
         .prepare(
           `UPDATE psa_sprawy SET stan = @stan, wstrzymana_od = @wstrzymana_od, termin_do = NULL,
-                                   notatka = @notatka, zaktualizowano = @teraz WHERE id = @id`
+                                   notatka = @notatka, sposob_usuniecia = @sposob_usuniecia,
+                                   termin_usuniecia = @termin_usuniecia, zaktualizowano = @teraz WHERE id = @id`
         )
         .run({
           ...poprawki,
           notatka: laczNotatke(sprawa.notatka, `Wstrzymano: ${powod}`),
+          sposob_usuniecia: sposobUsuniecia,
+          termin_usuniecia: terminUsuniecia,
           teraz: czas.terazIso(),
           id,
         });
@@ -416,7 +424,7 @@ router.patch(
       let wysylka = null;
       try {
         wysylka = await zawiadomienia.wezwanie(db(), {
-          sprawa: { ...sprawa, ...poprawki },
+          sprawa: { ...sprawa, ...poprawki, sposob_usuniecia: sposobUsuniecia, termin_usuniecia: terminUsuniecia },
           spolka,
           osoby,
           powodWstrzymania: powod,

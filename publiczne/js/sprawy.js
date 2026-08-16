@@ -261,6 +261,52 @@ function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie }) {
   );
 }
 
+/** Wstrzymanie — przeszkoda, sposób jej usunięcia i termin (wzór 06, blok A3 sesji 8). */
+function ModalWstrzymania({ przyZamknieciu, przyZapisie }) {
+  const [powod, ustawPowod] = useState('');
+  const [sposobUsuniecia, ustawSposobUsuniecia] = useState('');
+  const [terminUsuniecia, ustawTerminUsuniecia] = useState('');
+
+  return (
+    <Modal
+      tytul="Wstrzymanie sprawy"
+      przyZamknieciu={przyZamknieciu}
+      stopka={
+        <>
+          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          <button
+            className="btn btn-primary"
+            disabled={!powod.trim()}
+            onClick={() => przyZapisie({
+              powod: powod.trim(),
+              sposob_usuniecia: sposobUsuniecia.trim() || null,
+              termin_usuniecia: terminUsuniecia || null,
+            })}
+          >
+            Potwierdź
+          </button>
+        </>
+      }
+    >
+      <Pole etykieta="Przeszkoda uniemożliwiająca wpis" wymagane>
+        <textarea value={powod} onChange={(z) => ustawPowod(z.target.value)} autoFocus />
+      </Pole>
+      <Pole
+        etykieta="Sposób usunięcia przeszkody (opcjonalnie)"
+        podpowiedz="Co konkretnie ma dostarczyć żądający — trafia wprost do wezwania."
+      >
+        <textarea value={sposobUsuniecia} onChange={(z) => ustawSposobUsuniecia(z.target.value)} />
+      </Pole>
+      <Pole
+        etykieta="Termin usunięcia (opcjonalnie)"
+        podpowiedz="Przepisy nie narzucają liczby dni — termin wskazuje notariusz."
+      >
+        <PoleDaty wartosc={terminUsuniecia} przyZmianie={ustawTerminUsuniecia} />
+      </Pole>
+    </Modal>
+  );
+}
+
 /** Odmowa wpisu — przyczyna z katalogu zamkniętego (blok B5 sesji 8), opis
     obowiązkowy tylko przy „inna”, bo tam sam kod nic nie mówi. */
 function ModalOdmowy({ przyZamknieciu, przyZapisie }) {
@@ -336,11 +382,9 @@ function AkcjeSprawy({ sprawa, odswiez }) {
       <button className="btn btn-sm" onClick={() => ustawModal('anuluj')}>Anuluj sprawę</button>
 
       {modal === 'wstrzymaj' && (
-        <ModalPowod
-          tytul="Wstrzymanie sprawy"
-          etykieta="Przeszkoda uniemożliwiająca wpis"
+        <ModalWstrzymania
           przyZamknieciu={() => ustawModal(null)}
-          przyZapisie={(powod) => wykonaj('wstrzymaj', { powod })}
+          przyZapisie={(dane) => wykonaj('wstrzymaj', dane)}
         />
       )}
       {modal === 'odmow' && (

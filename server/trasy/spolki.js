@@ -33,6 +33,8 @@ const POLA_SPOLKI = [
   'siedziba_miejscownik',
   'reprezentant_biernik', 'reprezentant_plec', 'reprezentant_rodzice', 'reprezentant_dowod',
   'reprezentant_pesel', 'reprezentant_adres', 'reprezentant_funkcja_biernik', 'reprezentant_reprezentacja',
+  // Sesja 8, blok A3 (kontekst automatu pism):
+  'organ_rodzaj',
 ];
 
 /** Pola, ktorych zmiana jest zdarzeniem rejestrowym (art. 300(33) § 1 KSH). */
@@ -94,6 +96,9 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   }
   if (dane.reprezentant_plec && !['kobieta', 'mezczyzna'].includes(dane.reprezentant_plec)) {
     throw bledneZadanie('Płeć reprezentanta musi być „kobieta” albo „mężczyzna”.');
+  }
+  if (dane.organ_rodzaj && !['zarzad', 'rada_dyrektorow'].includes(dane.organ_rodzaj)) {
+    throw bledneZadanie('Rodzaj organu musi być „zarzad” albo „rada_dyrektorow”.');
   }
 }
 
