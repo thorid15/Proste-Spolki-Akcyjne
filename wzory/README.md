@@ -44,6 +44,29 @@ Składnia jest ta sama, co w `PLACEHOLDERY-PSA.md`:
 | `{{#kolekcja}}` … `{{/kolekcja}}` | powtórzenie fragmentu dla każdej pozycji |
 | `{{#warunek}}` … `{{/warunek}}` | to samo — sekcja o zero albo jednym elemencie |
 
+### Co dokładnie się powtarza
+
+Word nie ma pojęcia „blok tekstu", więc o jednostce powtórzenia decyduje to,
+gdzie postawisz znaczniki. Aplikacja rozpoznaje trzy układy — wszystkie trzy są
+używane w obecnych wzorach:
+
+| Gdzie stoją znaczniki | Co się powtarza |
+|---|---|
+| w **jednym akapicie** — `{{#adresat_spolka}}zarząd spółki{{/adresat_spolka}}` | sam tekst pomiędzy; akapit zostaje |
+| w **jednym wierszu tabeli**, w różnych komórkach | cały wiersz `<w:tr>` |
+| w **osobnych akapitach**, każdy sam w swojej linii | akapity POMIĘDZY; oba akapity ze znacznikami znikają |
+
+Stąd dwie praktyczne zasady:
+
+- W tabeli wstaw `{{#pozycje}}` na początku **pierwszej** komórki wiersza,
+  a `{{/pozycje}}` na końcu **ostatniej**. Gdy oba znajdą się w tej samej
+  komórce, powtórzy się tylko tekst, a nie wiersz.
+- W tabeli jednokolumnowej rozdziel znaczniki na dwa akapity wewnątrz komórki —
+  wtedy powtarza się wiersz.
+- Akapit ze znacznikiem `{{#…}}` albo `{{/…}}` ma zawierać **wyłącznie** ten
+  znacznik. Treść dopisana obok zniknie razem z nim; aplikacja o tym uprzedza
+  w podglądzie.
+
 **Placeholder musi być w jednym kawałku.** Word potrafi rozbić tekst na kilka
 fragmentów, gdy w środku wyrazu zmienia się formatowanie albo gdy działał
 autokorektor — wtedy `{{spolka_firma}}` staje się `{{spolka_` + `firma}}`
@@ -55,6 +78,10 @@ i podstawienie nie zadziała. Dlatego:
 
 Aplikacja **wykrywa rozbite placeholdery** przy wgraniu i mówi, który wzór
 i który klucz wymagają poprawki — nie wypuści pisma z niepodstawionym polem.
+Przy samym wypełnianiu scala je na tyle, żeby pismo dało się wydać, ale
+sygnalizuje to jako ostrzeżenie: wzór lepiej poprawić u źródła.
+
+*Stan na dziś: żaden z dziesięciu wzorów w tym katalogu nie ma rozbitego pola.*
 
 ---
 

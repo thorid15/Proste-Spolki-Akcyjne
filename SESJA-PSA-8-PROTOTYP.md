@@ -139,7 +139,7 @@ każdą taką zmianę odnotowujemy przy wzorze, którego dotyczy.
 
 | # | Zadanie | Zależy od |
 |---|---|---|
-| A0 | Warstwa `.docx`: odczyt i zapis ZIP na `zlib`, podstawianie w `word/document.xml`, **wykrywanie placeholderów rozbitych między fragmenty tekstu** | — (feasibility potwierdzona) |
+| A0 | ✅ **ZROBIONE** — warstwa `.docx`: odczyt i zapis ZIP na `zlib`, podstawianie w `word/document.xml`, trzy tryby sekcji, scalanie rozbitych pól | — |
 | A1 | Wgranie dziesięciu wzorów z `wzory/`; wycofanie brudnopisów z sesji 6 | pliki od Łukasza |
 | A2 | Słownik kluczy wg `PLACEHOLDERY-PSA.md`: `kancelaria_*` atomowo, formy przypadków, formy pochodne z `plec`, mapa migracji ze starych kluczy | A1 |
 | A3 | Kontekst pisma per typ: żądający, adresat, `wpis_opis`, `dokument_rodzaj`/`data`, `sprawa_numer`, sekcje `adresat_*` i `wpis_konstytutywny`/`deklaratoryjny` | A2, B1–B3 |
@@ -216,8 +216,34 @@ Blok D („tanie teraz, drogie potem") — decyzja osobna, do wplecenia w dowoln
 momencie; niekonieczny do testu wewnętrznego, konieczny przed pierwszym
 klientem z zewnątrz.
 
-A0 można zacząć od razu — nie czeka na pliki wzorów. A1 czeka.
+A0 zrobione. Pliki wzorów są w repozytorium, więc A1 też jest odblokowane.
 ```
+
+### 9.1. Wynik A0 — sprawdzone na prawdziwych wzorach
+
+Warstwa `.docx` (`server/logika/zip.js` + `server/logika/docx.js`, 44 testy)
+została puszczona na dziesięciu wzorach z katalogu `wzory/` i na komplecie
+danych testowych z `wzory/_generatory/dane_testowe.py`:
+
+- dziesięć na dziesięć wypełnia się **bez jednego brakującego klucza i bez
+  błędu**; wynik jest poprawnym archiwum ZIP z poprawnym XML-em,
+- części inne niż `word/document.xml` (style, czcionki, nagłówki) przechodzą
+  **bajt w bajt** — nie ma jak zepsuć formatowania pisma,
+- treść dziewięciu pism jest **znak w znak taka sama**, jak w folderze
+  `Przyklad wypelniony`;
+- rozbieżność w piśmie 07 wskazuje **błąd generatora pythonowego**, nie
+  renderera: python gubi trzywierszowy blok adresata (`{{#adresat_zadajacy}}`
+  i `{{#adresat_spolka}}` stoją tam wewnątrz akapitów, a python obsługuje
+  sekcje tylko na poziomie całych akapitów). Node renderuje ten blok poprawnie.
+  Plik `Przyklad wypelniony/07-…-TEST.docx` jest więc do przegenerowania.
+
+### 9.2. Generatory pythonowe — do czego są, a do czego nie
+
+Do zachowania: `slownik.py` jest źródłem prawdy dla nazw kluczy (zadanie A2),
+a `gen_01…gen_10` pozostają narzędziem do przegenerowania wzorów, gdy zmieni
+się ich treść. Poza obiegiem: `wypelnij.py` — renderer produkcyjny jest po
+stronie aplikacji i jest od niego dokładniejszy (patrz § 9.1). Aplikacja
+**nie uruchamia pythona** i nie ma zależności od `python-docx`.
 
 Po bloku A prototyp spełnia kryterium z § 1 i nadaje się do testu na własnych
 rejestrach. Blok C domyka obsługę AML, blok D przygotowuje grunt pod wdrożenie.
