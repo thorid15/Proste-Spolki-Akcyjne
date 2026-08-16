@@ -87,58 +87,51 @@ osobną pozycją — blok A2.
 
 ---
 
-## 3. Decyzje do podjęcia PRZED startem
+## 3. Decyzje — PODJĘTE
 
-### D1. Format wzorów — najważniejsza, przesądza o całym bloku A
+> Rozstrzygnięte 10.08.2026. Sekcja zachowana wraz z uzasadnieniem, żeby nie
+> wracać do tych pytań. Wykonawca implementuje, nie kwestionuje.
 
-`PLACEHOLDERY-PSA.md` § 11 mówi, że wzory `.docx` są **produktem generatorów
-Pythona**, nie plikami edytowanymi ręcznie. Źródło prawdy leży więc poza tą
-aplikacją. Trzeba ustalić postać przekazania:
+| # | Decyzja | Rozstrzygnięcie |
+|---|---|---|
+| D1 | Format wzorów | **Aplikacja wypełnia `.docx`**, klient dostaje gotowy plik do podpisu. Pliki źródłowe w `wzory/`. **Bez nowej zależności** — patrz niżej |
+| D2 | Zakres onboardingu | **Pełny onboarding odłożony.** Do prototypu wystarcza istniejący kreator rejestracji spółki |
+| D3 | Automat pism na szablonach | **Tak** — wszystkie cztery pisma z § 2.1 idą przez wzory |
+| D4a | Termin przeglądu AML | **12 miesięcy** |
+| D4b | Odmowa zawarcia umowy | **Tylko notariusz** — czynność notarialna z obowiązkiem zawiadomienia (art. 108a § 2 Pr. not.) |
+| — | OWU | **Zamknięte**: wcielone do umowy (wzór 01), zmiana aneksem. Nie wracać |
+| — | Nazwy placeholderów | Wykonawca ma swobodę ujednolicenia — patrz § 3.2 |
 
-| Wariant | Jak działa | Koszt | Cena |
-|---|---|---|---|
-| **A. Konwersja do HTML** | wzory `.docx` przerabiane raz na szablony w aplikacji; dalsza redakcja w aplikacji | mały | rozjazd z generatorami Pythona; dwa źródła prawdy |
-| **B. Aplikacja wypełnia `.docx`** | aplikacja czyta wzór `.docx`, podstawia, zwraca `.docx` | średni/duży | wymaga obsługi ZIP — **jedna zależność** albo własna implementacja |
-| **C. Eksport pośredni** | generatory Pythona produkują `.docx` **i** szablon dla aplikacji | średni | jedno źródło prawdy, ale build poza aplikacją |
+### 3.1. Zależność okazała się niepotrzebna
 
-**Rekomendacja: B, za cenę jednej zależności.** Wariant B jest jedyny, w którym
-Łukasz pracuje na dokumencie, który zna, a klient dostaje plik `.docx` gotowy do
-podpisu. Master zabrania zależności — więc to świadome odstępstwo do akceptacji,
-nie decyzja wykonawcza. Własna implementacja ZIP jest technicznie możliwa
-(`zlib` jest wbudowany), ale plik, którego Word nie otworzy, to gorszy problem
-niż jedna biblioteka.
+Rekomendowałem wariant `.docx` „za cenę jednej zależności". **Sprawdziłem —
+zależność nie jest potrzebna.** Wbudowany w Node `zlib` wystarcza: odczyt
+archiwum ZIP, rozpakowanie `word/document.xml`, podstawienie i przepisanie
+pliku przechodzą round-trip, a wynik otwiera się jako poprawny `.docx`
+(test integralności archiwum bez zastrzeżeń, zero pozostałych `{{`).
 
-**Bez tej decyzji blok A nie rusza.**
+Zakaz zależności z master pozostaje więc nienaruszony. Do udokumentowania
+w kodzie: obsługujemy metody składowania 0 (bez kompresji) i 8 (deflate),
+bez ZIP64 — to pokrywa pliki produkowane przez Worda i przez generatory.
 
-### D2. Zakres onboardingu
+### 3.2. Słownik kluczy — kierunek ujednolicenia
 
-`SESJA-PSA-7` opisuje pełny przepływ: formularz publiczny bez konta, tokeny,
-paczka dokumentów, dwie rundy podpisów, otwarcie rejestru — osiem faz.
+Notariusz przekazał swobodę w nazewnictwie. Przyjmuję kierunek **najtańszy
+i najmniej ryzykowny**: bazą zostaje słownik z `PLACEHOLDERY-PSA.md`, bo
+przekazywane wzory `.docx` już go używają, a jego konwencja (polski
+`snake_case`) jest spójna z resztą aplikacji (`spolka_id`, `data_zdarzenia`,
+`zadajacy_rola`).
 
-**Do testów wewnętrznych na dwóch własnych rejestrach nie jest potrzebny.**
-Istniejący kreator rejestracji spółki (sesja 6, faza 3) plus wygenerowanie umowy
-i uchwały wystarczają, żeby przejść ścieżkę od zera do otwartego rejestru.
+Ujednolicenie polega więc na **dociągnięciu aplikacji do wzorów**, nie odwrotnie:
 
-Pełny onboarding to praca pod **klientów zewnętrznych**, czyli już wdrożenie.
+- klucze mojego silnika z sesji 6 (`spolka_nazwa`, `kancelaria_nazwa`) —
+  **wycofane** na rzecz `spolka_firma`, `kancelaria_*` atomowych;
+- uzupełnienie brakujących: formy przypadków, formy pochodne z płci;
+- mapa migracji z `PLACEHOLDERY-PSA.md` § 10 wchodzi do kodu jako słownik
+  ostrzeżeń — stary klucz we wzorze daje czytelny komunikat, nie ciche pominięcie.
 
-**Rekomendacja: minimum teraz, pełna SESJA-7 po decyzji o wdrożeniu.**
-
-### D3. Czy automat przechodzi na szablony
-
-Automat z § 2.1 działa na treści zaszytej w kodzie. Przełączenie daje jedno
-miejsce redakcji, ale rusza żywy workflow spraw.
-
-**Rekomendacja: tak, po D1** — inaczej Łukasz redaguje wzory, a klient i tak
-dostaje treść wykonawcy.
-
-### D4. Drobne z `SESJA-PSA-7` § 8
-
-- termin przeglądu AML: **12 czy 24 miesiące** (wartość do konfiguracji),
-- odmowa zawarcia umowy: **tylko notariusz czy także pracownik** (sugestia pliku: notariusz).
-
-Rozstrzygnięte już gdzie indziej — **nie wracać**: OWU nie istnieją jako osobny
-dokument, ich treść jest w umowie (wzór 01), zmiana aneksem. To zamyka pytanie
-`SESJA-PSA-7` § 8 pkt 1 i `WDROZENIE` § 8.
+Zmiana nazwy klucza po stronie aplikacji **wymusza regenerację wzoru**, więc
+każdą taką zmianę odnotowujemy przy wzorze, którego dotyczy.
 
 ---
 
@@ -146,7 +139,8 @@ dokument, ich treść jest w umowie (wzór 01), zmiana aneksem. To zamyka pytani
 
 | # | Zadanie | Zależy od |
 |---|---|---|
-| A1 | Wgranie dziesięciu wzorów kancelarii; wycofanie brudnopisów | pliki od Łukasza + D1 |
+| A0 | Warstwa `.docx`: odczyt i zapis ZIP na `zlib`, podstawianie w `word/document.xml`, **wykrywanie placeholderów rozbitych między fragmenty tekstu** | — (feasibility potwierdzona) |
+| A1 | Wgranie dziesięciu wzorów z `wzory/`; wycofanie brudnopisów z sesji 6 | pliki od Łukasza |
 | A2 | Słownik kluczy wg `PLACEHOLDERY-PSA.md`: `kancelaria_*` atomowo, formy przypadków, formy pochodne z `plec`, mapa migracji ze starych kluczy | A1 |
 | A3 | Kontekst pisma per typ: żądający, adresat, `wpis_opis`, `dokument_rodzaj`/`data`, `sprawa_numer`, sekcje `adresat_*` i `wpis_konstytutywny`/`deklaratoryjny` | A2, B1–B3 |
 | A4 | Przełączenie automatu (`poWpisie`, `powiadomienieUprzednie`, `wezwanie`, `poOdmowie`) na szablony | A3, D3 |
@@ -214,11 +208,15 @@ Przy pierwszym kliencie z zewnątrz — wszystkie cztery.
 ## 9. Kolejność
 
 ```
-D1 (decyzja o formacie wzorów)  ──►  B1–B6 (dane)  ──►  A1–A7 (pisma)  ──►  test
-                                          │
-                                          └──►  C1–C4 (AML, równolegle)
+A0 (warstwa .docx)  ──►  B1–B6 (dane)  ──►  A1–A7 (pisma)  ──►  test na 2 rejestrach
+                              │
+                              └──►  C1–C4 (AML, równolegle)
 
-D (blok „tanie teraz") — decyzja osobna, można wpleść w dowolnym momencie
+Blok D („tanie teraz, drogie potem") — decyzja osobna, do wplecenia w dowolnym
+momencie; niekonieczny do testu wewnętrznego, konieczny przed pierwszym
+klientem z zewnątrz.
+
+A0 można zacząć od razu — nie czeka na pliki wzorów. A1 czeka.
 ```
 
 Po bloku A prototyp spełnia kryterium z § 1 i nadaje się do testu na własnych
