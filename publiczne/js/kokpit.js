@@ -596,6 +596,7 @@ function MetrykaBoczna({ spolka, dane, spolkaId }) {
   const najpilniejsza = sprawyWToku
     .filter((s) => s.termin && s.termin.dni_pozostale != null)
     .sort((a, b) => a.termin.dni_pozostale - b.termin.dni_pozostale)[0];
+  const [wystawianie, ustawWystawianie] = useState(false);
 
   return (
     <aside className="siatka-tresc-prawa bez-druku">
@@ -664,6 +665,18 @@ function MetrykaBoczna({ spolka, dane, spolkaId }) {
           </div>
         )}
       </Karta>
+
+      <Karta tytul="Dokumenty">
+        <div className="metryka-pion">
+          <div className="male wyciszony">Umowa, RODO, uchwała, lista dla sądu, klauzula zbycia.</div>
+          <button className="btn btn-maly" onClick={() => ustawWystawianie(true)}>
+            Wystaw dokument
+          </button>
+        </div>
+      </Karta>
+      {wystawianie && (
+        <ModalWystawDokumentu spolkaId={spolkaId} przyZamknieciu={() => ustawWystawianie(false)} />
+      )}
     </aside>
   );
 }

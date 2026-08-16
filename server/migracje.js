@@ -792,6 +792,66 @@ const MIGRACJE = [
       ALTER TABLE psa_wydane_dokumenty ADD COLUMN szablon_hash TEXT;
     `,
   },
+  {
+    wersja: 12,
+    nazwa: 'wystawianie na zadanie (sesja 8, blok A5): status VAT spolki dla wzoru umowy',
+    sql: `
+      -- ── Spolka: czy jest platnikiem VAT ──────────────────────────────────
+      -- Wzor 01 (umowa o prowadzenie rejestru) ma warunkowe oswiadczenie
+      -- o statusie VAT ({{#spolka_vat}}) - bez tego pola sekcja zawsze
+      -- wychodzi pusta, nawet gdy spolka jest platnikiem. Trojstanowe:
+      -- NULL = nieustalone (sekcja pusta, tak jak dzis), 0/1 = ustalone wprost.
+      ALTER TABLE psa_spolki ADD COLUMN platnik_vat INTEGER
+        CHECK (platnik_vat IS NULL OR platnik_vat IN (0,1));
+    `,
+  },
+  {
+    wersja: 13,
+    nazwa: 'wystawianie na zadanie (sesja 8, blok A5): typy dla wzorow ' +
+      'jednorazowych (umowa, RODO, uchwala, klauzula zbycia)',
+    sql: `
+      -- ── Rozszerzenie katalogu wydanych dokumentow ────────────────────────
+      -- SQLite nie pozwala zmienic CHECK-a przez ALTER TABLE - przepisujemy
+      -- tabele jak w migracji 4 i 7. "Lista akcjonariuszy do sadu" (wzor 08)
+      -- NIE dostaje nowego typu - to ten sam dokument prawny (art. 476 § 1(1)
+      -- KSH), co juz istniejacy 'wykaz_akcjonariuszy', tylko wystawiony na
+      -- zadanie zamiast automatem po wpisie. Cztery pozostale wzory
+      -- jednorazowe nie maja dzis odpowiednika w katalogu.
+      CREATE TABLE psa_wydane_dokumenty_v13 (
+        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+        sprawa_id          INTEGER REFERENCES psa_sprawy(id),
+        spolka_id          INTEGER NOT NULL REFERENCES psa_spolki(id),
+        typ                TEXT NOT NULL
+                             CHECK (typ IN
+                               ('zawiadomienie_wpis','zawiadomienie_odmowa','informacja_z_rejestru',
+                                'wezwanie','raport','powiadomienie',
+                                'wykaz_akcjonariuszy','zawiadomienie_sad_rozwiazanie',
+                                'umowa_rejestru','informacja_rodo','uchwala_wyboru','klauzula_zbycia')),
+        odbiorca_osoba_id  INTEGER REFERENCES psa_osoby(id),
+        kanal              TEXT NOT NULL CHECK (kanal IN ('email','portal','papier')),
+        sciezka_pdf        TEXT,
+        tresc_html         TEXT,
+        sciezka_plik       TEXT,
+        szablon_kod        TEXT,
+        szablon_wersja     INTEGER,
+        szablon_hash       TEXT,
+        wyslano            TEXT,
+        autor              TEXT NOT NULL,
+        utworzono          TEXT NOT NULL
+      );
+      INSERT INTO psa_wydane_dokumenty_v13
+        SELECT id, sprawa_id, spolka_id, typ, odbiorca_osoba_id, kanal, sciezka_pdf, tresc_html,
+               sciezka_plik, szablon_kod, szablon_wersja, szablon_hash, wyslano, autor, utworzono
+          FROM psa_wydane_dokumenty;
+      DROP TABLE psa_wydane_dokumenty;
+      ALTER TABLE psa_wydane_dokumenty_v13 RENAME TO psa_wydane_dokumenty;
+
+      CREATE INDEX IF NOT EXISTS psa_ix_wydane_sprawa
+        ON psa_wydane_dokumenty (sprawa_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_wydane_spolka
+        ON psa_wydane_dokumenty (spolka_id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

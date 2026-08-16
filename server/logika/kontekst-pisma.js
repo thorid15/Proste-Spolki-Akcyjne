@@ -1,17 +1,19 @@
 'use strict';
 
 /**
- * Kontekst danych dla automatu pism — cztery wzory, które wysyła się same
- * przy przejściach stanu sprawy (blok A3 sesji 8):
+ * Kontekst danych dla wszystkich dziesięciu wzorów pism.
  *
+ * Cztery idą automatem, przy przejściach stanu sprawy (blok A3 sesji 8):
  *   05 — powiadomienie o zamierzonym wpisie (art. 300(34) § 3 KSH)
  *   06 — wezwanie do usunięcia przeszkody
  *   07 — zawiadomienie o dokonaniu wpisu (art. 300(34) § 7 zd. 1 KSH)
  *   09 — zawiadomienie o niedokonaniu wpisu (art. 300(34) § 7 zd. 2 KSH)
  *
- * Wzory 01/02/03/08/10 (umowa, RODO, uchwała, lista dla sądu, klauzula
- * zbycia) są jednorazowe albo wystawiane na żądanie, nie automatem — ich
- * kontekst buduje się przy wystawianiu (blok A5), nie tutaj.
+ * Pięć wystawia się NA ŻĄDANIE, ze spółki, bez powiązania z konkretną sprawą
+ * (blok A5 sesji 8):
+ *   01 — umowa o prowadzenie rejestru       02 — załącznik: informacja RODO
+ *   03 — uchwała o wyborze notariusza       08 — lista akcjonariuszy do sądu
+ *   10 — klauzula do umowy zbycia akcji
  *
  * Klucz, którego tu NIE MA (np. `dokument_rodzaj` przy sprawie bez
  * wskazanego dokumentu), po prostu nie trafia do zwracanego obiektu —
@@ -22,6 +24,7 @@
 const przepisy = require('./przepisy');
 const konfiguracja = require('../konfiguracja');
 const widoki = require('../widoki');
+const formyOsobowe = require('./formy-osobowe');
 
 // ─────────────────────────────────────────────────────────────
 // Formatowanie wspólne
@@ -111,6 +114,28 @@ function spolkaKlucze(spolka) {
     spolka_email: spolka.email || null,
     spolka_organ: organ ? organ.organ : null,
     spolka_organ_czlonkowie: organ ? organ.czlonkowie : null,
+  };
+}
+
+/**
+ * `reprezentant_*` — osoba podpisująca w imieniu SPÓŁKI umowę o prowadzenie
+ * rejestru (wzór 01 § 5, blok B6). Formy pochodne z `reprezentant_plec`
+ * (`formy-osobowe.js`) — brak płci zostawia je puste, nie zgadnięte.
+ */
+function reprezentantKlucze(spolka) {
+  const formy = formyOsobowe.formyReprezentanta(spolka.reprezentant_plec) || {};
+  return {
+    reprezentant_biernik: spolka.reprezentant_biernik || null,
+    reprezentant_rodzice: spolka.reprezentant_rodzice || null,
+    reprezentant_dowod: spolka.reprezentant_dowod || null,
+    reprezentant_pesel: spolka.reprezentant_pesel || null,
+    reprezentant_adres: spolka.reprezentant_adres || null,
+    reprezentant_funkcja_biernik: spolka.reprezentant_funkcja_biernik || null,
+    reprezentant_reprezentacja: spolka.reprezentant_reprezentacja || null,
+    reprezentant_syn_corka: formy.reprezentant_syn_corka || null,
+    reprezentant_legitymujacy: formy.reprezentant_legitymujacy || null,
+    reprezentant_zamieszkaly: formy.reprezentant_zamieszkaly || null,
+    reprezentant_dzialajacy: formy.reprezentant_dzialajacy || null,
   };
 }
 
@@ -253,6 +278,131 @@ function powiadomienieUprzednie({ spolka, sprawa, zadajacy, odbiorca, osoby, ter
   };
 }
 
+// ─────────────────────────────────────────────────────────────
+// Kontekst per wzór — wystawiane na żądanie (blok A5)
+// ─────────────────────────────────────────────────────────────
+
+/** `akcjonariusz_*` — sekcja `{{#akcjonariusze}}`, wspólna dla wzorów 03 i 08. */
+function akcjonariuszeKlucze(akcjonariusze) {
+  return (akcjonariusze || []).map((a, i) => ({
+    akcjonariusz_lp: String(i + 1),
+    akcjonariusz_nazwa: mianownik(a.osoba),
+    akcjonariusz_seria: a.seria,
+    akcjonariusz_liczba_akcji: String(a.ilosc),
+    // Aplikacja nie prowadzi odrebnej wagi glosu na akcje (kazda niesie
+    // jeden glos, chyba ze umowa spolki stanowi inaczej - art. 300(23) § 1
+    // KSH - a to nie jest dzis modelowane) - liczba glosow rowna liczbie akcji.
+    akcjonariusz_liczba_glosow: String(a.ilosc),
+    akcjonariusz_obciazenia: opiszObciazenia(a.obciazenia),
+  }));
+}
+
+/** `czlonek_*` — sekcja `{{#czlonkowie_organu}}` (wzór 08), z importu KRS (`psa_spolki.sklad_organu_json`). */
+function czlonkowieOrganuKlucze(skladOrganu) {
+  return (skladOrganu || []).map((o) => ({
+    czlonek_mianownik: [o.imiona, o.nazwisko].filter(Boolean).join(' ') || null,
+    czlonek_funkcja: o.funkcja || null,
+  }));
+}
+
+/**
+ * Wzór 01 — umowa o prowadzenie rejestru. Jednorazowy dokument sporządzany
+ * przy rejestracji spółki — dane reprezentanta (blok B6) i status VAT
+ * (blok A5) notariusz uzupełnia raz, w kartotece spółki.
+ *
+ * `taksa_*` z konfiguracji stawek (`przepisy.STAWKI_GROSZE`) — te same liczby,
+ * co przy naliczaniu opłat (`server/oplaty.js`), więc umowa i rachunek nigdy
+ * nie rozjadą się kwotowo. Forma słowna (`taksa_roczna_slownie` itd.) NIE
+ * jest tu wyliczana wprost — renderer sam ją wyprowadzi z wartości liczbowej
+ * (`logika/docx.js`, mechanizm `{{klucz_slownie}}`).
+ */
+function umowaOProwadzenieRejestru({ spolka, dzis }) {
+  return {
+    ...kancelariaKlucze(),
+    ...spolkaKlucze(spolka),
+    ...reprezentantKlucze(spolka),
+    umowa_data: dataPl(spolka.data_umowy || dzis),
+    taksa_roczna: String(przepisy.STAWKI_GROSZE.PROWADZENIE_ROCZNIE / 100),
+    taksa_wpis: String(przepisy.STAWKI_GROSZE.WPIS / 100),
+    taksa_informacja: String(przepisy.STAWKI_GROSZE.INFORMACJA / 100),
+    // Trojstanowe (blok A5): nieustalone (null) zostaje kluczem NIEOBECNYM,
+    // wiec sekcja trafia na liste brakow zamiast cicho wyjsc pusta.
+    ...(spolka.platnik_vat == null ? {} : { spolka_vat: spolka.platnik_vat ? [{}] : [] }),
+  };
+}
+
+/** Wzór 02 — załącznik: informacja RODO. Podpisuje ten sam reprezentant, co umowę. */
+function informacjaRodo({ spolka }) {
+  const formy = formyOsobowe.formaZapoznania(spolka.reprezentant_plec) || {};
+  return {
+    ...kancelariaKlucze(),
+    zapoznany: formy.zapoznany || null,
+  };
+}
+
+/**
+ * Wzór 03 — uchwała o wyborze notariusza. Dokumentuje głosowanie, które
+ * zaszło POZA aplikacją (walne zgromadzenie/pisemne głosowanie akcjonariuszy)
+ * — liczby głosów, numer i tryb głosowania nie mają dziś żadnego miejsca
+ * w schemacie (to nie jest zdarzenie rejestrowe), więc wpisuje je notariusz
+ * wprost przy wystawianiu tego jednorazowego dokumentu.
+ */
+function uchwalaWyboru({ spolka, akcjonariusze, uchwala, dzis }) {
+  const u = uchwala || {};
+  return {
+    ...kancelariaKlucze(),
+    ...spolkaKlucze(spolka),
+    akcjonariusze: akcjonariuszeKlucze(akcjonariusze),
+    uchwala_numer: u.numer || null,
+    uchwala_data_slownie: u.dataSlownie || null,
+    uchwala_tryb_glosowania: u.trybGlosowania || null,
+    uchwala_glosy_za: u.glosyZa != null ? String(u.glosyZa) : null,
+    uchwala_glosy_przeciw: u.glosyPrzeciw != null ? String(u.glosyPrzeciw) : null,
+    uchwala_glosy_wstrzymujace: u.glosyWstrzymujace != null ? String(u.glosyWstrzymujace) : null,
+    uchwala_procent_glosow: u.procentGlosow || null,
+  };
+}
+
+/**
+ * Wzór 08 — lista akcjonariuszy do sądu (art. 476 § 1(1) KSH, nowelizacja).
+ * Dwa wyzwalacze: wykreślenie spółki z rejestru przedsiębiorców ORAZ
+ * odpowiedź na zapytanie sądu (art. 25da ustawy o KRS). `czlonkowieOrganu`
+ * z `psa_spolki.sklad_organu_json` (import z KRS) — podpisują listę.
+ */
+function listaAkcjonariuszyDoSadu({ spolka, akcjonariusze, razemAkcji, czlonkowieOrganu, adresatNazwa, adresatAdres, dzis }) {
+  return {
+    ...kancelariaKlucze(),
+    ...spolkaKlucze(spolka),
+    adresat_nazwa: adresatNazwa || sadRejestrowyPelny(spolka),
+    adresat_adres: adresatAdres || null,
+    pismo_data: dataPl(dzis),
+    lista_stan_na_dzien: dataPl(dzis),
+    lista_akcje_razem: razemAkcji != null ? String(razemAkcji) : null,
+    akcjonariusze: akcjonariuszeKlucze(akcjonariusze),
+    czlonkowie_organu: czlonkowieOrganuKlucze(czlonkowieOrganu),
+  };
+}
+
+/**
+ * Wzór 10 — klauzula do umowy zbycia akcji. Dołącza się do umowy zbywcy
+ * i nabywcy poza aplikacją — treść klauzuli (`paragraf`/`pokrycie`/
+ * `ograniczenia`) notariusz wpisuje przy wystawianiu, bo dotyczy KONKRETNEJ
+ * transakcji, nie stanu rejestru.
+ */
+function klauzulaZbycia({ spolka, klauzula, zbywca, nabywca }) {
+  const k = klauzula || {};
+  return {
+    spolka_firma: spolka.nazwa || null,
+    spolka_krs: spolka.krs || null,
+    spolka_siedziba_miejscownik: spolka.siedziba_miejscownik || null,
+    klauzula_paragraf: k.paragraf || null,
+    klauzula_pokrycie: k.pokrycie || null,
+    klauzula_ograniczenia: k.ograniczenia || null,
+    zbywca_email: zbywca ? zbywca.email : null,
+    nabywca_email: nabywca ? nabywca.email : null,
+  };
+}
+
 module.exports = {
   dataPl,
   godzina,
@@ -261,10 +411,18 @@ module.exports = {
   sadRejestrowyPelny,
   kancelariaKlucze,
   spolkaKlucze,
+  reprezentantKlucze,
   pismoKlucze,
   pozycjeKlucze,
+  akcjonariuszeKlucze,
+  czlonkowieOrganuKlucze,
   zawiadomienieWpisu,
   zawiadomienieNiedokonania,
   wezwanieDoUzupelnienia,
   powiadomienieUprzednie,
+  umowaOProwadzenieRejestru,
+  informacjaRodo,
+  uchwalaWyboru,
+  listaAkcjonariuszyDoSadu,
+  klauzulaZbycia,
 };

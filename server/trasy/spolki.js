@@ -4,6 +4,9 @@
  * Trasy `/api/psa/spolki/...` - kancelaria.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
 const express = require('express');
 
 const { db } = require('../baza');
@@ -11,6 +14,10 @@ const rejestr = require('../rejestr');
 const widoki = require('../widoki');
 const przepisy = require('../logika/przepisy');
 const typyZdarzen = require('../logika/typy-zdarzen');
+const wzoryDysk = require('../logika/wzory-dysk');
+const docx = require('../logika/docx');
+const kontekstPisma = require('../logika/kontekst-pisma');
+const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 const { pobierzZKrs } = require('./krs');
@@ -35,6 +42,8 @@ const POLA_SPOLKI = [
   'reprezentant_pesel', 'reprezentant_adres', 'reprezentant_funkcja_biernik', 'reprezentant_reprezentacja',
   // Sesja 8, blok A3 (kontekst automatu pism):
   'organ_rodzaj',
+  // Sesja 8, blok A5 (wystawianie na zadanie - wzor 01, sekcja spolka_vat):
+  'platnik_vat',
 ];
 
 /** Pola, ktorych zmiana jest zdarzeniem rejestrowym (art. 300(33) § 1 KSH). */
@@ -54,6 +63,14 @@ function wyczysc(cialo) {
   for (const pole of POLA_SPOLKI) {
     if (cialo[pole] === undefined) continue;
     const v = cialo[pole];
+    if (pole === 'platnik_vat') {
+      // Trojstanowe: nieustalone (null) rozni sie od "nie jest platnikiem"
+      // (0) - pierwsze zostawia sekcje wzoru pusta do uzupelnienia, drugie
+      // tez jest pusta, ale to swiadoma odpowiedz, nie brak danych.
+      // Porownanie z '0'/0 wprost - String(v).trim() na "0" dalby prawde.
+      wynik[pole] = v === '' || v === null ? null : (v === '0' || v === 0 ? 0 : 1);
+      continue;
+    }
     wynik[pole] = v === '' || v === null ? null : String(v).trim();
   }
   return wynik;
@@ -562,5 +579,184 @@ function tabelaAkcjonariatu(stan, data, osoby, baza, spolkaId) {
     })),
   };
 }
+
+// ─────────────────────────────────────────────────────────────
+// Dokumenty wystawiane na żądanie (blok A5 sesji 8)
+//
+// Pięć wzorów jednorazowych/na żądanie — nie idą automatem, tylko na
+// przycisk z kokpitu spółki. "08" dzieli typ z automatowym
+// 'wykaz_akcjonariuszy' (zawiadomienia.js) - to ten sam dokument prawny
+// (art. 476 § 1(1) KSH), tylko wystawiony na żądanie zamiast po wpisie.
+// ─────────────────────────────────────────────────────────────
+
+const WZORY_NA_ZADANIE = {
+  '01': { nazwa: 'Umowa o prowadzenie rejestru', typ: 'umowa_rejestru' },
+  '02': { nazwa: 'Załącznik: informacja RODO', typ: 'informacja_rodo' },
+  '03': { nazwa: 'Uchwała o wyborze notariusza', typ: 'uchwala_wyboru' },
+  '08': { nazwa: 'Lista akcjonariuszy do sądu', typ: 'wykaz_akcjonariuszy' },
+  '10': { nazwa: 'Klauzula do umowy zbycia akcji', typ: 'klauzula_zbycia' },
+};
+
+function stanAkcjonariatuNaDzis(spolkaId, dzis) {
+  const widok = widoki.widokStanu(db(), spolkaId, dzis, { rola: przepisy.ROLE_ODBIORCY.KANCELARIA });
+  return widok || { akcjonariusze: [], razem_akcji: 0 };
+}
+
+/** Buduje kontekst danych dla jednego z pięciu wzorów wystawianych na żądanie. */
+function budujKontekstNaZadanie(kod, spolka, cialo) {
+  const dzis = czas.dzisIso();
+  switch (kod) {
+    case '01':
+      return kontekstPisma.umowaOProwadzenieRejestru({ spolka, dzis });
+    case '02':
+      return kontekstPisma.informacjaRodo({ spolka });
+    case '03': {
+      const stan = stanAkcjonariatuNaDzis(spolka.id, dzis);
+      return kontekstPisma.uchwalaWyboru({ spolka, akcjonariusze: stan.akcjonariusze, uchwala: cialo.uchwala || {}, dzis });
+    }
+    case '08': {
+      const stan = stanAkcjonariatuNaDzis(spolka.id, dzis);
+      const czlonkowie = spolka.sklad_organu_json ? JSON.parse(spolka.sklad_organu_json) : [];
+      return kontekstPisma.listaAkcjonariuszyDoSadu({
+        spolka,
+        akcjonariusze: stan.akcjonariusze,
+        razemAkcji: stan.razem_akcji,
+        czlonkowieOrganu: czlonkowie,
+        adresatNazwa: cialo.adresat_nazwa || null,
+        adresatAdres: cialo.adresat_adres || null,
+        dzis,
+      });
+    }
+    case '10': {
+      const zbywca = cialo.zbywca_osoba_id
+        ? db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(Number(cialo.zbywca_osoba_id))
+        : null;
+      const nabywca = cialo.nabywca_osoba_id
+        ? db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(Number(cialo.nabywca_osoba_id))
+        : null;
+      return kontekstPisma.klauzulaZbycia({ spolka, klauzula: cialo.klauzula || {}, zbywca, nabywca });
+    }
+    default:
+      throw bledneZadanie(`Nieznany wzór: „${kod}".`);
+  }
+}
+
+/** Lista pięciu wzorów dostępnych do wystawienia na żądanie. */
+router.get(
+  '/:id/dokumenty/wystaw',
+  asy((zad, odp) => {
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    odp.json({
+      wzory: Object.entries(WZORY_NA_ZADANIE).map(([kod, w]) => ({ kod, nazwa: w.nazwa })),
+    });
+  })
+);
+
+/** Podgląd na REALNYCH danych spółki — przed wystawieniem, bez zapisu. */
+router.post(
+  '/:id/dokumenty/:kod/podglad',
+  asy((zad, odp) => {
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    if (!WZORY_NA_ZADANIE[zad.params.kod]) throw nieZnaleziono(`Nie ma wzoru o kodzie „${zad.params.kod}".`);
+
+    const dane = budujKontekstNaZadanie(zad.params.kod, spolka, zad.body || {});
+    const wynik = wzoryDysk.wypelnij(zad.params.kod, dane);
+    odp.json({
+      tekst: docx.tekst(wynik.plik),
+      brakujace: wynik.brakujace,
+      bledy: wynik.bledy,
+      ostrzezenia: wynik.ostrzezenia,
+    });
+  })
+);
+
+/** Wystawia dokument: renderuje, zapisuje plik na dysku i ślad w psa_wydane_dokumenty. */
+router.post(
+  '/:id/dokumenty/:kod',
+  asy((zad, odp) => {
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const opisWzoru = WZORY_NA_ZADANIE[zad.params.kod];
+    if (!opisWzoru) throw nieZnaleziono(`Nie ma wzoru o kodzie „${zad.params.kod}".`);
+    const kto = autor(zad);
+
+    const dane = budujKontekstNaZadanie(zad.params.kod, spolka, zad.body || {});
+    const wynik = wzoryDysk.wypelnij(zad.params.kod, dane);
+
+    const katalog = path.join(konfiguracja.KATALOG_DOKUMENTOW, `spolka_${spolka.id}`, 'wydane');
+    fs.mkdirSync(katalog, { recursive: true });
+    const nazwaPliku = `${wynik.nazwa.replace(/\s+/g, '-')}.docx`;
+    const nazwaZapisu = `${crypto.randomUUID()}-${nazwaPliku}`;
+    fs.writeFileSync(path.join(katalog, nazwaZapisu), wynik.plik);
+    const sciezkaWzgledna = path.relative(konfiguracja.KATALOG_DOKUMENTOW, path.join(katalog, nazwaZapisu));
+
+    const wpis = db()
+      .prepare(
+        `INSERT INTO psa_wydane_dokumenty
+           (sprawa_id, spolka_id, typ, odbiorca_osoba_id, kanal, tresc_html,
+            sciezka_plik, szablon_kod, szablon_hash, wyslano, autor, utworzono)
+         VALUES (NULL, @spolka_id, @typ, NULL, 'papier', @tresc_html,
+                 @sciezka_plik, @szablon_kod, @szablon_hash, NULL, @autor, @utworzono)`
+      )
+      .run({
+        spolka_id: spolka.id,
+        typ: opisWzoru.typ,
+        tresc_html: docx.tekst(wynik.plik),
+        sciezka_plik: sciezkaWzgledna,
+        szablon_kod: zad.params.kod,
+        szablon_hash: wynik.hash,
+        autor: kto,
+        utworzono: czas.terazIso(),
+      });
+
+    odp.status(201).json({
+      id: Number(wpis.lastInsertRowid),
+      brakujace: wynik.brakujace,
+      bledy: wynik.bledy,
+    });
+  })
+);
+
+/** Historia dokumentów wystawionych na żądanie (bez powiązania ze sprawą). */
+router.get(
+  '/:id/wydane',
+  asy((zad, odp) => {
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const wydane = db()
+      .prepare(
+        `SELECT id, typ, szablon_kod, autor, utworzono FROM psa_wydane_dokumenty
+          WHERE spolka_id = ? AND sprawa_id IS NULL ORDER BY id DESC`
+      )
+      .all(spolka.id);
+    odp.json({ wydane });
+  })
+);
+
+/** Pobranie pliku wystawionego na żądanie. */
+router.get(
+  '/:id/wydane/:wydanyId/plik',
+  asy((zad, odp) => {
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const wydany = db()
+      .prepare('SELECT * FROM psa_wydane_dokumenty WHERE id = ? AND spolka_id = ?')
+      .get(Number(zad.params.wydanyId), spolka.id);
+    if (!wydany || !wydany.sciezka_plik) throw nieZnaleziono('Nie odnaleziono pliku.');
+
+    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, wydany.sciezka_plik);
+    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+    odp.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+    odp.setHeader('Content-Disposition', `attachment; filename="${path.basename(pelnaSciezka).replace(/^[^-]+-/, '')}"`);
+    odp.sendFile(pelnaSciezka);
+  })
+);
 
 module.exports = router;

@@ -33,6 +33,7 @@ for (const [klucz, wartosc] of Object.entries({
 const kontekst = require('../server/logika/kontekst-pisma');
 const wzoryDysk = require('../server/logika/wzory-dysk');
 const przepisy = require('../server/logika/przepisy');
+const docx = require('../server/logika/docx');
 
 // ─────────────────────────────────────────────────────────────
 // Dane testowe wspólne
@@ -53,6 +54,16 @@ const SPOLKA = {
   regon: '545410859',
   email: 'kontakt@charlieunicorn.ai',
   organ_rodzaj: 'zarzad',
+  data_umowy: '2026-08-13',
+  platnik_vat: 1,
+  reprezentant_biernik: 'Łukasza Adriana Szymborskiego',
+  reprezentant_plec: 'mezczyzna',
+  reprezentant_rodzice: 'Pawła i Izabelli',
+  reprezentant_dowod: 'DGK 138559',
+  reprezentant_pesel: '88081105939',
+  reprezentant_adres: '76-015 Manowo, ulica Kasztanowa nr 17 m. 1',
+  reprezentant_funkcja_biernik: 'Prezesa Zarządu',
+  reprezentant_reprezentacja: 'uprawnionego do samodzielnej reprezentacji',
 };
 
 const ZADAJACY = {
@@ -259,4 +270,96 @@ test('brak dokumentu podstawy (sprawa bez dokument_rodzaj) zostaje WIDOCZNY brak
 
 test('charakterWpisu: sanity — konstytutywny i deklaratoryjny sie wykluczaja', () => {
   assert.notEqual(przepisy.CHARAKTER_WPISU.KONSTYTUTYWNY, przepisy.CHARAKTER_WPISU.DEKLARATORYJNY);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Wzory wystawiane na żądanie (blok A5) — sprawdzone na PRAWDZIWYCH plikach
+// ─────────────────────────────────────────────────────────────
+
+test('umowaOProwadzenieRejestru: taksy licza sie z konfiguracji stawek, slownie wylicza sie samo', () => {
+  const dane = kontekst.umowaOProwadzenieRejestru({ spolka: SPOLKA, dzis: '2026-08-13' });
+  assert.equal(dane.taksa_roczna, String(przepisy.STAWKI_GROSZE.PROWADZENIE_ROCZNIE / 100));
+  assert.equal(dane.taksa_wpis, String(przepisy.STAWKI_GROSZE.WPIS / 100));
+  assert.equal(dane.reprezentant_biernik, SPOLKA.reprezentant_biernik);
+  assert.equal(dane.reprezentant_dzialajacy, 'działającego');
+  assert.deepEqual(dane.spolka_vat, [{}], 'platnik_vat=1 wlacza sekcje');
+
+  const wynik = wzoryDysk.wypelnij('01', dane);
+  assert.deepEqual(wynik.bledy, []);
+  assert.deepEqual(wynik.brakujace, []);
+  assert.match(docx.tekst(wynik.plik), /jeden tysiąc dwieście złotych|1200/, 'stawka roczna widoczna w tresci');
+});
+
+test('umowaOProwadzenieRejestru: platnik_vat=0 wylacza sekcje, null zostaje BRAKIEM (nie zgadniety)', () => {
+  const wylaczona = kontekst.umowaOProwadzenieRejestru({ spolka: { ...SPOLKA, platnik_vat: 0 }, dzis: '2026-08-13' });
+  assert.deepEqual(wylaczona.spolka_vat, []);
+
+  const nieustalona = kontekst.umowaOProwadzenieRejestru({ spolka: { ...SPOLKA, platnik_vat: null }, dzis: '2026-08-13' });
+  assert.equal('spolka_vat' in nieustalona, false);
+  const wynik = wzoryDysk.wypelnij('01', nieustalona);
+  assert.ok(wynik.brakujace.includes('spolka_vat (sekcja)'));
+});
+
+test('informacjaRodo: forma czasownika zalezy od plci reprezentanta', () => {
+  const meski = kontekst.informacjaRodo({ spolka: SPOLKA });
+  assert.equal(meski.zapoznany, 'zapoznałem się');
+  bezBrakow('02', meski);
+
+  const zenski = kontekst.informacjaRodo({ spolka: { ...SPOLKA, reprezentant_plec: 'kobieta' } });
+  assert.equal(zenski.zapoznany, 'zapoznałam się');
+});
+
+test('uchwalaWyboru: dane glosowania sa AD HOC (podaje notariusz), sekcja akcjonariusze z rejestru', () => {
+  const dane = kontekst.uchwalaWyboru({
+    spolka: SPOLKA, akcjonariusze: AKCJONARIUSZE,
+    uchwala: { numer: '1', dataSlownie: '12 sierpnia 2026 roku', trybGlosowania: 'jednogłośnie', glosyZa: 1000, glosyPrzeciw: 0, glosyWstrzymujace: 0, procentGlosow: '100%' },
+    dzis: '2026-08-13',
+  });
+  assert.equal(dane.akcjonariusze.length, 2);
+  assert.equal(dane.akcjonariusze[0].akcjonariusz_nazwa, 'Jan Kowalski');
+  assert.equal(dane.akcjonariusze[0].akcjonariusz_liczba_glosow, dane.akcjonariusze[0].akcjonariusz_liczba_akcji, 'bez wagi glosu - 1 akcja = 1 glos');
+  assert.equal(dane.uchwala_glosy_za, '1000');
+
+  bezBrakow('03', dane);
+});
+
+test('uchwalaWyboru: bez danych glosowania pola zostaja WIDOCZNYM brakiem', () => {
+  const dane = kontekst.uchwalaWyboru({ spolka: SPOLKA, akcjonariusze: AKCJONARIUSZE, dzis: '2026-08-13' });
+  const wynik = wzoryDysk.wypelnij('03', dane);
+  assert.ok(wynik.brakujace.includes('uchwala_numer'));
+  assert.ok(wynik.brakujace.includes('uchwala_glosy_za'));
+});
+
+test('listaAkcjonariuszyDoSadu: razem akcji i sklad organu z importu KRS', () => {
+  const dane = kontekst.listaAkcjonariuszyDoSadu({
+    spolka: SPOLKA, akcjonariusze: AKCJONARIUSZE, razemAkcji: 1000,
+    czlonkowieOrganu: [{ imiona: 'Łukasz Adrian', nazwisko: 'Szymborski', funkcja: 'Prezes Zarządu' }],
+    adresatNazwa: 'Sąd Rejonowy dla m.st. Warszawy w Warszawie', adresatAdres: 'ul. Czerniakowska 100A, 00-454 Warszawa',
+    dzis: '2026-08-13',
+  });
+  assert.equal(dane.lista_akcje_razem, '1000');
+  assert.equal(dane.czlonkowie_organu[0].czlonek_mianownik, 'Łukasz Adrian Szymborski');
+
+  bezBrakow('08', dane);
+});
+
+test('listaAkcjonariuszyDoSadu: bez adresata podpowiada sad rejestrowy spolki jako domyslny adresat', () => {
+  const dane = kontekst.listaAkcjonariuszyDoSadu({
+    spolka: SPOLKA, akcjonariusze: AKCJONARIUSZE, razemAkcji: 1000, czlonkowieOrganu: [], dzis: '2026-08-13',
+  });
+  assert.equal(dane.adresat_nazwa, kontekst.sadRejestrowyPelny(SPOLKA));
+  assert.equal(dane.adresat_adres, null, 'adres sadu nie ma zrodla w schemacie - zostaje widoczny brak');
+});
+
+test('klauzulaZbycia: zbywca i nabywca to dwie rozne osoby z kartoteki', () => {
+  const zbywca = { typ: 'fizyczna', imie: 'Anna', nazwisko: 'Nowak', email: 'anna@nowak.pl' };
+  const nabywca = { typ: 'fizyczna', imie: 'Jan', nazwisko: 'Kowalski', email: 'jan@kowalski.pl' };
+  const dane = kontekst.klauzulaZbycia({
+    spolka: SPOLKA, klauzula: { paragraf: '7', pokrycie: 'zostały w całości pokryte', ograniczenia: 'umowa spółki nie ogranicza rozporządzania akcjami' },
+    zbywca, nabywca,
+  });
+  assert.equal(dane.zbywca_email, 'anna@nowak.pl');
+  assert.equal(dane.nabywca_email, 'jan@kowalski.pl');
+
+  bezBrakow('10', dane);
 });
