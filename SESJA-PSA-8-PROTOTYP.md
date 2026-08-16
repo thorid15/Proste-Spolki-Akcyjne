@@ -18,9 +18,10 @@ Prototyp jest domknięty, gdy Łukasz może **na własnych dwóch rejestrach**:
    i konkretnego akcjonariusza** — ✅ *jest* (blok A, zamknięty A0–A7),
 4. wydać informację z rejestru i raport — ✅ *jest* (sesja 6, faza 4),
 5. naliczyć i rozliczyć opłaty — ✅ *jest* (sprint 4),
-6. odnotować weryfikację AML z datą przeglądu — ⚠️ *częściowo, blok B*.
+6. odnotować weryfikację AML z datą przeglądu — ✅ *jest* (blok C, zamknięty C1–C4).
 
-Punkt 3 był jedynym, który blokował sens testu — domknięty. Zostaje blok B (uzupełnienia).
+Punkt 3 był jedynym, który blokował sens testu — domknięty. Bloki A, B i C są zamknięte w całości —
+prototyp spełnia kryterium ukończenia z sekcji 1.
 
 ---
 
@@ -167,10 +168,12 @@ każdą taką zmianę odnotowujemy przy wzorze, którego dotyczy.
 
 | # | Zadanie | Podstawa |
 |---|---|---|
-| C1 | `aml_data_przegladu` + sygnał dezaktualizacji w kartotece | SESJA-7 § 2.5, WDROZENIE § 7 |
-| C2 | Rozgałęzienie osoba fizyczna / prawna: beneficjent rzeczywisty | SESJA-7 § 2.5 |
-| C3 | PEP jako **oświadczenie osoby** z podpisem, nie ocena kancelarii | art. 46 ustawy AML |
-| C4 | Komentarz w kodzie: zakres AML jest **świadomą nadwyżką** wobec ustawy | SESJA-7 § 2.5 — żeby za rok nikt nie uznał tego za pomyłkę |
+| C1 | ✅ **ZROBIONE** — `psa_osoby.aml_data_przegladu` (migracja v15), odrębna od `aml_data` (pierwotne wykonanie). `server/logika/aml.js: wymagaPrzegladu()` — funkcja czysta, termin 12 miesięcy (decyzja D4a). Sygnał `wymaga_przegladu_aml` wraca z API i pokazuje się jako znacznik w kartotece i w formularzu — dotyczy WYŁĄCZNIE `aml_status='wykonane'` (`brak`/`niemożliwe` mają już własny, wyraźniejszy sygnał). **Świadomie NIE jest to nowa blokada wpisu** — `walidacje.js` w ogóle nie widzi tego pola | SESJA-7 § 2.5, WDROZENIE § 7 |
+| C2 | ✅ **ZROBIONE** — `psa_osoby.beneficjent_rzeczywisty_id` (self-referencing FK, migracja v15). Trasa `sprawdzBeneficjenta()` wymusza: tylko dla `typ='prawna'`, cel musi być `typ='fizyczna'` (art. 2 ust. 2 pkt 1 ustawy AML), zakaz samoodwołania. UI: `WyborOsoby` dostał `typFiltr`, żeby wyszukiwarka pokazywała wyłącznie osoby fizyczne | SESJA-7 § 2.5 |
+| C3 | ✅ **ZROBIONE** — `psa_osoby.pep_oswiadczenie` (`tak`/`nie`/`NULL` — katalog zamknięty, nigdy zgadywane) + `pep_oswiadczenie_data` (migracja v15). Etykieta w UI i podpowiedź jednoznacznie ramują to jako **oświadczenie składane przez osobę** (art. 46 ustawy AML), nie ocenę kancelarii | art. 46 ustawy AML |
+| C4 | ✅ **ZROBIONE** — komentarz przy `przepisy.js: TERMIN_PRZEGLADU_AML_MIESIECY` wprost mówi, że C1–C3 to nadwyżka wobec PRZEPISY-PSA.md § 9 (który jest ⚠️ i nie zawiera żadnego z tych szczegółów) i że żaden z tych elementów nie tworzy nowej blokady — zgodnie z zasadą sprintu 5 | SESJA-7 § 2.5 — żeby za rok nikt nie uznał tego za pomyłkę |
+
+Sprawdzone: 5 testów jednostkowych (`aml.js`, w tym granica 12 miesięcy i pierwszeństwo `aml_data_przegladu` nad `aml_data`) + 4 testy HTTP (`osoby-http.test.js`: walidacja beneficjenta, katalog PEP, sygnał w odpowiedzi) + przejście przez formularz osoby w przeglądarce (znacznik „wymaga przeglądu”, wybór beneficjenta, zapis oświadczenia PEP) — bez błędów konsoli. Pełny pakiet: 318/318.
 
 ---
 

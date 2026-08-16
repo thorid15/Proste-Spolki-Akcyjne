@@ -11,6 +11,7 @@ const express = require('express');
 const { db } = require('../baza');
 const przepisy = require('../logika/przepisy');
 const maskowanie = require('../logika/maskowanie');
+const aml = require('../logika/aml');
 const czas = require('../pomocnicze/czas');
 const { asy, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 
@@ -21,6 +22,8 @@ const POLA_OSOBY = [
   'numer_w_rejestrze', 'nazwa_rejestru', 'kraj', 'kod_pocztowy', 'miejscowosc', 'ulica',
   'nr_domu', 'nr_lokalu', 'adres_doreczen', 'adres_edoreczen', 'email', 'telefon',
   'zgoda_email', 'aml_status', 'aml_data', 'aml_notatka', 'uwagi',
+  // Sesja 8, blok C (przeglad okresowy, beneficjent rzeczywisty, oswiadczenie PEP):
+  'aml_data_przegladu', 'beneficjent_rzeczywisty_id', 'pep_oswiadczenie', 'pep_oswiadczenie_data',
 ];
 
 function wyczysc(cialo) {
@@ -29,6 +32,10 @@ function wyczysc(cialo) {
     if (cialo[pole] === undefined) continue;
     if (pole === 'zgoda_email') {
       wynik[pole] = cialo[pole] ? 1 : 0;
+      continue;
+    }
+    if (pole === 'beneficjent_rzeczywisty_id') {
+      wynik[pole] = cialo[pole] === '' || cialo[pole] === null ? null : Number(cialo[pole]);
       continue;
     }
     const v = cialo[pole];
@@ -82,8 +89,40 @@ function sprawdzOsobe(dane, { czesciowe = false } = {}) {
   if (dane.aml_status && !Object.values(przepisy.AML_STATUSY).includes(dane.aml_status)) {
     throw bledneZadanie(`Nieznany status AML: „${dane.aml_status}”.`);
   }
+  if (dane.aml_data_przegladu && !czas.poprawnaData(dane.aml_data_przegladu)) {
+    throw bledneZadanie('Data przeglądu AML musi mieć format RRRR-MM-DD.');
+  }
+  // Oswiadczenie PEP (blok C3) - skladane przez OSOBE, nie ocena kancelarii,
+  // stad katalog zamkniety tak/nie (nigdy zgadywane trzecia wartoscia).
+  if (dane.pep_oswiadczenie && !['tak', 'nie'].includes(dane.pep_oswiadczenie)) {
+    throw bledneZadanie('Oświadczenie PEP musi być „tak” albo „nie”.');
+  }
+  if (dane.pep_oswiadczenie_data && !czas.poprawnaData(dane.pep_oswiadczenie_data)) {
+    throw bledneZadanie('Data oświadczenia PEP musi mieć format RRRR-MM-DD.');
+  }
   if (dane.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dane.email)) {
     throw bledneZadanie('Adres e-mail jest niepoprawny.');
+  }
+}
+
+/**
+ * Beneficjent rzeczywisty (blok C2) - z definicji OSOBA FIZYCZNA (art. 2
+ * ust. 2 pkt 1 ustawy AML), sensowny wylacznie dla podmiotu typu "prawna".
+ * Odwolanie miedzy wierszami - CHECK w schemacie tego nie sprawdzi, stad
+ * walidacja tutaj, z dostepem do bazy.
+ */
+function sprawdzBeneficjenta(id, wlascicielId, wlascicielTyp) {
+  if (id == null) return;
+  if (wlascicielTyp !== 'prawna') {
+    throw bledneZadanie('Beneficjenta rzeczywistego wskazuje się wyłącznie dla osoby prawnej.');
+  }
+  if (id === wlascicielId) {
+    throw bledneZadanie('Podmiot nie może być własnym beneficjentem rzeczywistym.');
+  }
+  const beneficjent = db().prepare('SELECT typ FROM psa_osoby WHERE id = ?').get(id);
+  if (!beneficjent) throw bledneZadanie('Wskazany beneficjent rzeczywisty nie figuruje w kartotece.');
+  if (beneficjent.typ !== 'fizyczna') {
+    throw bledneZadanie('Beneficjent rzeczywisty musi być osobą fizyczną.');
   }
 }
 
@@ -92,6 +131,8 @@ function zOznaczeniem(osoba) {
     ...osoba,
     oznaczenie: maskowanie.oznaczenieOsoby(osoba),
     jawny_identyfikator: maskowanie.jawnyIdentyfikator(osoba),
+    // Sygnal, NIE blokada (blok C1) - patrz logika/aml.js.
+    wymaga_przegladu_aml: aml.wymagaPrzegladu(osoba, czas.dzisIso()),
   };
 }
 
@@ -143,6 +184,7 @@ router.post(
   asy((zad, odp) => {
     const dane = wyczysc(zad.body || {});
     sprawdzOsobe(dane);
+    sprawdzBeneficjenta(dane.beneficjent_rzeczywisty_id, null, dane.typ);
 
     const teraz = czas.terazIso();
     const kolumny = Object.keys(dane);
@@ -179,7 +221,11 @@ router.put(
 
     const dane = wyczysc(zad.body || {});
     if (Object.keys(dane).length === 0) throw bledneZadanie('Brak danych do zapisania.');
-    sprawdzOsobe({ ...biezaca, ...dane });
+    const scalone = { ...biezaca, ...dane };
+    sprawdzOsobe(scalone);
+    if ('beneficjent_rzeczywisty_id' in dane) {
+      sprawdzBeneficjenta(dane.beneficjent_rzeczywisty_id, id, scalone.typ);
+    }
 
     db()
       .prepare(

@@ -900,6 +900,34 @@ const MIGRACJE = [
         ON psa_wydane_dokumenty (spolka_id);
     `,
   },
+  {
+    wersja: 15,
+    nazwa: 'blok C (sesja 8): przeglad AML, beneficjent rzeczywisty, oswiadczenie PEP',
+    sql: `
+      -- ── Osoba: cztery pola AML wykraczajace poza tresc rejestru KSH ─────
+      -- Swiadoma nadwyzka wobec ustawy (SESJA-PSA-8-PROTOTYP.md § 6, blok C;
+      -- uzasadnienie w server/logika/przepisy.js przy AML_STATUSY) - zadne
+      -- z tych pol NIE zasila nowej blokady wpisu.
+      --
+      -- aml_data_przegladu: data OSTATNIEGO przegladu okresowego - odrebna
+      -- od aml_data (data PIERWOTNEGO wykonania srodkow bezpieczenstwa).
+      -- Termin przegladu: 12 miesiecy (decyzja D4a).
+      ALTER TABLE psa_osoby ADD COLUMN aml_data_przegladu TEXT;
+
+      -- beneficjent_rzeczywisty_id: self-referencing FK, sensowne wylacznie
+      -- dla typ='prawna'. Beneficjent rzeczywisty jest z definicji OSOBA
+      -- FIZYCZNA (art. 2 ust. 2 pkt 1 ustawy AML) - trasa wymusza to przy
+      -- zapisie, schemat sam tego nie sprawdzi (odwolanie miedzy wierszami).
+      ALTER TABLE psa_osoby ADD COLUMN beneficjent_rzeczywisty_id INTEGER
+        REFERENCES psa_osoby(id);
+
+      -- pep_oswiadczenie: OSWIADCZENIE OSOBY (art. 46 ustawy AML), nie ocena
+      -- kancelarii - stad tak/nie/NULL ("nie oswiadczono"), nigdy zgadywane.
+      ALTER TABLE psa_osoby ADD COLUMN pep_oswiadczenie TEXT
+        CHECK (pep_oswiadczenie IS NULL OR pep_oswiadczenie IN ('tak', 'nie'));
+      ALTER TABLE psa_osoby ADD COLUMN pep_oswiadczenie_data TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

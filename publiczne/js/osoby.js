@@ -8,6 +8,9 @@ const PUSTA_OSOBA = {
   kraj: 'Polska', kod_pocztowy: '', miejscowosc: '', ulica: '', nr_domu: '', nr_lokalu: '',
   adres_doreczen: '', adres_edoreczen: '', email: '', telefon: '',
   zgoda_email: 0, aml_status: 'brak', aml_data: '', aml_notatka: '', uwagi: '',
+  // Sesja 8, blok C — przegląd okresowy, beneficjent rzeczywisty, oświadczenie PEP:
+  aml_data_przegladu: '', beneficjent_rzeczywisty_id: null,
+  pep_oswiadczenie: '', pep_oswiadczenie_data: '',
 };
 
 function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
@@ -153,9 +156,52 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
           <PoleDaty wartosc={dane.aml_data || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, aml_data: v }))} />
         </Pole>
       </div>
+      <div className="siatka-2">
+        <Pole etykieta="Data ostatniego przeglądu AML" podpowiedz="Przegląd okresowy co 12 miesięcy — nie blokuje wpisu, jest tylko przypomnieniem.">
+          <PoleDaty wartosc={dane.aml_data_przegladu || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, aml_data_przegladu: v }))} />
+        </Pole>
+        <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 10 }}>
+          <ZnacznikPrzegladuAml wymaga={edycja && osoba.wymaga_przegladu_aml} />
+        </div>
+      </div>
       <Pole etykieta="Notatka AML" podpowiedz="Nigdy nie trafia na wydruki dla klienta.">
         <textarea {...pole('aml_notatka')} style={{ minHeight: 70 }} />
       </Pole>
+
+      {dane.typ === 'prawna' && (
+        <Pole
+          etykieta="Beneficjent rzeczywisty"
+          podpowiedz="Osoba fizyczna sprawująca kontrolę nad podmiotem (art. 2 ust. 2 pkt 1 ustawy AML)."
+        >
+          <WyborOsoby
+            wartosc={dane.beneficjent_rzeczywisty_id}
+            przyZmianie={(id) => ustawDane((p) => ({ ...p, beneficjent_rzeczywisty_id: id }))}
+            typFiltr="fizyczna"
+            wyklucz={edycja ? [osoba.id] : []}
+            placeholder="Szukaj osoby fizycznej w kartotece…"
+          />
+        </Pole>
+      )}
+
+      <div className="siatka-2">
+        <Pole
+          etykieta="Oświadczenie o statusie PEP"
+          podpowiedz="Oświadczenie SKŁADANE PRZEZ OSOBĘ (art. 46 ustawy AML) — nie ocena ani domysł kancelarii."
+        >
+          <select {...pole('pep_oswiadczenie')}>
+            <option value="">— nie oświadczono —</option>
+            <option value="tak">oświadcza, że JEST osobą zajmującą eksponowane stanowisko polityczne</option>
+            <option value="nie">oświadcza, że NIE JEST osobą zajmującą eksponowane stanowisko polityczne</option>
+          </select>
+        </Pole>
+        <Pole etykieta="Data oświadczenia PEP">
+          <PoleDaty
+            wartosc={dane.pep_oswiadczenie_data || ''}
+            przyZmianie={(v) => ustawDane((p) => ({ ...p, pep_oswiadczenie_data: v }))}
+          />
+        </Pole>
+      </div>
+
       <Pole etykieta="Uwagi wewnętrzne" podpowiedz="Nigdy nie trafiają na wydruki.">
         <textarea {...pole('uwagi')} style={{ minHeight: 70 }} />
       </Pole>
@@ -226,7 +272,12 @@ function EkranOsob() {
                     {o.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
                   </td>
                   <td className="kol-dane">{o.jawny_identyfikator || '—'}</td>
-                  <td><StatusAml status={o.aml_status} /></td>
+                  <td>
+                    <div className="row-g" style={{ gap: 6 }}>
+                      <StatusAml status={o.aml_status} />
+                      <ZnacznikPrzegladuAml wymaga={o.wymaga_przegladu_aml} />
+                    </div>
+                  </td>
                   <td className="do-prawej">{o.liczba_spolek || 0}</td>
                   <td className="do-prawej">
                     <button className="btn btn-maly" onClick={() => ustawFormularz(o)}>

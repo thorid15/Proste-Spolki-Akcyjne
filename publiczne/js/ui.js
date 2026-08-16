@@ -95,6 +95,12 @@ function StatusAml({ status }) {
   return <Znacznik odmiana={ODMIANY_AML[status] || 'neutralny'}>{NAZWY_AML[status] || status}</Znacznik>;
 }
 
+/** Sygnał dezaktualizacji przeglądu AML (blok C1, sesja 8) — NIE blokada, tylko wizualne przypomnienie. */
+function ZnacznikPrzegladuAml({ wymaga }) {
+  if (!wymaga) return null;
+  return <Znacznik odmiana="mosiadz">wymaga przeglądu</Znacznik>;
+}
+
 function Komunikat({ odmiana = 'info', tytul, tresc, lista }) {
   if (!tresc && (!lista || lista.length === 0)) return null;
   return (
@@ -186,7 +192,7 @@ function Sekcja({ tytul, licznik, domyslnieOtwarta = false, akcje, children }) {
  * Wyszukiwarka osób z kartoteki (reguła domenowa nr 10 — jeden inwestor
  * wpisywany raz). Pozwala też założyć nową osobę bez opuszczania kreatora.
  */
-function WyborOsoby({ wartosc, przyZmianie, placeholder = 'Szukaj w kartotece…', wyklucz = [] }) {
+function WyborOsoby({ wartosc, przyZmianie, placeholder = 'Szukaj w kartotece…', wyklucz = [], typFiltr = null }) {
   const [szukaj, ustawSzukaj] = useState('');
   const [wyniki, ustawWyniki] = useState([]);
   const [otwarte, ustawOtwarte] = useState(false);
@@ -208,13 +214,14 @@ function WyborOsoby({ wartosc, przyZmianie, placeholder = 'Szukaj w kartotece…
   useEffect(() => {
     if (!otwarte) return undefined;
     const uchwyt = setTimeout(() => {
-      API.get(`/api/psa/osoby?q=${encodeURIComponent(szukaj)}`)
+      const filtrTypu = typFiltr ? `&typ=${encodeURIComponent(typFiltr)}` : '';
+      API.get(`/api/psa/osoby?q=${encodeURIComponent(szukaj)}${filtrTypu}`)
         .then((o) => ustawWyniki(o.osoby.filter((x) => !wyklucz.includes(x.id))))
         .catch(() => ustawWyniki([]));
     }, 180);
     return () => clearTimeout(uchwyt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [szukaj, otwarte, wyklucz.join(',')]);
+  }, [szukaj, otwarte, wyklucz.join(','), typFiltr]);
 
   if (wybrana && !otwarte) {
     return (
@@ -315,6 +322,7 @@ window.Pole = Pole;
 window.Znacznik = Znacznik;
 window.StatusSpolki = StatusSpolki;
 window.StatusAml = StatusAml;
+window.ZnacznikPrzegladuAml = ZnacznikPrzegladuAml;
 window.Komunikat = Komunikat;
 window.Wyniki = Wyniki;
 window.Pusto = Pusto;

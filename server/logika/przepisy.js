@@ -243,6 +243,22 @@ const AML_STATUSY = {
 /** Status AML wymagany, by wpis dotyczacy osoby mogl dojsc do skutku. */
 const AML_STATUS_WYMAGANY = AML_STATUSY.WYKONANE;
 
+/**
+ * Blok C sesji 8 (przeglad okresowy, beneficjent rzeczywisty, oswiadczenie
+ * PEP) jest SWIADOMA NADWYZKA wobec tego, co PRZEPISY-PSA.md § 9 opisuje -
+ * caly ten paragraf jest oznaczony ⚠️ (niezweryfikowany), a jego tresc to
+ * wylacznie dwa zdania o instytucji obowiazanej i o stawkach. Szczegoly
+ * (termin przegladu 12 miesiecy, rozgraniczenie osoba fizyczna/prawna przy
+ * beneficjencie, forma oswiadczenia PEP) pochodza z decyzji roboczych
+ * (SESJA-PSA-8-PROTOTYP.md § 3 decyzja D4a, § 6 blok C), NIE z brzmienia
+ * ustawy AML zweryfikowanego w PRZEPISY-PSA.md. Za rok ktos moze pomyslec,
+ * ze to ustalona tresc przepisu - nie jest. Zgodnie z zasada sprintu 5
+ * ("Nowych blokad opartych na pozycjach ⚠️ NIE dodajemy") zaden z tych
+ * elementow NIE tworzy nowej blokady wpisu - sa to wylacznie pola danych
+ * i sygnaly informacyjne w kartotece.
+ */
+const TERMIN_PRZEGLADU_AML_MIESIECY = 12;
+
 // ─────────────────────────────────────────────────────────────
 // SLOWNIKI STANOW (stan wewnetrzny modulu - CLAUDE-PSA.md sekcje 5 i 7,
 // nie sa oddzielnymi jednostkami redakcyjnymi ustawy)
@@ -618,6 +634,7 @@ module.exports = {
   ORGANY_UPRAWNIONE,
   AML_STATUSY,
   AML_STATUS_WYMAGANY,
+  TERMIN_PRZEGLADU_AML_MIESIECY,
   STATUSY_SPOLKI,
   STATUSY_SPOLKI_BLOKUJACE_WPIS,
   STATUSY_EMISJI,
