@@ -71,13 +71,35 @@ const konfiguracja = {
     pass: tekst('SMTP_PASS', null),
     from: tekst('SMTP_FROM', null),
   },
-  /** Naglowek dokumentow - odpowiednik `rdzen_kancelaria` z mastera. */
+  /**
+   * Naglowek dokumentow - odpowiednik `rdzen_kancelaria` z mastera.
+   *
+   * Pola ponizej `email`/`telefon` sa ATOMOWE (blok A2 sesji 8) - wzory z
+   * `wzory/` odwoluja sie do `kancelaria_ulica`, `kancelaria_kod` itd. z
+   * osobna, bo zdanie "ulica X, 00-000 Miasto" sklada sie inaczej w kazdym
+   * pismie. Pola `adres`/`miejscowosc` zostaja NIETKNIETE - czyta je istniejacy
+   * automat zawiadomien (logika/dokumenty-tresc.js) i raporty; dublowanie na
+   * dwa ksztalty jest tansze niz przepisywanie dzialajacego kodu.
+   */
   KANCELARIA: {
     nazwa: tekst('KANCELARIA_NAZWA', 'Kancelaria Notarialna Łukasz Kozon'),
     adres: tekst('KANCELARIA_ADRES', ''),
     miejscowosc: tekst('KANCELARIA_MIEJSCOWOSC', ''),
     telefon: tekst('KANCELARIA_TELEFON', ''),
     email: tekst('KANCELARIA_EMAIL', ''),
+
+    // Atomowe - na potrzeby wzorow .docx (PLACEHOLDERY-PSA.md, sekcja KANCELARIA).
+    kancelaria_ulica: tekst('KANCELARIA_ULICA', ''),
+    kancelaria_kod: tekst('KANCELARIA_KOD', ''),
+    kancelaria_miasto: tekst('KANCELARIA_MIASTO', ''),
+    kancelaria_miasto_miejscownik: tekst('KANCELARIA_MIASTO_MIEJSCOWNIK', ''),
+    kancelaria_nip: tekst('KANCELARIA_NIP', ''),
+    kancelaria_regon: tekst('KANCELARIA_REGON', ''),
+    notariusz_mianownik: tekst('NOTARIUSZ_MIANOWNIK', 'Łukasz Kozon'),
+    notariusz_dopelniacz: tekst('NOTARIUSZ_DOPELNIACZ', ''),
+    notariusz_narzednik: tekst('NOTARIUSZ_NARZEDNIK', ''),
+    podpisujacy_funkcja: tekst('PODPISUJACY_FUNKCJA', 'Notariusz'),
+    podpisujacy_mianownik: tekst('PODPISUJACY_MIANOWNIK', tekst('NOTARIUSZ_MIANOWNIK', 'Łukasz Kozon')),
   },
 };
 

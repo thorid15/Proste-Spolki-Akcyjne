@@ -1,45 +1,25 @@
-/* szablony.js — redakcja szablonów dokumentów wychodzących (faza 4).
+/* szablony.js — wzory pism z wzory/ (blok A1 sesji 8).
 
-   Szablon jest niezmienialny: zapis zakłada KOLEJNĄ WERSJĘ, nigdy nie
-   nadpisuje poprzedniej. Ekran mówi to wprost, bo to nie jest oczywiste
-   dla kogoś, kto zna zwykłe edytory. */
+   Ekran wyłącznie DO PODGLĄDU: treść wzoru edytuje się w Wordzie i podmienia
+   plik w wzory/ (wzory/README.md) — nie ma tu przycisku "zapisz", bo nie ma
+   niczego, co ta aplikacja mogłaby nadpisać. Wersjonowanie idzie przez git;
+   skrót pliku (`hash`) zostaje w każdym wydanym dokumencie, żeby dało się
+   wskazać, z którego BRZMIENIA wzoru powstało pismo sprzed roku. */
 
-/** Podpowiedź składni — jedyne trzy rzeczy, które trzeba wiedzieć. */
-function PomocSkladni() {
-  return (
-    <Karta scisla tytul="Składnia">
-      <dl className="pary">
-        <Para etykieta={<span className="kol-dane">{'{{klucz}}'}</span>}>
-          wartość pola, np. nazwa spółki
-        </Para>
-        <Para etykieta={<span className="kol-dane">{'{{klucz_slownie}}'}</span>}>
-          ta sama wartość zapisana słowami — liczba albo data
-        </Para>
-        <Para etykieta={<span className="kol-dane">{'{{#lista}}…{{/lista}}'}</span>}>
-          powtórzenie fragmentu dla każdej pozycji, np. wiersz tabeli
-        </Para>
-      </dl>
-      <div className="podstawa-prawna odstep-g">
-        Klucz, którego nie da się uzupełnić, drukuje się jako „—" i pojawia się na liście
-        braków w podglądzie. Nic nie znika po cichu.
-      </div>
-    </Karta>
-  );
+function ZnacznikPoprawnosci({ szablon }) {
+  if (szablon.poprawny) return <Znacznik odmiana="zielony">gotowy</Znacznik>;
+  return <Znacznik odmiana="bordo">wymaga poprawy</Znacznik>;
 }
 
-function ListaKluczy({ klucze }) {
-  if (!klucze) return null;
-  const proste = klucze.proste || [];
-  const listy = klucze.listy || [];
-  if (proste.length === 0 && listy.length === 0) return null;
+function ListaKluczy({ szablon }) {
   return (
     <div className="odstep-g">
-      <div className="fl">Klucze użyte w tym szablonie</div>
+      <div className="fl">Klucze użyte w tym wzorze</div>
       <div className="row-g" style={{ flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-        {listy.map((k) => (
-          <Pigulka key={`l-${k}`} odmiana="mosiadz">{k} (lista)</Pigulka>
+        {szablon.sekcje.map((k) => (
+          <Pigulka key={`s-${k}`} odmiana="mosiadz">{k} (sekcja)</Pigulka>
         ))}
-        {proste.map((k) => (
+        {szablon.proste.map((k) => (
           <Pigulka key={k}>{k}</Pigulka>
         ))}
       </div>
@@ -47,28 +27,26 @@ function ListaKluczy({ klucze }) {
   );
 }
 
-/** Redakcja jednego szablonu: treść, podgląd na danych próbnych, historia. */
-function RedakcjaSzablonu({ szablon, przyZamknieciu, przyZapisie }) {
-  const [tytul, ustawTytul] = useState(szablon.tytul);
-  const [tresc, ustawTresc] = useState(szablon.tresc);
+/** Szczegóły jednego wzoru: klucze, walidacja, podgląd na danych próbnych. */
+function SzczegolyWzoru({ kod, przyZamknieciu }) {
+  const [szablon, ustawSzablon] = useState(null);
   const [podglad, ustawPodglad] = useState(null);
+  const [ladowanie, ustawLadowanie] = useState(true);
   const [ladowaniePodgladu, ustawLadowaniePodgladu] = useState(false);
-  const [zapisywanie, ustawZapisywanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
-  const [historia, ustawHistorie] = useState(null);
 
-  const zmieniony = tresc !== szablon.tresc || tytul !== szablon.tytul;
+  useEffect(() => {
+    API.get(`/api/psa/szablony/${kod}`)
+      .then((w) => ustawSzablon(w.szablon))
+      .catch((e) => ustawBlad(e.message))
+      .finally(() => ustawLadowanie(false));
+  }, [kod]);
 
   async function pokazPodglad() {
     ustawLadowaniePodgladu(true);
     ustawBlad(null);
     try {
-      const w = await API.post('/api/psa/szablony/podglad', {
-        tresc,
-        tytul,
-        podstawa_prawna: szablon.podstawa_prawna,
-      });
-      ustawPodglad(w);
+      ustawPodglad(await API.post(`/api/psa/szablony/${kod}/podglad`));
     } catch (e) {
       ustawBlad(e.message);
     } finally {
@@ -76,166 +54,120 @@ function RedakcjaSzablonu({ szablon, przyZamknieciu, przyZapisie }) {
     }
   }
 
-  async function wczytajHistorie() {
-    try {
-      const w = await API.get(`/api/psa/szablony/${szablon.kod}`);
-      ustawHistorie(w.wersje);
-    } catch (e) {
-      ustawBlad(e.message);
-    }
-  }
-
-  async function zapisz() {
-    ustawZapisywanie(true);
-    ustawBlad(null);
-    try {
-      await API.post(`/api/psa/szablony/${szablon.kod}/wersje`, {
-        tytul,
-        tresc,
-        opis: szablon.opis,
-        podstawa_prawna: szablon.podstawa_prawna,
-      });
-      przyZapisie();
-    } catch (e) {
-      ustawBlad(e.message);
-    } finally {
-      ustawZapisywanie(false);
-    }
-  }
-
-  async function przywroc(wersja) {
-    if (!window.confirm(`Uczynić wersję ${wersja} aktywną? Treść wersji nie zmieni się.`)) return;
-    try {
-      await API.post(`/api/psa/szablony/${szablon.kod}/aktywuj`, { wersja });
-      przyZapisie();
-    } catch (e) {
-      ustawBlad(e.message);
-    }
-  }
-
   return (
     <Modal
-      tytul={szablon.tytul}
+      tytul={ladowanie ? 'Wzór' : szablon.nazwa}
       przyZamknieciu={przyZamknieciu}
-      szerokosc={1100}
-      stopka={
-        <>
-          <button className="btn" onClick={przyZamknieciu}>Zamknij</button>
-          <button className="btn" onClick={pokazPodglad} disabled={ladowaniePodgladu}>
-            {ladowaniePodgladu ? 'Składanie…' : 'Podgląd'}
-          </button>
-          <button className="btn btn-glowny" onClick={zapisz} disabled={!zmieniony || zapisywanie}>
-            {zapisywanie ? 'Zapisywanie…' : `Zapisz jako wersję ${szablon.wersja + 1}`}
-          </button>
-        </>
-      }
+      szerokosc={880}
+      stopka={<button className="btn" onClick={przyZamknieciu}>Zamknij</button>}
     >
       <Komunikat odmiana="blad" tresc={blad} />
-
-      <Komunikat
-        odmiana="info"
-        tresc={`Aktywna jest wersja ${szablon.wersja}. Zapis nie nadpisuje jej — zakłada kolejną. Poprzednie zostają, bo to one są podstawą pism już wydanych.`}
-      />
-
-      <Pole etykieta="Tytuł dokumentu" wymagane>
-        <input type="text" value={tytul} onChange={(z) => ustawTytul(z.target.value)} />
-      </Pole>
-
-      {szablon.podstawa_prawna && (
-        <div className="podstawa-prawna odstep-d">Podstawa: {szablon.podstawa_prawna}</div>
-      )}
-
-      <Pole
-        etykieta="Treść pisma"
-        podpowiedz="Samo ciało pisma — nagłówek kancelarii i stopkę dokłada system."
-      >
-        <textarea
-          value={tresc}
-          onChange={(z) => ustawTresc(z.target.value)}
-          spellCheck={false}
-          style={{ minHeight: 320, fontFamily: 'var(--czcionka-dane, monospace)', fontSize: 12, lineHeight: 1.6 }}
-        />
-      </Pole>
-
-      <PomocSkladni />
-
-      {podglad && (
-        <>
-          {podglad.bledy && podglad.bledy.length > 0 && (
-            <Komunikat odmiana="blad" tytul="Błąd składni" lista={podglad.bledy} />
-          )}
-          {podglad.brakujace && podglad.brakujace.length > 0 && (
-            <Komunikat
-              odmiana="uwaga"
-              tytul="Klucze bez wartości w danych próbnych"
-              lista={podglad.brakujace}
-            />
-          )}
-          <ListaKluczy klucze={podglad.klucze} />
-          <Karta scisla tytul="Podgląd na danych próbnych">
-            <iframe
-              title="Podgląd dokumentu"
-              srcDoc={podglad.html}
-              style={{ width: '100%', height: 520, border: '1px solid var(--linia)', borderRadius: 8, background: '#fff' }}
-            />
-            <div className="podstawa-prawna odstep-g">
-              Dane w podglądzie są fikcyjne — służą wyłącznie sprawdzeniu układu i kompletności pól.
-            </div>
-          </Karta>
-        </>
-      )}
-
-      <div className="rozdzielacz" />
-
-      {historia ? (
-        <Karta scisla tytul="Historia wersji">
-          <table className="tabela">
-            <thead>
-              <tr>
-                <th>Wersja</th>
-                <th>Tytuł</th>
-                <th>Autor</th>
-                <th>Utworzono</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {historia.map((w) => (
-                <tr key={w.wersja}>
-                  <td className="kol-dane">{w.wersja}</td>
-                  <td>
-                    {w.tytul}
-                    {w.aktywna ? <Pigulka odmiana="rejestr" style={{ marginLeft: 8 }}>aktywna</Pigulka> : null}
-                  </td>
-                  <td className="wyciszony">{w.wbudowany ? 'wbudowany' : w.autor}</td>
-                  <td className="kol-dane">{fmt.data(w.utworzono)}</td>
-                  <td className="do-prawej">
-                    {!w.aktywna && (
-                      <button className="btn btn-maly" onClick={() => przywroc(w.wersja)}>
-                        Uczyń aktywną
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Karta>
+      {ladowanie ? (
+        <Spinner />
       ) : (
-        <button className="btn btn-maly" onClick={wczytajHistorie}>
-          Pokaż historię wersji
-        </button>
+        <>
+          <div className="row-g" style={{ alignItems: 'center' }}>
+            <ZnacznikPoprawnosci szablon={szablon} />
+            <span className="wyciszony kol-dane">{szablon.plik}</span>
+          </div>
+          <div className="podpowiedz odstep-d">
+            Skrót treści: <span className="kol-dane">{szablon.hashKrotki}</span> — zapisuje się
+            przy każdym wydanym z tego wzoru piśmie, więc zawsze wiadomo, które brzmienie pliku
+            stało za konkretnym dokumentem.
+          </div>
+
+          {szablon.niezamkniete.length > 0 && (
+            <Komunikat
+              odmiana="blad"
+              tytul="Sekcje bez znacznika zamykającego"
+              lista={szablon.niezamkniete.map((n) => `{{#${n}}} — brakuje {{/${n}}}`)}
+            />
+          )}
+          {szablon.ostrzezenia.length > 0 && (
+            <Komunikat odmiana="uwaga" tytul="Pola rozbite przez Worda" lista={szablon.ostrzezenia} />
+          )}
+
+          <ListaKluczy szablon={szablon} />
+
+          <div className="rozdzielacz" />
+
+          <div className="row-g" style={{ flexWrap: 'wrap' }}>
+            <button className="btn" onClick={pokazPodglad} disabled={ladowaniePodgladu}>
+              {ladowaniePodgladu ? 'Składanie…' : 'Podgląd na danych próbnych'}
+            </button>
+            <a className="btn" href={`/api/psa/szablony/${kod}/podglad.docx`}>
+              Pobierz jako .docx
+            </a>
+          </div>
+
+          {podglad && (
+            <>
+              {podglad.bledy.length > 0 && (
+                <Komunikat odmiana="blad" tytul="Błąd wzoru" lista={podglad.bledy} />
+              )}
+              {podglad.brakujace.length > 0 && (
+                <Komunikat odmiana="uwaga" tytul="Klucze bez wartości w danych próbnych" lista={podglad.brakujace} />
+              )}
+              <Karta scisla tytul="Treść na danych próbnych">
+                <pre
+                  style={{
+                    whiteSpace: 'pre-wrap', fontFamily: 'var(--czcionka-dane, monospace)',
+                    fontSize: 12, lineHeight: 1.6, margin: 0,
+                  }}
+                >
+                  {podglad.tekst}
+                </pre>
+              </Karta>
+              <div className="podstawa-prawna odstep-g">
+                Dane w podglądzie są fikcyjne (wzory/_generatory/dane_testowe.py) — służą wyłącznie
+                sprawdzeniu, że wszystkie pola się podstawiają. Formatowanie (czcionka, tabele,
+                akapity) widać dopiero w pobranym pliku .docx.
+              </div>
+            </>
+          )}
+        </>
       )}
     </Modal>
   );
 }
 
+/** Pełny katalog kluczy — do sprawdzenia PRZED redakcją wzoru w Wordzie, nie po. */
+function DostepneKlucze() {
+  const { dane, ladowanie } = useDane('/api/psa/szablony/dostepne-klucze');
+  const [rozwiniete, ustawRozwiniete] = useState(false);
+
+  if (ladowanie || !dane) return null;
+  return (
+    <Karta scisla tytul="Wszystkie dostępne klucze">
+      <button className="btn btn-maly" onClick={() => ustawRozwiniete((r) => !r)}>
+        {rozwiniete ? 'Zwiń' : `Pokaż (${dane.proste.length} pól, ${dane.sekcje.length} sekcji)`}
+      </button>
+      {rozwiniete && (
+        <div className="odstep-g">
+          <div className="podpowiedz">
+            Pełny słownik, niezależnie od tego, czego dziś używa który wzór — do sprawdzenia
+            PRZED redakcją pisma w Wordzie.
+          </div>
+          <div className="row-g" style={{ flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {dane.sekcje.map((k) => (
+              <Pigulka key={`s-${k}`} odmiana="mosiadz">{k} (sekcja)</Pigulka>
+            ))}
+            {dane.proste.map((k) => (
+              <Pigulka key={k}>{k}</Pigulka>
+            ))}
+          </div>
+        </div>
+      )}
+    </Karta>
+  );
+}
+
 function EkranSzablonow() {
-  const { dane, ladowanie, blad, odswiez } = useDane('/api/psa/szablony');
+  const { dane, ladowanie, blad } = useDane('/api/psa/szablony');
   const [otwarty, ustawOtwarty] = useState(null);
 
   if (ladowanie) return <Spinner />;
-  if (blad) return <Komunikat odmiana="blad" tytul="Nie udało się wczytać szablonów" tresc={blad.message} />;
+  if (blad) return <Komunikat odmiana="blad" tytul="Nie udało się wczytać wzorów" tresc={blad.message} />;
 
   const szablony = (dane && dane.szablony) || [];
 
@@ -245,55 +177,51 @@ function EkranSzablonow() {
         <div>
           <div className="tytul-strony">Szablony dokumentów</div>
           <div className="podtytul-strony">
-            Treść pism wychodzących z rejestru. Redakcja zakłada kolejną wersję — poprzednie
-            zostają, bo to one są podstawą dokumentów już wydanych.
+            Wzory pism z katalogu <span className="kol-dane">wzory/</span> w repozytorium. Treść
+            zmienia się podmieniając plik — patrz <span className="kol-dane">wzory/README.md</span>.
           </div>
         </div>
       </div>
 
-      <Karta scisla>
-        <table className="tabela">
-          <thead>
-            <tr>
-              <th>Dokument</th>
-              <th>Podstawa prawna</th>
-              <th className="do-prawej">Wersja</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {szablony.map((s) => (
-              <tr key={s.kod}>
-                <td>
-                  <div style={{ fontWeight: 500 }}>{s.tytul}</div>
-                  {s.opis && <div className="podpowiedz">{s.opis}</div>}
-                </td>
-                <td className="wyciszony">{s.podstawa_prawna || '—'}</td>
-                <td className="do-prawej kol-dane">
-                  {s.wersja}
-                  {s.wersji > 1 && <span className="wyciszony"> z {s.wersji}</span>}
-                </td>
-                <td className="do-prawej">
-                  <button className="btn btn-maly" onClick={() => ustawOtwarty(s)}>
-                    Otwórz
-                  </button>
-                </td>
+      {szablony.length === 0 ? (
+        <Karta>
+          <Pusto tytul="Katalog wzory/ jest pusty" opis="Wgraj pliki .docx zgodnie z wzory/README.md." />
+        </Karta>
+      ) : (
+        <Karta scisla>
+          <table className="tabela">
+            <thead>
+              <tr>
+                <th>Kod</th>
+                <th>Wzór</th>
+                <th>Stan</th>
+                <th className="do-prawej">Pól / sekcji</th>
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </Karta>
-
-      {otwarty && (
-        <RedakcjaSzablonu
-          szablon={otwarty}
-          przyZamknieciu={() => ustawOtwarty(null)}
-          przyZapisie={() => {
-            ustawOtwarty(null);
-            odswiez();
-          }}
-        />
+            </thead>
+            <tbody>
+              {szablony.map((s) => (
+                <tr key={s.kod}>
+                  <td className="kol-dane">{s.kod}</td>
+                  <td style={{ fontWeight: 500 }}>{s.nazwa}</td>
+                  <td><ZnacznikPoprawnosci szablon={s} /></td>
+                  <td className="do-prawej wyciszony">{s.proste.length} / {s.sekcje.length}</td>
+                  <td className="do-prawej">
+                    <button className="btn btn-maly" onClick={() => ustawOtwarty(s.kod)}>
+                      Otwórz
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Karta>
       )}
+
+      <div className="rozdzielacz" />
+      <DostepneKlucze />
+
+      {otwarty && <SzczegolyWzoru kod={otwarty} przyZamknieciu={() => ustawOtwarty(null)} />}
     </>
   );
 }

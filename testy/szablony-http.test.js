@@ -1,11 +1,11 @@
 'use strict';
 
 /**
- * Trasy redakcji szablonów (faza 4): lista, historia wersji, podgląd na
- * danych próbnych, zakładanie kolejnej wersji, przywracanie wcześniejszej.
+ * Trasy wzorów pism (blok A1 sesji 8): lista i podgląd wzorów `.docx`
+ * czytanych z `wzory/`.
  *
- * Sedno: szablonu NIE DA SIĘ nadpisać ani usunąć przez API - redakcja zawsze
- * zakłada nową wersję, bo poprzednia jest podstawą pism już wydanych.
+ * Sedno: te trasy tylko CZYTAJĄ katalog. Nie ma tu edycji treści — wzór
+ * zmienia się podmieniając plik w `wzory/`, nie przez API.
  */
 
 const test = require('node:test');
@@ -88,93 +88,89 @@ test.after(() => {
   fs.rmSync(process.env.KATALOG_DOKUMENTOW, { recursive: true, force: true });
 });
 
-test('lista szablonow zasianych przy starcie serwera', async () => {
+test('lista wzorow z katalogu wzory/ — dziesiec plikow, wszystkie poprawne', async () => {
   const [status, dane] = await zapytaj(ciastkoAdmina, 'GET', '/api/psa/szablony');
   assert.equal(status, 200);
-  assert.ok(dane.szablony.length >= 13, 'wszystkie szablony wbudowane zasiane');
-  const umowa = dane.szablony.find((s) => s.kod === 'umowa_o_prowadzenie');
-  assert.equal(umowa.wersja, 1);
-  assert.ok(umowa.klucze.proste.includes('spolka_nazwa'));
+  assert.equal(dane.szablony.length, 10);
+  const umowa = dane.szablony.find((s) => s.kod === '01');
+  assert.ok(umowa, 'wzor 01 (umowa o prowadzenie rejestru) jest na liscie');
+  assert.ok(umowa.proste.includes('spolka_firma'));
+  assert.ok(umowa.poprawny, 'wzor nie ma niezamknietych sekcji ani rozbitych pol');
+  for (const s of dane.szablony) {
+    assert.equal(s.niezamkniete.length, 0, `wzor ${s.kod} ma niezamkniete sekcje`);
+    assert.equal(s.ostrzezenia.length, 0, `wzor ${s.kod} ma rozbite pola`);
+  }
 });
 
-test('redakcja szablonow jest zastrzezona dla administratora', async () => {
+test('dostep do wzorow jest zastrzezony dla administratora', async () => {
   const [status] = await zapytaj(ciastkoPracownika, 'GET', '/api/psa/szablony');
-  assert.equal(status, 403, 'pracownik nie redaguje tresci pism o skutkach prawnych');
+  assert.equal(status, 403, 'pracownik nie zaglada do redakcji pism o skutkach prawnych');
 });
 
-test('podglad sklada dokument na danych probnych i wskazuje braki', async () => {
-  const [status, dane] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/szablony/podglad', {
-    tytul: 'Próba',
-    tresc: '<p>{{spolka_nazwa}} — {{razem_akcji}} ({{razem_akcji_slownie}}) akcji, {{czegoNieMa}}</p>',
-  });
-  assert.equal(status, 200);
-  assert.equal(dane.na_danych_probnych, true);
-  assert.match(dane.html, /WIATRAKI POLSKIE/, 'dane próbne podstawione');
-  assert.match(dane.html, /sto/, 'liczebnik zapisany słownie');
-  assert.deepEqual(dane.brakujace, ['czegoNieMa'], 'brak wskazany zamiast ukryty');
-  assert.match(dane.html, /—/, 'brak widoczny w treści');
-});
-
-test('podglad odmawia bez tresci', async () => {
-  const [status] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/szablony/podglad', {});
-  assert.equal(status, 400);
-});
-
-test('zapis zaklada KOLEJNA wersje, poprzednia zostaje nietknieta', async () => {
-  const [, przed] = await zapytaj(ciastkoAdmina, 'GET', '/api/psa/szablony/wezwanie_przeszkoda');
-  const trescV1 = przed.wersje[0].tresc;
-
-  const [status, dane] = await zapytaj(
-    ciastkoAdmina, 'POST', '/api/psa/szablony/wezwanie_przeszkoda/wersje',
-    { tytul: 'Wezwanie — redakcja własna', tresc: '<p>Nowa treść dla {{spolka_nazwa}}.</p>' }
-  );
-  assert.equal(status, 201);
-  assert.equal(dane.szablon.wersja, 2);
-  assert.equal(dane.szablon.aktywna, 1);
-
-  const [, po] = await zapytaj(ciastkoAdmina, 'GET', '/api/psa/szablony/wezwanie_przeszkoda');
-  assert.equal(po.wersje.length, 2);
-  const v1 = po.wersje.find((w) => w.wersja === 1);
-  assert.equal(v1.tresc, trescV1, 'wersja 1 bez zmian');
-  assert.equal(v1.aktywna, 0);
-});
-
-test('szablon z bledem skladni nie wchodzi do bazy', async () => {
-  const [status, dane] = await zapytaj(
-    ciastkoAdmina, 'POST', '/api/psa/szablony/zawiadomienie_odmowa/wersje',
-    { tytul: 'Zepsuty', tresc: '{{#lista}}wiersz bez zamkniecia' }
-  );
-  assert.equal(status, 400);
-  assert.match(dane.blad, /błąd składni/i);
-});
-
-test('nie da sie zalozyc wersji nieistniejacego szablonu', async () => {
-  const [status] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/szablony/nie_ma_takiego/wersje', {
-    tytul: 'X', tresc: '<p>x</p>',
-  });
+test('szczegoly wzoru nieznanego kodu daja 404', async () => {
+  const [status] = await zapytaj(ciastkoAdmina, 'GET', '/api/psa/szablony/99');
   assert.equal(status, 404);
 });
 
-test('mozna wrocic do wczesniejszej wersji bez zmiany jej tresci', async () => {
-  await zapytaj(ciastkoAdmina, 'POST', '/api/psa/szablony/uchwala_wyboru/wersje', {
-    tytul: 'Uchwała v2', tresc: '<p>wersja druga</p>',
-  });
-  const [status, dane] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/szablony/uchwala_wyboru/aktywuj', {
-    wersja: 1,
-  });
+test('szczegoly wzoru pokazuja klucze i sekcje', async () => {
+  const [status, dane] = await zapytaj(ciastkoAdmina, 'GET', '/api/psa/szablony/07');
   assert.equal(status, 200);
-  assert.equal(dane.szablon.wersja, 1);
-
-  const [, historia] = await zapytaj(ciastkoAdmina, 'GET', '/api/psa/szablony/uchwala_wyboru');
-  assert.equal(historia.wersje.length, 2, 'wersja 2 nadal w historii');
-  assert.equal(historia.wersje.find((w) => w.wersja === 1).aktywna, 1);
+  assert.ok(dane.szablon.sekcje.includes('pozycje'));
+  assert.ok(dane.szablon.hashKrotki.length > 0);
 });
 
-test('nie ma trasy nadpisujacej ani usuwajacej szablon', async () => {
-  const [put] = await zapytaj(ciastkoAdmina, 'PUT', '/api/psa/szablony/uchwala_wyboru', {
-    tresc: '<p>podmiana</p>',
+test('podglad na danych probnych renderuje bez brakow ani bledow', async () => {
+  const [status, dane] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/szablony/01/podglad');
+  assert.equal(status, 200);
+  assert.equal(dane.na_danych_probnych, true);
+  assert.deepEqual(dane.brakujace, []);
+  assert.deepEqual(dane.bledy, []);
+  assert.match(dane.tekst, /CHARLIE UNICORN AI/, 'dane probne podstawione w tekscie');
+  assert.ok(!dane.tekst.includes('{{'), 'brak niepodstawionych pol w podgladzie');
+});
+
+test('podglad wszystkich dziesieciu wzorow jest bez brakow', async () => {
+  const [, lista] = await zapytaj(ciastkoAdmina, 'GET', '/api/psa/szablony');
+  for (const { kod } of lista.szablony) {
+    const [status, dane] = await zapytaj(ciastkoAdmina, 'POST', `/api/psa/szablony/${kod}/podglad`);
+    assert.equal(status, 200, `wzor ${kod}`);
+    assert.deepEqual(dane.brakujace, [], `wzor ${kod} ma braki`);
+  }
+});
+
+test('podglad nieznanego kodu daje 404', async () => {
+  const [status] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/szablony/99/podglad');
+  assert.equal(status, 404);
+});
+
+test('podglad.docx zwraca prawdziwy plik Worda', async () => {
+  const odp = await fetch(`${baza}/api/psa/szablony/01/podglad.docx`, {
+    headers: { Cookie: ciastkoAdmina },
   });
-  const [del] = await zapytaj(ciastkoAdmina, 'DELETE', '/api/psa/szablony/uchwala_wyboru');
-  assert.ok(put === 404 || put === 405, `PUT nie moze byc obslugiwany (jest ${put})`);
-  assert.ok(del === 404 || del === 405, `DELETE nie moze byc obslugiwany (jest ${del})`);
+  assert.equal(odp.status, 200);
+  assert.equal(
+    odp.headers.get('content-type'),
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  );
+  const bufor = Buffer.from(await odp.arrayBuffer());
+  // Sygnatura lokalnego naglowka ZIP - potwierdza, ze to poprawne archiwum,
+  // nie np. strona bledu wyslana z zlym naglowkiem.
+  assert.equal(bufor.readUInt32LE(0), 0x04034b50);
+});
+
+test('dostepne-klucze: pelny katalog, niezalezny od tego, co uzywa ktory wzor', async () => {
+  const [status, dane] = await zapytaj(ciastkoAdmina, 'GET', '/api/psa/szablony/dostepne-klucze');
+  assert.equal(status, 200);
+  assert.ok(dane.proste.includes('spolka_firma'));
+  assert.ok(dane.sekcje.includes('pozycje'));
+  assert.ok(!dane.proste.includes('pozycje'), 'sekcje i proste klucze sie nie mieszaja');
+});
+
+test('nie ma trasy edytujacej ani usuwajacej wzor — tresc zmienia sie podmiana pliku', async () => {
+  const [put] = await zapytaj(ciastkoAdmina, 'PUT', '/api/psa/szablony/01', { tresc: 'x' });
+  const [del] = await zapytaj(ciastkoAdmina, 'DELETE', '/api/psa/szablony/01');
+  const [wersje] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/szablony/01/wersje', { tresc: 'x' });
+  assert.ok(put === 404 || put === 405);
+  assert.ok(del === 404 || del === 405);
+  assert.ok(wersje === 404 || wersje === 405);
 });

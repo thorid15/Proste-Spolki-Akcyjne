@@ -12,7 +12,6 @@ const express = require('express');
 const konfiguracja = require('./server/konfiguracja');
 const { db } = require('./server/baza');
 const migracje = require('./server/migracje');
-const dokumenty = require('./server/dokumenty');
 const { posrednikBledow } = require('./server/pomocnicze/odpowiedzi');
 const autoryzacja = require('./server/pomocnicze/autoryzacja');
 const auth = require('./server/trasy/auth');
@@ -31,13 +30,6 @@ aplikacja.use(autoryzacja.wczytajSesje);
 const zastosowane = migracje.uruchom(db());
 if (zastosowane.length > 0) {
   console.log(`[psa] wykonano migracje: ${zastosowane.join(', ')}`);
-}
-
-// Szablony wbudowane - dopisywane tylko wtedy, gdy danego kodu jeszcze nie ma.
-// Redakcja notariusza nigdy nie jest nadpisywana (server/dokumenty.js).
-const zasiane = dokumenty.zasiej(db(), 'system');
-if (zasiane.length > 0) {
-  console.log(`[psa] zasiano szablony dokumentów: ${zasiane.length}`);
 }
 
 // ── API ──────────────────────────────────────────────────────────────────

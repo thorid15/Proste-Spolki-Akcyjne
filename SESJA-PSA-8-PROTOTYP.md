@@ -140,12 +140,12 @@ każdą taką zmianę odnotowujemy przy wzorze, którego dotyczy.
 | # | Zadanie | Zależy od |
 |---|---|---|
 | A0 | ✅ **ZROBIONE** — warstwa `.docx`: odczyt i zapis ZIP na `zlib`, podstawianie w `word/document.xml`, trzy tryby sekcji, scalanie rozbitych pól | — |
-| A1 | Wgranie dziesięciu wzorów z `wzory/`; wycofanie brudnopisów z sesji 6 | pliki od Łukasza |
-| A2 | Słownik kluczy wg `PLACEHOLDERY-PSA.md`: `kancelaria_*` atomowo, formy przypadków, formy pochodne z `plec`, mapa migracji ze starych kluczy | A1 |
+| A1 | ✅ **ZROBIONE** — `server/logika/wzory-dysk.js` czyta `wzory/*.docx` na żywo (kod = numer z nazwy pliku, hash SHA-256, walidacja); trzynaście brudnopisów z sesji 6 (`szablony-wbudowane.js`, `dokumenty.js`, zasiew w `serwer.js`) usunięte | — |
+| A2 | ✅ **CZĘŚCIOWO** — `konfiguracja.js` ma teraz `kancelaria_*`/`notariusz_*` atomowo; `server/logika/dane-probne.js` to port `dane_testowe.py` (99 kluczy). Formy pochodne z `plec` już były (blok B1). **Nie zrobione**: mapa ostrzeżeń o starych kluczach — pominięta świadomie, bo żaden z dziesięciu wzorów nie zawiera starego klucza (sprawdzone `docx.kluczeWzoru`), więc mapowanie nie miałoby dziś czego ostrzegać | A1 |
 | A3 | Kontekst pisma per typ: żądający, adresat, `wpis_opis`, `dokument_rodzaj`/`data`, `sprawa_numer`, sekcje `adresat_*` i `wpis_konstytutywny`/`deklaratoryjny` | A2, B1–B3 |
 | A4 | Przełączenie automatu (`poWpisie`, `powiadomienieUprzednie`, `wezwanie`, `poOdmowie`) na szablony | A3, D3 |
-| A5 | Wystawianie na żądanie: przycisk przy sprawie i przy spółce, podgląd na **realnych** danych, zapis do `psa_wydane_dokumenty` z wersją szablonu | A3 |
-| A6 | Lista **dostępnych** kluczy w edytorze z wstawianiem w miejscu kursora (dziś widać tylko już użyte) | A2 |
+| A5 | Wystawianie na żądanie: przycisk przy sprawie i przy spółce, podgląd na **realnych** danych, zapis do `psa_wydane_dokumenty` z hashem wzoru | A3 |
+| A6 | ✅ **ZROBIONE** — ekran Konfiguracja → Szablony dokumentów czyta z dysku: lista z walidacją, szczegóły (klucze/sekcje/ostrzeżenia), podgląd na danych próbnych (tekst + pobranie `.docx`), sekcja „Wszystkie dostępne klucze" (pełny słownik, nie tylko użyte) | A2 |
 | A7 | Test: każdy z dziesięciu wzorów renderuje się na realnym rejestrze bez ani jednego nieuzupełnionego klucza | A1–A5 |
 
 ---
