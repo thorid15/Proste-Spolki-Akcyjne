@@ -210,11 +210,19 @@ test('odmowa wpisu wymaga przyczyny i wysyla zawiadomienie do zadajacego', async
   assert.equal(stBrak, 400);
   assert.match(brakOdp.blad, /przyczyny/);
 
+  const [stBezOpisu, bezOpisuOdp] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, {
+    akcja: 'odmow', powod_odmowy_kod: 'inna',
+  });
+  assert.equal(stBezOpisu, 400);
+  assert.match(bezOpisuOdp.blad, /opisz/);
+
   const [stOdm, odmOdp] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, {
-    akcja: 'odmow', powod_odmowy: 'Brak wymaganej uchwały o umorzeniu.',
+    akcja: 'odmow', powod_odmowy_kod: 'brak_dokumentow',
+    powod_odmowy: 'Brak wymaganej uchwały o umorzeniu.',
   });
   assert.equal(stOdm, 200);
   assert.equal(odmOdp.sprawa.stan, 'odmowa');
+  assert.equal(odmOdp.sprawa.powod_odmowy_kod, 'brak_dokumentow');
   assert.equal(odmOdp.sprawa.powod_odmowy, 'Brak wymaganej uchwały o umorzeniu.');
   assert.equal(odmOdp.wysylka.wyslano, false);
 });
@@ -410,4 +418,92 @@ test('sciezka z urzedu nie wymaga charakteru zadajacego (art. 300(34) § 2 KSH)'
   });
   assert.equal(st, 201);
   assert.equal(odp.sprawa.zadajacy_rola, null);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Sesja 8, blok B — znak sprawy, podstawa dokumentu, plec, dane spolki
+// ─────────────────────────────────────────────────────────────
+
+test('znak sprawy: nadawany automatycznie, sekwencyjnie, w formacie RA/ROK/NNNN', async () => {
+  const { spolkaId, kowalski } = await przygotujSpolke();
+
+  const [, pierwsza] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz', data_wplywu: '2026-03-01',
+  });
+  const [, druga] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz', data_wplywu: '2026-03-15',
+  });
+
+  assert.match(pierwsza.sprawa.numer, /^RA\/2026\/\d{4}$/);
+  assert.match(druga.sprawa.numer, /^RA\/2026\/\d{4}$/);
+  assert.notEqual(pierwsza.sprawa.numer, druga.sprawa.numer);
+  const [, kolejnaWTymRoku] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz', data_wplywu: '2026-03-20',
+  });
+  const numeryTegoRoku = [pierwsza, druga, kolejnaWTymRoku].map((o) => Number(o.sprawa.numer.split('/')[2]));
+  assert.deepEqual(
+    [...numeryTegoRoku].sort((a, b) => a - b),
+    numeryTegoRoku,
+    'kolejne sprawy dostaja rosnace numery'
+  );
+});
+
+test('podstawa dokumentu: rodzaj i data podaje sie razem, katalog jest zamkniety', async () => {
+  const { spolkaId, kowalski } = await przygotujSpolke();
+
+  const [stSam, odpSam] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz', dokument_rodzaj: 'uchwala',
+  });
+  assert.equal(stSam, 400);
+  assert.match(odpSam.blad, /razem/);
+
+  const [stObcy] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
+    dokument_rodzaj: 'faktura', dokument_data: '2026-01-01',
+  });
+  assert.equal(stObcy, 400);
+
+  const [stOk, odpOk] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
+    dokument_rodzaj: 'uchwala', dokument_data: '2026-01-15',
+  });
+  assert.equal(stOk, 201);
+  assert.equal(odpOk.sprawa.dokument_rodzaj, 'uchwala');
+  assert.equal(odpOk.sprawa.dokument_data, '2026-01-15');
+});
+
+test('osoba: plec jest dobrowolna i ograniczona do katalogu', async () => {
+  const [stObca] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: 'Testowy', plec: 'nieznana',
+  });
+  assert.equal(stObca, 400);
+
+  const [stOk, odpOk] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: 'Testowy', plec: 'mezczyzna',
+  });
+  assert.equal(stOk, 201);
+  assert.equal(odpOk.osoba.plec, 'mezczyzna');
+});
+
+test('spolka: siedziba w miejscowniku i dane reprezentanta umowy sie zapisuja', async () => {
+  const [, spolkaOdp] = await zapytaj('POST', '/api/psa/spolki', {
+    nazwa: 'Reprezentant Test P.S.A.', krs: '0000999888',
+    miejscowosc: 'Warszawa', siedziba_miejscownik: 'Warszawie',
+    reprezentant_biernik: 'Jana Kowalskiego', reprezentant_plec: 'mezczyzna',
+    reprezentant_funkcja_biernik: 'Prezesa Zarządu',
+  });
+  assert.equal(spolkaOdp.spolka.siedziba_miejscownik, 'Warszawie');
+  assert.equal(spolkaOdp.spolka.reprezentant_biernik, 'Jana Kowalskiego');
+  assert.equal(spolkaOdp.spolka.reprezentant_plec, 'mezczyzna');
+
+  const [stZla] = await zapytaj('POST', '/api/psa/spolki', {
+    nazwa: 'Zla Plec P.S.A.', krs: '0000999777', reprezentant_plec: 'nieznana',
+  });
+  assert.equal(stZla, 400);
 });

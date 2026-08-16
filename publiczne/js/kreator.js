@@ -1234,6 +1234,8 @@ function EkranNowejSprawy({ spolkaId }) {
   const [zadajacyOpis, ustawZadajacegoOpis] = useState('');
   const [zadajacyRola, ustawZadajacegoRole] = useState('');
   const [dataWplywu, ustawDateWplywu] = useState(fmt.dzisIso());
+  const [dokumentRodzaj, ustawDokumentRodzaj] = useState('');
+  const [dokumentData, ustawDokumentData] = useState('');
   const [podstawaOpis, ustawPodstawaOpis] = useState('');
   const [pliki, ustawPliki] = useState([]);
   const [typDokumentu, ustawTypDokumentu] = useState('inny');
@@ -1273,6 +1275,8 @@ function EkranNowejSprawy({ spolkaId }) {
         zadajacy_rola: zadajacyRola || null,
         zadajacy_opis: zadajacyOpis || null,
         data_wplywu: dataWplywu,
+        dokument_rodzaj: dokumentRodzaj || null,
+        dokument_data: dokumentData || null,
         notatka: podstawaOpis || null,
       });
       const sprawaId = odpowiedz.sprawa.id;
@@ -1310,7 +1314,7 @@ function EkranNowejSprawy({ spolkaId }) {
     krok === 0
       ? Boolean(typ)
       : krok === 1
-      ? Boolean(zrodlo && dataWplywu && zadajacyKompletny)
+      ? Boolean(zrodlo && dataWplywu && zadajacyKompletny && (!dokumentRodzaj || dokumentData))
       : false;
 
   return (
@@ -1423,8 +1427,28 @@ function EkranNowejSprawy({ spolkaId }) {
               </>
             )}
 
-            <Pole etykieta="Dokument stanowiący podstawę" podpowiedz="Np. „umowa sprzedaży akcji z 12 marca 2026 r., podpisy notarialnie poświadczone”.">
-              <textarea value={podstawaOpis} onChange={(z) => ustawPodstawaOpis(z.target.value)} style={{ minHeight: 80 }} />
+            <div className="siatka-2">
+              <Pole
+                etykieta="Rodzaj dokumentu stanowiącego podstawę"
+                podpowiedz="Trafia na pismo jako podstawa wpisu (art. 300(34) § 4 KSH). Puste — gdy podstawą nie jest pojedynczy dokument (np. wpis z urzędu)."
+              >
+                <select value={dokumentRodzaj} onChange={(z) => ustawDokumentRodzaj(z.target.value)}>
+                  <option value="">— brak —</option>
+                  <option value="umowa_zbycia">umowa zbycia akcji</option>
+                  <option value="uchwala">uchwała</option>
+                  <option value="zgoda">zgoda</option>
+                  <option value="postanowienie">postanowienie sądu</option>
+                  <option value="pelnomocnictwo">pełnomocnictwo</option>
+                  <option value="inny">inny dokument</option>
+                </select>
+              </Pole>
+              <Pole etykieta="Data dokumentu" wymagane={Boolean(dokumentRodzaj)}>
+                <PoleDaty wartosc={dokumentData} max={fmt.dzisIso()} przyZmianie={ustawDokumentData} />
+              </Pole>
+            </div>
+
+            <Pole etykieta="Opis podstawy (opcjonalnie)" podpowiedz="Notatka wewnętrzna — np. numer aktu notarialnego. Nie trafia na pismo.">
+              <textarea value={podstawaOpis} onChange={(z) => ustawPodstawaOpis(z.target.value)} style={{ minHeight: 60 }} />
             </Pole>
 
             <Pole etykieta="Dokumenty (opcjonalnie)">

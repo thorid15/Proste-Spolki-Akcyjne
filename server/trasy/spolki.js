@@ -29,6 +29,10 @@ const POLA_SPOLKI = [
   // ograniczenia z umowy spolki bez wlasnego cyklu zycia w rejestrze):
   'data_ostatniego_wpisu_krs', 'kapital_akcyjny_grosze', 'adres_edorecze', 'sklad_organu_json',
   'zakaz_glosu_zastawnika_umowa', 'ograniczenie_dziedziczenia_umowa',
+  // Sesja 8, blok B4/B6 (dane wymagane przez wzory pism):
+  'siedziba_miejscownik',
+  'reprezentant_biernik', 'reprezentant_plec', 'reprezentant_rodzice', 'reprezentant_dowod',
+  'reprezentant_pesel', 'reprezentant_adres', 'reprezentant_funkcja_biernik', 'reprezentant_reprezentacja',
 ];
 
 /** Pola, ktorych zmiana jest zdarzeniem rejestrowym (art. 300(33) § 1 KSH). */
@@ -87,6 +91,9 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   if (dane.forma_prawna !== undefined) {
     const ocena = przepisy.ocenFormePrawna(dane.forma_prawna);
     if (!ocena.dozwolona) throw bledneZadanie(ocena.powod);
+  }
+  if (dane.reprezentant_plec && !['kobieta', 'mezczyzna'].includes(dane.reprezentant_plec)) {
+    throw bledneZadanie('Płeć reprezentanta musi być „kobieta” albo „mężczyzna”.');
   }
 }
 

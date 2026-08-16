@@ -9,7 +9,8 @@
 
 const PUSTA_SPOLKA = {
   krs: '', nip: '', regon: '', nazwa: '', forma_prawna: 'PROSTA SPÓŁKA AKCYJNA',
-  kraj: 'Polska', kod_pocztowy: '', miejscowosc: '', ulica: '', nr_domu: '', nr_lokalu: '',
+  kraj: 'Polska', kod_pocztowy: '', miejscowosc: '', siedziba_miejscownik: '',
+  ulica: '', nr_domu: '', nr_lokalu: '',
   sad_rejestrowy: '', wydzial: '', telefon: '', email: '', www: '',
   data_utworzenia_spolki: '', data_ostatniego_wpisu_krs: '', adres_edorecze: '',
   kapital_akcyjny_grosze: null,
@@ -17,6 +18,9 @@ const PUSTA_SPOLKA = {
   data_uchwaly_wyboru: '', data_umowy: '', data_otwarcia_rejestru: '',
   umowe_zawarl: '', umowe_zawarl_imie_nazwisko: '', dodatkowe_informacje_umowa_spolki: '',
   zakaz_glosu_zastawnika_umowa: '', ograniczenie_dziedziczenia_umowa: '',
+  reprezentant_biernik: '', reprezentant_plec: '', reprezentant_rodzice: '',
+  reprezentant_dowod: '', reprezentant_pesel: '', reprezentant_adres: '',
+  reprezentant_funkcja_biernik: '', reprezentant_reprezentacja: '',
 };
 
 const PUSTA_EMISJA_ZALOZYCIELSKA = {
@@ -356,9 +360,15 @@ function EkranNowejSpolki() {
               <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
               <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
             </div>
-            <div className="siatka-2">
+            <div className="siatka-3">
               <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
               <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
+              <Pole
+                etykieta="Siedziba w miejscowniku"
+                podpowiedz='„z siedzibą w …” — odmiana nazw miejscowości nie daje się zautomatyzować, np. „Warszawie”.'
+              >
+                <input type="text" {...pole('siedziba_miejscownik')} placeholder="np. Warszawie" />
+              </Pole>
             </div>
             <div className="siatka-3">
               <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
@@ -430,6 +440,48 @@ function EkranNowejSpolki() {
             )}
 
             <div className="rozdzielacz" />
+            <div className="card-h">Reprezentant spółki podpisujący umowę</div>
+            <Komunikat
+              odmiana="info"
+              tresc="Osoba, która w imieniu SPÓŁKI podpisała umowę o prowadzenie rejestru — nie mylić z „kto zawarł umowę” powyżej, bo to druga strona tej samej umowy. Dane trafiają na wzór umowy (§ 5)."
+            />
+            <Pole
+              etykieta="Imię i nazwisko (w bierniku)"
+              podpowiedz='Forma gramatyczna dokładnie taka, jak ma się znaleźć w umowie, np. „Jana Kowalskiego”.'
+            >
+              <input type="text" {...pole('reprezentant_biernik')} placeholder="np. Jana Kowalskiego" />
+            </Pole>
+            <div className="siatka-2">
+              <Pole etykieta="Płeć" podpowiedz="Do form gramatycznych w umowie (np. „działającego” / „działającą”).">
+                <select {...pole('reprezentant_plec')}>
+                  <option value="">— nie podano —</option>
+                  <option value="mezczyzna">mężczyzna</option>
+                  <option value="kobieta">kobieta</option>
+                </select>
+              </Pole>
+              <Pole etykieta="Funkcja (w bierniku)">
+                <input type="text" {...pole('reprezentant_funkcja_biernik')} placeholder="np. Prezesa Zarządu" />
+              </Pole>
+            </div>
+            <Pole etykieta="Sposób reprezentacji">
+              <input
+                type="text"
+                {...pole('reprezentant_reprezentacja')}
+                placeholder="np. uprawnionego do samodzielnej reprezentacji"
+              />
+            </Pole>
+            <div className="siatka-2">
+              <Pole etykieta="Rodzice (w dopełniaczu)">
+                <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotra i Anny" />
+              </Pole>
+              <Pole etykieta="Dowód osobisty">
+                <input type="text" {...pole('reprezentant_dowod')} />
+              </Pole>
+            </div>
+            <div className="siatka-2">
+              <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
+              <Pole etykieta="Adres zamieszkania"><input type="text" {...pole('reprezentant_adres')} /></Pole>
+            </div>
             <div className="card-h">Ograniczenia z umowy spółki</div>
             <Komunikat
               odmiana="uwaga"

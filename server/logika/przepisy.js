@@ -319,6 +319,67 @@ const OPISY_ROL_ZADAJACEGO = {
   [ROLE_ZADAJACEGO.INNA]: 'inna osoba mająca interes prawny',
 };
 
+/**
+ * Rodzaj dokumentu bedacego podstawa zadania wpisu (art. 300(34) § 4 KSH -
+ * obowiazek przedlozenia dokumentow uzasadniajacych wpis). Ten sam katalog,
+ * co przy zalacznikach do sprawy (`psa_dokumenty.typ_dokumentu`) - to jedno
+ * pojecie, nie dwa niezaleznie utrzymywane.
+ */
+const RODZAJE_DOKUMENTU = {
+  UMOWA_ZBYCIA: 'umowa_zbycia',
+  UCHWALA: 'uchwala',
+  ZGODA: 'zgoda',
+  POSTANOWIENIE: 'postanowienie',
+  PELNOMOCNICTWO: 'pelnomocnictwo',
+  INNY: 'inny',
+};
+
+const OPISY_RODZAJOW_DOKUMENTU = {
+  [RODZAJE_DOKUMENTU.UMOWA_ZBYCIA]: 'umowa zbycia akcji',
+  [RODZAJE_DOKUMENTU.UCHWALA]: 'uchwała',
+  [RODZAJE_DOKUMENTU.ZGODA]: 'zgoda',
+  [RODZAJE_DOKUMENTU.POSTANOWIENIE]: 'postanowienie sądu',
+  [RODZAJE_DOKUMENTU.PELNOMOCNICTWO]: 'pełnomocnictwo',
+  [RODZAJE_DOKUMENTU.INNY]: 'inny dokument',
+};
+
+/**
+ * Przyczyna niedokonania wpisu jako katalog zamkniety (blok B5 sesji 8).
+ * Art. 300(34) § 7 zd. 2 KSH wymaga PODANIA PRZYCZYN, ale nie narzuca ich
+ * treści - katalog jest wiec domenowy, ugruntowany w § 4 i § 5 tego samego
+ * artykulu (co konkretnie moze pojsc nie tak z dokumentami uzasadniajacymi
+ * wpis) i w obowiazkach AML. Pozycja INNA zostaje na wypadek przyczyny spoza
+ * katalogu - wymaga wtedy opisu w polu `powod_odmowy`.
+ */
+const PRZYCZYNY_ODMOWY_WPISU = {
+  BRAK_DOKUMENTOW: 'brak_dokumentow',
+  DOKUMENTY_NIE_POTWIERDZAJA: 'dokumenty_nie_potwierdzaja',
+  WATPLIWOSCI_CO_DO_TRESCI: 'watpliwosci_co_do_tresci',
+  NIEZGODNOSC_Z_REJESTREM: 'niezgodnosc_z_rejestrem',
+  PRZESZKODA_NIEUSUNIETA: 'przeszkoda_nieusunieta',
+  BRAK_AML: 'brak_aml',
+  INNA: 'inna',
+};
+
+const OPISY_PRZYCZYN_ODMOWY_WPISU = {
+  [PRZYCZYNY_ODMOWY_WPISU.BRAK_DOKUMENTOW]:
+    'nie przedłożono dokumentów uzasadniających dokonanie wpisu',
+  [PRZYCZYNY_ODMOWY_WPISU.DOKUMENTY_NIE_POTWIERDZAJA]:
+    'przedłożone dokumenty nie potwierdzają zdarzenia będącego podstawą żądanego wpisu',
+  [PRZYCZYNY_ODMOWY_WPISU.WATPLIWOSCI_CO_DO_TRESCI]:
+    'treść lub forma przedłożonych dokumentów budzi uzasadnione wątpliwości',
+  [PRZYCZYNY_ODMOWY_WPISU.NIEZGODNOSC_Z_REJESTREM]:
+    'żądanie jest niezgodne z dotychczasową treścią rejestru',
+  [PRZYCZYNY_ODMOWY_WPISU.PRZESZKODA_NIEUSUNIETA]:
+    'nie usunięto przeszkody wskazanej w wezwaniu w wyznaczonym terminie',
+  [PRZYCZYNY_ODMOWY_WPISU.BRAK_AML]:
+    'nie można zastosować wobec osoby środków bezpieczeństwa finansowego (AML)',
+  [PRZYCZYNY_ODMOWY_WPISU.INNA]: 'inna przyczyna — patrz opis',
+};
+
+/** Przy tej przyczynie opis w `powod_odmowy` jest OBOWIĄZKOWY. */
+const PRZYCZYNA_ODMOWY_WYMAGA_OPISU = PRZYCZYNY_ODMOWY_WPISU.INNA;
+
 /** Kategorie, w ktorych moze znalezc sie kazdy numer akcji (materializacja - podstawa niezmiennika bilansu). */
 const KATEGORIE_AKCJI = {
   /** Wyemitowana, jeszcze nieobjeta przez zadnego akcjonariusza. */
@@ -549,6 +610,11 @@ module.exports = {
   ROLE_ZADAJACEGO,
   ROLA_ZADAJACEGO_WYMAGA_UZASADNIENIA,
   OPISY_ROL_ZADAJACEGO,
+  RODZAJE_DOKUMENTU,
+  OPISY_RODZAJOW_DOKUMENTU,
+  PRZYCZYNY_ODMOWY_WPISU,
+  OPISY_PRZYCZYN_ODMOWY_WPISU,
+  PRZYCZYNA_ODMOWY_WYMAGA_OPISU,
   KATEGORIE_AKCJI,
   RODZAJE_AKCJI,
   STANY_POKRYCIA,

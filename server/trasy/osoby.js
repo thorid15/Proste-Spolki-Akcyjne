@@ -17,7 +17,7 @@ const { asy, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi'
 const router = express.Router();
 
 const POLA_OSOBY = [
-  'typ', 'nazwisko', 'imie', 'nazwa', 'pesel', 'data_urodzenia', 'nip', 'regon',
+  'typ', 'nazwisko', 'imie', 'nazwa', 'plec', 'pesel', 'data_urodzenia', 'nip', 'regon',
   'numer_w_rejestrze', 'nazwa_rejestru', 'kraj', 'kod_pocztowy', 'miejscowosc', 'ulica',
   'nr_domu', 'nr_lokalu', 'adres_doreczen', 'adres_edoreczen', 'email', 'telefon',
   'zgoda_email', 'aml_status', 'aml_data', 'aml_notatka', 'uwagi',
@@ -69,6 +69,9 @@ function sprawdzOsobe(dane, { czesciowe = false } = {}) {
 
   if (dane.pesel && !poprawnyPesel(dane.pesel)) {
     throw bledneZadanie('Numer PESEL jest niepoprawny (nie zgadza się suma kontrolna).');
+  }
+  if (dane.plec && !['kobieta', 'mezczyzna'].includes(dane.plec)) {
+    throw bledneZadanie('Płeć musi być „kobieta” albo „mężczyzna”.');
   }
   if (dane.data_urodzenia && !czas.poprawnaData(dane.data_urodzenia)) {
     throw bledneZadanie('Data urodzenia musi mieć format RRRR-MM-DD.');

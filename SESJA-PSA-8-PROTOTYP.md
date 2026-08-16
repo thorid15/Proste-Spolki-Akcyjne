@@ -154,12 +154,12 @@ każdą taką zmianę odnotowujemy przy wzorze, którego dotyczy.
 
 | # | Zadanie | Uzasadnienie |
 |---|---|---|
-| B1 | `osoba.plec` + wyliczanie form pochodnych | `PLACEHOLDERY` § 1; bez tego „zamieszkały/zamieszkała" zostaje do skreślenia ręcznie |
-| B2 | `sprawa.numer` — znak sprawy, generowany przy założeniu (`RA/2026/0042`) | `{{sprawa_numer}}` na każdym piśmie |
-| B3 | `sprawa.dokument_rodzaj` (lista zamknięta z `PLACEHOLDERY` § 6) + `dokument_data` | wzory 04, 05, 07 czytają to z jednego miejsca |
-| B4 | Formy przypadków spółki i siedziby (`spolka_siedziba_miejscownik` itd.) | pola przy spółce; odmiana algorytmiczna jest zawodna |
-| B5 | Katalog przyczyn niedokonania wpisu jako lista zamknięta (`PLACEHOLDERY` § 7) | dziś wolny tekst; przyczyna musi być konkretna, art. 300³⁴ § 7 zd. 2 |
-| B6 | Dane reprezentanta spółki podpisującego umowę (wzór 01 § 5) | dziś nie zbieramy |
+| B1 | ✅ **ZROBIONE** — `osoba.plec` + `server/logika/formy-osobowe.js` (formy pochodne per miejsce użycia, nie per rdzeń słowa) | — |
+| B2 | ✅ **ZROBIONE** — `sprawa.numer`, `server/logika/znak-sprawy.js`, format `RA/ROK/NNNN`, nadawany przy założeniu | — |
+| B3 | ✅ **ZROBIONE** — `sprawa.dokument_rodzaj` (katalog wspólny z `psa_dokumenty.typ_dokumentu`) + `dokument_data`, oba razem albo żadne | — |
+| B4 | ✅ **ZROBIONE** — `spolka.siedziba_miejscownik`, pole edytowalne obok „Miejscowość" | — |
+| B5 | ✅ **ZROBIONE** — `sprawa.powod_odmowy_kod` (katalog zamknięty), `powod_odmowy` jako rozwinięcie, obowiązkowe przy kodzie „inna" | — |
+| B6 | ✅ **ZROBIONE** — `spolka.reprezentant_*` (biernik, płeć, rodzice, dowód, PESEL, adres, funkcja, sposób reprezentacji) w kroku „Umowa o prowadzenie rejestru" | — |
 
 ---
 
@@ -216,7 +216,8 @@ Blok D („tanie teraz, drogie potem") — decyzja osobna, do wplecenia w dowoln
 momencie; niekonieczny do testu wewnętrznego, konieczny przed pierwszym
 klientem z zewnątrz.
 
-A0 zrobione. Pliki wzorów są w repozytorium, więc A1 też jest odblokowane.
+A0 zrobione. Blok B zrobiony w całości (B1–B6). Pliki wzorów są w repozytorium
+i dane, których wzory wymagają, są już zbierane — A1 jest odblokowane.
 ```
 
 ### 9.1. Wynik A0 — sprawdzone na prawdziwych wzorach

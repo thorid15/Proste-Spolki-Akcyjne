@@ -30,13 +30,16 @@ const typyZdarzen = require('../logika/typy-zdarzen');
 const przepisy = require('../logika/przepisy');
 const maskowanie = require('../logika/maskowanie');
 const konfiguracja = require('../konfiguracja');
+const { nastepnyNumerSprawy } = require('../logika/znak-sprawy');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 
 const router = express.Router();
 
 const ZRODLA = ['portal', 'email', 'papier', 'z_urzedu'];
-const TYPY_DOKUMENTU = ['umowa_zbycia', 'uchwala', 'zgoda', 'postanowienie', 'pelnomocnictwo', 'inny'];
+// Ten sam katalog, co rodzaj podstawy zadania (przepisy.RODZAJE_DOKUMENTU) -
+// zalaczniki do sprawy sa czescia tego samego pojecia, nie osobnym slownikiem.
+const TYPY_DOKUMENTU = Object.values(przepisy.RODZAJE_DOKUMENTU);
 
 // ─────────────────────────────────────────────────────────────
 // Odczyt
@@ -175,6 +178,22 @@ router.post(
     // wprost w weryfikacji (patrz komentarz na gorze pliku).
     const stanPoczatkowy = typ.z_urzedu ? 'weryfikacja' : 'nowa';
 
+    // Dokument bedacy podstawa zadania (art. 300(34) § 4 KSH) - dobrowolny na
+    // poziomie schematu (sciezka z_urzedu i portalowa zgoda nie zawsze go maja),
+    // ale gdy podano jedno pole, wymagamy obu - inaczej wzory 04/05/07 dostana
+    // sekcje warunkowa {{#podstawa_dokument}} z polowicznymi danymi.
+    const dokumentRodzaj = cialo.dokument_rodzaj ? String(cialo.dokument_rodzaj).trim() : null;
+    const dokumentData = cialo.dokument_data ? String(cialo.dokument_data).trim() : null;
+    if (dokumentRodzaj && !Object.values(przepisy.RODZAJE_DOKUMENTU).includes(dokumentRodzaj)) {
+      throw bledneZadanie(`Nieznany rodzaj dokumentu: „${dokumentRodzaj}”.`);
+    }
+    if (dokumentData && !czas.poprawnaData(dokumentData)) {
+      throw bledneZadanie('Data dokumentu musi mieć format RRRR-MM-DD.');
+    }
+    if ((dokumentRodzaj && !dokumentData) || (!dokumentRodzaj && dokumentData)) {
+      throw bledneZadanie('Rodzaj i data dokumentu podaje się razem.');
+    }
+
     const dane = {
       spolka_id: spolkaId,
       typ_zdarzenia: typZdarzenia,
@@ -187,6 +206,9 @@ router.post(
       wymaga_powiadomienia: typ.wymaga_powiadomienia === true ? 1 : 0,
       autor: kto,
       notatka: cialo.notatka ? String(cialo.notatka).trim() : null,
+      numer: nastepnyNumerSprawy(db(), dataWplywu),
+      dokument_rodzaj: dokumentRodzaj,
+      dokument_data: dokumentData,
       utworzono: czas.terazIso(),
     };
     dane.termin_do = terminy.policzTermin(
@@ -356,7 +378,7 @@ router.patch(
     if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
     const spolka = rejestr.wczytajSpolke(db(), sprawa.spolka_id);
     const dzis = czas.dzisIso();
-    const { akcja, powod, powod_odmowy } = zad.body || {};
+    const { akcja, powod, powod_odmowy, powod_odmowy_kod } = zad.body || {};
 
     if (akcja === 'weryfikuj') {
       if (sprawa.stan !== 'nowa') {
@@ -432,21 +454,33 @@ router.patch(
       if (!['weryfikacja', 'wstrzymana'].includes(sprawa.stan)) {
         throw bledneZadanie('Odmówić można wyłącznie sprawie w toku weryfikacji.');
       }
-      if (!powod_odmowy || !String(powod_odmowy).trim()) {
-        throw bledneZadanie('Odmowa wymaga podania przyczyny (art. 300(34) § 7 zd. 2 KSH).');
+      // Katalog zamkniety (blok B5 sesji 8) - art. 300(34) § 7 zd. 2 KSH wymaga
+      // PODANIA PRZYCZYN, wiec wolny tekst bez zadnej kwalifikacji nie
+      // wystarcza. Kod "inna" wymaga opisu, bo sam kod nic nie mowi.
+      const kod = powod_odmowy_kod ? String(powod_odmowy_kod).trim() : '';
+      if (!kod || !Object.values(przepisy.PRZYCZYNY_ODMOWY_WPISU).includes(kod)) {
+        throw bledneZadanie('Odmowa wymaga wskazania przyczyny z katalogu (art. 300(34) § 7 zd. 2 KSH).');
       }
+      const opis = powod_odmowy ? String(powod_odmowy).trim() : '';
+      if (kod === przepisy.PRZYCZYNA_ODMOWY_WYMAGA_OPISU && !opis) {
+        throw bledneZadanie('Przy przyczynie „inna” opisz ją — sam kod nic nie mówi adresatowi pisma.');
+      }
+      const opisKoncowy = opis || przepisy.OPISY_PRZYCZYN_ODMOWY_WPISU[kod];
       db()
-        .prepare('UPDATE psa_sprawy SET stan = ?, powod_odmowy = ?, termin_do = NULL, zaktualizowano = ? WHERE id = ?')
-        .run('odmowa', powod_odmowy, czas.terazIso(), id);
+        .prepare(
+          `UPDATE psa_sprawy SET stan = ?, powod_odmowy_kod = ?, powod_odmowy = ?,
+                                   termin_do = NULL, zaktualizowano = ? WHERE id = ?`
+        )
+        .run('odmowa', kod, opisKoncowy, czas.terazIso(), id);
 
       const osoby = rejestr.wczytajOsoby(db(), sprawa.zadajacy_osoba_id ? [sprawa.zadajacy_osoba_id] : []);
       let wysylka = null;
       try {
         wysylka = await zawiadomienia.poOdmowie(db(), {
-          sprawa: { ...sprawa, stan: 'odmowa', powod_odmowy },
+          sprawa: { ...sprawa, stan: 'odmowa', powod_odmowy: opisKoncowy, powod_odmowy_kod: kod },
           spolka,
           osoby,
-          powodOdmowy: powod_odmowy,
+          powodOdmowy: opisKoncowy,
           autor: kto,
         });
       } catch (e) {

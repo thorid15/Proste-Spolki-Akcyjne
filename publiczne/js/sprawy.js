@@ -28,6 +28,19 @@ const OPISY_ROL_ZADAJACEGO = {
   inna: 'inna osoba mająca interes prawny',
 };
 
+/* Przyczyna niedokonania wpisu (art. 300(34) § 7 zd. 2 KSH) — lustro
+   server/logika/przepisy.js:OPISY_PRZYCZYN_ODMOWY_WPISU. */
+const OPISY_PRZYCZYN_ODMOWY_WPISU = {
+  brak_dokumentow: 'nie przedłożono dokumentów uzasadniających wpis',
+  dokumenty_nie_potwierdzaja: 'dokumenty nie potwierdzają zdarzenia będącego podstawą wpisu',
+  watpliwosci_co_do_tresci: 'treść lub forma dokumentów budzi uzasadnione wątpliwości',
+  niezgodnosc_z_rejestrem: 'żądanie jest niezgodne z dotychczasową treścią rejestru',
+  przeszkoda_nieusunieta: 'nie usunięto przeszkody wskazanej w wezwaniu',
+  brak_aml: 'nie można zastosować środków bezpieczeństwa finansowego (AML)',
+  inna: 'inna przyczyna',
+};
+const PRZYCZYNA_ODMOWY_WYMAGA_OPISU = 'inna';
+
 /** Widok sprawy — pełniejszy niż pigułka w kolejce: nazywa oba zegary wprost. */
 function ZnacznikTerminu({ termin }) {
   if (termin.zamrozony) return <Znacznik odmiana="oliwka">termin zawieszony</Znacznik>;
@@ -248,6 +261,49 @@ function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie }) {
   );
 }
 
+/** Odmowa wpisu — przyczyna z katalogu zamkniętego (blok B5 sesji 8), opis
+    obowiązkowy tylko przy „inna”, bo tam sam kod nic nie mówi. */
+function ModalOdmowy({ przyZamknieciu, przyZapisie }) {
+  const [kod, ustawKod] = useState('');
+  const [opis, ustawOpis] = useState('');
+  const wymagaOpisu = kod === PRZYCZYNA_ODMOWY_WYMAGA_OPISU;
+
+  return (
+    <Modal
+      tytul="Odmowa wpisu"
+      przyZamknieciu={przyZamknieciu}
+      stopka={
+        <>
+          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          <button
+            className="btn btn-primary"
+            disabled={!kod || (wymagaOpisu && !opis.trim())}
+            onClick={() => przyZapisie({ powod_odmowy_kod: kod, powod_odmowy: opis.trim() })}
+          >
+            Potwierdź
+          </button>
+        </>
+      }
+    >
+      <Pole etykieta="Przyczyna odmowy (art. 300(34) § 7 zd. 2 KSH)" wymagane>
+        <select value={kod} onChange={(z) => ustawKod(z.target.value)} autoFocus>
+          <option value="" disabled>wybierz przyczynę…</option>
+          {Object.entries(OPISY_PRZYCZYN_ODMOWY_WPISU).map(([k, etykieta]) => (
+            <option key={k} value={k}>{etykieta}</option>
+          ))}
+        </select>
+      </Pole>
+      <Pole
+        etykieta={wymagaOpisu ? 'Opis przyczyny' : 'Dodatkowy opis (opcjonalnie)'}
+        wymagane={wymagaOpisu}
+        podpowiedz="Trafia w piśmie wprost pod nazwę przyczyny."
+      >
+        <textarea value={opis} onChange={(z) => ustawOpis(z.target.value)} />
+      </Pole>
+    </Modal>
+  );
+}
+
 function AkcjeSprawy({ sprawa, odswiez }) {
   const [modal, ustawModal] = useState(null);
   const [bladAkcji, ustawBladAkcji] = useState(null);
@@ -288,11 +344,9 @@ function AkcjeSprawy({ sprawa, odswiez }) {
         />
       )}
       {modal === 'odmow' && (
-        <ModalPowod
-          tytul="Odmowa wpisu"
-          etykieta="Przyczyna odmowy (art. 300(34) § 7 zd. 2 KSH)"
+        <ModalOdmowy
           przyZamknieciu={() => ustawModal(null)}
-          przyZapisie={(powod_odmowy) => wykonaj('odmow', { powod_odmowy })}
+          przyZapisie={(dane) => wykonaj('odmow', dane)}
         />
       )}
       {modal === 'anuluj' && (
@@ -668,7 +722,11 @@ function EkranSprawy({ sprawaId }) {
         <Komunikat odmiana="info" tytul="Notatki" tresc={sprawa.notatka.split('\n').slice(-1)[0].replace(/^\[.*?\]\s*/, '')} />
       )}
       {sprawa.stan === 'odmowa' && (
-        <Komunikat odmiana="blad" tytul="Przyczyna odmowy" tresc={sprawa.powod_odmowy} />
+        <Komunikat
+          odmiana="blad"
+          tytul={`Przyczyna odmowy — ${OPISY_PRZYCZYN_ODMOWY_WPISU[sprawa.powod_odmowy_kod] || 'nieustalona'}`}
+          tresc={sprawa.powod_odmowy}
+        />
       )}
 
       {!wlasnieWpisano && <AkcjeSprawy sprawa={sprawa} odswiez={odswiez} />}

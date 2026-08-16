@@ -2,7 +2,7 @@
 
 const PUSTA_OSOBA = {
   typ: 'fizyczna',
-  nazwisko: '', imie: '', nazwa: '',
+  nazwisko: '', imie: '', nazwa: '', plec: '',
   pesel: '', data_urodzenia: '',
   nip: '', regon: '', numer_w_rejestrze: '', nazwa_rejestru: 'KRS',
   kraj: 'Polska', kod_pocztowy: '', miejscowosc: '', ulica: '', nr_domu: '', nr_lokalu: '',
@@ -71,6 +71,16 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
               <PoleDaty wartosc={dane.data_urodzenia || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))} />
             </Pole>
           </div>
+          <Pole
+            etykieta="Płeć"
+            podpowiedz="Do form gramatycznych na pismach (zamieszkały / zamieszkała). Puste — te pola zostają do ręcznego uzupełnienia."
+          >
+            <select {...pole('plec')}>
+              <option value="">— nie podano —</option>
+              <option value="mezczyzna">mężczyzna</option>
+              <option value="kobieta">kobieta</option>
+            </select>
+          </Pole>
           <Komunikat
             odmiana="info"
             tresc="Treścią rejestru są wyłącznie nazwisko, imię i adres (art. 300(33) § 1 pkt 5 KSH). PESEL i data urodzenia są dobrowolne — służą identyfikacji na potrzeby AML. Inni akcjonariusze ich nie zobaczą."

@@ -676,6 +676,78 @@ const MIGRACJE = [
       ALTER TABLE psa_wydane_dokumenty ADD COLUMN szablon_wersja INTEGER;
     `,
   },
+  {
+    wersja: 9,
+    nazwa: 'dane wymagane przez wzory pism (sesja 8, blok B): plec, znak sprawy, ' +
+      'podstawa dokumentu, przyczyna odmowy, forma spolki i reprezentant umowy',
+    sql: `
+      -- ── Osoba: plec ──────────────────────────────────────────────────
+      -- Wzory pism odmieniaja przez rodzaj gramatyczny ("zamieszkaly" wobec
+      -- "zamieszkala", "syna" wobec "corke") - PLACEHOLDERY-PSA.md § 1.
+      -- Bez tego pola kazde pismo wymagaloby recznego skreslenia niewlasciwej
+      -- formy. Dobrowolne na poziomie schematu (dane sprzed migracji i osoby
+      -- prawne go nie maja) - formy pochodne po prostu zostaja niewyliczone,
+      -- co widac w podgladzie pisma jako brak, nie jako cichy blad.
+      ALTER TABLE psa_osoby ADD COLUMN plec TEXT
+        CHECK (plec IS NULL OR plec IN ('kobieta','mezczyzna'));
+
+      -- ── Sprawa: znak sprawy ─────────────────────────────────────────────
+      -- {{sprawa_numer}} wystepuje na kazdym pismie. Generowany przy zalozeniu
+      -- sprawy (server/trasy/sprawy.js), format RA/ROK/NNNN. Sprawy sprzed
+      -- migracji zostaja bez numeru - nie ma jak go odtworzyc wstecz bez
+      -- ryzyka kolizji z numerami juz nadanymi po fakcie.
+      ALTER TABLE psa_sprawy ADD COLUMN numer TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS psa_ix_sprawy_numer
+        ON psa_sprawy (numer) WHERE numer IS NOT NULL;
+
+      -- ── Sprawa: dokument bedacy podstawa zadania ─────────────────────────
+      -- Dotad zapisywane wolnym tekstem w "notatka" - niespojnie miedzy
+      -- sprawami i nieczytelne dla wzorow 04/05/07, ktore odwoluja sie do
+      -- rodzaju i daty dokumentu jako osobnych pol (sekcja warunkowa
+      -- {{#podstawa_dokument}}). Katalog rodzajow jest ten sam, co przy
+      -- zalacznikach do sprawy (psa_dokumenty.typ_dokumentu) - to ten sam
+      -- pojeciowo katalog, jeden zamiast dwoch niezaleznie utrzymywanych.
+      ALTER TABLE psa_sprawy ADD COLUMN dokument_rodzaj TEXT
+        CHECK (dokument_rodzaj IS NULL OR dokument_rodzaj IN
+          ('umowa_zbycia','uchwala','zgoda','postanowienie','pelnomocnictwo','inny'));
+      ALTER TABLE psa_sprawy ADD COLUMN dokument_data TEXT;
+
+      -- ── Sprawa: przyczyna niedokonania wpisu jako katalog zamkniety ──────
+      -- Art. 300(34) § 7 zd. 2 KSH: przy niedokonaniu wpisu nalezy PODAC
+      -- PRZYCZYNY - dotad wolny tekst w "powod_odmowy", co pozwalalo na
+      -- odmowe bez konkretnej podstawy. Kolumna "powod_odmowy" zostaje jako
+      -- rozwiniecie/uzasadnienie w jezyku naturalnym (obowiazkowe przy kodzie
+      -- "inna", opcjonalne przy pozostalych - kod juz jest konkretny).
+      ALTER TABLE psa_sprawy ADD COLUMN powod_odmowy_kod TEXT
+        CHECK (powod_odmowy_kod IS NULL OR powod_odmowy_kod IN
+          ('brak_dokumentow','dokumenty_nie_potwierdzaja','watpliwosci_co_do_tresci',
+           'niezgodnosc_z_rejestrem','przeszkoda_nieusunieta','brak_aml','inna'));
+
+      -- ── Spolka: forma "w miejscowniku" siedziby ──────────────────────────
+      -- "z siedziba w Warszawie" - odmiana nazw miejscowosci algorytmem jest
+      -- zawodna (wyjatki, nazwy wieloczlonowe, formy historyczne), wiec pole
+      -- edytowalne zamiast wyliczane. Mianownik to juz istniejace "miejscowosc".
+      ALTER TABLE psa_spolki ADD COLUMN siedziba_miejscownik TEXT;
+
+      -- ── Spolka: reprezentant podpisujacy umowe o prowadzenie rejestru ────
+      -- Wzor 01 § 5. Dotyczy WYLACZNIE strony spolki (kto zawarl umowe w
+      -- imieniu podmiotu prowadzacego rejestr to juz "umowe_zawarl*" z
+      -- migracji 6 - inna strona tej samej umowy). Nazwisko w bierniku, bo
+      -- caly ustep identyfikacyjny wzoru jest w tym przypadku - odmiana
+      -- nazwiska nie da sie zautomatyzowac, notariusz wpisuje raz przy
+      -- rejestracji spolki. Formy pochodne ("dzialajacego"/"dzialajaca" itd.)
+      -- wylicza server/logika/formy-osobowe.js z pola "reprezentant_plec".
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_biernik TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_plec TEXT
+        CHECK (reprezentant_plec IS NULL OR reprezentant_plec IN ('kobieta','mezczyzna'));
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_rodzice TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_dowod TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_pesel TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_adres TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_funkcja_biernik TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_reprezentacja TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
