@@ -164,12 +164,20 @@ const PRZYGOTOWANIA = {
       // Puste pola = wklad pieniezny albo aport, bez dodatkowej tresci.
       const rodzajSwiadczenia = tekst(p.rodzaj_swiadczenia, 'rodzaj świadczenia', { wymagane: false, maks: 300 });
       const czasSwiadczenia = tekst(p.czas_swiadczenia, 'czas świadczenia', { wymagane: false, maks: 100 });
+      // Cena emisyjna PER AKCJONARIUSZ (etap 2.6 poprawek) - moze sie roznic
+      // miedzy osobami objetymi ta sama emisja (np. rozne aporty). Bez
+      // odpowiednika na poziomie emisji - kreator nie narzuca jednej ceny.
+      const cenaEmisyjnaGrosze =
+        p.cena_emisyjna_grosze == null || p.cena_emisyjna_grosze === ''
+          ? null
+          : liczbaCalkowita(p.cena_emisyjna_grosze, 'cena emisyjna za akcję (grosze)', { min: 0 });
       return {
         osoba_id: osobaId,
         osoba_nazwa: nazwaOsoby(kontekst.osoby.get(osobaId)),
         ilosc: n.ilosc(zakresy),
         zakresy,
         pokryta,
+        cena_emisyjna_grosze: cenaEmisyjnaGrosze,
         rodzaj_swiadczenia: rodzajSwiadczenia,
         czas_swiadczenia: czasSwiadczenia,
       };

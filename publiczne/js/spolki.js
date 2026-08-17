@@ -40,7 +40,11 @@ const PUSTA_SPOLKA = {
 };
 
 const PUSTA_EMISJA_ZALOZYCIELSKA = {
-  seria: '', nr_pierwszy: 1, ilosc: '', cena_emisyjna_grosze: null,
+  // Cena emisyjna NIE jest tu wspolna dla calej emisji (etap 2.6 poprawek) -
+  // rozne osoby moga wnosic rozne kwoty za akcje w tej samej emisji
+  // zalozycielskiej (np. rozne aporty); cena zyje przy kazdej pozycji
+  // akcjonariatu nizej.
+  seria: '', nr_pierwszy: 1, ilosc: '',
   data_emisji: '', data_wpisu_krs: '', rodzaj_akcji: 'zwykla', tytul: '', obowiazki_wobec_spolki: '',
   podstawa_prawna: '',
 };
@@ -95,17 +99,30 @@ function PozycjaZalozycielska({ pozycja, ustawPozycje, usun, mozna_usunac, wyklu
           />
         </Pole>
       </div>
-      <Pole etykieta="Wzmianka o pokryciu" podpowiedz="art. 300(33) § 1 pkt 9 KSH — zostaw puste, jeśli nieustalone.">
-        <select
-          value={pozycja.pokryta || ''}
-          onChange={(z) => ustawPozycje({ ...pozycja, pokryta: z.target.value })}
-        >
-          <option value="">— nieustalone —</option>
-          <option value="tak">pokryta w całości</option>
-          <option value="czesciowo">pokryta częściowo</option>
-          <option value="nie">niepokryta</option>
-        </select>
-      </Pole>
+      <div className="siatka-2">
+        <Pole etykieta="Wzmianka o pokryciu" podpowiedz="art. 300(33) § 1 pkt 9 KSH — zostaw puste, jeśli nieustalone.">
+          <select
+            value={pozycja.pokryta || ''}
+            onChange={(z) => ustawPozycje({ ...pozycja, pokryta: z.target.value })}
+          >
+            <option value="">— nieustalone —</option>
+            <option value="tak">pokryta w całości</option>
+            <option value="czesciowo">pokryta częściowo</option>
+            <option value="nie">niepokryta</option>
+          </select>
+        </Pole>
+        {!wkladNiepieniezny && (
+          <Pole
+            etykieta="Cena emisyjna (za akcję)"
+            podpowiedz="Kwota wniesiona za jedną akcję przez TEGO akcjonariusza — może się różnić między akcjonariuszami. Do kontroli spójności z kapitałem akcyjnym (krok 1)."
+          >
+            <PoleKwoty
+              grosze={pozycja.cena_emisyjna_grosze ?? null}
+              przyZmianie={(v) => ustawPozycje({ ...pozycja, cena_emisyjna_grosze: v })}
+            />
+          </Pole>
+        )}
+      </div>
       {!wkladNiepieniezny ? (
         <button className="btn btn-maly" onClick={() => ustawWkladNiepieniezny(true)}>
           Wkład w postaci pracy lub usług
@@ -237,6 +254,23 @@ function EkranNowejSpolki() {
   const ileAkcji = Number(emisja.ilosc) || 0;
   const sumaObjeta = pozycje.reduce((s, p) => s + (Number(p.ilosc) || 0), 0);
   const przekroczonyBilans = ileAkcji > 0 && sumaObjeta > ileAkcji;
+
+  // Kontrola spojnosci (etap 2.6): cena emisyjna jest teraz per akcjonariusz
+  // (moze sie roznic - np. rozne aporty), nie jedna wspolna cena emisji.
+  // Wklad praca/uslugami (art. 300(9) § 1 KSH) nie ma ceny - wylaczony z sumy.
+  const pozycjeWyceniane = pozycje.filter((p) => !p.rodzaj_swiadczenia && !p.czas_swiadczenia);
+  const sumaWkladowGrosze = pozycjeWyceniane.reduce(
+    (s, p) => s + (Number(p.ilosc) || 0) * (Number(p.cena_emisyjna_grosze) || 0),
+    0
+  );
+  const wszystkieWycenione =
+    pozycjeWyceniane.length > 0 &&
+    pozycjeWyceniane.every((p) => p.cena_emisyjna_grosze != null && p.cena_emisyjna_grosze !== '');
+  const kapitalNiezgodny =
+    wszystkieWycenione &&
+    dane.kapital_akcyjny_grosze != null &&
+    sumaWkladowGrosze !== Number(dane.kapital_akcyjny_grosze);
+
   const zgodaNiekompletna =
     zgoda.wymaga_zgody_spolki &&
     (!zgoda.zgoda_termin_wskazania_dni || !zgoda.zgoda_cena_opis.trim() || !zgoda.zgoda_termin_zaplaty_dni);
@@ -283,7 +317,8 @@ function EkranNowejSpolki() {
             seria: emisja.seria,
             nr_pierwszy: emisja.nr_pierwszy || 1,
             ilosc: ileAkcji,
-            cena_emisyjna_grosze: emisja.cena_emisyjna_grosze,
+            // Bez wspolnej ceny emisyjnej - patrz cena_emisyjna_grosze przy
+            // kazdej pozycji akcjonariatu nizej (etap 2.6 poprawek).
             // Emisja zalozycielska rejestruje sie razem ze spolka - zawsze
             // mirroruje date rejestracji w KRS (krok 1), pole w kroku 3 jest
             // read-only (etap 2.5 poprawek).
@@ -303,6 +338,7 @@ function EkranNowejSpolki() {
               osoba_id: p.osoba_id,
               ilosc: Number(p.ilosc),
               pokryta: p.pokryta || null,
+              cena_emisyjna_grosze: p.cena_emisyjna_grosze ?? null,
               rodzaj_swiadczenia: p.rodzaj_swiadczenia || null,
               czas_swiadczenia: p.czas_swiadczenia || null,
             })),
@@ -666,20 +702,15 @@ function EkranNowejSpolki() {
         {krok === 2 && (
           <>
             <div className="card-h">Pierwsza emisja</div>
-            <div className="siatka-2">
+            <div className="siatka-3">
               <Pole etykieta="Oznaczenie serii" wymagane>
                 <input type="text" value={emisja.seria} onChange={(z) => ustawEmisje((p) => ({ ...p, seria: z.target.value }))} placeholder="A" />
               </Pole>
               <Pole etykieta="Liczba akcji" wymagane>
                 <PoleLiczbowe sufiks="akcji" wartosc={emisja.ilosc} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, ilosc: v }))} />
               </Pole>
-            </div>
-            <div className="siatka-2">
               <Pole etykieta="Numer pierwszej akcji" podpowiedz="Domyślnie 1.">
                 <PoleLiczbowe wartosc={emisja.nr_pierwszy} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, nr_pierwszy: v || 1 }))} />
-              </Pole>
-              <Pole etykieta="Cena emisyjna jednej akcji">
-                <PoleKwoty grosze={emisja.cena_emisyjna_grosze} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, cena_emisyjna_grosze: v }))} />
               </Pole>
             </div>
             <div className="siatka-3">
@@ -735,6 +766,17 @@ function EkranNowejSpolki() {
                 (!przekroczonyBilans && sumaObjeta < ileAkcji && ileAkcji > 0 ? ' Reszta zostanie zapisana jako nieobjęta.' : '')
               }
             />
+            {pozycjeWyceniane.length > 0 && sumaWkladowGrosze > 0 && (
+              <Komunikat
+                odmiana={kapitalNiezgodny ? 'uwaga' : 'info'}
+                tresc={
+                  `Suma wkładów pieniężnych i aportowych: ${fmt.zlote(sumaWkladowGrosze)}` +
+                  (dane.kapital_akcyjny_grosze != null ? ` — kapitał akcyjny z KRS: ${fmt.zlote(dane.kapital_akcyjny_grosze)}.` : '.') +
+                  (kapitalNiezgodny ? ' Kwoty się różnią — sprawdź przed otwarciem rejestru.' : '') +
+                  (!wszystkieWycenione ? ' Nie wszystkie pozycje mają wpisaną cenę emisyjną — suma jest niepełna.' : '')
+                }
+              />
+            )}
           </>
         )}
 
