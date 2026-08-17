@@ -928,6 +928,40 @@ const MIGRACJE = [
       ALTER TABLE psa_osoby ADD COLUMN pep_oswiadczenie_data TEXT;
     `,
   },
+  {
+    wersja: 16,
+    nazwa: 'blok D4 (sesja 8): dziennik dostepu do danych osobowych',
+    sql: `
+      -- ── Dziennik dostepu (blok D4) - append-only, WASKI zakres ──────────
+      -- Tylko momenty realnego wgladu w dane wrazliwe albo wyniesienia ich
+      -- z systemu (informacja z rejestru, raport dla sadu, eksport CSV,
+      -- pobranie pliku) - NIE kazde wyswietlenie listy/kokpitu. Jedyna
+      -- sensowna odpowiedz na "kto mial wglad" przy incydencie albo
+      -- kontroli - szeroki zakres zasypalby ja szumem.
+      --
+      -- Osobna tabela od psa_zdarzenia (LANCUCH SKROTOW tresci rejestru) -
+      -- ten drugi zostaje NIETKNIETY, nigdy nie sluzy do celow audytowych
+      -- niezwiazanych ze stanem akcji. Ta tabela, jak psa_zdarzenia, jest
+      -- append-only - aplikacja nigdy nie robi na niej UPDATE ani DELETE.
+      CREATE TABLE IF NOT EXISTS psa_dziennik_dostepu (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        chwila     TEXT NOT NULL,
+        kto        TEXT NOT NULL,
+        typ_kto    TEXT NOT NULL CHECK (typ_kto IN ('pracownik', 'portal')),
+        spolka_id  INTEGER REFERENCES psa_spolki(id),
+        osoba_id   INTEGER REFERENCES psa_osoby(id),
+        akcja      TEXT NOT NULL,
+        opis       TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_dziennik_spolka
+        ON psa_dziennik_dostepu (spolka_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_dziennik_osoba
+        ON psa_dziennik_dostepu (osoba_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_dziennik_chwila
+        ON psa_dziennik_dostepu (chwila);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

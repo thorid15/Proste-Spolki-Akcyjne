@@ -8,6 +8,7 @@ const express = require('express');
 
 const { db } = require('../baza');
 const oplaty = require('../oplaty');
+const dziennikDostepu = require('../logika/dziennik-dostepu');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 const { wymagajAdmina } = require('../pomocnicze/autoryzacja');
@@ -96,6 +97,13 @@ router.get(
           ORDER BY o.data_naliczenia DESC, o.id DESC`
       )
       .all(...parametry);
+
+    // Wyniesienie zestawienia oplat z systemu - blok D4, zakres WASKI.
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik',
+      spolkaId: zad.query.spolka_id ? Number(zad.query.spolka_id) : null,
+      akcja: dziennikDostepu.AKCJE.EKSPORT, opis: 'eksport CSV — zestawienie opłat',
+    });
 
     const csv = oplaty.eksportujCsv(wiersze);
     const BOM = String.fromCharCode(0xfeff);

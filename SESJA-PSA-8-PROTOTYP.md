@@ -177,25 +177,34 @@ Sprawdzone: 5 testów jednostkowych (`aml.js`, w tym granica 12 miesięcy i pier
 
 ---
 
-## 7. Blok D — tanie teraz, drogie po zbudowaniu portalu ⚠️ DECYZJA
+## 7. Blok D — tanie teraz, drogie po zbudowaniu portalu ✅ ROZSTRZYGNIĘTE
 
-Z `WDROZENIE-PSA.md` § 1. Wszystkie dotykają schematu albo warstwy dostępu, więc
-wprowadzenie ich po onboardingu kosztuje wielokrotnie więcej.
+Z `WDROZENIE-PSA.md` § 1. Cztery punkty ocenione osobno — model zagrożenia jest
+**wyłącznie** „akcjonariusz/spółka portalu widzi cudzy rejestr" (kancelaria zawsze
+jedna, „druga kancelaria na tej samej instalacji" świadomie poza zakresem — patrz
+§ 8). Weryfikacja, czy spółka nie prowadzi rejestru gdzie indziej, jest oświadczeniem
+strony, nie czymś, co system może wymusić.
 
-| # | Zadanie | Dlaczego teraz |
+| # | Decyzja | Uzasadnienie |
 |---|---|---|
-| D1 | `status_doreczenia` per dokument | zawiadomienie w spamie = niewykonany obowiązek z art. 300³⁴ § 7, o którym nie wiemy |
-| D2 | Warstwa dostępu do plików jako abstrakcja, nie ścieżki w bazie | przejście na składowanie obiektowe bez migracji repozytorium |
-| D3 | Izolacja `spolka_id` wymuszona w warstwie danych | jedno zapomniane ograniczenie = wgląd w cudzy rejestr |
-| D4 | Dziennik dostępu do danych osobowych (append-only) | jedyna odpowiedź na „kto miał wgląd" przy incydencie |
+| D1 | ❌ **SKREŚLONE** — `psa_wydane_dokumenty.wyslano` (znacznik czasu / `NULL`) już dziś jest dokładnie tym, czego wymaga art. 300³⁴ § 7 KSH („niezwłocznie powiadamia" — obowiązkiem jest czynność powiadomienia, nie potwierdzenie odbioru). Automatyczne potwierdzenie odczytu nie istnieje jako wiarygodny mechanizm (MDN ignorowane, piksel śledzący blokowany + problem RODO), a webhooki dostawcy SMTP to nowa zależność, przez którą płynęłyby dane akcjonariuszy. Nie dokładamy `status_doreczenia` | — |
+| D2 | ⏸ **ŚWIADOMIE ODŁOŻONE** — wszystkie zapisy już używają `path.relative(KATALOG_DOKUMENTOW, ...)` (sprawdzone w kodzie), więc ścieżki w bazie są już WZGLĘDNE. Przejście na inne składowanie nie wymaga migracji danych ani dziś, ani za rok — to jedyny punkt z całej czwórki, który nie drożeje z czasem. Zrobić przy realnym hostingu | — |
+| D3 | ✅ **ZROBIONE** — izolacja portalu, domyślnie odmawiająca. `server/trasy/portal.js`: `router.param('spolkaId', ...)` (Express wywołuje to dla KAŻDEJ trasy z tym parametrem, obecnej i przyszłej — zwykły `router.use()` NIE widzi parametrów ścieżki należących do innych warstw, sprawdzone eksperymentalnie) + `wymagajDostepuDoSpolkiWCiele` dla `spolka_id` w ciele żądania. Odwołania POŚREDNIE (przez `sprawa_id`) idą przez `wczytajSpraweDlaKonta()` — jedyny sposób, w jaki trasa portalu dostaje sprawę do ręki. Test manifestu tras (`blok-d-http.test.js`): jeśli ktoś dopisze trasę, test się wywraca i wymusza świadomą decyzję | — |
+| D4 | ✅ **ZROBIONE** — `psa_dziennik_dostepu` (migracja v16), append-only, osobna tabela od `psa_zdarzenia` (łańcuch skrótów treści rejestru zostaje nietknięty). Zakres WĄSKI (decyzja): tylko informacja z rejestru, raport dla sądu, eksport CSV, pobranie pliku — NIE każde wyświetlenie listy/kokpitu, bo to zasypałoby dziennik szumem zamiast odpowiadać na „kto miał wgląd" | — |
 
-Przy teście **wewnętrznym, jednoosobowym** żaden z nich nie jest konieczny.
-Przy pierwszym kliencie z zewnątrz — wszystkie cztery.
+Sprawdzone: 3 testy jednostkowe (`dziennik-dostepu.js`) + 9 testów HTTP (`blok-d-http.test.js`:
+manifest tras, odrzucenie cudzej spółki przez ścieżkę i przez ciało żądania, brak blokady
+własnej spółki, ślad w dzienniku dla wszystkich czterech akcji z zakresu wąskiego) +
+weryfikacja na żywym serwerze (eksport CSV, logowanie portalowe, wpis w dzienniku
+potwierdzony bezpośrednio w bazie). Pełny pakiet: 330/330.
 
 ---
 
 ## 8. Świadomie poza zakresem
 
+- **Weryfikacja, czy spółka nie prowadzi rejestru u innego podmiotu** — sprawa
+  oświadczenia strony przy zawarciu umowy, nie coś, co aplikacja może wymusić
+  (blok D, § 7).
 - **Pełny onboarding** (SESJA-7 fazy 1–8) — patrz D2.
 - **Hosting, kopie zapasowe, 2FA, testy bezpieczeństwa** (`WDROZENIE` §§ 2–5, 9) —
   dotyczą wystawienia publicznego.

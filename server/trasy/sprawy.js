@@ -36,6 +36,7 @@ const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpo
 const wzoryDysk = require('../logika/wzory-dysk');
 const docx = require('../logika/docx');
 const kontekstPisma = require('../logika/kontekst-pisma');
+const dziennikDostepu = require('../logika/dziennik-dostepu');
 
 const router = express.Router();
 
@@ -783,6 +784,13 @@ router.get(
     if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
       throw nieZnaleziono('Plik nie jest już dostępny.');
     }
+
+    // Pobranie zalacznika do sprawy - blok D4, zakres WASKI.
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik', spolkaId: sprawa.spolka_id,
+      akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU, opis: `załącznik sprawy #${sprawa.id}: ${dokument.nazwa_pliku}`,
+    });
+
     odp.setHeader('Content-Type', dokument.mime || 'application/octet-stream');
     odp.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(dokument.nazwa_pliku)}"`);
     odp.sendFile(pelnaSciezka);
@@ -818,6 +826,13 @@ router.get(
     if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
       throw nieZnaleziono('Plik nie jest już dostępny.');
     }
+
+    // Pobranie wystawionego dokumentu - blok D4, zakres WASKI.
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik', spolkaId: sprawa.spolka_id, osobaId: wydany.odbiorca_osoba_id,
+      akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU, opis: `wydany dokument #${wydany.id} (${wydany.typ})`,
+    });
+
     odp.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'

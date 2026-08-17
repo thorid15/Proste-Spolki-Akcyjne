@@ -13,6 +13,7 @@ const dokumentyTresc = require('../logika/dokumenty-tresc');
 const przepisy = require('../logika/przepisy');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const terminy = require('../logika/terminy');
+const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
@@ -217,6 +218,12 @@ router.post(
          VALUES (?, 'wykaz_akcjonariuszy', 'papier', ?, ?, ?)`
       )
       .run(spolkaId, trescHtml, kto, czas.terazIso());
+
+    // Wykaz calego akcjonariatu spolki dla sadu - blok D4, zakres WASKI.
+    dziennikDostepu.zapisz(db(), {
+      kto, typKto: 'pracownik', spolkaId, akcja: dziennikDostepu.AKCJE.RAPORT_SAD,
+      opis: 'wykaz akcjonariuszy — zapytanie sądu rejestrowego',
+    });
 
     odp.json({ tresc_html: trescHtml });
   })

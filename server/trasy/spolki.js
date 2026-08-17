@@ -17,6 +17,7 @@ const typyZdarzen = require('../logika/typy-zdarzen');
 const wzoryDysk = require('../logika/wzory-dysk');
 const docx = require('../logika/docx');
 const kontekstPisma = require('../logika/kontekst-pisma');
+const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
@@ -326,6 +327,12 @@ router.get(
       odbiorcaOsobaId: null,
     });
     if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
+
+    // Wyniesienie danych calego akcjonariatu z systemu - blok D4, zakres WASKI.
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik', spolkaId: id,
+      akcja: dziennikDostepu.AKCJE.EKSPORT, opis: `eksport CSV — stan na ${data}`,
+    });
 
     const pole = (w) => {
       const t = String(w == null ? '' : w);
@@ -750,6 +757,13 @@ router.get(
     if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
       throw nieZnaleziono('Plik nie jest już dostępny.');
     }
+
+    // Pobranie wystawionego dokumentu - blok D4, zakres WASKI.
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik', spolkaId: spolka.id, osobaId: wydany.odbiorca_osoba_id,
+      akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU, opis: `wydany dokument #${wydany.id} (${wydany.typ})`,
+    });
+
     odp.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'

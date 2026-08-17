@@ -36,6 +36,7 @@ const numery = require('../logika/numery');
 const hasla = require('../logika/hasla');
 const limiter = require('../logika/limiter');
 const dokumentyTresc = require('../logika/dokumenty-tresc');
+const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany } = require('../pomocnicze/odpowiedzi');
@@ -120,6 +121,48 @@ router.get(
 // Od tego miejsca kazda trasa wymaga zalogowanego konta portalowego.
 router.use(autoryzacja.wymagajKonta);
 
+/**
+ * Izolacja miedzy klientami portalu, DOMYSLNIE ODMAWIAJACA (blok D3, sesja
+ * 8) - dziala na KAZDYM zadaniu niosacym identyfikator spolki, nie tylko na
+ * trasach ktore dzis o nim wiedza. Dwa miejsca, w ktorych spolka wchodzi do
+ * zadania, dwa mechanizmy:
+ *
+ * — `:spolkaId` w sciezce -> `router.param()`. Express wywoluje ten callback
+ *   dla KAZDEJ trasy majacej taki parametr, obecnej i przyszlej - w
+ *   odroznieniu od `router.use()` (ktory NIE widzi parametrow sciezki
+ *   nalezacych do innych warstw, sprawdzone eksperymentalnie), to jedyny
+ *   sposob na dopasowanie po nazwie parametru niezaleznie od trasy.
+ * — `spolka_id` w ciele zadania -> zwykly `router.use()`, bo cialo JEST
+ *   widoczne w kazdej warstwie (parsowane wczesniej, globalnie w serwer.js).
+ *
+ * Oba razem: nowa trasa przyjmujaca `spolka_id` (w ktorejkolwiek postaci)
+ * dostaje ochrone automatycznie, bez wzgledu na to, czy jej autor o niej
+ * pomyslal. 404, nie 403 - tak jak dotychczasowe punktowe sprawdzenia, zeby
+ * nie zdradzac samego istnienia cudzej spolki.
+ *
+ * Odwolania POSREDNIE (np. przez sprawa_id, ktora nalezy do spolki) zadnej
+ * z tych bramek nie widza - dla nich jest `wczytajSpraweDlaKonta` nizej:
+ * jedyny sposob, w jaki trasa portalu w ogole dostaje sprawe do reki.
+ */
+router.param('spolkaId', (zad, odp, dalej, wartosc) => {
+  const spolkaId = Number(wartosc);
+  if (!Number.isInteger(spolkaId) || !maDostepDoSpolki(zad.konto, spolkaId)) {
+    return dalej(nieZnaleziono('Nie odnaleziono spółki.'));
+  }
+  dalej();
+});
+
+function wymagajDostepuDoSpolkiWCiele(zad, odp, dalej) {
+  const kandydat = zad.body && zad.body.spolka_id;
+  if (kandydat == null) return dalej();
+  const spolkaId = Number(kandydat);
+  if (!Number.isInteger(spolkaId) || !maDostepDoSpolki(zad.konto, spolkaId)) {
+    return dalej(nieZnaleziono('Nie odnaleziono spółki.'));
+  }
+  dalej();
+}
+router.use(wymagajDostepuDoSpolkiWCiele);
+
 // ─────────────────────────────────────────────────────────────
 // Moje spolki / akcje
 // ─────────────────────────────────────────────────────────────
@@ -163,10 +206,8 @@ router.get(
 router.get(
   '/rejestr/:spolkaId',
   asy((zad, odp) => {
+    // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
     const spolkaId = Number(zad.params.spolkaId);
-    if (!maDostepDoSpolki(zad.konto, spolkaId)) {
-      throw nieZnaleziono('Nie odnaleziono spółki.');
-    }
     const data = zad.query.data ? String(zad.query.data) : czas.dzisIso();
     if (!czas.poprawnaData(data)) throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD.');
 
@@ -228,8 +269,8 @@ router.post(
     const konto = zad.konto;
     const cialo = zad.body || {};
 
+    // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
     const spolkaId = Number(cialo.spolka_id);
-    if (!maDostepDoSpolki(konto, spolkaId)) throw bledneZadanie('Nie odnaleziono spółki.');
     const spolka = rejestr.wczytajSpolke(db(), spolkaId);
     if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
     if (przepisy.STATUSY_SPOLKI_BLOKUJACE_WPIS.includes(spolka.status)) {
@@ -315,18 +356,28 @@ const upload = multer({
   },
 });
 
-/** Wstrzykuje sprawe do `zad` PRZED multerem, sprawdzajac wlasnosc. */
-function zaladujWlasnaSprawe(zad, odp, dalej) {
-  const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(Number(zad.params.id));
-  if (!sprawa || sprawa.zrodlo !== 'portal') return dalej(nieZnaleziono('Nie odnaleziono sprawy.'));
-
-  const konto = zad.konto;
+/**
+ * Jedyny sposob, w jaki trasa portalu dostaje sprawe do reki (blok D3,
+ * punkt 2 - odwolanie POSREDNIE przez `sprawa_id`, ktorej sama trasa nie
+ * zna, ale ktora nalezy do konkretnej spolki). `wymagajDostepuDoSpolki`
+ * wyzej tego nie widzi - stad osobna, nazwana funkcja zamiast golego
+ * `db().prepare(...).get()` w handlerze, zeby nie dalo sie o sprawdzenie
+ * wlasnosci przypadkiem zapomniec.
+ */
+function wczytajSpraweDlaKonta(konto, sprawaId) {
+  const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
+  if (!sprawa || sprawa.zrodlo !== 'portal') return null;
   const wlasciciel =
     konto.rola === 'spolka'
       ? Number(sprawa.spolka_id) === Number(konto.spolka_id)
       : Number(sprawa.zadajacy_osoba_id) === Number(konto.osoba_id);
-  if (!wlasciciel) return dalej(nieZnaleziono('Nie odnaleziono sprawy.'));
+  return wlasciciel ? sprawa : null;
+}
 
+/** Wstrzykuje sprawe do `zad` PRZED multerem, sprawdzajac wlasnosc. */
+function zaladujWlasnaSprawe(zad, odp, dalej) {
+  const sprawa = wczytajSpraweDlaKonta(zad.konto, Number(zad.params.id));
+  if (!sprawa) return dalej(nieZnaleziono('Nie odnaleziono sprawy.'));
   zad.psaSprawa = sprawa;
   dalej();
 }
@@ -374,9 +425,9 @@ router.post(
 router.post(
   '/informacja',
   asy((zad, odp) => {
+    // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
     const konto = zad.konto;
     const spolkaId = Number((zad.body || {}).spolka_id);
-    if (!maDostepDoSpolki(konto, spolkaId)) throw nieZnaleziono('Nie odnaleziono spółki.');
 
     const data = (zad.body || {}).data ? String((zad.body || {}).data) : czas.dzisIso();
     if (!czas.poprawnaData(data)) throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD.');
@@ -401,6 +452,15 @@ router.post(
          VALUES (?, 'informacja_z_rejestru', ?, 'portal', ?, ?, ?, ?)`
       )
       .run(spolkaId, konto.osoba_id, trescHtml, czas.terazIso(), autorWpisu, czas.terazIso());
+
+    // Wglad w dane calego akcjonariatu spolki - blok D4, zakres WASKI.
+    dziennikDostepu.zapisz(db(), {
+      kto: autorWpisu,
+      typKto: 'portal',
+      spolkaId,
+      akcja: dziennikDostepu.AKCJE.INFORMACJA_Z_REJESTRU,
+      opis: `stan na ${data}`,
+    });
 
     // Odpłatność za informację z rejestru (sekcja 1 i 8) - samoobsługowe
     // pobranie przez portal jest tak samo odpłatną czynnością jak żądanie
