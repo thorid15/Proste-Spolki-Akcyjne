@@ -709,21 +709,13 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
   function ekran() {
     // Etap 3B: konto zaproszone (rola 'wnioskodawca') nie ma jeszcze ani
     // spółki, ani statusu akcjonariusza — `EkranMoje` (poniżej) dla niego
-    // nie ma sensu. Zanim zobaczy formularz wniosku (dane spółki,
-    // akcjonariusze — etap 3C), musi najpierw potwierdzić klauzulę RODO
-    // (etap 3B.1); do czasu zbudowania formularza zostaje przy miejscu-trzymaczu.
+    // nie ma sensu. Zanim zobaczy formularz wniosku (etap 3C), musi
+    // najpierw potwierdzić klauzulę RODO (etap 3B.1).
     if (sesja.konto.rola === 'wnioskodawca') {
       if (!sesja.konto.rodo_zaakceptowano) {
         return <EkranKlauzulaRodo przyAkceptacji={() => sesja.odswiez()} />;
       }
-      return (
-        <Karta tytul="Wniosek o prowadzenie rejestru">
-          <Pusto
-            tytul="Konto aktywowane"
-            opis="Formularz wniosku (dane spółki i akcjonariuszy) pojawi się tutaj wkrótce. Kancelaria już wie o aktywacji Twojego konta."
-          />
-        </Karta>
-      );
+      return <EkranWniosku />;
     }
     if (segmenty.length === 0) return <EkranMoje />;
     if (segmenty[0] === 'sprawy') return <EkranSprawyPortal />;

@@ -1135,6 +1135,71 @@ const MIGRACJE = [
       ALTER TABLE psa_konta ADD COLUMN rodo_zaakceptowano TEXT;
     `,
   },
+  {
+    wersja: 24,
+    nazwa: 'etap 3C: psa_wnioski (dane spolki i reprezentanta z portalu klienta)',
+    sql: `
+      -- Wniosek klienta o prowadzenie rejestru - dane spolki i reprezentanta
+      -- zbierane PRZED istnieniem samej spolki w systemie (psa_spolki
+      -- powstaje dopiero, gdy kancelaria przyjmie wniosek - etap 3F,
+      -- podobnie jak dzis przy "Otworz rejestr" w kreatorze wewnetrznym).
+      -- Kolumny CELOWO lustrza podzbior psa_spolki (plus reprezentant_* z
+      -- etapu 2.2/2.3) - zeby projekt umowy (etap 3E) dalo sie wygenerowac
+      -- wolawac server/logika/kontekst-pisma.js: umowaOProwadzenieRejestru()
+      -- na obiekcie wniosku DOKLADNIE tak samo, jak dzis na obiekcie spolki,
+      -- bez przepisywania mapowania pol.
+      CREATE TABLE IF NOT EXISTS psa_wnioski (
+        id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+        konto_id                    INTEGER NOT NULL UNIQUE REFERENCES psa_konta(id),
+        status                      TEXT NOT NULL DEFAULT 'w_przygotowaniu'
+                                      CHECK (status IN (
+                                        'w_przygotowaniu','zlozony','do_uzupelnienia',
+                                        'umowa_wygenerowana','umowa_podpisana','przyjety','odrzucony'
+                                      )),
+        krs                         TEXT,
+        nip                         TEXT,
+        regon                       TEXT,
+        nazwa                       TEXT,
+        forma_prawna                TEXT NOT NULL DEFAULT 'PROSTA SPÓŁKA AKCYJNA',
+        kraj                        TEXT DEFAULT 'Polska',
+        kod_pocztowy                TEXT,
+        miejscowosc                 TEXT,
+        siedziba_miejscownik        TEXT,
+        ulica                       TEXT,
+        nr_domu                     TEXT,
+        nr_lokalu                   TEXT,
+        sad_rejestrowy              TEXT,
+        wydzial                     TEXT,
+        telefon                     TEXT,
+        email                       TEXT,
+        www                         TEXT,
+        organ_rodzaj                TEXT,
+        data_utworzenia_spolki      TEXT,
+        data_ostatniego_wpisu_krs   TEXT,
+        adres_edorecze              TEXT,
+        kapital_akcyjny_grosze      INTEGER,
+        data_zawarcia_umowy_spolki  TEXT,
+        -- Reprezentant, ktory bedzie podpisywal umowe w imieniu spolki -
+        -- mianownik (etap 2.3), te same klucze co psa_spolki.
+        reprezentant_imie_nazwisko           TEXT,
+        reprezentant_plec                    TEXT,
+        reprezentant_funkcja                 TEXT,
+        reprezentant_reprezentacja           TEXT,
+        reprezentant_rodzice                 TEXT,
+        reprezentant_dowod                   TEXT,
+        reprezentant_pesel                   TEXT,
+        reprezentant_adres                   TEXT,
+        reprezentant_biernik_recznie         TEXT,
+        reprezentant_funkcja_biernik_recznie TEXT,
+        reprezentant_rodzice_recznie         TEXT,
+        utworzono                   TEXT NOT NULL,
+        zaktualizowano              TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_wnioski_status
+        ON psa_wnioski (status);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

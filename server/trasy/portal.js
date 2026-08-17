@@ -39,8 +39,9 @@ const dokumentyTresc = require('../logika/dokumenty-tresc');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
-const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany } = require('../pomocnicze/odpowiedzi');
+const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
+const { pobierzZKrs } = require('./krs');
 
 const router = express.Router();
 
@@ -268,6 +269,125 @@ router.post(
       .prepare('UPDATE psa_konta SET rodo_zaakceptowano = ? WHERE id = ?')
       .run(czas.terazIso(), zad.konto.id);
     odp.json({ konto: widokKonta({ ...zad.konto, rodo_zaakceptowano: czas.terazIso() }) });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Wniosek o prowadzenie rejestru (etap 3C) - dane spolki i reprezentanta,
+// zbierane PRZED istnieniem spolki w systemie (psa_spolki powstaje dopiero,
+// gdy kancelaria przyjmie wniosek - etap 3F). Wylacznie rola 'wnioskodawca' -
+// inne role maja juz prawdziwa spolke/akcje, nie wniosek do wypelnienia.
+// ─────────────────────────────────────────────────────────────
+
+const POLA_WNIOSKU = [
+  'krs', 'nip', 'regon', 'nazwa', 'forma_prawna', 'kraj', 'kod_pocztowy', 'miejscowosc',
+  'siedziba_miejscownik', 'ulica', 'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial',
+  'telefon', 'email', 'www', 'organ_rodzaj', 'data_utworzenia_spolki', 'data_ostatniego_wpisu_krs',
+  'adres_edorecze', 'kapital_akcyjny_grosze', 'data_zawarcia_umowy_spolki',
+  'reprezentant_imie_nazwisko', 'reprezentant_plec', 'reprezentant_funkcja', 'reprezentant_reprezentacja',
+  'reprezentant_rodzice', 'reprezentant_dowod', 'reprezentant_pesel', 'reprezentant_adres',
+  'reprezentant_biernik_recznie', 'reprezentant_funkcja_biernik_recznie', 'reprezentant_rodzice_recznie',
+];
+
+function wyczyscWniosek(cialo) {
+  const wynik = {};
+  for (const pole of POLA_WNIOSKU) {
+    if (cialo[pole] === undefined) continue;
+    const v = cialo[pole];
+    wynik[pole] = v === '' || v === null ? null : String(v).trim();
+  }
+  return wynik;
+}
+
+/**
+ * Walidacja WNIOSKU jest celowo luzniejsza niz `spolki.js: sprawdzDaneSpolki`
+ * (regula domenowa "miekkie ostrzezenia przy wprowadzaniu, twarde blokady
+ * dopiero przy operacji rejestrowej") - klient zapisuje czesciowy postep
+ * wielokrotnie w trakcie wypelniania, wiec sprawdzamy wylacznie FORMAT juz
+ * podanych wartosci, nigdy kompletnosc. Kompletnosc sprawdza sie dopiero
+ * przy zlozeniu wniosku (etap 3D/3E).
+ */
+function sprawdzDaneWniosku(dane) {
+  if (dane.krs && !/^\d{10}$/.test(dane.krs)) {
+    throw bledneZadanie('Numer KRS składa się z 10 cyfr.');
+  }
+  if (dane.nip && !/^\d{10}$/.test(String(dane.nip).replace(/[\s-]/g, ''))) {
+    throw bledneZadanie('NIP składa się z 10 cyfr.');
+  }
+  for (const pole of ['data_utworzenia_spolki', 'data_ostatniego_wpisu_krs', 'data_zawarcia_umowy_spolki']) {
+    if (dane[pole] && !czas.poprawnaData(dane[pole])) {
+      throw bledneZadanie(`Pole „${pole}” musi być datą w formacie RRRR-MM-DD.`);
+    }
+  }
+  if (dane.reprezentant_plec && !['mezczyzna', 'kobieta'].includes(dane.reprezentant_plec)) {
+    throw bledneZadanie('Płeć reprezentanta musi być „mężczyzna” albo „kobieta”.');
+  }
+}
+
+function wymagajWnioskodawcy(zad, odp, dalej) {
+  if (zad.konto.rola !== 'wnioskodawca') {
+    return dalej(brakUprawnien('Ta operacja jest dostępna wyłącznie dla wniosków o prowadzenie rejestru.'));
+  }
+  dalej();
+}
+
+/** Wczytuje wniosek biezacego konta, zakladajac pusty przy pierwszym uzyciu. */
+function wczytajLubZalozWniosek(kontoId) {
+  let wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(kontoId);
+  if (!wniosek) {
+    const wynik = db()
+      .prepare('INSERT INTO psa_wnioski (konto_id, utworzono) VALUES (?, ?)')
+      .run(kontoId, czas.terazIso());
+    wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wynik.lastInsertRowid);
+  }
+  return wniosek;
+}
+
+router.get(
+  '/wniosek',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    odp.json({ wniosek: wczytajLubZalozWniosek(zad.konto.id) });
+  })
+);
+
+router.put(
+  '/wniosek',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const biezacy = wczytajLubZalozWniosek(zad.konto.id);
+    if (!['w_przygotowaniu', 'do_uzupelnienia'].includes(biezacy.status)) {
+      throw bledneZadanie(`Wniosek ma status „${biezacy.status}” — nie można go już edytować.`);
+    }
+    const dane = wyczyscWniosek(zad.body || {});
+    sprawdzDaneWniosku(dane);
+    if (Object.keys(dane).length > 0) {
+      db()
+        .prepare(
+          `UPDATE psa_wnioski
+              SET ${Object.keys(dane).map((k) => `${k} = @${k}`).join(', ')}, zaktualizowano = @zaktualizowano
+            WHERE id = @id`
+        )
+        .run({ ...dane, zaktualizowano: czas.terazIso(), id: biezacy.id });
+    }
+    odp.json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(biezacy.id) });
+  })
+);
+
+/** Pobranie danych z otwartego API KRS - lustro server/trasy/spolki.js: GET /z-krs/:numer. */
+router.get(
+  '/wniosek/z-krs/:numer',
+  wymagajWnioskodawcy,
+  asy(async (zad, odp) => {
+    const numer = String(zad.params.numer || '').replace(/\D/g, '');
+    if (numer.length !== 10) {
+      return odp.json({
+        znaleziono: false,
+        komunikat: 'Numer KRS składa się z 10 cyfr. Uzupełnij dane ręcznie.',
+      });
+    }
+    const wynik = await pobierzZKrs(numer);
+    odp.json(wynik);
   })
 );
 

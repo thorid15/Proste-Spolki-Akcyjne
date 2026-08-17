@@ -117,6 +117,13 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     // Etap 3B.1: potwierdzenie klauzuli RODO - dziala na WLASNYM koncie
     // (zad.konto.id z sesji), zadnego cudzego identyfikatora nie przyjmuje.
     'POST /rodo',
+    // Etap 3C: wniosek o prowadzenie rejestru - dziala na WLASNYM wniosku
+    // (znaleziony przez konto_id z sesji), zaden z tych URL-i nie przyjmuje
+    // cudzego identyfikatora spolki - spolka w tym momencie jeszcze nie
+    // istnieje w systemie.
+    'GET /wniosek',
+    'PUT /wniosek',
+    'GET /wniosek/z-krs/:numer',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
   ].sort();
