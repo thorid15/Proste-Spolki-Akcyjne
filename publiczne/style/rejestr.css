@@ -557,7 +557,7 @@ select {
   background: var(--karta);
   border: 1px solid var(--linia);
   border-radius: var(--r-sm);
-  font-family: var(--font-dane); font-size: var(--st-15);
+  font-family: var(--font-ui); font-size: var(--st-15); font-variant-numeric: tabular-nums;
 }
 .data-segmenty:focus-within { border-color: var(--rejestr); box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10); }
 .data-segmenty.bledne { border-color: var(--sygnal); }

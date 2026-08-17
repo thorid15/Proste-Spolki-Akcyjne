@@ -10,6 +10,8 @@
 
 const konfiguracja = require('../konfiguracja');
 const przepisy = require('../logika/przepisy');
+const { parseKrsDate } = require('../logika/daty-krs');
+const { normalizujRegon } = require('../logika/regon');
 
 const LIMIT_CZASU_MS = 8000;
 
@@ -26,44 +28,74 @@ function zeSciezek(zrodlo, sciezki) {
   return null;
 }
 
+/** Zamienia „1,00" (zapis PLN z API KRS, przecinek dziesiętny) na grosze. */
+function zlotePlnNaGrosze(tekst) {
+  if (tekst == null || tekst === '') return null;
+  const liczba = Number(String(tekst).replace(/\s/g, '').replace(',', '.'));
+  return Number.isFinite(liczba) ? Math.round(liczba * 100) : null;
+}
+
 /**
  * Mapuje odpowiedz API KRS na pola formularza spolki.
  * Mapowanie jest OBRONNE - struktura odpowiedzi bywa rozna dla roznych
  * rejestrow, a brak pojedynczego pola nie moze wywrocic calosci.
  */
 /**
- * Pola dopisane w sesji 6, fazie 3 (import rozszerzony) NIE zostaly
- * zweryfikowane wprost przeciwko zywej odpowiedzi API - srodowisko
- * deweloperskie, w ktorym powstal ten kod, nie mialo dostepu sieciowego do
- * api-krs.ms.gov.pl. Kandydaci scieżek sa oparte o realny odpis (PDF Rubryka
- * 2.5/8.1/Dzial 2 Rubryka 1) i konwencje juz potwierdzonych pol powyzej
- * (`naglowekA`, `dzial1.siedzibaIAdres`), ale sa NAJLEPSZYM PRZYBLIZENIEM,
- * nie potwierdzonym faktem. Dlatego krok 1 kreatora rejestracji spolki
- * ZAWSZE pokazuje surowy JSON obok zmapowanego podgladu (sekcja 3 sesji) -
- * to wlasciwe miejsce weryfikacji, na zywych danych, nie ten komentarz.
- * Brakujace pole = wpis reczny (bez zmian w tej regule).
+ * Ścieżki poniżej zweryfikowano na ŻYWEJ odpowiedzi API dla KRS 0001114217
+ * (rejestr=P, PROSTA SPÓŁKA AKCYJNA, pobrane 17.08.2026) — patrz plik roboczy
+ * z tej weryfikacji. Trzy ustalenia, które zmieniły wcześniejsze (niesprawdzone)
+ * domysły z sesji 6/fazy 3:
+ *   1. Kapitał akcyjny leży pod `dzial1.kapitalPSA.wysokoscKapitaluAkcyjnego`
+ *      (obiekt `{wartosc, waluta}`, NIE płaski klucz) — osobna gałąź od
+ *      kapitału zakładowego sp. z o.o./S.A., zapisana przecinkiem dziesiętnym
+ *      ("1,00"), nie kropką.
+ *   2. `dzial2.reprezentacja` to OBIEKT (`{nazwaOrganu, sposobReprezentacji,
+ *      sklad: [...]}`), nie tablica — lista osób jest pod `.sklad`, a każda
+ *      pozycja ma zagnieżdżone `nazwisko.nazwiskoICzlon` / `imiona.imie`
+ *      (+ `imiona.imieDrugie`) / `funkcjaWOrganie`.
+ *   3. W odpisie DLA REJESTRU P (przedsiębiorcy — spółki) NIE MA żadnego pola
+ *      z oznaczeniem sądu rejestrowego — ani w `naglowekA`, ani w `dzial1`.
+ *      Jedyne pole ze słowem „sąd" (`naglowekA.oznaczenieSaduDokonujacegoOstatniegoWpisu`)
+ *      to sąd/system, który dokonał OSTATNIEGO WPISU (dla e-KRS zwykle
+ *      „SYSTEM"), nie sąd prowadzący rejestr — to inna informacja, nie wolno
+ *      jej użyć jako namiastki. Import sądu rejestrowego z tego API nie jest
+ *      możliwy — patrz fallback z tabelą TERYT (sekcja 1.7 poprawek).
+ * Pozostałe pola (nazwa, forma prawna, NIP, REGON, adres, e-mail, data
+ * rejestracji, data ostatniego wpisu, adres do e-doręczeń) sprawdzone i
+ * poprawione tak samo. Kandydaci ścieżek z wcześniejszej wersji zostają jako
+ * DODATKOWY fallback (inne odpisy/rejestry mogą się różnić), ale sprawdzona
+ * ścieżka jest zawsze pierwsza. Krok 1 kreatora rejestracji spółki nadal
+ * pokazuje surowy JSON obok zmapowanego podglądu — do weryfikacji na
+ * kolejnych, innych spółkach. Brakujące pole = wpis ręczny.
  */
 function zmapuj(odpowiedz, numerKrs) {
   const dane = zeSciezek(odpowiedz, ['odpis.dane', 'dane']) || {};
   const naglowek = zeSciezek(odpowiedz, ['odpis.naglowekA', 'naglowekA']) || {};
   const podmiot = zeSciezek(dane, ['dzial1.danePodmiotu']) || {};
   const adres = zeSciezek(dane, ['dzial1.siedzibaIAdres']) || {};
-  const kapital = zeSciezek(dane, ['dzial1.kapitalSpolki', 'dzial1.kapital']) || {};
-  const reprezentacja =
-    zeSciezek(dane, ['dzial2.reprezentacja', 'dzial2.organReprezentujacy']) || [];
+  const kapital = zeSciezek(dane, ['dzial1.kapitalPSA', 'dzial1.kapitalSpolki', 'dzial1.kapital']) || {};
+  const organ = zeSciezek(dane, ['dzial2.reprezentacja']) || {};
+  const skladOrganu = Array.isArray(organ.sklad)
+    ? organ.sklad
+    : Array.isArray(organ)
+      ? organ // starsza (niesprawdzona) hipoteza: reprezentacja wprost jako tablica
+      : [];
 
-  const kapitalZlote = zeSciezek(kapital, [
+  const kapitalWartosc = zeSciezek(kapital, [
+    'wysokoscKapitaluAkcyjnego.wartosc',
     'wysokoscKapitaluAkcyjnego',
     'wysokoscKapitalu',
     'kapitalAkcyjny',
   ]);
+
+  const { regon } = normalizujRegon(zeSciezek(podmiot, ['identyfikatory.regon']));
 
   return {
     krs: numerKrs,
     nazwa: zeSciezek(podmiot, ['nazwa']) || null,
     forma_prawna: zeSciezek(podmiot, ['formaPrawna']) || null,
     nip: zeSciezek(podmiot, ['identyfikatory.nip']) || null,
-    regon: zeSciezek(podmiot, ['identyfikatory.regon']) || null,
+    regon,
     kraj: zeSciezek(adres, ['adres.kraj', 'siedziba.kraj']) || 'Polska',
     kod_pocztowy: zeSciezek(adres, ['adres.kodPocztowy']) || null,
     miejscowosc: zeSciezek(adres, ['adres.miejscowosc', 'siedziba.miejscowosc']) || null,
@@ -72,33 +104,37 @@ function zmapuj(odpowiedz, numerKrs) {
     nr_lokalu: zeSciezek(adres, ['adres.nrLokalu']) || null,
     email: zeSciezek(adres, ['adresPocztyElektronicznej']) || null,
     www: zeSciezek(adres, ['adresStronyInternetowej']) || null,
-    sad_rejestrowy:
-      zeSciezek(naglowek, ['oznaczenieSaduPrzechowujacegoAkta', 'sadRejestrowy']) || null,
-    data_utworzenia_spolki:
-      zeSciezek(naglowek, ['dataRejestracjiWKRS', 'dataRejestracji']) || null,
-    // ── Rozszerzony import (faza 3) — patrz zastrzeżenie w komentarzu wyżej.
-    data_ostatniego_wpisu_krs:
+    // Potwierdzone nieobecne w odpisie dla rejestru P — patrz komentarz wyżej.
+    // Zawsze wymaga uzupełnienia (ręcznie albo fallbackiem TERYT, sekcja 1.7).
+    sad_rejestrowy: null,
+    data_utworzenia_spolki: parseKrsDate(zeSciezek(naglowek, ['dataRejestracjiWKRS', 'dataRejestracji'])),
+    data_ostatniego_wpisu_krs: parseKrsDate(
       zeSciezek(naglowek, [
+        'dataOstatniegoWpisu',
         'dataDokonaniaOstatniegoWpisu',
         'ostatniWpis.dataDokonaniaWpisu',
         'dataWpisu',
-      ]) || null,
+      ])
+    ),
     adres_edorecze:
       zeSciezek(adres, [
+        'adresDoDoreczenElektronicznychWpisanyDoBAE',
         'adresDorReczenElektronicznych',
         'adresDoreczenElektronicznych',
         'aeDoreczenia',
       ]) || null,
-    kapital_akcyjny_grosze: kapitalZlote != null ? Math.round(Number(kapitalZlote) * 100) : null,
-    sklad_organu: Array.isArray(reprezentacja)
-      ? reprezentacja
-          .map((osoba) => ({
-            nazwisko: zeSciezek(osoba, ['nazwisko', 'nazwaLubFirma']) || null,
-            imiona: zeSciezek(osoba, ['imiona']) || null,
-            funkcja: zeSciezek(osoba, ['funkcjaWOrganieReprezentujacym', 'funkcja']) || null,
-          }))
-          .filter((o) => o.nazwisko || o.imiona)
-      : [],
+    kapital_akcyjny_grosze: zlotePlnNaGrosze(kapitalWartosc),
+    sklad_organu: skladOrganu
+      .map((osoba) => ({
+        nazwisko: zeSciezek(osoba, ['nazwisko.nazwiskoICzlon', 'nazwisko', 'nazwaLubFirma']) || null,
+        imiona:
+          [zeSciezek(osoba, ['imiona.imie', 'imiona']), zeSciezek(osoba, ['imiona.imieDrugie'])]
+            .filter(Boolean)
+            .join(' ') || null,
+        funkcja:
+          zeSciezek(osoba, ['funkcjaWOrganie', 'funkcjaWOrganieReprezentujacym', 'funkcja']) || null,
+      }))
+      .filter((o) => o.nazwisko || o.imiona),
   };
 }
 
@@ -153,6 +189,15 @@ async function pobierzZKrs(numerKrs) {
 
   if (!dane.nazwa) {
     ostrzezenia.push('API KRS nie zwróciło nazwy spółki — sprawdź i uzupełnij ręcznie.');
+  }
+
+  if (dane.regon) {
+    const { ostrzezenie } = normalizujRegon(dane.regon);
+    if (ostrzezenie) ostrzezenia.push(ostrzezenie);
+  }
+
+  if (!dane.sad_rejestrowy) {
+    ostrzezenia.push('API KRS nie podaje oznaczenia sądu rejestrowego — uzupełnij pole ręcznie.');
   }
 
   // Regula domenowa nr 11: rejestru nie prowadzimy dla S.A. ani S.K.A.

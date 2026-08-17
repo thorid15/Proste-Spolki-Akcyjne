@@ -134,6 +134,7 @@ function EkranNowejSpolki() {
   const [skladOrganu, ustawSkladOrganu] = useState([]);
   const [pobieranie, ustawPobieranie] = useState(false);
   const [komunikatKrs, ustawKomunikatKrs] = useState(null);
+  const [pobranoZKrsBezAde, ustawPobranoZKrsBezAde] = useState(false);
 
   const [emisja, ustawEmisje] = useState(PUSTA_EMISJA_ZALOZYCIELSKA);
   const [pozycje, ustawPozycjeState] = useState([{}]);
@@ -167,11 +168,12 @@ function EkranNowejSpolki() {
         );
         ustawDane((p) => ({ ...p, ...pobrane }));
         ustawSkladOrganu(sklad_organu || []);
+        ustawPobranoZKrsBezAde(!wynik.dane.adres_edorecze);
         ustawKomunikatKrs({
           odmiana: (wynik.ostrzezenia || []).length ? 'uwaga' : 'ok',
           tresc: (wynik.ostrzezenia || []).length
             ? wynik.ostrzezenia.join(' ')
-            : 'Dane pobrane z rejestru przedsiębiorców. Sprawdź je przed zapisaniem — mapowanie pól rozszerzonego importu nie było weryfikowane na żywej odpowiedzi API, patrz surowy JSON poniżej.',
+            : 'Dane pobrane z rejestru przedsiębiorców. Sprawdź je przed zapisaniem, zwłaszcza sąd rejestrowy — API KRS go nie zwraca, uzupełnij ręcznie.',
         });
         ustawPokazJson(true);
       }
@@ -400,7 +402,12 @@ function EkranNowejSpolki() {
             <div className="siatka-3">
               <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
               <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
-              <Pole etykieta="Adres do doręczeń elektronicznych"><input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" /></Pole>
+              <Pole
+                etykieta="Adres do doręczeń elektronicznych"
+                podpowiedz={pobranoZKrsBezAde ? 'Brak w KRS — uzupełnij ręcznie. ADE często nie jest ujawniony w KRS, tylko w bazie adresów elektronicznych.' : undefined}
+              >
+                <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
+              </Pole>
             </div>
             <div className="siatka-3">
               <Pole etykieta="Data rejestracji w KRS">
