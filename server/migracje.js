@@ -1026,6 +1026,21 @@ const MIGRACJE = [
       ALTER TABLE psa_spolki ADD COLUMN data_zawarcia_umowy_spolki TEXT;
     `,
   },
+  {
+    wersja: 20,
+    nazwa: 'poprawki PSA (etap 2.7): tresc postanowienia umowy spolki o zgodzie na zbycie',
+    sql: `
+      -- Doslowny cytat klauzuli umowy spolki o zgodzie spolki na zbycie akcji
+      -- (art. 300(39) § 1, 3 KSH) - obok juz istniejacych ustrukturyzowanych
+      -- pol (termin wskazania nabywcy, sposob ustalenia ceny, termin
+      -- zaplaty). Kreator rejestracji dopuszcza zapisanie tego postanowienia
+      -- BEZ kompletu trzech szczegolow (byly dotad wymagane razem) - notariusz
+      -- moze ich jeszcze nie znac przy zakladaniu spolki. Twarda blokada
+      -- (postanowienie niekompletne = bezskuteczne) przenosi sie na moment
+      -- FAKTYCZNEGO zbycia akcji (server/logika/walidacje.js).
+      ALTER TABLE psa_ograniczenia ADD COLUMN tresc_postanowienia TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

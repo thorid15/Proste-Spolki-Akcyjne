@@ -236,6 +236,62 @@ test('ograniczenie: prawo pierwszenstwa blokuje przeniesienie bez odnotowanego w
   });
 });
 
+test('ograniczenie: KOMPLETNA zgoda spółki blokuje przeniesienie bez odnotowanej zgody (etap 2.7)', () => {
+  const { db, spolka, kowalski, bank, emisjaId } = scenariusz();
+
+  wpis(db, spolka, 'ograniczenie', '2026-01-15', {
+    zakres: 'emisja',
+    emisja_zdarzenie_id: emisjaId,
+    wymaga_zgody_spolki: true,
+    zgoda_termin_wskazania_dni: 14,
+    zgoda_cena_opis: 'wartość nominalna',
+    zgoda_termin_zaplaty_dni: 7,
+    opis: 'Statutowy wymóg zgody spółki',
+  });
+
+  assert.throws(
+    () =>
+      wpis(db, spolka, 'przeniesienie', '2026-02-01', {
+        emisja_zdarzenie_id: emisjaId,
+        zbywca_osoba_id: kowalski,
+        pozycje: [{ nabywca_osoba_id: bank, ilosc: 10 }],
+      }),
+    /wymaga zgody spółki/
+  );
+
+  wpis(db, spolka, 'przeniesienie', '2026-02-01', {
+    emisja_zdarzenie_id: emisjaId,
+    zbywca_osoba_id: kowalski,
+    zgoda_spolki: true,
+    pozycje: [{ nabywca_osoba_id: bank, ilosc: 10 }],
+  });
+});
+
+test('ograniczenie: NIEKOMPLETNA zgoda spółki NIE blokuje przeniesienia — tylko miękkie ostrzeżenie (etap 2.7)', () => {
+  const { db, spolka, kowalski, bank, emisjaId } = scenariusz();
+
+  // Notariusz przy zakladaniu spolki zna tylko sam fakt wymogu zgody i
+  // tresc klauzuli - szczegoly (termin, cena, termin zaplaty) uzupelni
+  // pozniej. Kreator to teraz dopuszcza (patrz kreator-rejestracji.test.js).
+  wpis(db, spolka, 'ograniczenie', '2026-01-15', {
+    zakres: 'emisja',
+    emisja_zdarzenie_id: emisjaId,
+    wymaga_zgody_spolki: true,
+    tresc_postanowienia: 'Zbycie akcji wymaga uprzedniej zgody zarządu spółki.',
+  });
+
+  const wynik = wpis(db, spolka, 'przeniesienie', '2026-02-01', {
+    emisja_zdarzenie_id: emisjaId,
+    zbywca_osoba_id: kowalski,
+    pozycje: [{ nabywca_osoba_id: bank, ilosc: 10 }],
+  });
+
+  assert.ok(
+    wynik.ostrzezenia.some((o) => o.includes('niekompletne') && o.includes('Zbycie akcji wymaga uprzedniej zgody zarządu spółki')),
+    `oczekiwano ostrzeżenia o niekompletnym postanowieniu, dostano: ${JSON.stringify(wynik.ostrzezenia)}`
+  );
+});
+
 test('zmiana_danych_akcjonariusza aktualizuje kartotekę psa_osoby', () => {
   const { db, spolka, kowalski } = scenariusz();
   wpis(db, spolka, 'zmiana_danych_akcjonariusza', '2026-02-01', {

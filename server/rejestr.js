@@ -307,11 +307,11 @@ function zmaterializuj(db, spolkaId) {
     `INSERT INTO psa_ograniczenia
        (spolka_id, zakres, emisja_id, nr_od, nr_do, wymaga_zgody_spolki,
         zgoda_termin_wskazania_dni, zgoda_cena_opis, zgoda_termin_zaplaty_dni,
-        prawo_pierwszenstwa, opis, zdarzenie_id, status, data_wykreslenia)
+        tresc_postanowienia, prawo_pierwszenstwa, opis, zdarzenie_id, status, data_wykreslenia)
      VALUES
        (@spolka_id, @zakres, @emisja_id, @nr_od, @nr_do, @wymaga_zgody_spolki,
         @zgoda_termin_wskazania_dni, @zgoda_cena_opis, @zgoda_termin_zaplaty_dni,
-        @prawo_pierwszenstwa, @opis, @zdarzenie_id, @status, @data_wykreslenia)`
+        @tresc_postanowienia, @prawo_pierwszenstwa, @opis, @zdarzenie_id, @status, @data_wykreslenia)`
   );
   for (const o of stan.ograniczenia) {
     const zakresy = o.zakresy && o.zakresy.length > 0 ? o.zakresy : [{ nr_od: null, nr_do: null }];
@@ -326,6 +326,7 @@ function zmaterializuj(db, spolkaId) {
         zgoda_termin_wskazania_dni: o.zgoda_termin_wskazania_dni ?? null,
         zgoda_cena_opis: o.zgoda_cena_opis ?? null,
         zgoda_termin_zaplaty_dni: o.zgoda_termin_zaplaty_dni ?? null,
+        tresc_postanowienia: o.tresc_postanowienia ?? null,
         prawo_pierwszenstwa: o.prawo_pierwszenstwa,
         opis: o.opis,
         zdarzenie_id: o.zdarzenie_id,

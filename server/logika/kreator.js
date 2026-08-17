@@ -616,37 +616,33 @@ const PRZYGOTOWANIA = {
     // Kompletnosc postanowienia o zgodzie spolki (art. 300(39) § 1, 3 KSH,
     // WYTYCZNE-MERYTORYCZNE-PSA.md sekcja 11): bez terminu wskazania innego
     // nabywcy, sposobu ustalenia ceny i terminu zaplaty postanowienie jest
-    // BEZSKUTECZNE - "akcja moze byc zbyta bez ograniczenia". Nie zapisujemy
-    // wiec polowicznego ograniczenia, ktore myliloby pozniejszy wpis
-    // przeniesienia; albo komplet trzech pol, albo wymaga_zgody_spolki=0.
+    // BEZSKUTECZNE - "akcja moze byc zbyta bez ograniczenia". To jednak fakt
+    // o SKUTECZNOSCI postanowienia, nie o tym, czy WOLNO je zapisac - kreator
+    // juz nie blokuje zapisu niepelnego postanowienia (etap 2.7 poprawek):
+    // przy zakladaniu spolki notariusz moze jeszcze nie znac wszystkich
+    // trzech szczegolow. Twarda blokada zapada dopiero przy FAKTYCZNYM
+    // zbyciu akcji, i tylko dla postanowien kompletnych (walidacje.js,
+    // `sprawdzOgraniczenia`) - zgodnie z regula "miekkie ostrzezenia przy
+    // wprowadzaniu danych, twarde blokady dopiero przy operacji rejestrowej".
     let zgodaTerminWskazaniaDni = null;
     let zgodaCenaOpis = null;
     let zgodaTerminZaplatyDni = null;
     const wymagaZgody = Boolean(we.wymaga_zgody_spolki);
     if (wymagaZgody) {
-      const brakujace = [];
-      if (we.zgoda_termin_wskazania_dni == null || we.zgoda_termin_wskazania_dni === '') {
-        brakujace.push('termin wskazania innego nabywcy');
+      if (we.zgoda_termin_wskazania_dni != null && we.zgoda_termin_wskazania_dni !== '') {
+        zgodaTerminWskazaniaDni = liczbaCalkowita(we.zgoda_termin_wskazania_dni, 'termin wskazania innego nabywcy');
+        if (zgodaTerminWskazaniaDni > 31) {
+          throw new BladKreatora(
+            `Termin na wskazanie innego nabywcy nie może być dłuższy niż miesiąc (${przepisy.PODSTAWY.ZGODA_SPOLKI_NA_ZBYCIE}).`
+          );
+        }
       }
-      if (!String(we.zgoda_cena_opis || '').trim()) brakujace.push('sposób ustalenia ceny');
-      if (we.zgoda_termin_zaplaty_dni == null || we.zgoda_termin_zaplaty_dni === '') {
-        brakujace.push('termin zapłaty');
+      if (String(we.zgoda_cena_opis || '').trim()) {
+        zgodaCenaOpis = tekst(we.zgoda_cena_opis, 'sposób ustalenia ceny', { maks: 300 });
       }
-      if (brakujace.length > 0) {
-        throw new BladKreatora(
-          `Zgoda spółki na zbycie wymaga kompletu trzech elementów (${przepisy.PODSTAWY.ZGODA_SPOLKI_NA_ZBYCIE}) — ` +
-            `brakuje: ${brakujace.join(', ')}. Bez kompletu postanowienie jest bezskuteczne — ` +
-            'odznacz „wymaga zgody spółki” albo uzupełnij brakujące pola.'
-        );
+      if (we.zgoda_termin_zaplaty_dni != null && we.zgoda_termin_zaplaty_dni !== '') {
+        zgodaTerminZaplatyDni = liczbaCalkowita(we.zgoda_termin_zaplaty_dni, 'termin zapłaty');
       }
-      zgodaTerminWskazaniaDni = liczbaCalkowita(we.zgoda_termin_wskazania_dni, 'termin wskazania innego nabywcy');
-      if (zgodaTerminWskazaniaDni > 31) {
-        throw new BladKreatora(
-          `Termin na wskazanie innego nabywcy nie może być dłuższy niż miesiąc (${przepisy.PODSTAWY.ZGODA_SPOLKI_NA_ZBYCIE}).`
-        );
-      }
-      zgodaCenaOpis = tekst(we.zgoda_cena_opis, 'sposób ustalenia ceny', { maks: 300 });
-      zgodaTerminZaplatyDni = liczbaCalkowita(we.zgoda_termin_zaplaty_dni, 'termin zapłaty');
     }
 
     return {
@@ -654,10 +650,16 @@ const PRZYGOTOWANIA = {
       emisja_zdarzenie_id: emisjaKlucz,
       seria,
       zakresy,
-      wymaga_zgody_spolki: wymagaZgody && zgodaTerminWskazaniaDni != null ? 1 : 0,
+      wymaga_zgody_spolki: wymagaZgody ? 1 : 0,
       zgoda_termin_wskazania_dni: zgodaTerminWskazaniaDni,
       zgoda_cena_opis: zgodaCenaOpis,
       zgoda_termin_zaplaty_dni: zgodaTerminZaplatyDni,
+      // Doslowny cytat klauzuli umowy spolki (etap 2.7 poprawek) - przydatny
+      // notariuszowi nawet zanim ustrukturyzowane szczegoly powyzej sa znane.
+      tresc_postanowienia: tekst(we.tresc_postanowienia, 'treść postanowienia umowy spółki', {
+        wymagane: false,
+        maks: 2000,
+      }),
       prawo_pierwszenstwa: we.prawo_pierwszenstwa ? 1 : 0,
       opis: tekst(we.opis, 'opis', { wymagane: false, maks: 500 }),
       podstawa_opis: tekst(we.podstawa_opis, 'podstawa wpisu', { wymagane: false, maks: 500 }),

@@ -51,6 +51,9 @@ const PUSTA_EMISJA_ZALOZYCIELSKA = {
 
 const PUSTA_ZGODA_SPOLKI = {
   wymaga_zgody_spolki: false,
+  // Doslowny cytat klauzuli - przydatny nawet zanim szczegoly nizej sa znane
+  // (etap 2.7 poprawek).
+  tresc_postanowienia: '',
   zgoda_termin_wskazania_dni: '',
   zgoda_cena_opis: '',
   zgoda_termin_zaplaty_dni: '',
@@ -271,6 +274,10 @@ function EkranNowejSpolki() {
     dane.kapital_akcyjny_grosze != null &&
     sumaWkladowGrosze !== Number(dane.kapital_akcyjny_grosze);
 
+  // Niekompletnosc NIE blokuje juz kreatora (etap 2.7 poprawek) - postanowienie
+  // niekompletne jest bezskuteczne, ale to sprawdza sie dopiero przy
+  // faktycznym zbyciu akcji (server/logika/walidacje.js), nie przy zakladaniu
+  // spolki. Flaga zostaje wylacznie do miekkiego komunikatu informacyjnego.
   const zgodaNiekompletna =
     zgoda.wymaga_zgody_spolki &&
     (!zgoda.zgoda_termin_wskazania_dni || !zgoda.zgoda_cena_opis.trim() || !zgoda.zgoda_termin_zaplaty_dni);
@@ -281,8 +288,7 @@ function EkranNowejSpolki() {
     ileAkcji > 0 &&
     !przekroczonyBilans &&
     pozycje.length > 0 &&
-    pozycje.every((p) => p.osoba_id && Number(p.ilosc) > 0) &&
-    !zgodaNiekompletna;
+    pozycje.every((p) => p.osoba_id && Number(p.ilosc) > 0);
 
   const wszystkoOdhaczone = CHECKLISTA_OTWARCIA.every((p) => odhaczone[p.kod]);
 
@@ -353,9 +359,10 @@ function EkranNowejSpolki() {
           dane: {
             zakres: 'wszystkie',
             wymaga_zgody_spolki: zgoda.wymaga_zgody_spolki,
-            zgoda_termin_wskazania_dni: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_termin_wskazania_dni : null,
-            zgoda_cena_opis: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_cena_opis : null,
-            zgoda_termin_zaplaty_dni: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_termin_zaplaty_dni : null,
+            tresc_postanowienia: zgoda.wymaga_zgody_spolki ? zgoda.tresc_postanowienia || null : null,
+            zgoda_termin_wskazania_dni: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_termin_wskazania_dni || null : null,
+            zgoda_cena_opis: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_cena_opis || null : null,
+            zgoda_termin_zaplaty_dni: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_termin_zaplaty_dni || null : null,
             prawo_pierwszenstwa: zgoda.prawo_pierwszenstwa,
             opis: 'Ograniczenie ustanowione umową spółki, odnotowane przy otwarciu rejestru.',
           },
@@ -634,8 +641,8 @@ function EkranNowejSpolki() {
             <div className="rozdzielacz" />
             <div className="card-h">Ograniczenia z umowy spółki</div>
             <Komunikat
-              odmiana="uwaga"
-              tresc="Bez tych danych art. 300(34) § 6 KSH jest niewykonalny — podmiot prowadzący rejestr nie mógłby sprawdzić ograniczeń przy kolejnych wpisach."
+              odmiana="info"
+              tresc="Dane o ograniczeniach z umowy spółki (art. 300(34) § 6 KSH) służą przyszłej kontroli przy zbyciu akcji. Uzupełnij, co wiesz teraz — resztę można dopisać później, przed pierwszym zbyciem."
             />
 
             <label className="chk">
@@ -651,48 +658,62 @@ function EkranNowejSpolki() {
             </label>
             {zgoda.wymaga_zgody_spolki && (
               <>
-                <div className="siatka-3">
-                  <Pole etykieta="Termin wskazania innego nabywcy (dni)" podpowiedz="Nie dłuższy niż miesiąc (art. 300(39) § 3 KSH).">
-                    <PoleLiczbowe sufiks="dni" max={31} wartosc={zgoda.zgoda_termin_wskazania_dni} przyZmianie={(v) => ustawZgode((p) => ({ ...p, zgoda_termin_wskazania_dni: v }))} />
-                  </Pole>
-                  <Pole etykieta="Termin zapłaty (dni)">
-                    <PoleLiczbowe sufiks="dni" wartosc={zgoda.zgoda_termin_zaplaty_dni} przyZmianie={(v) => ustawZgode((p) => ({ ...p, zgoda_termin_zaplaty_dni: v }))} />
-                  </Pole>
-                  <Pole etykieta="Sposób ustalenia ceny">
-                    <input type="text" value={zgoda.zgoda_cena_opis} onChange={(z) => ustawZgode((p) => ({ ...p, zgoda_cena_opis: z.target.value }))} />
-                  </Pole>
-                </div>
+                <Pole
+                  etykieta="Treść postanowienia umowy spółki"
+                  podpowiedz="Dosłowny cytat klauzuli — przydatny przy zbyciu akcji, nawet zanim szczegóły niżej zostaną ustalone."
+                >
+                  <textarea
+                    value={zgoda.tresc_postanowienia}
+                    onChange={(z) => ustawZgode((p) => ({ ...p, tresc_postanowienia: z.target.value }))}
+                  />
+                </Pole>
+                <Sekcja tytul="Szczegóły postanowienia (termin, cena, zapłata) — opcjonalne teraz">
+                  <div className="siatka-3">
+                    <Pole etykieta="Termin wskazania innego nabywcy (dni)" podpowiedz="Nie dłuższy niż miesiąc (art. 300(39) § 3 KSH).">
+                      <PoleLiczbowe sufiks="dni" max={31} wartosc={zgoda.zgoda_termin_wskazania_dni} przyZmianie={(v) => ustawZgode((p) => ({ ...p, zgoda_termin_wskazania_dni: v }))} />
+                    </Pole>
+                    <Pole etykieta="Termin zapłaty (dni)">
+                      <PoleLiczbowe sufiks="dni" wartosc={zgoda.zgoda_termin_zaplaty_dni} przyZmianie={(v) => ustawZgode((p) => ({ ...p, zgoda_termin_zaplaty_dni: v }))} />
+                    </Pole>
+                    <Pole etykieta="Sposób ustalenia ceny">
+                      <input type="text" value={zgoda.zgoda_cena_opis} onChange={(z) => ustawZgode((p) => ({ ...p, zgoda_cena_opis: z.target.value }))} />
+                    </Pole>
+                  </div>
+                </Sekcja>
                 {zgodaNiekompletna && (
                   <Komunikat
-                    odmiana="uwaga"
-                    tresc="Bez kompletu tych trzech pól postanowienie o zgodzie spółki jest bezskuteczne — akcja może być zbyta bez ograniczenia. Uzupełnij wszystkie albo odznacz zgodę spółki."
+                    odmiana="info"
+                    tresc="Postanowienie jest na razie bezskuteczne bez kompletu tych trzech pól (art. 300(39) KSH) — można je uzupełnić później, przed pierwszym wpisem zbycia akcji tej spółki."
                   />
                 )}
               </>
             )}
 
-            <label className="chk">
-              <input
-                type="checkbox"
-                checked={zgoda.prawo_pierwszenstwa}
-                onChange={(z) => ustawZgode((p) => ({ ...p, prawo_pierwszenstwa: z.target.checked }))}
-              />
-              <span className="chk-tresc">
-                Pozostałym akcjonariuszom przysługuje prawo pierwszeństwa
-                <div className="podstawa-prawna">art. 300(42) KSH</div>
-              </span>
-            </label>
+            <Sekcja tytul="Postanowienia umowy spółki" domyslnieOtwarta>
+              <label className="chk">
+                <input
+                  type="checkbox"
+                  checked={zgoda.prawo_pierwszenstwa}
+                  onChange={(z) => ustawZgode((p) => ({ ...p, prawo_pierwszenstwa: z.target.checked }))}
+                />
+                <span className="chk-tresc">
+                  Pozostałym akcjonariuszom przysługuje prawo pierwszeństwa
+                  <div className="podstawa-prawna">art. 300(42) KSH</div>
+                </span>
+              </label>
 
-            <Pole etykieta="Zakaz prawa głosu zastawnika lub użytkownika" podpowiedz="art. 300(23) § 2 KSH">
-              <select {...pole('zakaz_glosu_zastawnika_umowa')}>
-                <option value="">umowa spółki nie ogranicza</option>
-                <option value="zakazane">umowa spółki zakazuje wprost</option>
-                <option value="wymaga_zgody_organu">umowa spółki uzależnia od zgody organu</option>
-              </select>
-            </Pole>
-            <Pole etykieta="Ograniczenie podziału akcji między spadkobierców" podpowiedz="art. 300(41) § 3 KSH — treść klauzuli, zostaw puste jeśli umowa spółki nie ogranicza.">
-              <textarea {...pole('ograniczenie_dziedziczenia_umowa')} />
-            </Pole>
+              <Pole etykieta="Zakaz prawa głosu zastawnika lub użytkownika" podpowiedz="art. 300(23) § 2 KSH">
+                <select {...pole('zakaz_glosu_zastawnika_umowa')}>
+                  <option value="">umowa spółki nie ogranicza</option>
+                  <option value="zakazane">umowa spółki zakazuje wprost</option>
+                  <option value="wymaga_zgody_organu">umowa spółki uzależnia od zgody organu</option>
+                </select>
+              </Pole>
+              <Pole etykieta="Ograniczenie podziału akcji między spadkobierców" podpowiedz="art. 300(41) § 3 KSH — treść klauzuli, zostaw puste jeśli umowa spółki nie ogranicza.">
+                <textarea {...pole('ograniczenie_dziedziczenia_umowa')} />
+              </Pole>
+            </Sekcja>
+
             <Pole etykieta="Dodatkowe informacje ujawniane w rejestrze" podpowiedz="art. 300(33) § 2 KSH">
               <textarea {...pole('dodatkowe_informacje_umowa_spolki')} />
             </Pole>

@@ -652,6 +652,7 @@ const HANDLERY = {
       zgoda_termin_wskazania_dni: d.zgoda_termin_wskazania_dni ?? null,
       zgoda_cena_opis: d.zgoda_cena_opis ?? null,
       zgoda_termin_zaplaty_dni: d.zgoda_termin_zaplaty_dni ?? null,
+      tresc_postanowienia: d.tresc_postanowienia || null,
       prawo_pierwszenstwa: d.prawo_pierwszenstwa ? 1 : 0,
       opis: d.opis || null,
       zdarzenie_id: Number(zdarzenie.id),

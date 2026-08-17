@@ -109,21 +109,25 @@ test('otworzRejestr: gdy drugie zdarzenie zawodzi, PIERWSZE też się cofa (atom
   assert.equal(zdarzenia.n, 0, 'transakcja cofnięta w całości — nawet poprawna emisja nie została zapisana');
 });
 
-test('ograniczenie: zgoda spółki wymaga kompletu trzech pól, inaczej odrzucona jako bezskuteczna', () => {
+test('ograniczenie: zgoda spółki BEZ kompletu trzech pól zapisuje się (etap 2.7) — bezskuteczność sprawdza się dopiero przy zbyciu', () => {
   const db = bazaTestowa();
   const spolka = dodajSpolke(db);
   wpis(db, spolka, 'emisja', '2026-01-10', { seria: 'A', ilosc: 100 });
 
-  assert.throws(
-    () =>
-      wpis(db, spolka, 'ograniczenie', '2026-01-15', {
-        zakres: 'wszystkie',
-        wymaga_zgody_spolki: true,
-        // brak zgoda_cena_opis i zgoda_termin_zaplaty_dni
-        zgoda_termin_wskazania_dni: 14,
-      }),
-    /kompletu trzech elementów/
-  );
+  wpis(db, spolka, 'ograniczenie', '2026-01-15', {
+    zakres: 'wszystkie',
+    wymaga_zgody_spolki: true,
+    tresc_postanowienia: 'Zbycie akcji wymaga zgody spółki wyrażonej przez zarząd.',
+    // brak zgoda_cena_opis i zgoda_termin_zaplaty_dni — notariusz jeszcze ich nie zna.
+    zgoda_termin_wskazania_dni: 14,
+  });
+
+  const wiersz = db.prepare('SELECT * FROM psa_ograniczenia WHERE spolka_id = ?').get(spolka);
+  assert.equal(wiersz.wymaga_zgody_spolki, 1, 'intencja checkboxa zapisuje się mimo niekompletnych szczegółów');
+  assert.equal(wiersz.zgoda_termin_wskazania_dni, 14);
+  assert.equal(wiersz.zgoda_cena_opis, null);
+  assert.equal(wiersz.zgoda_termin_zaplaty_dni, null);
+  assert.match(wiersz.tresc_postanowienia, /zgody spółki wyrażonej przez zarząd/);
 });
 
 test('ograniczenie: komplet trzech pól zapisuje skuteczne postanowienie o zgodzie spółki', () => {
