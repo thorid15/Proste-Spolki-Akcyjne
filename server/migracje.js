@@ -1070,6 +1070,56 @@ const MIGRACJE = [
         ON psa_zgloszenia (status, utworzono);
     `,
   },
+  {
+    wersja: 22,
+    nazwa: 'etap 3B: rola wnioskodawca w psa_konta (zaproszenie przed istnieniem spolki)',
+    sql: `
+      -- SQLite nie pozwala zmienic CHECK-a przez ALTER TABLE - psa_konta nie
+      -- jest append-only (to nie psa_zdarzenia), wiec przepisujemy ja z nowa
+      -- rola 'wnioskodawca': konto zaproszone przez kancelarie (etap 3B),
+      -- ktore NIE ma jeszcze ani spolka_id (spolka nie istnieje w systemie
+      -- do czasu przyjecia wniosku), ani osoba_id (nie jest jeszcze
+      -- akcjonariuszem zadnej spolki). Rownowaznosc dwoch CHECK-ow zamiast
+      -- jednego wylicza poprawnie wszystkie trzy role:
+      --   spolka        -> spolka_id wymagane,  osoba_id NULL
+      --   akcjonariusz  -> spolka_id NULL,       osoba_id wymagane
+      --   wnioskodawca  -> spolka_id NULL,       osoba_id NULL
+      --
+      -- hash_hasla staje sie NULLOWALNE - konto istnieje juz PRZED
+      -- aktywacja (link mailowy), haslo ustawia dopiero klient w tym
+      -- momencie (logika/hasla.js: zweryfikuj juz dzis bezpiecznie
+      -- traktuje brak hasha jako "nie pasuje", zero zmian po tej stronie).
+      -- token_wygasa - link aktywacyjny nie moze byc wazny bezterminowo.
+      CREATE TABLE psa_konta_v22 (
+        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+        email              TEXT NOT NULL UNIQUE,
+        hash_hasla         TEXT,
+        rola               TEXT NOT NULL CHECK (rola IN ('spolka','akcjonariusz','wnioskodawca')),
+        spolka_id          INTEGER REFERENCES psa_spolki(id),
+        osoba_id           INTEGER REFERENCES psa_osoby(id),
+        aktywne            INTEGER NOT NULL DEFAULT 0 CHECK (aktywne IN (0,1)),
+        token_aktywacji    TEXT,
+        token_wygasa       TEXT,
+        ostatnie_logowanie TEXT,
+        utworzono          TEXT NOT NULL,
+        CHECK ((rola = 'spolka') = (spolka_id IS NOT NULL)),
+        CHECK ((rola = 'akcjonariusz') = (osoba_id IS NOT NULL))
+      );
+      INSERT INTO psa_konta_v22
+        (id, email, hash_hasla, rola, spolka_id, osoba_id, aktywne, token_aktywacji, ostatnie_logowanie, utworzono)
+        SELECT id, email, hash_hasla, rola, spolka_id, osoba_id, aktywne, token_aktywacji, ostatnie_logowanie, utworzono
+          FROM psa_konta;
+      DROP TABLE psa_konta;
+      ALTER TABLE psa_konta_v22 RENAME TO psa_konta;
+
+      CREATE INDEX IF NOT EXISTS psa_ix_konta_spolka
+        ON psa_konta (spolka_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_konta_osoba
+        ON psa_konta (osoba_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_konta_token
+        ON psa_konta (token_aktywacji);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

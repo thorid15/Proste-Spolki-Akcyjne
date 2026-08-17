@@ -166,6 +166,83 @@ function EkranZgloszenieWstepne() {
   );
 }
 
+/* Etap 3B — publiczny, niezalogowany ekran wymiany tokenu z maila
+   zapraszającego na hasło. Po sukcesie backend od razu zakłada sesję
+   portalową (ciasteczko), więc wystarczy wrócić na „/” — świeże
+   `usePortalSesja()` samo ją odkryje. */
+function EkranAktywacjaKonta({ token }) {
+  const [email, ustawEmail] = useState(null);
+  const [sprawdzanie, ustawSprawdzanie] = useState(true);
+  const [bladTokenu, ustawBladTokenu] = useState(null);
+  const [haslo, ustawHaslo] = useState('');
+  const [powtorzHaslo, ustawPowtorzHaslo] = useState('');
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+
+  useEffect(() => {
+    API.get(`/api/psa/portal/aktywacja/${token}`)
+      .then((d) => ustawEmail(d.email))
+      .catch((e) => ustawBladTokenu(e instanceof BladApi ? e.message : 'Link aktywacyjny jest nieprawidłowy albo wygasł.'))
+      .finally(() => ustawSprawdzanie(false));
+  }, [token]);
+
+  async function aktywuj(zdarzenie) {
+    zdarzenie.preventDefault();
+    if (haslo !== powtorzHaslo) {
+      ustawBlad('Hasła nie są takie same.');
+      return;
+    }
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      await API.post(`/api/psa/portal/aktywacja/${token}`, { haslo });
+      idz('/');
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się aktywować konta.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  if (sprawdzanie) return <div className="ekran-logowania"><Spinner /></div>;
+
+  if (bladTokenu) {
+    return (
+      <div className="ekran-logowania">
+        <div className="card" style={{ width: 440, maxWidth: '92vw' }}>
+          <Pusto
+            tytul="Link jest nieważny"
+            opis={bladTokenu}
+            akcja={<button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ekran-logowania">
+      <form className="card" style={{ width: 400, maxWidth: '92vw' }} onSubmit={aktywuj}>
+        <div className="card-h" style={{ marginBottom: 4 }}>Aktywacja konta</div>
+        <div className="podtytul-strony" style={{ marginBottom: 22 }}>{email}</div>
+
+        <Komunikat odmiana="blad" tresc={blad} />
+
+        <Pole etykieta="Hasło" wymagane podpowiedz="Co najmniej 10 znaków, litera i cyfra.">
+          <input type="password" autoFocus value={haslo} onChange={(z) => ustawHaslo(z.target.value)} autoComplete="new-password" />
+        </Pole>
+        <Pole etykieta="Powtórz hasło" wymagane>
+          <input type="password" value={powtorzHaslo} onChange={(z) => ustawPowtorzHaslo(z.target.value)} autoComplete="new-password" />
+        </Pole>
+
+        <button className="btn btn-primary" type="submit" disabled={wysylanie || !haslo || !powtorzHaslo} style={{ width: '100%', marginTop: 8 }}>
+          {wysylanie ? 'Aktywowanie…' : 'Aktywuj konto'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────────────────
    UKŁAD
    ───────────────────────────────────────────────────── */
@@ -173,6 +250,13 @@ const KARTY_NAWIGACJI = [
   { sciezka: '/', nazwa: 'Moje spółki' },
   { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
 ];
+
+const ETYKIETA_ROLI_KONTA = {
+  spolka: 'konto spółki',
+  akcjonariusz: 'konto akcjonariusza',
+  // Etap 3B: zaproszone, ale wniosek jeszcze nie zlozony/przyjety.
+  wnioskodawca: 'konto wnioskodawcy',
+};
 
 function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
   const [wylogowywanie, ustawWylogowywanie] = useState(false);
@@ -191,7 +275,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
       <header className="portal-topbar pasek-gorny bez-druku" style={{ padding: '14px 28px' }}>
         <div>
           <div className="tytul-strony" style={{ fontSize: 17 }}>Portal klienta — Rejestr akcjonariuszy P.S.A.</div>
-          <div className="podpowiedz">{konto.email} · {konto.rola === 'spolka' ? 'konto spółki' : 'konto akcjonariusza'}</div>
+          <div className="podpowiedz">{konto.email} · {ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola}</div>
         </div>
         <div className="row-g">
           {KARTY_NAWIGACJI.map((k) => (
@@ -525,9 +609,11 @@ function AplikacjaPortal() {
   const trasa = useTrasa();
   const { segmenty, sciezka } = trasa;
 
-  // Etap 3A: jedyna trasa publiczna portalu — MUSI wyprzedzić bramkę sesji
-  // poniżej, inaczej niezalogowany gość zawsze wyląduje na ekranie logowania.
+  // Etap 3A/3B: jedyne trasy publiczne portalu — MUSZĄ wyprzedzić bramkę
+  // sesji poniżej, inaczej niezalogowany gość zawsze wyląduje na ekranie
+  // logowania (konto z aktywacji NIE MA jeszcze ważnej sesji w tym momencie).
   if (segmenty[0] === 'zglos-sie') return <EkranZgloszenieWstepne />;
+  if (segmenty[0] === 'aktywuj' && segmenty[1]) return <EkranAktywacjaKonta token={segmenty[1]} />;
 
   return <AplikacjaPortalZSesja segmenty={segmenty} sciezka={sciezka} />;
 }
@@ -539,6 +625,20 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
   if (!sesja.zalogowany) return <EkranLoginPortal przyZalogowaniu={() => sesja.odswiez()} />;
 
   function ekran() {
+    // Etap 3B: konto zaproszone (rola 'wnioskodawca') nie ma jeszcze ani
+    // spółki, ani statusu akcjonariusza — `EkranMoje` (poniżej) dla niego
+    // nie ma sensu. Właściwy wniosek (dane spółki, akcjonariusze) to etap 3C;
+    // do tego czasu zostaje przy tym miejscu-trzymaczu.
+    if (sesja.konto.rola === 'wnioskodawca') {
+      return (
+        <Karta tytul="Wniosek o prowadzenie rejestru">
+          <Pusto
+            tytul="Konto aktywowane"
+            opis="Formularz wniosku (dane spółki i akcjonariuszy) pojawi się tutaj wkrótce. Kancelaria już wie o aktywacji Twojego konta."
+          />
+        </Karta>
+      );
+    }
     if (segmenty.length === 0) return <EkranMoje />;
     if (segmenty[0] === 'sprawy') return <EkranSprawyPortal />;
     if (segmenty[0] === 'rejestr' && segmenty[1]) return <EkranRejestrPortal spolkaId={Number(segmenty[1])} />;

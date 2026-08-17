@@ -108,6 +108,12 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     // istnieje w systemie. Nie niesie `spolka_id` ani `:spolkaId`, wiec
     // D3 (izolacja miedzy klientami) go nie dotyczy.
     'POST /zgloszenia',
+    // Etap 3B: aktywacja konta zaproszonego przez kancelarie - rowniez
+    // PRZED bramka `wymagajKonta` (konto jeszcze nieaktywne w tym momencie,
+    // wiec sesji portalowej po prostu jeszcze nie ma). Parametr sciezki to
+    // `:token`, nie `:spolkaId` - D3 go nie dotyczy z tego samego powodu.
+    'GET /aktywacja/:token',
+    'POST /aktywacja/:token',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
   ].sort();

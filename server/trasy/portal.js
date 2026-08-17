@@ -159,6 +159,55 @@ router.post(
   })
 );
 
+// ─────────────────────────────────────────────────────────────
+// Aktywacja konta (etap 3B) - PUBLICZNE, bez sesji. Kancelaria zaklada
+// konto (rola 'wnioskodawca', aktywne=0) po zaakceptowaniu zgloszenia
+// (`server/trasy/zgloszenia.js: POST /:id/zapros`) i wysyla token mailem -
+// klient go tu wymienia na haslo i od razu ma otwarta sesje portalowa.
+// ─────────────────────────────────────────────────────────────
+
+function znajdzKontoDoAktywacji(token) {
+  const konto = db().prepare('SELECT * FROM psa_konta WHERE token_aktywacji = ?').get(String(token || ''));
+  if (!konto || konto.aktywne || !konto.token_wygasa || new Date(konto.token_wygasa) < new Date()) {
+    return null;
+  }
+  return konto;
+}
+
+router.get(
+  '/aktywacja/:token',
+  asy((zad, odp) => {
+    const konto = znajdzKontoDoAktywacji(zad.params.token);
+    if (!konto) throw nieZnaleziono('Link aktywacyjny jest nieprawidłowy albo wygasł.');
+    odp.json({ email: konto.email });
+  })
+);
+
+router.post(
+  '/aktywacja/:token',
+  asy(async (zad, odp) => {
+    const konto = znajdzKontoDoAktywacji(zad.params.token);
+    if (!konto) throw nieZnaleziono('Link aktywacyjny jest nieprawidłowy albo wygasł.');
+
+    const haslo = String((zad.body || {}).haslo || '');
+    const ocena = hasla.ocenSile(haslo);
+    if (!ocena.ok) throw bledneZadanie(ocena.powod);
+
+    const hash = await hasla.hashuj(haslo);
+    db()
+      .prepare(
+        `UPDATE psa_konta
+            SET hash_hasla = ?, aktywne = 1, token_aktywacji = NULL, token_wygasa = NULL,
+                ostatnie_logowanie = ?
+          WHERE id = ?`
+      )
+      .run(hash, czas.terazIso(), konto.id);
+
+    autoryzacja.zalogujKonto(zad, odp, konto.id);
+    odp.json({ konto: widokKonta({ ...konto, aktywne: 1 }) });
+  })
+);
+
 // Od tego miejsca kazda trasa wymaga zalogowanego konta portalowego.
 router.use(autoryzacja.wymagajKonta);
 

@@ -64,6 +64,9 @@ const konfiguracja = {
   SESJA_SEKRET: tekst('SESJA_SEKRET', null),
   KRS_API_URL: tekst('KRS_API_URL', 'https://api-krs.ms.gov.pl/api/krs'),
   PORTAL_WLACZONY: flaga('PORTAL_WLACZONY', false),
+  // Adres portalu klienta w mailach zapraszajacych (etap 3B) - link
+  // aktywacyjny musi wskazywac na PUBLICZNY adres, nie na "localhost".
+  URL_PORTALU: tekst('URL_PORTALU', `http://localhost:${liczba('PORT', 3005)}/portal.html`),
   SMTP: {
     host: tekst('SMTP_HOST', null),
     port: liczba('SMTP_PORT', 587),

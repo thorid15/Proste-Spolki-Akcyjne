@@ -25,6 +25,21 @@ function EkranZgloszenWstepnych() {
     }
   }
 
+  async function zapros(id) {
+    ustawPrzetwarzanie(id);
+    try {
+      const wynik = await API.post(`/api/psa/zgloszenia/${id}/zapros`, {});
+      if (!wynik.email_wyslany) {
+        window.alert(`Konto założone, ale e-mail nie został wysłany: ${wynik.powod || 'brak konfiguracji SMTP'}.`);
+      }
+      odswiez();
+    } catch (e) {
+      window.alert(e instanceof BladApi ? e.message : 'Nie udało się wysłać zaproszenia.');
+    } finally {
+      ustawPrzetwarzanie(null);
+    }
+  }
+
   const zgloszenia = (dane && dane.zgloszenia) || [];
 
   return (
@@ -80,6 +95,13 @@ function EkranZgloszenWstepnych() {
                           value={notatki[z.id] || ''}
                           onChange={(e) => ustawNotatki((p) => ({ ...p, [z.id]: e.target.value }))}
                         />
+                        <button
+                          className="btn btn-maly"
+                          disabled={przetwarzanie === z.id}
+                          onClick={() => zapros(z.id)}
+                        >
+                          Zaproś
+                        </button>
                         <button
                           className="btn btn-maly btn-sygnal"
                           disabled={przetwarzanie === z.id}
