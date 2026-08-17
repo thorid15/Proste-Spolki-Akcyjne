@@ -125,6 +125,12 @@ function zmapuj(odpowiedz, numerKrs) {
     wydzial: propozycjaSadu ? propozycjaSadu.wydzial : null,
     sad_rejestrowy_propozycja: Boolean(propozycjaSadu),
     data_utworzenia_spolki: parseKrsDate(zeSciezek(naglowek, ['dataRejestracjiWKRS', 'dataRejestracji'])),
+    // Data zawarcia UMOWY SPÓŁKI (akt założycielski) — różna od daty
+    // rejestracji w KRS powyżej. Pierwszy wpis tablicy to zawarcie, kolejne
+    // to późniejsze zmiany umowy — bierzemy indeks 0 (sekcja 2.5 poprawek).
+    data_zawarcia_umowy_spolki: parseKrsDate(
+      zeSciezek(dane, ['dzial1.umowaStatut.informacjaOZawarciuZmianieUmowyStatutu.0.zawarcieZmianaUmowyStatutu'])
+    ),
     data_ostatniego_wpisu_krs: parseKrsDate(
       zeSciezek(naglowek, [
         'dataOstatniegoWpisu',

@@ -43,6 +43,9 @@ const ODPIS_0001114217 = {
           adresPocztyElektronicznej: 'JEDRZEJ@GRABSKI.PL',
           adresDoDoreczenElektronicznychWpisanyDoBAE: 'AE:PL-72422-98772-ATIDW-24',
         },
+        umowaStatut: {
+          informacjaOZawarciuZmianieUmowyStatutu: [{ zawarcieZmianaUmowyStatutu: '21.06.2024' }],
+        },
         kapitalPSA: {
           wysokoscKapitaluAkcyjnego: { wartosc: '1,00', waluta: 'PLN' },
           lacznaLiczbaAkcji: '100',
@@ -71,6 +74,12 @@ test('mapuje daty z KRS (DD.MM.RRRR) na ISO, nie na surowy string', () => {
   const wynik = zmapuj(ODPIS_0001114217, '0001114217');
   assert.equal(wynik.data_utworzenia_spolki, '2024-07-04');
   assert.equal(wynik.data_ostatniego_wpisu_krs, '2025-07-15');
+});
+
+test('mapuje date zawarcia umowy spolki (akt zalozycielski) - PIERWSZY wpis tablicy, rozna od daty rejestracji w KRS', () => {
+  const wynik = zmapuj(ODPIS_0001114217, '0001114217');
+  assert.equal(wynik.data_zawarcia_umowy_spolki, '2024-06-21');
+  assert.notEqual(wynik.data_zawarcia_umowy_spolki, wynik.data_utworzenia_spolki);
 });
 
 test('obcina REGON z 14 zer koncowych do REGON-9', () => {

@@ -561,6 +561,8 @@ select {
 }
 .data-segmenty:focus-within { border-color: var(--rejestr); box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10); }
 .data-segmenty.bledne { border-color: var(--sygnal); }
+.data-segmenty.wylaczone { background: var(--papier); }
+.data-segment:disabled { color: var(--atrament-3); cursor: not-allowed; }
 .data-segment { border: none; background: none; font: inherit; color: var(--atrament); text-align: center; padding: 0; outline: none; }
 .data-segment::-webkit-outer-spin-button, .data-segment::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .data-segment[data-szer="2"] { width: 2.2ch; }

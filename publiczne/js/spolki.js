@@ -13,6 +13,11 @@ const PUSTA_SPOLKA = {
   ulica: '', nr_domu: '', nr_lokalu: '',
   sad_rejestrowy: '', wydzial: '', telefon: '', email: '', www: '',
   data_utworzenia_spolki: '', data_ostatniego_wpisu_krs: '', adres_edorecze: '',
+  // Data zawarcia UMOWY SPÓŁKI (akt założycielski / akt notarialny, przy S24
+  // — data podpisania w systemie) — etap 2.5 poprawek. Różna od daty
+  // rejestracji w KRS powyżej i od daty umowy o prowadzenie rejestru niżej;
+  // podstawa autouzupełnienia „data emisji” serii założycielskiej.
+  data_zawarcia_umowy_spolki: '',
   kapital_akcyjny_grosze: null,
   status: 'aktywna', opis: '', uwagi: '',
   organ_rodzaj: '',
@@ -37,6 +42,7 @@ const PUSTA_SPOLKA = {
 const PUSTA_EMISJA_ZALOZYCIELSKA = {
   seria: '', nr_pierwszy: 1, ilosc: '', cena_emisyjna_grosze: null,
   data_emisji: '', data_wpisu_krs: '', rodzaj_akcji: 'zwykla', tytul: '', obowiazki_wobec_spolki: '',
+  podstawa_prawna: '',
 };
 
 const PUSTA_ZGODA_SPOLKI = {
@@ -153,6 +159,26 @@ function EkranNowejSpolki() {
   const [pozycje, ustawPozycjeState] = useState([{}]);
   const [zgoda, ustawZgode] = useState(PUSTA_ZGODA_SPOLKI);
 
+  // Etap 2.5: data emisji założycielskiej = data zawarcia umowy spółki
+  // (krok 1) — autouzupełnienie JEDNORAZOWE, użytkownik może nadpisać.
+  // „Data wpisu emisji do KRS” NIE ma tu osobnego stanu — dla emisji
+  // założycielskiej zawsze i wyłącznie mirroruje „datę rejestracji w KRS”
+  // (pole w kroku 3 jest read-only, patrz niżej), bo emisja pierwotna
+  // rejestruje się razem ze spółką, nie osobno.
+  useEffect(() => {
+    if (dane.data_zawarcia_umowy_spolki && !emisja.data_emisji) {
+      ustawEmisje((p) => ({ ...p, data_emisji: dane.data_zawarcia_umowy_spolki }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dane.data_zawarcia_umowy_spolki]);
+
+  useEffect(() => {
+    if (dane.data_zawarcia_umowy_spolki && !emisja.podstawa_prawna) {
+      ustawEmisje((p) => ({ ...p, podstawa_prawna: `umowa spółki z dnia ${fmt.data(dane.data_zawarcia_umowy_spolki)}` }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dane.data_zawarcia_umowy_spolki]);
+
   const [odhaczone, ustawOdhaczone] = useState({});
   const [spolkaId, ustawSpolkaId] = useState(null);
   const [zapisywanie, ustawZapisywanie] = useState(false);
@@ -258,9 +284,13 @@ function EkranNowejSpolki() {
             nr_pierwszy: emisja.nr_pierwszy || 1,
             ilosc: ileAkcji,
             cena_emisyjna_grosze: emisja.cena_emisyjna_grosze,
-            data_wpisu_krs: emisja.data_wpisu_krs || null,
+            // Emisja zalozycielska rejestruje sie razem ze spolka - zawsze
+            // mirroruje date rejestracji w KRS (krok 1), pole w kroku 3 jest
+            // read-only (etap 2.5 poprawek).
+            data_wpisu_krs: dane.data_utworzenia_spolki || null,
             rodzaj_akcji: emisja.rodzaj_akcji,
             tytul: emisja.tytul,
+            podstawa_prawna: emisja.podstawa_prawna || null,
             obowiazki_wobec_spolki: emisja.obowiazki_wobec_spolki,
           },
         },
@@ -442,6 +472,15 @@ function EkranNowejSpolki() {
                 <PoleKwoty grosze={dane.kapital_akcyjny_grosze} przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))} />
               </Pole>
             </div>
+            <Pole
+              etykieta="Data zawarcia umowy spółki"
+              podpowiedz="Data aktu notarialnego zawiązania spółki — przy spółce zakładanej w S24 data podpisania w systemie. Różna od daty rejestracji w KRS powyżej. Uzupełnia „datę emisji” pierwszej emisji w kroku 3."
+            >
+              <PoleDaty
+                wartosc={dane.data_zawarcia_umowy_spolki}
+                przyZmianie={(v) => ustawDane((p) => ({ ...p, data_zawarcia_umowy_spolki: v }))}
+              />
+            </Pole>
 
             {skladOrganu.length > 0 && (
               <Pole etykieta="Skład organu reprezentującego" podpowiedz="Wyłącznie informacyjne — rejestr akcjonariuszy nie prowadzi własnej ewidencji osób w organach spółki.">
@@ -644,11 +683,18 @@ function EkranNowejSpolki() {
               </Pole>
             </div>
             <div className="siatka-3">
-              <Pole etykieta="Data emisji" wymagane>
+              <Pole
+                etykieta="Data emisji"
+                wymagane
+                podpowiedz="Przy emisji założycielskiej to data zawarcia umowy spółki (krok 1) — uzupełniona automatycznie, można nadpisać."
+              >
                 <PoleDaty wartosc={emisja.data_emisji} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, data_emisji: v }))} />
               </Pole>
-              <Pole etykieta="Data wpisu emisji do KRS" podpowiedz="Puste = akcje formalnie nie istnieją do czasu uzupełnienia (art. 300(30) § 2 KSH).">
-                <PoleDaty wartosc={emisja.data_wpisu_krs} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, data_wpisu_krs: v }))} />
+              <Pole
+                etykieta="Data wpisu emisji do KRS"
+                podpowiedz="Emisja założycielska rejestruje się razem ze spółką — to zawsze data rejestracji w KRS z kroku 1. Bez tej daty nie można dokonać wpisu akcji do rejestru akcjonariuszy (art. 300(30) § 2 KSH)."
+              >
+                <PoleDaty wartosc={dane.data_utworzenia_spolki} wylaczone />
               </Pole>
               <Pole etykieta="Rodzaj akcji" podpowiedz="art. 300(33) § 1 pkt 4 KSH">
                 <select value={emisja.rodzaj_akcji} onChange={(z) => ustawEmisje((p) => ({ ...p, rodzaj_akcji: z.target.value }))}>
@@ -660,6 +706,9 @@ function EkranNowejSpolki() {
               </Pole>
             </div>
             <Pole etykieta="Tytuł emisji"><input type="text" value={emisja.tytul} onChange={(z) => ustawEmisje((p) => ({ ...p, tytul: z.target.value }))} placeholder="Emisja założycielska" /></Pole>
+            <Pole etykieta="Podstawa emisji" podpowiedz='Np. „umowa spółki z dnia 04.07.2024” — uzupełniona automatycznie, można nadpisać.'>
+              <input type="text" value={emisja.podstawa_prawna} onChange={(z) => ustawEmisje((p) => ({ ...p, podstawa_prawna: z.target.value }))} />
+            </Pole>
             <Pole etykieta="Obowiązki wobec spółki związane z akcją" podpowiedz="art. 300(33) § 1 pkt 11 KSH — opcjonalne.">
               <textarea value={emisja.obowiazki_wobec_spolki} onChange={(z) => ustawEmisje((p) => ({ ...p, obowiazki_wobec_spolki: z.target.value }))} />
             </Pole>

@@ -32,6 +32,9 @@ const POLA_SPOLKI = [
   'ulica', 'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial', 'telefon', 'email', 'www',
   'status', 'komentarz_statusu', 'data_utworzenia_spolki', 'data_uchwaly_wyboru', 'data_umowy',
   'data_otwarcia_rejestru', 'data_zakonczenia_umowy', 'opis', 'uwagi',
+  // Etap 2.5 poprawek: data zawarcia umowy spolki (akt zalozycielski) - rozna
+  // od daty rejestracji w KRS i od daty umowy o prowadzenie rejestru.
+  'data_zawarcia_umowy_spolki',
   // Sprint 5 (zgodnosc z ustawa):
   'umowe_zawarl', 'umowe_zawarl_imie_nazwisko', 'dodatkowe_informacje_umowa_spolki',
   // Sesja 6, faza 3 (kreator rejestracji spolki - rozszerzony import KRS,
@@ -89,6 +92,7 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   for (const pole of [
     'data_utworzenia_spolki', 'data_uchwaly_wyboru', 'data_umowy',
     'data_otwarcia_rejestru', 'data_zakonczenia_umowy', 'data_ostatniego_wpisu_krs',
+    'data_zawarcia_umowy_spolki',
   ]) {
     if (dane[pole] && !czas.poprawnaData(dane[pole])) {
       throw bledneZadanie(`Pole „${pole}” musi być datą w formacie RRRR-MM-DD.`);

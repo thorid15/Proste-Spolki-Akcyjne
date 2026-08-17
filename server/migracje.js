@@ -1011,6 +1011,21 @@ const MIGRACJE = [
       ALTER TABLE psa_spolki ADD COLUMN reprezentant_rodzice_recznie TEXT;
     `,
   },
+  {
+    wersja: 19,
+    nazwa: 'poprawki PSA (etap 2.5): data zawarcia umowy spolki (akt zalozycielski)',
+    sql: `
+      -- ── Data zawarcia umowy spolki - RÓŻNA od daty rejestracji w KRS ────
+      -- ("data_utworzenia_spolki") i od daty umowy o PROWADZENIE REJESTRU
+      -- ("data_umowy"). To data aktu notarialnego zawiazania spolki (albo,
+      -- przy spolce zakladanej w S24, data podpisania w systemie) -
+      -- podstawa do autouzupelnienia "data emisji" serii zalozycielskiej.
+      -- Import z API KRS: dzial1.umowaStatut.informacjaOZawarciuZmianieUmowyStatutu[0]
+      -- (potwierdzone na zywej odpowiedzi, KRS 0001114217) - pierwszy wpis w tej
+      -- tablicy to zawarcie, kolejne to pozniejsze zmiany umowy spolki.
+      ALTER TABLE psa_spolki ADD COLUMN data_zawarcia_umowy_spolki TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
