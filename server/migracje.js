@@ -1248,6 +1248,24 @@ const MIGRACJE = [
         ON psa_wnioski_akcjonariusze (wniosek_id, kolejnosc);
     `,
   },
+  {
+    wersja: 26,
+    nazwa: 'etap 3E: projekt umowy o prowadzenie rejestru i odeslanie podpisanej kopii',
+    sql: `
+      -- Projekt umowy generowany AUTOMATYCZNIE przy zlozeniu wniosku (wzor 01,
+      -- server/logika/wzory-dysk.js + kontekst-pisma.js: umowaOProwadzenieRejestru
+      -- - dziala bez zmian na wierszu psa_wnioski, bo kolumny lustrza psa_spolki).
+      -- Wzor psa_spolki.umowa_zalacznik_* (migracja 18) - te same trzy kolumny,
+      -- inna nazwa (umowa_podpisana_*, nie umowa_zalacznik_*), bo to podpisana
+      -- kopia PROJEKTU wygenerowanego tutaj, nie skan zewnetrznego dokumentu.
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_projekt_sciezka TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_projekt_wygenerowano TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_sciezka TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_nazwa_pliku TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_mime TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_wgrano TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

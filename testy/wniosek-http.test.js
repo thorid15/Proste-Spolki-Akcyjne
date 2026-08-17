@@ -239,3 +239,100 @@ test('POST /api/psa/portal/wniosek/akcjonariusze: odmawia po zlozeniu wniosku', 
   const [status] = await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Zapozniony' }, ciastko);
   assert.equal(status, 400);
 });
+
+// ─────────────────────────────────────────────────────────────
+// Etap 3E: zlozenie wniosku, projekt umowy, odeslanie podpisanej kopii
+// ─────────────────────────────────────────────────────────────
+
+test('POST /api/psa/portal/wniosek/zloz: odmawia bez nazwy spolki albo bez akcjonariuszy', async () => {
+  const { ciastko } = await kontoWnioskodawcy('zlozenie-brak-danych@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
+
+  const [stPusty] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+  assert.equal(stPusty, 400, 'bez nazwy spolki i bez akcjonariuszy');
+
+  await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Wniosek Testowy P.S.A.' }, ciastko);
+  const [stBezAkcjonariuszy] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+  assert.equal(stBezAkcjonariuszy, 400, 'nazwa jest, ale zero akcjonariuszy');
+});
+
+test('POST /api/psa/portal/wniosek/zloz: generuje projekt umowy, zmienia status, plik jest pobieralny', async () => {
+  const { kontoId, ciastko } = await kontoWnioskodawcy('zlozenie-pelne@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
+  await zapytaj('PUT', '/api/psa/portal/wniosek', {
+    nazwa: 'Wniosek Pelny P.S.A.',
+    reprezentant_imie_nazwisko: 'Jan Kowalski',
+    reprezentant_plec: 'mezczyzna',
+    reprezentant_funkcja: 'Prezes Zarządu',
+  }, ciastko);
+  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Nowak', imie: 'Anna' }, ciastko);
+
+  const [stZloz, wynikZloz] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+  assert.equal(stZloz, 200);
+  assert.equal(wynikZloz.wniosek.status, 'umowa_wygenerowana');
+  assert.ok(wynikZloz.wniosek.umowa_projekt_sciezka, 'sciezka projektu umowy zapisana na wniosku');
+  assert.ok(Array.isArray(wynikZloz.ostrzezenia));
+
+  const wiersz = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(kontoId);
+  assert.equal(wiersz.status, 'umowa_wygenerowana');
+  assert.ok(fs.existsSync(path.join(require('../server/konfiguracja').KATALOG_DOKUMENTOW, wiersz.umowa_projekt_sciezka)));
+
+  // Wniosek jest teraz zamkniety do edycji (status opuscil stany edytowalne).
+  const [stEdycjaPoZlozeniu] = await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Zmiana' }, ciastko);
+  assert.equal(stEdycjaPoZlozeniu, 400);
+
+  const plikOdp = await fetch(`${baza}/api/psa/portal/wniosek/umowa-projekt`, { headers: { Cookie: ciastko } });
+  assert.equal(plikOdp.status, 200);
+  assert.equal(
+    plikOdp.headers.get('content-type'),
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  );
+  const bajty = await plikOdp.arrayBuffer();
+  assert.ok(bajty.byteLength > 0, 'wygenerowany projekt umowy nie jest pusty');
+});
+
+test('GET /api/psa/portal/wniosek/umowa-projekt: 404 przed zlozeniem wniosku', async () => {
+  const { ciastko } = await kontoWnioskodawcy('projekt-przed-zlozeniem@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
+  const odp = await fetch(`${baza}/api/psa/portal/wniosek/umowa-projekt`, { headers: { Cookie: ciastko } });
+  assert.equal(odp.status, 404);
+});
+
+test('POST /api/psa/portal/wniosek/umowa-podpisana: odmawia przed wygenerowaniem projektu, przyjmuje po', async () => {
+  const { kontoId, ciastko } = await kontoWnioskodawcy('umowa-podpisana@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
+
+  const formularzZaWczesnie = new FormData();
+  formularzZaWczesnie.append('plik', new Blob(['tresc testowa'], { type: 'application/pdf' }), 'umowa.pdf');
+  const zaWczesnie = await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: formularzZaWczesnie,
+  });
+  assert.equal(zaWczesnie.status, 400, 'jeszcze nie ma czego podpisywac');
+
+  await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Wniosek Do Podpisu P.S.A.' }, ciastko);
+  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Zielinski' }, ciastko);
+  await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+
+  const zlaKoncowka = new FormData();
+  zlaKoncowka.append('plik', new Blob(['echo'], { type: 'application/x-sh' }), 'skrypt.sh');
+  const odpZlaKoncowka = await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: zlaKoncowka,
+  });
+  assert.equal(odpZlaKoncowka.status, 400, 'niedozwolone rozszerzenie pliku');
+
+  const formularz = new FormData();
+  formularz.append('plik', new Blob(['podpisana tresc'], { type: 'application/pdf' }), 'podpisana-umowa.pdf');
+  const odp = await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: formularz,
+  });
+  assert.equal(odp.status, 201);
+  const dane = await odp.json();
+  assert.equal(dane.wniosek.status, 'umowa_podpisana');
+
+  const wiersz = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(kontoId);
+  assert.equal(wiersz.umowa_podpisana_nazwa_pliku, 'podpisana-umowa.pdf');
+
+  const pobrana = await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, { headers: { Cookie: ciastko } });
+  assert.equal(pobrana.status, 200);
+  assert.equal(pobrana.headers.get('content-type'), 'application/pdf');
+});

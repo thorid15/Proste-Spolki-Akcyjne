@@ -131,6 +131,13 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'POST /wniosek/akcjonariusze',
     'PUT /wniosek/akcjonariusze/:id',
     'DELETE /wniosek/akcjonariusze/:id',
+    // Etap 3E: zlozenie wniosku, projekt umowy, odeslanie podpisanej kopii -
+    // rowniez WYLACZNIE po konto_id z sesji, zaden URL nie przyjmuje cudzego
+    // identyfikatora.
+    'POST /wniosek/zloz',
+    'GET /wniosek/umowa-projekt',
+    'POST /wniosek/umowa-podpisana',
+    'GET /wniosek/umowa-podpisana',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
   ].sort();

@@ -39,6 +39,9 @@ const dokumentyTresc = require('../logika/dokumenty-tresc');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
+const wzoryDysk = require('../logika/wzory-dysk');
+const docx = require('../logika/docx');
+const kontekstPisma = require('../logika/kontekst-pisma');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
 const { pobierzZKrs } = require('./krs');
@@ -521,6 +524,169 @@ router.delete(
     if (!istniejacy) throw nieZnaleziono('Nie odnaleziono pozycji akcjonariusza.');
     db().prepare('DELETE FROM psa_wnioski_akcjonariusze WHERE id = ?').run(istniejacy.id);
     odp.json({ ok: true });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Zlozenie wniosku, projekt umowy, odeslanie podpisanej kopii (etap 3E)
+// ─────────────────────────────────────────────────────────────
+
+function katalogWnioskuDokumenty(wniosekId) {
+  return path.join(konfiguracja.KATALOG_DOKUMENTOW, 'wnioski', `wniosek_${wniosekId}`);
+}
+
+/**
+ * Zlozenie wniosku: klient nie ma tu nic wiecej do zrobienia poza uzupelnieniem
+ * danych, wiec jedno klikniecie i zamyka edycje (status -> zlozony), i - zgodnie
+ * z opisem przebiegu w promptcie ("system generuje projekt umowy", bez osobnego
+ * kroku) - odrazu generuje projekt umowy (status -> umowa_wygenerowana).
+ * Kompletnosc danych NIE jest tu twardo blokowana (regula ogolna nr 3 -
+ * miekkie ostrzezenia przy wprowadzaniu, twarde blokady dopiero przy
+ * faktycznej operacji rejestrowej, a otwarcie rejestru to etap 3F, nie ten) -
+ * poza dwoma minimalnymi warunkami SENSOWNOSCI zlozenia (nazwa i choc jeden
+ * akcjonariusz), ktore sa organizacyjne, nie merytoryczno-prawne.
+ */
+router.post(
+  '/wniosek/zloz',
+  wymagajWnioskodawcy,
+  wymagajWniosku,
+  asy((zad, odp) => {
+    const wniosek = zad.psaWniosek;
+    if (!wniosek.nazwa) throw bledneZadanie('Uzupełnij nazwę spółki (krok „Spółka i umowa”), zanim złożysz wniosek.');
+    const liczbaAkcjonariuszy = db()
+      .prepare('SELECT COUNT(*) AS ile FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ?')
+      .get(wniosek.id).ile;
+    if (liczbaAkcjonariuszy === 0) {
+      throw bledneZadanie('Dodaj przynajmniej jednego akcjonariusza (krok „Akcjonariusze”), zanim złożysz wniosek.');
+    }
+
+    const teraz = czas.terazIso();
+    db().prepare('UPDATE psa_wnioski SET status = ?, zaktualizowano = ? WHERE id = ?').run('zlozony', teraz, wniosek.id);
+
+    const dane = kontekstPisma.umowaOProwadzenieRejestru({ spolka: wniosek, dzis: czas.dzisIso() });
+    const wynik = wzoryDysk.wypelnij('01', dane);
+    const katalog = katalogWnioskuDokumenty(wniosek.id);
+    fs.mkdirSync(katalog, { recursive: true });
+    const nazwaZapisu = `${crypto.randomUUID()}-projekt-umowy.docx`;
+    fs.writeFileSync(path.join(katalog, nazwaZapisu), wynik.plik);
+    const sciezkaWzgledna = path.relative(konfiguracja.KATALOG_DOKUMENTOW, path.join(katalog, nazwaZapisu));
+
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET status = 'umowa_wygenerowana', umowa_projekt_sciezka = ?,
+                umowa_projekt_wygenerowano = ?, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(sciezkaWzgledna, teraz, czas.terazIso(), wniosek.id);
+
+    odp.json({
+      wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
+      brakujace: wynik.brakujace,
+      ostrzezenia: wynik.ostrzezenia,
+    });
+  })
+);
+
+router.get(
+  '/wniosek/umowa-projekt',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek || !wniosek.umowa_projekt_sciezka) throw nieZnaleziono('Projekt umowy nie został jeszcze wygenerowany.');
+
+    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.umowa_projekt_sciezka);
+    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+
+    odp.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    odp.setHeader('Content-Disposition', 'attachment; filename="projekt-umowy-o-prowadzenie-rejestru.docx"');
+    fs.createReadStream(pelnaSciezka).pipe(odp);
+  })
+);
+
+const ROZSZERZENIA_UMOWY_PODPISANEJ_DOZWOLONE = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
+const LIMIT_ROZMIARU_UMOWY_PODPISANEJ_BAJTY = 20 * 1024 * 1024;
+
+const uploadUmowyPodpisanej = multer({
+  storage: multer.diskStorage({
+    destination(zad, plik, wywolaj) {
+      const katalog = katalogWnioskuDokumenty(zad.psaWniosek.id);
+      fs.mkdirSync(katalog, { recursive: true });
+      wywolaj(null, katalog);
+    },
+    filename(zad, plik, wywolaj) {
+      const bezpiecznaNazwa = path.basename(plik.originalname).replace(/[^\w.\- ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/gu, '_');
+      wywolaj(null, `${crypto.randomUUID()}-${bezpiecznaNazwa}`);
+    },
+  }),
+  limits: { fileSize: LIMIT_ROZMIARU_UMOWY_PODPISANEJ_BAJTY, files: 1 },
+  fileFilter(zad, plik, wywolaj) {
+    const rozszerzenie = path.extname(plik.originalname).toLowerCase();
+    if (!ROZSZERZENIA_UMOWY_PODPISANEJ_DOZWOLONE.has(rozszerzenie)) {
+      return wywolaj(
+        new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Dozwolone: PDF albo skan/zdjęcie (JPG, PNG).`)
+      );
+    }
+    wywolaj(null, true);
+  },
+});
+
+/** Wstrzykuje wniosek do `zad` PRZED multerem - potrzebny do wyznaczenia katalogu docelowego. */
+function zaladujWlasnyWniosekDoUploadu(zad, odp, dalej) {
+  const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+  if (!wniosek) return dalej(nieZnaleziono('Najpierw złóż wniosek.'));
+  if (wniosek.status !== 'umowa_wygenerowana') {
+    return dalej(bledneZadanie(`Wniosek ma status „${wniosek.status}” — w tym momencie nie oczekujemy podpisanej umowy.`));
+  }
+  zad.psaWniosek = wniosek;
+  dalej();
+}
+
+router.post(
+  '/wniosek/umowa-podpisana',
+  wymagajWnioskodawcy,
+  zaladujWlasnyWniosekDoUploadu,
+  (zad, odp, dalej) => uploadUmowyPodpisanej.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  asy((zad, odp) => {
+    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    const teraz = czas.terazIso();
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET status = 'umowa_podpisana', umowa_podpisana_sciezka = ?, umowa_podpisana_nazwa_pliku = ?,
+                umowa_podpisana_mime = ?, umowa_podpisana_wgrano = ?, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(
+        path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path),
+        zad.file.originalname,
+        zad.file.mimetype,
+        teraz,
+        teraz,
+        zad.psaWniosek.id
+      );
+
+    odp.status(201).json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(zad.psaWniosek.id) });
+  })
+);
+
+router.get(
+  '/wniosek/umowa-podpisana',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek || !wniosek.umowa_podpisana_sciezka) throw nieZnaleziono('Nie odnaleziono przesłanej umowy.');
+
+    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.umowa_podpisana_sciezka);
+    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+
+    odp.setHeader('Content-Type', wniosek.umowa_podpisana_mime || 'application/octet-stream');
+    odp.setHeader('Content-Disposition', `attachment; filename="${wniosek.umowa_podpisana_nazwa_pliku}"`);
+    fs.createReadStream(pelnaSciezka).pipe(odp);
   })
 );
 

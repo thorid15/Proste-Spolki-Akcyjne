@@ -208,6 +208,12 @@ function EkranWniosku() {
   const [akcjonariusze, ustawAkcjonariusze] = useState([]);
   const [dodawanieAkcjonariusza, ustawDodawanieAkcjonariusza] = useState(false);
   const [bladAkcjonariuszy, ustawBladAkcjonariuszy] = useState(null);
+  const [skladanie, ustawSkladanie] = useState(false);
+  const [bladSkladania, ustawBladSkladania] = useState(null);
+  const [ostrzezeniaZlozenia, ustawOstrzezeniaZlozenia] = useState([]);
+  const [plikPodpisanejUmowy, ustawPlikPodpisanejUmowy] = useState(null);
+  const [wysylaniePodpisanej, ustawWysylaniePodpisanej] = useState(false);
+  const [bladPodpisanej, ustawBladPodpisanej] = useState(null);
 
   useEffect(() => {
     Promise.all([
@@ -222,7 +228,7 @@ function EkranWniosku() {
       .finally(() => ustawLadowanie(false));
   }, []);
 
-  const edytowalneAkcjonariusze = Boolean(dane) && ['w_przygotowaniu', 'do_uzupelnienia'].includes(dane.status);
+  const wniosekEdytowalny = Boolean(dane) && ['w_przygotowaniu', 'do_uzupelnienia'].includes(dane.status);
 
   async function dodajAkcjonariusza() {
     ustawDodawanieAkcjonariusza(true);
@@ -243,6 +249,40 @@ function EkranWniosku() {
 
   function poUsunieciuAkcjonariusza(id) {
     ustawAkcjonariusze((p) => p.filter((a) => a.id !== id));
+  }
+
+  async function zlozWniosek() {
+    ustawSkladanie(true);
+    ustawBladSkladania(null);
+    ustawOstrzezeniaZlozenia([]);
+    try {
+      const wynik = await API.post('/api/psa/portal/wniosek/zloz', {});
+      ustawDane(wynik.wniosek);
+      ustawOstrzezeniaZlozenia(wynik.ostrzezenia || []);
+    } catch (e) {
+      ustawBladSkladania(e instanceof BladApi ? e.message : 'Nie udało się złożyć wniosku.');
+    } finally {
+      ustawSkladanie(false);
+    }
+  }
+
+  async function wyslijPodpisanaUmowe() {
+    if (!plikPodpisanejUmowy) return;
+    ustawWysylaniePodpisanej(true);
+    ustawBladPodpisanej(null);
+    try {
+      const formularz = new FormData();
+      formularz.append('plik', plikPodpisanejUmowy);
+      const odp = await fetch('/api/psa/portal/wniosek/umowa-podpisana', { method: 'POST', body: formularz });
+      const tresc = await odp.json().catch(() => ({}));
+      if (!odp.ok) throw new Error(tresc.blad || `Nie udało się przesłać pliku (błąd ${odp.status}).`);
+      ustawDane(tresc.wniosek);
+      ustawPlikPodpisanejUmowy(null);
+    } catch (e) {
+      ustawBladPodpisanej(e.message);
+    } finally {
+      ustawWysylaniePodpisanej(false);
+    }
   }
 
   const pole = (klucz) => ({
@@ -458,7 +498,7 @@ function EkranWniosku() {
               odmiana="info"
               tresc="Wpisz osoby, które mają zostać wpisane do rejestru jako akcjonariusze. Kancelaria porówna te dane z rejestrem KRS i skontaktuje się w razie rozbieżności, zanim rejestr zostanie otwarty."
             />
-            {!edytowalneAkcjonariusze && dane.status && (
+            {!wniosekEdytowalny && dane.status && (
               <Komunikat
                 odmiana="uwaga"
                 tresc={`Wniosek ma status „${dane.status}” — lista akcjonariuszy jest już tylko do wglądu.`}
@@ -477,13 +517,13 @@ function EkranWniosku() {
               <PozycjaAkcjonariuszaWniosku
                 key={a.id}
                 pozycja={a}
-                edytowalne={edytowalneAkcjonariusze}
+                edytowalne={wniosekEdytowalny}
                 przyZapisie={poZapisieAkcjonariusza}
                 przyUsunieciu={poUsunieciuAkcjonariusza}
               />
             ))}
 
-            {edytowalneAkcjonariusze && (
+            {wniosekEdytowalny && (
               <button className="btn btn-maly" onClick={dodajAkcjonariusza} disabled={dodawanieAkcjonariusza}>
                 {dodawanieAkcjonariusza ? 'Dodawanie…' : '+ Dodaj akcjonariusza'}
               </button>
@@ -492,10 +532,113 @@ function EkranWniosku() {
         )}
 
         {krok === 2 && (
-          <Pusto
-            tytul="Wkrótce"
-            opis="Weryfikacja i złożenie wniosku będą dostępne po uzupełnieniu danych akcjonariuszy."
-          />
+          <div className="pion" style={{ gap: 16 }}>
+            <div className="card-h">Weryfikacja i złożenie wniosku</div>
+            <Komunikat odmiana="blad" tresc={bladSkladania} />
+
+            <Karta scisla tytul="Spółka">
+              <div className="podpowiedz">{dane.nazwa || '— nazwa nieuzupełniona —'}</div>
+              {dane.krs && <div className="podpowiedz">KRS {dane.krs}</div>}
+              {dane.miejscowosc && <div className="podpowiedz">{dane.miejscowosc}</div>}
+              <div className="rozdzielacz" />
+              <div className="podpowiedz">
+                Reprezentant: {dane.reprezentant_imie_nazwisko || '— nieuzupełniony —'}
+                {dane.reprezentant_funkcja ? ` (${dane.reprezentant_funkcja})` : ''}
+              </div>
+            </Karta>
+
+            <Karta scisla tytul={`Akcjonariusze (${akcjonariusze.length})`}>
+              {akcjonariusze.length === 0 && <div className="podpowiedz">— brak dodanych akcjonariuszy —</div>}
+              {akcjonariusze.map((a) => (
+                <div key={a.id} className="podpowiedz">
+                  {a.typ === 'prawna' ? (a.nazwa || '— nazwa nieuzupełniona —') : [a.imie, a.nazwisko].filter(Boolean).join(' ') || '— dane nieuzupełnione —'}
+                  {Boolean(Number(a.zgoda_email)) && ' · zgoda na komunikację elektroniczną'}
+                </div>
+              ))}
+            </Karta>
+
+            {wniosekEdytowalny && (
+              <>
+                <Komunikat
+                  odmiana="info"
+                  tresc="Po złożeniu wniosku system automatycznie przygotuje projekt umowy o prowadzenie rejestru na podstawie powyższych danych. Dane spółki i listę akcjonariuszy będzie można poprawić tylko, jeśli kancelaria odeśle wniosek do uzupełnienia."
+                />
+                <button
+                  className="btn btn-glowny"
+                  onClick={zlozWniosek}
+                  disabled={skladanie || !dane.nazwa || akcjonariusze.length === 0}
+                >
+                  {skladanie ? 'Składanie…' : 'Złóż wniosek'}
+                </button>
+                {(!dane.nazwa || akcjonariusze.length === 0) && (
+                  <div className="podpowiedz">
+                    {!dane.nazwa && 'Uzupełnij nazwę spółki (krok „Spółka i umowa”). '}
+                    {akcjonariusze.length === 0 && 'Dodaj przynajmniej jednego akcjonariusza (krok „Akcjonariusze”).'}
+                  </div>
+                )}
+              </>
+            )}
+
+            {dane.status === 'zlozony' && (
+              <Komunikat odmiana="info" tresc="Wniosek złożony — trwa przygotowywanie projektu umowy." />
+            )}
+
+            {dane.status === 'umowa_wygenerowana' && (
+              <>
+                <Komunikat
+                  odmiana="ok"
+                  tresc="Projekt umowy o prowadzenie rejestru jest gotowy. Pobierz go, podpisz (odręcznie albo podpisem kwalifikowanym) i odeślij skan lub zdjęcie podpisanego dokumentu poniżej."
+                />
+                {ostrzezeniaZlozenia.length > 0 && (
+                  <Komunikat
+                    odmiana="uwaga"
+                    tresc="Projekt zawiera niepełne dane — kancelaria uzupełni je przy weryfikacji, ale warto sprawdzić dokument przed podpisaniem."
+                    lista={ostrzezeniaZlozenia}
+                  />
+                )}
+                <a className="btn" href="/api/psa/portal/wniosek/umowa-projekt" target="_blank" rel="noopener">
+                  Pobierz projekt umowy (.docx)
+                </a>
+                <div className="rozdzielacz" />
+                <Pole etykieta="Podpisana umowa (PDF, JPG albo PNG)">
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={(z) => ustawPlikPodpisanejUmowy(z.target.files[0] || null)}
+                  />
+                  {plikPodpisanejUmowy && <div className="podpowiedz">{plikPodpisanejUmowy.name}</div>}
+                </Pole>
+                <Komunikat odmiana="blad" tresc={bladPodpisanej} />
+                <button
+                  className="btn btn-glowny"
+                  onClick={wyslijPodpisanaUmowe}
+                  disabled={!plikPodpisanejUmowy || wysylaniePodpisanej}
+                >
+                  {wysylaniePodpisanej ? 'Przesyłanie…' : 'Prześlij podpisaną umowę'}
+                </button>
+              </>
+            )}
+
+            {dane.status === 'umowa_podpisana' && (
+              <Komunikat
+                odmiana="ok"
+                tytul="Umowa podpisana i przesłana"
+                tresc="Sprawa trafiła do kolejki kancelarii. Po weryfikacji danych kancelaria otworzy rejestr akcjonariuszy — o dalszych krokach poinformujemy e-mailem."
+              />
+            )}
+
+            {dane.status === 'przyjety' && (
+              <Komunikat odmiana="ok" tytul="Rejestr otwarty" tresc="Wniosek został przyjęty, a rejestr akcjonariuszy — otwarty." />
+            )}
+
+            {dane.status === 'odrzucony' && (
+              <Komunikat
+                odmiana="blad"
+                tytul="Wniosek odrzucony"
+                tresc="Kancelaria odrzuciła wniosek. W razie pytań prosimy o kontakt z kancelarią."
+              />
+            )}
+          </div>
         )}
 
         <div className="kreator-stopka">
@@ -504,9 +647,11 @@ function EkranWniosku() {
           </button>
           <div className="kreator-stopka-prawa row-g">
             {komunikatZapisu && <span className="podpowiedz">{komunikatZapisu}</span>}
-            <button className="btn" onClick={zapisz} disabled={zapisywanie}>
-              {zapisywanie ? 'Zapisywanie…' : 'Zapisz'}
-            </button>
+            {wniosekEdytowalny && (
+              <button className="btn" onClick={zapisz} disabled={zapisywanie}>
+                {zapisywanie ? 'Zapisywanie…' : 'Zapisz'}
+              </button>
+            )}
             <button
               className="btn btn-glowny"
               onClick={() => ustawKrok((k) => Math.min(KROKI_WNIOSKU.length - 1, k + 1))}
