@@ -99,6 +99,23 @@ test('wymaga_przegladu_aml: status "brak"/"niemozliwe" nigdy nie daje sygnalu (m
   assert.equal(brak.osoba.wymaga_przegladu_aml, false);
 });
 
+test('PESEL: niepoprawna suma kontrolna daje ostrzezenie, NIE blokuje zapisu (etap 2.8)', async () => {
+  const [stPoprawny, poprawny] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `PeselPoprawny${sufiks()}`, pesel: '90071500118',
+  });
+  assert.equal(stPoprawny, 201);
+  assert.deepEqual(poprawny.ostrzezenia, []);
+
+  const [stNiepoprawny, niepoprawny] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `PeselNiepoprawny${sufiks()}`, pesel: '90071500110',
+  });
+  assert.equal(stNiepoprawny, 201, 'zla suma kontrolna nie blokuje zapisu osoby');
+  assert.ok(niepoprawny.ostrzezenia.some((o) => o.includes('Suma kontrolna')));
+
+  const [, poprawka] = await zapytaj('PUT', `/api/psa/osoby/${niepoprawny.osoba.id}`, { pesel: '90071500118' });
+  assert.deepEqual(poprawka.ostrzezenia, [], 'poprawiony PESEL usuwa ostrzezenie przy PUT');
+});
+
 test('beneficjent rzeczywisty: tylko dla osoby prawnej, tylko na osobe fizyczna, bez samoodwolania', async () => {
   const [, fizyczna] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Beneficjent${sufiks()}` });
   const [, prawna1] = await zapytaj('POST', '/api/psa/osoby', { typ: 'prawna', nazwa: `Spolka Jeden ${sufiks()}` });

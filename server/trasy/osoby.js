@@ -74,9 +74,10 @@ function sprawdzOsobe(dane, { czesciowe = false } = {}) {
     throw bledneZadanie('Nazwa podmiotu jest wymagana.');
   }
 
-  if (dane.pesel && !poprawnyPesel(dane.pesel)) {
-    throw bledneZadanie('Numer PESEL jest niepoprawny (nie zgadza się suma kontrolna).');
-  }
+  // Suma kontrolna PESEL jest MIEKKIM sygnalem (etap 2.8 poprawek), nie
+  // blokada - PESEL jest juz i tak polem dobrowolnym (patrz komentarz wyzej),
+  // a pomylka w jednej cyfrze nie powinna uniemozliwic zalozenia kartoteki
+  // osoby. Ostrzezenie wraca w odpowiedzi (patrz `ostrzezeniaOsoby` nizej).
   if (dane.plec && !['kobieta', 'mezczyzna'].includes(dane.plec)) {
     throw bledneZadanie('Płeć musi być „kobieta” albo „mężczyzna”.');
   }
@@ -103,6 +104,15 @@ function sprawdzOsobe(dane, { czesciowe = false } = {}) {
   if (dane.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dane.email)) {
     throw bledneZadanie('Adres e-mail jest niepoprawny.');
   }
+}
+
+/** Ostrzezenia NIE blokujace zapisu (etap 2.8 poprawek) - patrz sprawdzOsobe. */
+function ostrzezeniaOsoby(dane) {
+  const ostrzezenia = [];
+  if (dane.pesel && !poprawnyPesel(dane.pesel)) {
+    ostrzezenia.push('Suma kontrolna numeru PESEL się nie zgadza — sprawdź numer.');
+  }
+  return ostrzezenia;
 }
 
 /**
@@ -199,6 +209,7 @@ router.post(
       osoba: zOznaczeniem(
         db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(wynik.lastInsertRowid)
       ),
+      ostrzezenia: ostrzezeniaOsoby(dane),
     });
   })
 );
@@ -236,7 +247,10 @@ router.put(
       )
       .run({ ...dane, id, zaktualizowano: czas.terazIso() });
 
-    odp.json({ osoba: zOznaczeniem(db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(id)) });
+    odp.json({
+      osoba: zOznaczeniem(db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(id)),
+      ostrzezenia: ostrzezeniaOsoby(scalone),
+    });
   })
 );
 
