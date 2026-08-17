@@ -214,9 +214,9 @@ test('docx: sekcja rozpięta na akapitach powiela to, co pomiędzy, a znaczniki 
 });
 
 test('docx: sekcja warunkowa 0/1 na akapitach włącza i wyłącza blok', () => {
-  const plik = dokument(akapit('A'), akapit('{{#spolka_vat}}'), akapit('Podatek VAT.'), akapit('{{/spolka_vat}}'), akapit('B'));
-  assert.equal(wypelnijNaTekst(plik, { spolka_vat: 1 }).tekst, 'A\nPodatek VAT.\nB');
-  assert.equal(wypelnijNaTekst(plik, { spolka_vat: 0 }).tekst, 'A\nB');
+  const plik = dokument(akapit('A'), akapit('{{#warunek}}'), akapit('Tekst warunkowy.'), akapit('{{/warunek}}'), akapit('B'));
+  assert.equal(wypelnijNaTekst(plik, { warunek: 1 }).tekst, 'A\nTekst warunkowy.\nB');
+  assert.equal(wypelnijNaTekst(plik, { warunek: 0 }).tekst, 'A\nB');
 });
 
 test('docx: ta sama sekcja użyta kilka razy nie łączy się w jedną', () => {

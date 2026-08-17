@@ -962,6 +962,21 @@ const MIGRACJE = [
         ON psa_dziennik_dostepu (chwila);
     `,
   },
+  {
+    wersja: 17,
+    nazwa: 'poprawki PSA (etap 1.6): usuniecie statusu VAT spolki',
+    sql: `
+      -- ── Status VAT wycofany calkowicie z modulu ──────────────────────────
+      -- Dodane migracja 12 dla warunkowego oswiadczenia w umowie o
+      -- prowadzenie rejestru ({{#spolka_vat}}, wzor 01). Decyzja: to nie jest
+      -- element rejestru (art. 300(33) § 1 KSH), zmienia sie niezaleznie od
+      -- KRS i wprowadzalo myslace trojstanowe pole w kreatorze. Usuniete z
+      -- formularza, z API i z tresci wzoru 01 (sekcja ust. 4 usunieta z
+      -- generatora, plik przegenerowany) - kolumna usuwana tu, zeby stan bazy
+      -- byl spojny z reszta aplikacji.
+      ALTER TABLE psa_spolki DROP COLUMN platnik_vat;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

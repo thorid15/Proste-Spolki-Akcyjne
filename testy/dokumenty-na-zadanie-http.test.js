@@ -78,7 +78,6 @@ async function nowaSpolka(nadpisania = {}) {
     nazwa: `Na Żądanie ${sufiks} P.S.A.`,
     krs: `0001${sufiks}00`,
     organ_rodzaj: 'zarzad',
-    platnik_vat: 1,
     siedziba_miejscownik: 'Testowie',
     reprezentant_biernik: 'Jana Testowego',
     reprezentant_plec: 'mezczyzna',
@@ -156,7 +155,7 @@ test('wystawienie 10 (klauzula): zbywca i nabywca ze wskazanych osob w kartotece
 });
 
 test('brakujace dane (np. brak reprezentanta) nie blokuja wystawienia — wracaja w odpowiedzi', async () => {
-  const spolka = await nowaSpolka({ reprezentant_biernik: null, organ_rodzaj: null, platnik_vat: null });
+  const spolka = await nowaSpolka({ reprezentant_biernik: null, organ_rodzaj: null });
   const [status, odp] = await zapytaj('POST', `/api/psa/spolki/${spolka.id}/dokumenty/01`);
   assert.equal(status, 201, 'wystawienie sie udaje mimo brakow');
   assert.ok(odp.brakujace.includes('reprezentant_biernik'));

@@ -12,6 +12,7 @@ const konfiguracja = require('../konfiguracja');
 const przepisy = require('../logika/przepisy');
 const { parseKrsDate } = require('../logika/daty-krs');
 const { normalizujRegon } = require('../logika/regon');
+const { ustalSadRejestrowy } = require('../logika/sad-rejestrowy');
 
 const LIMIT_CZASU_MS = 8000;
 
@@ -90,6 +91,18 @@ function zmapuj(odpowiedz, numerKrs) {
 
   const { regon } = normalizujRegon(zeSciezek(podmiot, ['identyfikatory.regon']));
 
+  // Fallback sadu rejestrowego (sekcja 1.7 poprawek) - API nie zwraca tego
+  // pola (patrz komentarz wyzej), wiec probujemy dopasowac wg siedziby
+  // spolki z tej samej odpowiedzi. Baza jest dzis pusta (patrz
+  // server/dane/README-SADY-REJESTROWE.md) - do czasu jej uzupelnienia
+  // zwraca zawsze null i pole zostaje puste, tak jak dotychczas.
+  const siedziba = zeSciezek(adres, ['siedziba']) || {};
+  const propozycjaSadu = ustalSadRejestrowy({
+    wojewodztwo: zeSciezek(siedziba, ['wojewodztwo']),
+    powiat: zeSciezek(siedziba, ['powiat']),
+    gmina: zeSciezek(siedziba, ['gmina']),
+  });
+
   return {
     krs: numerKrs,
     nazwa: zeSciezek(podmiot, ['nazwa']) || null,
@@ -105,8 +118,11 @@ function zmapuj(odpowiedz, numerKrs) {
     email: zeSciezek(adres, ['adresPocztyElektronicznej']) || null,
     www: zeSciezek(adres, ['adresStronyInternetowej']) || null,
     // Potwierdzone nieobecne w odpisie dla rejestru P — patrz komentarz wyżej.
-    // Zawsze wymaga uzupełnienia (ręcznie albo fallbackiem TERYT, sekcja 1.7).
-    sad_rejestrowy: null,
+    // `propozycjaSadu` (fallback TERYT) albo null — zawsze wymaga
+    // potwierdzenia, pole w formularzu zostaje edytowalne (sekcja 1.7 pkt 3).
+    sad_rejestrowy: propozycjaSadu ? propozycjaSadu.sad_rejestrowy : null,
+    wydzial: propozycjaSadu ? propozycjaSadu.wydzial : null,
+    sad_rejestrowy_propozycja: Boolean(propozycjaSadu),
     data_utworzenia_spolki: parseKrsDate(zeSciezek(naglowek, ['dataRejestracjiWKRS', 'dataRejestracji'])),
     data_ostatniego_wpisu_krs: parseKrsDate(
       zeSciezek(naglowek, [
@@ -196,7 +212,13 @@ async function pobierzZKrs(numerKrs) {
     if (ostrzezenie) ostrzezenia.push(ostrzezenie);
   }
 
-  if (!dane.sad_rejestrowy) {
+  const sadZaproponowany = dane.sad_rejestrowy_propozycja;
+  delete dane.sad_rejestrowy_propozycja; // znacznik wewnetrzny, nie pole formularza
+  if (sadZaproponowany) {
+    ostrzezenia.push(
+      'Sąd rejestrowy zaproponowany na podstawie siedziby spółki — sprawdź przed zapisaniem.'
+    );
+  } else if (!dane.sad_rejestrowy) {
     ostrzezenia.push('API KRS nie podaje oznaczenia sądu rejestrowego — uzupełnij pole ręcznie.');
   }
 
@@ -214,7 +236,14 @@ async function pobierzZKrs(numerKrs) {
   // `surowa` niesie NIEPRZETWORZONA odpowiedz API - krok 1 kreatora (faza 3)
   // pokazuje ja obok zmapowanego podgladu, zeby dalo sie sprawdzic mapowanie
   // na zywych danych (patrz zastrzezenie przy `zmapuj`).
-  return { znaleziono: true, dane, surowa: tresc, dopuszczalna: true, ostrzezenia };
+  return {
+    znaleziono: true,
+    dane,
+    surowa: tresc,
+    dopuszczalna: true,
+    ostrzezenia,
+    sad_rejestrowy_propozycja: Boolean(sadZaproponowany),
+  };
 }
 
 module.exports = { pobierzZKrs, zmapuj };

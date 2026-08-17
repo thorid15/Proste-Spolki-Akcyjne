@@ -126,7 +126,6 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
     email: 'kontakt@charlieunicorn-a7.ai',
     data_umowy: '2026-01-05',
     organ_rodzaj: 'zarzad',
-    platnik_vat: 1,
     sklad_organu_json: JSON.stringify([{ imiona: 'Łukasz Adrian', nazwisko: 'Szymborski', funkcja: 'Prezes Zarządu' }]),
     reprezentant_biernik: 'Łukasza Adriana Szymborskiego',
     reprezentant_plec: 'mezczyzna',

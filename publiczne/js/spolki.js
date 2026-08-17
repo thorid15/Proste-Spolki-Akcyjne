@@ -15,7 +15,7 @@ const PUSTA_SPOLKA = {
   data_utworzenia_spolki: '', data_ostatniego_wpisu_krs: '', adres_edorecze: '',
   kapital_akcyjny_grosze: null,
   status: 'aktywna', opis: '', uwagi: '',
-  organ_rodzaj: '', platnik_vat: '',
+  organ_rodzaj: '',
   data_uchwaly_wyboru: '', data_umowy: '', data_otwarcia_rejestru: '',
   umowe_zawarl: '', umowe_zawarl_imie_nazwisko: '', dodatkowe_informacje_umowa_spolki: '',
   zakaz_glosu_zastawnika_umowa: '', ograniczenie_dziedziczenia_umowa: '',
@@ -135,6 +135,7 @@ function EkranNowejSpolki() {
   const [pobieranie, ustawPobieranie] = useState(false);
   const [komunikatKrs, ustawKomunikatKrs] = useState(null);
   const [pobranoZKrsBezAde, ustawPobranoZKrsBezAde] = useState(false);
+  const [sadZaproponowany, ustawSadZaproponowany] = useState(false);
 
   const [emisja, ustawEmisje] = useState(PUSTA_EMISJA_ZALOZYCIELSKA);
   const [pozycje, ustawPozycjeState] = useState([{}]);
@@ -169,6 +170,7 @@ function EkranNowejSpolki() {
         ustawDane((p) => ({ ...p, ...pobrane }));
         ustawSkladOrganu(sklad_organu || []);
         ustawPobranoZKrsBezAde(!wynik.dane.adres_edorecze);
+        ustawSadZaproponowany(Boolean(wynik.sad_rejestrowy_propozycja));
         ustawKomunikatKrs({
           odmiana: (wynik.ostrzezenia || []).length ? 'uwaga' : 'ok',
           tresc: (wynik.ostrzezenia || []).length
@@ -369,13 +371,6 @@ function EkranNowejSpolki() {
                 <option value="rada_dyrektorow">Rada Dyrektorów</option>
               </select>
             </Pole>
-            <Pole etykieta="Status VAT" podpowiedz="Do oświadczenia w umowie o prowadzenie rejestru (wzór 01).">
-              <select {...pole('platnik_vat')}>
-                <option value="">— nie ustalono —</option>
-                <option value="1">jest płatnikiem VAT</option>
-                <option value="0">nie jest płatnikiem VAT</option>
-              </select>
-            </Pole>
             <div className="siatka-2">
               <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
               <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
@@ -396,7 +391,12 @@ function EkranNowejSpolki() {
               <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
             </div>
             <div className="siatka-2">
-              <Pole etykieta="Sąd rejestrowy"><input type="text" {...pole('sad_rejestrowy')} /></Pole>
+              <Pole
+                etykieta="Sąd rejestrowy"
+                podpowiedz={sadZaproponowany ? 'Zaproponowano na podstawie siedziby spółki — sprawdź przed zapisaniem.' : undefined}
+              >
+                <input type="text" {...pole('sad_rejestrowy')} />
+              </Pole>
               <Pole etykieta="Wydział"><input type="text" {...pole('wydzial')} /></Pole>
             </div>
             <div className="siatka-3">

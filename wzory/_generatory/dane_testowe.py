@@ -123,7 +123,6 @@ DANE = {
         'wpis_deklaratoryjny': [],
         'zgoda': [{}],
         'podstawa_dokument': [{}],
-        'spolka_vat': [{}],
         'adresat_zadajacy': [{}],   # wariant A; dla wzoru 07 do spółki: [] i adresat_spolka: [{}]
         'adresat_spolka': [],
     },

@@ -1,0 +1,10 @@
+{
+  "_uwaga": "Baza NIE jest jeszcze uzupełniona danymi — patrz README-SADY-REJESTROWE.md w tym katalogu. Puste tablice poniżej są bezpiecznym stanem domyślnym: ustalSadRejestrowy() zwraca wtedy null, a formularz zostaje z pustym, edytowalnym polem — dokładnie jak dziś, bez żadnej fałszywej propozycji.",
+  "wersja_danych": null,
+  "obowiazuje_od": null,
+  "podstawa_prawna": "Rozporządzenie Ministra Sprawiedliwości z dnia 28 grudnia 2018 r. w sprawie ustalenia siedzib i obszarów właściwości sądów apelacyjnych, sądów okręgowych i sądów rejonowych oraz zakresu rozpoznawanych przez nie spraw (Dz.U. 2018 poz. 2548, tekst jednolity z późn. zm., ostatnia nowelizacja: Dz.U. 2025 poz. 925 z 11.07.2025)",
+  "zrodlo_wydzialow_krs": "Ministerstwo Sprawiedliwości — „Siedziby i obszary właściwości Wydziałów Gospodarczych KRS” (gov.pl/web/sprawiedliwosc), do zweryfikowania i wpisania dokładnego adresu pliku źródłowego przy uzupełnianiu bazy",
+  "sady_okregowe": [],
+  "powiaty": [],
+  "wyjatki_gminne": []
+}

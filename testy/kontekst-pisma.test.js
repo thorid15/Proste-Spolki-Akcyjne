@@ -55,7 +55,6 @@ const SPOLKA = {
   email: 'kontakt@charlieunicorn.ai',
   organ_rodzaj: 'zarzad',
   data_umowy: '2026-08-13',
-  platnik_vat: 1,
   reprezentant_biernik: 'Łukasza Adriana Szymborskiego',
   reprezentant_plec: 'mezczyzna',
   reprezentant_rodzice: 'Pawła i Izabelli',
@@ -282,22 +281,12 @@ test('umowaOProwadzenieRejestru: taksy licza sie z konfiguracji stawek, slownie 
   assert.equal(dane.taksa_wpis, String(przepisy.STAWKI_GROSZE.WPIS / 100));
   assert.equal(dane.reprezentant_biernik, SPOLKA.reprezentant_biernik);
   assert.equal(dane.reprezentant_dzialajacy, 'działającego');
-  assert.deepEqual(dane.spolka_vat, [{}], 'platnik_vat=1 wlacza sekcje');
+  assert.equal('spolka_vat' in dane, false, 'status VAT usuniety calkowicie (etap 1.6) - klucz nie istnieje');
 
   const wynik = wzoryDysk.wypelnij('01', dane);
   assert.deepEqual(wynik.bledy, []);
   assert.deepEqual(wynik.brakujace, []);
   assert.match(docx.tekst(wynik.plik), /jeden tysiąc dwieście złotych|1200/, 'stawka roczna widoczna w tresci');
-});
-
-test('umowaOProwadzenieRejestru: platnik_vat=0 wylacza sekcje, null zostaje BRAKIEM (nie zgadniety)', () => {
-  const wylaczona = kontekst.umowaOProwadzenieRejestru({ spolka: { ...SPOLKA, platnik_vat: 0 }, dzis: '2026-08-13' });
-  assert.deepEqual(wylaczona.spolka_vat, []);
-
-  const nieustalona = kontekst.umowaOProwadzenieRejestru({ spolka: { ...SPOLKA, platnik_vat: null }, dzis: '2026-08-13' });
-  assert.equal('spolka_vat' in nieustalona, false);
-  const wynik = wzoryDysk.wypelnij('01', nieustalona);
-  assert.ok(wynik.brakujace.includes('spolka_vat (sekcja)'));
 });
 
 test('informacjaRodo: forma czasownika zalezy od plci reprezentanta', () => {

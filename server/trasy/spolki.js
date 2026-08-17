@@ -43,8 +43,6 @@ const POLA_SPOLKI = [
   'reprezentant_pesel', 'reprezentant_adres', 'reprezentant_funkcja_biernik', 'reprezentant_reprezentacja',
   // Sesja 8, blok A3 (kontekst automatu pism):
   'organ_rodzaj',
-  // Sesja 8, blok A5 (wystawianie na zadanie - wzor 01, sekcja spolka_vat):
-  'platnik_vat',
 ];
 
 /** Pola, ktorych zmiana jest zdarzeniem rejestrowym (art. 300(33) § 1 KSH). */
@@ -64,14 +62,6 @@ function wyczysc(cialo) {
   for (const pole of POLA_SPOLKI) {
     if (cialo[pole] === undefined) continue;
     const v = cialo[pole];
-    if (pole === 'platnik_vat') {
-      // Trojstanowe: nieustalone (null) rozni sie od "nie jest platnikiem"
-      // (0) - pierwsze zostawia sekcje wzoru pusta do uzupelnienia, drugie
-      // tez jest pusta, ale to swiadoma odpowiedz, nie brak danych.
-      // Porownanie z '0'/0 wprost - String(v).trim() na "0" dalby prawde.
-      wynik[pole] = v === '' || v === null ? null : (v === '0' || v === 0 ? 0 : 1);
-      continue;
-    }
     wynik[pole] = v === '' || v === null ? null : String(v).trim();
   }
   return wynik;

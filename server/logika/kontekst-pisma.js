@@ -342,8 +342,8 @@ function czlonkowieOrganuKlucze(skladOrganu) {
 
 /**
  * Wzór 01 — umowa o prowadzenie rejestru. Jednorazowy dokument sporządzany
- * przy rejestracji spółki — dane reprezentanta (blok B6) i status VAT
- * (blok A5) notariusz uzupełnia raz, w kartotece spółki.
+ * przy rejestracji spółki — dane reprezentanta (blok B6) notariusz uzupełnia
+ * raz, w kartotece spółki.
  *
  * `taksa_*` z konfiguracji stawek (`przepisy.STAWKI_GROSZE`) — te same liczby,
  * co przy naliczaniu opłat (`server/oplaty.js`), więc umowa i rachunek nigdy
@@ -360,9 +360,6 @@ function umowaOProwadzenieRejestru({ spolka, dzis }) {
     taksa_roczna: String(przepisy.STAWKI_GROSZE.PROWADZENIE_ROCZNIE / 100),
     taksa_wpis: String(przepisy.STAWKI_GROSZE.WPIS / 100),
     taksa_informacja: String(przepisy.STAWKI_GROSZE.INFORMACJA / 100),
-    // Trojstanowe (blok A5): nieustalone (null) zostaje kluczem NIEOBECNYM,
-    // wiec sekcja trafia na liste brakow zamiast cicho wyjsc pusta.
-    ...(spolka.platnik_vat == null ? {} : { spolka_vat: spolka.platnik_vat ? [{}] : [] }),
   };
 }
 
