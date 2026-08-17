@@ -102,6 +102,12 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'POST /informacja',
     'POST /login',
     'POST /logout',
+    // Etap 3A: publiczny formularz zgloszenia wstepnego, PRZED bramka
+    // `wymagajKonta` (linia z komentarzem w portal.js) - swiadomie bez
+    // identyfikatora spolki, bo w tym momencie zadna spolka jeszcze nie
+    // istnieje w systemie. Nie niesie `spolka_id` ani `:spolkaId`, wiec
+    // D3 (izolacja miedzy klientami) go nie dotyczy.
+    'POST /zgloszenia',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
   ].sort();

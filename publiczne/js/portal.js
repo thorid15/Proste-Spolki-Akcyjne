@@ -75,6 +75,92 @@ function EkranLoginPortal({ przyZalogowaniu }) {
         <div className="podpowiedz" style={{ marginTop: 14, textAlign: 'center' }}>
           Dostęp do portalu zakłada kancelaria po weryfikacji tożsamości. Nie ma tu samodzielnej rejestracji.
         </div>
+        <div style={{ textAlign: 'center', marginTop: 10 }}>
+          <button type="button" className="btn btn-sm btn-cichy" onClick={() => idz('/zglos-sie')}>
+            Nie masz jeszcze konta? Zgłoś zainteresowanie
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* Etap 3A — publiczny, niezalogowany formularz pierwszego kontaktu. Zbiera
+   WYŁĄCZNIE dane kontaktowe (bez PESEL, bez adresu) — to lead do oceny przez
+   kancelarię, nie wniosek. Kancelaria odpowiada zaproszeniem (etap 3B), po
+   którym dopiero zaczyna się właściwy wniosek o prowadzenie rejestru. */
+function EkranZgloszenieWstepne() {
+  const [email, ustawEmail] = useState('');
+  const [telefon, ustawTelefon] = useState('');
+  const [nazwaSpolki, ustawNazwaSpolki] = useState('');
+  const [opis, ustawOpis] = useState('');
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const [gotowe, ustawGotowe] = useState(false);
+
+  async function wyslij(zdarzenie) {
+    zdarzenie.preventDefault();
+    if (!email.trim()) return;
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      await API.post('/api/psa/portal/zgloszenia', {
+        email: email.trim(),
+        telefon: telefon.trim() || undefined,
+        nazwa_spolki: nazwaSpolki.trim() || undefined,
+        opis: opis.trim() || undefined,
+      });
+      ustawGotowe(true);
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się wysłać zgłoszenia.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  if (gotowe) {
+    return (
+      <div className="ekran-logowania">
+        <div className="card" style={{ width: 440, maxWidth: '92vw' }}>
+          <Pusto
+            tytul="Dziękujemy za zgłoszenie"
+            opis="Kancelaria skontaktuje się z Tobą, żeby ustalić szczegóły i przesłać zaproszenie do złożenia właściwego wniosku o prowadzenie rejestru akcjonariuszy."
+            akcja={<button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ekran-logowania">
+      <form className="card" style={{ width: 440, maxWidth: '92vw' }} onSubmit={wyslij}>
+        <div className="card-h" style={{ marginBottom: 4 }}>Zgłoś zainteresowanie</div>
+        <div className="podtytul-strony" style={{ marginBottom: 22 }}>
+          Prowadzenie rejestru akcjonariuszy — Kancelaria Notarialna Łukasza Kozona
+        </div>
+
+        <Komunikat odmiana="blad" tresc={blad} />
+
+        <Pole etykieta="E-mail" wymagane>
+          <input type="email" autoFocus value={email} onChange={(z) => ustawEmail(z.target.value)} autoComplete="email" />
+        </Pole>
+        <Pole etykieta="Telefon">
+          <input type="tel" value={telefon} onChange={(z) => ustawTelefon(z.target.value)} autoComplete="tel" />
+        </Pole>
+        <Pole etykieta="Nazwa spółki" podpowiedz="Jeśli już istnieje i jest wpisana do KRS.">
+          <input type="text" value={nazwaSpolki} onChange={(z) => ustawNazwaSpolki(z.target.value)} />
+        </Pole>
+        <Pole etykieta="Krótki opis" podpowiedz="Kilka zdań — na tym etapie nie zbieramy danych osobowych ani PESEL.">
+          <textarea rows={3} value={opis} onChange={(z) => ustawOpis(z.target.value)} />
+        </Pole>
+
+        <button className="btn btn-primary" type="submit" disabled={wysylanie || !email.trim()} style={{ width: '100%', marginTop: 8 }}>
+          {wysylanie ? 'Wysyłanie…' : 'Wyślij zgłoszenie'}
+        </button>
+        <div style={{ textAlign: 'center', marginTop: 10 }}>
+          <button type="button" className="btn btn-sm btn-cichy" onClick={() => idz('/')}>← Wróć do logowania</button>
+        </div>
       </form>
     </div>
   );
@@ -437,8 +523,17 @@ function EkranInformacjaPortal({ spolkaId }) {
    ───────────────────────────────────────────────────── */
 function AplikacjaPortal() {
   const trasa = useTrasa();
-  const sesja = usePortalSesja();
   const { segmenty, sciezka } = trasa;
+
+  // Etap 3A: jedyna trasa publiczna portalu — MUSI wyprzedzić bramkę sesji
+  // poniżej, inaczej niezalogowany gość zawsze wyląduje na ekranie logowania.
+  if (segmenty[0] === 'zglos-sie') return <EkranZgloszenieWstepne />;
+
+  return <AplikacjaPortalZSesja segmenty={segmenty} sciezka={sciezka} />;
+}
+
+function AplikacjaPortalZSesja({ segmenty, sciezka }) {
+  const sesja = usePortalSesja();
 
   if (sesja.ladowanie) return <Spinner />;
   if (!sesja.zalogowany) return <EkranLoginPortal przyZalogowaniu={() => sesja.odswiez()} />;

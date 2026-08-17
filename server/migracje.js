@@ -1041,6 +1041,35 @@ const MIGRACJE = [
       ALTER TABLE psa_ograniczenia ADD COLUMN tresc_postanowienia TEXT;
     `,
   },
+  {
+    wersja: 21,
+    nazwa: 'etap 3A: zgloszenia wstepne portalu (lekki formularz publiczny)',
+    sql: `
+      -- Pierwszy kontakt nowego, nieznanego dotad klienta - WYLACZNIE dane
+      -- kontaktowe (e-mail, telefon, nazwa spolki, krotki opis), bez PESEL
+      -- i bez adresow. Zadnego konta portalowego ani sprawy nie zaklada -
+      -- to kancelaria decyduje, czy wyslac zaproszenie (etap 3B) czy odrzucic.
+      -- Celowo NIE jest tabela append-only (jak psa_zdarzenia) - to wylacznie
+      -- lead przed jakakolwiek weryfikacja tozsamosci, wolno go edytowac
+      -- i usuwac (np. RODO - zadanie usuniecia danych przed zawarciem umowy).
+      CREATE TABLE IF NOT EXISTS psa_zgloszenia (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        email               TEXT NOT NULL,
+        telefon             TEXT,
+        nazwa_spolki        TEXT,
+        opis                TEXT,
+        status              TEXT NOT NULL DEFAULT 'nowe'
+                              CHECK (status IN ('nowe','zaproszono','odrzucone')),
+        notatka_wewnetrzna  TEXT,
+        obsluzone_przez     TEXT,
+        obsluzone_kiedy     TEXT,
+        utworzono           TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_zgloszenia_status
+        ON psa_zgloszenia (status, utworzono);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

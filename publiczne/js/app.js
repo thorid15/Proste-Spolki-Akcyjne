@@ -17,6 +17,7 @@ const MENU = [
       { sciezka: '/sprawy', nazwa: 'Kolejka spraw', ikona: 'sprawy' },
       { sciezka: '/spolki', nazwa: 'Spółki', ikona: 'spolki' },
       { sciezka: '/osoby', nazwa: 'Kartoteka osób', ikona: 'osoby' },
+      { sciezka: '/zgloszenia', nazwa: 'Zgłoszenia', ikona: 'sprawy' },
     ],
   },
   {
@@ -180,6 +181,7 @@ function opisTrasy(segmenty) {
     sprawy: { tytul: 'Kolejka spraw', podtytul: 'Cel wewnętrzny 3 dni, termin ustawowy 7 dni (art. 300³⁴ § 1 KSH) — sprawy posortowane po pozostałym czasie.' },
     spolki: { tytul: 'Spółki', podtytul: 'Rejestry prowadzone przez kancelarię.' },
     osoby: { tytul: 'Kartoteka osób', podtytul: 'Wspólna dla wszystkich prowadzonych rejestrów — jeden inwestor wpisywany raz.' },
+    zgloszenia: { tytul: 'Zgłoszenia', podtytul: 'Pierwszy kontakt z publicznego formularza portalu — do oceny przed wysłaniem zaproszenia.' },
     oplaty: { tytul: 'Opłaty', podtytul: 'Naliczenia za czynności rejestrowe i prowadzenie rejestru.' },
     podglad: { tytul: 'Podgląd systemu', podtytul: 'Katalog komponentów modułu — paleta, typografia, pola, tabele i stany.' },
     konfiguracja: { tytul: 'Konfiguracja', podtytul: 'Stawki, terminy, szablony dokumentów i użytkownicy modułu.' },
@@ -230,6 +232,7 @@ function Aplikacja() {
     }
 
     if (segmenty[0] === 'osoby') return <EkranOsob />;
+    if (segmenty[0] === 'zgloszenia') return <EkranZgloszenWstepnych />;
     if (segmenty[0] === 'oplaty') return <EkranOplat />;
     if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'stawki') return <EkranStawek />;
     if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'szablony') {

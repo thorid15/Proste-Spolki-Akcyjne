@@ -118,6 +118,47 @@ router.get(
   })
 );
 
+// ─────────────────────────────────────────────────────────────
+// Zgloszenie wstepne (etap 3A) - PUBLICZNE, bez zadnej sesji. Pierwszy
+// kontakt nieznanego dotad klienta: wylacznie dane kontaktowe, zadnego
+// PESEL ani adresu. Kancelaria decyduje, czy wyslac zaproszenie (etap 3B).
+// ─────────────────────────────────────────────────────────────
+
+const WZORZEC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+router.post(
+  '/zgloszenia',
+  asy((zad, odp) => {
+    const cialo = zad.body || {};
+    const email = znormalizujEmail(cialo.email);
+    if (!email || !WZORZEC_EMAIL.test(email)) {
+      throw bledneZadanie('Podaj prawidłowy adres e-mail.');
+    }
+
+    // Miekki, ogolny limit zapytan na adres IP - formularz jest publiczny
+    // i niezalogowany, wiec to jedyna dostepna ochrona przed zalewem
+    // (limiter.js liczy tu KAZDA probe, nie tylko nieudane logowanie).
+    limiter.sprawdz(zad.ip, 'zgloszenie');
+    limiter.zanotujNieudana(zad.ip, 'zgloszenie');
+
+    const dane = {
+      email,
+      telefon: String(cialo.telefon || '').trim() || null,
+      nazwa_spolki: String(cialo.nazwa_spolki || '').trim() || null,
+      opis: String(cialo.opis || '').trim() || null,
+      status: 'nowe',
+      utworzono: czas.terazIso(),
+    };
+
+    const kolumny = Object.keys(dane);
+    db()
+      .prepare(`INSERT INTO psa_zgloszenia (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
+      .run(dane);
+
+    odp.status(201).json({ ok: true });
+  })
+);
+
 // Od tego miejsca kazda trasa wymaga zalogowanego konta portalowego.
 router.use(autoryzacja.wymagajKonta);
 
