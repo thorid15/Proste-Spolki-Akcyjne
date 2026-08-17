@@ -124,6 +124,13 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'GET /wniosek',
     'PUT /wniosek',
     'GET /wniosek/z-krs/:numer',
+    // Etap 3D: akcjonariusze proponowani we wniosku - dostep przez konto_id
+    // z sesji (posrednio, jak `wczytajSpraweDlaKonta`), zaden identyfikator
+    // spolki nie wystepuje - spolka jeszcze nie istnieje.
+    'GET /wniosek/akcjonariusze',
+    'POST /wniosek/akcjonariusze',
+    'PUT /wniosek/akcjonariusze/:id',
+    'DELETE /wniosek/akcjonariusze/:id',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
   ].sort();

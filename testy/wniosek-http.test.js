@@ -165,3 +165,77 @@ test('GET /api/psa/portal/wniosek/z-krs/:numer: zly numer nie rzuca bledu, zwrac
   assert.equal(wynik.znaleziono, false);
   assert.ok(wynik.komunikat);
 });
+
+test('POST /api/psa/portal/wniosek/akcjonariusze: bez zalozonego wniosku odmawia', async () => {
+  const { ciastko } = await kontoWnioskodawcy('brak-wniosku-akcjonariusz@example.pl');
+  const [status] = await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Kowalski' }, ciastko);
+  assert.equal(status, 404);
+});
+
+test('POST/PUT/DELETE /api/psa/portal/wniosek/akcjonariusze: pelny cykl zycia pozycji', async () => {
+  const { ciastko } = await kontoWnioskodawcy('akcjonariusz-cykl@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko); // zaloz wniosek
+
+  const [stZlyPesel] = await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { pesel: '123' }, ciastko);
+  assert.equal(stZlyPesel, 400);
+
+  const [stDodaj, dodany] = await zapytaj(
+    'POST',
+    '/api/psa/portal/wniosek/akcjonariusze',
+    { typ: 'fizyczna', nazwisko: 'Kowalski', imie: 'Jan', pesel: '90071500118' },
+    ciastko
+  );
+  assert.equal(stDodaj, 201);
+  assert.equal(dodany.akcjonariusz.nazwisko, 'Kowalski');
+  assert.equal(dodany.akcjonariusz.zgoda_email, 0, 'zgoda domyslnie wylaczona, nigdy zaznaczona za akcjonariusza');
+
+  const [stDrugi, drugi] = await zapytaj(
+    'POST',
+    '/api/psa/portal/wniosek/akcjonariusze',
+    { typ: 'fizyczna', nazwisko: 'Nowak', imie: 'Anna' },
+    ciastko
+  );
+  assert.equal(drugi.akcjonariusz.kolejnosc, dodany.akcjonariusz.kolejnosc + 1, 'kolejnosc rosnie z kazdym dodaniem');
+
+  const [, lista] = await zapytaj('GET', '/api/psa/portal/wniosek/akcjonariusze', undefined, ciastko);
+  assert.equal(lista.akcjonariusze.length, 2);
+
+  const [stEdytuj, edytowany] = await zapytaj(
+    'PUT',
+    `/api/psa/portal/wniosek/akcjonariusze/${dodany.akcjonariusz.id}`,
+    { email: 'jan.kowalski@example.pl', zgoda_email: true },
+    ciastko
+  );
+  assert.equal(stEdytuj, 200);
+  assert.equal(edytowany.akcjonariusz.email, 'jan.kowalski@example.pl');
+  assert.equal(edytowany.akcjonariusz.zgoda_email, 1);
+  assert.equal(edytowany.akcjonariusz.nazwisko, 'Kowalski', 'edycja czesciowa nie zaciera innych pol');
+
+  const [stUsun] = await zapytaj('DELETE', `/api/psa/portal/wniosek/akcjonariusze/${drugi.akcjonariusz.id}`, undefined, ciastko);
+  assert.equal(stUsun, 200);
+  const [, listaPo] = await zapytaj('GET', '/api/psa/portal/wniosek/akcjonariusze', undefined, ciastko);
+  assert.equal(listaPo.akcjonariusze.length, 1);
+});
+
+test('PUT/DELETE /api/psa/portal/wniosek/akcjonariusze/:id: konto nie widzi cudzych pozycji', async () => {
+  const { ciastko: ciastkoA } = await kontoWnioskodawcy('wlasciciel-akcjonariusza@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastkoA);
+  const [, dodany] = await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Prywatny' }, ciastkoA);
+
+  const { ciastko: ciastkoB } = await kontoWnioskodawcy('intruz-akcjonariusza@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastkoB);
+
+  const [stPut] = await zapytaj('PUT', `/api/psa/portal/wniosek/akcjonariusze/${dodany.akcjonariusz.id}`, { nazwisko: 'Podmiana' }, ciastkoB);
+  assert.equal(stPut, 404);
+  const [stDelete] = await zapytaj('DELETE', `/api/psa/portal/wniosek/akcjonariusze/${dodany.akcjonariusz.id}`, undefined, ciastkoB);
+  assert.equal(stDelete, 404);
+});
+
+test('POST /api/psa/portal/wniosek/akcjonariusze: odmawia po zlozeniu wniosku', async () => {
+  const { kontoId, ciastko } = await kontoWnioskodawcy('akcjonariusz-po-zlozeniu@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
+  db().prepare(`UPDATE psa_wnioski SET status = 'zlozony' WHERE konto_id = ?`).run(kontoId);
+
+  const [status] = await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Zapozniony' }, ciastko);
+  assert.equal(status, 400);
+});

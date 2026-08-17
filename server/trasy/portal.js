@@ -392,6 +392,139 @@ router.get(
 );
 
 // ─────────────────────────────────────────────────────────────
+// Akcjonariusze proponowani we wniosku (etap 3D) - dane do PRZYSZLEJ
+// kartoteki, nie sama kartoteka (patrz komentarz przy migracji 25).
+// ─────────────────────────────────────────────────────────────
+
+const POLA_AKCJONARIUSZA_WNIOSKU = [
+  'typ', 'nazwisko', 'imie', 'nazwa', 'pesel', 'data_urodzenia', 'plec',
+  'nip', 'regon', 'numer_w_rejestrze', 'nazwa_rejestru',
+  'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu', 'nr_lokalu',
+  'adres_doreczen', 'adres_edoreczen', 'email', 'telefon', 'zgoda_email',
+];
+
+function wyczyscAkcjonariuszaWniosku(cialo) {
+  const wynik = {};
+  for (const pole of POLA_AKCJONARIUSZA_WNIOSKU) {
+    if (cialo[pole] === undefined) continue;
+    if (pole === 'zgoda_email') {
+      wynik[pole] = cialo[pole] ? 1 : 0;
+      continue;
+    }
+    const v = cialo[pole];
+    wynik[pole] = v === '' || v === null ? null : String(v).trim();
+  }
+  return wynik;
+}
+
+function sprawdzAkcjonariuszaWniosku(dane) {
+  if (dane.typ && !['fizyczna', 'prawna'].includes(dane.typ)) {
+    throw bledneZadanie('Typ musi być „fizyczna” albo „prawna”.');
+  }
+  if (dane.pesel && !/^\d{11}$/.test(dane.pesel)) {
+    throw bledneZadanie('PESEL składa się z 11 cyfr.');
+  }
+  if (dane.data_urodzenia && !czas.poprawnaData(dane.data_urodzenia)) {
+    throw bledneZadanie('Data urodzenia musi mieć format RRRR-MM-DD.');
+  }
+  if (dane.plec && !['mezczyzna', 'kobieta'].includes(dane.plec)) {
+    throw bledneZadanie('Płeć musi być „mężczyzna” albo „kobieta”.');
+  }
+}
+
+/**
+ * Wymaga ISTNIEJACEGO, edytowalnego wniosku - dla mutacji akcjonariuszy
+ * (POST/PUT/DELETE). W odroznieniu od `wczytajLubZalozWniosek` (uzywanego
+ * przez GET/PUT samego wniosku) NIE zaklada wniosku - musi juz istniec,
+ * bo tylko wtedy ma sens dopisywac do niego akcjonariuszy.
+ */
+function wymagajWniosku(zad, odp, dalej) {
+  const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+  if (!wniosek) return dalej(nieZnaleziono('Najpierw otwórz formularz wniosku (krok „Spółka i umowa”), żeby go założyć.'));
+  if (!['w_przygotowaniu', 'do_uzupelnienia'].includes(wniosek.status)) {
+    return dalej(bledneZadanie(`Wniosek ma już status „${wniosek.status}” — nie można go edytować.`));
+  }
+  zad.psaWniosek = wniosek;
+  dalej();
+}
+
+function wczytajAkcjonariuszaWniosku(wniosekId, id) {
+  const wiersz = db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(id);
+  if (!wiersz || Number(wiersz.wniosek_id) !== Number(wniosekId)) return null;
+  return wiersz;
+}
+
+router.get(
+  '/wniosek/akcjonariusze',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek) return odp.json({ akcjonariusze: [] });
+    const wiersze = db()
+      .prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ? ORDER BY kolejnosc, id')
+      .all(wniosek.id);
+    odp.json({ akcjonariusze: wiersze });
+  })
+);
+
+router.post(
+  '/wniosek/akcjonariusze',
+  wymagajWnioskodawcy,
+  wymagajWniosku,
+  asy((zad, odp) => {
+    const dane = wyczyscAkcjonariuszaWniosku(zad.body || {});
+    sprawdzAkcjonariuszaWniosku(dane);
+    const maks = db()
+      .prepare('SELECT COALESCE(MAX(kolejnosc), -1) AS m FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ?')
+      .get(zad.psaWniosek.id).m;
+    const kolumny = Object.keys(dane);
+    const wynik = db()
+      .prepare(
+        `INSERT INTO psa_wnioski_akcjonariusze (wniosek_id, kolejnosc${kolumny.length ? ', ' + kolumny.join(', ') : ''}, utworzono)
+         VALUES (@wniosek_id, @kolejnosc${kolumny.length ? ', ' + kolumny.map((k) => `@${k}`).join(', ') : ''}, @utworzono)`
+      )
+      .run({ ...dane, wniosek_id: zad.psaWniosek.id, kolejnosc: maks + 1, utworzono: czas.terazIso() });
+    odp.status(201).json({
+      akcjonariusz: db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(wynik.lastInsertRowid),
+    });
+  })
+);
+
+router.put(
+  '/wniosek/akcjonariusze/:id',
+  wymagajWnioskodawcy,
+  wymagajWniosku,
+  asy((zad, odp) => {
+    const istniejacy = wczytajAkcjonariuszaWniosku(zad.psaWniosek.id, Number(zad.params.id));
+    if (!istniejacy) throw nieZnaleziono('Nie odnaleziono pozycji akcjonariusza.');
+    const dane = wyczyscAkcjonariuszaWniosku(zad.body || {});
+    sprawdzAkcjonariuszaWniosku(dane);
+    if (Object.keys(dane).length > 0) {
+      db()
+        .prepare(
+          `UPDATE psa_wnioski_akcjonariusze
+              SET ${Object.keys(dane).map((k) => `${k} = @${k}`).join(', ')}, zaktualizowano = @zaktualizowano
+            WHERE id = @id`
+        )
+        .run({ ...dane, zaktualizowano: czas.terazIso(), id: istniejacy.id });
+    }
+    odp.json({ akcjonariusz: db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(istniejacy.id) });
+  })
+);
+
+router.delete(
+  '/wniosek/akcjonariusze/:id',
+  wymagajWnioskodawcy,
+  wymagajWniosku,
+  asy((zad, odp) => {
+    const istniejacy = wczytajAkcjonariuszaWniosku(zad.psaWniosek.id, Number(zad.params.id));
+    if (!istniejacy) throw nieZnaleziono('Nie odnaleziono pozycji akcjonariusza.');
+    db().prepare('DELETE FROM psa_wnioski_akcjonariusze WHERE id = ?').run(istniejacy.id);
+    odp.json({ ok: true });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
 // Moje spolki / akcje
 // ─────────────────────────────────────────────────────────────
 

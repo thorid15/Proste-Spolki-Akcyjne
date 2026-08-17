@@ -3,9 +3,197 @@
    (publiczne/js/spolki.js: EkranNowejSpolki) na tyle, na ile dane są takie
    same — dane spółki (z importem z KRS) i reprezentant w mianowniku
    (odmianę liczy backend przy generowaniu projektu umowy, etap 3E).
-   Krok „Akcjonariusze" to etap 3D — tu na razie miejsce-trzymacz. */
+   Krok „Akcjonariusze" (etap 3D) zbiera dane do PRZYSZŁEJ kartoteki
+   (server/trasy/portal.js: psa_wnioski_akcjonariusze) — te wiersze NIE są
+   jeszcze prawdziwymi osobami w kartotece wspólnej, dopóki kancelaria nie
+   zweryfikuje wniosku (etap 3F). Każda pozycja zapisuje się osobno
+   (POST przy dodaniu, PUT przy „Zapisz”, DELETE przy „Usuń”) — inaczej niż
+   krok „Spółka”, który zapisuje się jednym PUT całości. */
 
 const KROKI_WNIOSKU = ['Spółka i umowa', 'Akcjonariusze', 'Weryfikacja'];
+
+const PUSTY_AKCJONARIUSZ_WNIOSKU = {
+  typ: 'fizyczna',
+  nazwisko: '', imie: '', nazwa: '',
+  pesel: '', data_urodzenia: '', plec: '',
+  nip: '', regon: '', numer_w_rejestrze: '', nazwa_rejestru: 'KRS',
+  kod_pocztowy: '', miejscowosc: '', ulica: '', nr_domu: '', nr_lokalu: '',
+  adres_doreczen: '', adres_edoreczen: '', email: '', telefon: '',
+  zgoda_email: 0,
+};
+
+/** Jedna proponowana pozycja akcjonariatu w kroku „Akcjonariusze” wniosku klienta. */
+function PozycjaAkcjonariuszaWniosku({ pozycja, edytowalne, przyZapisie, przyUsunieciu }) {
+  const [dane, ustawDane] = useState({ ...PUSTY_AKCJONARIUSZ_WNIOSKU, ...pozycja });
+  const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [usuwanie, ustawUsuwanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const [komunikat, ustawKomunikat] = useState(null);
+
+  const pole = (klucz) => ({
+    value: dane[klucz] ?? '',
+    onChange: (z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value })),
+    disabled: !edytowalne,
+  });
+
+  // Etap 2.8 / 3D: autouzupelnienie daty urodzenia i plci z PESEL,
+  // jednorazowe (uzupelnia tylko puste pola).
+  const pesel = dane.typ === 'fizyczna' ? parsujPesel(dane.pesel) : null;
+  useEffect(() => {
+    if (!pesel) return;
+    ustawDane((p) => ({
+      ...p,
+      data_urodzenia: p.data_urodzenia || pesel.data_urodzenia,
+      plec: p.plec || pesel.plec,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dane.pesel]);
+
+  async function zapisz() {
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    ustawKomunikat(null);
+    try {
+      const wynik = await API.put(`/api/psa/portal/wniosek/akcjonariusze/${pozycja.id}`, dane);
+      ustawDane(wynik.akcjonariusz);
+      przyZapisie(wynik.akcjonariusz);
+      ustawKomunikat('Zapisano.');
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zapisać pozycji.');
+    } finally {
+      ustawZapisywanie(false);
+    }
+  }
+
+  async function usun() {
+    if (!window.confirm('Usunąć tę pozycję z wniosku?')) return;
+    ustawUsuwanie(true);
+    ustawBlad(null);
+    try {
+      await API.delete(`/api/psa/portal/wniosek/akcjonariusze/${pozycja.id}`);
+      przyUsunieciu(pozycja.id);
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się usunąć pozycji.');
+      ustawUsuwanie(false);
+    }
+  }
+
+  const zgoda = Boolean(Number(dane.zgoda_email));
+
+  return (
+    <Karta>
+      <Komunikat odmiana="blad" tresc={blad} />
+
+      <Pole etykieta="Rodzaj podmiotu" wymagane>
+        <select value={dane.typ} onChange={(z) => ustawDane((p) => ({ ...p, typ: z.target.value }))} disabled={!edytowalne}>
+          <option value="fizyczna">Osoba fizyczna</option>
+          <option value="prawna">Osoba prawna lub jednostka organizacyjna</option>
+        </select>
+      </Pole>
+
+      {dane.typ === 'fizyczna' ? (
+        <>
+          <div className="siatka-2">
+            <Pole etykieta="Nazwisko" wymagane><input type="text" {...pole('nazwisko')} /></Pole>
+            <Pole etykieta="Imię"><input type="text" {...pole('imie')} /></Pole>
+          </div>
+          <div className="siatka-2">
+            <Pole etykieta="PESEL" podpowiedz="Data urodzenia i płeć uzupełnią się automatycznie po wpisaniu 11 cyfr — można je potem nadpisać.">
+              <input type="text" {...pole('pesel')} maxLength={11} />
+            </Pole>
+            <Pole etykieta="Data urodzenia">
+              <PoleDaty
+                wartosc={dane.data_urodzenia || ''}
+                przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))}
+                wylaczone={!edytowalne}
+              />
+            </Pole>
+          </div>
+          {pesel && !pesel.poprawnaSumaKontrolna && (
+            <Komunikat
+              odmiana="uwaga"
+              tresc="Suma kontrolna numeru PESEL się nie zgadza — sprawdź numer. Zapis nie jest blokowany."
+            />
+          )}
+          <Pole etykieta="Płeć">
+            <select value={dane.plec || ''} onChange={(z) => ustawDane((p) => ({ ...p, plec: z.target.value }))} disabled={!edytowalne}>
+              <option value="">— nie podano —</option>
+              <option value="mezczyzna">mężczyzna</option>
+              <option value="kobieta">kobieta</option>
+            </select>
+          </Pole>
+        </>
+      ) : (
+        <>
+          <Pole etykieta="Nazwa" wymagane><input type="text" {...pole('nazwa')} /></Pole>
+          <div className="siatka-2">
+            <Pole etykieta="Numer we właściwym rejestrze"><input type="text" {...pole('numer_w_rejestrze')} /></Pole>
+            <Pole etykieta="Nazwa rejestru"><input type="text" {...pole('nazwa_rejestru')} /></Pole>
+          </div>
+          <div className="siatka-2">
+            <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
+            <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
+          </div>
+        </>
+      )}
+
+      <div className="rozdzielacz" />
+      <div className="siatka-3">
+        <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
+        <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
+        <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
+      </div>
+      <div className="siatka-2">
+        <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
+        <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
+      </div>
+      <Pole etykieta="Adres do doręczeń" podpowiedz="Jeśli inny niż adres zamieszkania lub siedziby.">
+        <input type="text" {...pole('adres_doreczen')} />
+      </Pole>
+
+      <div className="siatka-2">
+        <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
+        <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
+      </div>
+
+      <label className="chk" style={{ padding: '8px 0' }}>
+        <input
+          type="checkbox"
+          checked={zgoda}
+          onChange={(z) => ustawDane((p) => ({ ...p, zgoda_email: z.target.checked ? 1 : 0 }))}
+          disabled={!edytowalne}
+        />
+        <span className="chk-tresc">
+          Wyrażam zgodę na komunikację elektroniczną w sprawach tego rejestru i na wpisanie poniższego adresu
+          do doręczeń elektronicznych do rejestru akcjonariuszy (art. 300<sup>33</sup> § 1 pkt 5 KSH). Bez tej
+          zgody adres do doręczeń elektronicznych NIE zostanie wpisany do rejestru — pozostają dotychczasowe
+          zasady doręczeń.
+        </span>
+      </label>
+      {zgoda && !dane.adres_edoreczen && (
+        <Komunikat
+          odmiana="uwaga"
+          tresc="Zaznaczono zgodę, ale nie podano adresu do doręczeń elektronicznych — uzupełnij pole niżej albo cofnij zgodę."
+        />
+      )}
+      <Pole etykieta="Adres do doręczeń elektronicznych">
+        <input type="text" {...pole('adres_edoreczen')} placeholder="AE:PL-…" />
+      </Pole>
+
+      {edytowalne && (
+        <div className="row-g" style={{ justifyContent: 'flex-end', paddingTop: 8 }}>
+          {komunikat && <span className="podpowiedz">{komunikat}</span>}
+          <button className="btn btn-maly btn-sygnal" onClick={usun} disabled={usuwanie || zapisywanie}>
+            {usuwanie ? 'Usuwanie…' : 'Usuń'}
+          </button>
+          <button className="btn btn-maly btn-glowny" onClick={zapisz} disabled={zapisywanie || usuwanie}>
+            {zapisywanie ? 'Zapisywanie…' : 'Zapisz'}
+          </button>
+        </div>
+      )}
+    </Karta>
+  );
+}
 
 function EkranWniosku() {
   const [krok, ustawKrok] = useState(0);
@@ -17,13 +205,45 @@ function EkranWniosku() {
   const [pobieranieKrs, ustawPobieranieKrs] = useState(false);
   const [komunikatKrs, ustawKomunikatKrs] = useState(null);
   const [pokazKorekteOdmiany, ustawPokazKorekteOdmiany] = useState(false);
+  const [akcjonariusze, ustawAkcjonariusze] = useState([]);
+  const [dodawanieAkcjonariusza, ustawDodawanieAkcjonariusza] = useState(false);
+  const [bladAkcjonariuszy, ustawBladAkcjonariuszy] = useState(null);
 
   useEffect(() => {
-    API.get('/api/psa/portal/wniosek')
-      .then((d) => ustawDane(d.wniosek))
+    Promise.all([
+      API.get('/api/psa/portal/wniosek'),
+      API.get('/api/psa/portal/wniosek/akcjonariusze'),
+    ])
+      .then(([w, a]) => {
+        ustawDane(w.wniosek);
+        ustawAkcjonariusze(a.akcjonariusze);
+      })
       .catch((e) => ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się wczytać wniosku.'))
       .finally(() => ustawLadowanie(false));
   }, []);
+
+  const edytowalneAkcjonariusze = Boolean(dane) && ['w_przygotowaniu', 'do_uzupelnienia'].includes(dane.status);
+
+  async function dodajAkcjonariusza() {
+    ustawDodawanieAkcjonariusza(true);
+    ustawBladAkcjonariuszy(null);
+    try {
+      const wynik = await API.post('/api/psa/portal/wniosek/akcjonariusze', {});
+      ustawAkcjonariusze((p) => [...p, wynik.akcjonariusz]);
+    } catch (e) {
+      ustawBladAkcjonariuszy(e instanceof BladApi ? e.message : 'Nie udało się dodać pozycji.');
+    } finally {
+      ustawDodawanieAkcjonariusza(false);
+    }
+  }
+
+  function poZapisieAkcjonariusza(zapisany) {
+    ustawAkcjonariusze((p) => p.map((a) => (a.id === zapisany.id ? zapisany : a)));
+  }
+
+  function poUsunieciuAkcjonariusza(id) {
+    ustawAkcjonariusze((p) => p.filter((a) => a.id !== id));
+  }
 
   const pole = (klucz) => ({
     value: (dane && dane[klucz]) ?? '',
@@ -232,10 +452,43 @@ function EkranWniosku() {
         )}
 
         {krok === 1 && (
-          <Pusto
-            tytul="Wkrótce"
-            opis="Formularz danych akcjonariuszy pojawi się tutaj wkrótce. Zapisz dotychczasowe dane spółki przyciskiem „Zapisz” poniżej."
-          />
+          <div className="pion" style={{ gap: 16 }}>
+            <div className="card-h">Akcjonariusze</div>
+            <Komunikat
+              odmiana="info"
+              tresc="Wpisz osoby, które mają zostać wpisane do rejestru jako akcjonariusze. Kancelaria porówna te dane z rejestrem KRS i skontaktuje się w razie rozbieżności, zanim rejestr zostanie otwarty."
+            />
+            {!edytowalneAkcjonariusze && dane.status && (
+              <Komunikat
+                odmiana="uwaga"
+                tresc={`Wniosek ma status „${dane.status}” — lista akcjonariuszy jest już tylko do wglądu.`}
+              />
+            )}
+            <Komunikat odmiana="blad" tresc={bladAkcjonariuszy} />
+
+            {akcjonariusze.length === 0 && (
+              <Pusto
+                tytul="Brak akcjonariuszy"
+                opis="Dodaj przynajmniej jedną osobę, która obejmie akcje w spółce."
+              />
+            )}
+
+            {akcjonariusze.map((a) => (
+              <PozycjaAkcjonariuszaWniosku
+                key={a.id}
+                pozycja={a}
+                edytowalne={edytowalneAkcjonariusze}
+                przyZapisie={poZapisieAkcjonariusza}
+                przyUsunieciu={poUsunieciuAkcjonariusza}
+              />
+            ))}
+
+            {edytowalneAkcjonariusze && (
+              <button className="btn btn-maly" onClick={dodajAkcjonariusza} disabled={dodawanieAkcjonariusza}>
+                {dodawanieAkcjonariusza ? 'Dodawanie…' : '+ Dodaj akcjonariusza'}
+              </button>
+            )}
+          </div>
         )}
 
         {krok === 2 && (

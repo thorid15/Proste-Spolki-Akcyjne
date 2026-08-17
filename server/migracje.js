@@ -1200,6 +1200,54 @@ const MIGRACJE = [
         ON psa_wnioski (status);
     `,
   },
+  {
+    wersja: 25,
+    nazwa: 'etap 3D: psa_wnioski_akcjonariusze (dane do kartoteki + zgoda elektroniczna)',
+    sql: `
+      -- Proponowani akcjonariusze zbierani przez klienta w portalu - dane do
+      -- PRZYSZLEJ kartoteki wspolnej (psa_osoby), nie sama kartoteka: dopoki
+      -- kancelaria nie zweryfikuje wniosku (etap 3F), te wiersze NIE tworza
+      -- realnych psa_osoby (regula domenowa nr 10 - jeden inwestor wpisany
+      -- raz - wpis nieprzejrzanych danych zaśmiecałby wspólną kartotekę
+      -- wykorzystywaną przez WSZYSTKIE spolki kancelarii).
+      -- Pola lustrza podzbior psa_osoby (bez AML/beneficjenta/PEP - to
+      -- warstwa etapu 3.1, nie czesc wniosku klienta).
+      CREATE TABLE IF NOT EXISTS psa_wnioski_akcjonariusze (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        wniosek_id        INTEGER NOT NULL REFERENCES psa_wnioski(id),
+        kolejnosc         INTEGER NOT NULL DEFAULT 0,
+        typ               TEXT NOT NULL DEFAULT 'fizyczna' CHECK (typ IN ('fizyczna','prawna')),
+        nazwisko          TEXT,
+        imie              TEXT,
+        nazwa             TEXT,
+        pesel             TEXT,
+        data_urodzenia    TEXT,
+        plec              TEXT,
+        nip               TEXT,
+        regon             TEXT,
+        numer_w_rejestrze TEXT,
+        nazwa_rejestru    TEXT,
+        kod_pocztowy      TEXT,
+        miejscowosc       TEXT,
+        ulica             TEXT,
+        nr_domu           TEXT,
+        nr_lokalu         TEXT,
+        adres_doreczen    TEXT,
+        adres_edoreczen   TEXT,
+        email             TEXT,
+        telefon           TEXT,
+        -- Swiadoma zgoda na komunikacje elektroniczna (opis promptu, etap 3
+        -- "zakres danych"): adres do doreczen elektronicznych trafia do
+        -- rejestru WYLACZNIE za zgoda akcjonariusza.
+        zgoda_email       INTEGER NOT NULL DEFAULT 0 CHECK (zgoda_email IN (0,1)),
+        utworzono         TEXT NOT NULL,
+        zaktualizowano    TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_wnioski_akcjonariusze_wniosek
+        ON psa_wnioski_akcjonariusze (wniosek_id, kolejnosc);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
