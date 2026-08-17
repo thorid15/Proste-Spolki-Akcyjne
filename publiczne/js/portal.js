@@ -243,6 +243,88 @@ function EkranAktywacjaKonta({ token }) {
   );
 }
 
+/* Etap 3B.1 — informacja o przetwarzaniu danych osobowych (art. 13 RODO),
+   potwierdzana JEDNORAZOWO przed wejściem do formularza wniosku (etap 3C).
+   To NIE jest zgoda z art. 6 ust. 1 lit. a) RODO — podstawą przetwarzania
+   danych treści rejestru jest umowa / obowiązek prawny, więc "zgody" na
+   samo przetwarzanie się tu nie zbiera; potwierdza się WYŁĄCZNIE zapoznanie
+   z obowiązkiem informacyjnym. Prawdziwa zgoda (komunikacja elektroniczna)
+   żyje przy danych akcjonariusza — etap 3D, zgodnie z opisem promptu. */
+function EkranKlauzulaRodo({ przyAkceptacji }) {
+  const { dane } = useDane('/api/wspolne/kancelaria');
+  const kancelaria = dane && dane.kancelaria;
+  const [potwierdzono, ustawPotwierdzono] = useState(false);
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+
+  async function dalej() {
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      await API.post('/api/psa/portal/rodo');
+      przyAkceptacji();
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zapisać potwierdzenia.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  return (
+    <Karta tytul="Informacja o przetwarzaniu danych osobowych">
+      <div className="pion" style={{ gap: 14 }}>
+        <p>
+          Zanim przejdziesz do wypełnienia wniosku o prowadzenie rejestru akcjonariuszy, zapoznaj się
+          z poniższą informacją.
+        </p>
+        <div className="pion" style={{ gap: 8 }}>
+          <div>
+            <strong>Administrator danych:</strong>{' '}
+            {kancelaria ? kancelaria.nazwa : '—'}
+            {kancelaria && kancelaria.adres ? `, ${kancelaria.adres}` : ''}
+            {kancelaria && kancelaria.miejscowosc ? `, ${kancelaria.miejscowosc}` : ''}
+            {kancelaria && kancelaria.email ? ` (${kancelaria.email})` : ''}.
+          </div>
+          <div>
+            <strong>Cel przetwarzania:</strong> zawarcie i wykonanie umowy o prowadzenie rejestru
+            akcjonariuszy prostej spółki akcyjnej (art. 300(31) i nast. Kodeksu spółek handlowych),
+            w tym zebranie danych stanowiących treść rejestru.
+          </div>
+          <div>
+            <strong>Podstawa prawna:</strong> art. 6 ust. 1 lit. b) RODO (niezbędność do zawarcia
+            i wykonania umowy) oraz art. 6 ust. 1 lit. c) RODO (obowiązek prawny wynikający
+            z Kodeksu spółek handlowych) — w zakresie, w jakim dane stanowią obligatoryjną treść rejestru.
+          </div>
+          <div>
+            <strong>Zakres danych:</strong> dane spółki, dane reprezentanta podpisującego umowę oraz
+            dane akcjonariuszy (imię, nazwisko, PESEL, data urodzenia, adres, dane kontaktowe).
+          </div>
+          <div>
+            <strong>Okres przechowywania:</strong> przez czas prowadzenia rejestru akcjonariuszy oraz
+            przez okres wynikający z obowiązków archiwizacyjnych kancelarii notarialnej.
+          </div>
+          <div>
+            <strong>Prawa osoby, której dane dotyczą:</strong> dostęp do danych, sprostowanie oraz —
+            w zakresie przewidzianym przepisami — ograniczenie przetwarzania i wniesienie skargi do
+            Prezesa Urzędu Ochrony Danych Osobowych.
+          </div>
+        </div>
+
+        <Komunikat odmiana="blad" tresc={blad} />
+
+        <label className="chk">
+          <input type="checkbox" checked={potwierdzono} onChange={(z) => ustawPotwierdzono(z.target.checked)} />
+          <span className="chk-tresc">Przeczytałem/-am i rozumiem powyższą informację.</span>
+        </label>
+
+        <button className="btn btn-primary" disabled={!potwierdzono || wysylanie} onClick={dalej} style={{ alignSelf: 'flex-start' }}>
+          {wysylanie ? 'Zapisywanie…' : 'Przejdź dalej'}
+        </button>
+      </div>
+    </Karta>
+  );
+}
+
 /* ─────────────────────────────────────────────────────
    UKŁAD
    ───────────────────────────────────────────────────── */
@@ -627,9 +709,13 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
   function ekran() {
     // Etap 3B: konto zaproszone (rola 'wnioskodawca') nie ma jeszcze ani
     // spółki, ani statusu akcjonariusza — `EkranMoje` (poniżej) dla niego
-    // nie ma sensu. Właściwy wniosek (dane spółki, akcjonariusze) to etap 3C;
-    // do tego czasu zostaje przy tym miejscu-trzymaczu.
+    // nie ma sensu. Zanim zobaczy formularz wniosku (dane spółki,
+    // akcjonariusze — etap 3C), musi najpierw potwierdzić klauzulę RODO
+    // (etap 3B.1); do czasu zbudowania formularza zostaje przy miejscu-trzymaczu.
     if (sesja.konto.rola === 'wnioskodawca') {
+      if (!sesja.konto.rodo_zaakceptowano) {
+        return <EkranKlauzulaRodo przyAkceptacji={() => sesja.odswiez()} />;
+      }
       return (
         <Karta tytul="Wniosek o prowadzenie rejestru">
           <Pusto

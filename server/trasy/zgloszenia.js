@@ -25,6 +25,34 @@ const router = express.Router();
 // po wygasnieciu kancelaria zaprasza ponownie (nowy token nadpisuje stary).
 const TOKEN_WAZNOSC_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Tresc maila zaproszenia - wydzielona z handlera, zeby dalo sie ja
+ * przetestowac bez zywego SMTP (`poczta.wyslij` i tak degraduje sie
+ * miekko bez konfiguracji, ale sama tresc ma byc poprawna niezaleznie od
+ * tego). Opisuje caly przebieg wniosku (etapy 3B-3E), nie tylko sam link -
+ * klient ma wiedziec, co go czeka, zanim klinie.
+ */
+function trescZaproszenia({ link, kancelariaNazwa }) {
+  return `
+    <p>Dzień dobry,</p>
+    <p>W odpowiedzi na zgłoszenie zainteresowania prowadzeniem rejestru akcjonariuszy
+       zapraszamy do złożenia wniosku przez portal klienta ${kancelariaNazwa}.</p>
+    <p><a href="${link}">${link}</a></p>
+    <p>Link jest ważny przez 7 dni. Po jego otwarciu:</p>
+    <ol>
+      <li>ustawisz hasło do portalu i od razu zalogujesz się na konto,</li>
+      <li>zapoznasz się z informacją o przetwarzaniu danych osobowych,</li>
+      <li>wypełnisz dane spółki (można pobrać automatycznie z KRS po numerze),
+          dane reprezentanta oraz dane akcjonariuszy,</li>
+      <li>system przygotuje projekt umowy o prowadzenie rejestru na podstawie
+          wpisanych danych,</li>
+      <li>podpisaną umowę odeślesz przez portal — od tego momentu wniosek
+          czeka na weryfikację kancelarii i otwarcie rejestru.</li>
+    </ol>
+    <p>W razie pytań prosimy o kontakt z kancelarią.</p>
+  `;
+}
+
 router.get(
   '/',
   asy((zad, odp) => {
@@ -103,14 +131,7 @@ router.post(
     const proba = await poczta.wyslij({
       do: zgloszenie.email,
       temat: `Zaproszenie do portalu — ${konfiguracja.KANCELARIA.nazwa}`,
-      html: `
-        <p>Dzień dobry,</p>
-        <p>W odpowiedzi na zgłoszenie zainteresowania prowadzeniem rejestru akcjonariuszy
-           zapraszamy do złożenia wniosku przez portal klienta ${konfiguracja.KANCELARIA.nazwa}.</p>
-        <p><a href="${link}">${link}</a></p>
-        <p>Link jest ważny przez 7 dni. Po jego otwarciu ustawisz hasło i przejdziesz
-           do wypełnienia wniosku.</p>
-      `,
+      html: trescZaproszenia({ link, kancelariaNazwa: konfiguracja.KANCELARIA.nazwa }),
     });
 
     db()
@@ -129,3 +150,4 @@ router.post(
 );
 
 module.exports = router;
+module.exports.trescZaproszenia = trescZaproszenia;

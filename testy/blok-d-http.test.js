@@ -114,6 +114,9 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     // `:token`, nie `:spolkaId` - D3 go nie dotyczy z tego samego powodu.
     'GET /aktywacja/:token',
     'POST /aktywacja/:token',
+    // Etap 3B.1: potwierdzenie klauzuli RODO - dziala na WLASNYM koncie
+    // (zad.konto.id z sesji), zadnego cudzego identyfikatora nie przyjmuje.
+    'POST /rodo',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
   ].sort();

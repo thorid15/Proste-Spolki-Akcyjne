@@ -1120,6 +1120,21 @@ const MIGRACJE = [
         ON psa_konta (token_aktywacji);
     `,
   },
+  {
+    wersja: 23,
+    nazwa: 'etap 3B.1: potwierdzenie klauzuli informacyjnej RODO przed wnioskiem',
+    sql: `
+      -- Znacznik czasu potwierdzenia klauzuli informacyjnej o przetwarzaniu
+      -- danych osobowych - blokuje dostep do formularza wniosku (etap 3C)
+      -- dopoki wnioskodawca jej nie potwierdzi. To NIE jest "zgoda" w
+      -- rozumieniu art. 6 ust. 1 lit. a) RODO (podstawa przetwarzania danych
+      -- rejestru to umowa/obowiazek prawny, nie zgoda - wiec zgody sie tu nie
+      -- "zbiera") - to potwierdzenie ZAPOZNANIA SIE z obowiazkiem
+      -- informacyjnym (art. 13 RODO). Osobna, prawdziwa zgoda (na komunikacje
+      -- elektroniczna) zyje przy danych akcjonariusza, nie przy koncie.
+      ALTER TABLE psa_konta ADD COLUMN rodo_zaakceptowano TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

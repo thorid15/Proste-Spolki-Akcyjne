@@ -1,11 +1,12 @@
 'use strict';
 
 /**
- * Etap 3A/3B: zgloszenia wstepne i zaproszenia do portalu.
+ * Etap 3A/3B/3B.1: zgloszenia wstepne, zaproszenia i klauzula RODO portalu.
  *   - `POST /api/psa/portal/zgloszenia` — publiczny formularz, bez sesji.
  *   - `GET/POST /api/psa/zgloszenia/...` — kolejka po stronie kancelarii.
  *   - `POST /api/psa/zgloszenia/:id/zapros` — zaklada konto "wnioskodawca".
  *   - `GET/POST /api/psa/portal/aktywacja/:token` — aktywacja konta, publiczne.
+ *   - `POST /api/psa/portal/rodo` — potwierdzenie klauzuli informacyjnej.
  */
 
 const test = require('node:test');
@@ -13,6 +14,10 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
 
+// UWAGA KOLEJNOSCI: zaden require dotykajacy `server/baza.js` (transytywnie,
+// np. przez trasy/*.js) nie moze wystapic PRZED ustawieniem WSPOLNA_BAZA
+// ponizej - `baza.js` czyta zmienna srodowiskowa raz, przy pierwszym uzyciu
+// polaczenia. Stad `trescZaproszenia` importowane dopiero PO tym bloku.
 const PLIK_BAZY = path.join(__dirname, '..', 'dane', '.test-zgloszenia-http.db');
 fs.rmSync(PLIK_BAZY, { force: true });
 fs.rmSync(`${PLIK_BAZY}-wal`, { force: true });
@@ -23,6 +28,19 @@ process.env.PORTAL_WLACZONY = 'true';
 const app = require('../serwer');
 const { db } = require('../server/baza');
 const hasla = require('../server/logika/hasla');
+const { trescZaproszenia } = require('../server/trasy/zgloszenia');
+
+test('trescZaproszenia: opisuje wszystkie kroki wniosku, nie tylko sam link', () => {
+  const html = trescZaproszenia({ link: 'https://portal.test/aktywuj/abc', kancelariaNazwa: 'Kancelaria Testowa' });
+  assert.match(html, /https:\/\/portal\.test\/aktywuj\/abc/);
+  assert.match(html, /Kancelaria Testowa/);
+  assert.match(html, /ustawisz hasło/);
+  assert.match(html, /przetwarzaniu danych osobowych/);
+  assert.match(html, /dane spółki/);
+  assert.match(html, /dane akcjonariuszy/);
+  assert.match(html, /projekt umowy/);
+  assert.match(html, /[Pp]odpisaną umowę odeślesz/);
+});
 
 let serwer;
 let baza;
@@ -213,4 +231,15 @@ test('GET/POST /api/psa/portal/aktywacja/:token: aktywuje konto, ustawia haslo, 
   const [, whoami] = await zapytaj('GET', '/api/psa/portal/whoami', undefined, ciastkoPortal);
   assert.equal(whoami.zalogowany, true);
   assert.equal(whoami.konto.rola, 'wnioskodawca');
+  assert.equal(whoami.konto.rodo_zaakceptowano, null, 'klauzula RODO jeszcze niepotwierdzona zaraz po aktywacji');
+
+  const [stBezSesji] = await zapytaj('POST', '/api/psa/portal/rodo', {}, null);
+  assert.equal(stBezSesji, 401);
+
+  const [stRodo, rodo] = await zapytaj('POST', '/api/psa/portal/rodo', {}, ciastkoPortal);
+  assert.equal(stRodo, 200);
+  assert.ok(rodo.konto.rodo_zaakceptowano);
+
+  const [, whoamiPo] = await zapytaj('GET', '/api/psa/portal/whoami', undefined, ciastkoPortal);
+  assert.ok(whoamiPo.konto.rodo_zaakceptowano, 'potwierdzenie trwale zapisane, widoczne przy nastepnym whoami');
 });

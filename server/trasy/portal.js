@@ -55,6 +55,8 @@ function widokKonta(k) {
     spolka_id: k.spolka_id,
     osoba_id: k.osoba_id,
     ostatnie_logowanie: k.ostatnie_logowanie,
+    // Etap 3B.1 - bramka przed formularzem wniosku (etap 3C), patrz POST /rodo.
+    rodo_zaakceptowano: k.rodo_zaakceptowano,
   };
 }
 
@@ -252,6 +254,22 @@ function wymagajDostepuDoSpolkiWCiele(zad, odp, dalej) {
   dalej();
 }
 router.use(wymagajDostepuDoSpolkiWCiele);
+
+// ─────────────────────────────────────────────────────────────
+// Klauzula informacyjna RODO (etap 3B.1) - potwierdzenie zapoznania sie,
+// jednorazowe na konto. Bramkuje formularz wniosku (etap 3C) po stronie
+// frontu; ten endpoint tylko zapisuje znacznik czasu.
+// ─────────────────────────────────────────────────────────────
+
+router.post(
+  '/rodo',
+  asy((zad, odp) => {
+    db()
+      .prepare('UPDATE psa_konta SET rodo_zaakceptowano = ? WHERE id = ?')
+      .run(czas.terazIso(), zad.konto.id);
+    odp.json({ konto: widokKonta({ ...zad.konto, rodo_zaakceptowano: czas.terazIso() }) });
+  })
+);
 
 // ─────────────────────────────────────────────────────────────
 // Moje spolki / akcje
