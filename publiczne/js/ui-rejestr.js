@@ -756,6 +756,7 @@ function WyborZKartoteki({ wartosc, przyZmianie, placeholder = 'Zacznij pisać n
   const [otwarte, ustawOtwarte] = useState(false);
   const [podswietlony, ustawPodswietlony] = useState(0);
   const [wybrana, ustawWybrana] = useState(null);
+  const [modalNowejOsoby, ustawModalNowejOsoby] = useState(false);
 
   useEffect(() => {
     if (!wartosc) { ustawWybrana(null); return; }
@@ -825,7 +826,12 @@ function WyborZKartoteki({ wartosc, przyZmianie, placeholder = 'Zacznij pisać n
       {otwarte && szukaj.trim().length >= 3 && (
         <div className="kartoteka-lista">
           {wyniki.length === 0 ? (
-            <div className="kartoteka-poz wyciszony">Nikt nie pasuje — załóż nową osobę w kartotece.</div>
+            <button
+              className="kartoteka-poz wyciszony"
+              onMouseDown={(z) => { z.preventDefault(); ustawOtwarte(false); ustawModalNowejOsoby(true); }}
+            >
+              Nikt nie pasuje — załóż nową osobę w kartotece.
+            </button>
           ) : (
             wyniki.map((o, i) => (
               <button
@@ -842,6 +848,17 @@ function WyborZKartoteki({ wartosc, przyZmianie, placeholder = 'Zacznij pisać n
             ))
           )}
         </div>
+      )}
+
+      {modalNowejOsoby && (
+        <FormularzOsoby
+          osoba={{ nazwisko: szukaj.trim() }}
+          przyZamknieciu={() => ustawModalNowejOsoby(false)}
+          przyZapisie={(nowaOsoba) => {
+            ustawModalNowejOsoby(false);
+            wybierz(nowaOsoba);
+          }}
+        />
       )}
     </div>
   );

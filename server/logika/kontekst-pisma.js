@@ -30,6 +30,7 @@ const przepisy = require('./przepisy');
 const konfiguracja = require('../konfiguracja');
 const widoki = require('../widoki');
 const formyOsobowe = require('./formy-osobowe');
+const deklinacja = require('./deklinacja');
 
 // ─────────────────────────────────────────────────────────────
 // Formatowanie wspólne
@@ -156,16 +157,40 @@ function spolkaKlucze(spolka) {
  * `reprezentant_*` — osoba podpisująca w imieniu SPÓŁKI umowę o prowadzenie
  * rejestru (wzór 01 § 5, blok B6). Formy pochodne z `reprezentant_plec`
  * (`formy-osobowe.js`) — brak płci zostawia je puste, nie zgadnięte.
+ *
+ * Sekcja 2.3 poprawek: `spolka.reprezentant_imie_nazwisko` i
+ * `reprezentant_funkcja` są w MIANOWNIKU (tak wpisuje je kreator) — biernik
+ * i dopełniacz liczy `deklinacja.js` w locie. Trzy pola „_recznie" to
+ * korekta użytkownika (nazwiska nietypowe/obcojęzyczne, których deklinator
+ * nie zgadnie poprawnie) — gdy wypełnione, mają PIERWSZEŃSTWO przed
+ * automatem. Klucze wyjściowe (`reprezentant_biernik` itd.) zostają BEZ
+ * ZMIAN — to jedyny kontrakt, jaki widzi wzór 01, i podmiana źródła danych
+ * po stronie wejścia go nie narusza.
  */
 function reprezentantKlucze(spolka) {
   const formy = formyOsobowe.formyReprezentanta(spolka.reprezentant_plec) || {};
+  const plec = spolka.reprezentant_plec || null;
+
+  const biernik =
+    spolka.reprezentant_biernik_recznie ||
+    deklinacja.odmienImieNazwisko(spolka.reprezentant_imie_nazwisko, 'biernik', plec) ||
+    null;
+  const funkcjaBiernik =
+    spolka.reprezentant_funkcja_biernik_recznie ||
+    deklinacja.odmienFunkcjeBiernik(spolka.reprezentant_funkcja) ||
+    null;
+  const rodzice =
+    spolka.reprezentant_rodzice_recznie ||
+    deklinacja.odmienRodzicow(spolka.reprezentant_rodzice) ||
+    null;
+
   return {
-    reprezentant_biernik: spolka.reprezentant_biernik || null,
-    reprezentant_rodzice: spolka.reprezentant_rodzice || null,
+    reprezentant_biernik: biernik,
+    reprezentant_rodzice: rodzice,
     reprezentant_dowod: spolka.reprezentant_dowod || null,
     reprezentant_pesel: spolka.reprezentant_pesel || null,
     reprezentant_adres: spolka.reprezentant_adres || null,
-    reprezentant_funkcja_biernik: spolka.reprezentant_funkcja_biernik || null,
+    reprezentant_funkcja_biernik: funkcjaBiernik,
     reprezentant_reprezentacja: spolka.reprezentant_reprezentacja || null,
     reprezentant_syn_corka: formy.reprezentant_syn_corka || null,
     reprezentant_legitymujacy: formy.reprezentant_legitymujacy || null,

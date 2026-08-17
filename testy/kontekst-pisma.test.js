@@ -55,13 +55,15 @@ const SPOLKA = {
   email: 'kontakt@charlieunicorn.ai',
   organ_rodzaj: 'zarzad',
   data_umowy: '2026-08-13',
-  reprezentant_biernik: 'Łukasza Adriana Szymborskiego',
+  // Mianownik (etap 2.3 poprawek) - odmiane liczy deklinacja.js w locie,
+  // patrz test nizej "reprezentantKlucze: odmiana liczona automatycznie...".
+  reprezentant_imie_nazwisko: 'Łukasz Adrian Szymborski',
   reprezentant_plec: 'mezczyzna',
-  reprezentant_rodzice: 'Pawła i Izabelli',
+  reprezentant_rodzice: 'Paweł i Izabella',
   reprezentant_dowod: 'DGK 138559',
   reprezentant_pesel: '88081105939',
   reprezentant_adres: '76-015 Manowo, ulica Kasztanowa nr 17 m. 1',
-  reprezentant_funkcja_biernik: 'Prezesa Zarządu',
+  reprezentant_funkcja: 'Prezes Zarządu',
   reprezentant_reprezentacja: 'uprawnionego do samodzielnej reprezentacji',
 };
 
@@ -279,7 +281,11 @@ test('umowaOProwadzenieRejestru: taksy licza sie z konfiguracji stawek, slownie 
   const dane = kontekst.umowaOProwadzenieRejestru({ spolka: SPOLKA, dzis: '2026-08-13' });
   assert.equal(dane.taksa_roczna, String(przepisy.STAWKI_GROSZE.PROWADZENIE_ROCZNIE / 100));
   assert.equal(dane.taksa_wpis, String(przepisy.STAWKI_GROSZE.WPIS / 100));
-  assert.equal(dane.reprezentant_biernik, SPOLKA.reprezentant_biernik);
+  // Mianownik "Łukasz Adrian Szymborski" -> biernik odmieniony automatycznie
+  // (etap 2.3) - nie wpisywany recznie w SPOLKA, patrz deklinacja.test.js.
+  assert.equal(dane.reprezentant_biernik, 'Łukasza Adriana Szymborskiego');
+  assert.equal(dane.reprezentant_funkcja_biernik, 'Prezesa Zarządu');
+  assert.equal(dane.reprezentant_rodzice, 'Pawła i Izabelli');
   assert.equal(dane.reprezentant_dzialajacy, 'działającego');
   assert.equal('spolka_vat' in dane, false, 'status VAT usuniety calkowicie (etap 1.6) - klucz nie istnieje');
 
@@ -287,6 +293,20 @@ test('umowaOProwadzenieRejestru: taksy licza sie z konfiguracji stawek, slownie 
   assert.deepEqual(wynik.bledy, []);
   assert.deepEqual(wynik.brakujace, []);
   assert.match(docx.tekst(wynik.plik), /jeden tysiąc dwieście złotych|1200/, 'stawka roczna widoczna w tresci');
+});
+
+test('umowaOProwadzenieRejestru: reczna korekta odmiany ma pierwszenstwo przed automatem', () => {
+  const dane = kontekst.umowaOProwadzenieRejestru({
+    spolka: { ...SPOLKA, reprezentant_biernik_recznie: 'Łukasza Adriana Szymborskiego (korekta)' },
+    dzis: '2026-08-13',
+  });
+  assert.equal(dane.reprezentant_biernik, 'Łukasza Adriana Szymborskiego (korekta)');
+});
+
+test('umowaOProwadzenieRejestru: bez plci automat nie zgaduje biernika - zostaje null', () => {
+  const { reprezentant_plec, ...bezPlci } = SPOLKA;
+  const dane = kontekst.umowaOProwadzenieRejestru({ spolka: bezPlci, dzis: '2026-08-13' });
+  assert.equal(dane.reprezentant_biernik, null);
 });
 
 test('informacjaRodo: forma czasownika zalezy od plci reprezentanta', () => {

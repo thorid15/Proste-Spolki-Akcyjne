@@ -977,6 +977,40 @@ const MIGRACJE = [
       ALTER TABLE psa_spolki DROP COLUMN platnik_vat;
     `,
   },
+  {
+    wersja: 18,
+    nazwa: 'poprawki PSA (etap 2.2/2.3): umowa jako fakt juz zaistnialy, dane reprezentanta w mianowniku',
+    sql: `
+      -- ── Krok 2 kreatora przestaje "otwierac" podpisywanie umowy ─────────
+      -- Zamiast tego rejestruje FAKT juz zawartej umowy: sposob zawarcia
+      -- i skan/plik. Data zawarcia to juz istniejace "data_umowy".
+      ALTER TABLE psa_spolki ADD COLUMN umowa_sposob_zawarcia TEXT
+        CHECK (umowa_sposob_zawarcia IS NULL OR umowa_sposob_zawarcia IN
+          ('pisemna', 'elektroniczna_kwalifikowany'));
+      ALTER TABLE psa_spolki ADD COLUMN umowa_zalacznik_sciezka TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN umowa_zalacznik_nazwa_pliku TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN umowa_zalacznik_mime TEXT;
+
+      -- ── Dane reprezentanta: mianownik zamiast recznie wpisywanych form ──
+      -- 'reprezentant_biernik' i 'reprezentant_funkcja_biernik' przechowywaly
+      -- WARTOSC JUZ ODMIENIONA - uzytkownik musial sam znac biernik. Teraz
+      -- wpisuje mianownik ('reprezentant_imie_nazwisko', 'reprezentant_funkcja'),
+      -- a odmiane liczy server/logika/deklinacja.js w locie (kontekst-pisma.js).
+      -- 'reprezentant_rodzice' NIE zmienia nazwy, ale zmienia sens: dotad
+      -- dopelniacz wpisywany recznie ("Piotra i Anny"), teraz mianownik
+      -- ("Piotr i Anna") - deklinowany automatycznie tak samo jak reszta.
+      -- Trzy kolumny "_recznie" to pole korekty z sekcji 2.3 promptu
+      -- ("deklinator ma byc pomoca, nie wyrocznia") - gdy wypelnione, maja
+      -- pierwszenstwo przed wynikiem automatu.
+      ALTER TABLE psa_spolki DROP COLUMN reprezentant_biernik;
+      ALTER TABLE psa_spolki DROP COLUMN reprezentant_funkcja_biernik;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_imie_nazwisko TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_funkcja TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_biernik_recznie TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_funkcja_biernik_recznie TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_rodzice_recznie TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

@@ -495,11 +495,11 @@ test('spolka: siedziba w miejscowniku i dane reprezentanta umowy sie zapisuja', 
   const [, spolkaOdp] = await zapytaj('POST', '/api/psa/spolki', {
     nazwa: 'Reprezentant Test P.S.A.', krs: '0000999888',
     miejscowosc: 'Warszawa', siedziba_miejscownik: 'Warszawie',
-    reprezentant_biernik: 'Jana Kowalskiego', reprezentant_plec: 'mezczyzna',
-    reprezentant_funkcja_biernik: 'Prezesa Zarządu',
+    reprezentant_imie_nazwisko: 'Jan Kowalski', reprezentant_plec: 'mezczyzna',
+    reprezentant_funkcja: 'Prezes Zarządu',
   });
   assert.equal(spolkaOdp.spolka.siedziba_miejscownik, 'Warszawie');
-  assert.equal(spolkaOdp.spolka.reprezentant_biernik, 'Jana Kowalskiego');
+  assert.equal(spolkaOdp.spolka.reprezentant_imie_nazwisko, 'Jan Kowalski');
   assert.equal(spolkaOdp.spolka.reprezentant_plec, 'mezczyzna');
 
   const [stZla] = await zapytaj('POST', '/api/psa/spolki', {
