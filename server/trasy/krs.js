@@ -92,14 +92,15 @@ function zmapuj(odpowiedz, numerKrs) {
   const { regon } = normalizujRegon(zeSciezek(podmiot, ['identyfikatory.regon']));
 
   // Fallback sadu rejestrowego (sekcja 1.7 poprawek) - API nie zwraca tego
-  // pola (patrz komentarz wyzej), wiec probujemy dopasowac wg siedziby
-  // spolki z tej samej odpowiedzi. Baza jest dzis pusta (patrz
-  // server/dane/README-SADY-REJESTROWE.md) - do czasu jej uzupelnienia
-  // zwraca zawsze null i pole zostaje puste, tak jak dotychczas.
+  // pola (patrz komentarz wyzej), wiec dopasowujemy wg gminy siedziby spolki
+  // z tej samej odpowiedzi. Baza (server/dane/sady-rejestrowe.json) pokrywa
+  // ok. 2150 z ok. 2477 gmin w Polsce - reszta to nazwy powtarzajace sie w
+  // kilku wojewodztwach (bez TERYT nie do rozstrzygniecia bez zgadywania)
+  // oraz Warszawa/Krakow (podzial wlasciwosci na poziomie dzielnicy, ktorej
+  // API KRS nie zwraca) - dla nich zwraca null i pole zostaje puste, jak
+  // dotychczas. Patrz server/dane/README-SADY-REJESTROWE.md.
   const siedziba = zeSciezek(adres, ['siedziba']) || {};
   const propozycjaSadu = ustalSadRejestrowy({
-    wojewodztwo: zeSciezek(siedziba, ['wojewodztwo']),
-    powiat: zeSciezek(siedziba, ['powiat']),
     gmina: zeSciezek(siedziba, ['gmina']),
   });
 

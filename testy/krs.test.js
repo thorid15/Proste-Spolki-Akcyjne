@@ -88,11 +88,14 @@ test('mapuje adres do e-doreczen z rzeczywistej sciezki BAE', () => {
   assert.equal(wynik.adres_edorecze, 'AE:PL-72422-98772-ATIDW-24');
 });
 
-test('sad rejestrowy nie jest zgadywany z pola o ostatnim wpisie - zostaje null (baza TERYT dzis pusta)', () => {
+test('sad rejestrowy nie jest zgadywany z pola o ostatnim wpisie, tylko z fallbacku TERYT wg gminy siedziby', () => {
   const wynik = zmapuj(ODPIS_0001114217, '0001114217');
-  assert.equal(wynik.sad_rejestrowy, null);
-  assert.equal(wynik.wydzial, null);
-  assert.equal(wynik.sad_rejestrowy_propozycja, false);
+  // Spolka ma siedzibe w Gdansku (dzial1.siedzibaIAdres.siedziba.gmina) -
+  // baza sadow rejestrowych (server/dane/sady-rejestrowe.json) rozstrzyga
+  // to jednoznacznie na VII Wydzial Gospodarczy KRS.
+  assert.equal(wynik.sad_rejestrowy, 'Sąd Rejonowy Gdańsk-Północ w Gdańsku');
+  assert.equal(wynik.wydzial, 'VII Wydział Gospodarczy Krajowego Rejestru Sądowego');
+  assert.equal(wynik.sad_rejestrowy_propozycja, true);
 });
 
 test('mapuje sklad organu z dzial2.reprezentacja.sklad (obiekt, nie tablica)', () => {

@@ -6,66 +6,78 @@ sekcja 1.7 poprawek. Potwierdzone empirycznie (żywa odpowiedź API, KRS
 **nie zawiera** żadnego pola z oznaczeniem sądu rejestrowego. Fallback jest
 więc potrzebny zawsze, nie tylko w rzadkich przypadkach.
 
-## Stan na dziś: PUSTA
+## Stan: uzupełniona, 2154 z ok. 2477 gmin w Polsce
 
-Plik zawiera schemat i puste tablice. `ustalSadRejestrowy()`
-(`server/logika/sad-rejestrowy.js`) zwraca wtedy zawsze `null`, więc
-aplikacja zachowuje się dokładnie tak jak przed poprawką — pole zostaje
-puste i edytowalne, bez fałszywej propozycji. **To bezpieczny stan, nie
-błąd** — nie wolno wypełnić tej bazy zgadywaniem.
+Zbudowana z dwóch wykazów Ministerstwa Sprawiedliwości (stan na luty
+2025 r.), dostarczonych przez Łukasza:
 
-## Dlaczego pusta, a nie wypełniona od razu
+1. **„Właściwość sądów powszechnych"** — dla każdego z 319 sądów
+   rejonowych: pełna lista gmin/miast w jego obszarze właściwości.
+2. **„Lista Wydziałów Gospodarczych Krajowego Rejestru Sądowego"** — który
+   sąd rejonowy (i który numer wydziału) prowadzi sprawy KRS dla obszaru
+   którego sądu okręgowego (albo których konkretnie sądów rejonowych, gdy
+   duży okręg jest podzielony między kilka wydziałów, np. Warszawa i
+   Kraków).
 
-Zbudowanie tabeli wymaga dwóch źródeł danych naraz:
+Dopasowanie działa na poziomie **gminy** (dokładnie granulacja źródła), nie
+powiatu — KRS zwraca `gmina` wprost w `dzial1.siedzibaIAdres.siedziba`, więc
+nie trzeba było iść przez pośrednią warstwę powiatu ani osobną listę
+wyjątków dla podzielonych powiatów, jak pierwotnie zakładano.
 
-1. **Rozporządzenie MS z 28.12.2018 r.** (Dz.U. 2018 poz. 2548, tekst
-   jednolity z późn. zm., ostatnia nowelizacja Dz.U. 2025 poz. 925 z
-   11.07.2025) — które powiaty należą do obszaru właściwości którego sądu
-   okręgowego.
-2. **Wykaz Ministerstwa Sprawiedliwości** „Siedziby i obszary właściwości
-   Wydziałów Gospodarczych KRS” (gov.pl/web/sprawiedliwosc) — który
-   konkretnie sąd rejonowy i który numer wydziału prowadzi KRS dla obszaru
-   danego sądu okręgowego (to NIE zawsze ten sam budynek co sąd okręgowy).
+## Trzy świadome ograniczenia (opisane też w samym pliku danych)
 
-W środowisku, w którym powstał ten kod, dostęp sieciowy do obu źródeł (i w
-zasadzie do całej domeny `gov.pl`, ISAP-u i Wikipedii) jest zablokowany na
-poziomie proxy sesji — dokładnie ten sam problem, co z API KRS (patrz
-`server/trasy/krs.js`). Wypełnienie tabeli zgadywaniem z pamięci byłoby
-dokładnie tym błędem, przed którym ostrzega prompt poprawek („zakaz
-opierania się na opracowaniach branżowych", „nie zgaduj — zgłoś").
+1. **~70 nazw gmin powtarza się** w różnych regionach Polski (np. „Dobra"
+   jest gminą i pod Limanową, i pod Turkiem, i pod Łobzem — trzy różne
+   wydziały). Bez wiarygodnego źródła TERYT (gmina → województwo) nie da
+   się ich rozstrzygnąć bez zgadywania, więc są **celowo pominięte** w
+   tabeli — pełna lista w `gminy-niejednoznaczne.json` w tym katalogu, do
+   uzupełnienia, jeśli pojawi się rzetelne źródło.
+2. **Warszawa i Kraków nie występują w tabeli wcale.** Obie mają wewnętrzny
+   podział właściwości KRS na poziomie **dzielnicy** (nie gminy) —
+   np. Warszawa-Śródmieście i Warszawa-Mokotów trafiają do różnych
+   wydziałów. API KRS nie zwraca dzielnicy, więc nie da się tego
+   rozstrzygnąć bez zgadywania. Gminy **przyległe** do tych miast (np.
+   Wieliczka, Piaseczno, Łomianki) są rozstrzygane normalnie i są w
+   tabeli.
+3. **Będzin i Czeladź nie mają wpisu.** Formalnie należą do obszaru Sądu
+   Okręgowego w Rybniku, ale żaden z 27 wydziałów gospodarczych KRS z
+   wykazu MS ich literalnie nie wymienia — luka w źródle, nie błąd
+   kodowania (zweryfikowana: nazwa nie pojawia się w żadnym z 27 opisów
+   wydziałów). Do sprawdzenia bezpośrednio w Ministerstwie, jeśli to
+   istotne w praktyce.
 
-## Jak uzupełnić
+We wszystkich trzech przypadkach `ustalSadRejestrowy()` zwraca `null` —
+pole w formularzu zostaje puste i edytowalne, dokładnie jak dla gminy
+nieobecnej w ogóle. To bezpieczne zachowanie, nie błąd.
 
-1. Pobrać tekst jednolity rozporządzenia (link: ISAP, `DU/2018/2548`) i
-   wykaz wydziałów gospodarczych KRS (plik `.xlsx` na stronie MS,
-   aktualizowany, stan na luty 2025 w chwili pisania tego pliku) —
-   najprościej wkleić linki bezpośrednio w rozmowie z Claude, tak jak
-   zrobiono to z odpowiedzią API KRS.
-2. Wypełnić trzy tablice w `sady-rejestrowe.json`:
-   - `sady_okregowe`: lista sądów okręgowych, każdy z `id`, `nazwa` i
-     `wydzial_krs: { sad, numer_wydzialu, nazwa_pelna }` (sąd rejonowy
-     prowadzący KRS dla tego okręgu — patrz wykaz MS, punkt 1 wyżej),
-   - `powiaty`: dla każdego powiatu (~380 pozycji) — `teryt` (kod TERYT),
-     `powiat` (nazwa, WIELKIMI LITERAMI jak zwraca KRS), `wojewodztwo`,
-     `sad_okregowy_id` (klucz do `sady_okregowe`),
-   - `wyjatki_gminne`: powiaty podzielone między okręgi — te same pola co
-     `powiaty`, plus `gmina` (dopasowanie wtedy idzie po
-     powiat+gmina+województwo, ma pierwszeństwo przed `powiaty`).
-3. Uzupełnić `wersja_danych` (data przygotowania) i `obowiazuje_od` (data
-   wejścia w życie ostatniej uwzględnionej nowelizacji rozporządzenia) —
-   właściwości sądów się zmieniają, kolejne aktualizacje pliku powinny to
-   pole aktualizować.
-4. Dopisać testy w `testy/sad-rejestrowy.test.js` sprawdzające kilka
-   konkretnych, znanych przypadków (w tym co najmniej jeden z
-   `wyjatki_gminne`).
+## Format
 
-## Format dopasowania
+```json
+{
+  "wydzialy": [
+    { "id": "czestochowa-xvii", "sad": "Sąd Rejonowy w Częstochowie",
+      "numer_wydzialu": "XVII",
+      "nazwa_pelna": "XVII Wydział Gospodarczy Krajowego Rejestru Sądowego" }
+  ],
+  "gminy": [
+    { "gmina": "CZĘSTOCHOWA", "wydzial_id": "czestochowa-xvii" }
+  ]
+}
+```
 
-`ustalSadRejestrowy({ wojewodztwo, powiat, gmina })` czyta te pola
-dokładnie tak, jak przychodzą z `dzial1.siedzibaIAdres.siedziba` w
-odpowiedzi API KRS (potwierdzone na żywych danych: WIELKIMI LITERAMI, np.
-`"POMORSKIE"`, `"GDAŃSK"`). Dopasowanie jest wielkości liter niewrażliwe.
+`ustalSadRejestrowy({ gmina })` (`server/logika/sad-rejestrowy.js`) czyta
+`gmina` dokładnie tak, jak przychodzi z `dzial1.siedzibaIAdres.siedziba.gmina`
+w odpowiedzi API KRS (WIELKIMI LITERAMI) — dopasowanie jest wielkości liter
+niewrażliwe. Wynik jest **zawsze propozycją**, nigdy wartością wiążącą —
+pole w formularzu spółki zostaje edytowalne niezależnie od wyniku
+(sekcja 1.7, punkt 3 poprawek).
 
-Wynik jest **zawsze propozycją**, nigdy wartością wiążącą — pole w
-formularzu spółki zostaje edytowalne niezależnie od tego, czy dopasowanie
-się powiodło (sekcja 1.7, punkt 3 poprawek).
+## Aktualizacja
+
+Właściwości sądów się zmieniają (rozporządzenie MS z 28.12.2018 było
+nowelizowane wielokrotnie, ostatnio 23.07.2025 wg promptu poprawek — ten
+plik danych bazuje na stanie z **lutego 2025**, sprawdź czy nowelizacja z
+lipca 2025 coś zmieniła, zanim uznasz dane za w pełni aktualne). Przy
+aktualizacji: podmień oba pliki źródłowe (wykaz MS), przelicz od nowa wg
+metody opisanej wyżej, zaktualizuj `wersja_danych`/`obowiazuje_od` w
+`sady-rejestrowe.json`.

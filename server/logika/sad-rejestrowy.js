@@ -9,10 +9,22 @@
  * wyjątkowo.
  *
  * Tabela leży w pliku danych (`server/dane/sady-rejestrowe.json`), nie w
- * kodzie — patrz README obok tego pliku po sposób jej uzupełnienia.
- * Wydziały gospodarcze KRS orzekają dla obszaru CAŁEGO OKRĘGU, więc mapujemy
- * na poziomie powiatu; kilka powiatów podzielonych między okręgi ma wpis w
- * `wyjatki_gminne` (pierwszeństwo przed dopasowaniem po samym powiecie).
+ * kodzie — zbudowana z dwóch wykazów Ministerstwa Sprawiedliwości (stan na
+ * luty 2025 r.): „Właściwość sądów powszechnych" (obszar każdego sądu
+ * rejonowego opisany listą gmin) i „Lista Wydziałów Gospodarczych KRS"
+ * (który sąd rejonowy/wydział obsługuje sprawy KRS dla obszaru którego sądu
+ * okręgowego). Dopasowanie działa na poziomie GMINY (nie powiatu) — to
+ * dokładnie granulacja źródła, więc nie ma potrzeby osobnej listy wyjątków
+ * dla podzielonych powiatów.
+ *
+ * Dwa świadome ograniczenia danych (opisane też w pliku danych):
+ *   - ok. 70 nazw gmin powtarza się w różnych regionach Polski (te same
+ *     nazwy, różne województwa) — bez wiarygodnego źródła TERYT nie dają
+ *     się rozstrzygnąć bez zgadywania, więc są pominięte (`gminy-niejednoznaczne.json`),
+ *   - Warszawa i Kraków mają wewnętrzny podział właściwości KRS na poziomie
+ *     DZIELNICY, nie gminy — API KRS nie zwraca dzielnicy, więc obu miast
+ *     celowo nie ma w tabeli (przyległe gminy, np. Wieliczka czy Piaseczno,
+ *     są rozstrzygane normalnie).
  *
  * Wynik jest ZAWSZE propozycją do potwierdzenia przez pracownika — pole w
  * formularzu zostaje edytowalne niezależnie od wyniku (sekcja 1.7, punkt 3).
@@ -29,7 +41,7 @@ function wczytajBaze() {
   try {
     zbuforowana = JSON.parse(fs.readFileSync(PLIK_DANYCH, 'utf8'));
   } catch {
-    zbuforowana = { sady_okregowe: [], powiaty: [], wyjatki_gminne: [] };
+    zbuforowana = { wydzialy: [], gminy: [] };
   }
   return zbuforowana;
 }
@@ -41,30 +53,26 @@ function znormalizuj(tekst) {
 /**
  * @param {{ wojewodztwo?: string, powiat?: string, gmina?: string }} siedziba
  *   Pola dokładnie jak z `dzial1.siedzibaIAdres.siedziba` odpowiedzi API KRS.
+ *   `wojewodztwo`/`powiat` nie są dziś używane do dopasowania (tabela nie ma
+ *   niejednoznaczności wymagających ich jako tie-breakera — patrz komentarz
+ *   wyżej), przyjmowane na przyszłość, gdyby ktoś uzupełnił
+ *   `gminy-niejednoznaczne.json` o rozstrzygnięcia wojewódzkie.
  * @param {object} [bazaDoTestow] Wstrzyknięcie bazy zamiast pliku (testy).
- * @returns {{ sad_okregowy: string, sad_rejestrowy: string, wydzial: string } | null}
+ * @returns {{ sad_rejestrowy: string, wydzial: string } | null}
  */
-function ustalSadRejestrowy({ wojewodztwo, powiat, gmina } = {}, bazaDoTestow) {
-  if (!powiat) return null;
+function ustalSadRejestrowy({ gmina } = {}, bazaDoTestow) {
+  if (!gmina) return null;
   const baza = bazaDoTestow || wczytajBaze();
 
-  const pasujePowiat = (p) =>
-    znormalizuj(p.powiat) === znormalizuj(powiat) &&
-    (!p.wojewodztwo || znormalizuj(p.wojewodztwo) === znormalizuj(wojewodztwo));
+  const wpisGminy = (baza.gminy || []).find((g) => znormalizuj(g.gmina) === znormalizuj(gmina));
+  if (!wpisGminy) return null;
 
-  const wyjatek = (baza.wyjatki_gminne || []).find(
-    (w) => pasujePowiat(w) && znormalizuj(w.gmina) === znormalizuj(gmina)
-  );
-  const wpisPowiatu = wyjatek || (baza.powiaty || []).find(pasujePowiat);
-  if (!wpisPowiatu) return null;
-
-  const sadOkregowy = (baza.sady_okregowe || []).find((s) => s.id === wpisPowiatu.sad_okregowy_id);
-  if (!sadOkregowy || !sadOkregowy.wydzial_krs) return null;
+  const wydzial = (baza.wydzialy || []).find((w) => w.id === wpisGminy.wydzial_id);
+  if (!wydzial) return null;
 
   return {
-    sad_okregowy: sadOkregowy.nazwa,
-    sad_rejestrowy: sadOkregowy.wydzial_krs.sad,
-    wydzial: sadOkregowy.wydzial_krs.nazwa_pelna,
+    sad_rejestrowy: wydzial.sad,
+    wydzial: wydzial.nazwa_pelna,
   };
 }
 
