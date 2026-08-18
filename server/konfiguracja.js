@@ -103,6 +103,13 @@ const konfiguracja = {
     notariusz_narzednik: tekst('NOTARIUSZ_NARZEDNIK', ''),
     podpisujacy_funkcja: tekst('PODPISUJACY_FUNKCJA', 'Notariusz'),
     podpisujacy_mianownik: tekst('PODPISUJACY_MIANOWNIK', tekst('NOTARIUSZ_MIANOWNIK', 'Łukasz Kozon')),
+
+    // Etap 4.7: rejestr prowadzi KANCELARIA (art. 300(31) § 1 KSH), nie izba
+    // notarialna - znak izby na nagłówku raportu mógłby sugerować, że
+    // dokument pochodzi od samorządu. Domyślnie WYŁĄCZONY; do rozstrzygnięcia
+    // z notariuszem, czy i którą izbę pokazywać.
+    pokaz_znak_izby: flaga('POKAZ_ZNAK_IZBY', false),
+    nazwa_izby: tekst('NAZWA_IZBY', 'Izba Notarialna'),
   },
 };
 
