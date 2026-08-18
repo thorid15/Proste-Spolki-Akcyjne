@@ -55,6 +55,8 @@ const POLA_SPOLKI = [
   'umowa_sposob_zawarcia',
   // Sesja 8, blok A3 (kontekst automatu pism):
   'organ_rodzaj',
+  // Etap 3.1: przelacznik procedury AML, wylaczony domyslnie (migracja 28).
+  'stosuje_procedure_aml',
 ];
 
 /** Pola, ktorych zmiana jest zdarzeniem rejestrowym (art. 300(33) § 1 KSH). */
@@ -73,6 +75,10 @@ function wyczysc(cialo) {
   const wynik = {};
   for (const pole of POLA_SPOLKI) {
     if (cialo[pole] === undefined) continue;
+    if (pole === 'stosuje_procedure_aml') {
+      wynik[pole] = cialo[pole] ? 1 : 0;
+      continue;
+    }
     const v = cialo[pole];
     wynik[pole] = v === '' || v === null ? null : String(v).trim();
   }

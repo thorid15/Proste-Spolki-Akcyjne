@@ -1290,6 +1290,50 @@ const MIGRACJE = [
       ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN osoba_id INTEGER REFERENCES psa_osoby(id);
     `,
   },
+  {
+    wersja: 28,
+    nazwa: 'etap 3.1: modul AML konfigurowalny per spolka - skany dokumentow, wylaczony domyslnie',
+    sql: `
+      -- Przelacznik per spolka (domyslnie WYLACZONY - opis etapu 3.1 promptu:
+      -- "nie zbierac skanow dowodow jako domyslne zachowanie"). Status/data/
+      -- notatka AML na psa_osoby (migracja 1) i PEP/beneficjent (migracja
+      -- ok. sesji 8, blok C) istnieja juz i zostaja dostepne zawsze - to
+      -- "dane z dokumentu bez pliku", minimalny domyslny zakres. Ten
+      -- przelacznik odblokowuje wylacznie SKAN pliku (i w interfejsie -
+      -- oswiadczenie PEP/beneficjenta, ktore w praktyce towarzyszy pelnej
+      -- procedurze AML, nie samej ewidencji statusu).
+      ALTER TABLE psa_spolki ADD COLUMN stosuje_procedure_aml INTEGER NOT NULL DEFAULT 0 CHECK (stosuje_procedure_aml IN (0,1));
+
+      -- Skany sa przypisane DO OSOBY (kartoteka wspolna, regula domenowa
+      -- nr 10 - jeden inwestor, jeden komplet dokumentow), ale niosa
+      -- spolka_id: procedura AML jest wlaczana PER SPOLKA, wiec skan
+      -- zebrany w zwiazku z jedna spolka nie powinien pojawiac sie w
+      -- kontekscie innej bez swiadomej decyzji. Retencja (kolumna retencja_do)
+      -- jest polem RECZNYM - okres przechowywania danych KYC to decyzja
+      -- polityki AML kancelarii/notariusza, nie wartosc do zgadniecia w
+      -- kodzie (por. ogolna zasada nr 2 z promptu etapu 3).
+      CREATE TABLE IF NOT EXISTS psa_osoby_skany_aml (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        osoba_id       INTEGER NOT NULL REFERENCES psa_osoby(id),
+        spolka_id      INTEGER NOT NULL REFERENCES psa_spolki(id),
+        typ_dokumentu  TEXT NOT NULL DEFAULT 'inny'
+                         CHECK (typ_dokumentu IN ('dowod_osobisty','paszport','inny')),
+        nazwa_pliku    TEXT NOT NULL,
+        sciezka        TEXT NOT NULL,
+        mime           TEXT,
+        rozmiar        INTEGER,
+        hash           TEXT,
+        retencja_do    TEXT,
+        wgral          TEXT NOT NULL,
+        utworzono      TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_aml_skany_osoba
+        ON psa_osoby_skany_aml (osoba_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_aml_skany_spolka
+        ON psa_osoby_skany_aml (spolka_id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

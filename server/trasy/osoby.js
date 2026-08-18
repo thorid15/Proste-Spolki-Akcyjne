@@ -6,14 +6,20 @@
  * Regula domenowa nr 10: jeden inwestor w wielu spolkach wpisywany RAZ.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
 const express = require('express');
+const multer = require('multer');
 
 const { db } = require('../baza');
 const przepisy = require('../logika/przepisy');
 const maskowanie = require('../logika/maskowanie');
 const aml = require('../logika/aml');
+const dziennikDostepu = require('../logika/dziennik-dostepu');
+const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
-const { asy, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
+const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 
 const router = express.Router();
 
@@ -264,7 +270,7 @@ router.get(
     }
     const wiersze = db()
       .prepare(
-        `SELECT s.id, s.nazwa, s.krs, s.status,
+        `SELECT s.id, s.nazwa, s.krs, s.status, s.stosuje_procedure_aml,
                 SUM(sa.ilosc) AS ilosc_akcji,
                 COUNT(DISTINCT sa.emisja_id) AS liczba_serii,
                 MIN(sa.data_od) AS akcjonariusz_od
@@ -276,6 +282,148 @@ router.get(
       )
       .all(id);
     odp.json({ spolki: wiersze });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Skany dokumentow AML (etap 3.1) - domyslnie WYLACZONE (patrz migracja 28
+// i psa_spolki.stosuje_procedure_aml). Skan jest przypisany do osoby
+// (kartoteka wspolna), ale niesie spolka_id - procedura AML jest wlaczana
+// PER SPOLKA, wiec upload jest dopuszczalny wylacznie, gdy WSKAZANA spolka
+// ma przelacznik wlaczony.
+// ─────────────────────────────────────────────────────────────
+
+const ROZSZERZENIA_SKANU_AML_DOZWOLONE = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
+const LIMIT_ROZMIARU_SKANU_AML_BAJTY = 20 * 1024 * 1024;
+const TYPY_DOKUMENTU_AML = ['dowod_osobisty', 'paszport', 'inny'];
+
+function katalogSkanowAml(osobaId) {
+  return path.join(konfiguracja.KATALOG_DOKUMENTOW, 'aml', `osoba_${osobaId}`);
+}
+
+const uploadSkanuAml = multer({
+  storage: multer.diskStorage({
+    destination(zad, plik, wywolaj) {
+      const katalog = katalogSkanowAml(Number(zad.params.id));
+      fs.mkdirSync(katalog, { recursive: true });
+      wywolaj(null, katalog);
+    },
+    filename(zad, plik, wywolaj) {
+      const bezpiecznaNazwa = path.basename(plik.originalname).replace(/[^\w.\- ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/gu, '_');
+      wywolaj(null, `${crypto.randomUUID()}-${bezpiecznaNazwa}`);
+    },
+  }),
+  limits: { fileSize: LIMIT_ROZMIARU_SKANU_AML_BAJTY, files: 1 },
+  fileFilter(zad, plik, wywolaj) {
+    const rozszerzenie = path.extname(plik.originalname).toLowerCase();
+    if (!ROZSZERZENIA_SKANU_AML_DOZWOLONE.has(rozszerzenie)) {
+      return wywolaj(new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Dozwolone: PDF, JPG, PNG.`));
+    }
+    wywolaj(null, true);
+  },
+});
+
+/** Wymaga, zeby WSKAZANA spolka miala wlaczona procedure AML - inaczej upload skanu jest odmawiany. */
+function wymagajProceduryAml(zad, odp, dalej) {
+  const spolkaId = Number((zad.body && zad.body.spolka_id) || zad.query.spolka_id);
+  if (!Number.isInteger(spolkaId)) return dalej(bledneZadanie('Wskaż spółkę (spolka_id), w kontekście której zbierany jest skan.'));
+  const spolka = db().prepare('SELECT id, stosuje_procedure_aml FROM psa_spolki WHERE id = ?').get(spolkaId);
+  if (!spolka) return dalej(nieZnaleziono('Nie odnaleziono spółki.'));
+  if (!spolka.stosuje_procedure_aml) {
+    return dalej(bledneZadanie('Ta spółka nie ma włączonej procedury AML — skany dokumentów nie są zbierane.'));
+  }
+  zad.psaSpolkaAml = spolka;
+  dalej();
+}
+
+router.get(
+  '/:id/aml-skany',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const warunki = ['osoba_id = ?'];
+    const parametry = [id];
+    if (zad.query.spolka_id) {
+      warunki.push('spolka_id = ?');
+      parametry.push(Number(zad.query.spolka_id));
+    }
+    const skany = db()
+      .prepare(
+        `SELECT id, spolka_id, typ_dokumentu, nazwa_pliku, rozmiar, retencja_do, wgral, utworzono
+           FROM psa_osoby_skany_aml WHERE ${warunki.join(' AND ')} ORDER BY utworzono DESC`
+      )
+      .all(...parametry);
+    odp.json({ skany });
+  })
+);
+
+router.post(
+  '/:id/aml-skany',
+  // Kolejnosc: multer NAJPIERW (spolka_id jest polem formularza multipart -
+  // zad.body jest puste, dopoki multer nie sparsuje strumienia; destynacja
+  // pliku zalezy tylko od :id z URL, wiec walidacja procedury AML moze
+  // bezpiecznie isc PO uploadzie - a gdy sie nie powiedzie, plik jest kasowany).
+  (zad, odp, dalej) => uploadSkanuAml.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  (zad, odp, dalej) => wymagajProceduryAml(zad, odp, (blad) => {
+    if (blad && zad.file) fs.rm(zad.file.path, { force: true }, () => {});
+    dalej(blad);
+  }),
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    if (!db().prepare('SELECT id FROM psa_osoby WHERE id = ?').get(id)) throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
+    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    const typDokumentu = String((zad.body || {}).typ_dokumentu || 'inny');
+    if (!TYPY_DOKUMENTU_AML.includes(typDokumentu)) throw bledneZadanie(`Nieznany typ dokumentu: „${typDokumentu}”.`);
+    const retencjaDo = (zad.body || {}).retencja_do || null;
+    if (retencjaDo && !czas.poprawnaData(retencjaDo)) throw bledneZadanie('Data retencji musi mieć format RRRR-MM-DD.');
+
+    const hash = crypto.createHash('sha256').update(fs.readFileSync(zad.file.path)).digest('hex');
+    const wynik = db()
+      .prepare(
+        `INSERT INTO psa_osoby_skany_aml
+           (osoba_id, spolka_id, typ_dokumentu, nazwa_pliku, sciezka, mime, rozmiar, hash, retencja_do, wgral, utworzono)
+         VALUES (@osoba_id, @spolka_id, @typ_dokumentu, @nazwa_pliku, @sciezka, @mime, @rozmiar, @hash, @retencja_do, @wgral, @utworzono)`
+      )
+      .run({
+        osoba_id: id,
+        spolka_id: zad.psaSpolkaAml.id,
+        typ_dokumentu: typDokumentu,
+        nazwa_pliku: zad.file.originalname,
+        sciezka: path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path),
+        mime: zad.file.mimetype,
+        rozmiar: zad.file.size,
+        hash,
+        retencja_do: retencjaDo,
+        wgral: autor(zad),
+        utworzono: czas.terazIso(),
+      });
+
+    odp.status(201).json({
+      skan: db().prepare('SELECT id, spolka_id, typ_dokumentu, nazwa_pliku, rozmiar, retencja_do, wgral, utworzono FROM psa_osoby_skany_aml WHERE id = ?').get(wynik.lastInsertRowid),
+    });
+  })
+);
+
+router.get(
+  '/:id/aml-skany/:skanId/plik',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const skan = db().prepare('SELECT * FROM psa_osoby_skany_aml WHERE id = ? AND osoba_id = ?').get(Number(zad.params.skanId), id);
+    if (!skan) throw nieZnaleziono('Nie odnaleziono skanu.');
+
+    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, skan.sciezka);
+    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+
+    // Log dostepu do skanu - opis etapu 3.1 promptu ("log dostepu dla skanow").
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik', spolkaId: skan.spolka_id, osobaId: id,
+      akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU, opis: `skan dokumentu AML: ${skan.nazwa_pliku}`,
+    });
+
+    odp.setHeader('Content-Type', skan.mime || 'application/octet-stream');
+    odp.setHeader('Content-Disposition', `attachment; filename="${skan.nazwa_pliku}"`);
+    fs.createReadStream(pelnaSciezka).pipe(odp);
   })
 );
 

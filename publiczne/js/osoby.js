@@ -15,11 +15,113 @@ const PUSTA_OSOBA = {
   pep_oswiadczenie: '', pep_oswiadczenie_data: '',
 };
 
+const TYPY_DOKUMENTU_AML = [
+  { wartosc: 'dowod_osobisty', etykieta: 'dowód osobisty' },
+  { wartosc: 'paszport', etykieta: 'paszport' },
+  { wartosc: 'inny', etykieta: 'inny' },
+];
+
+/** Skany dokumentow AML (etap 3.1) - widoczne wylacznie, gdy wybrana spolka ma wlaczona procedure. */
+function SekcjaSkanowAml({ osobaId, spolkaId }) {
+  const [skany, ustawSkany] = useState([]);
+  const [ladowanie, ustawLadowanie] = useState(true);
+  const [typDokumentu, ustawTypDokumentu] = useState('dowod_osobisty');
+  const [retencjaDo, ustawRetencjaDo] = useState('');
+  const [plik, ustawPlik] = useState(null);
+  const [wgrywanie, ustawWgrywanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+
+  function wczytaj() {
+    ustawLadowanie(true);
+    API.get(`/api/psa/osoby/${osobaId}/aml-skany?spolka_id=${spolkaId}`)
+      .then((w) => ustawSkany(w.skany))
+      .catch(() => ustawSkany([]))
+      .finally(() => ustawLadowanie(false));
+  }
+  useEffect(wczytaj, [osobaId, spolkaId]);
+
+  async function wgraj() {
+    if (!plik) return;
+    ustawWgrywanie(true);
+    ustawBlad(null);
+    try {
+      const formularz = new FormData();
+      formularz.append('spolka_id', String(spolkaId));
+      formularz.append('typ_dokumentu', typDokumentu);
+      if (retencjaDo) formularz.append('retencja_do', retencjaDo);
+      formularz.append('plik', plik);
+      const odp = await fetch(`/api/psa/osoby/${osobaId}/aml-skany`, { method: 'POST', body: formularz });
+      const tresc = await odp.json().catch(() => ({}));
+      if (!odp.ok) throw new Error(tresc.blad || `Nie udało się przesłać pliku (błąd ${odp.status}).`);
+      ustawPlik(null);
+      wczytaj();
+    } catch (e) {
+      ustawBlad(e.message);
+    } finally {
+      ustawWgrywanie(false);
+    }
+  }
+
+  return (
+    <Pole
+      etykieta="Skany dokumentów tożsamości"
+      podpowiedz="Pobranie skanu zostawia ślad w dzienniku dostępu. Okres przechowywania (retencja) ustala kancelaria — zgodnie z polityką AML, nie automatycznie."
+    >
+      <Komunikat odmiana="blad" tresc={blad} />
+      {!ladowanie && skany.length > 0 && (
+        <ul className="lista-plaska" style={{ marginBottom: 8 }}>
+          {skany.map((s) => (
+            <li key={s.id}>
+              <a href={`/api/psa/osoby/${osobaId}/aml-skany/${s.id}/plik`} target="_blank" rel="noopener">
+                {s.nazwa_pliku}
+              </a>{' '}
+              <span className="podpowiedz">
+                ({TYPY_DOKUMENTU_AML.find((t) => t.wartosc === s.typ_dokumentu)?.etykieta || s.typ_dokumentu}
+                {s.retencja_do ? ` · retencja do ${s.retencja_do}` : ''})
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="siatka-3">
+        <select value={typDokumentu} onChange={(z) => ustawTypDokumentu(z.target.value)}>
+          {TYPY_DOKUMENTU_AML.map((t) => <option key={t.wartosc} value={t.wartosc}>{t.etykieta}</option>)}
+        </select>
+        <PoleDaty wartosc={retencjaDo} przyZmianie={ustawRetencjaDo} />
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(z) => ustawPlik(z.target.files[0] || null)} />
+      </div>
+      <button className="btn btn-maly" onClick={wgraj} disabled={!plik || wgrywanie} style={{ marginTop: 8 }}>
+        {wgrywanie ? 'Przesyłanie…' : 'Dodaj skan'}
+      </button>
+    </Pole>
+  );
+}
+
 function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
   const [dane, ustawDane] = useState({ ...PUSTA_OSOBA, ...(osoba || {}) });
   const [blad, ustawBlad] = useState(null);
   const [zapisywanie, ustawZapisywanie] = useState(false);
   const edycja = Boolean(osoba && osoba.id);
+
+  // Etap 3.1: procedura AML (skan/PEP/beneficjent) jest wlaczana PER SPOLKA,
+  // a osoba (kartoteka wspolna) moze byc akcjonariuszem w kilku - wybor
+  // "kontekstu" decyduje, ktorej spolki przelacznik gate'uje ten formularz.
+  // Nowa osoba (bez id) nie ma jeszcze zadnej spolki do wyboru - zostaje przy
+  // domyslnym, oszczednym zakresie (dane z dokumentu, bez pliku).
+  const [spolkiOsoby, ustawSpolkiOsoby] = useState([]);
+  const [kontekstSpolkaId, ustawKontekstSpolkaId] = useState(null);
+  useEffect(() => {
+    if (!edycja) return;
+    API.get(`/api/psa/osoby/${osoba.id}/spolki`)
+      .then((w) => {
+        ustawSpolkiOsoby(w.spolki);
+        if (w.spolki.length === 1) ustawKontekstSpolkaId(w.spolki[0].id);
+      })
+      .catch(() => ustawSpolkiOsoby([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edycja, osoba && osoba.id]);
+  const kontekstSpolka = spolkiOsoby.find((s) => s.id === kontekstSpolkaId) || null;
+  const stosujeAml = Boolean(kontekstSpolka && Number(kontekstSpolka.stosuje_procedure_aml));
 
   const pole = (klucz) => ({
     value: dane[klucz] ?? '',
@@ -192,39 +294,70 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
         <textarea {...pole('aml_notatka')} style={{ minHeight: 70 }} />
       </Pole>
 
-      {dane.typ === 'prawna' && (
+      {edycja && spolkiOsoby.length > 0 && (
         <Pole
-          etykieta="Beneficjent rzeczywisty"
-          podpowiedz="Osoba fizyczna sprawująca kontrolę nad podmiotem (art. 2 ust. 2 pkt 1 ustawy AML)."
+          etykieta="Kontekst procedury AML"
+          podpowiedz="Procedura AML (skan dokumentu, PEP, beneficjent) jest włączana per spółka — wybierz, w kontekście której spółki chcesz nią zarządzać."
         >
-          <WyborOsoby
-            wartosc={dane.beneficjent_rzeczywisty_id}
-            przyZmianie={(id) => ustawDane((p) => ({ ...p, beneficjent_rzeczywisty_id: id }))}
-            typFiltr="fizyczna"
-            wyklucz={edycja ? [osoba.id] : []}
-            placeholder="Szukaj osoby fizycznej w kartotece…"
-          />
+          <select value={kontekstSpolkaId ?? ''} onChange={(z) => ustawKontekstSpolkaId(z.target.value ? Number(z.target.value) : null)}>
+            <option value="">— nie wybrano —</option>
+            {spolkiOsoby.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nazwa}{Number(s.stosuje_procedure_aml) ? '' : ' (procedura AML wyłączona)'}
+              </option>
+            ))}
+          </select>
         </Pole>
       )}
 
-      <div className="siatka-2">
-        <Pole
-          etykieta="Oświadczenie o statusie PEP"
-          podpowiedz="Oświadczenie SKŁADANE PRZEZ OSOBĘ (art. 46 ustawy AML) — nie ocena ani domysł kancelarii."
-        >
-          <select {...pole('pep_oswiadczenie')}>
-            <option value="">— nie oświadczono —</option>
-            <option value="tak">oświadcza, że JEST osobą zajmującą eksponowane stanowisko polityczne</option>
-            <option value="nie">oświadcza, że NIE JEST osobą zajmującą eksponowane stanowisko polityczne</option>
-          </select>
-        </Pole>
-        <Pole etykieta="Data oświadczenia PEP">
-          <PoleDaty
-            wartosc={dane.pep_oswiadczenie_data || ''}
-            przyZmianie={(v) => ustawDane((p) => ({ ...p, pep_oswiadczenie_data: v }))}
-          />
-        </Pole>
-      </div>
+      {!stosujeAml ? (
+        <Komunikat
+          odmiana="info"
+          tresc={
+            kontekstSpolka
+              ? 'Wybrana spółka nie ma włączonej procedury AML — zbierane są wyłącznie dane z dokumentu tożsamości powyżej, bez pliku, oświadczenia PEP ani beneficjenta rzeczywistego.'
+              : 'Wybierz spółkę powyżej, żeby zarządzać skanem dokumentu, oświadczeniem PEP i beneficjentem rzeczywistym (dostępne wyłącznie, gdy spółka ma włączoną procedurę AML).'
+          }
+        />
+      ) : (
+        <>
+          {dane.typ === 'prawna' && (
+            <Pole
+              etykieta="Beneficjent rzeczywisty"
+              podpowiedz="Osoba fizyczna sprawująca kontrolę nad podmiotem (art. 2 ust. 2 pkt 1 ustawy AML)."
+            >
+              <WyborOsoby
+                wartosc={dane.beneficjent_rzeczywisty_id}
+                przyZmianie={(id) => ustawDane((p) => ({ ...p, beneficjent_rzeczywisty_id: id }))}
+                typFiltr="fizyczna"
+                wyklucz={edycja ? [osoba.id] : []}
+                placeholder="Szukaj osoby fizycznej w kartotece…"
+              />
+            </Pole>
+          )}
+
+          <div className="siatka-2">
+            <Pole
+              etykieta="Oświadczenie o statusie PEP"
+              podpowiedz="Oświadczenie SKŁADANE PRZEZ OSOBĘ (art. 46 ustawy AML) — nie ocena ani domysł kancelarii."
+            >
+              <select {...pole('pep_oswiadczenie')}>
+                <option value="">— nie oświadczono —</option>
+                <option value="tak">oświadcza, że JEST osobą zajmującą eksponowane stanowisko polityczne</option>
+                <option value="nie">oświadcza, że NIE JEST osobą zajmującą eksponowane stanowisko polityczne</option>
+              </select>
+            </Pole>
+            <Pole etykieta="Data oświadczenia PEP">
+              <PoleDaty
+                wartosc={dane.pep_oswiadczenie_data || ''}
+                przyZmianie={(v) => ustawDane((p) => ({ ...p, pep_oswiadczenie_data: v }))}
+              />
+            </Pole>
+          </div>
+
+          <SekcjaSkanowAml osobaId={osoba.id} spolkaId={kontekstSpolkaId} />
+        </>
+      )}
 
       <Pole etykieta="Uwagi wewnętrzne" podpowiedz="Nigdy nie trafiają na wydruki.">
         <textarea {...pole('uwagi')} style={{ minHeight: 70 }} />
