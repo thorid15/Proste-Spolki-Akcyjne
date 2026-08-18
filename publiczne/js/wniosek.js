@@ -628,7 +628,11 @@ function EkranWniosku() {
             )}
 
             {dane.status === 'przyjety' && (
-              <Komunikat odmiana="ok" tytul="Rejestr otwarty" tresc="Wniosek został przyjęty, a rejestr akcjonariuszy — otwarty." />
+              <Komunikat
+                odmiana="ok"
+                tytul="Wniosek przyjęty"
+                tresc="Kancelaria zweryfikowała dane i założyła spółkę w systemie. Rejestr akcjonariuszy zostanie otwarty po ustaleniu pierwszej emisji akcji — o dalszych krokach poinformujemy e-mailem."
+              />
             )}
 
             {dane.status === 'odrzucony' && (

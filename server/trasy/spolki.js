@@ -869,3 +869,8 @@ router.get(
 );
 
 module.exports = router;
+// Etap 3F: kancelaria zaklada realna spolke z zaakceptowanego wniosku klienta
+// - wnioski.js reuzywa TA SAMA walidacje, zeby wpis z wniosku nigdy nie
+// ominal regul, ktorym podlega wpis reczny.
+module.exports.POLA_SPOLKI = POLA_SPOLKI;
+module.exports.sprawdzDaneSpolki = sprawdzDaneSpolki;

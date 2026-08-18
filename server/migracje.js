@@ -1266,6 +1266,30 @@ const MIGRACJE = [
       ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_wgrano TEXT;
     `,
   },
+  {
+    wersja: 27,
+    nazwa: 'etap 3F: weryfikacja wniosku przez kancelarie - porownanie z KRS, akceptacja pozycja po pozycji',
+    sql: `
+      -- Slad obslugi wniosku (jak psa_zgloszenia.obsluzone_przez/kiedy) i
+      -- notatka kancelarii przy odeslaniu do uzupelnienia albo odrzuceniu.
+      -- spolka_id: wypelniane dopiero przy przyjeciu wniosku (POST .../przyjmij)
+      -- - dowiazuje wniosek do REALNEJ spolki zalozonej w kartotece, bez
+      -- ktorej dalszy krok (otwarcie rejestru z emisja zalozycielska) dzieje
+      -- sie w istniejacym kreatorze wewnetrznym (server/trasy/spolki.js).
+      ALTER TABLE psa_wnioski ADD COLUMN notatka_weryfikacji TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN spolka_id INTEGER REFERENCES psa_spolki(id);
+      ALTER TABLE psa_wnioski ADD COLUMN obsluzone_przez TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN obsluzone_kiedy TEXT;
+
+      -- "Akceptacja pozycja po pozycji" (opis etapu 3 promptu): kazda
+      -- proponowana pozycja akcjonariusza jest oddzielnie zaznaczana jako
+      -- zweryfikowana przez kancelarie, zanim POST .../przyjmij zamieni ja
+      -- w realny wpis w psa_osoby (albo dowiaze do JUZ istniejacego wpisu,
+      -- jesli kancelaria dopasowala pozycje do kogos z kartoteki - osoba_id).
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN zweryfikowano INTEGER NOT NULL DEFAULT 0 CHECK (zweryfikowano IN (0,1));
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN osoba_id INTEGER REFERENCES psa_osoby(id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

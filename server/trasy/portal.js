@@ -1004,3 +1004,12 @@ router.post(
 );
 
 module.exports = router;
+// Etap 3F: kancelaria koryguje dane wniosku (server/trasy/wnioski.js) - ta
+// sama walidacja formatu, co przy zapisie klienta, zeby korekta kancelarii
+// nie mogla wpisac danych w gorszym ksztalcie niz sam klient.
+module.exports.POLA_WNIOSKU = POLA_WNIOSKU;
+module.exports.wyczyscWniosek = wyczyscWniosek;
+module.exports.sprawdzDaneWniosku = sprawdzDaneWniosku;
+module.exports.POLA_AKCJONARIUSZA_WNIOSKU = POLA_AKCJONARIUSZA_WNIOSKU;
+module.exports.wyczyscAkcjonariuszaWniosku = wyczyscAkcjonariuszaWniosku;
+module.exports.sprawdzAkcjonariuszaWniosku = sprawdzAkcjonariuszaWniosku;

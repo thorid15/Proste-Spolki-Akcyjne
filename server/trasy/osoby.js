@@ -280,3 +280,11 @@ router.get(
 );
 
 module.exports = router;
+// Etap 3F: kancelaria materializuje akcjonariuszy proponowanych we wniosku
+// klienta do kartoteki wspólnej - wnioski.js reużywa TĘ SAMĄ walidację
+// (regula domenowa nr 10 - jeden inwestor wpisany raz - nie duplikujemy
+// logiki, żeby wpis z wniosku nigdy nie ominął reguł, którym podlega
+// wpis ręczny).
+module.exports.POLA_OSOBY = POLA_OSOBY;
+module.exports.sprawdzOsobe = sprawdzOsobe;
+module.exports.ostrzezeniaOsoby = ostrzezeniaOsoby;

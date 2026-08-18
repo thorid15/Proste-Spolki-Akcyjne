@@ -52,6 +52,7 @@ aplikacja.use('/api/psa/zdarzenia', autoryzacja.wymagajPracownika, require('./se
 aplikacja.use('/api/psa/oplaty', autoryzacja.wymagajPracownika, require('./server/trasy/oplaty'));
 aplikacja.use('/api/psa/szablony', autoryzacja.wymagajPracownika, require('./server/trasy/szablony'));
 aplikacja.use('/api/psa/zgloszenia', autoryzacja.wymagajPracownika, require('./server/trasy/zgloszenia'));
+aplikacja.use('/api/psa/wnioski', autoryzacja.wymagajPracownika, require('./server/trasy/wnioski'));
 aplikacja.use('/api/psa', require('./server/trasy/pozostale'));
 
 // ── Statyki ──────────────────────────────────────────────────────────────
