@@ -31,7 +31,9 @@ const MENU = [
       { sciezka: '/konfiguracja/stawki', nazwa: 'Stawki i terminy', ikona: 'stawki' },
       { sciezka: '/konfiguracja/szablony', nazwa: 'Szablony dokumentów', ikona: 'szablony', admin: true },
       { sciezka: '/konfiguracja/uzytkownicy', nazwa: 'Użytkownicy', ikona: 'uzytkownicy', admin: true },
-      { sciezka: '/podglad', nazwa: 'Podgląd systemu', ikona: 'podglad' },
+      // Etap 5.2: diagnostyka (stan bazy, integralność łańcucha zdarzeń) nie
+      // jest codzienną pracą notariusza — wyłącznie dla roli administratora.
+      { sciezka: '/podglad', nazwa: 'Podgląd systemu', ikona: 'podglad', admin: true },
     ],
   },
 ];
@@ -204,7 +206,9 @@ function Aplikacja() {
 
   function ekran() {
     if (segmenty.length === 0) return <EkranPulpitu />;
-    if (segmenty[0] === 'podglad') return <EkranPodgladu />;
+    if (segmenty[0] === 'podglad') {
+      return sesja.uzytkownik.rola === 'admin' ? <EkranPodgladu /> : <NieZnaleziono />;
+    }
 
     if (segmenty[0] === 'spolki') {
       if (segmenty.length === 1) return <EkranSpolek />;

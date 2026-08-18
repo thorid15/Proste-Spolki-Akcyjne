@@ -266,6 +266,17 @@ function widokZdarzen(db, spolkaId, { limit = null } = {}) {
   const zdarzenia = rejestr.wczytajZdarzenia(db, spolkaId);
   const osoby = rejestr.wczytajOsobySpolki(db, spolkaId);
 
+  // Etap 5.1: link DWUKIERUNKOWY - sprostowanie juz zna zdarzenie_prostowane_id
+  // (wskazuje wstecz), ale zdarzenie prostowane samo nie wie, ze zostalo
+  // sprostowane. Budujemy mape "prostowane -> prostujace" z tej samej listy
+  // (bez dodatkowego zapytania), zeby oznaczyc oryginal wizualnie.
+  const sprostowanePrzez = new Map();
+  for (const z of zdarzenia) {
+    if (z.typ === 'sprostowanie' && z.zdarzenie_prostowane_id != null) {
+      sprostowanePrzez.set(Number(z.zdarzenie_prostowane_id), z.id);
+    }
+  }
+
   const lista = [...zdarzenia].sort(
     (a, b) => -stanLogika.porownajZdarzenia(a, b)
   );
@@ -279,6 +290,7 @@ function widokZdarzen(db, spolkaId, { limit = null } = {}) {
     autor: z.autor,
     uzasadnienie: z.uzasadnienie,
     zdarzenie_prostowane_id: z.zdarzenie_prostowane_id,
+    sprostowane_przez_id: sprostowanePrzez.get(Number(z.id)) ?? null,
     dane: z.dane,
     // Skrot pokazujemy w calosci tylko na zadanie - w tabeli wystarczy
     // pierwszych 12 znakow jako znacznik ciaglosci.

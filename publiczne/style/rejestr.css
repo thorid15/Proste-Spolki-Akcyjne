@@ -1081,6 +1081,25 @@ select {
 .zdarzenie-tresc { font-size: var(--st-13); color: var(--atrament-2); line-height: 1.55; }
 .zdarzenie-meta { font-size: var(--st-11); color: var(--atrament-3); margin-top: var(--od-4); }
 
+/* Etap 5.1: link miedzy zdarzeniem prostowanym a prostujacym - dziala w obie
+   strony, wiec styl jest wspolny niezaleznie od kierunku. */
+.btn-tekstowy {
+  display: inline-block;
+  margin-top: var(--od-4);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--rejestr-3);
+  font-size: var(--st-11);
+  cursor: pointer;
+}
+.btn-tekstowy:hover { text-decoration: underline; }
+.zdarzenie-poz.podswietlone { animation: zdarzenie-podswietlenie 1.6s ease-out; }
+@keyframes zdarzenie-podswietlenie {
+  from { background: var(--rejestr-tlo); }
+  to { background: transparent; }
+}
+
 /* ─────────────────────────────────────────────────────
    METRYKA BOCZNA — prawa, przyklejona kolumna kokpitu (2.4).
    ───────────────────────────────────────────────────── */

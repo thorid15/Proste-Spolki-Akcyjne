@@ -769,6 +769,16 @@ function EkranKokpitu({ spolkaId }) {
     el.scrollIntoView({ behavior: bezRuchu ? 'auto' : 'smooth', block: 'center' });
   }
 
+  /** Etap 5.1: skok miedzy zdarzeniem prostowanym a prostujacym - link dziala w OBIE strony. */
+  function skoczDoZdarzenia(id) {
+    const el = document.getElementById(`zdarzenie-${id}`);
+    if (!el) return;
+    const bezRuchu = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: bezRuchu ? 'auto' : 'smooth', block: 'center' });
+    el.classList.add('podswietlone');
+    setTimeout(() => el.classList.remove('podswietlone'), 1600);
+  }
+
   async function przelicz() {
     ustawPrzeliczanie(null);
     try {
@@ -1049,18 +1059,38 @@ function EkranKokpitu({ spolkaId }) {
               ) : (
                 <div className="zdarzenia-czas">
                   {zdarzenia.map((z) => (
-                    <div key={z.id} className="zdarzenie-poz">
+                    <div
+                      key={z.id}
+                      id={`zdarzenie-${z.id}`}
+                      className={`zdarzenie-poz ${z.typ === 'sprostowanie' || z.sprostowane_przez_id ? 'sprostowane' : ''}`}
+                    >
                       <div className="rzad-rozdzielony">
                         <div className="zdarzenie-data">
                           {fmt.data(z.data_zdarzenia)} · zdarzenie #{z.id}
                         </div>
-                        {!wstecz && z.typ !== 'sprostowanie' && (
+                        {!wstecz && z.typ !== 'sprostowanie' && !z.sprostowane_przez_id && (
                           <button className="btn btn-maly bez-druku" onClick={() => ustawSprostowanie(z)}>
                             Sprostuj
                           </button>
                         )}
                       </div>
                       <div className="zdarzenie-tresc">{z.podsumowanie || `Zdarzenie typu „${z.typ}”.`}</div>
+                      {z.typ === 'sprostowanie' && z.zdarzenie_prostowane_id != null && (
+                        <button
+                          className="btn-tekstowy bez-druku"
+                          onClick={() => skoczDoZdarzenia(z.zdarzenie_prostowane_id)}
+                        >
+                          → zobacz zdarzenie prostowane #{z.zdarzenie_prostowane_id}
+                        </button>
+                      )}
+                      {z.sprostowane_przez_id != null && (
+                        <button
+                          className="btn-tekstowy bez-druku"
+                          onClick={() => skoczDoZdarzenia(z.sprostowane_przez_id)}
+                        >
+                          Sprostowane zdarzeniem #{z.sprostowane_przez_id} →
+                        </button>
+                      )}
                       <div className="zdarzenie-meta">
                         wpisano {fmt.dataCzas(z.data_wpisu)} · {z.autor} · skrót {z.hash_skrocony}…
                       </div>
