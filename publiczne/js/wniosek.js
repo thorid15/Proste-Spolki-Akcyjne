@@ -391,6 +391,7 @@ function EkranWniosku() {
   const [skladanie, ustawSkladanie] = useState(false);
   const [bladSkladania, ustawBladSkladania] = useState(null);
   const [ostrzezeniaZlozenia, ustawOstrzezeniaZlozenia] = useState([]);
+  const [dokumenty, ustawDokumenty] = useState([]);
   const [plikPodpisanejUmowy, ustawPlikPodpisanejUmowy] = useState(null);
   const [wysylaniePodpisanej, ustawWysylaniePodpisanej] = useState(false);
   const [bladPodpisanej, ustawBladPodpisanej] = useState(null);
@@ -399,10 +400,12 @@ function EkranWniosku() {
     Promise.all([
       API.get('/api/psa/portal/wniosek'),
       API.get('/api/psa/portal/wniosek/akcjonariusze'),
+      API.get('/api/psa/portal/wniosek/dokumenty'),
     ])
-      .then(([w, a]) => {
+      .then(([w, a, d]) => {
         ustawDane(w.wniosek);
         ustawAkcjonariusze(a.akcjonariusze);
+        ustawDokumenty(d.dokumenty || []);
       })
       .catch((e) => ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się wczytać wniosku.'))
       .finally(() => ustawLadowanie(false));
@@ -452,6 +455,13 @@ function EkranWniosku() {
       const wynik = await API.post('/api/psa/portal/wniosek/zloz', {});
       ustawDane(wynik.wniosek);
       ustawOstrzezeniaZlozenia(wynik.ostrzezenia || []);
+      ustawDokumenty(wynik.dokumenty || []);
+      if (wynik.blad_pakietu) {
+        ustawBladSkladania(
+          `Wniosek został złożony, ale nie udało się przygotować kompletu oświadczeń: ${wynik.blad_pakietu}. `
+          + 'Kancelaria przygotuje je ręcznie.'
+        );
+      }
     } catch (e) {
       ustawBladSkladania(e instanceof BladApi ? e.message : 'Nie udało się złożyć wniosku.');
     } finally {
@@ -785,9 +795,45 @@ function EkranWniosku() {
                     lista={ostrzezeniaZlozenia}
                   />
                 )}
-                <a className="btn" href="/api/psa/portal/wniosek/umowa-projekt" target="_blank" rel="noopener">
-                  Pobierz projekt umowy (.docx)
-                </a>
+                <div className="pion" style={{ gap: 'var(--od-8)' }}>
+                  <a
+                    className="btn"
+                    href="/api/psa/portal/wniosek/umowa-projekt"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    <Ikona nazwa="pobierz" rozmiar={16} /> Umowa o prowadzenie rejestru (.docx)
+                  </a>
+                </div>
+
+                {dokumenty.length > 0 && (
+                  <>
+                    <div className="rozdzielacz" />
+                    <div className="card-h">Oświadczenia do podpisu</div>
+                    <Komunikat
+                      odmiana="info"
+                      tresc="Każdy akcjonariusz podpisuje swoje oświadczenia osobiście — zarząd nie może złożyć ich za niego. Żądanie pierwszego wpisu podpisują wszyscy akcjonariusze wspólnie. Dokumenty są w formacie PDF; odeślij je razem z podpisaną umową."
+                    />
+                    <div className="lista-dokumentow">
+                      {dokumenty.map((d) => (
+                        <a
+                          key={d.id}
+                          className="lista-dokumentow-poz"
+                          href={`/api/psa/portal/wniosek/dokumenty/${d.id}`}
+                          target="_blank"
+                          rel="noopener"
+                        >
+                          <Ikona nazwa="pobierz" rozmiar={17} />
+                          <span className="lista-dokumentow-nazwa">{d.nazwa_pliku}</span>
+                          <span className="lista-dokumentow-rozmiar">
+                            {Math.max(1, Math.round((d.rozmiar || 0) / 1024))} kB
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  </>
+                )}
+
                 <div className="rozdzielacz" />
                 <Pole etykieta="Podpisana umowa (PDF, JPG albo PNG)">
                   <input
@@ -834,7 +880,11 @@ function EkranWniosku() {
           </div>
         )}
 
-        <div className="kreator-stopka">
+        {/* Pasek nawigacji przykleja się do dołu okna PO TO, żeby „Dalej"
+            było w zasięgu przy długim kroku. Na ostatnim kroku „Dalej" jest
+            wyłączone, więc przyklejony pasek już tylko zasłaniałby treść —
+            tam zostaje w tekście. */}
+        <div className={`kreator-stopka ${krok === KROKI_WNIOSKU.length - 1 ? 'kreator-stopka-statyczna' : ''}`}>
           <button className="btn" onClick={() => ustawKrok((k) => Math.max(0, k - 1))} disabled={krok === 0}>
             Wstecz
           </button>

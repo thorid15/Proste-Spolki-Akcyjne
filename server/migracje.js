@@ -1424,6 +1424,38 @@ const MIGRACJE = [
       UPDATE psa_wnioski_akcjonariusze SET zgoda_email_status = 'potwierdzona' WHERE zgoda_email = 1;
     `,
   },
+  {
+    wersja: 32,
+    nazwa: 'komplet dokumentow do podpisu generowany przy zlozeniu wniosku',
+    sql: `
+      -- Przy zlozeniu wniosku powstaje nie jeden dokument, tylko KOMPLET:
+      -- umowa o prowadzenie rejestru (wzor 01, .docx - dokument negocjowany,
+      -- edytowalny) oraz oswiadczenia w PDF, po trzy na akcjonariusza plus
+      -- wspolne zadanie pierwszego wpisu.
+      --
+      -- Dlaczego osobna tabela, a nie kolejne kolumny w psa_wnioski: liczba
+      -- dokumentow zalezy od liczby akcjonariuszy, wiec nie da sie jej
+      -- zmiescic w stalym zestawie kolumn. Kolumna umowa_projekt_sciezka
+      -- ZOSTAJE - umowa ma wlasny cykl zycia (projekt -> podpisana kopia)
+      -- i wlasne trasy, a te wiersze sa tylko do pobrania i podpisania.
+      CREATE TABLE IF NOT EXISTS psa_wnioski_dokumenty (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        wniosek_id      INTEGER NOT NULL REFERENCES psa_wnioski(id),
+        -- NULL = dokument wspolny dla calego wniosku (zadanie wpisu).
+        akcjonariusz_id INTEGER REFERENCES psa_wnioski_akcjonariusze(id),
+        typ             TEXT NOT NULL,
+        nazwa           TEXT NOT NULL,
+        nazwa_pliku     TEXT NOT NULL,
+        sciezka         TEXT NOT NULL,
+        mime            TEXT NOT NULL DEFAULT 'application/pdf',
+        rozmiar         INTEGER,
+        utworzono       TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_wnioski_dokumenty_wniosek
+        ON psa_wnioski_dokumenty (wniosek_id, id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

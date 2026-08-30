@@ -1507,3 +1507,30 @@ select {
 /* Stopka kreatora przykleja się do dołu okna przy długim formularzu —
    cień odróżnia ją od treści, która pod nią przepływa. */
 .kreator-stopka { box-shadow: 0 -10px 18px -14px rgba(26, 31, 27, 0.45); }
+/* Ostatni krok kreatora: nie ma dokąd iść dalej, więc pasek nie przykleja
+   się do dołu okna i nie zasłania treści nad sobą. */
+.kreator-stopka-statyczna { position: static; box-shadow: none; }
+
+/* ── Lista dokumentów do pobrania ──
+   Cały wiersz jest celem kliknięcia, nie sam odnośnik w środku: nazwy plików
+   bywają długie i trafienie w tekst byłoby loterią. */
+.lista-dokumentow { display: flex; flex-direction: column; }
+.lista-dokumentow-poz {
+  display: flex; align-items: center; gap: var(--od-12);
+  padding: var(--od-12);
+  border: 1px solid var(--linia-2);
+  border-radius: var(--r-sm);
+  margin-bottom: var(--od-8);
+  color: var(--atrament);
+  text-decoration: none;
+  transition: background var(--ruch-wiersz), border-color var(--ruch-wiersz);
+}
+.lista-dokumentow-poz:hover { background: var(--papier); border-color: var(--linia); }
+.lista-dokumentow-poz svg { flex-shrink: 0; color: var(--rejestr); }
+.lista-dokumentow-nazwa { flex: 1; min-width: 0; font-size: var(--st-13); overflow-wrap: anywhere; }
+.lista-dokumentow-rozmiar {
+  flex-shrink: 0;
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  font-variant-numeric: tabular-nums;
+}

@@ -123,6 +123,23 @@ spółkę**, a rejestr wpisuje adres dopiero po otrzymaniu **podpisanego
 oświadczenia akcjonariusza** (dokument z etapu 6). Do tego czasu adres e-mail
 figuruje w aktach sprawy, ale nie jako element treści rejestru.
 
+### Co poszło w PDF, a co zostało w `.docx`
+
+| Dokument | Format | Dlaczego |
+|---|---|---|
+| Umowa o prowadzenie rejestru | `.docx` | dokument **negocjowany** — notariusz edytuje jego wzór w Wordzie, a klient może zgłosić uwagi przed podpisem |
+| Zgoda na komunikację elektroniczną | PDF | oświadczenie o ustalonej treści |
+| Oświadczenie RODO | PDF | jw. |
+| Oświadczenie GIIF (beneficjent, PEP) | PDF | jw. |
+| Żądanie pierwszego wpisu ze zgodą | PDF | jw. |
+
+Umowa zostaje w formacie edytowalnym świadomie: to jedyny z tych dokumentów,
+którego treść bywa uzgadniana, a jego wzór jest w rękach notariusza
+(`wzory/01-...docx`). Gdyby miała wychodzić w PDF, potrzebny byłby konwerter
+`.docx` → PDF na serwerze (np. LibreOffice w trybie bezokienkowym) — do
+decyzji przy wdrożeniu. Autor w metadanych i nazwa pliku są poprawione
+niezależnie od formatu.
+
 ---
 
 ## Do ustalenia (zapisane, nie wykonane)
@@ -131,6 +148,9 @@ figuruje w aktach sprawy, ale nie jako element treści rejestru.
   dopracowania merytorycznego (zakres danych, okresy przechowywania, podstawy
   przetwarzania przy poszczególnych kategoriach danych). Dziś jest wersja
   robocza; do przejścia z notariuszem przed wdrożeniem.
+* **Umowa o prowadzenie rejestru w PDF** — wymaga konwertera `.docx` → PDF
+  po stronie serwera. Do rozstrzygnięcia, czy wdrożenie ma mieć zainstalowane
+  LibreOffice, czy umowa zostaje edytowalna.
 * **Konto klienta po przyjęciu wniosku** nie przepina się z roli
   „wnioskodawca" na „spółka", więc klient nie widzi jeszcze podglądu rejestru.
   Do decyzji, czy ma się to dziać automatycznie przy przyjęciu wniosku, czy

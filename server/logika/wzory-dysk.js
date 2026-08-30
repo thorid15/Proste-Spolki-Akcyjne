@@ -25,6 +25,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const docx = require('./docx');
+const konfiguracja = require('../konfiguracja');
 
 const KATALOG_WZOROW = path.join(__dirname, '..', '..', 'wzory');
 const WZORZEC_NAZWY = /^(\d+)-(.+?)(?:-WZOR)?\.docx$/i;
@@ -101,7 +102,13 @@ function analizuj(kod) {
  */
 function wypelnij(kod, dane) {
   const { plik: plikZrodlowy, nazwa, bufor, hash } = wczytaj(kod);
-  const wynik = docx.wypelnij(bufor, dane);
+  // Autor w metadanych pliku: wzory powstaja skryptem w Pythonie, wiec bez
+  // tej podmiany Word pokazywalby "python-docx" we wlasciwosciach kazdego
+  // pisma wydanego klientowi.
+  const wynik = docx.wypelnij(bufor, dane, {
+    autor: konfiguracja.KANCELARIA.nazwa,
+    tytul: nazwa,
+  });
   return { kod, plikZrodlowy, nazwa, hash, ...wynik };
 }
 

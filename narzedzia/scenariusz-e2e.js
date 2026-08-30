@@ -293,6 +293,10 @@ async function main() {
   }
   const projekt = await zapytaj(klient, 'GET', '/api/psa/portal/wniosek/umowa-projekt');
   info(`pobrano projekt umowy (.docx, ${projekt.byteLength} B)`);
+  for (const d of zlozenie.dokumenty || []) {
+    info(`oświadczenie do podpisu: ${d.nazwa_pliku} (${Math.round(d.rozmiar / 1024)} kB)`);
+  }
+  if (zlozenie.blad_pakietu) info(`UWAGA: nie złożono kompletu oświadczeń — ${zlozenie.blad_pakietu}`);
 
   krok('klient', 'Odsyła podpisany egzemplarz umowy');
   const formularz = new FormData();
