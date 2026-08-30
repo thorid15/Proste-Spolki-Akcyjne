@@ -64,6 +64,14 @@ const konfiguracja = {
   SESJA_SEKRET: tekst('SESJA_SEKRET', null),
   KRS_API_URL: tekst('KRS_API_URL', 'https://api-krs.ms.gov.pl/api/krs'),
   PORTAL_WLACZONY: flaga('PORTAL_WLACZONY', false),
+  /**
+   * Ekran `/podglad` to katalog komponentow systemu wizualnego - narzedzie
+   * DEWELOPERSKIE, nie ekran pracy notariusza (nie ma zadnej funkcji poza
+   * pokazaniem, jak wygladaja przyciski, pola i tabele). Domyslnie
+   * WYLACZONY: nie pojawia sie w menu i trasa oddaje "nie ma takiej strony".
+   * Wlacza sie go swiadomie przy pracach nad interfejsem.
+   */
+  PODGLAD_SYSTEMU: flaga('PODGLAD_SYSTEMU', false),
   // Adres portalu klienta w mailach zapraszajacych (etap 3B) - link
   // aktywacyjny musi wskazywac na PUBLICZNY adres, nie na "localhost".
   URL_PORTALU: tekst('URL_PORTALU', `http://localhost:${liczba('PORT', 3005)}/portal.html`),
@@ -90,6 +98,13 @@ const konfiguracja = {
     miejscowosc: tekst('KANCELARIA_MIEJSCOWOSC', ''),
     telefon: tekst('KANCELARIA_TELEFON', ''),
     email: tekst('KANCELARIA_EMAIL', ''),
+
+    // Strona kancelarii - stopka aplikacji i portalu klienta. `www_psa` to
+    // adres zakladki "Proste Spolki Akcyjne" (informacje o prowadzeniu
+    // rejestru). Gdy nie podano dokladnego adresu zakladki, odsylamy na
+    // strone glowna - lepiej niz link, ktory konczy sie bledem 404.
+    www: tekst('KANCELARIA_WWW', 'https://notariusz.gdansk.pl'),
+    www_psa: tekst('KANCELARIA_WWW_PSA', tekst('KANCELARIA_WWW', 'https://notariusz.gdansk.pl')),
 
     // Atomowe - na potrzeby wzorow .docx (PLACEHOLDERY-PSA.md, sekcja KANCELARIA).
     kancelaria_ulica: tekst('KANCELARIA_ULICA', ''),

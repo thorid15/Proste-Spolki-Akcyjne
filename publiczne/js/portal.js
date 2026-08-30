@@ -12,6 +12,75 @@
    <script> dzieli to samo leksykalne srodowisko najwyzszego poziomu, wiec
    ponowna deklaracja `const` rzucalaby "already declared". */
 
+/* Marka i stopka portalu biora dane z `/api/wspolne/kancelaria`; zapasowy
+   komplet zostaje na wypadek, gdyby endpoint nie odpowiedzial - klient ma
+   zawsze widziec, czyj to portal. */
+const KANCELARIA_ZAPASOWA_PORTAL = {
+  nazwa: 'Kancelaria Notarialna Łukasz Kozon',
+  www: 'https://notariusz.gdansk.pl',
+  www_psa: 'https://notariusz.gdansk.pl',
+};
+
+function useKancelaria() {
+  const { dane } = useDane('/api/wspolne/kancelaria');
+  return (dane && dane.kancelaria) || KANCELARIA_ZAPASOWA_PORTAL;
+}
+
+/** Stopka portalu — kto prowadzi rejestr i gdzie o tym poczytać. */
+function StopkaPortalu() {
+  const k = useKancelaria();
+  const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
+  const kontakt = [k.telefon, k.email].filter(Boolean).join(' · ');
+  const link = k.www_psa || k.www;
+  return (
+    <footer className="stopka bez-druku">
+      <div className="stopka-kolumna">
+        <div className="stopka-nazwa">{k.nazwa}</div>
+        {adres && <div>{adres}</div>}
+        {kontakt && <div>{kontakt}</div>}
+      </div>
+      <div className="stopka-kolumna stopka-kolumna-prawa">
+        <div>Rejestr prowadzony na podstawie art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych.</div>
+        {link && (
+          <div>
+            Informacje o prowadzeniu rejestru — zakładka „Proste Spółki Akcyjne":{' '}
+            <a href={link} target="_blank" rel="noopener noreferrer">
+              {link.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+            </a>
+          </div>
+        )}
+      </div>
+    </footer>
+  );
+}
+
+/** Pasek marki — wspólny dla ekranów publicznych i zalogowanych. */
+function PasekMarkiPortal({ opis }) {
+  const k = useKancelaria();
+  return (
+    <div className="marka-pasek bez-druku">
+      <div className="marka-pasek-nazwa">{k.nazwa}</div>
+      <div className="marka-pasek-opis">{opis}</div>
+      {k.www && (
+        <a className="marka-pasek-link" href={k.www} target="_blank" rel="noopener noreferrer">
+          {k.www.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+        </a>
+      )}
+    </div>
+  );
+}
+
+/** Rama ekranów publicznych: marka na górze, stopka na dole, karta w środku. */
+function RamaPubliczna({ children }) {
+  return (
+    <div className="pion" style={{ minHeight: '100vh' }}>
+      <PasekMarkiPortal opis="Portal klienta — rejestr akcjonariuszy P.S.A." />
+      <div className="rama-publiczna-tresc">{children}</div>
+      <StopkaPortalu />
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────────────────
    SESJA PORTALOWA
    ───────────────────────────────────────────────────── */
@@ -55,9 +124,9 @@ function EkranLoginPortal({ przyZalogowaniu }) {
   return (
     <div className="ekran-logowania">
       <form className="card" style={{ width: 400, maxWidth: '92vw' }} onSubmit={zaloguj}>
-        <div className="card-h" style={{ marginBottom: 4 }}>Portal klienta</div>
+        <div className="card-h" style={{ marginBottom: 4 }}>Kancelaria Notarialna Łukasz Kozon</div>
         <div className="podtytul-strony" style={{ marginBottom: 22 }}>
-          Rejestr akcjonariuszy P.S.A. — Kancelaria Notarialna Łukasza Kozona
+          Portal klienta — rejestr akcjonariuszy P.S.A.
         </div>
 
         <Komunikat odmiana="blad" tresc={blad} />
@@ -137,7 +206,7 @@ function EkranZgloszenieWstepne() {
       <form className="card" style={{ width: 440, maxWidth: '92vw' }} onSubmit={wyslij}>
         <div className="card-h" style={{ marginBottom: 4 }}>Zgłoś zainteresowanie</div>
         <div className="podtytul-strony" style={{ marginBottom: 22 }}>
-          Prowadzenie rejestru akcjonariuszy — Kancelaria Notarialna Łukasza Kozona
+          Prowadzenie rejestru akcjonariuszy prostej spółki akcyjnej
         </div>
 
         <Komunikat odmiana="blad" tresc={blad} />
@@ -354,9 +423,10 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
 
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
+      <PasekMarkiPortal opis="Portal klienta — rejestr akcjonariuszy P.S.A." />
       <header className="portal-topbar pasek-gorny bez-druku" style={{ padding: '14px 28px' }}>
         <div>
-          <div className="tytul-strony" style={{ fontSize: 17 }}>Portal klienta — Rejestr akcjonariuszy P.S.A.</div>
+          <div className="tytul-strony" style={{ fontSize: 17 }}>Rejestr akcjonariuszy P.S.A.</div>
           <div className="podpowiedz">{konto.email} · {ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola}</div>
         </div>
         <div className="row-g">
@@ -373,6 +443,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
         </div>
       </header>
       <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
+      <StopkaPortalu />
     </div>
   );
 }
@@ -694,8 +765,12 @@ function AplikacjaPortal() {
   // Etap 3A/3B: jedyne trasy publiczne portalu — MUSZĄ wyprzedzić bramkę
   // sesji poniżej, inaczej niezalogowany gość zawsze wyląduje na ekranie
   // logowania (konto z aktywacji NIE MA jeszcze ważnej sesji w tym momencie).
-  if (segmenty[0] === 'zglos-sie') return <EkranZgloszenieWstepne />;
-  if (segmenty[0] === 'aktywuj' && segmenty[1]) return <EkranAktywacjaKonta token={segmenty[1]} />;
+  if (segmenty[0] === 'zglos-sie') {
+    return <RamaPubliczna><EkranZgloszenieWstepne /></RamaPubliczna>;
+  }
+  if (segmenty[0] === 'aktywuj' && segmenty[1]) {
+    return <RamaPubliczna><EkranAktywacjaKonta token={segmenty[1]} /></RamaPubliczna>;
+  }
 
   return <AplikacjaPortalZSesja segmenty={segmenty} sciezka={sciezka} />;
 }
@@ -704,7 +779,13 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
   const sesja = usePortalSesja();
 
   if (sesja.ladowanie) return <Spinner />;
-  if (!sesja.zalogowany) return <EkranLoginPortal przyZalogowaniu={() => sesja.odswiez()} />;
+  if (!sesja.zalogowany) {
+    return (
+      <RamaPubliczna>
+        <EkranLoginPortal przyZalogowaniu={() => sesja.odswiez()} />
+      </RamaPubliczna>
+    );
+  }
 
   function ekran() {
     // Etap 3B: konto zaproszone (rola 'wnioskodawca') nie ma jeszcze ani

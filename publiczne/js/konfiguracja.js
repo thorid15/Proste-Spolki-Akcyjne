@@ -75,7 +75,7 @@ function EkranStawek() {
               min. {dane.terminy.WYPOWIEDZENIE_MIESIACE} miesiące, tylko z ważnych powodów
             </Para>
             <Para etykieta="Zawiadomienie sądu o rozwiązaniu umowy">
-              {dane.terminy.ZAWIADOMIENIE_SADU_DNI} dni (od {fmt.data(dane.nowelizacja.WEJSCIE_W_ZYCIE)})
+              {dane.terminy.ZAWIADOMIENIE_SADU_DNI} dni od wygaśnięcia albo rozwiązania umowy
             </Para>
             <Para etykieta="Zgłoszenie zmiany danych przez zarząd">
               {dane.terminy.ZGLOSZENIE_ZMIANY_PRZEZ_ZARZAD_DNI} dni od zdarzenia
@@ -99,26 +99,17 @@ function EkranStawek() {
           </div>
         </Karta>
 
-        <Karta tytul="Nowelizacja">
-          <Komunikat
-            odmiana="uwaga"
-            tytul={`${dane.nowelizacja.DZIENNIK} — wejście w życie ${fmt.data(dane.nowelizacja.WEJSCIE_W_ZYCIE)}`}
-            tresc={
-              'Katalog danych rejestru (art. 300(33) § 1 pkt 1–11 KSH) nowelizacja NIE zmienia — jedyne ' +
-              'rozwiązanie addytywne wdrożone od pierwszego dnia to zakaz udostępniania PESEL-u, daty ' +
-              'urodzenia i adresu zamieszkania pozostałym akcjonariuszom (maskowanie).'
-            }
-          />
+        <Karta tytul="Dostęp do danych rejestru">
           <dl className="pary">
-            <Para etykieta="Koniec okresu przejściowego">
-              {fmt.data(dane.nowelizacja.KONIEC_OKRESU_PRZEJSCIOWEGO)} — zgłoszenie podmiotu
-              prowadzącego rejestr do KRS
-            </Para>
-            <Para etykieta="Maskowane dane">
+            <Para etykieta="Maskowane pozostałym akcjonariuszom">
               PESEL, data urodzenia, adres zamieszkania — {dane.podstawy.MASKOWANIE}
             </Para>
             <Para etykieta="Pełny dostęp">{dane.organy_uprawnione.join(', ')}</Para>
           </dl>
+          <div className="podstawa-prawna odstep-g">
+            Maskowanie działa w każdym widoku i wydruku o roli innej niż spółka albo organ
+            uprawniony — także w podglądzie rejestru w portalu klienta.
+          </div>
         </Karta>
       </div>
 
@@ -154,10 +145,8 @@ function EkranStawek() {
                 <td>
                   {dane.typy_w_kreatorze.includes(t.kod) ? (
                     <Znacznik odmiana="zielony">w kreatorze</Znacznik>
-                  ) : t.sprint <= dane.sprint ? (
-                    <Znacznik odmiana="neutralny">przez edycję danych spółki</Znacznik>
                   ) : (
-                    <Znacznik odmiana="neutralny">sprint {t.sprint}</Znacznik>
+                    <Znacznik odmiana="neutralny">przez edycję danych spółki</Znacznik>
                   )}
                 </td>
               </tr>

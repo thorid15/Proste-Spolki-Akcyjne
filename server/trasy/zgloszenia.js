@@ -145,6 +145,13 @@ router.post(
       konto_id: Number(wynikKonta.lastInsertRowid),
       email_wyslany: proba.wyslano,
       powod: proba.powod,
+      // Gdy wysylka sie nie powiodla (brak SMTP, blad serwera poczty), konto
+      // JUZ istnieje, a token siedzi w bazie - bez tego pola zaproszenie
+      // przepadaloby bezpowrotnie. Link wraca WYLACZNIE w tej sytuacji
+      // i wylacznie do zalogowanego pracownika kancelarii, ktory sam go
+      // przed chwila wystawil; kancelaria przekazuje go wtedy klientowi
+      // innym kanalem. Przy udanej wysylce link nie opuszcza serwera.
+      link_aktywacyjny: proba.wyslano ? undefined : link,
     });
   })
 );

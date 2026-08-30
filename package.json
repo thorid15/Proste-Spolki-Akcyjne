@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node serwer.js",
     "dev": "node --watch serwer.js",
-    "test": "node --test \"testy/*.test.js\""
+    "test": "node --test \"testy/*.test.js\"",
+    "scenariusz": "node narzedzia/scenariusz-e2e.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

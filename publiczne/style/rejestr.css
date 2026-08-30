@@ -78,6 +78,7 @@ em, i, cite, blockquote, address, dfn, var { font-style: normal; }
   --szyna:  244px;
   --tresc:  1240px;
   --topbar: 72px;
+  --marka:  46px;
 
   /* ── Promienie ── */
   --r-lg: 16px;  /* panel aplikacji, karty */
@@ -151,6 +152,7 @@ body {
 .powloka {
   display: grid;
   grid-template-columns: var(--szyna) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   max-width: 1680px;
   margin: var(--od-16) auto;
   min-height: calc(100vh - var(--od-16) * 2);
@@ -170,12 +172,74 @@ body {
   border-right: 1px solid var(--linia-2);
   position: sticky;
   top: 0;
-  height: calc(100vh - var(--od-16) * 2);
+  height: calc(100vh - var(--od-16) * 2 - var(--marka));
   overflow-y: auto;
   padding: var(--od-24) var(--od-12) var(--od-16);
   display: flex;
   flex-direction: column;
 }
+
+/* ── Pasek marki kancelarii: pierwsza linia na kazdym ekranie ──
+   Rejestr prowadzi kancelaria (art. 300(31) § 1 KSH), wiec jej nazwa stoi
+   NAD nazwa modulu. Pasek idzie przez oba slupki siatki powloki. */
+.marka-pasek {
+  grid-column: 1 / -1;
+  min-height: var(--marka);
+  display: flex; align-items: center; gap: var(--od-12);
+  padding: 0 var(--od-24);
+  background: var(--rejestr);
+  color: var(--karta);
+  border-bottom: 1px solid var(--rejestr-2);
+}
+.marka-pasek-nazwa {
+  font-family: var(--font-display);
+  font-size: var(--st-20);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.marka-pasek-opis {
+  flex: 1; min-width: 0;
+  font-size: var(--st-11);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  opacity: 0.75;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.marka-pasek-link {
+  flex-shrink: 0;
+  font-size: var(--st-13);
+  color: inherit;
+  opacity: 0.85;
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+.marka-pasek-link:hover { opacity: 1; }
+@media (max-width: 640px) {
+  .marka-pasek-opis { display: none; }
+}
+
+/* ── Stopka: dane kancelarii i odeslanie na strone WWW ── */
+.stopka {
+  margin-top: auto;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--od-24); flex-wrap: wrap;
+  padding: var(--od-16) var(--od-40);
+  border-top: 1px solid var(--linia-2);
+  background: var(--karta);
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  line-height: 1.6;
+}
+.stopka-kolumna { min-width: 0; }
+/* Ekrany publiczne portalu (`.ekran-logowania`) same w sobie maja 100vh -
+   w ramie z marka i stopka ta wysokosc musi ustapic, inaczej stopka lezy
+   pod zagieciem. */
+.rama-publiczna-tresc { flex: 1; display: flex; }
+.rama-publiczna-tresc > .ekran-logowania { flex: 1; min-height: 0; }
+.stopka-kolumna-prawa { text-align: right; }
+@media (max-width: 700px) { .stopka-kolumna-prawa { text-align: left; } }
+.stopka-nazwa { font-weight: 600; color: var(--atrament-2); }
+.stopka a { color: var(--rejestr); text-decoration: none; }
+.stopka a:hover { text-decoration: underline; }
 
 /* Marka: znak w kwadracie + nazwa. Znak rysowany SVG, nie plikiem. */
 .szyna-marka { display: flex; align-items: center; gap: var(--od-12); padding: 0 var(--od-8) var(--od-24); }
@@ -221,8 +285,6 @@ body {
 }
 .szyna-poz.aktywna svg { opacity: 1; }
 .szyna-poz-etykieta { flex: 1; min-width: 0; }
-.szyna-poz.zablokowana { color: var(--atrament-3); cursor: not-allowed; }
-.szyna-poz.zablokowana:hover { background: none; color: var(--atrament-3); }
 
 /* Karta pomocy na dole szyny — jedyne miejsce z tłem w kolorze rejestru. */
 .szyna-pomoc {
