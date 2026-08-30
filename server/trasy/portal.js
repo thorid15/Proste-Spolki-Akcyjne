@@ -858,6 +858,17 @@ router.get(
       return odp.json({ rola: 'spolka', spolki: spolka ? [{ ...spolka, uwagi: undefined }] : [] });
     }
 
+    // Wnioskodawca nie ma jeszcze ani spolki, ani akcji - jego "Moje spolki"
+    // to STAN WNIOSKU. Bez tego ekran pokazywal "brak powiazanych spolek",
+    // co po zlozeniu wniosku i odeslaniu podpisanej umowy jest po prostu
+    // nieprawda: sprawa jest w toku, tylko po stronie kancelarii.
+    if (konto.rola === 'wnioskodawca') {
+      const wniosek = db()
+        .prepare('SELECT id, status, nazwa, krs, zaktualizowano FROM psa_wnioski WHERE konto_id = ?')
+        .get(konto.id);
+      return odp.json({ rola: 'wnioskodawca', spolki: [], wniosek: wniosek || null });
+    }
+
     const wiersze = db()
       .prepare(
         `SELECT sa.spolka_id, s.nazwa, s.krs, e.seria, sa.nr_od, sa.nr_do, sa.ilosc

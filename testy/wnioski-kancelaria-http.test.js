@@ -212,6 +212,48 @@ test('POST /api/psa/wnioski/:id/przyjmij: zaklada spolke i osobe, dowiazuje wnio
   assert.equal(stKorektaPoZamknieciu, 400, 'zamknietego wniosku nie mozna juz korygowac');
 });
 
+test('POST /api/psa/wnioski/:id/przyjmij: przepina konto wnioskodawcy na role spolki — i tylko na JEGO spolke', async () => {
+  const { wniosekId, ciastkoKlienta } = await wnioskGotowyDoWeryfikacji('przepiecie-konta@example.pl');
+  const [, dane] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
+  await zapytaj(
+    'POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${dane.akcjonariusze[0].id}/zweryfikuj`,
+    { zweryfikowano: true }, ciastkoPracownik
+  );
+
+  // Przed przyjeciem: konto nie ma spolki, a "Moje spolki" pokazuje wniosek.
+  const [, mojePrzed] = await zapytaj('GET', '/api/psa/portal/moje', undefined, ciastkoKlienta);
+  assert.equal(mojePrzed.rola, 'wnioskodawca');
+  assert.deepEqual(mojePrzed.spolki, []);
+  assert.equal(mojePrzed.wniosek.status, 'umowa_podpisana', 'ekran klienta mowi, na czym stoi sprawa');
+
+  const [status, wynik] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, undefined, ciastkoPracownik);
+  assert.equal(status, 200);
+  assert.equal(wynik.konto_przepiete, true);
+
+  const konto = db().prepare('SELECT * FROM psa_konta WHERE email = ?').get('przepiecie-konta@example.pl');
+  assert.equal(konto.rola, 'spolka');
+  assert.equal(konto.spolka_id, wynik.spolka_id);
+
+  // Po przyjeciu konto widzi SWOJA spolke...
+  const [, mojePo] = await zapytaj('GET', '/api/psa/portal/moje', undefined, ciastkoKlienta);
+  assert.equal(mojePo.rola, 'spolka');
+  assert.equal(mojePo.spolki.length, 1);
+  assert.equal(mojePo.spolki[0].id, wynik.spolka_id);
+
+  // ...i WYLACZNIE swoja: rejestr cudzej spolki zostaje zamkniety.
+  const obca = await wnioskGotowyDoWeryfikacji('przepiecie-konta-obca@example.pl');
+  const [, daneObcej] = await zapytaj('GET', `/api/psa/wnioski/${obca.wniosekId}`, undefined, ciastkoPracownik);
+  await zapytaj(
+    'POST', `/api/psa/wnioski/${obca.wniosekId}/akcjonariusze/${daneObcej.akcjonariusze[0].id}/zweryfikuj`,
+    { zweryfikowano: true }, ciastkoPracownik
+  );
+  const [, wynikObcej] = await zapytaj('POST', `/api/psa/wnioski/${obca.wniosekId}/przyjmij`, undefined, ciastkoPracownik);
+  // 404, nie 403 — portal celowo nie potwierdza nawet ISTNIENIA cudzej
+  // spolki (`wymagajDostepuDoSpolki` w server/trasy/portal.js).
+  const [stObca] = await zapytaj('GET', `/api/psa/portal/rejestr/${wynikObcej.spolka_id}`, undefined, ciastkoKlienta);
+  assert.equal(stObca, 404, 'konto spolki nie siega do rejestru innej spolki');
+});
+
 test('POST /api/psa/wnioski/:id/przyjmij: dopasowuje istniejaca osobe przy zweryfikuj z osoba_id, nie duplikuje kartoteki', async () => {
   const [, istniejaca] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: 'Istniejacy', imie: 'Adam' }, ciastkoPracownik);
 

@@ -415,7 +415,7 @@ function EkranNowejSpolki() {
           <>
             <Pole
               etykieta="Numer KRS"
-              podpowiedz="Dziesięć cyfr. Dane pobierzemy z otwartego API rejestru przedsiębiorców; przy niepowodzeniu uzupełnisz je ręcznie — awaria API nie blokuje rejestracji."
+              podpowiedz="Dane pobierzemy z otwartego API rejestru przedsiębiorców; przy niepowodzeniu uzupełnisz je ręcznie — awaria API nie blokuje rejestracji."
             >
               <div className="row-g">
                 <input type="text" {...pole('krs')} maxLength={10} placeholder="0000123456" />

@@ -478,10 +478,17 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
 /* ─────────────────────────────────────────────────────
    UKŁAD
    ───────────────────────────────────────────────────── */
-const KARTY_NAWIGACJI = [
-  { sciezka: '/', nazwa: 'Moje spółki' },
-  { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
-];
+/* Wnioskodawca nie ma jeszcze spółki w rejestrze — jego zakładka „Moje
+   spółki" pokazuje stan wniosku (`StanWniosku`), a sam formularz dostaje
+   własną pozycję, bo do przyjęcia wniosku to jego główny ekran. */
+function kartyNawigacji(rola) {
+  const karty = [
+    { sciezka: '/', nazwa: 'Moje spółki' },
+    { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
+  ];
+  if (rola === 'wnioskodawca') karty.splice(1, 0, { sciezka: '/wniosek', nazwa: 'Wniosek' });
+  return karty;
+}
 
 const ETYKIETA_ROLI_KONTA = {
   spolka: 'konto spółki',
@@ -511,7 +518,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
           <div className="podpowiedz">{konto.email} · {ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola}</div>
         </div>
         <div className="row-g">
-          {KARTY_NAWIGACJI.map((k) => (
+          {kartyNawigacji(konto.rola).map((k) => (
             <button
               key={k.sciezka}
               className={`btn btn-sm ${sciezka === k.sciezka ? 'btn-glowny' : ''}`}
@@ -530,12 +537,91 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
 }
 
 /* ─────────────────────────────────────────────────────
+   STAN WNIOSKU — ekran konta wnioskodawcy
+   ───────────────────────────────────────────────────── */
+
+/* Co widzi wnioskodawca w „Moich spółkach", dopóki spółki nie ma jeszcze
+   w rejestrze. Każdy stan mówi to samo w trzech częściach: gdzie jest
+   sprawa, po czyjej stronie jest ruch i co się stanie dalej. */
+const STANY_WNIOSKU_KLIENTA = {
+  w_przygotowaniu: {
+    odmiana: 'info',
+    tytul: 'Wniosek w przygotowaniu',
+    tresc: 'Wniosek nie został jeszcze złożony. Wróć do formularza i uzupełnij dane spółki oraz listę akcjonariuszy.',
+    doFormularza: true,
+  },
+  do_uzupelnienia: {
+    odmiana: 'uwaga',
+    tytul: 'Wniosek wrócił do uzupełnienia',
+    tresc: 'Kancelaria odesłała wniosek z uwagami. Popraw wskazane dane i złóż go ponownie.',
+    doFormularza: true,
+  },
+  zlozony: {
+    odmiana: 'info',
+    tytul: 'Trwa rejestracja spółki w systemie',
+    tresc: 'Wniosek został złożony. Przygotowujemy komplet dokumentów do podpisu.',
+  },
+  umowa_wygenerowana: {
+    odmiana: 'uwaga',
+    tytul: 'Czekamy na podpisane dokumenty',
+    tresc: 'Komplet dokumentów jest gotowy do pobrania. Podpisz je i odeślij podpisaną umowę w formularzu wniosku.',
+    doFormularza: true,
+  },
+  umowa_podpisana: {
+    odmiana: 'info',
+    tytul: 'Trwa rejestracja spółki w systemie',
+    tresc: 'Dokumenty dotarły do kancelarii. Trwa weryfikacja danych i zakładanie rejestru akcjonariuszy — po jej zakończeniu otrzymasz wiadomość e-mail, a w tym miejscu pojawi się podgląd rejestru i możliwość pobrania danych.',
+  },
+  odrzucony: {
+    odmiana: 'blad',
+    tytul: 'Wniosek nie został przyjęty',
+    tresc: 'Kancelaria nie przyjęła wniosku. Szczegóły otrzymasz e-mailem — w razie pytań skontaktuj się z kancelarią.',
+  },
+};
+
+function StanWniosku({ wniosek }) {
+  if (!wniosek) {
+    return (
+      <Pusto
+        tytul="Nie rozpoczęto jeszcze wniosku"
+        opis="Aby spółka trafiła do rejestru, wypełnij wniosek o prowadzenie rejestru akcjonariuszy."
+        akcja={<button className="btn btn-glowny" onClick={() => idz('/wniosek')}>Wypełnij wniosek</button>}
+      />
+    );
+  }
+
+  const stan = STANY_WNIOSKU_KLIENTA[wniosek.status] || {
+    odmiana: 'info',
+    tytul: 'Wniosek w toku',
+    tresc: 'Sprawa jest w toku po stronie kancelarii.',
+  };
+
+  return (
+    <div className="pion" style={{ gap: 16 }}>
+      <Karta tytul={wniosek.nazwa || 'Wniosek o prowadzenie rejestru'}>
+        {wniosek.krs && <div className="podpowiedz" style={{ marginBottom: 14 }}>KRS {wniosek.krs}</div>}
+        <Komunikat odmiana={stan.odmiana} tytul={stan.tytul} tresc={stan.tresc} />
+        {stan.doFormularza && (
+          <button className="btn btn-glowny" onClick={() => idz('/wniosek')}>
+            Przejdź do wniosku
+          </button>
+        )}
+      </Karta>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
    MOJE SPÓŁKI / AKCJE
    ───────────────────────────────────────────────────── */
 function EkranMoje() {
   const { dane, ladowanie } = useDane('/api/psa/portal/moje');
   if (ladowanie) return <Spinner />;
   if (!dane) return null;
+
+  // Konto wnioskodawcy: spółki jeszcze nie ma w rejestrze, więc zamiast
+  // pustej listy pokazujemy, na czym stoi wniosek i co dzieje się dalej.
+  if (dane.rola === 'wnioskodawca') return <StanWniosku wniosek={dane.wniosek} />;
 
   if (dane.spolki.length === 0) {
     return <Pusto tytul="Brak powiązanych spółek" opis="To konto nie jest jeszcze powiązane z żadną spółką w rejestrze." />;
@@ -901,16 +987,16 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
   }
 
   function ekran() {
-    // Etap 3B: konto zaproszone (rola 'wnioskodawca') nie ma jeszcze ani
-    // spółki, ani statusu akcjonariusza — `EkranMoje` (poniżej) dla niego
-    // nie ma sensu. Zanim zobaczy formularz wniosku (etap 3C), musi
-    // najpierw potwierdzić klauzulę RODO (etap 3B.1).
-    if (sesja.konto.rola === 'wnioskodawca') {
-      if (!sesja.konto.rodo_zaakceptowano) {
-        return <EkranKlauzulaRodo przyAkceptacji={() => sesja.odswiez()} />;
-      }
-      return <EkranWniosku />;
+    // Etap 3B: konto zaproszone (rola 'wnioskodawca'), zanim zobaczy
+    // formularz wniosku (etap 3C), musi potwierdzić klauzulę RODO (3B.1).
+    if (sesja.konto.rola === 'wnioskodawca' && !sesja.konto.rodo_zaakceptowano) {
+      return <EkranKlauzulaRodo przyAkceptacji={() => sesja.odswiez()} />;
     }
+    // Wnioskodawca dostawał tu formularz wniosku BEZ WZGLĘDU na adres, więc
+    // „Moje spółki" i „Moje zgłoszenia" zmieniały adres, a ekran zostawał
+    // ten sam — przyciski wyglądały na zepsute. Teraz nawigacja działa dla
+    // każdej roli, a formularz ma własny adres.
+    if (segmenty[0] === 'wniosek') return <EkranWniosku />;
     if (segmenty.length === 0) return <EkranMoje />;
     if (segmenty[0] === 'sprawy') return <EkranSprawyPortal />;
     if (segmenty[0] === 'rejestr' && segmenty[1]) return <EkranRejestrPortal spolkaId={Number(segmenty[1])} />;

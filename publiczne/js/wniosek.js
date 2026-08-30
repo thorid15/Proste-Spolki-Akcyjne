@@ -36,13 +36,6 @@ const OPIS_ADRESU_REJESTROWEGO = {
 };
 
 /**
- * Podsumowanie mówi, JAKIE adresy klient podał — nie który z nich trafi do
- * rejestru. Wyboru wymaganego przez art. 300(33) § 1 pkt 3 KSH dokonuje
- * kancelaria przy weryfikacji (formularz klienta nie ma już tego pola), więc
- * pokazywanie tu „adres niewskazany" znaczyłoby dla klienta coś zupełnie
- * innego, niż znaczy naprawdę.
- */
-/**
  * Etykieta pozycji na liście dokumentów. Nazwa pliku niesie jeszcze numer KRS
  * i rozszerzenie — potrzebne w pobranym pliku, zbędne na ekranie, gdzie cała
  * lista dotyczy tej samej spółki i tego samego formatu.
@@ -53,6 +46,13 @@ function etykietaDokumentu(nazwaPliku) {
     .replace(/\s+—\s+KRS\s+\d+$/i, '');
 }
 
+/**
+ * Podsumowanie mówi, JAKIE adresy klient podał — nie który z nich trafi do
+ * rejestru. Wyboru wymaganego przez art. 300(33) § 1 pkt 3 KSH dokonuje
+ * kancelaria przy weryfikacji (formularz klienta nie ma już tego pola), więc
+ * pokazywanie tu „adres niewskazany" znaczyłoby dla klienta coś zupełnie
+ * innego, niż znaczy naprawdę.
+ */
 function opisAdresowAkcjonariusza(a) {
   const podane = [];
   if ([a.kod_pocztowy, a.miejscowosc, a.ulica].some((v) => v && String(v).trim())) {
@@ -556,7 +556,7 @@ function EkranWniosku() {
             <div className="card-h">Dane spółki</div>
             <Pole
               etykieta="Numer KRS"
-              podpowiedz="Dziesięć cyfr. Pobierzemy dane z otwartego rejestru przedsiębiorców; przy niepowodzeniu uzupełnij je ręcznie."
+              podpowiedz="Pobierzemy dane z otwartego rejestru przedsiębiorców; przy niepowodzeniu uzupełnij je ręcznie."
             >
               <div className="row-g">
                 <input type="text" {...pole('krs')} maxLength={10} placeholder="0000123456" />

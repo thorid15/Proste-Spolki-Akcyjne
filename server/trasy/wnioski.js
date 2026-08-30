@@ -340,10 +340,34 @@ router.post(
       )
       .run(spolkaId, autor(zad), teraz, teraz, wniosek.id);
 
+    // Konto, ktore zlozylo wniosek, przestaje byc "wnioskodawca": osoba
+    // podpisala umowe o prowadzenie rejestru W IMIENIU SPOLKI, wiec od
+    // przyjecia wniosku widzi rejestr TEJ spolki - i wylacznie tej
+    // (`maDostepDoSpolki` w trasach portalu porownuje spolka_id konta
+    // z identyfikatorem w adresie). Bez tego kroku konto zostawalo w roli,
+    // ktora po przyjeciu wniosku nie ma juz zadnego ekranu: formularz
+    // wniosku jest zamkniety, a "Moje spolki" szuka akcji po osoba_id,
+    // ktorego wnioskodawca nie ma.
+    //
+    // Przepinamy WYLACZNIE role "wnioskodawca". Konto akcjonariusza albo
+    // konto juz przypisane do innej spolki zostaje nietkniete - zmiana
+    // roli jest nadaniem dostepu do cudzych danych, wiec dzieje sie tylko
+    // tam, gdzie wynika wprost ze zlozonego wniosku.
+    const kontoWnioskodawcy = wniosek.konto_id
+      ? db().prepare('SELECT id, rola FROM psa_konta WHERE id = ?').get(wniosek.konto_id)
+      : null;
+    const przepiete = Boolean(kontoWnioskodawcy && kontoWnioskodawcy.rola === 'wnioskodawca');
+    if (przepiete) {
+      db()
+        .prepare(`UPDATE psa_konta SET rola = 'spolka', spolka_id = ? WHERE id = ?`)
+        .run(spolkaId, kontoWnioskodawcy.id);
+    }
+
     odp.json({
       wniosek: wczytajWniosek(wniosek.id),
       akcjonariusze: wczytajAkcjonariuszy(wniosek.id),
       spolka_id: spolkaId,
+      konto_przepiete: przepiete,
     });
   })
 );
