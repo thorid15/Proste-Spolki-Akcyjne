@@ -138,6 +138,12 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'GET /wniosek/umowa-projekt',
     'POST /wniosek/umowa-podpisana',
     'GET /wniosek/umowa-podpisana',
+    // Etap 6: komplet oswiadczen do podpisu (PDF) skladany przy zlozeniu
+    // wniosku. Obie trasy schodza do wniosku po konto_id z sesji, a pobranie
+    // dodatkowo sprawdza, czy dokument nalezy DO TEGO wniosku - identyfikator
+    // z URL-a nigdy nie jest jedynym warunkiem dostepu.
+    'GET /wniosek/dokumenty',
+    'GET /wniosek/dokumenty/:id',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
   ].sort();

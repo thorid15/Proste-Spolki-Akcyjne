@@ -491,21 +491,22 @@ test('osoba: plec jest dobrowolna i ograniczona do katalogu', async () => {
   assert.equal(odpOk.osoba.plec, 'mezczyzna');
 });
 
-test('spolka: siedziba w miejscowniku i dane reprezentanta umowy sie zapisuja', async () => {
+test('spolka: dane reprezentanta umowy zapisuja sie w mianowniku, bez pol odmiany', async () => {
   const [, spolkaOdp] = await zapytaj('POST', '/api/psa/spolki', {
-    nazwa: 'Reprezentant Test P.S.A.', krs: '0000999888',
-    miejscowosc: 'Warszawa', siedziba_miejscownik: 'Warszawie',
-    reprezentant_imie_nazwisko: 'Jan Kowalski', reprezentant_plec: 'mezczyzna',
+    nazwa: 'Reprezentant Test P.S.A.',
+    krs: '0000999888',
+    miejscowosc: 'Warszawa',
+    reprezentant_imie_nazwisko: 'Jan Kowalski',
     reprezentant_funkcja: 'Prezes Zarządu',
+    reprezentant_rodzice: 'Piotr i Anna',
+    reprezentant_email: 'j.kowalski@example.pl',
   });
-  assert.equal(spolkaOdp.spolka.siedziba_miejscownik, 'Warszawie');
+  assert.equal(spolkaOdp.spolka.miejscowosc, 'Warszawa');
   assert.equal(spolkaOdp.spolka.reprezentant_imie_nazwisko, 'Jan Kowalski');
-  assert.equal(spolkaOdp.spolka.reprezentant_plec, 'mezczyzna');
-
-  const [stZla] = await zapytaj('POST', '/api/psa/spolki', {
-    nazwa: 'Zla Plec P.S.A.', krs: '0000999777', reprezentant_plec: 'nieznana',
-  });
-  assert.equal(stZla, 400);
+  assert.equal(spolkaOdp.spolka.reprezentant_funkcja, 'Prezes Zarządu');
+  // Wszystko zapisuje sie doslownie - pisma nie odmieniaja tych wartosci.
+  assert.equal(spolkaOdp.spolka.reprezentant_rodzice, 'Piotr i Anna');
+  assert.equal(spolkaOdp.spolka.reprezentant_email, 'j.kowalski@example.pl');
 });
 
 // ─────────────────────────────────────────────────────────────

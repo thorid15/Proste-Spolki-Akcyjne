@@ -1334,6 +1334,128 @@ const MIGRACJE = [
         ON psa_osoby_skany_aml (spolka_id);
     `,
   },
+  {
+    wersja: 29,
+    nazwa: 'zgloszenie wstepne: numer KRS spolki',
+    sql: `
+      -- Rejestr akcjonariuszy prowadzi sie dla spolki JUZ wpisanej do
+      -- rejestru przedsiebiorcow, wiec numer KRS jest naturalnym sitem na
+      -- zgloszenia przedwczesne. Kolumna zostaje NULLABLE: zgloszenia
+      -- przyjete przed ta zmiana numeru nie maja i nie da sie go dopisac
+      -- wstecz. Wymagalnosc egzekwuje trasa POST /api/psa/portal/zgloszenia
+      -- dla NOWYCH zgloszen - inaczej migracja nie przeszlaby na bazie
+      -- z historia.
+      ALTER TABLE psa_zgloszenia ADD COLUMN krs TEXT;
+    `,
+  },
+  {
+    wersja: 30,
+    nazwa: 'reprezentant spolki: adres e-mail',
+    sql: `
+      -- Adres poczty elektronicznej osoby, ktora podpisuje umowe w imieniu
+      -- spolki. Odrebny od 'email' spolki: korespondencja w sprawie zawarcia
+      -- umowy i podpisu idzie do KONKRETNEJ osoby, nie na skrzynke ogolna.
+      ALTER TABLE psa_spolki  ADD COLUMN reprezentant_email TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_email TEXT;
+    `,
+  },
+  {
+    wersja: 31,
+    nazwa: 'dane akcjonariusza wg art. 300(33) § 1 pkt 2-4 KSH (brak PESEL, adres rejestrowy, zgoda e-mail, wspolwlasnosc)',
+    sql: `
+      -- Art. 300(33) § 1 KSH wymaga w rejestrze:
+      --   pkt 2  - nazwisko i imie, PESEL ALBO date urodzenia, a dla podmiotu
+      --            niebedacego osoba fizyczna firme (nazwe) oraz numer
+      --            w rejestrze i nazwe tego rejestru,
+      --   pkt 3  - adres zamieszkania ALBO siedziby, ALBO inny adres do
+      --            doreczen, ALBO adres do doreczen elektronicznych,
+      --   pkt 4  - adres poczty elektronicznej, JEZELI akcjonariusz wyrazil
+      --            zgode na komunikacje elektroniczna,
+      --   pkt 5  - przy wspolwlasnosci akcji: dane pozostalych wspolwlascicieli,
+      --            rodzaj wspolwlasnosci, a przy ulamkowej wielkosc udzialu.
+      --
+      -- Trzy rzeczy, ktore ten zestaw kolumn prostuje wobec stanu sprzed:
+      --
+      -- 1. PESEL nie jest obowiazkowy. Cudzoziemiec go nie ma - ustawa
+      --    dopuszcza wtedy date urodzenia. „bez_pesel” to JAWNA deklaracja,
+      --    a nie wnioskowanie z pustego pola: puste pole rownie dobrze
+      --    znaczy "jeszcze nie wpisano".
+      -- 2. Adres w rejestrze to JEDEN z czterech, wskazany swiadomie -
+      --    „rodzaj_adresu_rejestrowego” mowi, ktory z wypelnionych adresow
+      --    jest tym z ustawy.
+      -- 3. Zgoda na komunikacje elektroniczna dotyczy adresu E-MAIL, nie
+      --    adresu do e-Doreczen (te dwie rzeczy byly wczesniej pomylone).
+      --    Zgode sklada SAM akcjonariusz - zarzad nie moze jej zlozyc za
+      --    niego - stad trzy stany zamiast checkboxa: spolka moze ja we
+      --    wniosku ZADEKLAROWAC, ale do rejestru adres wchodzi dopiero po
+      --    otrzymaniu podpisanego oswiadczenia.
+      --
+      -- Kolumna „zgoda_email” (0/1) ZOSTAJE - czytaja ja wzory pism
+      -- i maskowanie. Serwer ustawia ja razem ze statusem: 1 wylacznie dla
+      -- 'potwierdzona'. Status jest zrodlem prawdy, „zgoda_email” skrotem.
+      ALTER TABLE psa_osoby ADD COLUMN bez_pesel INTEGER NOT NULL DEFAULT 0
+        CHECK (bez_pesel IN (0,1));
+      ALTER TABLE psa_osoby ADD COLUMN rodzaj_adresu_rejestrowego TEXT
+        CHECK (rodzaj_adresu_rejestrowego IS NULL OR rodzaj_adresu_rejestrowego IN
+               ('zamieszkania','doreczen','edoreczen'));
+      ALTER TABLE psa_osoby ADD COLUMN zgoda_email_status TEXT NOT NULL DEFAULT 'brak'
+        CHECK (zgoda_email_status IN ('brak','zadeklarowana','potwierdzona'));
+      ALTER TABLE psa_osoby ADD COLUMN wspolwlasnosc TEXT NOT NULL DEFAULT 'brak'
+        CHECK (wspolwlasnosc IN ('brak','laczna','ulamkowa'));
+      ALTER TABLE psa_osoby ADD COLUMN wspolwlasciciele TEXT;
+      ALTER TABLE psa_osoby ADD COLUMN udzial_licznik INTEGER;
+      ALTER TABLE psa_osoby ADD COLUMN udzial_mianownik INTEGER;
+
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN bez_pesel INTEGER NOT NULL DEFAULT 0
+        CHECK (bez_pesel IN (0,1));
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN rodzaj_adresu_rejestrowego TEXT
+        CHECK (rodzaj_adresu_rejestrowego IS NULL OR rodzaj_adresu_rejestrowego IN
+               ('zamieszkania','doreczen','edoreczen'));
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN zgoda_email_status TEXT NOT NULL DEFAULT 'brak'
+        CHECK (zgoda_email_status IN ('brak','zadeklarowana','potwierdzona'));
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN wspolwlasnosc TEXT NOT NULL DEFAULT 'brak'
+        CHECK (wspolwlasnosc IN ('brak','laczna','ulamkowa'));
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN wspolwlasciciele TEXT;
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN udzial_licznik INTEGER;
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN udzial_mianownik INTEGER;
+
+      -- Dane zastane: kto mial zgode jako 0/1, ten ma ja potwierdzona.
+      UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona' WHERE zgoda_email = 1;
+      UPDATE psa_wnioski_akcjonariusze SET zgoda_email_status = 'potwierdzona' WHERE zgoda_email = 1;
+    `,
+  },
+  {
+    wersja: 32,
+    nazwa: 'komplet dokumentow do podpisu generowany przy zlozeniu wniosku',
+    sql: `
+      -- Przy zlozeniu wniosku powstaje nie jeden dokument, tylko KOMPLET:
+      -- umowa o prowadzenie rejestru (wzor 01, .docx - dokument negocjowany,
+      -- edytowalny) oraz oswiadczenia w PDF, po trzy na akcjonariusza plus
+      -- wspolne zadanie pierwszego wpisu.
+      --
+      -- Dlaczego osobna tabela, a nie kolejne kolumny w psa_wnioski: liczba
+      -- dokumentow zalezy od liczby akcjonariuszy, wiec nie da sie jej
+      -- zmiescic w stalym zestawie kolumn. Kolumna umowa_projekt_sciezka
+      -- ZOSTAJE - umowa ma wlasny cykl zycia (projekt -> podpisana kopia)
+      -- i wlasne trasy, a te wiersze sa tylko do pobrania i podpisania.
+      CREATE TABLE IF NOT EXISTS psa_wnioski_dokumenty (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        wniosek_id      INTEGER NOT NULL REFERENCES psa_wnioski(id),
+        -- NULL = dokument wspolny dla calego wniosku (zadanie wpisu).
+        akcjonariusz_id INTEGER REFERENCES psa_wnioski_akcjonariusze(id),
+        typ             TEXT NOT NULL,
+        nazwa           TEXT NOT NULL,
+        nazwa_pliku     TEXT NOT NULL,
+        sciezka         TEXT NOT NULL,
+        mime            TEXT NOT NULL DEFAULT 'application/pdf',
+        rozmiar         INTEGER,
+        utworzono       TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_wnioski_dokumenty_wniosek
+        ON psa_wnioski_dokumenty (wniosek_id, id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

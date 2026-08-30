@@ -182,30 +182,32 @@ body {
 /* ── Pasek marki kancelarii: pierwsza linia na kazdym ekranie ──
    Rejestr prowadzi kancelaria (art. 300(31) § 1 KSH), wiec jej nazwa stoi
    NAD nazwa modulu. Pasek idzie przez oba slupki siatki powloki. */
+/* Nazwa kancelarii stoi POSRODKU paska, niezaleznie od tego, jak szeroki
+   jest odnosnik po prawej - stad siatka o trzech kolumnach, w ktorej skrajne
+   maja te sama szerokosc. Link zyje w prawej, srodkowa jest zawsze
+   wysrodkowana wzgledem calego paska. */
 .marka-pasek {
   grid-column: 1 / -1;
   min-height: var(--marka);
-  display: flex; align-items: center; gap: var(--od-12);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--od-12);
   padding: 0 var(--od-24);
   background: var(--rejestr);
   color: var(--karta);
   border-bottom: 1px solid var(--rejestr-2);
 }
 .marka-pasek-nazwa {
+  grid-column: 2;
   font-family: var(--font-display);
   font-size: var(--st-20);
   line-height: 1.1;
-  white-space: nowrap;
-}
-.marka-pasek-opis {
-  flex: 1; min-width: 0;
-  font-size: var(--st-11);
-  text-transform: uppercase; letter-spacing: 0.08em;
-  opacity: 0.75;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-align: center;
 }
 .marka-pasek-link {
-  flex-shrink: 0;
+  grid-column: 3;
+  justify-self: end;
   font-size: var(--st-13);
   color: inherit;
   opacity: 0.85;
@@ -214,7 +216,8 @@ body {
 }
 .marka-pasek-link:hover { opacity: 1; }
 @media (max-width: 640px) {
-  .marka-pasek-opis { display: none; }
+  .marka-pasek { grid-template-columns: 1fr; justify-items: center; padding: var(--od-8) var(--od-16); }
+  .marka-pasek-nazwa, .marka-pasek-link { grid-column: 1; justify-self: center; }
 }
 
 /* ── Stopka: dane kancelarii i odeslanie na strone WWW ── */
@@ -285,6 +288,22 @@ body {
 }
 .szyna-poz.aktywna svg { opacity: 1; }
 .szyna-poz-etykieta { flex: 1; min-width: 0; }
+/* Licznik kolejki: liczba, nie ozdoba - dlatego cyfry tabelaryczne i staly
+   minimalny rozmiar, zeby "1" i "12" nie rozjezdzaly wiersza. */
+.szyna-licznik {
+  flex-shrink: 0;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--rejestr);
+  color: var(--karta);
+  font-size: var(--st-11);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: center;
+}
+.szyna-poz.aktywna .szyna-licznik { background: var(--rejestr-2); }
 
 /* Karta pomocy na dole szyny — jedyne miejsce z tłem w kolorze rejestru. */
 .szyna-pomoc {
@@ -1332,4 +1351,186 @@ select {
   /* Oś akcji nie trafia na wydruk — kreskowanie ginie na druku
      czarno-białym (SESJA-PSA-6-INTERFEJS.md, faza 4). */
   .os-akcji, .raport-bez-druku { display: none !important; }
+}
+
+/* ── Wskaźnik autozapisu ──
+   Ma być widoczny, gdy się go szuka, i niewidoczny, gdy się pisze — stąd
+   rozmiar podpisu i kolor wyciszony, a nie pigułka przyciągająca wzrok. */
+.stan-zapisu {
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  white-space: nowrap;
+}
+.stan-zapisu-blad { color: var(--sygnal); white-space: normal; }
+
+/* ─────────────────────────────────────────────────────
+   PODSUMOWANIE WNIOSKU (portal klienta, krok „Weryfikacja”)
+   Ostatni ekran przed złożeniem wniosku czyta się, a nie wypełnia — więc
+   treść dostaje rozmiar tekstu, nie podpisu, a etykiety własną kolumnę
+   zamiast wisieć w jednej linii z wartością.
+   ───────────────────────────────────────────────────── */
+.podsumowanie {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--od-8) var(--od-24);
+  margin: 0;
+  font-size: var(--st-15);
+  align-items: baseline;
+}
+.podsumowanie dt {
+  color: var(--atrament-3);
+  font-size: var(--st-13);
+}
+.podsumowanie dd {
+  margin: 0;
+  color: var(--atrament);
+  overflow-wrap: anywhere;
+}
+.podsumowanie .brak { color: var(--atrament-3); font-style: italic; }
+.podsumowanie-dopisek {
+  display: block;
+  font-size: var(--st-13);
+  color: var(--atrament-2);
+}
+@media (max-width: 640px) {
+  .podsumowanie { grid-template-columns: minmax(0, 1fr); gap: 2px var(--od-8); }
+  .podsumowanie dd { margin-bottom: var(--od-12); }
+}
+
+/* Lista akcjonariuszy w podsumowaniu: nazwa na pierwszym planie, cechy
+   ustawowe pod nią jako rozdzielone kropkami znaczniki. */
+.podsumowanie-lista { display: flex; flex-direction: column; }
+.podsumowanie-pozycja {
+  padding: var(--od-12) 0;
+  border-bottom: 1px solid var(--linia-2);
+}
+.podsumowanie-pozycja:last-child { border-bottom: none; padding-bottom: 0; }
+.podsumowanie-pozycja:first-child { padding-top: 0; }
+.podsumowanie-nazwa { font-size: var(--st-15); font-weight: 500; }
+.podsumowanie-cechy {
+  display: flex; flex-wrap: wrap;
+  gap: 2px var(--od-8);
+  margin-top: 2px;
+  font-size: var(--st-13);
+  color: var(--atrament-2);
+}
+.podsumowanie-cechy > span + span::before {
+  content: '·';
+  margin-right: var(--od-8);
+  color: var(--atrament-3);
+}
+
+/* ─────────────────────────────────────────────────────
+   EKRAN LOGOWANIA / EKRAN PUBLICZNY PORTALU
+   Dwie kolumny: po lewej kto prowadzi rejestr i na jakiej podstawie,
+   po prawej formularz. Na wąskim ekranie kolumna opisowa schodzi pod
+   formularz — najpierw rzecz do zrobienia, potem wyjaśnienie.
+   ───────────────────────────────────────────────────── */
+.brama {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
+  gap: var(--od-64);
+  align-items: center;
+  justify-content: center;
+  max-width: 1080px;
+  width: 100%;
+  margin-inline: auto;
+  padding: var(--od-64) var(--od-40);
+}
+.brama-opis { max-width: 480px; }
+.brama-tytul {
+  font-family: var(--font-display);
+  font-size: var(--st-40);
+  line-height: 1.1;
+  margin-bottom: var(--od-16);
+}
+.brama-lead {
+  font-size: var(--st-15);
+  color: var(--atrament-2);
+  line-height: 1.6;
+  margin-bottom: var(--od-24);
+}
+.brama-punkty { display: flex; flex-direction: column; gap: var(--od-12); }
+.brama-punkt { display: flex; gap: var(--od-12); align-items: flex-start; }
+.brama-punkt-ikona {
+  flex-shrink: 0;
+  width: 26px; height: 26px;
+  border-radius: var(--r-sm);
+  background: var(--rejestr-tlo);
+  color: var(--rejestr);
+  display: flex; align-items: center; justify-content: center;
+}
+.brama-punkt-tresc { font-size: var(--st-13); color: var(--atrament-2); line-height: 1.55; }
+.brama-punkt-tresc strong { color: var(--atrament); font-weight: 600; display: block; }
+
+.brama-karta {
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r-lg);
+  box-shadow: var(--cien-panel);
+  padding: var(--od-40);
+}
+.brama-karta-tytul {
+  font-family: var(--font-display);
+  font-size: var(--st-28);
+  line-height: 1.15;
+  margin-bottom: var(--od-4);
+}
+.brama-karta-podtytul {
+  font-size: var(--st-13);
+  color: var(--atrament-2);
+  margin-bottom: var(--od-24);
+}
+.brama-stopka {
+  margin-top: var(--od-24);
+  padding-top: var(--od-16);
+  border-top: 1px solid var(--linia-2);
+  font-size: var(--st-13);
+  color: var(--atrament-2);
+  text-align: center;
+}
+.brama-stopka .btn { margin-top: var(--od-8); }
+
+@media (max-width: 900px) {
+  .brama {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--od-40);
+    padding: var(--od-40) var(--od-24);
+    align-content: start;
+  }
+  .brama-opis { order: 2; max-width: none; }
+  .brama-karta { order: 1; padding: var(--od-24); }
+  .brama-tytul { font-size: var(--st-28); }
+}
+
+/* Stopka kreatora przykleja się do dołu okna przy długim formularzu —
+   cień odróżnia ją od treści, która pod nią przepływa. */
+.kreator-stopka { box-shadow: 0 -10px 18px -14px rgba(26, 31, 27, 0.45); }
+/* Ostatni krok kreatora: nie ma dokąd iść dalej, więc pasek nie przykleja
+   się do dołu okna i nie zasłania treści nad sobą. */
+.kreator-stopka-statyczna { position: static; box-shadow: none; }
+
+/* ── Lista dokumentów do pobrania ──
+   Cały wiersz jest celem kliknięcia, nie sam odnośnik w środku: nazwy plików
+   bywają długie i trafienie w tekst byłoby loterią. */
+.lista-dokumentow { display: flex; flex-direction: column; }
+.lista-dokumentow-poz {
+  display: flex; align-items: center; gap: var(--od-12);
+  padding: var(--od-12);
+  border: 1px solid var(--linia-2);
+  border-radius: var(--r-sm);
+  margin-bottom: var(--od-8);
+  color: var(--atrament);
+  text-decoration: none;
+  transition: background var(--ruch-wiersz), border-color var(--ruch-wiersz);
+}
+.lista-dokumentow-poz:hover { background: var(--papier); border-color: var(--linia); }
+.lista-dokumentow-poz svg { flex-shrink: 0; color: var(--rejestr); }
+.lista-dokumentow-nazwa { flex: 1; min-width: 0; font-size: var(--st-13); overflow-wrap: anywhere; }
+.lista-dokumentow-rozmiar {
+  flex-shrink: 0;
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  font-variant-numeric: tabular-nums;
 }

@@ -39,8 +39,8 @@ p = akapit(d, 'left', przed=10, po=6)
 pisz(p, 'Łączna liczba akcji: {{lista_akcje_razem}}.')
 
 p = akapit(d, 'just', po=6)
-pisz(p, 'Rejestr akcjonariuszy spółki prowadzi Kancelaria Notarialna Notariusza {{notariusz_dopelniacz}}, '
-        'ulica {{kancelaria_ulica}}, {{kancelaria_kod}} {{kancelaria_miasto}}.')
+pisz(p, 'Rejestr akcjonariuszy spółki prowadzi Kancelaria Notarialna, notariusz: {{notariusz_mianownik}}, '
+        'adres: ulica {{kancelaria_ulica}}, {{kancelaria_kod}} {{kancelaria_miasto}}.')
 
 p = akapit(d, 'left', przed=18, po=0)
 pisz(p, '{{#czlonkowie_organu}}')

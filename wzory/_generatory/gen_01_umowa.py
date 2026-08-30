@@ -16,26 +16,26 @@ def rozdzial(tytul):
 naglowek_dok(d, ['Umowa', 'o prowadzenie rejestru akcjonariuszy prostej spółki akcyjnej'], size=14)
 
 p = akapit(d, 'just', po=6)
-pisz(p, 'zawarta w {{kancelaria_miasto_miejscownik}} dnia {{umowa_data}} roku pomiędzy:')
+pisz(p, 'zawarta dnia {{umowa_data}} roku w miejscowości {{kancelaria_miasto}}, pomiędzy:')
 
 p = akapit(d, 'just', po=6)
-pisz(p, 'Spółką pod firmą {{spolka_firma}} prosta spółka akcyjna z siedzibą w {{spolka_siedziba_miejscownik}} '
+pisz(p, 'Spółką pod firmą {{spolka_firma}} prosta spółka akcyjna, siedziba: {{spolka_siedziba_mianownik}} '
         '({{spolka_adres_pelny}}), wpisaną do rejestru przedsiębiorców Krajowego Rejestru Sądowego '
         'prowadzonego przez {{spolka_sad_rejestrowy}} pod numerem KRS {{spolka_krs}}, '
         'NIP {{spolka_nip}}, REGON {{spolka_regon}} (dalej jako „Spółka”),')
 
 p = akapit(d, 'just', po=6)
-pisz(p, 'reprezentowaną przez {{reprezentant_biernik}}, {{reprezentant_syn_corka}} {{reprezentant_rodzice}}, '
-        '{{reprezentant_legitymujacy}} dowodem osobistym {{reprezentant_dowod}}, PESEL {{reprezentant_pesel}}, '
-        '{{reprezentant_zamieszkaly}}: {{reprezentant_adres}}, {{reprezentant_dzialajacy}} jako '
-        '{{reprezentant_funkcja_biernik}} – {{reprezentant_reprezentacja}} powyższej Spółki,')
+pisz(p, 'reprezentowaną przez: {{reprezentant_imie_nazwisko}}, imiona rodziców: {{reprezentant_rodzice}}, '
+        'dowód osobisty: {{reprezentant_dowod}}, PESEL: {{reprezentant_pesel}}, '
+        'adres zamieszkania: {{reprezentant_adres}}, działający jako: {{reprezentant_funkcja}}, '
+        'sposób reprezentacji: {{reprezentant_reprezentacja}},')
 
 p = akapit(d, 'just', po=6)
 pisz(p, 'a')
 
 p = akapit(d, 'just', po=6)
-pisz(p, 'Notariuszem {{notariusz_narzednik}} prowadzącym Kancelarię Notarialną w {{kancelaria_miasto_miejscownik}}, '
-        'przy ulicy {{kancelaria_ulica}}, NIP {{kancelaria_nip}}, REGON {{kancelaria_regon}} '
+pisz(p, 'Kancelarią Notarialną, notariusz: {{notariusz_mianownik}}, adres: ulica {{kancelaria_ulica}}, '
+        '{{kancelaria_kod}} {{kancelaria_miasto}}, NIP: {{kancelaria_nip}}, REGON: {{kancelaria_regon}} '
         '(dalej jako: „Notariusz”)')
 
 p = akapit(d, 'just', po=10)
@@ -303,13 +303,13 @@ ustep(d, '1.', 'Jeżeli niniejsza Umowa nie stanowi inaczej, wszelkie oświadcze
                'i dokumenty związane z zawarciem i wykonaniem Umowy będą doręczane między Stronami na następujące '
                'adresy:')
 p = akapit(d, 'left', po=2, wciecie=1.5)
-pisz(p, 'Kancelaria Notarialna Notariusza {{notariusz_dopelniacz}}', bold=True)
+pisz(p, 'Kancelaria Notarialna, notariusz: {{notariusz_mianownik}}', bold=True)
 p = akapit(d, 'left', po=2, wciecie=1.5)
 pisz(p, '– adres korespondencyjny: {{kancelaria_kod}} {{kancelaria_miasto}}, ulica {{kancelaria_ulica}}')
 p = akapit(d, 'left', po=8, wciecie=1.5)
 pisz(p, '– adres poczty elektronicznej: {{kancelaria_email}}')
 p = akapit(d, 'left', po=2, wciecie=1.5)
-pisz(p, 'Spółka {{spolka_firma}} prosta spółka akcyjna z siedzibą w {{spolka_siedziba_miejscownik}}', bold=True)
+pisz(p, 'Spółka {{spolka_firma}} prosta spółka akcyjna, siedziba: {{spolka_siedziba_mianownik}}', bold=True)
 p = akapit(d, 'left', po=2, wciecie=1.5)
 pisz(p, '– adres korespondencyjny: {{spolka_adres_pelny}}')
 p = akapit(d, 'left', po=8, wciecie=1.5)

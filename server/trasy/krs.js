@@ -131,14 +131,6 @@ function zmapuj(odpowiedz, numerKrs) {
     data_zawarcia_umowy_spolki: parseKrsDate(
       zeSciezek(dane, ['dzial1.umowaStatut.informacjaOZawarciuZmianieUmowyStatutu.0.zawarcieZmianaUmowyStatutu'])
     ),
-    data_ostatniego_wpisu_krs: parseKrsDate(
-      zeSciezek(naglowek, [
-        'dataOstatniegoWpisu',
-        'dataDokonaniaOstatniegoWpisu',
-        'ostatniWpis.dataDokonaniaWpisu',
-        'dataWpisu',
-      ])
-    ),
     adres_edorecze:
       zeSciezek(adres, [
         'adresDoDoreczenElektronicznychWpisanyDoBAE',

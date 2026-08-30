@@ -361,6 +361,48 @@ function renderujFragment(xml, zakresy, kontekst) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Metadane pliku
+// ─────────────────────────────────────────────────────────────
+
+const CZESC_METADANYCH = 'docProps/core.xml';
+const CZESC_APLIKACJI = 'docProps/app.xml';
+
+/**
+ * Podmienia autora i tytuł w metadanych pliku .docx.
+ *
+ * Wzory powstają skryptem w Pythonie, więc bez tego kroku Word pokazuje we
+ * właściwościach pliku „python-docx” jako autora KAŻDEGO pisma wydanego
+ * klientowi. Dokument wychodzi z kancelarii i to kancelaria ma być jego
+ * autorem — także w metadanych, nie tylko w treści.
+ *
+ * Podmieniamy WYŁĄCZNIE zawartość znanych znaczników; gdy pliku metadanych
+ * w archiwum nie ma (wzór zapisany nietypowym narzędziem), zostawiamy
+ * dokument bez zmian zamiast psuć archiwum.
+ */
+function ustawAutora(wpisy, autor, tytul) {
+  const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  return wpisy.map((w) => {
+    if (w.nazwa !== CZESC_METADANYCH && w.nazwa !== CZESC_APLIKACJI) return w;
+    let xml = zip.rozpakuj(w).toString('utf8');
+
+    if (w.nazwa === CZESC_METADANYCH) {
+      xml = xml
+        .replace(/<dc:creator>[\s\S]*?<\/dc:creator>/, `<dc:creator>${esc(autor)}</dc:creator>`)
+        .replace(/<cp:lastModifiedBy>[\s\S]*?<\/cp:lastModifiedBy>/, `<cp:lastModifiedBy>${esc(autor)}</cp:lastModifiedBy>`);
+      if (tytul) {
+        xml = xml.replace(/<dc:title>[\s\S]*?<\/dc:title>/, `<dc:title>${esc(tytul)}</dc:title>`);
+      }
+    } else {
+      // app.xml niesie nazwę programu, który zapisał plik.
+      xml = xml.replace(/<Application>[\s\S]*?<\/Application>/, `<Application>${esc(autor)}</Application>`);
+    }
+
+    return { ...w, dane: Buffer.from(xml, 'utf8') };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
 // Wejście publiczne
 // ─────────────────────────────────────────────────────────────
 
@@ -380,15 +422,16 @@ function dokumentXml(bufor) {
  * @param {object} dane   słownik kluczy (patrz PLACEHOLDERY-PSA.md)
  * @returns {{ plik: Buffer, brakujace: string[], bledy: string[], ostrzezenia: string[] }}
  */
-function wypelnij(bufor, dane = {}) {
+function wypelnij(bufor, dane = {}, opcje = {}) {
   const { wpisy, wpis, xml } = dokumentXml(bufor);
   const kontekst = { brakujace: new Set(), bledy: [], ostrzezenia: [] };
   const scalony = scalPrzebiegi(xml, kontekst.ostrzezenia);
   const wypelniony = renderujFragment(scalony, [dane], kontekst);
 
-  const nowe = wpisy.map((w) =>
+  let nowe = wpisy.map((w) =>
     w === wpis ? { ...w, dane: Buffer.from(wypelniony, 'utf8') } : w
   );
+  if (opcje.autor) nowe = ustawAutora(nowe, opcje.autor, opcje.tytul || null);
   return {
     plik: zip.zapisz(nowe),
     brakujace: [...kontekst.brakujace],

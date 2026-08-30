@@ -1,62 +1,21 @@
 'use strict';
 
 /**
- * Blok B sesji 8 — dane wymagane przez wzory pism: formy gramatyczne zalezne
- * od plci (server/logika/formy-osobowe.js), znak sprawy
- * (server/logika/znak-sprawy.js) i nowe katalogi w server/logika/przepisy.js.
+ * Blok B sesji 8 — dane wymagane przez wzory pism: znak sprawy
+ * (server/logika/znak-sprawy.js) i katalogi w server/logika/przepisy.js.
+ *
+ * Formy gramatyczne zalezne od plci znikly razem z `formy-osobowe.js`:
+ * wzory nie odmieniaja juz danych przez przypadki, tylko opisuja je
+ * etykieta ("imiona rodzicow:", "dzialajacy jako:").
  */
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const formy = require('../server/logika/formy-osobowe');
 const { nastepnyNumerSprawy } = require('../server/logika/znak-sprawy');
 const przepisy = require('../server/logika/przepisy');
 const { bazaTestowa } = require('./pomoc');
 
-// ─────────────────────────────────────────────────────────────
-// formy-osobowe.js
-// ─────────────────────────────────────────────────────────────
-
-test('formyReprezentanta: rozne formy dla obu plci, null gdy plec nieznana', () => {
-  assert.deepEqual(formy.formyReprezentanta('mezczyzna'), {
-    reprezentant_syn_corka: 'syna',
-    reprezentant_legitymujacy: 'legitymującego się',
-    reprezentant_zamieszkaly: 'zamieszkałego',
-    reprezentant_dzialajacy: 'działającego',
-  });
-  assert.deepEqual(formy.formyReprezentanta('kobieta'), {
-    reprezentant_syn_corka: 'córkę',
-    reprezentant_legitymujacy: 'legitymującą się',
-    reprezentant_zamieszkaly: 'zamieszkałą',
-    reprezentant_dzialajacy: 'działającą',
-  });
-  assert.equal(formy.formyReprezentanta(null), null);
-  assert.equal(formy.formyReprezentanta(undefined), null);
-  assert.equal(formy.formyReprezentanta('nieznana'), null);
-});
-
-test('formyZadajacego i formyZgadzajacego: mianownik, pierwsza/trzecia osoba', () => {
-  assert.deepEqual(formy.formyZadajacego('mezczyzna'), {
-    zadajacy_podpisany: 'podpisany',
-    zadajacy_zamieszkaly: 'zamieszkały',
-  });
-  assert.deepEqual(formy.formyZadajacego('kobieta'), {
-    zadajacy_podpisany: 'podpisana',
-    zadajacy_zamieszkaly: 'zamieszkała',
-  });
-  assert.equal(formy.formyZadajacego(null), null);
-
-  assert.deepEqual(formy.formyZgadzajacego('mezczyzna'), { zgadzajacy_podpisany: 'podpisany' });
-  assert.deepEqual(formy.formyZgadzajacego('kobieta'), { zgadzajacy_podpisany: 'podpisana' });
-  assert.equal(formy.formyZgadzajacego(null), null);
-});
-
-test('formaZapoznania: czasownik w pierwszej osobie, czas przeszly', () => {
-  assert.deepEqual(formy.formaZapoznania('mezczyzna'), { zapoznany: 'zapoznałem się' });
-  assert.deepEqual(formy.formaZapoznania('kobieta'), { zapoznany: 'zapoznałam się' });
-  assert.equal(formy.formaZapoznania(null), null);
-});
 
 // ─────────────────────────────────────────────────────────────
 // znak-sprawy.js

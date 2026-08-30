@@ -59,6 +59,36 @@ router.get(
   })
 );
 
+/**
+ * Liczniki kolejek dla szyny nawigacji - male znaczniki przy pozycjach menu.
+ *
+ * Liczy sie WYLACZNIE to, co czeka na ruch KANCELARII, nie wszystko, co
+ * istnieje: zgloszenie w stanie "nowe" (do oceny), wniosek z odeslana
+ * podpisana umowa (do weryfikacji) i sprawa w toku. Pozycje czekajace na
+ * ruch klienta (wniosek w przygotowaniu, wygenerowana umowa jeszcze
+ * niepodpisana) licznika NIE podbijaja - inaczej znacznik pokazywalby
+ * prace, ktorej nie da sie wykonac.
+ *
+ * "Spolki" i "Kartoteka osob" licznikow nie maja z zalozenia - to katalogi,
+ * nie kolejki.
+ */
+router.get(
+  '/liczniki',
+  wymagajPracownika,
+  asy((zad, odp) => {
+    const wiersz = db()
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM psa_zgloszenia WHERE status = 'nowe')            AS zgloszenia,
+           (SELECT COUNT(*) FROM psa_wnioski WHERE status = 'umowa_podpisana')    AS wnioski,
+           (SELECT COUNT(*) FROM psa_sprawy
+             WHERE stan IN ('nowa','weryfikacja','wstrzymana'))                   AS sprawy`
+      )
+      .get();
+    odp.json({ liczniki: wiersz });
+  })
+);
+
 /** Pulpit: spolki + dyskretny znacznik integralnosci + liczniki. */
 router.get(
   '/pulpit',

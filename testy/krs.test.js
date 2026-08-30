@@ -73,7 +73,14 @@ const ODPIS_0001114217 = {
 test('mapuje daty z KRS (DD.MM.RRRR) na ISO, nie na surowy string', () => {
   const wynik = zmapuj(ODPIS_0001114217, '0001114217');
   assert.equal(wynik.data_utworzenia_spolki, '2024-07-04');
-  assert.equal(wynik.data_ostatniego_wpisu_krs, '2025-07-15');
+});
+
+// Data ostatniego wpisu do KRS nie jest juz importowana: nie wchodzi do
+// tresci rejestru (art. 300(33) § 1 KSH), nie trafia do zadnego pisma
+// i nie warunkuje zadnej walidacji - byla wylacznie ciekawostka w formularzu.
+test('NIE mapuje juz daty ostatniego wpisu do KRS', () => {
+  const wynik = zmapuj(ODPIS_0001114217, '0001114217');
+  assert.equal(wynik.data_ostatniego_wpisu_krs, undefined);
 });
 
 test('mapuje date zawarcia umowy spolki (akt zalozycielski) - PIERWSZY wpis tablicy, rozna od daty rejestracji w KRS', () => {

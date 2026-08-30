@@ -5,18 +5,19 @@ występujące w .docx. Dodanie klucza do wzoru bez wpisu tutaj = błąd testu.""
 
 # --- konfiguracja modułu (nie z formularza) -------------------------------
 KANCELARIA = [
-    # notariusz_mianownik: wartość konfiguracyjna — zasila domyślnie podpisujacy_mianownik,
-    # nie występuje bezpośrednio w żadnym wzorze
-    'notariusz_mianownik', 'notariusz_dopelniacz', 'notariusz_narzednik',
+    # Wszystkie dane osobowe i nazwy własne występują we wzorach w MIANOWNIKU
+    # i są opisane etykietą („notariusz: …", „siedziba: …"), więc żadne pole
+    # w dopełniaczu, narzędniku ani miejscowniku nie jest już potrzebne.
+    'notariusz_mianownik',
     'podpisujacy_funkcja', 'podpisujacy_mianownik',
-    'kancelaria_miasto', 'kancelaria_miasto_miejscownik', 'kancelaria_ulica',
+    'kancelaria_miasto', 'kancelaria_ulica',
     'kancelaria_kod', 'kancelaria_email', 'kancelaria_telefon',
     'kancelaria_nip', 'kancelaria_regon',
 ]
 
 # --- spółka (KRS / formularz) ---------------------------------------------
 SPOLKA = [
-    'spolka_firma', 'spolka_siedziba_mianownik', 'spolka_siedziba_miejscownik',
+    'spolka_firma', 'spolka_siedziba_mianownik',
     'spolka_adres_pelny',
     'spolka_sad_rejestrowy', 'spolka_krs', 'spolka_nip', 'spolka_regon',
     'spolka_email', 'spolka_organ', 'spolka_organ_czlonkowie',
@@ -27,12 +28,9 @@ PISMO = ['pismo_data', 'sprawa_numer', 'adresat_nazwa', 'adresat_adres']
 
 # --- reprezentant spółki (wzór 01) ----------------------------------------
 REPREZENTANT = [
-    'reprezentant_biernik', 'reprezentant_rodzice', 'reprezentant_dowod',
-    'reprezentant_pesel', 'reprezentant_adres', 'reprezentant_funkcja_biernik',
-    'reprezentant_reprezentacja',
-    # formy pochodne z pola plec:
-    'reprezentant_syn_corka', 'reprezentant_legitymujacy',
-    'reprezentant_zamieszkaly', 'reprezentant_dzialajacy',
+    'reprezentant_imie_nazwisko', 'reprezentant_rodzice', 'reprezentant_dowod',
+    'reprezentant_pesel', 'reprezentant_adres', 'reprezentant_funkcja',
+    'reprezentant_reprezentacja', 'reprezentant_email',
 ]
 
 # --- żądanie i żądający ----------------------------------------------------
@@ -43,8 +41,6 @@ ZADANIE = [
     'sposob_doreczen', 'zgoda_email',
     'dokument_rodzaj', 'dokument_data', 'dokument_strony',
     'zgadzajacy_mianownik', 'zgadzajacy_identyfikator',
-    # formy pochodne z pola plec:
-    'zadajacy_podpisany', 'zadajacy_zamieszkaly', 'zgadzajacy_podpisany', 'zapoznany',
 ]
 
 # --- wpis ------------------------------------------------------------------
@@ -96,9 +92,9 @@ ZNANE = PROSTE | W_SEKCJACH | set(SEKCJE)
 # --- mapa migracji: stary klucz -> nowy ------------------------------------
 MIGRACJA = {
     'miejscowosc': 'kancelaria_miasto',
-    'spolka_siedziba': 'spolka_siedziba_mianownik / spolka_siedziba_miejscownik (zależnie od zdania)',
+    'spolka_siedziba': 'spolka_siedziba_mianownik',
     'data_pisma': 'pismo_data',
-    'kancelaria_nazwa': '(rozłożony na tekst stały + notariusz_dopelniacz)',
+    'kancelaria_nazwa': '(rozłożony na tekst stały + notariusz_mianownik)',
     'kancelaria_adres': '(rozłożony na kancelaria_ulica/kod/miasto)',
     'kancelaria_kontakt': '(rozłożony na kancelaria_email + kancelaria_telefon)',
     'podpisujacy_imie_nazwisko': 'podpisujacy_mianownik',

@@ -78,9 +78,7 @@ async function nowaSpolka(nadpisania = {}) {
     nazwa: `Na Żądanie ${sufiks} P.S.A.`,
     krs: `0001${sufiks}00`,
     organ_rodzaj: 'zarzad',
-    siedziba_miejscownik: 'Testowie',
     reprezentant_imie_nazwisko: 'Jan Testowy',
-    reprezentant_plec: 'mezczyzna',
     ...nadpisania,
   });
   return odp.spolka;
@@ -158,7 +156,7 @@ test('brakujace dane (np. brak reprezentanta) nie blokuja wystawienia — wracaj
   const spolka = await nowaSpolka({ reprezentant_imie_nazwisko: null, organ_rodzaj: null });
   const [status, odp] = await zapytaj('POST', `/api/psa/spolki/${spolka.id}/dokumenty/01`);
   assert.equal(status, 201, 'wystawienie sie udaje mimo brakow');
-  assert.ok(odp.brakujace.includes('reprezentant_biernik'));
+  assert.ok(odp.brakujace.includes('reprezentant_imie_nazwisko'));
 });
 
 test('nieznany kod wzoru daje 404', async () => {

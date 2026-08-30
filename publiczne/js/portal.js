@@ -55,12 +55,11 @@ function StopkaPortalu() {
 }
 
 /** Pasek marki — wspólny dla ekranów publicznych i zalogowanych. */
-function PasekMarkiPortal({ opis }) {
+function PasekMarkiPortal() {
   const k = useKancelaria();
   return (
     <div className="marka-pasek bez-druku">
       <div className="marka-pasek-nazwa">{k.nazwa}</div>
-      <div className="marka-pasek-opis">{opis}</div>
       {k.www && (
         <a className="marka-pasek-link" href={k.www} target="_blank" rel="noopener noreferrer">
           {k.www.replace(/^https?:\/\//, '').replace(/\/$/, '')}
@@ -70,16 +69,81 @@ function PasekMarkiPortal({ opis }) {
   );
 }
 
-/** Rama ekranów publicznych: marka na górze, stopka na dole, karta w środku. */
-function RamaPubliczna({ children }) {
+/**
+ * Kolumna opisowa ekranów publicznych — mówi, czym jest ten portal i czego
+ * po nim oczekiwać, zanim ktokolwiek wpisze hasło. Ta sama na logowaniu,
+ * zgłoszeniu i aktywacji, żeby trzy wejścia do portalu wyglądały jak jedno
+ * miejsce, a nie trzy różne strony.
+ */
+function OpisPortalu({ tytul, lead, punkty }) {
+  return (
+    <div className="brama-opis">
+      <div className="brama-tytul">{tytul}</div>
+      <div className="brama-lead">{lead}</div>
+      <div className="brama-punkty">
+        {punkty.map((p) => (
+          <div className="brama-punkt" key={p.tytul}>
+            <span className="brama-punkt-ikona"><Ikona nazwa={p.ikona} rozmiar={15} /></span>
+            <span className="brama-punkt-tresc">
+              <strong>{p.tytul}</strong>
+              {p.tresc}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Rama ekranów publicznych: marka na górze, stopka na dole, dwie kolumny w środku. */
+function RamaPubliczna({ opis, children }) {
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <PasekMarkiPortal opis="Portal klienta — rejestr akcjonariuszy P.S.A." />
-      <div className="rama-publiczna-tresc">{children}</div>
+      <PasekMarkiPortal />
+      <div className="brama">
+        {opis}
+        <div className="brama-karta">{children}</div>
+      </div>
       <StopkaPortalu />
     </div>
   );
 }
+
+const PUNKTY_LOGOWANIA = [
+  {
+    ikona: 'spolki',
+    tytul: 'Podgląd rejestru akcjonariuszy',
+    tresc: 'Stan na dowolny dzień, w zakresie odpowiadającym roli konta.',
+  },
+  {
+    ikona: 'sprawy',
+    tytul: 'Zgłaszanie zmian',
+    tresc: 'Żądanie wpisu wraz z dokumentami, bez wizyty w kancelarii.',
+  },
+  {
+    ikona: 'dokument',
+    tytul: 'Informacja z rejestru',
+    tresc: 'Dokument wystawiany na wskazany dzień — art. 300³⁵ KSH.',
+  },
+];
+
+const PUNKTY_ZGLOSZENIA = [
+  {
+    ikona: 'sprawdz',
+    tytul: 'Spółka wpisana do KRS',
+    tresc: 'Rejestr akcjonariuszy prowadzi się dla spółki już zarejestrowanej.',
+  },
+  {
+    ikona: 'dokument',
+    tytul: 'Bez danych osobowych na tym etapie',
+    tresc: 'Zbieramy tylko kontakt i numer KRS — reszta dopiero we wniosku.',
+  },
+  {
+    ikona: 'zegar',
+    tytul: 'Odpowiedź od kancelarii',
+    tresc: 'Po ocenie zgłoszenia dostaniesz zaproszenie do portalu.',
+  },
+];
 
 /* ─────────────────────────────────────────────────────
    SESJA PORTALOWA
@@ -122,35 +186,35 @@ function EkranLoginPortal({ przyZalogowaniu }) {
   }
 
   return (
-    <div className="ekran-logowania">
-      <form className="card" style={{ width: 400, maxWidth: '92vw' }} onSubmit={zaloguj}>
-        <div className="card-h" style={{ marginBottom: 4 }}>Kancelaria Notarialna Łukasz Kozon</div>
-        <div className="podtytul-strony" style={{ marginBottom: 22 }}>
-          Portal klienta — rejestr akcjonariuszy P.S.A.
-        </div>
+    <form onSubmit={zaloguj}>
+      <div className="brama-karta-tytul">Zaloguj się</div>
+      <div className="brama-karta-podtytul">Portal klienta rejestru akcjonariuszy</div>
 
-        <Komunikat odmiana="blad" tresc={blad} />
+      <Komunikat odmiana="blad" tresc={blad} />
 
-        <Pole etykieta="E-mail" wymagane>
-          <input type="email" autoFocus value={email} onChange={(z) => ustawEmail(z.target.value)} autoComplete="username" />
-        </Pole>
-        <Pole etykieta="Hasło" wymagane>
-          <input type="password" value={haslo} onChange={(z) => ustawHaslo(z.target.value)} autoComplete="current-password" />
-        </Pole>
+      <Pole etykieta="E-mail" wymagane>
+        <input type="email" autoFocus value={email} onChange={(z) => ustawEmail(z.target.value)} autoComplete="username" />
+      </Pole>
+      <Pole etykieta="Hasło" wymagane>
+        <input type="password" value={haslo} onChange={(z) => ustawHaslo(z.target.value)} autoComplete="current-password" />
+      </Pole>
 
-        <button className="btn btn-primary" type="submit" disabled={wysylanie || !email.trim() || !haslo} style={{ width: '100%', marginTop: 8 }}>
-          {wysylanie ? 'Logowanie…' : 'Zaloguj się'}
+      <button
+        className="btn btn-glowny btn-duzy"
+        type="submit"
+        disabled={wysylanie || !email.trim() || !haslo}
+        style={{ width: '100%', marginTop: 'var(--od-8)' }}
+      >
+        {wysylanie ? 'Logowanie…' : 'Zaloguj się'}
+      </button>
+
+      <div className="brama-stopka">
+        Dostęp zakłada kancelaria po weryfikacji tożsamości — nie ma tu samodzielnej rejestracji.
+        <button type="button" className="btn" onClick={() => idz('/zglos-sie')} style={{ width: '100%' }}>
+          Nie mam konta — zgłaszam zainteresowanie
         </button>
-        <div className="podpowiedz" style={{ marginTop: 14, textAlign: 'center' }}>
-          Dostęp do portalu zakłada kancelaria po weryfikacji tożsamości. Nie ma tu samodzielnej rejestracji.
-        </div>
-        <div style={{ textAlign: 'center', marginTop: 10 }}>
-          <button type="button" className="btn btn-sm btn-cichy" onClick={() => idz('/zglos-sie')}>
-            Nie masz jeszcze konta? Zgłoś zainteresowanie
-          </button>
-        </div>
-      </form>
-    </div>
+      </div>
+    </form>
   );
 }
 
@@ -160,6 +224,7 @@ function EkranLoginPortal({ przyZalogowaniu }) {
    którym dopiero zaczyna się właściwy wniosek o prowadzenie rejestru. */
 function EkranZgloszenieWstepne() {
   const [email, ustawEmail] = useState('');
+  const [krs, ustawKrs] = useState('');
   const [telefon, ustawTelefon] = useState('');
   const [nazwaSpolki, ustawNazwaSpolki] = useState('');
   const [opis, ustawOpis] = useState('');
@@ -167,14 +232,18 @@ function EkranZgloszenieWstepne() {
   const [blad, ustawBlad] = useState(null);
   const [gotowe, ustawGotowe] = useState(false);
 
+  const krsCyfry = krs.replace(/\D/g, '');
+  const krsPoprawny = krsCyfry.length === 10;
+
   async function wyslij(zdarzenie) {
     zdarzenie.preventDefault();
-    if (!email.trim()) return;
+    if (!email.trim() || !krsPoprawny) return;
     ustawWysylanie(true);
     ustawBlad(null);
     try {
       await API.post('/api/psa/portal/zgloszenia', {
         email: email.trim(),
+        krs: krsCyfry,
         telefon: telefon.trim() || undefined,
         nazwa_spolki: nazwaSpolki.trim() || undefined,
         opis: opis.trim() || undefined,
@@ -189,25 +258,21 @@ function EkranZgloszenieWstepne() {
 
   if (gotowe) {
     return (
-      <div className="ekran-logowania">
-        <div className="card" style={{ width: 440, maxWidth: '92vw' }}>
-          <Pusto
-            tytul="Dziękujemy za zgłoszenie"
-            opis="Kancelaria skontaktuje się z Tobą, żeby ustalić szczegóły i przesłać zaproszenie do złożenia właściwego wniosku o prowadzenie rejestru akcjonariuszy."
-            akcja={<button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>}
-          />
-        </div>
-      </div>
+      <Pusto
+        ikona="sprawdz"
+        tytul="Dziękujemy za zgłoszenie"
+        opis="Kancelaria skontaktuje się z Tobą, żeby ustalić szczegóły i przesłać zaproszenie do złożenia właściwego wniosku o prowadzenie rejestru akcjonariuszy."
+        akcja={<button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>}
+      />
     );
   }
 
   return (
-    <div className="ekran-logowania">
-      <form className="card" style={{ width: 440, maxWidth: '92vw' }} onSubmit={wyslij}>
-        <div className="card-h" style={{ marginBottom: 4 }}>Zgłoś zainteresowanie</div>
-        <div className="podtytul-strony" style={{ marginBottom: 22 }}>
-          Prowadzenie rejestru akcjonariuszy prostej spółki akcyjnej
-        </div>
+    <form onSubmit={wyslij}>
+      <div className="brama-karta-tytul">Zgłoś zainteresowanie</div>
+      <div className="brama-karta-podtytul">
+        Prowadzenie rejestru akcjonariuszy prostej spółki akcyjnej
+      </div>
 
         <Komunikat odmiana="blad" tresc={blad} />
 
@@ -217,21 +282,42 @@ function EkranZgloszenieWstepne() {
         <Pole etykieta="Telefon">
           <input type="tel" value={telefon} onChange={(z) => ustawTelefon(z.target.value)} autoComplete="tel" />
         </Pole>
-        <Pole etykieta="Nazwa spółki" podpowiedz="Jeśli już istnieje i jest wpisana do KRS.">
+        <Pole
+          etykieta="Numer KRS spółki"
+          wymagane
+          podpowiedz="Dziesięć cyfr. Rejestr akcjonariuszy prowadzi się dla spółki wpisanej już do rejestru przedsiębiorców — spółkę w organizacji trzeba najpierw zarejestrować."
+        >
+          <input
+            type="text"
+            inputMode="numeric"
+            value={krs}
+            onChange={(z) => ustawKrs(z.target.value)}
+            maxLength={14}
+            placeholder="0000123456"
+          />
+        </Pole>
+        {krs && !krsPoprawny && (
+          <Komunikat odmiana="uwaga" tresc="Numer KRS składa się z dziesięciu cyfr." />
+        )}
+        <Pole etykieta="Nazwa spółki">
           <input type="text" value={nazwaSpolki} onChange={(z) => ustawNazwaSpolki(z.target.value)} />
         </Pole>
         <Pole etykieta="Krótki opis" podpowiedz="Kilka zdań — na tym etapie nie zbieramy danych osobowych ani PESEL.">
           <textarea rows={3} value={opis} onChange={(z) => ustawOpis(z.target.value)} />
         </Pole>
 
-        <button className="btn btn-primary" type="submit" disabled={wysylanie || !email.trim()} style={{ width: '100%', marginTop: 8 }}>
-          {wysylanie ? 'Wysyłanie…' : 'Wyślij zgłoszenie'}
-        </button>
-        <div style={{ textAlign: 'center', marginTop: 10 }}>
-          <button type="button" className="btn btn-sm btn-cichy" onClick={() => idz('/')}>← Wróć do logowania</button>
-        </div>
-      </form>
-    </div>
+      <button
+        className="btn btn-glowny btn-duzy"
+        type="submit"
+        disabled={wysylanie || !email.trim() || !krsPoprawny}
+        style={{ width: '100%', marginTop: 'var(--od-8)' }}
+      >
+        {wysylanie ? 'Wysyłanie…' : 'Wyślij zgłoszenie'}
+      </button>
+      <div className="brama-stopka">
+        <button type="button" className="btn btn-cichy" onClick={() => idz('/')}>← Wróć do logowania</button>
+      </div>
+    </form>
   );
 }
 
@@ -273,42 +359,42 @@ function EkranAktywacjaKonta({ token }) {
     }
   }
 
-  if (sprawdzanie) return <div className="ekran-logowania"><Spinner /></div>;
+  if (sprawdzanie) return <Spinner />;
 
   if (bladTokenu) {
     return (
-      <div className="ekran-logowania">
-        <div className="card" style={{ width: 440, maxWidth: '92vw' }}>
-          <Pusto
-            tytul="Link jest nieważny"
-            opis={bladTokenu}
-            akcja={<button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>}
-          />
-        </div>
-      </div>
+      <Pusto
+        ikona="ostrzezenie"
+        tytul="Link jest nieważny"
+        opis={bladTokenu}
+        akcja={<button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>}
+      />
     );
   }
 
   return (
-    <div className="ekran-logowania">
-      <form className="card" style={{ width: 400, maxWidth: '92vw' }} onSubmit={aktywuj}>
-        <div className="card-h" style={{ marginBottom: 4 }}>Aktywacja konta</div>
-        <div className="podtytul-strony" style={{ marginBottom: 22 }}>{email}</div>
+    <form onSubmit={aktywuj}>
+      <div className="brama-karta-tytul">Aktywacja konta</div>
+      <div className="brama-karta-podtytul">{email}</div>
 
-        <Komunikat odmiana="blad" tresc={blad} />
+      <Komunikat odmiana="blad" tresc={blad} />
 
-        <Pole etykieta="Hasło" wymagane podpowiedz="Co najmniej 10 znaków, litera i cyfra.">
-          <input type="password" autoFocus value={haslo} onChange={(z) => ustawHaslo(z.target.value)} autoComplete="new-password" />
-        </Pole>
-        <Pole etykieta="Powtórz hasło" wymagane>
-          <input type="password" value={powtorzHaslo} onChange={(z) => ustawPowtorzHaslo(z.target.value)} autoComplete="new-password" />
-        </Pole>
+      <Pole etykieta="Hasło" wymagane podpowiedz="Co najmniej 10 znaków, litera i cyfra.">
+        <input type="password" autoFocus value={haslo} onChange={(z) => ustawHaslo(z.target.value)} autoComplete="new-password" />
+      </Pole>
+      <Pole etykieta="Powtórz hasło" wymagane>
+        <input type="password" value={powtorzHaslo} onChange={(z) => ustawPowtorzHaslo(z.target.value)} autoComplete="new-password" />
+      </Pole>
 
-        <button className="btn btn-primary" type="submit" disabled={wysylanie || !haslo || !powtorzHaslo} style={{ width: '100%', marginTop: 8 }}>
-          {wysylanie ? 'Aktywowanie…' : 'Aktywuj konto'}
-        </button>
-      </form>
-    </div>
+      <button
+        className="btn btn-glowny btn-duzy"
+        type="submit"
+        disabled={wysylanie || !haslo || !powtorzHaslo}
+        style={{ width: '100%', marginTop: 'var(--od-8)' }}
+      >
+        {wysylanie ? 'Aktywowanie…' : 'Aktywuj konto'}
+      </button>
+    </form>
   );
 }
 
@@ -423,7 +509,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
 
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <PasekMarkiPortal opis="Portal klienta — rejestr akcjonariuszy P.S.A." />
+      <PasekMarkiPortal />
       <header className="portal-topbar pasek-gorny bez-druku" style={{ padding: '14px 28px' }}>
         <div>
           <div className="tytul-strony" style={{ fontSize: 17 }}>Rejestr akcjonariuszy P.S.A.</div>
@@ -766,10 +852,34 @@ function AplikacjaPortal() {
   // sesji poniżej, inaczej niezalogowany gość zawsze wyląduje na ekranie
   // logowania (konto z aktywacji NIE MA jeszcze ważnej sesji w tym momencie).
   if (segmenty[0] === 'zglos-sie') {
-    return <RamaPubliczna><EkranZgloszenieWstepne /></RamaPubliczna>;
+    return (
+      <RamaPubliczna
+        opis={
+          <OpisPortalu
+            tytul="Powierz nam rejestr akcjonariuszy"
+            lead="Rejestr akcjonariuszy prostej spółki akcyjnej prowadzi notariusz na podstawie umowy ze spółką (art. 300³¹ § 1 KSH). Zostaw kontakt — odezwiemy się z propozycją dalszych kroków."
+            punkty={PUNKTY_ZGLOSZENIA}
+          />
+        }
+      >
+        <EkranZgloszenieWstepne />
+      </RamaPubliczna>
+    );
   }
   if (segmenty[0] === 'aktywuj' && segmenty[1]) {
-    return <RamaPubliczna><EkranAktywacjaKonta token={segmenty[1]} /></RamaPubliczna>;
+    return (
+      <RamaPubliczna
+        opis={
+          <OpisPortalu
+            tytul="Ustaw hasło do portalu"
+            lead="Konto zostało założone przez kancelarię. Ustaw hasło, a przejdziesz prosto do wniosku o prowadzenie rejestru akcjonariuszy."
+            punkty={PUNKTY_LOGOWANIA}
+          />
+        }
+      >
+        <EkranAktywacjaKonta token={segmenty[1]} />
+      </RamaPubliczna>
+    );
   }
 
   return <AplikacjaPortalZSesja segmenty={segmenty} sciezka={sciezka} />;
@@ -781,7 +891,15 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
   if (sesja.ladowanie) return <Spinner />;
   if (!sesja.zalogowany) {
     return (
-      <RamaPubliczna>
+      <RamaPubliczna
+        opis={
+          <OpisPortalu
+            tytul="Rejestr akcjonariuszy pod ręką"
+            lead="Portal daje spółce i akcjonariuszom wgląd w rejestr prowadzony przez kancelarię oraz drogę do zgłaszania zmian — bez wizyty i bez papierowej korespondencji."
+            punkty={PUNKTY_LOGOWANIA}
+          />
+        }
+      >
         <EkranLoginPortal przyZalogowaniu={() => sesja.odswiez()} />
       </RamaPubliczna>
     );

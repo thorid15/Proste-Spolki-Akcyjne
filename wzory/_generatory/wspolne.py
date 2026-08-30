@@ -147,14 +147,16 @@ def linia_podpisu(doc, opis, align='center', przed=18):
 # się między wzorami przy późniejszych edycjach.
 # ============================================================================
 
+# Nazwa miejscowości nie jest odmieniana — pisma opisują ją etykietą
+# („siedziba: Gdańsk”), więc wystarczy jedna forma z formularza.
 SPOLKA_DOPELNIACZ = (
-    'spółki {{spolka_firma}} prosta spółka akcyjna z siedzibą w {{spolka_siedziba_miejscownik}}, '
+    'spółki {{spolka_firma}} prosta spółka akcyjna, siedziba: {{spolka_siedziba_mianownik}}, '
     'wpisanej do rejestru przedsiębiorców Krajowego Rejestru Sądowego prowadzonego przez '
     '{{spolka_sad_rejestrowy}} pod numerem KRS {{spolka_krs}}, NIP {{spolka_nip}}'
 )
 
 SPOLKA_MIANOWNIK = (
-    '{{spolka_firma}} prosta spółka akcyjna z siedzibą w {{spolka_siedziba_miejscownik}}, '
+    '{{spolka_firma}} prosta spółka akcyjna, siedziba: {{spolka_siedziba_mianownik}}, '
     'wpisana do rejestru przedsiębiorców Krajowego Rejestru Sądowego prowadzonego przez '
     '{{spolka_sad_rejestrowy}} pod numerem KRS {{spolka_krs}}, NIP {{spolka_nip}}'
 )
@@ -179,7 +181,7 @@ def naglowek_pisma(doc):
     """Nagłówek pisma kancelarii: dane nadawcy po lewej, miejscowość i data po prawej."""
     t = doc.add_table(rows=1, cols=2)
     t.autofit = True
-    lewa = ['Kancelaria Notarialna Notariusza {{notariusz_dopelniacz}}',
+    lewa = ['Kancelaria Notarialna, notariusz: {{notariusz_mianownik}}',
             'ulica {{kancelaria_ulica}}, {{kancelaria_kod}} {{kancelaria_miasto}}',
             '{{kancelaria_email}}, tel. {{kancelaria_telefon}}',
             'podmiot prowadzący rejestr akcjonariuszy']

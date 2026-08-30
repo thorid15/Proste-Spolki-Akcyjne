@@ -120,7 +120,6 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
     miejscowosc: 'Warszawa',
     ulica: 'Aleje Jerozolimskie',
     nr_domu: '51',
-    siedziba_miejscownik: 'Warszawie',
     sad_rejestrowy: 'Sąd Rejonowy dla m.st. Warszawy w Warszawie',
     wydzial: 'XII Wydział Gospodarczy',
     email: 'kontakt@charlieunicorn-a7.ai',
@@ -129,7 +128,6 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
     sklad_organu_json: JSON.stringify([{ imiona: 'Łukasz Adrian', nazwisko: 'Szymborski', funkcja: 'Prezes Zarządu' }]),
     // Mianownik (etap 2.3 poprawek) - biernik/dopelniacz liczy deklinacja.js.
     reprezentant_imie_nazwisko: 'Łukasz Adrian Szymborski',
-    reprezentant_plec: 'mezczyzna',
     reprezentant_rodzice: 'Paweł i Izabella',
     reprezentant_dowod: 'DGK 138559',
     reprezentant_pesel: '88081105939',

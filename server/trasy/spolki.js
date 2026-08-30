@@ -39,16 +39,14 @@ const POLA_SPOLKI = [
   'umowe_zawarl', 'umowe_zawarl_imie_nazwisko', 'dodatkowe_informacje_umowa_spolki',
   // Sesja 6, faza 3 (kreator rejestracji spolki - rozszerzony import KRS,
   // ograniczenia z umowy spolki bez wlasnego cyklu zycia w rejestrze):
-  'data_ostatniego_wpisu_krs', 'kapital_akcyjny_grosze', 'adres_edorecze', 'sklad_organu_json',
+  'kapital_akcyjny_grosze', 'adres_edorecze', 'sklad_organu_json',
   'zakaz_glosu_zastawnika_umowa', 'ograniczenie_dziedziczenia_umowa',
-  // Sesja 8, blok B4/B6 (dane wymagane przez wzory pism):
-  'siedziba_miejscownik',
-  // Reprezentant w MIANOWNIKU (etap 2.3 poprawek) + pola recznej korekty
-  // odmiany - `deklinacja.js` liczy biernik/dopelniacz automatycznie,
-  // te trzy nadpisuja go, gdy wypelnione (nazwiska nietypowe/obcojezyczne).
-  'reprezentant_imie_nazwisko', 'reprezentant_plec', 'reprezentant_rodzice', 'reprezentant_dowod',
+  // Reprezentant - wszystkie dane w MIANOWNIKU. Pisma nie odmieniaja ich
+  // przez przypadki, tylko opisuja etykieta ("imiona rodzicow:", "dzialajacy
+  // jako:"), wiec zadne pole korekty odmiany nie jest potrzebne.
+  'reprezentant_imie_nazwisko', 'reprezentant_rodzice', 'reprezentant_dowod',
   'reprezentant_pesel', 'reprezentant_adres', 'reprezentant_funkcja', 'reprezentant_reprezentacja',
-  'reprezentant_biernik_recznie', 'reprezentant_funkcja_biernik_recznie', 'reprezentant_rodzice_recznie',
+  'reprezentant_email',
   // Etap 2.2 poprawek: umowa jako fakt juz zaistnialy (data zawarcia to juz
   // istniejace 'data_umowy'). Zalacznik NIE jest tu - ma dedykowany
   // endpoint uploadu, zeby nie przyjmowac dowolnej sciezki z ciala JSON.
@@ -97,7 +95,7 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   }
   for (const pole of [
     'data_utworzenia_spolki', 'data_uchwaly_wyboru', 'data_umowy',
-    'data_otwarcia_rejestru', 'data_zakonczenia_umowy', 'data_ostatniego_wpisu_krs',
+    'data_otwarcia_rejestru', 'data_zakonczenia_umowy',
     'data_zawarcia_umowy_spolki',
   ]) {
     if (dane[pole] && !czas.poprawnaData(dane[pole])) {
@@ -126,9 +124,6 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   if (dane.forma_prawna !== undefined) {
     const ocena = przepisy.ocenFormePrawna(dane.forma_prawna);
     if (!ocena.dozwolona) throw bledneZadanie(ocena.powod);
-  }
-  if (dane.reprezentant_plec && !['kobieta', 'mezczyzna'].includes(dane.reprezentant_plec)) {
-    throw bledneZadanie('Płeć reprezentanta musi być „kobieta” albo „mężczyzna”.');
   }
   if (dane.organ_rodzaj && !['zarzad', 'rada_dyrektorow'].includes(dane.organ_rodzaj)) {
     throw bledneZadanie('Rodzaj organu musi być „zarzad” albo „rada_dyrektorow”.');

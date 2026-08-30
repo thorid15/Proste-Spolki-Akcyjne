@@ -17,9 +17,8 @@ pisz(p, 'Zgodnie z art. 13 ust. 1 i 2 Rozporządzenia Parlamentu Europejskiego i
         'danych oraz uchylenia dyrektywy 95/46/WE (ogólne rozporządzenie o ochronie danych) (Dz. Urz. UE L 119 z 04.05.2016, '
         's. 1), dalej zwanego „RODO”, informujemy, że:')
 
-ustep(d, '1.', 'Administratorem Pani/Pana danych osobowych jest Kancelaria Notarialna Notariusza '
-               '{{notariusz_dopelniacz}} z siedzibą w {{kancelaria_miasto_miejscownik}}, ulica {{kancelaria_ulica}} '
-               '(kod pocztowy: {{kancelaria_kod}}), '
+ustep(d, '1.', 'Administratorem Pani/Pana danych osobowych jest Kancelaria Notarialna, notariusz: '
+               '{{notariusz_mianownik}}, adres: ulica {{kancelaria_ulica}}, {{kancelaria_kod}} {{kancelaria_miasto}}, '
                'tel. {{kancelaria_telefon}}, adres e-mail: {{kancelaria_email}}, zwana dalej „Kancelarią”.')
 ustep(d, '2.', 'Pani/Pana dane osobowe przetwarzane będą w celu:')
 punkt(d, 'a)', 'zawarcia umowy o prowadzenie rejestru akcjonariuszy zgodnie z art. §§300^32 ustawy z dnia 15 września 2000 r. '
@@ -52,7 +51,7 @@ ustep(d, '9.', 'Pani/Pana dane osobowe nie będą przetwarzane w sposób zautoma
                'przekazywane do państwa trzeciego.')
 
 p = akapit(d, 'right', przed=24, po=2)
-pisz(p, '{{zapoznany}}')
+pisz(p, 'Oświadczam, że zapoznałam/zapoznałem się z powyższą informacją.')
 linia_podpisu(d, 'data, imię i nazwisko oraz podpis', align='right', przed=6)
 
 d.save(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '02-Zalacznik-Informacja-RODO-WZOR.docx'))

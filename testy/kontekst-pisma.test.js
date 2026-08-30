@@ -42,7 +42,6 @@ const docx = require('../server/logika/docx');
 const SPOLKA = {
   nazwa: 'CHARLIE UNICORN AI',
   miejscowosc: 'Warszawa',
-  siedziba_miejscownik: 'Warszawie',
   kod_pocztowy: '00-697',
   ulica: 'Aleje Jerozolimskie',
   nr_domu: '51',
@@ -55,16 +54,15 @@ const SPOLKA = {
   email: 'kontakt@charlieunicorn.ai',
   organ_rodzaj: 'zarzad',
   data_umowy: '2026-08-13',
-  // Mianownik (etap 2.3 poprawek) - odmiane liczy deklinacja.js w locie,
-  // patrz test nizej "reprezentantKlucze: odmiana liczona automatycznie...".
+  // Wszystko w MIANOWNIKU - pisma nie odmieniaja tych danych.
   reprezentant_imie_nazwisko: 'Łukasz Adrian Szymborski',
-  reprezentant_plec: 'mezczyzna',
   reprezentant_rodzice: 'Paweł i Izabella',
   reprezentant_dowod: 'DGK 138559',
   reprezentant_pesel: '88081105939',
   reprezentant_adres: '76-015 Manowo, ulica Kasztanowa nr 17 m. 1',
   reprezentant_funkcja: 'Prezes Zarządu',
-  reprezentant_reprezentacja: 'uprawnionego do samodzielnej reprezentacji',
+  reprezentant_reprezentacja: 'samodzielnie',
+  reprezentant_email: 'l.szymborski@example.pl',
 };
 
 const ZADAJACY = {
@@ -162,7 +160,7 @@ test('spolkaKlucze: organ_rodzaj rozwija sie w spolka_organ/spolka_organ_czlonko
   const k = kontekst.spolkaKlucze(SPOLKA);
   assert.equal(k.spolka_organ, 'Zarząd');
   assert.equal(k.spolka_organ_czlonkowie, 'członków zarządu');
-  assert.equal(k.spolka_siedziba_miejscownik, 'Warszawie');
+  assert.equal(k.spolka_siedziba_mianownik, 'Warszawa');
 
   const rada = kontekst.spolkaKlucze({ ...SPOLKA, organ_rodzaj: 'rada_dyrektorow' });
   assert.equal(rada.spolka_organ, 'Rada Dyrektorów');
@@ -281,12 +279,13 @@ test('umowaOProwadzenieRejestru: taksy licza sie z konfiguracji stawek, slownie 
   const dane = kontekst.umowaOProwadzenieRejestru({ spolka: SPOLKA, dzis: '2026-08-13' });
   assert.equal(dane.taksa_roczna, String(przepisy.STAWKI_GROSZE.PROWADZENIE_ROCZNIE / 100));
   assert.equal(dane.taksa_wpis, String(przepisy.STAWKI_GROSZE.WPIS / 100));
-  // Mianownik "Łukasz Adrian Szymborski" -> biernik odmieniony automatycznie
-  // (etap 2.3) - nie wpisywany recznie w SPOLKA, patrz deklinacja.test.js.
-  assert.equal(dane.reprezentant_biernik, 'Łukasza Adriana Szymborskiego');
-  assert.equal(dane.reprezentant_funkcja_biernik, 'Prezesa Zarządu');
-  assert.equal(dane.reprezentant_rodzice, 'Pawła i Izabelli');
-  assert.equal(dane.reprezentant_dzialajacy, 'działającego');
+  // Wszystkie dane reprezentanta ida do pisma w MIANOWNIKU, dokladnie tak,
+  // jak wpisano je w formularzu - zadnej odmiany po drodze.
+  assert.equal(dane.reprezentant_imie_nazwisko, SPOLKA.reprezentant_imie_nazwisko);
+  assert.equal(dane.reprezentant_funkcja, SPOLKA.reprezentant_funkcja);
+  assert.equal(dane.reprezentant_rodzice, SPOLKA.reprezentant_rodzice);
+  assert.equal('reprezentant_biernik' in dane, false, 'formy odmienione nie istnieja');
+  assert.equal('reprezentant_dzialajacy' in dane, false, 'formy zalezne od plci nie istnieja');
   assert.equal('spolka_vat' in dane, false, 'status VAT usuniety calkowicie (etap 1.6) - klucz nie istnieje');
 
   const wynik = wzoryDysk.wypelnij('01', dane);
@@ -295,28 +294,8 @@ test('umowaOProwadzenieRejestru: taksy licza sie z konfiguracji stawek, slownie 
   assert.match(docx.tekst(wynik.plik), /jeden tysiąc dwieście złotych|1200/, 'stawka roczna widoczna w tresci');
 });
 
-test('umowaOProwadzenieRejestru: reczna korekta odmiany ma pierwszenstwo przed automatem', () => {
-  const dane = kontekst.umowaOProwadzenieRejestru({
-    spolka: { ...SPOLKA, reprezentant_biernik_recznie: 'Łukasza Adriana Szymborskiego (korekta)' },
-    dzis: '2026-08-13',
-  });
-  assert.equal(dane.reprezentant_biernik, 'Łukasza Adriana Szymborskiego (korekta)');
-});
 
-test('umowaOProwadzenieRejestru: bez plci automat nie zgaduje biernika - zostaje null', () => {
-  const { reprezentant_plec, ...bezPlci } = SPOLKA;
-  const dane = kontekst.umowaOProwadzenieRejestru({ spolka: bezPlci, dzis: '2026-08-13' });
-  assert.equal(dane.reprezentant_biernik, null);
-});
 
-test('informacjaRodo: forma czasownika zalezy od plci reprezentanta', () => {
-  const meski = kontekst.informacjaRodo({ spolka: SPOLKA });
-  assert.equal(meski.zapoznany, 'zapoznałem się');
-  bezBrakow('02', meski);
-
-  const zenski = kontekst.informacjaRodo({ spolka: { ...SPOLKA, reprezentant_plec: 'kobieta' } });
-  assert.equal(zenski.zapoznany, 'zapoznałam się');
-});
 
 test('uchwalaWyboru: dane glosowania sa AD HOC (podaje notariusz), sekcja akcjonariusze z rejestru', () => {
   const dane = kontekst.uchwalaWyboru({
@@ -422,8 +401,8 @@ test('zadanieWpisu: adres do doreczen inny niz adres zamieszkania, gdy wskazany 
   assert.equal(dane.zadajacy_adres_doreczen, 'skrytka pocztowa 12');
 });
 
-test('zadanieWpisu: zgoda innej osoby (sekcja IV) - formy zalezne od plci zgadzajacego', () => {
-  const zgadzajaca = { typ: 'fizyczna', imie: 'Anna', nazwisko: 'Nowak', pesel: '85050512309', plec: 'kobieta' };
+test('zadanieWpisu: zgoda innej osoby wypelnia sekcje IV', () => {
+  const zgadzajaca = { typ: 'fizyczna', imie: 'Anna', nazwisko: 'Nowak', pesel: '85050512309' };
   const dane = kontekst.zadanieWpisu({
     spolka: SPOLKA,
     sprawa: { ...SPRAWA, zadajacy_rola: 'nabywca' },
@@ -435,7 +414,6 @@ test('zadanieWpisu: zgoda innej osoby (sekcja IV) - formy zalezne od plci zgadza
   });
   assert.equal(dane.zgadzajacy_mianownik, 'Anna Nowak');
   assert.equal(dane.zgadzajacy_identyfikator, 'PESEL 85050512309');
-  assert.equal(dane.zgadzajacy_podpisany, 'podpisana');
   assert.deepEqual(dane.zgoda, [{}]);
 
   bezBrakow('04', dane);

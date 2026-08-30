@@ -9,7 +9,7 @@ d = nowy_dokument()
 
 naglowek_dok(d, ['Uchwała nr {{uchwala_numer}}',
                  'akcjonariuszy spółki {{spolka_firma}} prosta spółka akcyjna',
-                 'z siedzibą w {{spolka_siedziba_miejscownik}}',
+                 'siedziba: {{spolka_siedziba_mianownik}}',
                  'podjęta poza walnym zgromadzeniem, na piśmie,',
                  'w dniu {{uchwala_data_slownie}}'], size=13)
 
@@ -21,14 +21,14 @@ pisz(p, 'art. §§300^31 § 5 w związku z art. §§300^80 § 1 Kodeksu spółek
 p = akapit(d, 'center', po=6)
 pisz(p, '§ 1', bold=True)
 p = akapit(d, 'just', po=8)
-pisz(p, 'Akcjonariusze spółki działającej pod firmą {{spolka_firma}} prosta spółka akcyjna z siedzibą '
-        'w {{spolka_siedziba_miejscownik}} ({{spolka_adres_pelny}}), wpisanej do rejestru przedsiębiorców '
+pisz(p, 'Akcjonariusze spółki działającej pod firmą {{spolka_firma}} prosta spółka akcyjna, siedziba: '
+        '{{spolka_siedziba_mianownik}} ({{spolka_adres_pelny}}), wpisanej do rejestru przedsiębiorców '
         'Krajowego Rejestru Sądowego prowadzonego przez {{spolka_sad_rejestrowy}} pod numerem '
         'KRS {{spolka_krs}}, NIP {{spolka_nip}}, REGON {{spolka_regon}}, działając na podstawie '
-        'art. §§300^31 § 5 Kodeksu spółek handlowych, dokonują wyboru notariusza {{notariusz_dopelniacz}}, '
-        'prowadzącego Kancelarię Notarialną w {{kancelaria_miasto_miejscownik}} przy ulicy '
-        '{{kancelaria_ulica}}, NIP {{kancelaria_nip}}, REGON {{kancelaria_regon}}, jako podmiotu '
-        'prowadzącego rejestr akcjonariuszy Spółki oraz wyrażają zgodę na zawarcie z nim umowy '
+        'art. §§300^31 § 5 Kodeksu spółek handlowych, dokonują wyboru podmiotu prowadzącego rejestr '
+        'akcjonariuszy Spółki w osobie: Kancelaria Notarialna, notariusz: {{notariusz_mianownik}}, '
+        'adres: ulica {{kancelaria_ulica}}, {{kancelaria_kod}} {{kancelaria_miasto}}, '
+        'NIP: {{kancelaria_nip}}, REGON: {{kancelaria_regon}}, oraz wyrażają zgodę na zawarcie umowy '
         'o prowadzenie rejestru akcjonariuszy prostej spółki akcyjnej.')
 
 p = akapit(d, 'center', po=6)

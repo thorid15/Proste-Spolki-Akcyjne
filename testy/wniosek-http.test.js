@@ -262,7 +262,6 @@ test('POST /api/psa/portal/wniosek/zloz: generuje projekt umowy, zmienia status,
   await zapytaj('PUT', '/api/psa/portal/wniosek', {
     nazwa: 'Wniosek Pelny P.S.A.',
     reprezentant_imie_nazwisko: 'Jan Kowalski',
-    reprezentant_plec: 'mezczyzna',
     reprezentant_funkcja: 'Prezes Zarządu',
   }, ciastko);
   await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Nowak', imie: 'Anna' }, ciastko);

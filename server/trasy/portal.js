@@ -30,6 +30,8 @@ const widoki = require('../widoki');
 const oplaty = require('../oplaty');
 const maskowanie = require('../logika/maskowanie');
 const przepisy = require('../logika/przepisy');
+const akcjonariuszLogika = require('../logika/akcjonariusz');
+const dokumentyWniosku = require('../logika/dokumenty-wniosku');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const terminy = require('../logika/terminy');
 const numery = require('../logika/numery');
@@ -141,6 +143,15 @@ router.post(
       throw bledneZadanie('Podaj prawidłowy adres e-mail.');
     }
 
+    // Rejestr akcjonariuszy prowadzi sie dla spolki JUZ wpisanej do rejestru
+    // przedsiebiorcow (art. 300(30) § 1 KSH dotyczy spolki, ktora istnieje),
+    // wiec numer KRS jest tu polem obowiazkowym - odsiewa zgloszenia spolek
+    // w organizacji, ktore i tak trzeba by odeslac.
+    const krs = String(cialo.krs || '').replace(/\D/g, '');
+    if (krs.length !== 10) {
+      throw bledneZadanie('Podaj numer KRS spółki — dziesięć cyfr. Rejestr akcjonariuszy prowadzi się dla spółki wpisanej już do rejestru przedsiębiorców.');
+    }
+
     // Miekki, ogolny limit zapytan na adres IP - formularz jest publiczny
     // i niezalogowany, wiec to jedyna dostepna ochrona przed zalewem
     // (limiter.js liczy tu KAZDA probe, nie tylko nieudane logowanie).
@@ -149,6 +160,7 @@ router.post(
 
     const dane = {
       email,
+      krs,
       telefon: String(cialo.telefon || '').trim() || null,
       nazwa_spolki: String(cialo.nazwa_spolki || '').trim() || null,
       opis: String(cialo.opis || '').trim() || null,
@@ -284,12 +296,12 @@ router.post(
 
 const POLA_WNIOSKU = [
   'krs', 'nip', 'regon', 'nazwa', 'forma_prawna', 'kraj', 'kod_pocztowy', 'miejscowosc',
-  'siedziba_miejscownik', 'ulica', 'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial',
-  'telefon', 'email', 'www', 'organ_rodzaj', 'data_utworzenia_spolki', 'data_ostatniego_wpisu_krs',
+  'ulica', 'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial',
+  'telefon', 'email', 'www', 'organ_rodzaj', 'data_utworzenia_spolki',
   'adres_edorecze', 'kapital_akcyjny_grosze', 'data_zawarcia_umowy_spolki',
-  'reprezentant_imie_nazwisko', 'reprezentant_plec', 'reprezentant_funkcja', 'reprezentant_reprezentacja',
+  'reprezentant_imie_nazwisko', 'reprezentant_funkcja', 'reprezentant_reprezentacja',
   'reprezentant_rodzice', 'reprezentant_dowod', 'reprezentant_pesel', 'reprezentant_adres',
-  'reprezentant_biernik_recznie', 'reprezentant_funkcja_biernik_recznie', 'reprezentant_rodzice_recznie',
+  'reprezentant_email',
 ];
 
 function wyczyscWniosek(cialo) {
@@ -317,13 +329,10 @@ function sprawdzDaneWniosku(dane) {
   if (dane.nip && !/^\d{10}$/.test(String(dane.nip).replace(/[\s-]/g, ''))) {
     throw bledneZadanie('NIP składa się z 10 cyfr.');
   }
-  for (const pole of ['data_utworzenia_spolki', 'data_ostatniego_wpisu_krs', 'data_zawarcia_umowy_spolki']) {
+  for (const pole of ['data_utworzenia_spolki', 'data_zawarcia_umowy_spolki']) {
     if (dane[pole] && !czas.poprawnaData(dane[pole])) {
       throw bledneZadanie(`Pole „${pole}” musi być datą w formacie RRRR-MM-DD.`);
     }
-  }
-  if (dane.reprezentant_plec && !['mezczyzna', 'kobieta'].includes(dane.reprezentant_plec)) {
-    throw bledneZadanie('Płeć reprezentanta musi być „mężczyzna” albo „kobieta”.');
   }
 }
 
@@ -404,20 +413,22 @@ const POLA_AKCJONARIUSZA_WNIOSKU = [
   'nip', 'regon', 'numer_w_rejestrze', 'nazwa_rejestru',
   'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu', 'nr_lokalu',
   'adres_doreczen', 'adres_edoreczen', 'email', 'telefon', 'zgoda_email',
+  // Art. 300(33) § 1 pkt 2-5 KSH - patrz logika/akcjonariusz.js.
+  ...akcjonariuszLogika.POLA_USTAWOWE,
 ];
 
 function wyczyscAkcjonariuszaWniosku(cialo) {
   const wynik = {};
   for (const pole of POLA_AKCJONARIUSZA_WNIOSKU) {
     if (cialo[pole] === undefined) continue;
-    if (pole === 'zgoda_email') {
+    if (pole === 'zgoda_email' || pole === 'bez_pesel') {
       wynik[pole] = cialo[pole] ? 1 : 0;
       continue;
     }
     const v = cialo[pole];
     wynik[pole] = v === '' || v === null ? null : String(v).trim();
   }
-  return wynik;
+  return akcjonariuszLogika.znormalizuj(wynik);
 }
 
 function sprawdzAkcjonariuszaWniosku(dane) {
@@ -433,6 +444,10 @@ function sprawdzAkcjonariuszaWniosku(dane) {
   if (dane.plec && !['mezczyzna', 'kobieta'].includes(dane.plec)) {
     throw bledneZadanie('Płeć musi być „mężczyzna” albo „kobieta”.');
   }
+  // Sprzecznosci ustawowe blokuja zapis; niekompletnosc NIE - wniosek
+  // wypelnia sie etapami i zapisuje po kazdej zmianie.
+  const bledy = akcjonariuszLogika.bledy(dane);
+  if (bledy.length > 0) throw bledneZadanie(bledy.join(' '));
 }
 
 /**
@@ -550,7 +565,7 @@ router.post(
   '/wniosek/zloz',
   wymagajWnioskodawcy,
   wymagajWniosku,
-  asy((zad, odp) => {
+  asy(async (zad, odp) => {
     const wniosek = zad.psaWniosek;
     if (!wniosek.nazwa) throw bledneZadanie('Uzupełnij nazwę spółki (krok „Spółka i umowa”), zanim złożysz wniosek.');
     const liczbaAkcjonariuszy = db()
@@ -580,11 +595,124 @@ router.post(
       )
       .run(sciezkaWzgledna, teraz, czas.terazIso(), wniosek.id);
 
+    // Braki wobec art. 300(33) § 1 KSH liczymy na KOMPLETNYM wierszu, przy
+    // skladaniu - nie przy kazdym zapisie. Nie blokuja zlozenia: kancelaria
+    // i tak weryfikuje wniosek, a czesci danych (np. potwierdzonej zgody
+    // akcjonariusza na e-mail) z natury nie da sie miec wczesniej.
+    const akcjonariusze = db()
+      .prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ? ORDER BY kolejnosc, id')
+      .all(wniosek.id);
+    const brakiAkcjonariuszy = akcjonariusze.flatMap((a) => akcjonariuszLogika.ostrzezenia(a));
+
+    // Komplet oswiadczen do podpisu (PDF). Skladamy go PO umowie i poza
+    // transakcja - to zapis na dysk, ktory nie moze cofnac juz dokonanej
+    // zmiany statusu wniosku. Blad skladania nie przewraca zlozenia:
+    // dokumenty da sie wystawic ponownie, wniosku - nie.
+    const wniosekPoZlozeniu = db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id);
+    let bladPakietu = null;
+    try {
+      await zapiszPakietDokumentow(wniosekPoZlozeniu, akcjonariusze);
+    } catch (e) {
+      bladPakietu = e.message;
+    }
+
     odp.json({
-      wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
+      wniosek: wniosekPoZlozeniu,
       brakujace: wynik.brakujace,
       ostrzezenia: wynik.ostrzezenia,
+      braki_akcjonariuszy: brakiAkcjonariuszy,
+      dokumenty: wczytajDokumentyWniosku(wniosek.id),
+      blad_pakietu: bladPakietu,
     });
+  })
+);
+
+/**
+ * Sklada komplet oswiadczen do podpisu i zapisuje je obok projektu umowy.
+ * Wywolywana ponownie NADPISUJE poprzedni komplet - wniosek odeslany do
+ * uzupelnienia i zlozony po raz drugi ma miec dokumenty z aktualnych danych,
+ * a nie dwa zestawy roznych.
+ */
+async function zapiszPakietDokumentow(wniosek, akcjonariusze) {
+  const pakiet = await dokumentyWniosku.zlozPakiet({
+    wniosek,
+    akcjonariusze,
+    dzis: czas.dzisIso(),
+  });
+
+  const katalog = path.join(katalogWnioskuDokumenty(wniosek.id), 'oswiadczenia');
+  fs.rmSync(katalog, { recursive: true, force: true });
+  fs.mkdirSync(katalog, { recursive: true });
+
+  const teraz = czas.terazIso();
+  db().prepare('DELETE FROM psa_wnioski_dokumenty WHERE wniosek_id = ?').run(wniosek.id);
+
+  for (const d of pakiet) {
+    // Nazwa NA DYSKU jest techniczna (UUID), zeby nie zalezec od znakow
+    // w nazwisku; nazwa widoczna dla klienta siedzi w kolumnie.
+    const nazwaNaDysku = `${crypto.randomUUID()}.pdf`;
+    fs.writeFileSync(path.join(katalog, nazwaNaDysku), d.plik);
+    db()
+      .prepare(
+        `INSERT INTO psa_wnioski_dokumenty
+           (wniosek_id, akcjonariusz_id, typ, nazwa, nazwa_pliku, sciezka, mime, rozmiar, utworzono)
+         VALUES (@wniosek_id, @akcjonariusz_id, @typ, @nazwa, @nazwa_pliku, @sciezka,
+                 'application/pdf', @rozmiar, @utworzono)`
+      )
+      .run({
+        wniosek_id: wniosek.id,
+        akcjonariusz_id: d.akcjonariuszId,
+        typ: d.typ,
+        nazwa: d.nazwa,
+        nazwa_pliku: d.nazwaPliku,
+        sciezka: path.relative(konfiguracja.KATALOG_DOKUMENTOW, path.join(katalog, nazwaNaDysku)),
+        rozmiar: d.plik.length,
+        utworzono: teraz,
+      });
+  }
+}
+
+function wczytajDokumentyWniosku(wniosekId) {
+  return db()
+    .prepare(
+      `SELECT id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id
+         FROM psa_wnioski_dokumenty WHERE wniosek_id = ? ORDER BY id`
+    )
+    .all(wniosekId);
+}
+
+/** Lista dokumentow do podpisu — umowa ma wlasna trase, tu sa oswiadczenia. */
+router.get(
+  '/wniosek/dokumenty',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek) return odp.json({ dokumenty: [] });
+    odp.json({ dokumenty: wczytajDokumentyWniosku(wniosek.id) });
+  })
+);
+
+router.get(
+  '/wniosek/dokumenty/:id',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
+    const dokument = db()
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
+      .get(Number(zad.params.id), wniosek.id);
+    if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+
+    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, dokument.sciezka);
+    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+    odp.setHeader('Content-Type', dokument.mime);
+    odp.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(dokument.nazwa_pliku)}`
+    );
+    fs.createReadStream(pelnaSciezka).pipe(odp);
   })
 );
 
@@ -600,8 +728,16 @@ router.get(
       throw nieZnaleziono('Plik nie jest już dostępny.');
     }
 
+    const nazwaPliku = [
+      'Umowa o prowadzenie rejestru',
+      wniosek.krs ? `KRS ${wniosek.krs}` : null,
+    ].filter(Boolean).join(' — ').replace(/[\\/:*?"<>|]/g, '-');
+
     odp.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    odp.setHeader('Content-Disposition', 'attachment; filename="projekt-umowy-o-prowadzenie-rejestru.docx"');
+    odp.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(`${nazwaPliku}.docx`)}`
+    );
     fs.createReadStream(pelnaSciezka).pipe(odp);
   })
 );

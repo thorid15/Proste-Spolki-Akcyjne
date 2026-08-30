@@ -20,7 +20,7 @@ c.text = ''
 p = c.paragraphs[0]
 p.paragraph_format.space_after = Pt(0)
 pisz(p, 'Do', size=10, italic=True)
-for l in ('Kancelaria Notarialna Notariusza {{notariusz_dopelniacz}}',
+for l in ('Kancelaria Notarialna, notariusz: {{notariusz_mianownik}}',
           'ulica {{kancelaria_ulica}}, {{kancelaria_kod}} {{kancelaria_miasto}}',
           'podmiot prowadzący rejestr akcjonariuszy'):
     p = c.add_paragraph()
@@ -69,7 +69,7 @@ p = akapit(d, 'left', po=0)
 pisz(p, '{{#zgoda}}')
 sekcja(d, 'IV. Zgoda na dokonanie wpisu')
 p = akapit(d, 'just', po=4)
-pisz(p, 'Ja, niżej {{zgadzajacy_podpisany}} {{zgadzajacy_mianownik}}, {{zgadzajacy_identyfikator}}, jako osoba, '
+pisz(p, 'Ja, niżej podpisana/podpisany: {{zgadzajacy_mianownik}}, {{zgadzajacy_identyfikator}}, jako osoba, '
         'której uprawnienia z akcji zostaną przez wpis wykreślone, zmienione lub obciążone, wyrażam zgodę '
         'na dokonanie wpisu o treści wskazanej w pkt II. Zgoda dotyczy wyłącznie tego wpisu.')
 linia_podpisu(d, '{{zgadzajacy_mianownik}}', align='right', przed=18)
