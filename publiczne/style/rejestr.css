@@ -181,68 +181,79 @@ body {
 
 /* ── Pasek marki kancelarii: pierwsza linia na kazdym ekranie ──
    Rejestr prowadzi kancelaria (art. 300(31) § 1 KSH), wiec jej nazwa stoi
-   NAD nazwa modulu. Pasek idzie przez oba slupki siatki powloki. */
-/* Nazwa kancelarii stoi POSRODKU paska, niezaleznie od tego, jak szeroki
-   jest odnosnik po prawej - stad siatka o trzech kolumnach, w ktorej skrajne
-   maja te sama szerokosc. Link zyje w prawej, srodkowa jest zawsze
-   wysrodkowana wzgledem calego paska. */
+   NAD nazwa modulu. Pasek idzie przez oba slupki siatki powloki. Sam odnosnik
+   do strony kancelarii zyje w stopce (nizej) - pierwsza linia ekranu nie ma
+   wygladac jak reklama. */
 .marka-pasek {
   grid-column: 1 / -1;
   min-height: var(--marka);
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
-  gap: var(--od-12);
+  justify-content: center;
   padding: 0 var(--od-24);
   background: var(--rejestr);
   color: var(--karta);
   border-bottom: 1px solid var(--rejestr-2);
 }
 .marka-pasek-nazwa {
-  grid-column: 2;
   font-family: var(--font-display);
   font-size: var(--st-20);
   line-height: 1.1;
   text-align: center;
 }
-.marka-pasek-link {
-  grid-column: 3;
-  justify-self: end;
-  font-size: var(--st-13);
-  color: inherit;
-  opacity: 0.85;
-  text-decoration: none;
-  border-bottom: 1px solid currentColor;
-}
-.marka-pasek-link:hover { opacity: 1; }
 @media (max-width: 640px) {
-  .marka-pasek { grid-template-columns: 1fr; justify-items: center; padding: var(--od-8) var(--od-16); }
-  .marka-pasek-nazwa, .marka-pasek-link { grid-column: 1; justify-self: center; }
+  .marka-pasek { padding: var(--od-8) var(--od-16); }
 }
 
-/* ── Stopka: dane kancelarii i odeslanie na strone WWW ── */
+/* ── Stopka: trzy kolumny na jednej linii bazowej, z realną hierarchią
+   tekstu — nazwa kancelarii i odnośnik czytelne, drobny druk osobno. Stara
+   wersja upychała wszystko w 11 px i zawijała się nierówno; ta ma stałe
+   kolumny w gridzie, więc się nie rozjeżdża. ── */
 .stopka {
   margin-top: auto;
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: var(--od-24); flex-wrap: wrap;
-  padding: var(--od-16) var(--od-40);
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--od-24) var(--od-40);
+  padding: var(--od-24) var(--od-40);
   border-top: 1px solid var(--linia-2);
   background: var(--karta);
-  font-size: var(--st-11);
-  color: var(--atrament-3);
+  font-size: var(--st-13);
+  color: var(--atrament-2);
   line-height: 1.6;
 }
 .stopka-kolumna { min-width: 0; }
+.stopka-kolumna-link { text-align: right; }
+.stopka-nazwa {
+  font-family: var(--font-display);
+  font-size: var(--st-20);
+  color: var(--atrament);
+  margin-bottom: var(--od-4);
+}
+.stopka-linia { color: var(--atrament-2); }
+.stopka-etykieta {
+  font-size: var(--st-11);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--atrament-3);
+  margin-bottom: var(--od-4);
+}
+.stopka-link {
+  font-size: var(--st-15);
+  font-weight: 600;
+  color: var(--rejestr);
+  text-decoration: none;
+}
+.stopka-link:hover { text-decoration: underline; }
+@media (max-width: 700px) {
+  .stopka { grid-template-columns: minmax(0, 1fr); gap: var(--od-16); padding: var(--od-24); }
+  .stopka-kolumna-link { text-align: left; }
+}
+
 /* Ekrany publiczne portalu (`.ekran-logowania`) same w sobie maja 100vh -
    w ramie z marka i stopka ta wysokosc musi ustapic, inaczej stopka lezy
    pod zagieciem. */
 .rama-publiczna-tresc { flex: 1; display: flex; }
 .rama-publiczna-tresc > .ekran-logowania { flex: 1; min-height: 0; }
-.stopka-kolumna-prawa { text-align: right; }
-@media (max-width: 700px) { .stopka-kolumna-prawa { text-align: left; } }
-.stopka-nazwa { font-weight: 600; color: var(--atrament-2); }
-.stopka a { color: var(--rejestr); text-decoration: none; }
-.stopka a:hover { text-decoration: underline; }
 
 /* Marka: znak w kwadracie + nazwa. Znak rysowany SVG, nie plikiem. */
 .szyna-marka { display: flex; align-items: center; gap: var(--od-12); padding: 0 var(--od-8) var(--od-24); }
@@ -427,6 +438,13 @@ body {
 .btn-glowny:disabled { background: var(--linia); border-color: var(--linia); color: var(--atrament-3); box-shadow: none; }
 .btn-sygnal { color: var(--sygnal); }
 .btn-sygnal:hover:not(:disabled) { border-color: var(--sygnal); background: var(--sygnal-tlo); }
+/* Wypełniony wariant tego samego bordowego akcentu — jedyne miejsce w
+   aplikacji, gdzie `--sygnal` oznacza DRUGĄ silną akcję (zgłoszenie
+   zainteresowania), nie błąd ani odmowę. Używany wyłącznie na ekranie
+   logowania portalu, obok zielonego „Zaloguj się" — nigdy jako sąsiad
+   komunikatu o błędzie, więc znaczenia się nie mieszają. */
+.btn-akcent { background: var(--sygnal); border-color: var(--sygnal); color: var(--karta); box-shadow: var(--cien-s); }
+.btn-akcent:hover:not(:disabled) { background: #8A241D; border-color: #8A241D; }
 .btn-duzy { padding: var(--od-12) var(--od-24); font-size: var(--st-15); border-radius: var(--r); }
 .btn-maly { padding: var(--od-4) var(--od-12); font-size: var(--st-11); }
 .btn-cichy { background: none; border-color: transparent; }
@@ -727,6 +745,14 @@ select {
 }
 .chk-tresc { font-size: var(--st-13); line-height: 1.5; }
 .checklista { display: flex; flex-direction: column; gap: var(--od-4); }
+
+/* Pole z odznaczeniem w tej samej linii co input — np. PESEL + „Nie posiada":
+   pole tekstowe rośnie, znacznik jest stałej szerokości po prawej i nie
+   niesie żadnego opisu poza własną etykietą. */
+.pole-z-odznaczeniem { display: flex; align-items: center; gap: var(--od-12); }
+.pole-z-odznaczeniem input[type="text"] { flex: 1; min-width: 0; }
+.chk-w-linii { padding: 0; flex-shrink: 0; white-space: nowrap; }
+.chk-w-linii .chk-tresc { color: var(--atrament-2); }
 
 /* ─────────────────────────────────────────────────────
    TABELE

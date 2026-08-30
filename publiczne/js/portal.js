@@ -26,6 +26,10 @@ function useKancelaria() {
   return (dane && dane.kancelaria) || KANCELARIA_ZAPASOWA_PORTAL;
 }
 
+function skrocAdresWww(url) {
+  return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
 /** Stopka portalu — kto prowadzi rejestr i gdzie o tym poczytać. */
 function StopkaPortalu() {
   const k = useKancelaria();
@@ -36,20 +40,21 @@ function StopkaPortalu() {
     <footer className="stopka bez-druku">
       <div className="stopka-kolumna">
         <div className="stopka-nazwa">{k.nazwa}</div>
-        {adres && <div>{adres}</div>}
-        {kontakt && <div>{kontakt}</div>}
+        {adres && <div className="stopka-linia">{adres}</div>}
+        {kontakt && <div className="stopka-linia">{kontakt}</div>}
       </div>
-      <div className="stopka-kolumna stopka-kolumna-prawa">
-        <div>Rejestr prowadzony na podstawie art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych.</div>
-        {link && (
-          <div>
-            Informacje o prowadzeniu rejestru — zakładka „Proste Spółki Akcyjne":{' '}
-            <a href={link} target="_blank" rel="noopener noreferrer">
-              {link.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-            </a>
-          </div>
-        )}
+      <div className="stopka-kolumna">
+        <div className="stopka-etykieta">Podstawa prowadzenia rejestru</div>
+        <div className="stopka-linia">art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych</div>
       </div>
+      {link && (
+        <div className="stopka-kolumna stopka-kolumna-link">
+          <div className="stopka-etykieta">Proste Spółki Akcyjne</div>
+          <a className="stopka-link" href={link} target="_blank" rel="noopener noreferrer">
+            {skrocAdresWww(link)}
+          </a>
+        </div>
+      )}
     </footer>
   );
 }
@@ -60,11 +65,6 @@ function PasekMarkiPortal() {
   return (
     <div className="marka-pasek bez-druku">
       <div className="marka-pasek-nazwa">{k.nazwa}</div>
-      {k.www && (
-        <a className="marka-pasek-link" href={k.www} target="_blank" rel="noopener noreferrer">
-          {k.www.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-        </a>
-      )}
     </div>
   );
 }
@@ -210,7 +210,12 @@ function EkranLoginPortal({ przyZalogowaniu }) {
 
       <div className="brama-stopka">
         Dostęp zakłada kancelaria po weryfikacji tożsamości — nie ma tu samodzielnej rejestracji.
-        <button type="button" className="btn" onClick={() => idz('/zglos-sie')} style={{ width: '100%' }}>
+        <button
+          type="button"
+          className="btn btn-akcent btn-duzy"
+          onClick={() => idz('/zglos-sie')}
+          style={{ width: '100%' }}
+        >
           Nie mam konta — zgłaszam zainteresowanie
         </button>
       </div>
@@ -225,9 +230,7 @@ function EkranLoginPortal({ przyZalogowaniu }) {
 function EkranZgloszenieWstepne() {
   const [email, ustawEmail] = useState('');
   const [krs, ustawKrs] = useState('');
-  const [telefon, ustawTelefon] = useState('');
   const [nazwaSpolki, ustawNazwaSpolki] = useState('');
-  const [opis, ustawOpis] = useState('');
   const [wysylanie, ustawWysylanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
   const [gotowe, ustawGotowe] = useState(false);
@@ -244,9 +247,7 @@ function EkranZgloszenieWstepne() {
       await API.post('/api/psa/portal/zgloszenia', {
         email: email.trim(),
         krs: krsCyfry,
-        telefon: telefon.trim() || undefined,
         nazwa_spolki: nazwaSpolki.trim() || undefined,
-        opis: opis.trim() || undefined,
       });
       ustawGotowe(true);
     } catch (e) {
@@ -279,13 +280,10 @@ function EkranZgloszenieWstepne() {
         <Pole etykieta="E-mail" wymagane>
           <input type="email" autoFocus value={email} onChange={(z) => ustawEmail(z.target.value)} autoComplete="email" />
         </Pole>
-        <Pole etykieta="Telefon">
-          <input type="tel" value={telefon} onChange={(z) => ustawTelefon(z.target.value)} autoComplete="tel" />
-        </Pole>
         <Pole
           etykieta="Numer KRS spółki"
           wymagane
-          podpowiedz="Dziesięć cyfr. Rejestr akcjonariuszy prowadzi się dla spółki wpisanej już do rejestru przedsiębiorców — spółkę w organizacji trzeba najpierw zarejestrować."
+          podpowiedz="Rejestr akcjonariuszy prowadzi się dla spółki wpisanej już do rejestru przedsiębiorców — spółkę w organizacji trzeba najpierw zarejestrować."
         >
           <input
             type="text"
@@ -301,9 +299,6 @@ function EkranZgloszenieWstepne() {
         )}
         <Pole etykieta="Nazwa spółki">
           <input type="text" value={nazwaSpolki} onChange={(z) => ustawNazwaSpolki(z.target.value)} />
-        </Pole>
-        <Pole etykieta="Krótki opis" podpowiedz="Kilka zdań — na tym etapie nie zbieramy danych osobowych ani PESEL.">
-          <textarea rows={3} value={opis} onChange={(z) => ustawOpis(z.target.value)} />
         </Pole>
 
       <button

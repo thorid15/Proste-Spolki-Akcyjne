@@ -575,26 +575,26 @@ function EkranNowejSpolki() {
                 <input type="text" {...pole('reprezentant_funkcja')} placeholder="np. Prezes Zarządu" />
               </Pole>
             </div>
+            {/* Sposób reprezentacji NIE jest już polem do wypełnienia — kancelaria
+                sprawdza go na podstawie wydruku z KRS przy podpisaniu umowy;
+                gdy dane spółki pobrano przyciskiem „Pobierz z KRS” wyżej,
+                wartość dochodzi razem z resztą i trafia do umowy bez udziału
+                tego formularza. */}
             <div className="siatka-2">
-              <Pole etykieta="Sposób reprezentacji">
-                <input type="text" {...pole('reprezentant_reprezentacja')} placeholder="np. samodzielnie" />
-              </Pole>
               <Pole etykieta="Imiona rodziców">
                 <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
               </Pole>
-            </div>
-            <div className="siatka-2">
               <Pole etykieta="Dowód osobisty">
                 <input type="text" {...pole('reprezentant_dowod')} />
               </Pole>
-              <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
             </div>
             <div className="siatka-2">
+              <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
               <Pole etykieta="Adres zamieszkania"><input type="text" {...pole('reprezentant_adres')} /></Pole>
-              <Pole etykieta="Adres e-mail" podpowiedz="Korespondencja w sprawie umowy o prowadzenie rejestru.">
-                <input type="email" {...pole('reprezentant_email')} />
-              </Pole>
             </div>
+            <Pole etykieta="Adres e-mail" podpowiedz="Korespondencja w sprawie umowy o prowadzenie rejestru.">
+              <input type="email" {...pole('reprezentant_email')} />
+            </Pole>
 
             <div className="rozdzielacz" />
             <div className="card-h">Ograniczenia z umowy spółki</div>

@@ -189,28 +189,33 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
             <Pole etykieta="Nazwisko" wymagane><input type="text" {...pole('nazwisko')} /></Pole>
             <Pole etykieta="Imię"><input type="text" {...pole('imie')} /></Pole>
           </div>
-          <label className="chk" style={{ padding: '8px 0' }}>
-            <input
-              type="checkbox"
-              checked={Boolean(Number(dane.bez_pesel))}
-              onChange={(z) =>
-                ustawDane((p) => ({
-                  ...p,
-                  bez_pesel: z.target.checked ? 1 : 0,
-                  pesel: z.target.checked ? '' : p.pesel,
-                }))
-              }
-            />
-            <span className="chk-tresc">
-              Nie ma numeru PESEL (np. cudzoziemiec) — do rejestru wchodzi data urodzenia
-            </span>
-          </label>
           <div className="siatka-2">
-            {!Number(dane.bez_pesel) && (
-              <Pole etykieta="PESEL" podpowiedz="Data urodzenia i płeć uzupełnią się automatycznie po wpisaniu 11 cyfr — można je potem nadpisać.">
-                <input type="text" {...pole('pesel')} maxLength={11} />
-              </Pole>
-            )}
+            <Pole
+              etykieta="PESEL"
+              podpowiedz={
+                !Number(dane.bez_pesel)
+                  ? 'Data urodzenia i płeć uzupełnią się automatycznie po wpisaniu 11 cyfr — można je potem nadpisać.'
+                  : null
+              }
+            >
+              <div className="pole-z-odznaczeniem">
+                {!Number(dane.bez_pesel) && <input type="text" {...pole('pesel')} maxLength={11} />}
+                <label className="chk chk-w-linii">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(Number(dane.bez_pesel))}
+                    onChange={(z) =>
+                      ustawDane((p) => ({
+                        ...p,
+                        bez_pesel: z.target.checked ? 1 : 0,
+                        pesel: z.target.checked ? '' : p.pesel,
+                      }))
+                    }
+                  />
+                  <span className="chk-tresc">Nie posiada</span>
+                </label>
+              </div>
+            </Pole>
             <Pole etykieta="Data urodzenia" wymagane={Boolean(Number(dane.bez_pesel))}>
               <PoleDaty wartosc={dane.data_urodzenia || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))} />
             </Pole>

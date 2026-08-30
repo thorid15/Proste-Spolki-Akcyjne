@@ -117,13 +117,13 @@ function PasekMarki({ kancelaria }) {
   return (
     <div className="marka-pasek bez-druku">
       <div className="marka-pasek-nazwa">{k.nazwa}</div>
-      {k.www && (
-        <a className="marka-pasek-link" href={k.www} target="_blank" rel="noopener noreferrer">
-          {k.www.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-        </a>
-      )}
     </div>
   );
+}
+
+/** Adres bez protokołu i bez końcowego ukośnika — tak, jak się go czyta na wizytówce. */
+function skrocAdresWww(url) {
+  return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
 /** Stopka — dane kancelarii i odesłanie do zakładki „Proste Spółki Akcyjne". */
@@ -131,26 +131,26 @@ function StopkaKancelarii({ kancelaria }) {
   const k = kancelaria || KANCELARIA_ZAPASOWA;
   const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
   const kontakt = [k.telefon, k.email].filter(Boolean).join(' · ');
+  const link = k.www_psa || k.www;
   return (
     <footer className="stopka bez-druku">
       <div className="stopka-kolumna">
         <div className="stopka-nazwa">{k.nazwa}</div>
-        {adres && <div>{adres}</div>}
-        {kontakt && <div>{kontakt}</div>}
+        {adres && <div className="stopka-linia">{adres}</div>}
+        {kontakt && <div className="stopka-linia">{kontakt}</div>}
       </div>
-      <div className="stopka-kolumna stopka-kolumna-prawa">
-        <div>
-          Rejestr prowadzony na podstawie art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych.
+      <div className="stopka-kolumna">
+        <div className="stopka-etykieta">Podstawa prowadzenia rejestru</div>
+        <div className="stopka-linia">art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych</div>
+      </div>
+      {link && (
+        <div className="stopka-kolumna stopka-kolumna-link">
+          <div className="stopka-etykieta">Proste Spółki Akcyjne</div>
+          <a className="stopka-link" href={link} target="_blank" rel="noopener noreferrer">
+            {skrocAdresWww(link)}
+          </a>
         </div>
-        {(k.www_psa || k.www) && (
-          <div>
-            Informacje o prowadzeniu rejestru — zakładka „Proste Spółki Akcyjne":{' '}
-            <a href={k.www_psa || k.www} target="_blank" rel="noopener noreferrer">
-              {(k.www_psa || k.www).replace(/^https?:\/\//, '').replace(/\/$/, '')}
-            </a>
-          </div>
-        )}
-      </div>
+      )}
     </footer>
   );
 }

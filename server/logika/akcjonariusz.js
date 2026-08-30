@@ -127,18 +127,24 @@ function ostrzezenia(a) {
     }
   }
 
-  // pkt 3 — jeden ze wskazanych adresów, wybrany świadomie i wypełniony.
+  // pkt 3 — jeden ze wskazanych adresów trafia do treści rejestru. Klient
+  // (wniosek) wpisuje tyle adresów, ile akcjonariusz posiada, bez wyboru —
+  // KTÓRY z nich jest tym z ustawy, wskazuje kancelaria przy weryfikacji.
+  // Brakiem jest więc wyłącznie brak jakiegokolwiek adresu; niezgodność
+  // wskazanego rodzaju z wypełnionym polem to osobny, bardziej konkretny
+  // sygnał dla kancelarii (np. domyślne "zamieszkania" zostało puste, bo
+  // klient podał tylko adres do e-Doręczeń).
   const adresy = {
     [ADRES.ZAMIESZKANIA]: [a.kod_pocztowy, a.miejscowosc, a.ulica].some((v) => !pusty(v)),
     [ADRES.DORECZEN]: !pusty(a.adres_doreczen),
     [ADRES.EDORECZEN]: !pusty(a.adres_edoreczen),
   };
-  if (pusty(a.rodzaj_adresu_rejestrowego)) {
-    lista.push(`${oznaczenie}: wskaż, który adres ma zostać wpisany do rejestru.`);
-  } else if (!adresy[a.rodzaj_adresu_rejestrowego]) {
+  if (!Object.values(adresy).some(Boolean)) {
+    lista.push(`${oznaczenie}: brak jakiegokolwiek adresu.`);
+  } else if (!pusty(a.rodzaj_adresu_rejestrowego) && !adresy[a.rodzaj_adresu_rejestrowego]) {
     lista.push(
-      `${oznaczenie}: wskazano „${przepisy.OPISY_RODZAJOW_ADRESU_REJESTROWEGO[a.rodzaj_adresu_rejestrowego]}”, `
-      + 'ale pole tego adresu jest puste.'
+      `${oznaczenie}: jako adres do rejestru wskazano „${przepisy.OPISY_RODZAJOW_ADRESU_REJESTROWEGO[a.rodzaj_adresu_rejestrowego]}”, `
+      + 'ale to pole jest puste — sprawdź, który adres ma zostać wpisany.'
     );
   }
 

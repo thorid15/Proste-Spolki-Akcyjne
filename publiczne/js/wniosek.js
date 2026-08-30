@@ -29,12 +29,6 @@ const PUSTY_AKCJONARIUSZ_WNIOSKU = {
   wspolwlasnosc: 'brak', wspolwlasciciele: '', udzial_licznik: '', udzial_mianownik: '',
 };
 
-const RODZAJE_ADRESU_REJESTROWEGO = [
-  { kod: 'zamieszkania', nazwa: 'Adres zamieszkania albo siedziby' },
-  { kod: 'doreczen', nazwa: 'Inny adres do doręczeń' },
-  { kod: 'edoreczen', nazwa: 'Adres do doręczeń elektronicznych' },
-];
-
 const OPIS_ADRESU_REJESTROWEGO = {
   zamieszkania: 'adres zamieszkania / siedziby',
   doreczen: 'inny adres do doręczeń',
@@ -98,10 +92,12 @@ function brakiUstawoweAkcjonariusza(a) {
     doreczen: !pusty(a.adres_doreczen),
     edoreczen: !pusty(a.adres_edoreczen),
   };
-  if (pusty(a.rodzaj_adresu_rejestrowego)) {
-    braki.push(`${kto}: wskaż, który adres ma zostać wpisany do rejestru.`);
-  } else if (!wypelniony[a.rodzaj_adresu_rejestrowego]) {
-    braki.push(`${kto}: wskazany adres (${OPIS_ADRESU_REJESTROWEGO[a.rodzaj_adresu_rejestrowego]}) jest pusty.`);
+  // Klient wpisuje tyle adresów, ile akcjonariusz posiada — który z nich
+  // trafi do treści rejestru wybiera kancelaria przy weryfikacji (patrz
+  // POLA_KOREKTY_AKCJONARIUSZA w wnioski.js), więc na tym etapie brakiem
+  // jest wyłącznie brak JAKIEGOKOLWIEK adresu, nie brak wyboru.
+  if (!Object.values(wypelniony).some(Boolean)) {
+    braki.push(`${kto}: brak jakiegokolwiek adresu.`);
   }
 
   if (a.zgoda_email_status && a.zgoda_email_status !== 'brak' && pusty(a.email)) {
@@ -164,13 +160,6 @@ function PozycjaAkcjonariuszaWniosku({ pozycja, edytowalne, przyZapisie, przyUsu
   }
 
   const bezPesel = Boolean(Number(dane.bez_pesel));
-  // Sprawdzamy, czy WSKAZANY rodzaj adresu ma w ogóle wypełnione pole —
-  // ustawa wymaga adresu, nie deklaracji o adresie.
-  const adresWskazanyWypelniony = {
-    zamieszkania: Boolean(dane.kod_pocztowy || dane.miejscowosc || dane.ulica),
-    doreczen: Boolean(dane.adres_doreczen),
-    edoreczen: Boolean(dane.adres_edoreczen),
-  }[dane.rodzaj_adresu_rejestrowego || 'zamieszkania'];
 
   return (
     <Karta>
@@ -189,33 +178,32 @@ function PozycjaAkcjonariuszaWniosku({ pozycja, edytowalne, przyZapisie, przyUsu
             <Pole etykieta="Nazwisko" wymagane><input type="text" {...pole('nazwisko')} /></Pole>
             <Pole etykieta="Imię"><input type="text" {...pole('imie')} /></Pole>
           </div>
-          <label className="chk" style={{ padding: '8px 0' }}>
-            <input
-              type="checkbox"
-              checked={bezPesel}
-              onChange={(z) =>
-                ustawDane((p) => ({
-                  ...p,
-                  bez_pesel: z.target.checked ? 1 : 0,
-                  // Deklaracja braku PESEL-u i wpisany numer wykluczają się —
-                  // serwer odrzuciłby taki zapis, więc czyścimy pole od razu.
-                  pesel: z.target.checked ? '' : p.pesel,
-                }))
-              }
-              disabled={!edytowalne}
-            />
-            <span className="chk-tresc">
-              Akcjonariusz nie ma numeru PESEL (np. mieszka za granicą). Wtedy do rejestru
-              wchodzi data urodzenia — art. 300<sup>33</sup> § 1 pkt 2 KSH dopuszcza tę
-              alternatywę, ale wymaga jednego z dwojga.
-            </span>
-          </label>
           <div className="siatka-2">
-            {!bezPesel && (
-              <Pole etykieta="PESEL" podpowiedz="Data urodzenia uzupełni się automatycznie po wpisaniu 11 cyfr — można ją potem nadpisać.">
-                <input type="text" {...pole('pesel')} maxLength={11} />
-              </Pole>
-            )}
+            <Pole
+              etykieta="PESEL"
+              podpowiedz={!bezPesel ? 'Data urodzenia uzupełni się automatycznie po wpisaniu 11 cyfr — można ją potem nadpisać.' : null}
+            >
+              <div className="pole-z-odznaczeniem">
+                {!bezPesel && <input type="text" {...pole('pesel')} maxLength={11} />}
+                <label className="chk chk-w-linii">
+                  <input
+                    type="checkbox"
+                    checked={bezPesel}
+                    onChange={(z) =>
+                      ustawDane((p) => ({
+                        ...p,
+                        bez_pesel: z.target.checked ? 1 : 0,
+                        // Deklaracja braku PESEL-u i wpisany numer wykluczają się —
+                        // serwer odrzuciłby taki zapis, więc czyścimy pole od razu.
+                        pesel: z.target.checked ? '' : p.pesel,
+                      }))
+                    }
+                    disabled={!edytowalne}
+                  />
+                  <span className="chk-tresc">Nie posiada</span>
+                </label>
+              </div>
+            </Pole>
             <Pole etykieta="Data urodzenia" wymagane={bezPesel}>
               <PoleDaty
                 wartosc={dane.data_urodzenia || ''}
@@ -263,20 +251,8 @@ function PozycjaAkcjonariuszaWniosku({ pozycja, edytowalne, przyZapisie, przyUsu
       <div className="card-h">Adres</div>
       <Komunikat
         odmiana="info"
-        tresc="Do rejestru wchodzi JEDEN adres — art. 300³³ § 1 pkt 3 KSH daje wybór: adres zamieszkania albo siedziby, inny adres do doręczeń albo adres do doręczeń elektronicznych. Wskaż, który ma być wpisany; pozostałe możesz zostawić puste."
+        tresc="Wpisz tyle adresów, ile akcjonariusz faktycznie posiada — do treści rejestru trafia jeden z nich (art. 300³³ § 1 pkt 3 KSH), kancelaria wskaże który przy weryfikacji wniosku."
       />
-      <Pole etykieta="Adres wpisywany do rejestru" wymagane>
-        <select
-          value={dane.rodzaj_adresu_rejestrowego || 'zamieszkania'}
-          onChange={(z) => ustawDane((p) => ({ ...p, rodzaj_adresu_rejestrowego: z.target.value }))}
-          disabled={!edytowalne}
-        >
-          {RODZAJE_ADRESU_REJESTROWEGO.map((r) => (
-            <option key={r.kod} value={r.kod}>{r.nazwa}</option>
-          ))}
-        </select>
-      </Pole>
-
       <div className="siatka-3">
         <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
         <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
@@ -294,12 +270,6 @@ function PozycjaAkcjonariuszaWniosku({ pozycja, edytowalne, przyZapisie, przyUsu
           <input type="text" {...pole('adres_edoreczen')} placeholder="AE:PL-…" />
         </Pole>
       </div>
-      {!adresWskazanyWypelniony && (
-        <Komunikat
-          odmiana="uwaga"
-          tresc="Wskazany rodzaj adresu nie jest jeszcze wypełniony — uzupełnij go albo wybierz inny."
-        />
-      )}
 
       <div className="rozdzielacz" />
       <div className="card-h">Kontakt i zgoda na komunikację elektroniczną</div>
@@ -309,7 +279,7 @@ function PozycjaAkcjonariuszaWniosku({ pozycja, edytowalne, przyZapisie, przyUsu
       </div>
       <Komunikat
         odmiana="info"
-        tresc="Adres e-mail wchodzi do rejestru tylko wtedy, gdy akcjonariusz wyrazi zgodę na komunikację elektroniczną (art. 300³³ § 1 pkt 4 KSH). Zgoda jest oświadczeniem samego akcjonariusza — zarząd nie może jej złożyć za niego. Zaznacz „zadeklarowana”, a my przygotujemy oświadczenie do podpisu; po jego odesłaniu kancelaria zmieni status na potwierdzoną."
+        tresc="Adres e-mail wchodzi do rejestru tylko wtedy, gdy akcjonariusz wyrazi zgodę na komunikację elektroniczną (art. 300³³ § 1 pkt 4 KSH). Zgoda jest oświadczeniem samego akcjonariusza — zarząd nie może jej złożyć za niego. Zaznacz „zadeklarowana”, a przygotujemy oświadczenie do podpisu."
       />
       <Pole etykieta="Zgoda na komunikację elektroniczną">
         <select
@@ -627,33 +597,29 @@ function EkranWniosku() {
                 <input type="text" {...pole('reprezentant_funkcja')} placeholder="np. Prezes Zarządu" />
               </Pole>
             </div>
+            {/* Sposób reprezentacji NIE jest już polem do wypełnienia — kancelaria
+                sprawdza go na podstawie wydruku z KRS przy podpisaniu umowy;
+                gdy dane spółki pobrano przyciskiem „Pobierz z KRS” wyżej,
+                wartość dochodzi razem z resztą i trafia do umowy bez udziału
+                tego formularza. */}
             <div className="siatka-2">
-              <Pole etykieta="Sposób reprezentacji">
-                <input
-                  type="text"
-                  {...pole('reprezentant_reprezentacja')}
-                  placeholder="np. samodzielnie"
-                />
-              </Pole>
               <Pole etykieta="Imiona rodziców">
                 <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
               </Pole>
-            </div>
-            <div className="siatka-2">
               <Pole etykieta="Dowód osobisty">
                 <input type="text" {...pole('reprezentant_dowod')} />
               </Pole>
-              <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
             </div>
             <div className="siatka-2">
+              <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
               <Pole etykieta="Adres zamieszkania"><input type="text" {...pole('reprezentant_adres')} /></Pole>
-              <Pole
-                etykieta="Adres e-mail"
-                podpowiedz="Na ten adres trafi projekt umowy do podpisu i korespondencja w sprawie jej zawarcia."
-              >
-                <input type="email" {...pole('reprezentant_email')} />
-              </Pole>
             </div>
+            <Pole
+              etykieta="Adres e-mail"
+              podpowiedz="Na ten adres trafi projekt umowy do podpisu i korespondencja w sprawie jej zawarcia."
+            >
+              <input type="email" {...pole('reprezentant_email')} />
+            </Pole>
           </>
         )}
 

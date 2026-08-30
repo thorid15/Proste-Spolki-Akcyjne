@@ -103,7 +103,11 @@ function identyfikatorWewnetrzny(osoba) {
 function sadRejestrowyPelny(spolka) {
   if (!spolka.sad_rejestrowy) return null;
   if (!spolka.wydzial) return spolka.sad_rejestrowy;
-  const wydzial = /rejestru s.dowego/i.test(spolka.wydzial)
+  // Import z KRS zawsze zwraca pelna nazwe ("... Wydzial Gospodarczy
+  // Krajowego Rejestru Sadowego" - server/dane/sady-rejestrowe.json), ale
+  // pole jest edytowalne recznie - ktos moze wpisac skrot "KRS" zamiast
+  // pelnej nazwy. Obie formy licza sie jako "juz obecne".
+  const wydzial = /rejestru s.dowego|\bKRS\b/i.test(spolka.wydzial)
     ? spolka.wydzial
     : `${spolka.wydzial} Krajowego Rejestru Sądowego`;
   return `${spolka.sad_rejestrowy}, ${wydzial}`;
@@ -137,10 +141,27 @@ function kancelariaKlucze() {
  * etykietą („siedziba: Gdańsk”) — dlatego nie ma tu drugiej formy do
  * odmiany i nie ma czego zgadywać przy nazwach nietypowych.
  */
+/**
+ * `{{spolka_firma}}` jest we WSZYSTKICH dziesięciu wzorach wplecione w zdanie,
+ * które od razu dokleja słowa „prosta spółka akcyjna" (art. 305 § 1 KSH
+ * wymaga tego oznaczenia w firmie) — a firma zarejestrowana w KRS ZWYKLE
+ * już to oznaczenie zawiera (np. „YAMA GROUP PROSTA SPÓŁKA AKCYJNA"), co bez
+ * tego przycięcia dawało w piśmie podwójne „prosta spółka akcyjna prosta
+ * spółka akcyjna". Przycinamy więc oznaczenie z KOŃCA firmy — wzór dokleja
+ * je z powrotem, dokładnie raz, niezależnie od tego, czy operator wpisał
+ * firmę z oznaczeniem, czy bez.
+ */
+function firmaBezOznaczeniaFormy(nazwa) {
+  if (!nazwa) return nazwa;
+  return String(nazwa)
+    .replace(/,?\s*(prosta\s+sp[oó]łka\s+akcyjna|P\.?\s*S\.?\s*A\.?)\s*$/i, '')
+    .trim();
+}
+
 function spolkaKlucze(spolka) {
   const organ = spolka.organ_rodzaj ? przepisy.OPISY_ORGANOW[spolka.organ_rodzaj] : null;
   return {
-    spolka_firma: spolka.nazwa || null,
+    spolka_firma: firmaBezOznaczeniaFormy(spolka.nazwa) || null,
     spolka_siedziba_mianownik: spolka.miejscowosc || null,
     spolka_adres_pelny: adresPelny(spolka),
     spolka_sad_rejestrowy: sadRejestrowyPelny(spolka),

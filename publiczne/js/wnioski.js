@@ -94,6 +94,10 @@ const POLA_KOREKTY_AKCJONARIUSZA = [
   ['adres_doreczen', 'Inny adres do doręczeń'], ['adres_edoreczen', 'Adres do e-Doręczeń'],
   ['email', 'E-mail'], ['telefon', 'Telefon'],
   ['wspolwlasciciele', 'Pozostali współwłaściciele'],
+  // Klient wpisuje adresy, jakie ma — KTÓRY z nich trafia do treści rejestru
+  // (art. 300³³ § 1 pkt 3 KSH dopuszcza tylko jeden) wybiera tu kancelaria,
+  // stąd specjalny <select>, patrz render niżej.
+  ['rodzaj_adresu_rejestrowego', 'Adres wpisywany do rejestru'],
 ];
 
 /** Opisy pól ustawowych — te same, co widzi klient w portalu. */
@@ -248,15 +252,28 @@ function PozycjaAkcjonariuszaWeryfikacja({ pozycja, wniosekId, zablokowane, odsw
         </div>
       ) : (
         <div className="siatka-2" style={{ marginTop: 10 }}>
-          {POLA_KOREKTY_AKCJONARIUSZA.map(([klucz, etykieta]) => (
-            <Pole key={klucz} etykieta={etykieta}>
-              <input
-                type="text"
-                value={dane[klucz] || ''}
-                onChange={(z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value }))}
-              />
-            </Pole>
-          ))}
+          {POLA_KOREKTY_AKCJONARIUSZA.map(([klucz, etykieta]) =>
+            klucz === 'rodzaj_adresu_rejestrowego' ? (
+              <Pole key={klucz} etykieta={etykieta}>
+                <select
+                  value={dane[klucz] || 'zamieszkania'}
+                  onChange={(z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value }))}
+                >
+                  <option value="zamieszkania">Adres zamieszkania albo siedziby</option>
+                  <option value="doreczen">Inny adres do doręczeń</option>
+                  <option value="edoreczen">Adres do doręczeń elektronicznych</option>
+                </select>
+              </Pole>
+            ) : (
+              <Pole key={klucz} etykieta={etykieta}>
+                <input
+                  type="text"
+                  value={dane[klucz] || ''}
+                  onChange={(z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value }))}
+                />
+              </Pole>
+            )
+          )}
         </div>
       )}
 
