@@ -35,6 +35,34 @@ const OPIS_ADRESU_REJESTROWEGO = {
   edoreczen: 'adres do e-Doręczeń',
 };
 
+/**
+ * Podsumowanie mówi, JAKIE adresy klient podał — nie który z nich trafi do
+ * rejestru. Wyboru wymaganego przez art. 300(33) § 1 pkt 3 KSH dokonuje
+ * kancelaria przy weryfikacji (formularz klienta nie ma już tego pola), więc
+ * pokazywanie tu „adres niewskazany" znaczyłoby dla klienta coś zupełnie
+ * innego, niż znaczy naprawdę.
+ */
+/**
+ * Etykieta pozycji na liście dokumentów. Nazwa pliku niesie jeszcze numer KRS
+ * i rozszerzenie — potrzebne w pobranym pliku, zbędne na ekranie, gdzie cała
+ * lista dotyczy tej samej spółki i tego samego formatu.
+ */
+function etykietaDokumentu(nazwaPliku) {
+  return String(nazwaPliku || '')
+    .replace(/\.pdf$/i, '')
+    .replace(/\s+—\s+KRS\s+\d+$/i, '');
+}
+
+function opisAdresowAkcjonariusza(a) {
+  const podane = [];
+  if ([a.kod_pocztowy, a.miejscowosc, a.ulica].some((v) => v && String(v).trim())) {
+    podane.push('adres zamieszkania / siedziby');
+  }
+  if (a.adres_doreczen && a.adres_doreczen.trim()) podane.push('adres do doręczeń');
+  if (a.adres_edoreczen && a.adres_edoreczen.trim()) podane.push('adres do e-Doręczeń');
+  return podane.length > 0 ? podane.join(', ') : 'brak adresu';
+}
+
 const OPIS_ZGODY_EMAIL = {
   brak: 'bez zgody na e-mail',
   zadeklarowana: 'zgoda na e-mail — do potwierdzenia',
@@ -365,6 +393,13 @@ function EkranWniosku() {
   const [plikPodpisanejUmowy, ustawPlikPodpisanejUmowy] = useState(null);
   const [wysylaniePodpisanej, ustawWysylaniePodpisanej] = useState(false);
   const [bladPodpisanej, ustawBladPodpisanej] = useState(null);
+  // Adres kancelarii do odesłania podpisanych oświadczeń — formularz niżej
+  // przyjmuje wyłącznie sam egzemplarz umowy (jeden plik, jedna kolumna
+  // w `psa_wnioski`), więc instrukcja podpisu musi wskazać, gdzie trafia reszta.
+  const { dane: daneKancelarii } = useDane('/api/wspolne/kancelaria');
+  const emailKancelarii = daneKancelarii && daneKancelarii.kancelaria
+    ? daneKancelarii.kancelaria.email
+    : null;
 
   useEffect(() => {
     Promise.all([
@@ -426,9 +461,14 @@ function EkranWniosku() {
       ustawDane(wynik.wniosek);
       ustawOstrzezeniaZlozenia(wynik.ostrzezenia || []);
       ustawDokumenty(wynik.dokumenty || []);
-      if (wynik.blad_pakietu) {
+      if (wynik.blad_umowy) {
         ustawBladSkladania(
-          `Wniosek został złożony, ale nie udało się przygotować kompletu oświadczeń: ${wynik.blad_pakietu}. `
+          `Wniosek został złożony, ale nie udało się przygotować projektu umowy: ${wynik.blad_umowy}. `
+          + 'Spróbuj złożyć wniosek ponownie za chwilę albo skontaktuj się z kancelarią.'
+        );
+      } else if (wynik.blad_pakietu) {
+        ustawBladSkladania(
+          `Wniosek został złożony, ale nie udało się przygotować kompletu dokumentów do podpisu: ${wynik.blad_pakietu}. `
           + 'Kancelaria przygotuje je ręcznie.'
         );
       }
@@ -701,7 +741,7 @@ function EkranWniosku() {
                       <div className="podsumowanie-nazwa">{nazwaAkcjonariusza(a)}</div>
                       <div className="podsumowanie-cechy">
                         <span>{identyfikatorAkcjonariusza(a)}</span>
-                        <span>{OPIS_ADRESU_REJESTROWEGO[a.rodzaj_adresu_rejestrowego] || 'adres niewskazany'}</span>
+                        <span>{opisAdresowAkcjonariusza(a)}</span>
                         <span>{OPIS_ZGODY_EMAIL[a.zgoda_email_status || 'brak']}</span>
                         {a.wspolwlasnosc && a.wspolwlasnosc !== 'brak' && (
                           <span>{OPIS_WSPOLWLASNOSCI[a.wspolwlasnosc]}</span>
@@ -752,7 +792,7 @@ function EkranWniosku() {
               <>
                 <Komunikat
                   odmiana="ok"
-                  tresc="Projekt umowy o prowadzenie rejestru jest gotowy. Pobierz go, podpisz (odręcznie albo podpisem kwalifikowanym) i odeślij skan lub zdjęcie podpisanego dokumentu poniżej."
+                  tresc="Komplet dokumentów jest gotowy. Pobierz wszystkie pozycje z listy poniżej, zbierz podpisy i odeślij je kancelarii."
                 />
                 {ostrzezeniaZlozenia.length > 0 && (
                   <Komunikat
@@ -761,44 +801,67 @@ function EkranWniosku() {
                     lista={ostrzezeniaZlozenia}
                   />
                 )}
-                <div className="pion" style={{ gap: 'var(--od-8)' }}>
+
+                <div className="rozdzielacz" />
+                <div className="card-h">Dokumenty do podpisu</div>
+                <Komunikat
+                  odmiana="info"
+                  tresc="Umowę podpisuje reprezentant spółki. Uchwałę o wyborze podmiotu prowadzącego rejestr oraz żądanie pierwszego wpisu podpisują wszyscy akcjonariusze wspólnie. Pozostałe oświadczenia każdy akcjonariusz podpisuje osobiście — zarząd nie może złożyć ich za niego."
+                />
+                <div className="lista-dokumentow">
                   <a
-                    className="btn"
+                    className="lista-dokumentow-poz"
                     href="/api/psa/portal/wniosek/umowa-projekt"
                     target="_blank"
                     rel="noopener"
                   >
-                    <Ikona nazwa="pobierz" rozmiar={16} /> Umowa o prowadzenie rejestru (.docx)
+                    <Ikona nazwa="pobierz" rozmiar={17} />
+                    <span className="lista-dokumentow-nazwa">Umowa o prowadzenie rejestru</span>
                   </a>
+                  {dokumenty.map((d) => (
+                    <a
+                      key={d.id}
+                      className="lista-dokumentow-poz"
+                      href={`/api/psa/portal/wniosek/dokumenty/${d.id}`}
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      <Ikona nazwa="pobierz" rozmiar={17} />
+                      <span className="lista-dokumentow-nazwa">{etykietaDokumentu(d.nazwa_pliku)}</span>
+                      <span className="lista-dokumentow-rozmiar">
+                        {Math.max(1, Math.round((d.rozmiar || 0) / 1024))} kB
+                      </span>
+                    </a>
+                  ))}
                 </div>
 
-                {dokumenty.length > 0 && (
-                  <>
-                    <div className="rozdzielacz" />
-                    <div className="card-h">Oświadczenia do podpisu</div>
-                    <Komunikat
-                      odmiana="info"
-                      tresc="Każdy akcjonariusz podpisuje swoje oświadczenia osobiście — zarząd nie może złożyć ich za niego. Żądanie pierwszego wpisu podpisują wszyscy akcjonariusze wspólnie. Dokumenty są w formacie PDF; odeślij je razem z podpisaną umową."
-                    />
-                    <div className="lista-dokumentow">
-                      {dokumenty.map((d) => (
-                        <a
-                          key={d.id}
-                          className="lista-dokumentow-poz"
-                          href={`/api/psa/portal/wniosek/dokumenty/${d.id}`}
-                          target="_blank"
-                          rel="noopener"
-                        >
-                          <Ikona nazwa="pobierz" rozmiar={17} />
-                          <span className="lista-dokumentow-nazwa">{d.nazwa_pliku}</span>
-                          <span className="lista-dokumentow-rozmiar">
-                            {Math.max(1, Math.round((d.rozmiar || 0) / 1024))} kB
-                          </span>
-                        </a>
-                      ))}
-                    </div>
-                  </>
-                )}
+                <div className="instrukcja-podpisu">
+                  <div className="instrukcja-podpisu-tytul">Jak podpisać dokumenty</div>
+                  <ul className="instrukcja-podpisu-lista">
+                    <li>
+                      <strong>Podpisem własnoręcznym</strong> — wydrukuj dokument, podpisz go odręcznie,
+                      a następnie zeskanuj albo zrób czytelne zdjęcie każdej strony.
+                    </li>
+                    <li>
+                      <strong>Kwalifikowanym podpisem elektronicznym</strong> — podpisz plik PDF bez
+                      drukowania; podpis kwalifikowany jest równoważny podpisowi własnoręcznemu
+                      (art. 78<sup>1</sup> § 2 Kodeksu cywilnego).
+                    </li>
+                    <li>
+                      <strong>Podpisem zaufanym albo osobistym</strong> (profil zaufany, e-dowód) —
+                      dokument podpisany w ten sposób również przyjmujemy.
+                    </li>
+                  </ul>
+                  <div className="instrukcja-podpisu-uwaga">
+                    Każda strona dokumentu musi być czytelna, a podpis widoczny w całości.
+                    Podpisaną umowę odeślij formularzem poniżej. Pozostałe podpisane dokumenty
+                    prześlij kancelarii
+                    {emailKancelarii ? (
+                      <> na adres <a href={`mailto:${emailKancelarii}`}>{emailKancelarii}</a></>
+                    ) : ' pocztą elektroniczną'}
+                    {' '}albo dostarcz je osobiście.
+                  </div>
+                </div>
 
                 <div className="rozdzielacz" />
                 <Pole etykieta="Podpisana umowa (PDF, JPG albo PNG)">

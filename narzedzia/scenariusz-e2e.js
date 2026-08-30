@@ -291,12 +291,13 @@ async function main() {
   if (zlozenie.brakujace && zlozenie.brakujace.length) {
     info(`pola niewypełnione w projekcie umowy: ${zlozenie.brakujace.join(', ')}`);
   }
+  if (zlozenie.blad_umowy) info(`UWAGA: nie wygenerowano PDF-u umowy — ${zlozenie.blad_umowy}`);
   const projekt = await zapytaj(klient, 'GET', '/api/psa/portal/wniosek/umowa-projekt');
-  info(`pobrano projekt umowy (.docx, ${projekt.byteLength} B)`);
+  info(`pobrano projekt umowy (.pdf, ${projekt.byteLength} B)`);
   for (const d of zlozenie.dokumenty || []) {
-    info(`oświadczenie do podpisu: ${d.nazwa_pliku} (${Math.round(d.rozmiar / 1024)} kB)`);
+    info(`dokument do podpisu: ${d.nazwa_pliku} (${Math.round(d.rozmiar / 1024)} kB)`);
   }
-  if (zlozenie.blad_pakietu) info(`UWAGA: nie złożono kompletu oświadczeń — ${zlozenie.blad_pakietu}`);
+  if (zlozenie.blad_pakietu) info(`UWAGA: nie złożono kompletu dokumentów — ${zlozenie.blad_pakietu}`);
 
   krok('klient', 'Odsyła podpisany egzemplarz umowy');
   const formularz = new FormData();

@@ -318,6 +318,31 @@ test('uchwalaWyboru: bez danych glosowania pola zostaja WIDOCZNYM brakiem', () =
   assert.ok(wynik.brakujace.includes('uchwala_glosy_za'));
 });
 
+test('uchwalaWyboruProjekt: wzor do wypelnienia — nazwiska realne, liczby glosow jako miejsce do wpisania, nie zmyslone', () => {
+  const akcjonariuszeWniosku = [
+    { typ: 'fizyczna', imie: 'Jan', nazwisko: 'Kowalski' },
+    { typ: 'prawna', nazwa: 'ACME sp. z o.o.' },
+  ];
+  const dane = kontekst.uchwalaWyboruProjekt({
+    wniosek: SPOLKA, akcjonariusze: akcjonariuszeWniosku, dzis: '2026-08-13',
+  });
+  assert.equal(dane.akcjonariusze.length, 2);
+  assert.equal(dane.akcjonariusze[0].akcjonariusz_nazwa, 'Jan Kowalski');
+  assert.equal(dane.akcjonariusze[1].akcjonariusz_nazwa, 'ACME sp. z o.o.');
+  assert.equal(dane.uchwala_data, '2026-08-13');
+
+  // Zadne pole nie zostaje "brakiem" — wzor wychodzi do klienta kompletny,
+  // z kropkami tam, gdzie wpisuje sie recznie przy podpisywaniu.
+  const wynik = bezBrakow('03', dane);
+  const tekst = docx.tekst(wynik.plik);
+  assert.match(tekst, /13 sierpnia 2026/, 'data uchwaly slownie wyliczona automatycznie z uchwala_data');
+  assert.match(tekst, /Jan Kowalski/);
+  assert.match(tekst, /ACME sp\. z o\.o\./);
+  // Liczby glosow nie moga byc zmyslone: w miejscu kazdej stoi kropkowana linia.
+  assert.match(tekst, /Jan Kowalski – \.{3,} akcji dających uprawnienie do \.{3,} głosów/);
+  assert.equal(/\d+ akcji dających uprawnienie/.test(tekst), false, 'zadnej wymyslonej liczby akcji');
+});
+
 test('listaAkcjonariuszyDoSadu: razem akcji i sklad organu z importu KRS', () => {
   const dane = kontekst.listaAkcjonariuszyDoSadu({
     spolka: SPOLKA, akcjonariusze: AKCJONARIUSZE, razemAkcji: 1000,

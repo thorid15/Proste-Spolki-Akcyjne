@@ -42,6 +42,7 @@ const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
 const wzoryDysk = require('../logika/wzory-dysk');
+const docxPdf = require('../logika/docx-pdf');
 const docx = require('../logika/docx');
 const kontekstPisma = require('../logika/kontekst-pisma');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien } = require('../pomocnicze/odpowiedzi');
@@ -582,18 +583,34 @@ router.post(
     const wynik = wzoryDysk.wypelnij('01', dane);
     const katalog = katalogWnioskuDokumenty(wniosek.id);
     fs.mkdirSync(katalog, { recursive: true });
-    const nazwaZapisu = `${crypto.randomUUID()}-projekt-umowy.docx`;
-    fs.writeFileSync(path.join(katalog, nazwaZapisu), wynik.plik);
-    const sciezkaWzgledna = path.relative(konfiguracja.KATALOG_DOKUMENTOW, path.join(katalog, nazwaZapisu));
 
-    db()
-      .prepare(
-        `UPDATE psa_wnioski
-            SET status = 'umowa_wygenerowana', umowa_projekt_sciezka = ?,
-                umowa_projekt_wygenerowano = ?, zaktualizowano = ?
-          WHERE id = ?`
-      )
-      .run(sciezkaWzgledna, teraz, czas.terazIso(), wniosek.id);
+    // Umowa NIE jest negocjowalna po stronie klienta - dostaje ja gotowa,
+    // w PDF, ktorego nie da sie zmienic w edytorze tekstu tak jak .docx
+    // (zob. komentarz na gorze `logika/docx-pdf.js`). Blad konwersji
+    // (np. LibreOffice niedostepne) NIE cofa juz dokonanego zlozenia wniosku -
+    // wniosek zostaje w stanie "zlozony", a projekt umowy da sie wygenerowac
+    // ponownie, gdy kancelaria zauwazy problem.
+    let bladUmowy = null;
+    try {
+      const pdfUmowy = await docxPdf.zPdf(wynik.plik, {
+        autor: konfiguracja.KANCELARIA.nazwa,
+        tytul: 'Umowa o prowadzenie rejestru',
+      });
+      const nazwaZapisu = `${crypto.randomUUID()}-projekt-umowy.pdf`;
+      fs.writeFileSync(path.join(katalog, nazwaZapisu), pdfUmowy);
+      const sciezkaWzgledna = path.relative(konfiguracja.KATALOG_DOKUMENTOW, path.join(katalog, nazwaZapisu));
+
+      db()
+        .prepare(
+          `UPDATE psa_wnioski
+              SET status = 'umowa_wygenerowana', umowa_projekt_sciezka = ?,
+                  umowa_projekt_wygenerowano = ?, zaktualizowano = ?
+            WHERE id = ?`
+        )
+        .run(sciezkaWzgledna, teraz, czas.terazIso(), wniosek.id);
+    } catch (e) {
+      bladUmowy = e.message;
+    }
 
     // Braki wobec art. 300(33) § 1 KSH liczymy na KOMPLETNYM wierszu, przy
     // skladaniu - nie przy kazdym zapisie. Nie blokuja zlozenia: kancelaria
@@ -604,10 +621,10 @@ router.post(
       .all(wniosek.id);
     const brakiAkcjonariuszy = akcjonariusze.flatMap((a) => akcjonariuszLogika.ostrzezenia(a));
 
-    // Komplet oswiadczen do podpisu (PDF). Skladamy go PO umowie i poza
-    // transakcja - to zapis na dysk, ktory nie moze cofnac juz dokonanej
-    // zmiany statusu wniosku. Blad skladania nie przewraca zlozenia:
-    // dokumenty da sie wystawic ponownie, wniosku - nie.
+    // Komplet dokumentow do podpisu (uchwala i oswiadczenia, PDF). Skladamy
+    // go PO umowie i poza transakcja - to zapis na dysk, ktory nie moze
+    // cofnac juz dokonanej zmiany statusu wniosku. Blad skladania nie
+    // przewraca zlozenia: dokumenty da sie wystawic ponownie, wniosku - nie.
     const wniosekPoZlozeniu = db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id);
     let bladPakietu = null;
     try {
@@ -622,6 +639,7 @@ router.post(
       ostrzezenia: wynik.ostrzezenia,
       braki_akcjonariuszy: brakiAkcjonariuszy,
       dokumenty: wczytajDokumentyWniosku(wniosek.id),
+      blad_umowy: bladUmowy,
       blad_pakietu: bladPakietu,
     });
   })
@@ -733,10 +751,10 @@ router.get(
       wniosek.krs ? `KRS ${wniosek.krs}` : null,
     ].filter(Boolean).join(' — ').replace(/[\\/:*?"<>|]/g, '-');
 
-    odp.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    odp.setHeader('Content-Type', 'application/pdf');
     odp.setHeader(
       'Content-Disposition',
-      `attachment; filename*=UTF-8''${encodeURIComponent(`${nazwaPliku}.docx`)}`
+      `attachment; filename*=UTF-8''${encodeURIComponent(`${nazwaPliku}.pdf`)}`
     );
     fs.createReadStream(pelnaSciezka).pipe(odp);
   })

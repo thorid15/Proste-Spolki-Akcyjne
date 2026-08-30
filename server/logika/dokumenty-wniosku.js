@@ -3,11 +3,15 @@
 /**
  * Komplet dokumentów powstający przy złożeniu wniosku o prowadzenie rejestru.
  *
- * Umowa o prowadzenie rejestru jest osobno (wzór 01, `.docx`) — to dokument
- * NEGOCJOWANY, którego wzór notariusz edytuje w Wordzie. Tutaj składają się
- * OŚWIADCZENIA o ustalonej treści, po jednym na akcjonariusza, oraz wspólne
- * żądanie pierwszego wpisu. Ich treści się nie negocjuje, więc idą w PDF —
- * patrz komentarz na górze `logika/pdf.js`.
+ * Cztery OŚWIADCZENIA o ustalonej treści (po jednym na akcjonariusza) oraz
+ * wspólne żądanie pierwszego wpisu składają się tutaj wprost jako PDF —
+ * patrz komentarz na górze `logika/pdf.js`. Uchwałę o wyborze podmiotu
+ * prowadzącego rejestr (`uchwalaProjekt`) silnik składa inaczej: to wzór
+ * `.docx` (notariusz edytuje jego treść w Wordzie), wypełniony danymi
+ * i skonwertowany do PDF (`logika/docx-pdf.js`) — tak samo jak umowa
+ * o prowadzenie rejestru (wzór 01, `server/trasy/portal.js`). Efekt końcowy
+ * jest ten sam: klient dostaje gotowy, NIEEDYTOWALNY dokument do podpisu,
+ * niezależnie którą z dwóch dróg powstał.
  *
  * Wszystkie dane osobowe trafiają na papier w MIANOWNIKU, opisane etykietą
  * („PESEL: …”, „Działający jako: …”), nigdy odmienione przez przypadki.
@@ -16,12 +20,16 @@
 const pdf = require('./pdf');
 const przepisy = require('./przepisy');
 const konfiguracja = require('../konfiguracja');
+const wzoryDysk = require('./wzory-dysk');
+const docxPdf = require('./docx-pdf');
+const kontekstPisma = require('./kontekst-pisma');
 
 const PODSTAWA_AML = 'ustawa z dnia 1 marca 2018 r. o przeciwdziałaniu praniu pieniędzy '
   + 'oraz finansowaniu terroryzmu';
 
 /** Katalog dokumentów pakietu — `kod` jest identyfikatorem typu w bazie. */
 const TYPY = {
+  UCHWALA_WYBORU: 'uchwala_wyboru_projekt',
   ZGODA_EMAIL: 'zgoda_email',
   OSWIADCZENIE_RODO: 'oswiadczenie_rodo',
   OSWIADCZENIE_AML: 'oswiadczenie_aml',
@@ -29,6 +37,7 @@ const TYPY = {
 };
 
 const NAZWY = {
+  [TYPY.UCHWALA_WYBORU]: 'Uchwała o wyborze podmiotu prowadzącego rejestr',
   [TYPY.ZGODA_EMAIL]: 'Zgoda na komunikację elektroniczną',
   [TYPY.OSWIADCZENIE_RODO]: 'Oświadczenie o zapoznaniu się z informacją o przetwarzaniu danych',
   [TYPY.OSWIADCZENIE_AML]: 'Oświadczenie o beneficjencie rzeczywistym i statusie PEP',
@@ -124,6 +133,24 @@ function polaAkcjonariusza(a) {
     adresRejestrowy(a),
   ]);
   return pary;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Dokument 0 — projekt uchwały o wyborze podmiotu prowadzącego rejestr
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Wzór `.docx` (03) wypełniony danymi wniosku i skonwertowany do PDF —
+ * patrz komentarz na górze pliku i przy `kontekstPisma.uchwalaWyboruProjekt`.
+ */
+async function uchwalaProjekt({ wniosek, akcjonariusze, dzis }) {
+  const dane = kontekstPisma.uchwalaWyboruProjekt({ wniosek, akcjonariusze, dzis });
+  const wynik = wzoryDysk.wypelnij('03', dane);
+  const plik = await docxPdf.zPdf(wynik.plik, {
+    autor: konfiguracja.KANCELARIA.nazwa,
+    tytul: NAZWY[TYPY.UCHWALA_WYBORU],
+  });
+  return { typ: TYPY.UCHWALA_WYBORU, akcjonariuszId: null, plik };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -348,14 +375,20 @@ function nazwaPliku({ typ, wniosek, akcjonariusz }) {
 }
 
 /**
- * Składa cały komplet: po trzy oświadczenia na akcjonariusza plus jedno
- * wspólne żądanie wpisu.
+ * Składa cały komplet: projekt uchwały, po trzy oświadczenia na
+ * akcjonariusza, plus jedno wspólne żądanie wpisu.
  *
  * @returns {Promise<{typ: string, nazwa: string, nazwaPliku: string,
  *   akcjonariuszId: number|null, plik: Buffer}[]>}
  */
 async function zlozPakiet({ wniosek, akcjonariusze, dzis }) {
   const dokumenty = [];
+
+  // Uchwała jest pierwsza na liście — obok umowy to drugi dokument
+  // "założycielski" pakietu, przed indywidualnymi oświadczeniami akcjonariuszy.
+  if (akcjonariusze.length > 0) {
+    dokumenty.push(await uchwalaProjekt({ wniosek, akcjonariusze, dzis }));
+  }
 
   for (const a of akcjonariusze) {
     // Zgodę na komunikację elektroniczną wystawiamy tylko tym, którym ma

@@ -282,12 +282,11 @@ test('POST /api/psa/portal/wniosek/zloz: generuje projekt umowy, zmienia status,
 
   const plikOdp = await fetch(`${baza}/api/psa/portal/wniosek/umowa-projekt`, { headers: { Cookie: ciastko } });
   assert.equal(plikOdp.status, 200);
-  assert.equal(
-    plikOdp.headers.get('content-type'),
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  );
-  const bajty = await plikOdp.arrayBuffer();
+  assert.equal(plikOdp.headers.get('content-type'), 'application/pdf');
+  const bajty = Buffer.from(await plikOdp.arrayBuffer());
   assert.ok(bajty.byteLength > 0, 'wygenerowany projekt umowy nie jest pusty');
+  // Umowa nie jest negocjowalna - klient dostaje PDF, nie edytowalny .docx.
+  assert.equal(bajty.subarray(0, 4).toString('latin1'), '%PDF');
 });
 
 test('GET /api/psa/portal/wniosek/umowa-projekt: 404 przed zlozeniem wniosku', async () => {

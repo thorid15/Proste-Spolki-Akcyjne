@@ -1560,3 +1560,29 @@ select {
   color: var(--atrament-3);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Instrukcja podpisu pod listą dokumentów ──
+   Nie komunikat (te sygnalizują stan), tylko trwały blok pomocy: stoi pod
+   listą zawsze, bo dotyczy każdej z jej pozycji. */
+.instrukcja-podpisu {
+  margin-top: var(--od-16);
+  padding: var(--od-16);
+  background: var(--papier);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  font-size: var(--st-13);
+  line-height: 1.55;
+}
+.instrukcja-podpisu-tytul {
+  font-weight: 600;
+  color: var(--rejestr);
+  margin-bottom: var(--od-8);
+}
+.instrukcja-podpisu-lista { margin: 0 0 var(--od-12) var(--od-16); padding: 0; }
+.instrukcja-podpisu-lista li { margin-bottom: var(--od-8); }
+.instrukcja-podpisu-lista li:last-child { margin-bottom: 0; }
+.instrukcja-podpisu-uwaga {
+  padding-top: var(--od-12);
+  border-top: 1px solid var(--linia);
+  color: var(--atrament-2);
+}
