@@ -107,15 +107,14 @@ const konfiguracja = {
     www_psa: tekst('KANCELARIA_WWW_PSA', tekst('KANCELARIA_WWW', 'https://notariusz.gdansk.pl')),
 
     // Atomowe - na potrzeby wzorow .docx (PLACEHOLDERY-PSA.md, sekcja KANCELARIA).
+    // Wszystkie w MIANOWNIKU: pisma opisuja dane etykieta ("notariusz: ...",
+    // "siedziba: ..."), wiec zadna forma odmieniona nie jest juz potrzebna.
     kancelaria_ulica: tekst('KANCELARIA_ULICA', ''),
     kancelaria_kod: tekst('KANCELARIA_KOD', ''),
     kancelaria_miasto: tekst('KANCELARIA_MIASTO', ''),
-    kancelaria_miasto_miejscownik: tekst('KANCELARIA_MIASTO_MIEJSCOWNIK', ''),
     kancelaria_nip: tekst('KANCELARIA_NIP', ''),
     kancelaria_regon: tekst('KANCELARIA_REGON', ''),
     notariusz_mianownik: tekst('NOTARIUSZ_MIANOWNIK', 'Łukasz Kozon'),
-    notariusz_dopelniacz: tekst('NOTARIUSZ_DOPELNIACZ', ''),
-    notariusz_narzednik: tekst('NOTARIUSZ_NARZEDNIK', ''),
     podpisujacy_funkcja: tekst('PODPISUJACY_FUNKCJA', 'Notariusz'),
     podpisujacy_mianownik: tekst('PODPISUJACY_MIANOWNIK', tekst('NOTARIUSZ_MIANOWNIK', 'Łukasz Kozon')),
 

@@ -1334,6 +1334,31 @@ const MIGRACJE = [
         ON psa_osoby_skany_aml (spolka_id);
     `,
   },
+  {
+    wersja: 29,
+    nazwa: 'zgloszenie wstepne: numer KRS spolki',
+    sql: `
+      -- Rejestr akcjonariuszy prowadzi sie dla spolki JUZ wpisanej do
+      -- rejestru przedsiebiorcow, wiec numer KRS jest naturalnym sitem na
+      -- zgloszenia przedwczesne. Kolumna zostaje NULLABLE: zgloszenia
+      -- przyjete przed ta zmiana numeru nie maja i nie da sie go dopisac
+      -- wstecz. Wymagalnosc egzekwuje trasa POST /api/psa/portal/zgloszenia
+      -- dla NOWYCH zgloszen - inaczej migracja nie przeszlaby na bazie
+      -- z historia.
+      ALTER TABLE psa_zgloszenia ADD COLUMN krs TEXT;
+    `,
+  },
+  {
+    wersja: 30,
+    nazwa: 'reprezentant spolki: adres e-mail',
+    sql: `
+      -- Adres poczty elektronicznej osoby, ktora podpisuje umowe w imieniu
+      -- spolki. Odrebny od 'email' spolki: korespondencja w sprawie zawarcia
+      -- umowy i podpisu idzie do KONKRETNEJ osoby, nie na skrzynke ogolna.
+      ALTER TABLE psa_spolki  ADD COLUMN reprezentant_email TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_email TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

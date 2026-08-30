@@ -94,11 +94,11 @@ test('zip: naruszona suma kontrolna jest wykrywana', () => {
 // ─────────────────────────────────────────────────────────────
 
 test('docx: podstawia proste klucze', () => {
-  const { tekst } = wypelnijNaTekst(dokument(akapit('Spółka {{spolka_firma}} z siedzibą w {{spolka_siedziba_miejscownik}}.')), {
+  const { tekst } = wypelnijNaTekst(dokument(akapit('Spółka {{spolka_firma}}, siedziba: {{spolka_siedziba_mianownik}}.')), {
     spolka_firma: 'CHARLIE UNICORN AI',
-    spolka_siedziba_miejscownik: 'Warszawie',
+    spolka_siedziba_mianownik: 'Warszawa',
   });
-  assert.equal(tekst, 'Spółka CHARLIE UNICORN AI z siedzibą w Warszawie.');
+  assert.equal(tekst, 'Spółka CHARLIE UNICORN AI, siedziba: Warszawa.');
 });
 
 test('docx: klucz bez wartości nie znika po cichu — zostaje myślnik i wpis na liście braków', () => {

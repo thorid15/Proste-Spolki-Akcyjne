@@ -75,12 +75,11 @@ function EkranWnioski() {
 /** Grid pol do recznej korekty danych spolki - lzejszy niz pelny formularz kreatora klienta. */
 const POLA_KOREKTY_SPOLKI = [
   ['nazwa', 'Nazwa'], ['krs', 'KRS'], ['nip', 'NIP'], ['regon', 'REGON'],
-  ['kod_pocztowy', 'Kod pocztowy'], ['miejscowosc', 'Miejscowość'], ['siedziba_miejscownik', 'Siedziba (miejscownik)'],
+  ['kod_pocztowy', 'Kod pocztowy'], ['miejscowosc', 'Miejscowość'],
   ['ulica', 'Ulica'], ['nr_domu', 'Nr domu'], ['nr_lokalu', 'Nr lokalu'],
   ['sad_rejestrowy', 'Sąd rejestrowy'], ['wydzial', 'Wydział'],
   ['telefon', 'Telefon'], ['email', 'E-mail'], ['adres_edorecze', 'Adres do e-doręczeń'],
   ['reprezentant_imie_nazwisko', 'Reprezentant — imię i nazwisko'],
-  ['reprezentant_plec', 'Reprezentant — płeć'],
   ['reprezentant_funkcja', 'Reprezentant — funkcja'],
   ['reprezentant_pesel', 'Reprezentant — PESEL'],
   ['reprezentant_adres', 'Reprezentant — adres'],

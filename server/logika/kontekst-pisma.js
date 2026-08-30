@@ -29,8 +29,6 @@
 const przepisy = require('./przepisy');
 const konfiguracja = require('../konfiguracja');
 const widoki = require('../widoki');
-const formyOsobowe = require('./formy-osobowe');
-const deklinacja = require('./deklinacja');
 
 // ─────────────────────────────────────────────────────────────
 // Formatowanie wspólne
@@ -120,12 +118,9 @@ function kancelariaKlucze() {
   const k = konfiguracja.KANCELARIA;
   return {
     notariusz_mianownik: k.notariusz_mianownik || null,
-    notariusz_dopelniacz: k.notariusz_dopelniacz || null,
-    notariusz_narzednik: k.notariusz_narzednik || null,
     podpisujacy_funkcja: k.podpisujacy_funkcja || null,
     podpisujacy_mianownik: k.podpisujacy_mianownik || null,
     kancelaria_miasto: k.kancelaria_miasto || null,
-    kancelaria_miasto_miejscownik: k.kancelaria_miasto_miejscownik || null,
     kancelaria_ulica: k.kancelaria_ulica || null,
     kancelaria_kod: k.kancelaria_kod || null,
     kancelaria_email: k.email || null,
@@ -135,13 +130,18 @@ function kancelariaKlucze() {
   };
 }
 
-/** `spolka_*` — z rekordu `psa_spolki` (siedziba_miejscownik: blok B4, organ_rodzaj: blok A3). */
+/**
+ * `spolka_*` — z rekordu `psa_spolki` (organ_rodzaj: blok A3).
+ *
+ * Nazwa miejscowości występuje w pismach WYŁĄCZNIE w mianowniku, opisana
+ * etykietą („siedziba: Gdańsk”) — dlatego nie ma tu drugiej formy do
+ * odmiany i nie ma czego zgadywać przy nazwach nietypowych.
+ */
 function spolkaKlucze(spolka) {
   const organ = spolka.organ_rodzaj ? przepisy.OPISY_ORGANOW[spolka.organ_rodzaj] : null;
   return {
     spolka_firma: spolka.nazwa || null,
     spolka_siedziba_mianownik: spolka.miejscowosc || null,
-    spolka_siedziba_miejscownik: spolka.siedziba_miejscownik || null,
     spolka_adres_pelny: adresPelny(spolka),
     spolka_sad_rejestrowy: sadRejestrowyPelny(spolka),
     spolka_krs: spolka.krs || null,
@@ -155,47 +155,24 @@ function spolkaKlucze(spolka) {
 
 /**
  * `reprezentant_*` — osoba podpisująca w imieniu SPÓŁKI umowę o prowadzenie
- * rejestru (wzór 01 § 5, blok B6). Formy pochodne z `reprezentant_plec`
- * (`formy-osobowe.js`) — brak płci zostawia je puste, nie zgadnięte.
+ * rejestru (wzór 01).
  *
- * Sekcja 2.3 poprawek: `spolka.reprezentant_imie_nazwisko` i
- * `reprezentant_funkcja` są w MIANOWNIKU (tak wpisuje je kreator) — biernik
- * i dopełniacz liczy `deklinacja.js` w locie. Trzy pola „_recznie" to
- * korekta użytkownika (nazwiska nietypowe/obcojęzyczne, których deklinator
- * nie zgadnie poprawnie) — gdy wypełnione, mają PIERWSZEŃSTWO przed
- * automatem. Klucze wyjściowe (`reprezentant_biernik` itd.) zostają BEZ
- * ZMIAN — to jedyny kontrakt, jaki widzi wzór 01, i podmiana źródła danych
- * po stronie wejścia go nie narusza.
+ * Wszystkie wartości idą do pisma w MIANOWNIKU, dokładnie tak, jak wpisano
+ * je w formularzu. Wzór opisuje je etykietą („imiona rodziców:”, „działający
+ * jako:”) zamiast wplatać w zdanie wymagające odmiany — dzięki temu nie ma
+ * ani automatycznej deklinacji, ani pól jej ręcznej korekty, ani zależności
+ * od płci osoby.
  */
 function reprezentantKlucze(spolka) {
-  const formy = formyOsobowe.formyReprezentanta(spolka.reprezentant_plec) || {};
-  const plec = spolka.reprezentant_plec || null;
-
-  const biernik =
-    spolka.reprezentant_biernik_recznie ||
-    deklinacja.odmienImieNazwisko(spolka.reprezentant_imie_nazwisko, 'biernik', plec) ||
-    null;
-  const funkcjaBiernik =
-    spolka.reprezentant_funkcja_biernik_recznie ||
-    deklinacja.odmienFunkcjeBiernik(spolka.reprezentant_funkcja) ||
-    null;
-  const rodzice =
-    spolka.reprezentant_rodzice_recznie ||
-    deklinacja.odmienRodzicow(spolka.reprezentant_rodzice) ||
-    null;
-
   return {
-    reprezentant_biernik: biernik,
-    reprezentant_rodzice: rodzice,
+    reprezentant_imie_nazwisko: spolka.reprezentant_imie_nazwisko || null,
+    reprezentant_funkcja: spolka.reprezentant_funkcja || null,
+    reprezentant_rodzice: spolka.reprezentant_rodzice || null,
     reprezentant_dowod: spolka.reprezentant_dowod || null,
     reprezentant_pesel: spolka.reprezentant_pesel || null,
     reprezentant_adres: spolka.reprezentant_adres || null,
-    reprezentant_funkcja_biernik: funkcjaBiernik,
+    reprezentant_email: spolka.reprezentant_email || null,
     reprezentant_reprezentacja: spolka.reprezentant_reprezentacja || null,
-    reprezentant_syn_corka: formy.reprezentant_syn_corka || null,
-    reprezentant_legitymujacy: formy.reprezentant_legitymujacy || null,
-    reprezentant_zamieszkaly: formy.reprezentant_zamieszkaly || null,
-    reprezentant_dzialajacy: formy.reprezentant_dzialajacy || null,
   };
 }
 
@@ -389,12 +366,8 @@ function umowaOProwadzenieRejestru({ spolka, dzis }) {
 }
 
 /** Wzór 02 — załącznik: informacja RODO. Podpisuje ten sam reprezentant, co umowę. */
-function informacjaRodo({ spolka }) {
-  const formy = formyOsobowe.formaZapoznania(spolka.reprezentant_plec) || {};
-  return {
-    ...kancelariaKlucze(),
-    zapoznany: formy.zapoznany || null,
-  };
+function informacjaRodo() {
+  return { ...kancelariaKlucze() };
 }
 
 /**
@@ -451,7 +424,7 @@ function klauzulaZbycia({ spolka, klauzula, zbywca, nabywca }) {
   return {
     spolka_firma: spolka.nazwa || null,
     spolka_krs: spolka.krs || null,
-    spolka_siedziba_miejscownik: spolka.siedziba_miejscownik || null,
+    spolka_siedziba_mianownik: spolka.miejscowosc || null,
     klauzula_paragraf: k.paragraf || null,
     klauzula_pokrycie: k.pokrycie || null,
     klauzula_ograniczenia: k.ograniczenia || null,
@@ -475,7 +448,6 @@ function klauzulaZbycia({ spolka, klauzula, zbywca, nabywca }) {
  * i nabywcę przy klauzuli zbycia (wzór 10, blok A5).
  */
 function zadanieWpisu({ spolka, sprawa, zadajacy, osoby, dokumenty, zgadzajacy, dzis }) {
-  const formyZg = formyOsobowe.formyZgadzajacego(zgadzajacy ? zgadzajacy.plec : null) || {};
   return {
     ...kancelariaKlucze(),
     ...spolkaKlucze(spolka),
@@ -501,7 +473,6 @@ function zadanieWpisu({ spolka, sprawa, zadajacy, osoby, dokumenty, zgadzajacy, 
     })),
     zgadzajacy_mianownik: zgadzajacy ? mianownik(zgadzajacy) : null,
     zgadzajacy_identyfikator: zgadzajacy ? identyfikatorWewnetrzny(zgadzajacy) : null,
-    zgadzajacy_podpisany: formyZg.zgadzajacy_podpisany || null,
     zgoda: zgadzajacy ? [{}] : [],
   };
 }

@@ -102,17 +102,30 @@ test.after(() => {
   fs.rmSync(`${PLIK_BAZY}-shm`, { force: true });
 });
 
-test('POST /api/psa/portal/zgloszenia: publiczne, bez sesji, wymaga poprawnego e-maila', async () => {
+test('POST /api/psa/portal/zgloszenia: publiczne, bez sesji, wymaga poprawnego e-maila i numeru KRS', async () => {
   const [stBrak] = await zapytaj('POST', '/api/psa/portal/zgloszenia', { opis: 'Chcę przenieść rejestr' }, null);
   assert.equal(stBrak, 400);
 
-  const [stZle] = await zapytaj('POST', '/api/psa/portal/zgloszenia', { email: 'nie-email' }, null);
-  assert.equal(stZle, 400);
+  // Rejestr akcjonariuszy prowadzi sie dla spolki JUZ wpisanej do rejestru
+  // przedsiebiorcow - numer KRS odsiewa zgloszenia spolek w organizacji.
+  const [stBezKrs, odpBezKrs] = await zapytaj(
+    'POST',
+    '/api/psa/portal/zgloszenia',
+    { email: 'bez-krs@example.pl', krs: '12345' },
+    null
+  );
+  assert.equal(stBezKrs, 400);
+  assert.match(odpBezKrs.blad, /KRS/);
 
   const [stOk, ok] = await zapytaj(
     'POST',
     '/api/psa/portal/zgloszenia',
-    { email: 'Prospect@Example.pl', nazwa_spolki: 'Nowa Nadzieja P.S.A.', opis: 'Zakładamy PSA, szukamy podmiotu prowadzącego rejestr.' },
+    {
+      email: 'Prospect@Example.pl',
+      krs: '0000123456',
+      nazwa_spolki: 'Nowa Nadzieja P.S.A.',
+      opis: 'Zakładamy PSA, szukamy podmiotu prowadzącego rejestr.',
+    },
     null
   );
   assert.equal(stOk, 201);
@@ -122,6 +135,7 @@ test('POST /api/psa/portal/zgloszenia: publiczne, bez sesji, wymaga poprawnego e
   const wpis = lista.zgloszenia.find((z) => z.nazwa_spolki === 'Nowa Nadzieja P.S.A.');
   assert.ok(wpis, 'zgloszenie trafilo do kolejki kancelarii');
   assert.equal(wpis.email, 'prospect@example.pl', 'e-mail znormalizowany do malych liter');
+  assert.equal(wpis.krs, '0000123456');
   assert.equal(wpis.status, 'nowe');
 });
 
@@ -129,7 +143,7 @@ test('POST /api/psa/portal/zgloszenia: NIE zaklada zadnego konta portalowego ani
   const przedKonta = db().prepare('SELECT COUNT(*) AS n FROM psa_konta').get().n;
   const przedSpolki = db().prepare('SELECT COUNT(*) AS n FROM psa_spolki').get().n;
 
-  await zapytaj('POST', '/api/psa/portal/zgloszenia', { email: 'lead-bez-konta@example.pl' }, null);
+  await zapytaj('POST', '/api/psa/portal/zgloszenia', { email: 'lead-bez-konta@example.pl', krs: '0000999888' }, null);
 
   assert.equal(db().prepare('SELECT COUNT(*) AS n FROM psa_konta').get().n, przedKonta);
   assert.equal(db().prepare('SELECT COUNT(*) AS n FROM psa_spolki').get().n, przedSpolki);

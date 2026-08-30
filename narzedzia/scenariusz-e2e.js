@@ -81,6 +81,10 @@ if (!ADMIN_EMAIL || !ADMIN_HASLO) {
 
 const ZNACZNIK = Date.now().toString().slice(-6);
 const EMAIL_KLIENTA = arg.email || `proba.${ZNACZNIK}@example-test.pl`;
+// Numer KRS jest w zgloszeniu wstepnym obowiazkowy - dziesiec cyfr,
+// unikalnych dla przebiegu, zeby kolejne uruchomienia nie dowiazywaly sie
+// do spolki zalozonej poprzednio.
+const KRS_SPOLKI = `0000${ZNACZNIK}`.padEnd(10, '0').slice(0, 10);
 const HASLO_KLIENTA = 'HasloKlienta123';
 
 // ── Dwie niezależne sesje: pracownik i klient ────────────────────────────
@@ -175,6 +179,7 @@ async function main() {
   krok('klient', 'Wysyła zgłoszenie z publicznego formularza „Zgłoś zainteresowanie"');
   await zapytaj(klient, 'POST', '/api/psa/portal/zgloszenia', {
     email: EMAIL_KLIENTA,
+    krs: KRS_SPOLKI,
     telefon: '+48 500 100 200',
     nazwa_spolki: `Próbna ${ZNACZNIK} P.S.A.`,
     opis: 'Chcemy powierzyć kancelarii prowadzenie rejestru akcjonariuszy.',
@@ -221,11 +226,10 @@ async function main() {
   await zapytaj(klient, 'PUT', '/api/psa/portal/wniosek', {
     nazwa: `Próbna ${ZNACZNIK} Prosta Spółka Akcyjna`,
     forma_prawna: 'PROSTA SPÓŁKA AKCYJNA',
-    krs: null,
+    krs: KRS_SPOLKI,
     kraj: 'Polska',
     kod_pocztowy: '80-280',
     miejscowosc: 'Gdańsk',
-    siedziba_miejscownik: 'Gdańsku',
     ulica: 'Bolesława Leśmiana',
     nr_domu: '3',
     nr_lokalu: 'U10',
@@ -233,9 +237,9 @@ async function main() {
     telefon: '+48 500 100 200',
     data_zawarcia_umowy_spolki: DZIS,
     reprezentant_imie_nazwisko: 'Anna Nowak',
-    reprezentant_plec: 'kobieta',
     reprezentant_funkcja: 'Prezes zarządu',
     reprezentant_reprezentacja: 'samodzielnie',
+    reprezentant_email: EMAIL_KLIENTA,
   });
   info('krok „Spółka i umowa" zapisany');
 

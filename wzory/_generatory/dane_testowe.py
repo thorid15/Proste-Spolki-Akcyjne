@@ -6,12 +6,9 @@ Dane fikcyjne."""
 DANE = {
     # kancelaria
     'notariusz_mianownik': 'Łukasz Kozon',
-    'notariusz_dopelniacz': 'Łukasza Kozona',
-    'notariusz_narzednik': 'Łukaszem Kozonem',
     'podpisujacy_funkcja': 'Notariusz',
     'podpisujacy_mianownik': 'Łukasz Kozon',
     'kancelaria_miasto': 'Gdańsk',
-    'kancelaria_miasto_miejscownik': 'Gdańsku',
     'kancelaria_ulica': 'Bolesława Leśmiana nr 3/U10',
     'kancelaria_kod': '80-280',
     'kancelaria_email': 'biuro@notariusz.gdansk.pl',
@@ -21,7 +18,6 @@ DANE = {
     # spółka
     'spolka_firma': 'CHARLIE UNICORN AI',
     'spolka_siedziba_mianownik': 'Warszawa',
-    'spolka_siedziba_miejscownik': 'Warszawie',
     'spolka_adres_pelny': '00-697 Warszawa, ulica Aleje Jerozolimskie nr 51',
     'spolka_sad_rejestrowy': 'Sąd Rejonowy dla m.st. Warszawy w Warszawie, '
                              'XII Wydział Gospodarczy Krajowego Rejestru Sądowego',
@@ -37,17 +33,15 @@ DANE = {
     'adresat_nazwa': 'Jan Kowalski',
     'adresat_adres': '80-180 Gdańsk, ulica Kwiatowa nr 4 m. 2',
     # reprezentant spółki
-    'reprezentant_biernik': 'Łukasza Adriana Szymborskiego',
-    'reprezentant_rodzice': 'Pawła i Izabelli',
+    # Wszystko w MIANOWNIKU - wzory opisuja te dane etykieta, nie odmieniaja.
+    'reprezentant_imie_nazwisko': 'Łukasz Adrian Szymborski',
+    'reprezentant_funkcja': 'Prezes Zarządu',
+    'reprezentant_rodzice': 'Paweł i Izabella',
     'reprezentant_dowod': 'DGK 138559',
     'reprezentant_pesel': '88081105939',
     'reprezentant_adres': '76-015 Manowo, ulica Kasztanowa nr 17 m. 1',
-    'reprezentant_funkcja_biernik': 'Prezesa Zarządu',
-    'reprezentant_reprezentacja': 'uprawnionego do samodzielnej reprezentacji',
-    'reprezentant_syn_corka': 'syna',
-    'reprezentant_legitymujacy': 'legitymującego się',
-    'reprezentant_zamieszkaly': 'zamieszkałego',
-    'reprezentant_dzialajacy': 'działającego',
+    'reprezentant_reprezentacja': 'samodzielnie',
+    'reprezentant_email': 'l.szymborski@example.pl',
     # żądanie
     'zadanie_data': '13.08.2026',
     'zadanie_data_wplywu': '10.08.2026',
@@ -64,10 +58,6 @@ DANE = {
     'dokument_strony': 'Anna Nowak (zbywca) i Jan Kowalski (nabywca)',
     'zgadzajacy_mianownik': 'Anna Nowak',
     'zgadzajacy_identyfikator': 'PESEL 75042311111',
-    'zadajacy_podpisany': 'podpisany',
-    'zadajacy_zamieszkaly': 'zamieszkały',
-    'zgadzajacy_podpisany': 'podpisana',
-    'zapoznany': 'zapoznałem się',
     # wpis
     'wpis_data': '13.08.2026',
     'wpis_godzina': '11:42',

@@ -19,7 +19,7 @@ pisz(p, '§ {{klauzula_paragraf}}. Zgoda na wpis w rejestrze akcjonariuszy i ż�
 
 ustep(d, '1.', 'Zbywca, jako osoba, której uprawnienia z akcji objętych niniejszą umową zostaną przez wpis '
                'wykreślone albo obciążone, wyraża zgodę na dokonanie w rejestrze akcjonariuszy spółki '
-               '{{spolka_firma}} prosta spółka akcyjna z siedzibą w {{spolka_siedziba_miejscownik}}, '
+               '{{spolka_firma}} prosta spółka akcyjna, siedziba: {{spolka_siedziba_mianownik}}, '
                'KRS {{spolka_krs}}, wpisu wynikającego z niniejszej umowy. Zgoda dotyczy wyłącznie tego wpisu.')
 ustep(d, '2.', 'Wobec zgody wyrażonej w ust. 1 powiadomienie, o którym mowa w art. §§300^34 § 3 Kodeksu spółek '
                'handlowych, nie jest wymagane.')

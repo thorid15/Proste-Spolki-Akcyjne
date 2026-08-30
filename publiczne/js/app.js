@@ -23,11 +23,14 @@ const MENU = [
     grupa: 'Praca',
     pozycje: [
       { sciezka: '/', nazwa: 'Pulpit', ikona: 'pulpit' },
-      { sciezka: '/sprawy', nazwa: 'Kolejka spraw', ikona: 'sprawy' },
+      // `licznik` = klucz z GET /api/psa/liczniki. Dostaja go wylacznie
+      // KOLEJKI (coś czeka na ruch kancelarii). „Spółki" i „Kartoteka osób"
+      // to katalogi — nie ma tam czego odhaczać, więc nie ma i licznika.
+      { sciezka: '/sprawy', nazwa: 'Kolejka spraw', ikona: 'sprawy', licznik: 'sprawy' },
       { sciezka: '/spolki', nazwa: 'Spółki', ikona: 'spolki' },
       { sciezka: '/osoby', nazwa: 'Kartoteka osób', ikona: 'osoby' },
-      { sciezka: '/zgloszenia', nazwa: 'Zgłoszenia', ikona: 'sprawy' },
-      { sciezka: '/wnioski', nazwa: 'Wnioski', ikona: 'sprawy' },
+      { sciezka: '/zgloszenia', nazwa: 'Zgłoszenia', ikona: 'sprawy', licznik: 'zgloszenia' },
+      { sciezka: '/wnioski', nazwa: 'Wnioski', ikona: 'sprawy', licznik: 'wnioski' },
     ],
   },
   {
@@ -48,7 +51,13 @@ const MENU = [
   },
 ];
 
-function Szyna({ sciezka, uzytkownik, kancelaria, podgladSystemu }) {
+const OPIS_LICZNIKA = {
+  zgloszenia: 'zgłoszeń do oceny',
+  wnioski: 'wniosków do weryfikacji',
+  sprawy: 'spraw w toku',
+};
+
+function Szyna({ sciezka, uzytkownik, kancelaria, podgladSystemu, liczniki }) {
   const aktywna = (poz) =>
     poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka);
 
@@ -76,6 +85,14 @@ function Szyna({ sciezka, uzytkownik, kancelaria, podgladSystemu }) {
             >
               <Ikona nazwa={poz.ikona} rozmiar={17} />
               <span className="szyna-poz-etykieta">{poz.nazwa}</span>
+              {poz.licznik && liczniki[poz.licznik] > 0 && (
+                <span
+                  className="szyna-licznik"
+                  title={`${liczniki[poz.licznik]} ${OPIS_LICZNIKA[poz.licznik]}`}
+                >
+                  {liczniki[poz.licznik]}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -100,7 +117,6 @@ function PasekMarki({ kancelaria }) {
   return (
     <div className="marka-pasek bez-druku">
       <div className="marka-pasek-nazwa">{k.nazwa}</div>
-      <div className="marka-pasek-opis">Rejestr akcjonariuszy prostych spółek akcyjnych</div>
       {k.www && (
         <a className="marka-pasek-link" href={k.www} target="_blank" rel="noopener noreferrer">
           {k.www.replace(/^https?:\/\//, '').replace(/\/$/, '')}
@@ -256,10 +272,12 @@ function Aplikacja() {
   const { dane: meta } = useDane('/api/psa/meta');
   const podgladSystemu = Boolean(meta && meta.podglad_systemu);
 
-  // Licznik na dzwonku: sprawy w toku. Odświeżany przy każdej zmianie trasy,
-  // żeby po dokonaniu wpisu nie pokazywał nieaktualnej liczby.
-  const { dane: sprawyDane } = useDane(sesja.zalogowany ? '/api/psa/sprawy' : null, [sciezka]);
-  const liczbaSpraw = sprawyDane && sprawyDane.sprawy ? sprawyDane.sprawy.length : 0;
+  // Liczniki kolejek w szynie i na dzwonku. Odświeżane przy każdej zmianie
+  // trasy, żeby po obsłużeniu zgłoszenia albo wpisu znacznik nie został
+  // z nieaktualną liczbą.
+  const { dane: daneLicznikow } = useDane(sesja.zalogowany ? '/api/psa/liczniki' : null, [sciezka]);
+  const liczniki = (daneLicznikow && daneLicznikow.liczniki) || {};
+  const liczbaSpraw = liczniki.sprawy || 0;
 
   function ekran() {
     if (segmenty.length === 0) return <EkranPulpitu />;
@@ -337,6 +355,7 @@ function Aplikacja() {
         uzytkownik={sesja.uzytkownik}
         kancelaria={kancelaria}
         podgladSystemu={podgladSystemu}
+        liczniki={liczniki}
       />
       <div className="obszar">
         <Topbar

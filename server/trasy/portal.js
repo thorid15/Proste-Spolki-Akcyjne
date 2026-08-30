@@ -141,6 +141,15 @@ router.post(
       throw bledneZadanie('Podaj prawidłowy adres e-mail.');
     }
 
+    // Rejestr akcjonariuszy prowadzi sie dla spolki JUZ wpisanej do rejestru
+    // przedsiebiorcow (art. 300(30) § 1 KSH dotyczy spolki, ktora istnieje),
+    // wiec numer KRS jest tu polem obowiazkowym - odsiewa zgloszenia spolek
+    // w organizacji, ktore i tak trzeba by odeslac.
+    const krs = String(cialo.krs || '').replace(/\D/g, '');
+    if (krs.length !== 10) {
+      throw bledneZadanie('Podaj numer KRS spółki — dziesięć cyfr. Rejestr akcjonariuszy prowadzi się dla spółki wpisanej już do rejestru przedsiębiorców.');
+    }
+
     // Miekki, ogolny limit zapytan na adres IP - formularz jest publiczny
     // i niezalogowany, wiec to jedyna dostepna ochrona przed zalewem
     // (limiter.js liczy tu KAZDA probe, nie tylko nieudane logowanie).
@@ -149,6 +158,7 @@ router.post(
 
     const dane = {
       email,
+      krs,
       telefon: String(cialo.telefon || '').trim() || null,
       nazwa_spolki: String(cialo.nazwa_spolki || '').trim() || null,
       opis: String(cialo.opis || '').trim() || null,
@@ -284,12 +294,12 @@ router.post(
 
 const POLA_WNIOSKU = [
   'krs', 'nip', 'regon', 'nazwa', 'forma_prawna', 'kraj', 'kod_pocztowy', 'miejscowosc',
-  'siedziba_miejscownik', 'ulica', 'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial',
-  'telefon', 'email', 'www', 'organ_rodzaj', 'data_utworzenia_spolki', 'data_ostatniego_wpisu_krs',
+  'ulica', 'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial',
+  'telefon', 'email', 'www', 'organ_rodzaj', 'data_utworzenia_spolki',
   'adres_edorecze', 'kapital_akcyjny_grosze', 'data_zawarcia_umowy_spolki',
-  'reprezentant_imie_nazwisko', 'reprezentant_plec', 'reprezentant_funkcja', 'reprezentant_reprezentacja',
+  'reprezentant_imie_nazwisko', 'reprezentant_funkcja', 'reprezentant_reprezentacja',
   'reprezentant_rodzice', 'reprezentant_dowod', 'reprezentant_pesel', 'reprezentant_adres',
-  'reprezentant_biernik_recznie', 'reprezentant_funkcja_biernik_recznie', 'reprezentant_rodzice_recznie',
+  'reprezentant_email',
 ];
 
 function wyczyscWniosek(cialo) {
@@ -317,13 +327,10 @@ function sprawdzDaneWniosku(dane) {
   if (dane.nip && !/^\d{10}$/.test(String(dane.nip).replace(/[\s-]/g, ''))) {
     throw bledneZadanie('NIP składa się z 10 cyfr.');
   }
-  for (const pole of ['data_utworzenia_spolki', 'data_ostatniego_wpisu_krs', 'data_zawarcia_umowy_spolki']) {
+  for (const pole of ['data_utworzenia_spolki', 'data_zawarcia_umowy_spolki']) {
     if (dane[pole] && !czas.poprawnaData(dane[pole])) {
       throw bledneZadanie(`Pole „${pole}” musi być datą w formacie RRRR-MM-DD.`);
     }
-  }
-  if (dane.reprezentant_plec && !['mezczyzna', 'kobieta'].includes(dane.reprezentant_plec)) {
-    throw bledneZadanie('Płeć reprezentanta musi być „mężczyzna” albo „kobieta”.');
   }
 }
 

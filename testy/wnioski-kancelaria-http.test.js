@@ -92,7 +92,6 @@ async function wnioskGotowyDoWeryfikacji(email, { zAkcjonariuszem = true, dodatk
   await zapytaj('PUT', '/api/psa/portal/wniosek', {
     nazwa: `Wniosek Weryfikacja ${email}`,
     reprezentant_imie_nazwisko: 'Jan Kowalski',
-    reprezentant_plec: 'mezczyzna',
     reprezentant_funkcja: 'Prezes Zarządu',
     ...dodatkowePola,
   }, ciastko);

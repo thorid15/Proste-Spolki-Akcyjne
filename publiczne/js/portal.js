@@ -55,12 +55,11 @@ function StopkaPortalu() {
 }
 
 /** Pasek marki — wspólny dla ekranów publicznych i zalogowanych. */
-function PasekMarkiPortal({ opis }) {
+function PasekMarkiPortal() {
   const k = useKancelaria();
   return (
     <div className="marka-pasek bez-druku">
       <div className="marka-pasek-nazwa">{k.nazwa}</div>
-      <div className="marka-pasek-opis">{opis}</div>
       {k.www && (
         <a className="marka-pasek-link" href={k.www} target="_blank" rel="noopener noreferrer">
           {k.www.replace(/^https?:\/\//, '').replace(/\/$/, '')}
@@ -74,7 +73,7 @@ function PasekMarkiPortal({ opis }) {
 function RamaPubliczna({ children }) {
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <PasekMarkiPortal opis="Portal klienta — rejestr akcjonariuszy P.S.A." />
+      <PasekMarkiPortal />
       <div className="rama-publiczna-tresc">{children}</div>
       <StopkaPortalu />
     </div>
@@ -160,6 +159,7 @@ function EkranLoginPortal({ przyZalogowaniu }) {
    którym dopiero zaczyna się właściwy wniosek o prowadzenie rejestru. */
 function EkranZgloszenieWstepne() {
   const [email, ustawEmail] = useState('');
+  const [krs, ustawKrs] = useState('');
   const [telefon, ustawTelefon] = useState('');
   const [nazwaSpolki, ustawNazwaSpolki] = useState('');
   const [opis, ustawOpis] = useState('');
@@ -167,14 +167,18 @@ function EkranZgloszenieWstepne() {
   const [blad, ustawBlad] = useState(null);
   const [gotowe, ustawGotowe] = useState(false);
 
+  const krsCyfry = krs.replace(/\D/g, '');
+  const krsPoprawny = krsCyfry.length === 10;
+
   async function wyslij(zdarzenie) {
     zdarzenie.preventDefault();
-    if (!email.trim()) return;
+    if (!email.trim() || !krsPoprawny) return;
     ustawWysylanie(true);
     ustawBlad(null);
     try {
       await API.post('/api/psa/portal/zgloszenia', {
         email: email.trim(),
+        krs: krsCyfry,
         telefon: telefon.trim() || undefined,
         nazwa_spolki: nazwaSpolki.trim() || undefined,
         opis: opis.trim() || undefined,
@@ -217,14 +221,31 @@ function EkranZgloszenieWstepne() {
         <Pole etykieta="Telefon">
           <input type="tel" value={telefon} onChange={(z) => ustawTelefon(z.target.value)} autoComplete="tel" />
         </Pole>
-        <Pole etykieta="Nazwa spółki" podpowiedz="Jeśli już istnieje i jest wpisana do KRS.">
+        <Pole
+          etykieta="Numer KRS spółki"
+          wymagane
+          podpowiedz="Dziesięć cyfr. Rejestr akcjonariuszy prowadzi się dla spółki wpisanej już do rejestru przedsiębiorców — spółkę w organizacji trzeba najpierw zarejestrować."
+        >
+          <input
+            type="text"
+            inputMode="numeric"
+            value={krs}
+            onChange={(z) => ustawKrs(z.target.value)}
+            maxLength={14}
+            placeholder="0000123456"
+          />
+        </Pole>
+        {krs && !krsPoprawny && (
+          <Komunikat odmiana="uwaga" tresc="Numer KRS składa się z dziesięciu cyfr." />
+        )}
+        <Pole etykieta="Nazwa spółki">
           <input type="text" value={nazwaSpolki} onChange={(z) => ustawNazwaSpolki(z.target.value)} />
         </Pole>
         <Pole etykieta="Krótki opis" podpowiedz="Kilka zdań — na tym etapie nie zbieramy danych osobowych ani PESEL.">
           <textarea rows={3} value={opis} onChange={(z) => ustawOpis(z.target.value)} />
         </Pole>
 
-        <button className="btn btn-primary" type="submit" disabled={wysylanie || !email.trim()} style={{ width: '100%', marginTop: 8 }}>
+        <button className="btn btn-primary" type="submit" disabled={wysylanie || !email.trim() || !krsPoprawny} style={{ width: '100%', marginTop: 8 }}>
           {wysylanie ? 'Wysyłanie…' : 'Wyślij zgłoszenie'}
         </button>
         <div style={{ textAlign: 'center', marginTop: 10 }}>
@@ -423,7 +444,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
 
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <PasekMarkiPortal opis="Portal klienta — rejestr akcjonariuszy P.S.A." />
+      <PasekMarkiPortal />
       <header className="portal-topbar pasek-gorny bez-druku" style={{ padding: '14px 28px' }}>
         <div>
           <div className="tytul-strony" style={{ fontSize: 17 }}>Rejestr akcjonariuszy P.S.A.</div>

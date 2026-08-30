@@ -83,6 +83,7 @@ function EkranZgloszenWstepnych() {
                 <th>Zgłoszono</th>
                 <th>E-mail</th>
                 <th>Telefon</th>
+                <th>KRS</th>
                 <th>Nazwa spółki</th>
                 <th>Opis</th>
                 <th>Status</th>
@@ -95,6 +96,7 @@ function EkranZgloszenWstepnych() {
                   <td className="wyciszony">{fmt.dataCzas(z.utworzono)}</td>
                   <td>{z.email}</td>
                   <td>{z.telefon || '—'}</td>
+                  <td className="kol-dane">{z.krs || '—'}</td>
                   <td>{z.nazwa_spolki || '—'}</td>
                   <td style={{ maxWidth: 280 }}>{z.opis || '—'}</td>
                   <td><Znacznik odmiana={ZNACZNIK_STANU_ZGLOSZENIA[z.status] || 'neutralny'}>{z.status}</Znacznik></td>

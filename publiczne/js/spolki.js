@@ -9,10 +9,10 @@
 
 const PUSTA_SPOLKA = {
   krs: '', nip: '', regon: '', nazwa: '', forma_prawna: 'PROSTA SPÓŁKA AKCYJNA',
-  kraj: 'Polska', kod_pocztowy: '', miejscowosc: '', siedziba_miejscownik: '',
+  kraj: 'Polska', kod_pocztowy: '', miejscowosc: '',
   ulica: '', nr_domu: '', nr_lokalu: '',
   sad_rejestrowy: '', wydzial: '', telefon: '', email: '', www: '',
-  data_utworzenia_spolki: '', data_ostatniego_wpisu_krs: '', adres_edorecze: '',
+  data_utworzenia_spolki: '', adres_edorecze: '',
   // Data zawarcia UMOWY SPÓŁKI (akt założycielski / akt notarialny, przy S24
   // — data podpisania w systemie) — etap 2.5 poprawek. Różna od daty
   // rejestracji w KRS powyżej i od daty umowy o prowadzenie rejestru niżej;
@@ -30,13 +30,12 @@ const PUSTA_SPOLKA = {
   // zawarcia to już istniejące `data_umowy` powyżej. Załącznik trzymany
   // osobno w stanie kreatora (plik, nie pole tekstowe) — patrz `umowaZalacznik`.
   umowa_sposob_zawarcia: '',
-  // Reprezentant w MIANOWNIKU (etap 2.3) — odmianę liczy backend
-  // (`deklinacja.js`) przy generowaniu dokumentu; trzy pola „_recznie” to
-  // opcjonalna korekta automatu.
-  reprezentant_imie_nazwisko: '', reprezentant_plec: '', reprezentant_rodzice: '',
+  // Reprezentant — wszystkie dane w mianowniku, tak jak w dokumencie
+  // tożsamości. Pisma nie odmieniają ich przez przypadki, tylko opisują
+  // etykietą („imiona rodziców:", „działający jako:").
+  reprezentant_imie_nazwisko: '', reprezentant_rodzice: '',
   reprezentant_dowod: '', reprezentant_pesel: '', reprezentant_adres: '',
-  reprezentant_funkcja: '', reprezentant_reprezentacja: '',
-  reprezentant_biernik_recznie: '', reprezentant_funkcja_biernik_recznie: '', reprezentant_rodzice_recznie: '',
+  reprezentant_funkcja: '', reprezentant_reprezentacja: '', reprezentant_email: '',
 };
 
 const PUSTA_EMISJA_ZALOZYCIELSKA = {
@@ -173,7 +172,6 @@ function EkranNowejSpolki() {
   const [pobranoZKrsBezAde, ustawPobranoZKrsBezAde] = useState(false);
   const [sadZaproponowany, ustawSadZaproponowany] = useState(false);
   const [umowaZalacznik, ustawUmowaZalacznik] = useState(null);
-  const [pokazKorekteOdmiany, ustawPokazKorekteOdmiany] = useState(false);
 
   const [emisja, ustawEmisje] = useState(PUSTA_EMISJA_ZALOZYCIELSKA);
   const [pozycje, ustawPozycjeState] = useState([{}]);
@@ -470,15 +468,9 @@ function EkranNowejSpolki() {
               <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
               <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
             </div>
-            <div className="siatka-3">
+            <div className="siatka-2">
               <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
               <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
-              <Pole
-                etykieta="Siedziba w miejscowniku"
-                podpowiedz='„z siedzibą w …” — odmiana nazw miejscowości nie daje się zautomatyzować, np. „Warszawie”.'
-              >
-                <input type="text" {...pole('siedziba_miejscownik')} placeholder="np. Warszawie" />
-              </Pole>
             </div>
             <div className="siatka-3">
               <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
@@ -504,12 +496,9 @@ function EkranNowejSpolki() {
                 <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
               </Pole>
             </div>
-            <div className="siatka-3">
+            <div className="siatka-2">
               <Pole etykieta="Data rejestracji w KRS">
                 <PoleDaty wartosc={dane.data_utworzenia_spolki} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_utworzenia_spolki: v }))} />
-              </Pole>
-              <Pole etykieta="Data ostatniego wpisu do KRS">
-                <PoleDaty wartosc={dane.data_ostatniego_wpisu_krs} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_ostatniego_wpisu_krs: v }))} />
               </Pole>
               <Pole etykieta="Kapitał akcyjny">
                 <PoleKwoty grosze={dane.kapital_akcyjny_grosze} przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))} />
@@ -576,67 +565,36 @@ function EkranNowejSpolki() {
             <div className="card-h">Reprezentant spółki, który podpisał umowę</div>
             <Komunikat
               odmiana="info"
-              tresc="Osoba, która w imieniu SPÓŁKI podpisała już zawartą umowę o prowadzenie rejestru. Wpisz dane w mianowniku, tak jak w dokumencie tożsamości — formy gramatyczne do treści umowy (§ 5) dobiorą się automatycznie."
+              tresc="Osoba, która w imieniu SPÓŁKI podpisała już zawartą umowę o prowadzenie rejestru. Wpisz dane dokładnie tak, jak widnieją w dokumencie tożsamości — pisma używają ich w tej samej postaci."
             />
             <div className="siatka-2">
-              <Pole etykieta="Imię i nazwisko" podpowiedz='W mianowniku, np. „Jan Kowalski”.'>
+              <Pole etykieta="Imię i nazwisko">
                 <input type="text" {...pole('reprezentant_imie_nazwisko')} placeholder="np. Jan Kowalski" />
               </Pole>
-              <Pole etykieta="Płeć" podpowiedz="Do form gramatycznych w umowie (np. „działającego” / „działającą”).">
-                <select {...pole('reprezentant_plec')}>
-                  <option value="">— nie podano —</option>
-                  <option value="mezczyzna">mężczyzna</option>
-                  <option value="kobieta">kobieta</option>
-                </select>
-              </Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole etykieta="Funkcja" podpowiedz='W mianowniku, np. „Prezes Zarządu”.'>
+              <Pole etykieta="Funkcja">
                 <input type="text" {...pole('reprezentant_funkcja')} placeholder="np. Prezes Zarządu" />
               </Pole>
+            </div>
+            <div className="siatka-2">
               <Pole etykieta="Sposób reprezentacji">
-                <input
-                  type="text"
-                  {...pole('reprezentant_reprezentacja')}
-                  placeholder="np. uprawnionego do samodzielnej reprezentacji"
-                />
+                <input type="text" {...pole('reprezentant_reprezentacja')} placeholder="np. samodzielnie" />
+              </Pole>
+              <Pole etykieta="Imiona rodziców">
+                <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
               </Pole>
             </div>
             <div className="siatka-2">
-              <Pole etykieta="Rodzice" podpowiedz='Imiona w mianowniku, np. „Piotr i Anna”.'>
-                <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
-              </Pole>
               <Pole etykieta="Dowód osobisty">
                 <input type="text" {...pole('reprezentant_dowod')} />
               </Pole>
+              <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
             </div>
             <div className="siatka-2">
-              <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
               <Pole etykieta="Adres zamieszkania"><input type="text" {...pole('reprezentant_adres')} /></Pole>
+              <Pole etykieta="Adres e-mail" podpowiedz="Korespondencja w sprawie umowy o prowadzenie rejestru.">
+                <input type="email" {...pole('reprezentant_email')} />
+              </Pole>
             </div>
-
-            <button className="btn btn-maly" onClick={() => ustawPokazKorekteOdmiany((p) => !p)}>
-              {pokazKorekteOdmiany ? 'Ukryj korektę odmiany' : 'Popraw automatyczną odmianę (nazwiska nietypowe, obcojęzyczne)'}
-            </button>
-            {pokazKorekteOdmiany && (
-              <>
-                <Komunikat
-                  odmiana="uwaga"
-                  tresc="Automat odmienia imię, nazwisko, funkcję i imiona rodziców na podstawie najczęstszych wzorców polskiej odmiany — to pomoc, nie wyrocznia. Dla nazwisk nietypowych lub obcojęzycznych może się mylić. Wypełnione pole niżej NADPISUJE wynik automatu; sprawdź efekt w podglądzie umowy (Konfiguracja → Szablony dokumentów) przed jej wydaniem."
-                />
-                <div className="siatka-2">
-                  <Pole etykieta="Imię i nazwisko w bierniku (korekta)">
-                    <input type="text" {...pole('reprezentant_biernik_recznie')} placeholder="zostaw puste, by użyć automatu" />
-                  </Pole>
-                  <Pole etykieta="Funkcja w bierniku (korekta)">
-                    <input type="text" {...pole('reprezentant_funkcja_biernik_recznie')} placeholder="zostaw puste, by użyć automatu" />
-                  </Pole>
-                </div>
-                <Pole etykieta="Rodzice w dopełniaczu (korekta)">
-                  <input type="text" {...pole('reprezentant_rodzice_recznie')} placeholder="zostaw puste, by użyć automatu" />
-                </Pole>
-              </>
-            )}
 
             <div className="rozdzielacz" />
             <div className="card-h">Ograniczenia z umowy spółki</div>
