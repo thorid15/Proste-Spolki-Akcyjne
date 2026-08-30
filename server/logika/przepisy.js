@@ -433,6 +433,61 @@ const KATEGORIE_AKCJI = {
 };
 
 /** PRZEPISY-PSA.md art. 300(33) § 1 pkt 4 🟢 - rodzaj danej akcji. */
+/**
+ * Art. 300(33) § 1 pkt 3 KSH - adres wpisywany do rejestru. Ustawa daje
+ * ALTERNATYWE, nie sume: adres zamieszkania albo siedziby, albo INNY adres
+ * do doreczen, albo adres do doreczen elektronicznych. Ktory z nich jest tym
+ * z ustawy, wskazuje sie swiadomie - stad slownik, nie domysl z pustych pol.
+ */
+const RODZAJE_ADRESU_REJESTROWEGO = {
+  ZAMIESZKANIA: 'zamieszkania',
+  DORECZEN: 'doreczen',
+  EDORECZEN: 'edoreczen',
+};
+
+const OPISY_RODZAJOW_ADRESU_REJESTROWEGO = {
+  [RODZAJE_ADRESU_REJESTROWEGO.ZAMIESZKANIA]: 'adres zamieszkania albo siedziby',
+  [RODZAJE_ADRESU_REJESTROWEGO.DORECZEN]: 'inny adres do doręczeń',
+  [RODZAJE_ADRESU_REJESTROWEGO.EDORECZEN]: 'adres do doręczeń elektronicznych',
+};
+
+/**
+ * Art. 300(33) § 1 pkt 4 KSH - adres poczty elektronicznej wchodzi do
+ * rejestru WYLACZNIE, jezeli akcjonariusz wyrazil zgode na komunikacje
+ * elektroniczna. Zgoda jest oswiadczeniem SAMEGO akcjonariusza - zarzad nie
+ * moze jej zlozyc za niego. Dlatego trzy stany, nie checkbox: spolka
+ * deklaruje ja we wniosku, a rejestr uznaje dopiero po otrzymaniu
+ * podpisanego oswiadczenia.
+ */
+const STATUSY_ZGODY_EMAIL = {
+  BRAK: 'brak',
+  ZADEKLAROWANA: 'zadeklarowana',
+  POTWIERDZONA: 'potwierdzona',
+};
+
+const OPISY_STATUSOW_ZGODY_EMAIL = {
+  [STATUSY_ZGODY_EMAIL.BRAK]: 'brak zgody — adres e-mail nie wchodzi do rejestru',
+  [STATUSY_ZGODY_EMAIL.ZADEKLAROWANA]: 'zadeklarowana przez spółkę — czeka na oświadczenie akcjonariusza',
+  [STATUSY_ZGODY_EMAIL.POTWIERDZONA]: 'potwierdzona oświadczeniem akcjonariusza',
+};
+
+/**
+ * Art. 300(33) § 1 pkt 5 KSH - wspolwlasnosc akcji. Przy wspolwlasnosci
+ * w czesciach ULAMKOWYCH rejestr niesie dodatkowo wielkosc udzialu
+ * akcjonariusza; przy lacznej (np. malzenska) udzialow sie nie wyodrebnia.
+ */
+const RODZAJE_WSPOLWLASNOSCI = {
+  BRAK: 'brak',
+  LACZNA: 'laczna',
+  ULAMKOWA: 'ulamkowa',
+};
+
+const OPISY_RODZAJOW_WSPOLWLASNOSCI = {
+  [RODZAJE_WSPOLWLASNOSCI.BRAK]: 'akcje nie są przedmiotem współwłasności',
+  [RODZAJE_WSPOLWLASNOSCI.LACZNA]: 'współwłasność łączna',
+  [RODZAJE_WSPOLWLASNOSCI.ULAMKOWA]: 'współwłasność w częściach ułamkowych',
+};
+
 const RODZAJE_AKCJI = ['zwykla', 'uprzywilejowana', 'zalozycielska', 'niema'];
 
 /** PRZEPISY-PSA.md art. 300(33) § 1 pkt 9 🟢 - wzmianka o pokryciu. NULL (nieustalone) jest dozwolonym stanem poza tym katalogiem. */
@@ -652,6 +707,12 @@ module.exports = {
   OPISY_ORGANOW,
   KATEGORIE_AKCJI,
   RODZAJE_AKCJI,
+  RODZAJE_ADRESU_REJESTROWEGO,
+  OPISY_RODZAJOW_ADRESU_REJESTROWEGO,
+  STATUSY_ZGODY_EMAIL,
+  OPISY_STATUSOW_ZGODY_EMAIL,
+  RODZAJE_WSPOLWLASNOSCI,
+  OPISY_RODZAJOW_WSPOLWLASNOSCI,
   STANY_POKRYCIA,
   UMOWE_ZAWARL,
   CHARAKTER_WPISU,

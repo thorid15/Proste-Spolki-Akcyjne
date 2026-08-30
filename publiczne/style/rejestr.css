@@ -1352,3 +1352,70 @@ select {
      czarno-białym (SESJA-PSA-6-INTERFEJS.md, faza 4). */
   .os-akcji, .raport-bez-druku { display: none !important; }
 }
+
+/* ── Wskaźnik autozapisu ──
+   Ma być widoczny, gdy się go szuka, i niewidoczny, gdy się pisze — stąd
+   rozmiar podpisu i kolor wyciszony, a nie pigułka przyciągająca wzrok. */
+.stan-zapisu {
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  white-space: nowrap;
+}
+.stan-zapisu-blad { color: var(--sygnal); white-space: normal; }
+
+/* ─────────────────────────────────────────────────────
+   PODSUMOWANIE WNIOSKU (portal klienta, krok „Weryfikacja”)
+   Ostatni ekran przed złożeniem wniosku czyta się, a nie wypełnia — więc
+   treść dostaje rozmiar tekstu, nie podpisu, a etykiety własną kolumnę
+   zamiast wisieć w jednej linii z wartością.
+   ───────────────────────────────────────────────────── */
+.podsumowanie {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--od-8) var(--od-24);
+  margin: 0;
+  font-size: var(--st-15);
+  align-items: baseline;
+}
+.podsumowanie dt {
+  color: var(--atrament-3);
+  font-size: var(--st-13);
+}
+.podsumowanie dd {
+  margin: 0;
+  color: var(--atrament);
+  overflow-wrap: anywhere;
+}
+.podsumowanie .brak { color: var(--atrament-3); font-style: italic; }
+.podsumowanie-dopisek {
+  display: block;
+  font-size: var(--st-13);
+  color: var(--atrament-2);
+}
+@media (max-width: 640px) {
+  .podsumowanie { grid-template-columns: minmax(0, 1fr); gap: 2px var(--od-8); }
+  .podsumowanie dd { margin-bottom: var(--od-12); }
+}
+
+/* Lista akcjonariuszy w podsumowaniu: nazwa na pierwszym planie, cechy
+   ustawowe pod nią jako rozdzielone kropkami znaczniki. */
+.podsumowanie-lista { display: flex; flex-direction: column; }
+.podsumowanie-pozycja {
+  padding: var(--od-12) 0;
+  border-bottom: 1px solid var(--linia-2);
+}
+.podsumowanie-pozycja:last-child { border-bottom: none; padding-bottom: 0; }
+.podsumowanie-pozycja:first-child { padding-top: 0; }
+.podsumowanie-nazwa { font-size: var(--st-15); font-weight: 500; }
+.podsumowanie-cechy {
+  display: flex; flex-wrap: wrap;
+  gap: 2px var(--od-8);
+  margin-top: 2px;
+  font-size: var(--st-13);
+  color: var(--atrament-2);
+}
+.podsumowanie-cechy > span + span::before {
+  content: '·';
+  margin-right: var(--od-8);
+  color: var(--atrament-3);
+}

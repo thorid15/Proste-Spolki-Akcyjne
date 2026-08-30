@@ -1000,6 +1000,92 @@ window.Zakladki = Zakladki;
 window.Metryka = Metryka;
 window.Szukajka = Szukajka;
 window.SzybkieAkcje = SzybkieAkcje;
+/* ─────────────────────────────────────────────────────
+   AUTOZAPIS FORMULARZA
+   Formularz nie ma przycisku „Zapisz”: każda zmiana leci na serwer sama,
+   z krótkim opóźnieniem, żeby pisanie w polu nie wywoływało zapytania na
+   każdą literę. Dzięki temu nie da się zobaczyć formularza wypełnionego
+   „na ekranie”, a pustego po stronie serwera — a to była przyczyna
+   odbijanego składania wniosku.
+   ───────────────────────────────────────────────────── */
+
+const OPOZNIENIE_AUTOZAPISU_MS = 800;
+
+/**
+ * @param {object} wartosci      aktualny stan formularza
+ * @param {Function} zapisz      (wartosci) => Promise — wywołanie API
+ * @param {object} [opcje]
+ * @param {boolean} [opcje.wlaczony=true]   false wyłącza zapis (formularz do wglądu)
+ * @param {Function} [opcje.przyZapisie]    dostaje odpowiedź serwera
+ * @returns {{stan: 'spoczynek'|'zapisywanie'|'zapisano'|'blad', blad: string|null}}
+ */
+function useAutozapis(wartosci, zapisz, opcje = {}) {
+  const { wlaczony = true, przyZapisie } = opcje;
+  const [stan, ustawStan] = useState({ stan: 'spoczynek', blad: null });
+
+  // Pierwszy przebieg to wartości WCZYTANE z serwera, nie zmiana użytkownika —
+  // zapisywanie ich z powrotem byłoby zapytaniem bez żadnego skutku.
+  const pierwszy = useRef(true);
+  const ostatnie = useRef(JSON.stringify(wartosci));
+  // Zapisy muszą iść po kolei: gdyby wolniejsze wcześniejsze zapytanie
+  // wróciło po nowszym, serwer dostałby starsze dane jako ostatnie.
+  const kolejka = useRef(Promise.resolve());
+  const funkcja = useRef(zapisz);
+  funkcja.current = zapisz;
+  const powiadom = useRef(przyZapisie);
+  powiadom.current = przyZapisie;
+
+  const serializacja = JSON.stringify(wartosci);
+
+  useEffect(() => {
+    if (!wlaczony) return undefined;
+    if (pierwszy.current) {
+      pierwszy.current = false;
+      ostatnie.current = serializacja;
+      return undefined;
+    }
+    if (serializacja === ostatnie.current) return undefined;
+
+    const czasomierz = setTimeout(() => {
+      const doZapisu = JSON.parse(serializacja);
+      ostatnie.current = serializacja;
+      ustawStan({ stan: 'zapisywanie', blad: null });
+      kolejka.current = kolejka.current
+        .then(() => funkcja.current(doZapisu))
+        .then((odpowiedz) => {
+          ustawStan({ stan: 'zapisano', blad: null });
+          if (powiadom.current) powiadom.current(odpowiedz);
+        })
+        .catch((e) => {
+          // Zapis się nie udał — następna zmiana ma spróbować ponownie,
+          // więc kasujemy pamięć ostatnio wysłanej wersji.
+          ostatnie.current = null;
+          ustawStan({
+            stan: 'blad',
+            blad: e instanceof BladApi ? e.message : 'Nie udało się zapisać zmian.',
+          });
+        });
+    }, OPOZNIENIE_AUTOZAPISU_MS);
+
+    return () => clearTimeout(czasomierz);
+  }, [serializacja, wlaczony]);
+
+  return stan;
+}
+
+/** Dyskretny wskaźnik autozapisu — jedna linijka tekstu, bez migotania. */
+function StanZapisu({ stan }) {
+  if (!stan || stan.stan === 'spoczynek') return null;
+  if (stan.stan === 'blad') {
+    return <span className="stan-zapisu stan-zapisu-blad">{stan.blad}</span>;
+  }
+  return (
+    <span className="stan-zapisu">
+      {stan.stan === 'zapisywanie' ? 'Zapisywanie…' : 'Zapisano'}
+    </span>
+  );
+}
+
 window.Stronicowanie = Stronicowanie;
 window.Iskra = Iskra;
 window.Spinner = Spinner;
@@ -1020,3 +1106,5 @@ window.WyborZKartoteki = WyborZKartoteki;
 window.PaletaPolecen = PaletaPolecen;
 window.usePaletaPolecen = usePaletaPolecen;
 window.dataSlownie = dataSlownie;
+window.useAutozapis = useAutozapis;
+window.StanZapisu = StanZapisu;

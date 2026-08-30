@@ -30,6 +30,7 @@ const widoki = require('../widoki');
 const oplaty = require('../oplaty');
 const maskowanie = require('../logika/maskowanie');
 const przepisy = require('../logika/przepisy');
+const akcjonariuszLogika = require('../logika/akcjonariusz');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const terminy = require('../logika/terminy');
 const numery = require('../logika/numery');
@@ -411,20 +412,22 @@ const POLA_AKCJONARIUSZA_WNIOSKU = [
   'nip', 'regon', 'numer_w_rejestrze', 'nazwa_rejestru',
   'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu', 'nr_lokalu',
   'adres_doreczen', 'adres_edoreczen', 'email', 'telefon', 'zgoda_email',
+  // Art. 300(33) § 1 pkt 2-5 KSH - patrz logika/akcjonariusz.js.
+  ...akcjonariuszLogika.POLA_USTAWOWE,
 ];
 
 function wyczyscAkcjonariuszaWniosku(cialo) {
   const wynik = {};
   for (const pole of POLA_AKCJONARIUSZA_WNIOSKU) {
     if (cialo[pole] === undefined) continue;
-    if (pole === 'zgoda_email') {
+    if (pole === 'zgoda_email' || pole === 'bez_pesel') {
       wynik[pole] = cialo[pole] ? 1 : 0;
       continue;
     }
     const v = cialo[pole];
     wynik[pole] = v === '' || v === null ? null : String(v).trim();
   }
-  return wynik;
+  return akcjonariuszLogika.znormalizuj(wynik);
 }
 
 function sprawdzAkcjonariuszaWniosku(dane) {
@@ -440,6 +443,10 @@ function sprawdzAkcjonariuszaWniosku(dane) {
   if (dane.plec && !['mezczyzna', 'kobieta'].includes(dane.plec)) {
     throw bledneZadanie('Płeć musi być „mężczyzna” albo „kobieta”.');
   }
+  // Sprzecznosci ustawowe blokuja zapis; niekompletnosc NIE - wniosek
+  // wypelnia sie etapami i zapisuje po kazdej zmianie.
+  const bledy = akcjonariuszLogika.bledy(dane);
+  if (bledy.length > 0) throw bledneZadanie(bledy.join(' '));
 }
 
 /**
@@ -587,10 +594,20 @@ router.post(
       )
       .run(sciezkaWzgledna, teraz, czas.terazIso(), wniosek.id);
 
+    // Braki wobec art. 300(33) § 1 KSH liczymy na KOMPLETNYM wierszu, przy
+    // skladaniu - nie przy kazdym zapisie. Nie blokuja zlozenia: kancelaria
+    // i tak weryfikuje wniosek, a czesci danych (np. potwierdzonej zgody
+    // akcjonariusza na e-mail) z natury nie da sie miec wczesniej.
+    const akcjonariusze = db()
+      .prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ? ORDER BY kolejnosc, id')
+      .all(wniosek.id);
+    const brakiAkcjonariuszy = akcjonariusze.flatMap((a) => akcjonariuszLogika.ostrzezenia(a));
+
     odp.json({
       wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
       brakujace: wynik.brakujace,
       ostrzezenia: wynik.ostrzezenia,
+      braki_akcjonariuszy: brakiAkcjonariuszy,
     });
   })
 );

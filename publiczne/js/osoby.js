@@ -10,6 +10,9 @@ const PUSTA_OSOBA = {
   kraj: 'Polska', kod_pocztowy: '', miejscowosc: '', ulica: '', nr_domu: '', nr_lokalu: '',
   adres_doreczen: '', adres_edoreczen: '', email: '', telefon: '',
   zgoda_email: 0, aml_status: 'brak', aml_data: '', aml_notatka: '', uwagi: '',
+  // Art. 300(33) § 1 pkt 2-5 KSH — patrz server/logika/akcjonariusz.js.
+  bez_pesel: 0, rodzaj_adresu_rejestrowego: 'zamieszkania', zgoda_email_status: 'brak',
+  wspolwlasnosc: 'brak', wspolwlasciciele: '', udzial_licznik: '', udzial_mianownik: '',
   // Sesja 8, blok C — przegląd okresowy, beneficjent rzeczywisty, oświadczenie PEP:
   aml_data_przegladu: '', beneficjent_rzeczywisty_id: null,
   pep_oswiadczenie: '', pep_oswiadczenie_data: '',
@@ -186,11 +189,29 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
             <Pole etykieta="Nazwisko" wymagane><input type="text" {...pole('nazwisko')} /></Pole>
             <Pole etykieta="Imię"><input type="text" {...pole('imie')} /></Pole>
           </div>
+          <label className="chk" style={{ padding: '8px 0' }}>
+            <input
+              type="checkbox"
+              checked={Boolean(Number(dane.bez_pesel))}
+              onChange={(z) =>
+                ustawDane((p) => ({
+                  ...p,
+                  bez_pesel: z.target.checked ? 1 : 0,
+                  pesel: z.target.checked ? '' : p.pesel,
+                }))
+              }
+            />
+            <span className="chk-tresc">
+              Nie ma numeru PESEL (np. cudzoziemiec) — do rejestru wchodzi data urodzenia
+            </span>
+          </label>
           <div className="siatka-2">
-            <Pole etykieta="PESEL" podpowiedz="Data urodzenia i płeć uzupełnią się automatycznie po wpisaniu 11 cyfr — można je potem nadpisać.">
-              <input type="text" {...pole('pesel')} maxLength={11} />
-            </Pole>
-            <Pole etykieta="Data urodzenia">
+            {!Number(dane.bez_pesel) && (
+              <Pole etykieta="PESEL" podpowiedz="Data urodzenia i płeć uzupełnią się automatycznie po wpisaniu 11 cyfr — można je potem nadpisać.">
+                <input type="text" {...pole('pesel')} maxLength={11} />
+              </Pole>
+            )}
+            <Pole etykieta="Data urodzenia" wymagane={Boolean(Number(dane.bez_pesel))}>
               <PoleDaty wartosc={dane.data_urodzenia || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))} />
             </Pole>
           </div>
@@ -202,7 +223,7 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
           )}
           <Pole
             etykieta="Płeć"
-            podpowiedz="Do form gramatycznych na pismach (zamieszkały / zamieszkała). Puste — te pola zostają do ręcznego uzupełnienia."
+            podpowiedz="Uzupełnia się automatycznie z numeru PESEL. Dana pomocnicza — pisma jej nie używają."
           >
             <select {...pole('plec')}>
               <option value="">— nie podano —</option>
@@ -212,7 +233,7 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
           </Pole>
           <Komunikat
             odmiana="info"
-            tresc="Treścią rejestru są wyłącznie nazwisko, imię i adres (art. 300(33) § 1 pkt 5 KSH). PESEL i data urodzenia są dobrowolne — służą identyfikacji na potrzeby AML. Inni akcjonariusze ich nie zobaczą."
+            tresc="Treść rejestru to nazwisko, imię oraz PESEL ALBO data urodzenia, a także adres (art. 300(33) § 1 pkt 2 i 3 KSH). PESEL, data urodzenia i adres zamieszkania są maskowane wobec pozostałych akcjonariuszy."
           />
         </>
       ) : (
@@ -244,26 +265,72 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
         <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
         <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
       </div>
-      <Pole etykieta="Adres do doręczeń" podpowiedz="Jeśli inny niż adres zamieszkania lub siedziby.">
-        <input type="text" {...pole('adres_doreczen')} />
+      <div className="siatka-2">
+        <Pole etykieta="Inny adres do doręczeń" podpowiedz="Jeśli osoba go posiada.">
+          <input type="text" {...pole('adres_doreczen')} />
+        </Pole>
+        <Pole etykieta="Adres do doręczeń elektronicznych" podpowiedz="Jeśli osoba go posiada.">
+          <input type="text" {...pole('adres_edoreczen')} placeholder="AE:PL-…" />
+        </Pole>
+      </div>
+      <Pole
+        etykieta="Adres wpisywany do rejestru"
+        wymagane
+        podpowiedz="Art. 300(33) § 1 pkt 3 KSH daje wybór jednego z trzech — wskaż, który jest tym z ustawy."
+      >
+        <select {...pole('rodzaj_adresu_rejestrowego')}>
+          <option value="zamieszkania">Adres zamieszkania albo siedziby</option>
+          <option value="doreczen">Inny adres do doręczeń</option>
+          <option value="edoreczen">Adres do doręczeń elektronicznych</option>
+        </select>
       </Pole>
+
+      <div className="rozdzielacz" />
 
       <div className="siatka-2">
         <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
         <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
       </div>
-      <Pole etykieta="Adres do e-doręczeń"><input type="text" {...pole('adres_edoreczen')} /></Pole>
+      <Pole
+        etykieta="Zgoda na komunikację elektroniczną"
+        podpowiedz="Art. 300(33) § 1 pkt 4 KSH — adres e-mail wchodzi do rejestru dopiero po zgodzie SAMEGO akcjonariusza. Zarząd może ją zadeklarować we wniosku, potwierdza ją podpisane oświadczenie."
+      >
+        <select {...pole('zgoda_email_status')}>
+          <option value="brak">Brak — adres e-mail nie wchodzi do rejestru</option>
+          <option value="zadeklarowana">Zadeklarowana przez spółkę — czeka na oświadczenie</option>
+          <option value="potwierdzona">Potwierdzona oświadczeniem akcjonariusza</option>
+        </select>
+      </Pole>
 
-      <label className="chk" style={{ padding: '8px 0' }}>
-        <input
-          type="checkbox"
-          checked={Boolean(Number(dane.zgoda_email))}
-          onChange={(z) => ustawDane((p) => ({ ...p, zgoda_email: z.target.checked ? 1 : 0 }))}
-        />
-        <span className="chk-tresc">
-          Zgoda na komunikację elektroniczną (art. 300(33) § 1 pkt 5 KSH)
-        </span>
-      </label>
+      <div className="rozdzielacz" />
+
+      <Pole
+        etykieta="Współwłasność akcji"
+        podpowiedz="Art. 300(33) § 1 pkt 5 KSH — wypełnij tylko, gdy akcje należą do kilku osób wspólnie."
+      >
+        <select {...pole('wspolwlasnosc')}>
+          <option value="brak">Brak</option>
+          <option value="laczna">Współwłasność łączna</option>
+          <option value="ulamkowa">Współwłasność w częściach ułamkowych</option>
+        </select>
+      </Pole>
+      {dane.wspolwlasnosc && dane.wspolwlasnosc !== 'brak' && (
+        <>
+          <Pole etykieta="Pozostali współwłaściciele" wymagane>
+            <input type="text" {...pole('wspolwlasciciele')} />
+          </Pole>
+          {dane.wspolwlasnosc === 'ulamkowa' && (
+            <div className="siatka-2">
+              <Pole etykieta="Udział — licznik" wymagane>
+                <input type="number" min="1" {...pole('udzial_licznik')} />
+              </Pole>
+              <Pole etykieta="Udział — mianownik" wymagane>
+                <input type="number" min="1" {...pole('udzial_mianownik')} />
+              </Pole>
+            </div>
+          )}
+        </>
+      )}
 
       <div className="rozdzielacz" />
 

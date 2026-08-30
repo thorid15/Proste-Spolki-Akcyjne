@@ -30,6 +30,7 @@ const { pobierzZKrs } = require('./krs');
 const portal = require('./portal');
 const osobyModul = require('./osoby');
 const spolkiModul = require('./spolki');
+const akcjonariuszLogika = require('../logika/akcjonariusz');
 
 const router = express.Router();
 
@@ -87,7 +88,16 @@ router.get(
       krs = await pobierzZKrs(numerKrs);
     }
 
-    odp.json({ wniosek, akcjonariusze, krs });
+    // Braki wobec art. 300(33) § 1 KSH, liczone per pozycja - kancelaria
+    // widzi je przy weryfikacji, zanim odhaczy akcjonariusza jako
+    // zweryfikowanego.
+    const braki = {};
+    for (const a of akcjonariusze) {
+      const lista = akcjonariuszLogika.ostrzezenia(a);
+      if (lista.length > 0) braki[a.id] = lista;
+    }
+
+    odp.json({ wniosek, akcjonariusze, krs, braki_ustawowe: braki });
   })
 );
 

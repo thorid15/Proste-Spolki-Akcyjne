@@ -14,6 +14,7 @@ const multer = require('multer');
 
 const { db } = require('../baza');
 const przepisy = require('../logika/przepisy');
+const akcjonariuszLogika = require('../logika/akcjonariusz');
 const maskowanie = require('../logika/maskowanie');
 const aml = require('../logika/aml');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
@@ -28,6 +29,8 @@ const POLA_OSOBY = [
   'numer_w_rejestrze', 'nazwa_rejestru', 'kraj', 'kod_pocztowy', 'miejscowosc', 'ulica',
   'nr_domu', 'nr_lokalu', 'adres_doreczen', 'adres_edoreczen', 'email', 'telefon',
   'zgoda_email', 'aml_status', 'aml_data', 'aml_notatka', 'uwagi',
+  // Art. 300(33) § 1 pkt 2-5 KSH - patrz logika/akcjonariusz.js.
+  ...akcjonariuszLogika.POLA_USTAWOWE,
   // Sesja 8, blok C (przeglad okresowy, beneficjent rzeczywisty, oswiadczenie PEP):
   'aml_data_przegladu', 'beneficjent_rzeczywisty_id', 'pep_oswiadczenie', 'pep_oswiadczenie_data',
 ];
@@ -36,7 +39,7 @@ function wyczysc(cialo) {
   const wynik = {};
   for (const pole of POLA_OSOBY) {
     if (cialo[pole] === undefined) continue;
-    if (pole === 'zgoda_email') {
+    if (pole === 'zgoda_email' || pole === 'bez_pesel') {
       wynik[pole] = cialo[pole] ? 1 : 0;
       continue;
     }
@@ -47,7 +50,7 @@ function wyczysc(cialo) {
     const v = cialo[pole];
     wynik[pole] = v === '' || v === null ? null : String(v).trim();
   }
-  return wynik;
+  return akcjonariuszLogika.znormalizuj(wynik);
 }
 
 /** Suma kontrolna numeru PESEL - blad w PESEL-u akcjonariusza jest kosztowny. */
@@ -79,6 +82,12 @@ function sprawdzOsobe(dane, { czesciowe = false } = {}) {
   if (typ === 'prawna' && !czesciowe && !dane.nazwa) {
     throw bledneZadanie('Nazwa podmiotu jest wymagana.');
   }
+
+  // Sprzecznosci ustawowe (np. "brak PESEL-u" razem z podanym PESEL-em)
+  // blokuja zapis - to nie niekompletnosc, tylko dane wykluczajace sie
+  // nawzajem. Patrz logika/akcjonariusz.js.
+  const bledyUstawowe = akcjonariuszLogika.bledy(dane);
+  if (bledyUstawowe.length > 0) throw bledneZadanie(bledyUstawowe.join(' '));
 
   // Suma kontrolna PESEL jest MIEKKIM sygnalem (etap 2.8 poprawek), nie
   // blokada - PESEL jest juz i tak polem dobrowolnym (patrz komentarz wyzej),
@@ -216,6 +225,12 @@ router.post(
         db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(wynik.lastInsertRowid)
       ),
       ostrzezenia: ostrzezeniaOsoby(dane),
+      // Braki wobec art. 300(33) § 1 KSH sa czyms innym niz ostrzezenia
+      // o jakosci danych: kartoteke zaklada sie czesto zanim komplet danych
+      // wroci od akcjonariusza, a wiaza dopiero przy wpisie do rejestru.
+      // Osobny klucz, zeby ekran mogl je pokazac inaczej - i zeby nie
+      // zaszumialy sygnalu o blednym PESEL-u.
+      braki_ustawowe: akcjonariuszLogika.ostrzezenia(dane),
     });
   })
 );
@@ -256,6 +271,7 @@ router.put(
     odp.json({
       osoba: zOznaczeniem(db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(id)),
       ostrzezenia: ostrzezeniaOsoby(scalone),
+      braki_ustawowe: akcjonariuszLogika.ostrzezenia(scalone),
     });
   })
 );

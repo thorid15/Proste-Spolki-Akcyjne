@@ -86,12 +86,31 @@ const POLA_KOREKTY_SPOLKI = [
 ];
 
 const POLA_KOREKTY_AKCJONARIUSZA = [
-  ['nazwisko', 'Nazwisko'], ['imie', 'Imię'], ['nazwa', 'Nazwa (os. prawna)'],
-  ['pesel', 'PESEL'], ['data_urodzenia', 'Data urodzenia'], ['plec', 'Płeć'],
+  ['nazwisko', 'Nazwisko'], ['imie', 'Imię'], ['nazwa', 'Firma (nazwa)'],
+  ['pesel', 'PESEL'], ['data_urodzenia', 'Data urodzenia'],
+  ['numer_w_rejestrze', 'Numer w rejestrze'], ['nazwa_rejestru', 'Nazwa rejestru'],
   ['kod_pocztowy', 'Kod pocztowy'], ['miejscowosc', 'Miejscowość'], ['ulica', 'Ulica'],
   ['nr_domu', 'Nr domu'], ['nr_lokalu', 'Nr lokalu'],
+  ['adres_doreczen', 'Inny adres do doręczeń'], ['adres_edoreczen', 'Adres do e-Doręczeń'],
   ['email', 'E-mail'], ['telefon', 'Telefon'],
+  ['wspolwlasciciele', 'Pozostali współwłaściciele'],
 ];
+
+/** Opisy pól ustawowych — te same, co widzi klient w portalu. */
+const OPIS_ADRESU_REJESTROWEGO_WNIOSKU = {
+  zamieszkania: 'adres zamieszkania / siedziby',
+  doreczen: 'inny adres do doręczeń',
+  edoreczen: 'adres do e-Doręczeń',
+};
+const OPIS_ZGODY_EMAIL_WNIOSKU = {
+  brak: 'bez zgody na e-mail',
+  zadeklarowana: 'zgoda na e-mail zadeklarowana — czeka na oświadczenie',
+  potwierdzona: 'zgoda na e-mail potwierdzona',
+};
+const OPIS_WSPOLWLASNOSCI_WNIOSKU = {
+  laczna: 'współwłasność łączna',
+  ulamkowa: 'współwłasność ułamkowa',
+};
 
 function PorownanieZKrs({ wniosek, krs }) {
   if (!wniosek.krs) {
@@ -129,7 +148,19 @@ function PorownanieZKrs({ wniosek, krs }) {
   );
 }
 
-function PozycjaAkcjonariuszaWeryfikacja({ pozycja, wniosekId, zablokowane, odswiez }) {
+/** Identyfikator ustawowy: PESEL albo data urodzenia; dla podmiotu numer w rejestrze. */
+function identyfikatorPozycji(a) {
+  if (a.typ === 'prawna') {
+    if (a.numer_w_rejestrze) return `${a.nazwa_rejestru || 'rejestr'} ${a.numer_w_rejestrze}`;
+    if (a.nip) return `NIP ${a.nip}`;
+    return 'bez numeru w rejestrze';
+  }
+  if (a.pesel) return `PESEL ${a.pesel}`;
+  if (a.data_urodzenia) return `ur. ${fmt.data(a.data_urodzenia)}`;
+  return 'bez PESEL-u i daty urodzenia';
+}
+
+function PozycjaAkcjonariuszaWeryfikacja({ pozycja, wniosekId, zablokowane, odswiez, braki }) {
   const [edycja, ustawEdycja] = useState(false);
   const [dane, ustawDane] = useState(pozycja);
   const [zapisywanie, ustawZapisywanie] = useState(false);
@@ -179,16 +210,35 @@ function PozycjaAkcjonariuszaWeryfikacja({ pozycja, wniosekId, zablokowane, odsw
       <div className="rzad-rozdzielony">
         <div>
           <div style={{ fontWeight: 600 }}>{nazwa || '— dane nieuzupełnione —'}</div>
-          <div className="podpowiedz">
-            {pozycja.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
-            {pozycja.pesel ? ` · PESEL ${pozycja.pesel}` : ''}
-            {Boolean(Number(pozycja.zgoda_email)) ? ' · zgoda na komunikację elektroniczną' : ''}
+          <div className="podsumowanie-cechy">
+            <span>{pozycja.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}</span>
+            <span>{identyfikatorPozycji(pozycja)}</span>
+            <span>
+              {OPIS_ADRESU_REJESTROWEGO_WNIOSKU[pozycja.rodzaj_adresu_rejestrowego] || 'adres niewskazany'}
+            </span>
+            <span>{OPIS_ZGODY_EMAIL_WNIOSKU[pozycja.zgoda_email_status || 'brak']}</span>
+            {pozycja.wspolwlasnosc && pozycja.wspolwlasnosc !== 'brak' && (
+              <span>
+                {OPIS_WSPOLWLASNOSCI_WNIOSKU[pozycja.wspolwlasnosc]}
+                {pozycja.wspolwlasnosc === 'ulamkowa' && pozycja.udzial_licznik
+                  ? ` ${pozycja.udzial_licznik}/${pozycja.udzial_mianownik}`
+                  : ''}
+              </span>
+            )}
           </div>
         </div>
         <Znacznik odmiana={pozycja.zweryfikowano ? 'zielony' : 'neutralny'}>
           {pozycja.zweryfikowano ? 'zweryfikowano' : 'do weryfikacji'}
         </Znacznik>
       </div>
+
+      {braki && braki.length > 0 && (
+        <Komunikat
+          odmiana="uwaga"
+          tytul="Braki wobec art. 300³³ § 1 KSH"
+          lista={braki}
+        />
+      )}
 
       {!edycja ? (
         <div className="siatka-3" style={{ marginTop: 10 }}>
@@ -251,6 +301,9 @@ function PozycjaAkcjonariuszaWeryfikacja({ pozycja, wniosekId, zablokowane, odsw
 
 function EkranWniosekSzczegoly({ wniosekId }) {
   const { dane, ladowanie, odswiez } = useDane(`/api/psa/wnioski/${wniosekId}`);
+  // Braki wobec art. 300(33) § 1 KSH liczy serwer (logika/akcjonariusz.js)
+  // - front ich nie powtarza, tylko pokazuje przy właściwej pozycji.
+  const brakiUstawowe = (dane && dane.braki_ustawowe) || {};
   const [edycjaSpolki, ustawEdycjaSpolki] = useState(false);
   const [daneSpolki, ustawDaneSpolki] = useState(null);
   const [zapisywanieSpolki, ustawZapisywanieSpolki] = useState(false);
@@ -402,6 +455,7 @@ function EkranWniosekSzczegoly({ wniosekId }) {
               wniosekId={wniosek.id}
               zablokowane={zablokowane}
               odswiez={odswiez}
+              braki={brakiUstawowe[a.id]}
             />
           ))}
           {!zablokowane && (

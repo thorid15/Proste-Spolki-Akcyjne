@@ -255,8 +255,9 @@ async function main() {
       miejscowosc: 'Gdańsk',
       ulica: 'Bolesława Leśmiana',
       nr_domu: '3',
+      rodzaj_adresu_rejestrowego: 'zamieszkania',
       email: EMAIL_KLIENTA,
-      zgoda_email: true,
+      zgoda_email_status: 'zadeklarowana',
     },
     {
       typ: 'fizyczna',
@@ -269,8 +270,9 @@ async function main() {
       miejscowosc: 'Gdynia',
       ulica: 'Świętojańska',
       nr_domu: '12',
+      rodzaj_adresu_rejestrowego: 'zamieszkania',
       email: `wspolnik.${ZNACZNIK}@example-test.pl`,
-      zgoda_email: true,
+      zgoda_email_status: 'zadeklarowana',
     },
   ];
   const dodani = [];
