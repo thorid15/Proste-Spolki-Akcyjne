@@ -292,7 +292,17 @@ function Aplikacja() {
       const id = Number(segmenty[1]);
       if (!Number.isInteger(id)) return <NieZnaleziono />;
       if (segmenty.length === 2) return <EkranKokpitu spolkaId={id} />;
-      if (segmenty[2] === 'zdarzenie') return <EkranNowejSprawy spolkaId={id} />;
+      if (segmenty[2] === 'zdarzenie') {
+        // Przejście EMISJA → OBJĘCIE: typ i seria przychodzą z ekranu wyniku
+        // wpisu emisji, żeby nie zakładać sprawy „od zera" (sprawy.js).
+        return (
+          <EkranNowejSprawy
+            spolkaId={id}
+            typPoczatkowy={zapytanie.get('typ') || undefined}
+            emisjaPoczatkowa={zapytanie.get('emisja') || undefined}
+          />
+        );
+      }
       if (segmenty[2] === 'migracja') return <EkranMigracji spolkaId={id} />;
       if (segmenty[2] === 'wydruk') {
         const data = zapytanie.get('data') || undefined;
@@ -309,7 +319,7 @@ function Aplikacja() {
       }
       const id = Number(segmenty[1]);
       if (!Number.isInteger(id)) return <NieZnaleziono />;
-      return <EkranSprawy sprawaId={id} />;
+      return <EkranSprawy sprawaId={id} emisjaPoczatkowa={zapytanie.get('emisja') || undefined} />;
     }
 
     if (segmenty[0] === 'osoby') return <EkranOsob />;

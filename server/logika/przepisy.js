@@ -342,6 +342,11 @@ const OPISY_ROL_ZADAJACEGO = {
  * pojecie, nie dwa niezaleznie utrzymywane.
  */
 const RODZAJE_DOKUMENTU = {
+  // Podstawa PIERWSZEJ emisji: akcje obejmowane przy zawiazaniu spolki
+  // powstaja z samej umowy spolki (art. 300(3) i art. 300(9) KSH), a nie
+  // z pozniejszej uchwaly o emisji - bez tej pozycji notariusz musialby
+  // wybrac "uchwala" i opisac prawde w polu tekstowym.
+  UMOWA_SPOLKI: 'umowa_spolki',
   UMOWA_ZBYCIA: 'umowa_zbycia',
   UCHWALA: 'uchwala',
   ZGODA: 'zgoda',
@@ -351,6 +356,7 @@ const RODZAJE_DOKUMENTU = {
 };
 
 const OPISY_RODZAJOW_DOKUMENTU = {
+  [RODZAJE_DOKUMENTU.UMOWA_SPOLKI]: 'umowa spółki',
   [RODZAJE_DOKUMENTU.UMOWA_ZBYCIA]: 'umowa zbycia akcji',
   [RODZAJE_DOKUMENTU.UCHWALA]: 'uchwała',
   [RODZAJE_DOKUMENTU.ZGODA]: 'zgoda',

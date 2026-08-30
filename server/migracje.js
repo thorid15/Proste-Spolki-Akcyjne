@@ -1456,6 +1456,56 @@ const MIGRACJE = [
         ON psa_wnioski_dokumenty (wniosek_id, id);
     `,
   },
+  {
+    wersja: 33,
+    nazwa: 'umowa spolki jako rodzaj dokumentu bedacego podstawa wpisu',
+    sql: `
+      -- Akcje obejmowane przy zawiazaniu spolki powstaja z samej UMOWY SPOLKI
+      -- (art. 300(3) i art. 300(9) KSH), a nie z pozniejszej uchwaly o emisji.
+      -- Dotad katalog rodzajow dokumentu tej pozycji nie mial, wiec pierwsza
+      -- emisja musiala isc jako "uchwala" (nieprawda) albo "inny dokument"
+      -- (bez tresci) - a rodzaj trafia wprost na pismo do akcjonariusza
+      -- (art. 300(34) § 4 KSH), wiec falszywy opis podstawy nie jest drobiazgiem.
+      --
+      -- CHECK-a nie da sie w SQLite zmienic w miejscu. Przy psa_dokumenty
+      -- (tabela liscia - nic jej nie wskazuje) przebudowujemy tabele, jak
+      -- w migracjach 4, 7, 13, 14 i 22. Przy psa_sprawy, na ktora wskazuja
+      -- trzy inne tabele, podmieniamy SAMA KOLUMNE - przebudowa tabeli
+      -- zerwalaby te powiazania.
+
+      CREATE TABLE psa_dokumenty_v33 (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        sprawa_id      INTEGER NOT NULL REFERENCES psa_sprawy(id),
+        nazwa_pliku    TEXT NOT NULL,
+        sciezka        TEXT NOT NULL,
+        mime           TEXT,
+        rozmiar        INTEGER,
+        typ_dokumentu  TEXT NOT NULL
+                         CHECK (typ_dokumentu IN
+                           ('umowa_spolki','umowa_zbycia','uchwala','zgoda',
+                            'postanowienie','pelnomocnictwo','inny')),
+        hash           TEXT,
+        wgral          TEXT NOT NULL,
+        utworzono      TEXT NOT NULL
+      );
+      INSERT INTO psa_dokumenty_v33
+        SELECT id, sprawa_id, nazwa_pliku, sciezka, mime, rozmiar, typ_dokumentu,
+               hash, wgral, utworzono
+          FROM psa_dokumenty;
+      DROP TABLE psa_dokumenty;
+      ALTER TABLE psa_dokumenty_v33 RENAME TO psa_dokumenty;
+
+      CREATE INDEX IF NOT EXISTS psa_ix_dokumenty_sprawa ON psa_dokumenty (sprawa_id);
+
+      ALTER TABLE psa_sprawy ADD COLUMN dokument_rodzaj_v33 TEXT
+        CHECK (dokument_rodzaj_v33 IS NULL OR dokument_rodzaj_v33 IN
+          ('umowa_spolki','umowa_zbycia','uchwala','zgoda',
+           'postanowienie','pelnomocnictwo','inny'));
+      UPDATE psa_sprawy SET dokument_rodzaj_v33 = dokument_rodzaj;
+      ALTER TABLE psa_sprawy DROP COLUMN dokument_rodzaj;
+      ALTER TABLE psa_sprawy RENAME COLUMN dokument_rodzaj_v33 TO dokument_rodzaj;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

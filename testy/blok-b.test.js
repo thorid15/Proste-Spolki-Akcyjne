@@ -65,11 +65,43 @@ test('nastepnyNumerSprawy: numer sprawy anulowanej nie wraca do puli', () => {
 test('RODZAJE_DOKUMENTU: ten sam katalog, co typy zalacznikow do sprawy', () => {
   assert.deepEqual(
     Object.values(przepisy.RODZAJE_DOKUMENTU).sort(),
-    ['umowa_zbycia', 'uchwala', 'zgoda', 'postanowienie', 'pelnomocnictwo', 'inny'].sort()
+    ['umowa_spolki', 'umowa_zbycia', 'uchwala', 'zgoda', 'postanowienie', 'pelnomocnictwo', 'inny'].sort()
   );
   for (const kod of Object.values(przepisy.RODZAJE_DOKUMENTU)) {
     assert.ok(przepisy.OPISY_RODZAJOW_DOKUMENTU[kod], `brak opisu dla „${kod}”`);
   }
+});
+
+/**
+ * Katalog w kodzie i CHECK w bazie musza opisywac ten sam zbior. Rozjechanie
+ * ich nie wychodzi przy zapisie kodu ani przy migracji - wychodzi dopiero
+ * przy probie zapisania konkretnej sprawy, u notariusza.
+ */
+test('RODZAJE_DOKUMENTU: baza przyjmuje KAZDA wartosc z katalogu', () => {
+  const db = bazaTestowa();
+  db.prepare(
+    `INSERT INTO psa_spolki (nazwa, forma_prawna, status, utworzono)
+     VALUES ('X', 'PROSTA SPÓŁKA AKCYJNA', 'aktywna', '2026-01-01T00:00:00.000Z')`
+  ).run();
+  const spolkaId = db.prepare('SELECT id FROM psa_spolki ORDER BY id DESC LIMIT 1').get().id;
+
+  for (const kod of Object.values(przepisy.RODZAJE_DOKUMENTU)) {
+    db.prepare(
+      `INSERT INTO psa_sprawy (spolka_id, typ_zdarzenia, zrodlo, data_wplywu, stan,
+                               dokument_rodzaj, autor, utworzono)
+       VALUES (?, 'emisja', 'papier', '2026-01-02', 'nowa', ?, 'test', '2026-01-02T00:00:00.000Z')`
+    ).run(spolkaId, kod);
+    const sprawaId = db.prepare('SELECT id FROM psa_sprawy ORDER BY id DESC LIMIT 1').get().id;
+    db.prepare(
+      `INSERT INTO psa_dokumenty (sprawa_id, nazwa_pliku, sciezka, typ_dokumentu, wgral, utworzono)
+       VALUES (?, 'plik.pdf', 'a/plik.pdf', ?, 'test', '2026-01-02T00:00:00.000Z')`
+    ).run(sprawaId, kod);
+  }
+
+  assert.equal(
+    db.prepare('SELECT COUNT(DISTINCT typ_dokumentu) c FROM psa_dokumenty').get().c,
+    Object.values(przepisy.RODZAJE_DOKUMENTU).length
+  );
 });
 
 test('PRZYCZYNY_ODMOWY_WPISU: katalog zamkniety, „inna” wymaga opisu', () => {

@@ -51,7 +51,7 @@ const { pobierzZKrs } = require('./krs');
 
 const router = express.Router();
 
-const TYPY_DOKUMENTU = ['umowa_zbycia', 'uchwala', 'zgoda', 'postanowienie', 'pelnomocnictwo', 'inny'];
+const TYPY_DOKUMENTU = Object.values(przepisy.RODZAJE_DOKUMENTU);
 
 function widokKonta(k) {
   if (!k) return null;

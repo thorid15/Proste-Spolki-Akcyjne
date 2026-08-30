@@ -168,7 +168,7 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
       stopka={
         <>
           <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-          <button className="btn btn-primary" onClick={zapisz} disabled={zapisywanie}>
+          <button className="btn btn-glowny" onClick={zapisz} disabled={zapisywanie}>
             {zapisywanie ? 'Zapisywanie…' : 'Zapisz'}
           </button>
         </>

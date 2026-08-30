@@ -97,9 +97,10 @@
   color: var(--atrament-3);
 }
 
-.btn-primary { background: var(--rejestr); border-color: var(--rejestr); color: var(--karta); }
-.btn-primary:hover:not(:disabled) { background: var(--rejestr-2); border-color: var(--rejestr-2); }
-.btn-primary:disabled { background: var(--linia); border-color: var(--linia); color: var(--atrament-3); }
+/* `.btn-primary` USUNIĘTE. Reguła stała tu bezczynnie: ma tę samą wagę,
+   co `.btn` z `rejestr.css`, a ten arkusz wczytuje się WCZEŚNIEJ (patrz
+   komentarz w index.html), więc tło z `.btn` wygrywało i każdy przycisk
+   „główny" wyglądał jak zwykły. Klasą główną jest `.btn-glowny`. */
 .btn-sm { padding: var(--od-4) var(--od-12); font-size: var(--st-11); }
 .btn-lg { padding: var(--od-12) var(--od-24); font-size: var(--st-15); }
 .btn-danger { color: var(--sygnal); }

@@ -129,7 +129,7 @@ function ModalWystawDokumentu({ spolkaId, bazowyUrl, kontekstNazwa = 'spółki',
 
   if (wystawiony) {
     return (
-      <Modal tytul="Dokument wystawiony" przyZamknieciu={przyZamknieciu} stopka={<button className="btn btn-primary" onClick={przyZamknieciu}>Zamknij</button>}>
+      <Modal tytul="Dokument wystawiony" przyZamknieciu={przyZamknieciu} stopka={<button className="btn btn-glowny" onClick={przyZamknieciu}>Zamknij</button>}>
         <Komunikat odmiana="ok" tresc="Plik zapisany i gotowy do pobrania." />
         {wystawiony.brakujace.length > 0 && (
           <Komunikat odmiana="uwaga" tytul="Do sprawdzenia — puste pola w piśmie" lista={wystawiony.brakujace} />

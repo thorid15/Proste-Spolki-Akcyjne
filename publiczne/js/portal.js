@@ -467,7 +467,7 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
           <span className="chk-tresc">Przeczytałem/-am i rozumiem powyższą informację.</span>
         </label>
 
-        <button className="btn btn-primary" disabled={!potwierdzono || wysylanie} onClick={dalej} style={{ alignSelf: 'flex-start' }}>
+        <button className="btn btn-glowny" disabled={!potwierdzono || wysylanie} onClick={dalej} style={{ alignSelf: 'flex-start' }}>
           {wysylanie ? 'Zapisywanie…' : 'Przejdź dalej'}
         </button>
       </div>
@@ -514,7 +514,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
           {KARTY_NAWIGACJI.map((k) => (
             <button
               key={k.sciezka}
-              className={`btn btn-sm ${sciezka === k.sciezka ? 'btn-primary' : ''}`}
+              className={`btn btn-sm ${sciezka === k.sciezka ? 'btn-glowny' : ''}`}
               onClick={() => idz(k.sciezka)}
             >
               {k.nazwa}
@@ -695,7 +695,7 @@ function EkranZgloszeniePortal({ spolkaId }) {
         <Pusto
           tytul="Zgłoszenie przyjęte"
           opis="Kancelaria rozpatrzy je i skontaktuje się w razie potrzeby uzupełnienia dokumentów. Status widoczny jest w zakładce „Moje zgłoszenia”."
-          akcja={<button className="btn btn-primary" onClick={() => idz('/sprawy')}>Zobacz moje zgłoszenia</button>}
+          akcja={<button className="btn btn-glowny" onClick={() => idz('/sprawy')}>Zobacz moje zgłoszenia</button>}
         />
       </Karta>
     );
@@ -721,7 +721,7 @@ function EkranZgloszeniePortal({ spolkaId }) {
           <input type="file" multiple onChange={(z) => ustawPliki([...z.target.files])} />
         </Pole>
         <button
-          className="btn btn-primary"
+          className="btn btn-glowny"
           disabled={wysylanie || !typ || !opis.trim()}
           onClick={zglos}
           style={{ marginTop: 8 }}
@@ -918,7 +918,7 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
     if (segmenty[0] === 'informacja' && segmenty[1]) return <EkranInformacjaPortal spolkaId={Number(segmenty[1])} />;
     return (
       <Karta>
-        <Pusto tytul="Nie ma takiej strony" akcja={<button className="btn btn-primary" onClick={() => idz('/')}>Wróć</button>} />
+        <Pusto tytul="Nie ma takiej strony" akcja={<button className="btn btn-glowny" onClick={() => idz('/')}>Wróć</button>} />
       </Karta>
     );
   }
