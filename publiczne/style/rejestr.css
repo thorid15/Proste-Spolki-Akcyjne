@@ -1317,14 +1317,45 @@ select {
   margin-bottom: var(--od-8);
 }
 
-.raport .tabela { font-size: var(--st-11); }
+/* Tabele raportu muszą zmieścić się w SZEROKOŚCI STRONY, nie ekranu.
+   `.tabela` jest zestrojona z widokami aplikacji: 24 px odstępu po obu
+   stronach każdej komórki i nagłówki bez zawijania. Na A4 zostaje po
+   marginesach ~178 mm, więc przy siedmiu kolumnach same odstępy zjadały
+   pół szerokości i tabela emisji urywała się na krawędzi kartki (kolumny
+   „w obrocie" i „cena emisyjna" po prostu nie wchodziły na wydruk).
+   Tu więc: ciaśniejsze komórki, łamane nagłówki i układ stały, który
+   dzieli brakujące miejsce między kolumny zamiast wypychać je poza stronę. */
+.raport .tabela {
+  font-size: var(--st-11);
+  width: 100%;
+}
 .raport .tabela th {
   background: none;
   border-bottom: 1px solid var(--atrament);
   color: var(--atrament-2);
+  /* Nagłówek łamie się na kilka wierszy zamiast rozpychać kolumnę —
+     „wyemitowane" i „cena emisyjna" są dłuższe niż liczby pod nimi. */
+  white-space: normal;
+  padding: 6px var(--od-4);
+  letter-spacing: 0.04em;
+  vertical-align: bottom;
 }
-.raport .tabela td { padding-top: 5px; padding-bottom: 5px; }
+.raport .tabela td {
+  height: auto;
+  padding: 5px var(--od-4);
+  vertical-align: top;
+}
+/* Skrajne kolumny bez odstępu na zewnątrz — tabela zaczyna się i kończy
+   równo z pozostałymi sekcjami raportu. */
+.raport .tabela th:first-child,
+.raport .tabela td:first-child { padding-left: 0; }
+.raport .tabela th:last-child,
+.raport .tabela td:last-child { padding-right: 0; }
 .raport .tabela tr { break-inside: avoid; }
+/* Liczby, daty i zakresy numerów nigdy się nie łamią — „30.08.2026"
+   przeniesione po trzecim znaku przestaje być datą. */
+.raport .tabela .do-prawej,
+.raport .tabela .mono { white-space: nowrap; }
 
 /* Ułamkowa część akcji — „1/3 akcji nr 96". Zapis wprost, bez skrótów:
    na wydruku dla sądu musi być czytelny bez znajomości aplikacji. */

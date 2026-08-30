@@ -29,31 +29,55 @@ function dataPl(iso) {
   return `${d}.${m}.${r}`;
 }
 
+/**
+ * Paleta i kroje TE SAME, co w aplikacji (`publiczne/style/rejestr.css`) —
+ * klient dostaje mailem i w portalu dokument wyglądający jak reszta systemu,
+ * a nie jak wydruk z innej epoki.
+ *
+ * Wartości są tu WPISANE WPROST, a nie przez zmienne CSS: to samo HTML idzie
+ * jako treść e-maila, a programy pocztowe nie obsługują `var(--…)` ani
+ * arkuszy zewnętrznych — działa wyłącznie styl w atrybucie. Z tego samego
+ * powodu w krojach liczą się dopiero pozycje systemowe: webfontów
+ * (Inter Tight, EB Garamond) poczta i tak nie wczyta.
+ */
+const ATRAMENT = '#14181C';
+const ATRAMENT_2 = '#565E68';
+const ATRAMENT_3 = '#8A929C';
+const LINIA = '#E6E8E3';
+const SYGNAL_TLO = '#F9EBE9';
+const MOSIADZ_TLO = '#F7EFE2';
+const FONT_TEKST = "'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+const FONT_TYTUL = "'EB Garamond', 'Iowan Old Style', Georgia, serif";
+const FONT_DANE = "'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace";
+
 const STYL = `
-  font-family: Georgia, 'Times New Roman', serif; color: #1f1a14; line-height: 1.6;
+  font-family: ${FONT_TEKST}; color: ${ATRAMENT}; line-height: 1.6;
   max-width: 640px; margin: 0 auto; padding: 8px;
 `;
 
 function szkielet({ tytul, kancelaria, tresc, stopkaDodatkowa }) {
   return `
 <!doctype html>
-<html lang="pl"><head><meta charset="utf-8"><title>${esc(tytul)}</title></head>
+<html lang="pl"><head><meta charset="utf-8"><title>${esc(tytul)}</title>
+<!-- Bez tego iOS i część programów pocztowych zamienia „art. 300(35) § 1"
+     na numer telefonu: sygnatury przepisów robiły się niebieskimi odnośnikami. -->
+<meta name="format-detection" content="telephone=no,date=no,address=no"></head>
 <body style="${STYL}">
-  <div style="border-bottom: 2px solid #1f1a14; padding-bottom: 12px; margin-bottom: 20px;">
-    <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b6256;">
+  <div style="border-bottom: 2px solid ${ATRAMENT}; padding-bottom: 12px; margin-bottom: 20px;">
+    <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: ${ATRAMENT_2};">
       ${esc(kancelaria.nazwa)}
     </div>
-    ${kancelaria.adres ? `<div style="font-size: 12px; color: #6b6256;">${esc(kancelaria.adres)}</div>` : ''}
-    ${kancelaria.miejscowosc ? `<div style="font-size: 12px; color: #6b6256;">${esc(kancelaria.miejscowosc)}</div>` : ''}
+    ${kancelaria.adres ? `<div style="font-size: 12px; color: ${ATRAMENT_2};">${esc(kancelaria.adres)}</div>` : ''}
+    ${kancelaria.miejscowosc ? `<div style="font-size: 12px; color: ${ATRAMENT_2};">${esc(kancelaria.miejscowosc)}</div>` : ''}
     ${kancelaria.telefon || kancelaria.email
-      ? `<div style="font-size: 12px; color: #6b6256;">${esc(
+      ? `<div style="font-size: 12px; color: ${ATRAMENT_2};">${esc(
           [kancelaria.telefon, kancelaria.email].filter(Boolean).join(' · ')
         )}</div>`
       : ''}
   </div>
-  <h1 style="font-size: 22px; font-weight: 500; margin: 0 0 18px;">${esc(tytul)}</h1>
+  <h1 style="font-family: ${FONT_TYTUL}; font-size: 24px; font-weight: 500; margin: 0 0 18px;">${esc(tytul)}</h1>
   ${tresc}
-  <div style="margin-top: 32px; padding-top: 14px; border-top: 1px solid #e0d9ca; font-size: 11px; color: #9e9487;">
+  <div style="margin-top: 32px; padding-top: 14px; border-top: 1px solid ${LINIA}; font-size: 11px; color: ${ATRAMENT_3};">
     Rejestr akcjonariuszy prowadzony na podstawie art. 300(31) § 1 Kodeksu spółek handlowych.
     ${stopkaDodatkowa ? `<br>${esc(stopkaDodatkowa)}` : ''}
   </div>
@@ -72,11 +96,11 @@ function zawiadomienieWpis({ kancelaria, spolka, zdarzenie, typZdarzenie, podsum
       dokonano wpisu.
     </p>
     <table style="width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px;">
-      <tr><td style="padding: 4px 0; color: #6b6256; width: 160px;">Rodzaj zdarzenia</td>
+      <tr><td style="padding: 4px 0; color: ${ATRAMENT_2}; width: 160px;">Rodzaj zdarzenia</td>
           <td style="padding: 4px 0;">${esc(typZdarzenie.nazwa)}</td></tr>
-      <tr><td style="padding: 4px 0; color: #6b6256;">Data zdarzenia</td>
+      <tr><td style="padding: 4px 0; color: ${ATRAMENT_2};">Data zdarzenia</td>
           <td style="padding: 4px 0;">${dataPl(zdarzenie.data_zdarzenia)}</td></tr>
-      <tr><td style="padding: 4px 0; color: #6b6256;">Data i godzina wpisu</td>
+      <tr><td style="padding: 4px 0; color: ${ATRAMENT_2};">Data i godzina wpisu</td>
           <td style="padding: 4px 0;">${esc(zdarzenie.data_wpisu)}</td></tr>
     </table>
     <p>${esc(podsumowanie || 'Treść wpisu opisana jest w rejestrze akcjonariuszy spółki.')}</p>
@@ -100,7 +124,7 @@ function zawiadomienieOdmowa({ kancelaria, spolka, typZdarzenie, powodOdmowy, od
       odmówiono dokonania wpisu dotyczącego zdarzenia: <strong>${esc(typZdarzenie.nazwa)}</strong>.
     </p>
     <p><strong>Przyczyna odmowy:</strong></p>
-    <p style="background: #f5e8ea; border-radius: 6px; padding: 12px 14px;">${esc(powodOdmowy)}</p>
+    <p style="background: ${SYGNAL_TLO}; border-radius: 6px; padding: 12px 14px;">${esc(powodOdmowy)}</p>
     <p style="margin-top: 24px;">Z poważaniem,<br>${esc(kancelaria.nazwa)}</p>
   `;
   return szkielet({
@@ -151,7 +175,7 @@ function wezwanieDoUzupelnienia({ kancelaria, spolka, typZdarzenie, powodWstrzym
       uniemożliwiającą dokonanie wpisu.
     </p>
     <p><strong>Wskazana przeszkoda:</strong></p>
-    <p style="background: #f2ede0; border-radius: 6px; padding: 12px 14px;">${esc(powodWstrzymania)}</p>
+    <p style="background: ${MOSIADZ_TLO}; border-radius: 6px; padding: 12px 14px;">${esc(powodWstrzymania)}</p>
     <p>
       Bieg ustawowego terminu na dokonanie wpisu zostaje zawieszony do czasu usunięcia
       wskazanej przeszkody. Prosimy o jej usunięcie i przekazanie brakujących dokumentów
@@ -182,11 +206,11 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan }) {
       const obciazone = a.obciazenia && a.obciazenia.length ? ' 🔒' : '';
       return `
         <tr>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca;">${oznaczenie}${identyfikator}${obciazone}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca;">${esc(a.seria)}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; text-align: right;">${esc(a.ilosc)}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; font-family: monospace; font-size: 11px;">${esc(a.numery)}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; text-align: right;">${esc(a.procent)}%</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA};">${oznaczenie}${identyfikator}${obciazone}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA};">${esc(a.seria)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; text-align: right;">${esc(a.ilosc)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; font-family: ${FONT_DANE}; font-size: 11px;">${esc(a.numery)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; text-align: right;">${esc(a.procent)}%</td>
         </tr>`;
     })
     .join('');
@@ -199,7 +223,7 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan }) {
     </p>
     <table style="width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px;">
       <thead>
-        <tr style="text-align: left; color: #6b6256; font-size: 11px; text-transform: uppercase;">
+        <tr style="text-align: left; color: ${ATRAMENT_2}; font-size: 11px; text-transform: uppercase;">
           <th style="padding: 6px 8px;">Akcjonariusz</th>
           <th style="padding: 6px 8px;">Seria</th>
           <th style="padding: 6px 8px; text-align: right;">Ilość</th>
@@ -209,13 +233,27 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan }) {
       </thead>
       <tbody>${wiersze || '<tr><td colspan="5" style="padding:6px 8px;">Brak wpisanych akcjonariuszy.</td></tr>'}</tbody>
     </table>
-    <p style="font-size: 12px; color: #6b6256;">
+    <p style="font-size: 12px; color: ${ATRAMENT_2};">
       Razem akcji wyemitowanych i objętych: ${esc(stan.razem_akcji)}.
       ${'🔒'} oznacza akcje obciążone zastawem, użytkowaniem lub zajęciem.
     </p>
-    <p style="font-size: 11px; color: #9e9487;">
+    <p style="font-size: 11px; color: ${ATRAMENT_3};">
       Dane osób innych niż wnioskujący mogą być częściowo zamaskowane zgodnie z art. 300(35) § 1(1) KSH.
     </p>
+    <!-- Ten sam blok, co na wydruku kancelarii (publiczne/js/wydruk.js:
+         StopkaRaportu, wariant nieroboczy). Klient dostaje TEN SAM dokument
+         ustawowy, więc musi się on tak samo przedstawiać i mieć miejsce na
+         podpis — inaczej pobrana informacja niczym nie różni się od notatki. -->
+    <p style="margin-top: 26px; font-size: 12px;">
+      Dokument stanowi informację z rejestru akcjonariuszy w rozumieniu
+      art. 300(35) § 3 Kodeksu spółek handlowych.
+    </p>
+    <div style="margin-top: 46px; text-align: right;">
+      <div style="display: inline-block; border-top: 1px solid ${ATRAMENT}; padding-top: 6px;
+                  font-size: 11px; color: ${ATRAMENT_2}; min-width: 220px; text-align: center;">
+        podpis i pieczęć notariusza
+      </div>
+    </div>
   `;
   return szkielet({
     tytul: 'Informacja z rejestru akcjonariuszy',
@@ -240,11 +278,11 @@ function wykazAkcjonariuszy({ kancelaria, spolka, data, stan, powod }) {
       const pesel = a.osoba && a.osoba.typ === 'fizyczna' && a.osoba.pesel ? ` · PESEL ${esc(a.osoba.pesel)}` : '';
       return `
         <tr>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca;">${oznaczenie}${identyfikator}${pesel}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca;">${esc(a.seria)}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; text-align: right;">${esc(a.ilosc)}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; font-family: monospace; font-size: 11px;">${esc(a.numery)}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e0d9ca; text-align: right;">${esc(a.procent)}%</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA};">${oznaczenie}${identyfikator}${pesel}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA};">${esc(a.seria)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; text-align: right;">${esc(a.ilosc)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; font-family: ${FONT_DANE}; font-size: 11px;">${esc(a.numery)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; text-align: right;">${esc(a.procent)}%</td>
         </tr>`;
     })
     .join('');
@@ -255,10 +293,10 @@ function wykazAkcjonariuszy({ kancelaria, spolka, data, stan, powod }) {
       sporządzony na podstawie art. 476 § 1(1) Kodeksu spółek handlowych, według stanu na dzień
       <strong>${dataPl(data)}</strong>.
     </p>
-    ${powod ? `<p style="font-size: 12px; color: #6b6256;">Podstawa sporządzenia: ${esc(powod)}.</p>` : ''}
+    ${powod ? `<p style="font-size: 12px; color: ${ATRAMENT_2};">Podstawa sporządzenia: ${esc(powod)}.</p>` : ''}
     <table style="width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px;">
       <thead>
-        <tr style="text-align: left; color: #6b6256; font-size: 11px; text-transform: uppercase;">
+        <tr style="text-align: left; color: ${ATRAMENT_2}; font-size: 11px; text-transform: uppercase;">
           <th style="padding: 6px 8px;">Akcjonariusz</th>
           <th style="padding: 6px 8px;">Seria</th>
           <th style="padding: 6px 8px; text-align: right;">Ilość</th>
@@ -268,7 +306,7 @@ function wykazAkcjonariuszy({ kancelaria, spolka, data, stan, powod }) {
       </thead>
       <tbody>${wiersze || '<tr><td colspan="5" style="padding:6px 8px;">Brak wpisanych akcjonariuszy.</td></tr>'}</tbody>
     </table>
-    <p style="font-size: 12px; color: #6b6256;">Razem akcji wyemitowanych i objętych: ${esc(stan.razem_akcji)}.</p>
+    <p style="font-size: 12px; color: ${ATRAMENT_2};">Razem akcji wyemitowanych i objętych: ${esc(stan.razem_akcji)}.</p>
   `;
   return szkielet({
     tytul: 'Wykaz akcjonariuszy',

@@ -38,19 +38,37 @@ function sporzadzonoTeraz() {
  * Miejsce na logotyp samorządu notarialnego.
  *
  * Pliki dostarcza kancelaria (SESJA-PSA-6-INTERFEJS.md, faza 4). Znaków
- * samorządu NIE generujemy, nie odtwarzamy ani nie pobieramy z sieci — do
- * czasu dostarczenia plików widać ramkę o właściwych proporcjach z opisem,
- * czego brakuje.
+ * samorządu NIE generujemy, nie odtwarzamy ani nie pobieramy z sieci —
+ * wystarczy WGRAĆ PLIK pod ścieżkę z `LOGO_NOTARIAT` (patrz niżej), a
+ * pojawi się sam. Dopóki pliku nie ma, `onError` wraca do ramki z opisem,
+ * czego brakuje — dokument nigdy nie pokazuje pustego kwadratu ani
+ * ikony zepsutego obrazka.
  */
 function LogoSamorzadu({ zrodlo, opis }) {
+  const [nieudane, ustawNieudane] = useState(false);
+  const pokazObraz = Boolean(zrodlo) && !nieudane;
   return (
     <div className="raport-logo" title={opis}>
-      {zrodlo ? <img src={zrodlo} alt={opis} /> : opis}
+      {pokazObraz
+        ? <img src={zrodlo} alt={opis} onError={() => ustawNieudane(true)} />
+        : opis}
     </div>
   );
 }
 
-function NaglowekRaportu({ tytul, podtytul, kancelaria, sporzadzono, logoNotariat, logoIzba }) {
+/**
+ * Znak „Notariat Rzeczypospolitej Polskiej" na wydrukach. Żeby go włączyć,
+ * wystarczy wgrać plik do repozytorium pod tę ścieżkę (SVG albo PNG
+ * z przezroczystym tłem, w proporcji zbliżonej do kwadratu):
+ *
+ *   publiczne/obrazy/notariat.svg
+ *
+ * Nic więcej nie trzeba zmieniać — bez pliku nagłówek pokazuje ramkę
+ * z nazwą znaku, dokładnie jak dotąd.
+ */
+const LOGO_NOTARIAT = '/obrazy/notariat.svg';
+
+function NaglowekRaportu({ tytul, podtytul, kancelaria, sporzadzono, logoNotariat = LOGO_NOTARIAT, logoIzba }) {
   return (
     <div className="raport-naglowek">
       <div className="raport-logotypy">
