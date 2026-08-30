@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const express = require('express');
+const multer = require('multer');
 
 const { db } = require('../baza');
 const rejestr = require('../rejestr');
@@ -31,6 +32,9 @@ const POLA_SPOLKI = [
   'ulica', 'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial', 'telefon', 'email', 'www',
   'status', 'komentarz_statusu', 'data_utworzenia_spolki', 'data_uchwaly_wyboru', 'data_umowy',
   'data_otwarcia_rejestru', 'data_zakonczenia_umowy', 'opis', 'uwagi',
+  // Etap 2.5 poprawek: data zawarcia umowy spolki (akt zalozycielski) - rozna
+  // od daty rejestracji w KRS i od daty umowy o prowadzenie rejestru.
+  'data_zawarcia_umowy_spolki',
   // Sprint 5 (zgodnosc z ustawa):
   'umowe_zawarl', 'umowe_zawarl_imie_nazwisko', 'dodatkowe_informacje_umowa_spolki',
   // Sesja 6, faza 3 (kreator rejestracji spolki - rozszerzony import KRS,
@@ -39,12 +43,20 @@ const POLA_SPOLKI = [
   'zakaz_glosu_zastawnika_umowa', 'ograniczenie_dziedziczenia_umowa',
   // Sesja 8, blok B4/B6 (dane wymagane przez wzory pism):
   'siedziba_miejscownik',
-  'reprezentant_biernik', 'reprezentant_plec', 'reprezentant_rodzice', 'reprezentant_dowod',
-  'reprezentant_pesel', 'reprezentant_adres', 'reprezentant_funkcja_biernik', 'reprezentant_reprezentacja',
+  // Reprezentant w MIANOWNIKU (etap 2.3 poprawek) + pola recznej korekty
+  // odmiany - `deklinacja.js` liczy biernik/dopelniacz automatycznie,
+  // te trzy nadpisuja go, gdy wypelnione (nazwiska nietypowe/obcojezyczne).
+  'reprezentant_imie_nazwisko', 'reprezentant_plec', 'reprezentant_rodzice', 'reprezentant_dowod',
+  'reprezentant_pesel', 'reprezentant_adres', 'reprezentant_funkcja', 'reprezentant_reprezentacja',
+  'reprezentant_biernik_recznie', 'reprezentant_funkcja_biernik_recznie', 'reprezentant_rodzice_recznie',
+  // Etap 2.2 poprawek: umowa jako fakt juz zaistnialy (data zawarcia to juz
+  // istniejace 'data_umowy'). Zalacznik NIE jest tu - ma dedykowany
+  // endpoint uploadu, zeby nie przyjmowac dowolnej sciezki z ciala JSON.
+  'umowa_sposob_zawarcia',
   // Sesja 8, blok A3 (kontekst automatu pism):
   'organ_rodzaj',
-  // Sesja 8, blok A5 (wystawianie na zadanie - wzor 01, sekcja spolka_vat):
-  'platnik_vat',
+  // Etap 3.1: przelacznik procedury AML, wylaczony domyslnie (migracja 28).
+  'stosuje_procedure_aml',
 ];
 
 /** Pola, ktorych zmiana jest zdarzeniem rejestrowym (art. 300(33) § 1 KSH). */
@@ -63,15 +75,11 @@ function wyczysc(cialo) {
   const wynik = {};
   for (const pole of POLA_SPOLKI) {
     if (cialo[pole] === undefined) continue;
-    const v = cialo[pole];
-    if (pole === 'platnik_vat') {
-      // Trojstanowe: nieustalone (null) rozni sie od "nie jest platnikiem"
-      // (0) - pierwsze zostawia sekcje wzoru pusta do uzupelnienia, drugie
-      // tez jest pusta, ale to swiadoma odpowiedz, nie brak danych.
-      // Porownanie z '0'/0 wprost - String(v).trim() na "0" dalby prawde.
-      wynik[pole] = v === '' || v === null ? null : (v === '0' || v === 0 ? 0 : 1);
+    if (pole === 'stosuje_procedure_aml') {
+      wynik[pole] = cialo[pole] ? 1 : 0;
       continue;
     }
+    const v = cialo[pole];
     wynik[pole] = v === '' || v === null ? null : String(v).trim();
   }
   return wynik;
@@ -90,6 +98,7 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   for (const pole of [
     'data_utworzenia_spolki', 'data_uchwaly_wyboru', 'data_umowy',
     'data_otwarcia_rejestru', 'data_zakonczenia_umowy', 'data_ostatniego_wpisu_krs',
+    'data_zawarcia_umowy_spolki',
   ]) {
     if (dane[pole] && !czas.poprawnaData(dane[pole])) {
       throw bledneZadanie(`Pole „${pole}” musi być datą w formacie RRRR-MM-DD.`);
@@ -100,6 +109,12 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   }
   if (dane.umowe_zawarl && !przepisy.UMOWE_ZAWARL.includes(dane.umowe_zawarl)) {
     throw bledneZadanie(`Pole „umowe_zawarl” musi być jedną z wartości: ${przepisy.UMOWE_ZAWARL.join(', ')}.`);
+  }
+  if (
+    dane.umowa_sposob_zawarcia &&
+    !['pisemna', 'elektroniczna_kwalifikowany'].includes(dane.umowa_sposob_zawarcia)
+  ) {
+    throw bledneZadanie('Sposób zawarcia umowy musi być „pisemna” albo „elektroniczna_kwalifikowany”.');
   }
   if (
     dane.zakaz_glosu_zastawnika_umowa &&
@@ -199,6 +214,92 @@ router.post(
     odp.status(201).json({
       spolka: db().prepare('SELECT * FROM psa_spolki WHERE id = ?').get(wynik.lastInsertRowid),
     });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Zalacznik do umowy o prowadzenie rejestru (etap 2.2 poprawek) - skan/plik
+// JUZ ZAWARTEJ umowy, nie dokument tworzony w tej aplikacji. Jeden plik na
+// spolke (nadpisywalny), poza katalogiem publicznym jak reszta dokumentow.
+// ─────────────────────────────────────────────────────────────
+
+const ROZSZERZENIA_UMOWY_DOZWOLONE = new Set(['.pdf']);
+const LIMIT_ROZMIARU_UMOWY_BAJTY = 20 * 1024 * 1024;
+
+function katalogUmowySpolki(spolkaId) {
+  return path.join(konfiguracja.KATALOG_DOKUMENTOW, `spolka_${spolkaId}`, 'umowa-rejestru');
+}
+
+const uploadUmowy = multer({
+  storage: multer.diskStorage({
+    destination(zad, plik, wywolaj) {
+      const katalog = katalogUmowySpolki(Number(zad.params.id));
+      fs.mkdirSync(katalog, { recursive: true });
+      wywolaj(null, katalog);
+    },
+    filename(zad, plik, wywolaj) {
+      const bezpiecznaNazwa = path.basename(plik.originalname).replace(/[^\w.\- ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/gu, '_');
+      wywolaj(null, `${crypto.randomUUID()}-${bezpiecznaNazwa}`);
+    },
+  }),
+  limits: { fileSize: LIMIT_ROZMIARU_UMOWY_BAJTY, files: 1 },
+  fileFilter(zad, plik, wywolaj) {
+    const rozszerzenie = path.extname(plik.originalname).toLowerCase();
+    if (!ROZSZERZENIA_UMOWY_DOZWOLONE.has(rozszerzenie)) {
+      return wywolaj(new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Dozwolony wyłącznie PDF.`));
+    }
+    wywolaj(null, true);
+  },
+});
+
+router.post(
+  '/:id/umowa-zalacznik',
+  (zad, odp, dalej) => uploadUmowy.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const spolka = db().prepare('SELECT id FROM psa_spolki WHERE id = ?').get(id);
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+
+    db()
+      .prepare(
+        `UPDATE psa_spolki
+            SET umowa_zalacznik_sciezka = ?, umowa_zalacznik_nazwa_pliku = ?, umowa_zalacznik_mime = ?
+          WHERE id = ?`
+      )
+      .run(
+        path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path),
+        zad.file.originalname,
+        zad.file.mimetype,
+        id
+      );
+
+    odp.status(201).json({ nazwa_pliku: zad.file.originalname });
+  })
+);
+
+router.get(
+  '/:id/umowa-zalacznik',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const spolka = db()
+      .prepare('SELECT umowa_zalacznik_sciezka, umowa_zalacznik_nazwa_pliku, umowa_zalacznik_mime FROM psa_spolki WHERE id = ?')
+      .get(id);
+    if (!spolka || !spolka.umowa_zalacznik_sciezka) throw nieZnaleziono('Nie odnaleziono załącznika umowy.');
+
+    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, spolka.umowa_zalacznik_sciezka);
+    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik', spolkaId: id,
+      akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU, opis: `załącznik umowy o prowadzenie rejestru: ${spolka.umowa_zalacznik_nazwa_pliku}`,
+    });
+
+    odp.setHeader('Content-Type', spolka.umowa_zalacznik_mime || 'application/octet-stream');
+    odp.setHeader('Content-Disposition', `attachment; filename="${spolka.umowa_zalacznik_nazwa_pliku}"`);
+    fs.createReadStream(pelnaSciezka).pipe(odp);
   })
 );
 
@@ -774,3 +875,8 @@ router.get(
 );
 
 module.exports = router;
+// Etap 3F: kancelaria zaklada realna spolke z zaakceptowanego wniosku klienta
+// - wnioski.js reuzywa TA SAMA walidacje, zeby wpis z wniosku nigdy nie
+// ominal regul, ktorym podlega wpis reczny.
+module.exports.POLA_SPOLKI = POLA_SPOLKI;
+module.exports.sprawdzDaneSpolki = sprawdzDaneSpolki;

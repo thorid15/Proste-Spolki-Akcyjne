@@ -55,7 +55,12 @@ function NaglowekRaportu({ tytul, podtytul, kancelaria, sporzadzono, logoNotaria
     <div className="raport-naglowek">
       <div className="raport-logotypy">
         <LogoSamorzadu zrodlo={logoNotariat} opis="Notariat Rzeczypospolitej Polskiej" />
-        <LogoSamorzadu zrodlo={logoIzba} opis="Izba Notarialna w Gdańsku" />
+        {/* Etap 4.7: rejestr prowadzi KANCELARIA (art. 300(31) § 1 KSH), nie
+            izba notarialna - znak izby jest opcją, domyślnie wyłączoną, żeby
+            nagłówek nie sugerował, że dokument pochodzi od samorządu. */}
+        {kancelaria && kancelaria.pokaz_znak_izby && (
+          <LogoSamorzadu zrodlo={logoIzba} opis={kancelaria.nazwa_izby || 'Izba Notarialna'} />
+        )}
       </div>
       <div>
         <h1 className="raport-tytul">{tytul}</h1>
@@ -89,25 +94,34 @@ function SekcjaRaportu({ tytul, children }) {
  * dokłada więc mechanizm druku przeglądarki (nagłówki i stopki w oknie
  * drukowania) — tutaj dbamy o to, żeby KAŻDA strona dała się zidentyfikować
  * po treści: oznaczenie spółki i dzień stanu są w nagłówku sekcji.
+ *
+ * Etap 4.3: „stan na dzień” i podstawa prowadzenia rejestru są już w
+ * nagłówku/sekcji „Podmiot prowadzący rejestr” — stopka zostaje wyłącznie
+ * przy klauzuli ustawowej, żeby nie powtarzać tych samych faktów trzeci raz.
+ *
+ * Etap 4.6: dokument roboczy (raport wewnętrzny, `roboczy`) nie jest pismem
+ * wydawanym na zewnątrz — bez podpisu notariusza, ze znakiem wodnym.
+ * Informacja z rejestru (art. 300(35) § 3 KSH) zachowuje miejsce na podpis.
  */
-function StopkaRaportu({ spolka, data, oznaczenie, dodatek }) {
+function StopkaRaportu({ oznaczenie, dodatek, roboczy = false }) {
   return (
     <>
       <div className="raport-stopka">
         <div>
-          Dokument stanowi informację z rejestru akcjonariuszy w rozumieniu art. 300(35) § 3
-          Kodeksu spółek handlowych.
-        </div>
-        <div style={{ marginTop: 4 }}>
-          Rejestr akcjonariuszy spółki {spolka} prowadzony na podstawie art. 300(31) § 1 Kodeksu
-          spółek handlowych. Stan na dzień {fmt.data(data)}.
+          {roboczy
+            ? 'Dokument roboczy sporządzony na potrzeby wewnętrzne kancelarii — nie stanowi informacji z rejestru akcjonariuszy w rozumieniu art. 300(35) § 3 Kodeksu spółek handlowych.'
+            : 'Dokument stanowi informację z rejestru akcjonariuszy w rozumieniu art. 300(35) § 3 Kodeksu spółek handlowych.'}
         </div>
         {oznaczenie && <div style={{ marginTop: 4 }}>Oznaczenie dokumentu: {oznaczenie}</div>}
         {dodatek && <div style={{ marginTop: 4 }}>{dodatek}</div>}
       </div>
-      <div className="raport-podpis">
-        <div className="raport-podpis-linia">podpis i pieczęć notariusza</div>
-      </div>
+      {roboczy ? (
+        <div className="raport-znak-wodny">DOKUMENT ROBOCZY</div>
+      ) : (
+        <div className="raport-podpis">
+          <div className="raport-podpis-linia">podpis i pieczęć notariusza</div>
+        </div>
+      )}
     </>
   );
 }
@@ -421,7 +435,7 @@ function EkranRaportu({ spolkaId, dataPoczatkowa }) {
           )}
         </SekcjaRaportu>
 
-        <SekcjaRaportu tytul={<>Akcjonariusze na dzień {fmt.data(data)}</>}>
+        <SekcjaRaportu tytul="Akcjonariusze">
           <TabelaAkcjonariuszyRaport akcjonariusze={d.akcjonariusze} razem={d.razem_akcji} />
         </SekcjaRaportu>
 
@@ -447,7 +461,7 @@ function EkranRaportu({ spolkaId, dataPoczatkowa }) {
           </SekcjaRaportu>
         )}
 
-        <StopkaRaportu spolka={d.spolka.nazwa} data={data} />
+        <StopkaRaportu roboczy />
       </div>
     </>
   );
@@ -588,8 +602,6 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
         </SekcjaRaportu>
 
         <StopkaRaportu
-          spolka={d.spolka.nazwa}
-          data={data}
           oznaczenie={`odbiorca: ${opisOdbiorcy}`}
           dodatek={
             zamaskowane

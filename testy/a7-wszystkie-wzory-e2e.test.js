@@ -126,15 +126,15 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
     email: 'kontakt@charlieunicorn-a7.ai',
     data_umowy: '2026-01-05',
     organ_rodzaj: 'zarzad',
-    platnik_vat: 1,
     sklad_organu_json: JSON.stringify([{ imiona: 'Łukasz Adrian', nazwisko: 'Szymborski', funkcja: 'Prezes Zarządu' }]),
-    reprezentant_biernik: 'Łukasza Adriana Szymborskiego',
+    // Mianownik (etap 2.3 poprawek) - biernik/dopelniacz liczy deklinacja.js.
+    reprezentant_imie_nazwisko: 'Łukasz Adrian Szymborski',
     reprezentant_plec: 'mezczyzna',
-    reprezentant_rodzice: 'Pawła i Izabelli',
+    reprezentant_rodzice: 'Paweł i Izabella',
     reprezentant_dowod: 'DGK 138559',
     reprezentant_pesel: '88081105939',
     reprezentant_adres: '76-015 Manowo, ulica Kasztanowa nr 17 m. 1',
-    reprezentant_funkcja_biernik: 'Prezesa Zarządu',
+    reprezentant_funkcja: 'Prezes Zarządu',
     reprezentant_reprezentacja: 'uprawnionego do samodzielnej reprezentacji',
   });
   assert.equal(stSpolka, 201, JSON.stringify(spolkaOdp));

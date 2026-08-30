@@ -99,6 +99,23 @@ test('wymaga_przegladu_aml: status "brak"/"niemozliwe" nigdy nie daje sygnalu (m
   assert.equal(brak.osoba.wymaga_przegladu_aml, false);
 });
 
+test('PESEL: niepoprawna suma kontrolna daje ostrzezenie, NIE blokuje zapisu (etap 2.8)', async () => {
+  const [stPoprawny, poprawny] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `PeselPoprawny${sufiks()}`, pesel: '90071500118',
+  });
+  assert.equal(stPoprawny, 201);
+  assert.deepEqual(poprawny.ostrzezenia, []);
+
+  const [stNiepoprawny, niepoprawny] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `PeselNiepoprawny${sufiks()}`, pesel: '90071500110',
+  });
+  assert.equal(stNiepoprawny, 201, 'zla suma kontrolna nie blokuje zapisu osoby');
+  assert.ok(niepoprawny.ostrzezenia.some((o) => o.includes('Suma kontrolna')));
+
+  const [, poprawka] = await zapytaj('PUT', `/api/psa/osoby/${niepoprawny.osoba.id}`, { pesel: '90071500118' });
+  assert.deepEqual(poprawka.ostrzezenia, [], 'poprawiony PESEL usuwa ostrzezenie przy PUT');
+});
+
 test('beneficjent rzeczywisty: tylko dla osoby prawnej, tylko na osobe fizyczna, bez samoodwolania', async () => {
   const [, fizyczna] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Beneficjent${sufiks()}` });
   const [, prawna1] = await zapytaj('POST', '/api/psa/osoby', { typ: 'prawna', nazwa: `Spolka Jeden ${sufiks()}` });
@@ -139,4 +156,81 @@ test('oswiadczenie PEP: katalog zamkniety tak/nie, zapisuje sie z data', async (
   assert.equal(stOk, 201);
   assert.equal(ok.osoba.pep_oswiadczenie, 'tak');
   assert.equal(ok.osoba.pep_oswiadczenie_data, '2026-08-16');
+});
+
+// ─────────────────────────────────────────────────────────────
+// Etap 3.1: modul AML konfigurowalny per spolka - wylaczony domyslnie.
+// ─────────────────────────────────────────────────────────────
+
+test('POST/PUT /api/psa/spolki: przelacznik stosuje_procedure_aml, domyslnie wylaczony', async () => {
+  const [, domyslna] = await zapytaj('POST', '/api/psa/spolki', { nazwa: `AML Domyslna ${sufiks()}` });
+  assert.equal(domyslna.spolka.stosuje_procedure_aml, 0);
+
+  const [, wlaczona] = await zapytaj('POST', '/api/psa/spolki', {
+    nazwa: `AML Wlaczona ${sufiks()}`, stosuje_procedure_aml: true,
+  });
+  assert.equal(wlaczona.spolka.stosuje_procedure_aml, 1);
+
+  const [, wylaczona] = await zapytaj('PUT', `/api/psa/spolki/${wlaczona.spolka.id}`, { stosuje_procedure_aml: false });
+  assert.equal(wylaczona.spolka.stosuje_procedure_aml, 0);
+});
+
+test('POST /api/psa/osoby/:id/aml-skany: wymaga spolka_id i wlaczonej procedury AML', async () => {
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `SkanBrak${sufiks()}` });
+  const [, spolkaBezAml] = await zapytaj('POST', '/api/psa/spolki', { nazwa: `Bez AML ${sufiks()}` });
+
+  const formularzBezSpolki = new FormData();
+  formularzBezSpolki.append('plik', new Blob(['x'], { type: 'application/pdf' }), 'dowod.pdf');
+  const odpBrakSpolki = await fetch(`${baza}/api/psa/osoby/${osoba.osoba.id}/aml-skany`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: formularzBezSpolki,
+  });
+  assert.equal(odpBrakSpolki.status, 400, 'brak spolka_id');
+
+  const formularzWylaczona = new FormData();
+  formularzWylaczona.append('spolka_id', String(spolkaBezAml.spolka.id));
+  formularzWylaczona.append('plik', new Blob(['x'], { type: 'application/pdf' }), 'dowod.pdf');
+  const odpWylaczona = await fetch(`${baza}/api/psa/osoby/${osoba.osoba.id}/aml-skany`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: formularzWylaczona,
+  });
+  assert.equal(odpWylaczona.status, 400, 'spolka nie ma wlaczonej procedury AML');
+});
+
+test('POST/GET /api/psa/osoby/:id/aml-skany: upload, lista, pobranie z logiem dostepu; odrzuca zle rozszerzenie', async () => {
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `SkanOk${sufiks()}` });
+  const [, spolka] = await zapytaj('POST', '/api/psa/spolki', { nazwa: `Z AML ${sufiks()}`, stosuje_procedure_aml: true });
+
+  const zlaKoncowka = new FormData();
+  zlaKoncowka.append('spolka_id', String(spolka.spolka.id));
+  zlaKoncowka.append('plik', new Blob(['x'], { type: 'text/plain' }), 'notatka.txt');
+  const odpZlaKoncowka = await fetch(`${baza}/api/psa/osoby/${osoba.osoba.id}/aml-skany`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: zlaKoncowka,
+  });
+  assert.equal(odpZlaKoncowka.status, 400, 'niedozwolone rozszerzenie pliku');
+
+  const formularz = new FormData();
+  formularz.append('spolka_id', String(spolka.spolka.id));
+  formularz.append('typ_dokumentu', 'dowod_osobisty');
+  formularz.append('retencja_do', '2031-01-01');
+  formularz.append('plik', new Blob(['tresc skanu'], { type: 'application/pdf' }), 'dowod-osobisty.pdf');
+  const odpUpload = await fetch(`${baza}/api/psa/osoby/${osoba.osoba.id}/aml-skany`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: formularz,
+  });
+  assert.equal(odpUpload.status, 201);
+  const dane = await odpUpload.json();
+  assert.equal(dane.skan.typ_dokumentu, 'dowod_osobisty');
+  assert.equal(dane.skan.retencja_do, '2031-01-01');
+
+  const [stLista, listaWynik] = await zapytaj('GET', `/api/psa/osoby/${osoba.osoba.id}/aml-skany`);
+  assert.equal(stLista, 200);
+  assert.equal(listaWynik.skany.length, 1);
+  assert.equal(listaWynik.skany[0].id, dane.skan.id);
+
+  const liczbaWpisowDziennikaPrzed = db().prepare('SELECT COUNT(*) AS ile FROM psa_dziennik_dostepu').get().ile;
+  const odpPlik = await fetch(`${baza}/api/psa/osoby/${osoba.osoba.id}/aml-skany/${dane.skan.id}/plik`, {
+    headers: { Cookie: ciastko },
+  });
+  assert.equal(odpPlik.status, 200);
+  assert.equal(odpPlik.headers.get('content-type'), 'application/pdf');
+  const liczbaWpisowDziennikaPo = db().prepare('SELECT COUNT(*) AS ile FROM psa_dziennik_dostepu').get().ile;
+  assert.equal(liczbaWpisowDziennikaPo, liczbaWpisowDziennikaPrzed + 1, 'pobranie skanu zostawia slad w dzienniku dostepu');
 });

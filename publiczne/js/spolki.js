@@ -13,24 +13,47 @@ const PUSTA_SPOLKA = {
   ulica: '', nr_domu: '', nr_lokalu: '',
   sad_rejestrowy: '', wydzial: '', telefon: '', email: '', www: '',
   data_utworzenia_spolki: '', data_ostatniego_wpisu_krs: '', adres_edorecze: '',
+  // Data zawarcia UMOWY SPÓŁKI (akt założycielski / akt notarialny, przy S24
+  // — data podpisania w systemie) — etap 2.5 poprawek. Różna od daty
+  // rejestracji w KRS powyżej i od daty umowy o prowadzenie rejestru niżej;
+  // podstawa autouzupełnienia „data emisji” serii założycielskiej.
+  data_zawarcia_umowy_spolki: '',
   kapital_akcyjny_grosze: null,
   status: 'aktywna', opis: '', uwagi: '',
-  organ_rodzaj: '', platnik_vat: '',
+  organ_rodzaj: '',
   data_uchwaly_wyboru: '', data_umowy: '', data_otwarcia_rejestru: '',
-  umowe_zawarl: '', umowe_zawarl_imie_nazwisko: '', dodatkowe_informacje_umowa_spolki: '',
+  // Stroną umowy po stronie podmiotu prowadzącego rejestr zawsze jest
+  // kancelaria (etap 2.1 poprawek) — bez wyboru w kreatorze.
+  umowe_zawarl: 'notariusz', umowe_zawarl_imie_nazwisko: '', dodatkowe_informacje_umowa_spolki: '',
   zakaz_glosu_zastawnika_umowa: '', ograniczenie_dziedziczenia_umowa: '',
-  reprezentant_biernik: '', reprezentant_plec: '', reprezentant_rodzice: '',
+  // Umowa jako fakt już zaistniały (etap 2.2) — sposób zawarcia; data
+  // zawarcia to już istniejące `data_umowy` powyżej. Załącznik trzymany
+  // osobno w stanie kreatora (plik, nie pole tekstowe) — patrz `umowaZalacznik`.
+  umowa_sposob_zawarcia: '',
+  // Reprezentant w MIANOWNIKU (etap 2.3) — odmianę liczy backend
+  // (`deklinacja.js`) przy generowaniu dokumentu; trzy pola „_recznie” to
+  // opcjonalna korekta automatu.
+  reprezentant_imie_nazwisko: '', reprezentant_plec: '', reprezentant_rodzice: '',
   reprezentant_dowod: '', reprezentant_pesel: '', reprezentant_adres: '',
-  reprezentant_funkcja_biernik: '', reprezentant_reprezentacja: '',
+  reprezentant_funkcja: '', reprezentant_reprezentacja: '',
+  reprezentant_biernik_recznie: '', reprezentant_funkcja_biernik_recznie: '', reprezentant_rodzice_recznie: '',
 };
 
 const PUSTA_EMISJA_ZALOZYCIELSKA = {
-  seria: '', nr_pierwszy: 1, ilosc: '', cena_emisyjna_grosze: null,
+  // Cena emisyjna NIE jest tu wspolna dla calej emisji (etap 2.6 poprawek) -
+  // rozne osoby moga wnosic rozne kwoty za akcje w tej samej emisji
+  // zalozycielskiej (np. rozne aporty); cena zyje przy kazdej pozycji
+  // akcjonariatu nizej.
+  seria: '', nr_pierwszy: 1, ilosc: '',
   data_emisji: '', data_wpisu_krs: '', rodzaj_akcji: 'zwykla', tytul: '', obowiazki_wobec_spolki: '',
+  podstawa_prawna: '',
 };
 
 const PUSTA_ZGODA_SPOLKI = {
   wymaga_zgody_spolki: false,
+  // Doslowny cytat klauzuli - przydatny nawet zanim szczegoly nizej sa znane
+  // (etap 2.7 poprawek).
+  tresc_postanowienia: '',
   zgoda_termin_wskazania_dni: '',
   zgoda_cena_opis: '',
   zgoda_termin_zaplaty_dni: '',
@@ -79,17 +102,30 @@ function PozycjaZalozycielska({ pozycja, ustawPozycje, usun, mozna_usunac, wyklu
           />
         </Pole>
       </div>
-      <Pole etykieta="Wzmianka o pokryciu" podpowiedz="art. 300(33) § 1 pkt 9 KSH — zostaw puste, jeśli nieustalone.">
-        <select
-          value={pozycja.pokryta || ''}
-          onChange={(z) => ustawPozycje({ ...pozycja, pokryta: z.target.value })}
-        >
-          <option value="">— nieustalone —</option>
-          <option value="tak">pokryta w całości</option>
-          <option value="czesciowo">pokryta częściowo</option>
-          <option value="nie">niepokryta</option>
-        </select>
-      </Pole>
+      <div className="siatka-2">
+        <Pole etykieta="Wzmianka o pokryciu" podpowiedz="art. 300(33) § 1 pkt 9 KSH — zostaw puste, jeśli nieustalone.">
+          <select
+            value={pozycja.pokryta || ''}
+            onChange={(z) => ustawPozycje({ ...pozycja, pokryta: z.target.value })}
+          >
+            <option value="">— nieustalone —</option>
+            <option value="tak">pokryta w całości</option>
+            <option value="czesciowo">pokryta częściowo</option>
+            <option value="nie">niepokryta</option>
+          </select>
+        </Pole>
+        {!wkladNiepieniezny && (
+          <Pole
+            etykieta="Cena emisyjna (za akcję)"
+            podpowiedz="Kwota wniesiona za jedną akcję przez TEGO akcjonariusza — może się różnić między akcjonariuszami. Do kontroli spójności z kapitałem akcyjnym (krok 1)."
+          >
+            <PoleKwoty
+              grosze={pozycja.cena_emisyjna_grosze ?? null}
+              przyZmianie={(v) => ustawPozycje({ ...pozycja, cena_emisyjna_grosze: v })}
+            />
+          </Pole>
+        )}
+      </div>
       {!wkladNiepieniezny ? (
         <button className="btn btn-maly" onClick={() => ustawWkladNiepieniezny(true)}>
           Wkład w postaci pracy lub usług
@@ -134,10 +170,34 @@ function EkranNowejSpolki() {
   const [skladOrganu, ustawSkladOrganu] = useState([]);
   const [pobieranie, ustawPobieranie] = useState(false);
   const [komunikatKrs, ustawKomunikatKrs] = useState(null);
+  const [pobranoZKrsBezAde, ustawPobranoZKrsBezAde] = useState(false);
+  const [sadZaproponowany, ustawSadZaproponowany] = useState(false);
+  const [umowaZalacznik, ustawUmowaZalacznik] = useState(null);
+  const [pokazKorekteOdmiany, ustawPokazKorekteOdmiany] = useState(false);
 
   const [emisja, ustawEmisje] = useState(PUSTA_EMISJA_ZALOZYCIELSKA);
   const [pozycje, ustawPozycjeState] = useState([{}]);
   const [zgoda, ustawZgode] = useState(PUSTA_ZGODA_SPOLKI);
+
+  // Etap 2.5: data emisji założycielskiej = data zawarcia umowy spółki
+  // (krok 1) — autouzupełnienie JEDNORAZOWE, użytkownik może nadpisać.
+  // „Data wpisu emisji do KRS” NIE ma tu osobnego stanu — dla emisji
+  // założycielskiej zawsze i wyłącznie mirroruje „datę rejestracji w KRS”
+  // (pole w kroku 3 jest read-only, patrz niżej), bo emisja pierwotna
+  // rejestruje się razem ze spółką, nie osobno.
+  useEffect(() => {
+    if (dane.data_zawarcia_umowy_spolki && !emisja.data_emisji) {
+      ustawEmisje((p) => ({ ...p, data_emisji: dane.data_zawarcia_umowy_spolki }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dane.data_zawarcia_umowy_spolki]);
+
+  useEffect(() => {
+    if (dane.data_zawarcia_umowy_spolki && !emisja.podstawa_prawna) {
+      ustawEmisje((p) => ({ ...p, podstawa_prawna: `umowa spółki z dnia ${fmt.data(dane.data_zawarcia_umowy_spolki)}` }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dane.data_zawarcia_umowy_spolki]);
 
   const [odhaczone, ustawOdhaczone] = useState({});
   const [spolkaId, ustawSpolkaId] = useState(null);
@@ -167,11 +227,13 @@ function EkranNowejSpolki() {
         );
         ustawDane((p) => ({ ...p, ...pobrane }));
         ustawSkladOrganu(sklad_organu || []);
+        ustawPobranoZKrsBezAde(!wynik.dane.adres_edorecze);
+        ustawSadZaproponowany(Boolean(wynik.sad_rejestrowy_propozycja));
         ustawKomunikatKrs({
           odmiana: (wynik.ostrzezenia || []).length ? 'uwaga' : 'ok',
           tresc: (wynik.ostrzezenia || []).length
             ? wynik.ostrzezenia.join(' ')
-            : 'Dane pobrane z rejestru przedsiębiorców. Sprawdź je przed zapisaniem — mapowanie pól rozszerzonego importu nie było weryfikowane na żywej odpowiedzi API, patrz surowy JSON poniżej.',
+            : 'Dane pobrane z rejestru przedsiębiorców. Sprawdź je przed zapisaniem, zwłaszcza sąd rejestrowy — API KRS go nie zwraca, uzupełnij ręcznie.',
         });
         ustawPokazJson(true);
       }
@@ -195,6 +257,27 @@ function EkranNowejSpolki() {
   const ileAkcji = Number(emisja.ilosc) || 0;
   const sumaObjeta = pozycje.reduce((s, p) => s + (Number(p.ilosc) || 0), 0);
   const przekroczonyBilans = ileAkcji > 0 && sumaObjeta > ileAkcji;
+
+  // Kontrola spojnosci (etap 2.6): cena emisyjna jest teraz per akcjonariusz
+  // (moze sie roznic - np. rozne aporty), nie jedna wspolna cena emisji.
+  // Wklad praca/uslugami (art. 300(9) § 1 KSH) nie ma ceny - wylaczony z sumy.
+  const pozycjeWyceniane = pozycje.filter((p) => !p.rodzaj_swiadczenia && !p.czas_swiadczenia);
+  const sumaWkladowGrosze = pozycjeWyceniane.reduce(
+    (s, p) => s + (Number(p.ilosc) || 0) * (Number(p.cena_emisyjna_grosze) || 0),
+    0
+  );
+  const wszystkieWycenione =
+    pozycjeWyceniane.length > 0 &&
+    pozycjeWyceniane.every((p) => p.cena_emisyjna_grosze != null && p.cena_emisyjna_grosze !== '');
+  const kapitalNiezgodny =
+    wszystkieWycenione &&
+    dane.kapital_akcyjny_grosze != null &&
+    sumaWkladowGrosze !== Number(dane.kapital_akcyjny_grosze);
+
+  // Niekompletnosc NIE blokuje juz kreatora (etap 2.7 poprawek) - postanowienie
+  // niekompletne jest bezskuteczne, ale to sprawdza sie dopiero przy
+  // faktycznym zbyciu akcji (server/logika/walidacje.js), nie przy zakladaniu
+  // spolki. Flaga zostaje wylacznie do miekkiego komunikatu informacyjnego.
   const zgodaNiekompletna =
     zgoda.wymaga_zgody_spolki &&
     (!zgoda.zgoda_termin_wskazania_dni || !zgoda.zgoda_cena_opis.trim() || !zgoda.zgoda_termin_zaplaty_dni);
@@ -205,8 +288,7 @@ function EkranNowejSpolki() {
     ileAkcji > 0 &&
     !przekroczonyBilans &&
     pozycje.length > 0 &&
-    pozycje.every((p) => p.osoba_id && Number(p.ilosc) > 0) &&
-    !zgodaNiekompletna;
+    pozycje.every((p) => p.osoba_id && Number(p.ilosc) > 0);
 
   const wszystkoOdhaczone = CHECKLISTA_OTWARCIA.every((p) => odhaczone[p.kod]);
 
@@ -221,6 +303,16 @@ function EkranNowejSpolki() {
         ustawSpolkaId(id);
       }
 
+      if (umowaZalacznik) {
+        const formularz = new FormData();
+        formularz.append('plik', umowaZalacznik);
+        const odpZalacznika = await fetch(`/api/psa/spolki/${id}/umowa-zalacznik`, { method: 'POST', body: formularz });
+        if (!odpZalacznika.ok) {
+          const tresc = await odpZalacznika.json().catch(() => ({}));
+          throw new Error(tresc.blad || `Nie udało się wgrać załącznika umowy (błąd ${odpZalacznika.status}).`);
+        }
+      }
+
       const dataOtwarcia = emisja.data_emisji || dane.data_umowy;
       const zdarzenia = [
         {
@@ -231,10 +323,15 @@ function EkranNowejSpolki() {
             seria: emisja.seria,
             nr_pierwszy: emisja.nr_pierwszy || 1,
             ilosc: ileAkcji,
-            cena_emisyjna_grosze: emisja.cena_emisyjna_grosze,
-            data_wpisu_krs: emisja.data_wpisu_krs || null,
+            // Bez wspolnej ceny emisyjnej - patrz cena_emisyjna_grosze przy
+            // kazdej pozycji akcjonariatu nizej (etap 2.6 poprawek).
+            // Emisja zalozycielska rejestruje sie razem ze spolka - zawsze
+            // mirroruje date rejestracji w KRS (krok 1), pole w kroku 3 jest
+            // read-only (etap 2.5 poprawek).
+            data_wpisu_krs: dane.data_utworzenia_spolki || null,
             rodzaj_akcji: emisja.rodzaj_akcji,
             tytul: emisja.tytul,
+            podstawa_prawna: emisja.podstawa_prawna || null,
             obowiazki_wobec_spolki: emisja.obowiazki_wobec_spolki,
           },
         },
@@ -247,6 +344,7 @@ function EkranNowejSpolki() {
               osoba_id: p.osoba_id,
               ilosc: Number(p.ilosc),
               pokryta: p.pokryta || null,
+              cena_emisyjna_grosze: p.cena_emisyjna_grosze ?? null,
               rodzaj_swiadczenia: p.rodzaj_swiadczenia || null,
               czas_swiadczenia: p.czas_swiadczenia || null,
             })),
@@ -261,9 +359,10 @@ function EkranNowejSpolki() {
           dane: {
             zakres: 'wszystkie',
             wymaga_zgody_spolki: zgoda.wymaga_zgody_spolki,
-            zgoda_termin_wskazania_dni: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_termin_wskazania_dni : null,
-            zgoda_cena_opis: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_cena_opis : null,
-            zgoda_termin_zaplaty_dni: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_termin_zaplaty_dni : null,
+            tresc_postanowienia: zgoda.wymaga_zgody_spolki ? zgoda.tresc_postanowienia || null : null,
+            zgoda_termin_wskazania_dni: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_termin_wskazania_dni || null : null,
+            zgoda_cena_opis: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_cena_opis || null : null,
+            zgoda_termin_zaplaty_dni: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_termin_zaplaty_dni || null : null,
             prawo_pierwszenstwa: zgoda.prawo_pierwszenstwa,
             opis: 'Ograniczenie ustanowione umową spółki, odnotowane przy otwarciu rejestru.',
           },
@@ -367,13 +466,6 @@ function EkranNowejSpolki() {
                 <option value="rada_dyrektorow">Rada Dyrektorów</option>
               </select>
             </Pole>
-            <Pole etykieta="Status VAT" podpowiedz="Do oświadczenia w umowie o prowadzenie rejestru (wzór 01).">
-              <select {...pole('platnik_vat')}>
-                <option value="">— nie ustalono —</option>
-                <option value="1">jest płatnikiem VAT</option>
-                <option value="0">nie jest płatnikiem VAT</option>
-              </select>
-            </Pole>
             <div className="siatka-2">
               <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
               <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
@@ -394,13 +486,23 @@ function EkranNowejSpolki() {
               <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
             </div>
             <div className="siatka-2">
-              <Pole etykieta="Sąd rejestrowy"><input type="text" {...pole('sad_rejestrowy')} /></Pole>
+              <Pole
+                etykieta="Sąd rejestrowy"
+                podpowiedz={sadZaproponowany ? 'Zaproponowano na podstawie siedziby spółki — sprawdź przed zapisaniem.' : undefined}
+              >
+                <input type="text" {...pole('sad_rejestrowy')} />
+              </Pole>
               <Pole etykieta="Wydział"><input type="text" {...pole('wydzial')} /></Pole>
             </div>
             <div className="siatka-3">
               <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
               <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
-              <Pole etykieta="Adres do doręczeń elektronicznych"><input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" /></Pole>
+              <Pole
+                etykieta="Adres do doręczeń elektronicznych"
+                podpowiedz={pobranoZKrsBezAde ? 'Brak w KRS — uzupełnij ręcznie. ADE często nie jest ujawniony w KRS, tylko w bazie adresów elektronicznych.' : undefined}
+              >
+                <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
+              </Pole>
             </div>
             <div className="siatka-3">
               <Pole etykieta="Data rejestracji w KRS">
@@ -413,6 +515,15 @@ function EkranNowejSpolki() {
                 <PoleKwoty grosze={dane.kapital_akcyjny_grosze} przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))} />
               </Pole>
             </div>
+            <Pole
+              etykieta="Data zawarcia umowy spółki"
+              podpowiedz="Data aktu notarialnego zawiązania spółki — przy spółce zakładanej w S24 data podpisania w systemie. Różna od daty rejestracji w KRS powyżej. Uzupełnia „datę emisji” pierwszej emisji w kroku 3."
+            >
+              <PoleDaty
+                wartosc={dane.data_zawarcia_umowy_spolki}
+                przyZmianie={(v) => ustawDane((p) => ({ ...p, data_zawarcia_umowy_spolki: v }))}
+              />
+            </Pole>
 
             {skladOrganu.length > 0 && (
               <Pole etykieta="Skład organu reprezentującego" podpowiedz="Wyłącznie informacyjne — rejestr akcjonariuszy nie prowadzi własnej ewidencji osób w organach spółki.">
@@ -443,33 +554,34 @@ function EkranNowejSpolki() {
                 <PoleDaty wartosc={dane.data_otwarcia_rejestru} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_otwarcia_rejestru: v }))} />
               </Pole>
             </div>
-            <Pole etykieta="Kto zawarł umowę" podpowiedz="art. 300(32) § 1(2) KSH">
-              <select {...pole('umowe_zawarl')}>
-                <option value="">— wybierz —</option>
-                <option value="notariusz">notariusz</option>
-                <option value="zastepca">zastępca notarialny</option>
-                <option value="osoba_upowazniona">osoba upoważniona</option>
-              </select>
-            </Pole>
-            {dane.umowe_zawarl === 'zastepca' && (
-              <Pole etykieta="Imię i nazwisko zastępcy" wymagane podpowiedz="Wymagane w zgłoszeniu do KRS.">
-                <input type="text" {...pole('umowe_zawarl_imie_nazwisko')} />
+            <div className="siatka-2">
+              <Pole etykieta="Sposób zawarcia umowy" wymagane>
+                <select {...pole('umowa_sposob_zawarcia')}>
+                  <option value="">— wybierz —</option>
+                  <option value="pisemna">pisemna</option>
+                  <option value="elektroniczna_kwalifikowany">elektroniczna, z podpisem kwalifikowanym</option>
+                </select>
               </Pole>
-            )}
+              <Pole etykieta="Skan / plik umowy (PDF)" podpowiedz="Załącznik do już zawartej umowy.">
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(z) => ustawUmowaZalacznik(z.target.files[0] || null)}
+                />
+                {umowaZalacznik && <div className="podpowiedz">{umowaZalacznik.name}</div>}
+              </Pole>
+            </div>
 
             <div className="rozdzielacz" />
-            <div className="card-h">Reprezentant spółki podpisujący umowę</div>
+            <div className="card-h">Reprezentant spółki, który podpisał umowę</div>
             <Komunikat
               odmiana="info"
-              tresc="Osoba, która w imieniu SPÓŁKI podpisała umowę o prowadzenie rejestru — nie mylić z „kto zawarł umowę” powyżej, bo to druga strona tej samej umowy. Dane trafiają na wzór umowy (§ 5)."
+              tresc="Osoba, która w imieniu SPÓŁKI podpisała już zawartą umowę o prowadzenie rejestru. Wpisz dane w mianowniku, tak jak w dokumencie tożsamości — formy gramatyczne do treści umowy (§ 5) dobiorą się automatycznie."
             />
-            <Pole
-              etykieta="Imię i nazwisko (w bierniku)"
-              podpowiedz='Forma gramatyczna dokładnie taka, jak ma się znaleźć w umowie, np. „Jana Kowalskiego”.'
-            >
-              <input type="text" {...pole('reprezentant_biernik')} placeholder="np. Jana Kowalskiego" />
-            </Pole>
             <div className="siatka-2">
+              <Pole etykieta="Imię i nazwisko" podpowiedz='W mianowniku, np. „Jan Kowalski”.'>
+                <input type="text" {...pole('reprezentant_imie_nazwisko')} placeholder="np. Jan Kowalski" />
+              </Pole>
               <Pole etykieta="Płeć" podpowiedz="Do form gramatycznych w umowie (np. „działającego” / „działającą”).">
                 <select {...pole('reprezentant_plec')}>
                   <option value="">— nie podano —</option>
@@ -477,20 +589,22 @@ function EkranNowejSpolki() {
                   <option value="kobieta">kobieta</option>
                 </select>
               </Pole>
-              <Pole etykieta="Funkcja (w bierniku)">
-                <input type="text" {...pole('reprezentant_funkcja_biernik')} placeholder="np. Prezesa Zarządu" />
+            </div>
+            <div className="siatka-2">
+              <Pole etykieta="Funkcja" podpowiedz='W mianowniku, np. „Prezes Zarządu”.'>
+                <input type="text" {...pole('reprezentant_funkcja')} placeholder="np. Prezes Zarządu" />
+              </Pole>
+              <Pole etykieta="Sposób reprezentacji">
+                <input
+                  type="text"
+                  {...pole('reprezentant_reprezentacja')}
+                  placeholder="np. uprawnionego do samodzielnej reprezentacji"
+                />
               </Pole>
             </div>
-            <Pole etykieta="Sposób reprezentacji">
-              <input
-                type="text"
-                {...pole('reprezentant_reprezentacja')}
-                placeholder="np. uprawnionego do samodzielnej reprezentacji"
-              />
-            </Pole>
             <div className="siatka-2">
-              <Pole etykieta="Rodzice (w dopełniaczu)">
-                <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotra i Anny" />
+              <Pole etykieta="Rodzice" podpowiedz='Imiona w mianowniku, np. „Piotr i Anna”.'>
+                <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
               </Pole>
               <Pole etykieta="Dowód osobisty">
                 <input type="text" {...pole('reprezentant_dowod')} />
@@ -500,10 +614,35 @@ function EkranNowejSpolki() {
               <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
               <Pole etykieta="Adres zamieszkania"><input type="text" {...pole('reprezentant_adres')} /></Pole>
             </div>
+
+            <button className="btn btn-maly" onClick={() => ustawPokazKorekteOdmiany((p) => !p)}>
+              {pokazKorekteOdmiany ? 'Ukryj korektę odmiany' : 'Popraw automatyczną odmianę (nazwiska nietypowe, obcojęzyczne)'}
+            </button>
+            {pokazKorekteOdmiany && (
+              <>
+                <Komunikat
+                  odmiana="uwaga"
+                  tresc="Automat odmienia imię, nazwisko, funkcję i imiona rodziców na podstawie najczęstszych wzorców polskiej odmiany — to pomoc, nie wyrocznia. Dla nazwisk nietypowych lub obcojęzycznych może się mylić. Wypełnione pole niżej NADPISUJE wynik automatu; sprawdź efekt w podglądzie umowy (Konfiguracja → Szablony dokumentów) przed jej wydaniem."
+                />
+                <div className="siatka-2">
+                  <Pole etykieta="Imię i nazwisko w bierniku (korekta)">
+                    <input type="text" {...pole('reprezentant_biernik_recznie')} placeholder="zostaw puste, by użyć automatu" />
+                  </Pole>
+                  <Pole etykieta="Funkcja w bierniku (korekta)">
+                    <input type="text" {...pole('reprezentant_funkcja_biernik_recznie')} placeholder="zostaw puste, by użyć automatu" />
+                  </Pole>
+                </div>
+                <Pole etykieta="Rodzice w dopełniaczu (korekta)">
+                  <input type="text" {...pole('reprezentant_rodzice_recznie')} placeholder="zostaw puste, by użyć automatu" />
+                </Pole>
+              </>
+            )}
+
+            <div className="rozdzielacz" />
             <div className="card-h">Ograniczenia z umowy spółki</div>
             <Komunikat
-              odmiana="uwaga"
-              tresc="Bez tych danych art. 300(34) § 6 KSH jest niewykonalny — podmiot prowadzący rejestr nie mógłby sprawdzić ograniczeń przy kolejnych wpisach."
+              odmiana="info"
+              tresc="Dane o ograniczeniach z umowy spółki (art. 300(34) § 6 KSH) służą przyszłej kontroli przy zbyciu akcji. Uzupełnij, co wiesz teraz — resztę można dopisać później, przed pierwszym zbyciem."
             />
 
             <label className="chk">
@@ -519,48 +658,62 @@ function EkranNowejSpolki() {
             </label>
             {zgoda.wymaga_zgody_spolki && (
               <>
-                <div className="siatka-3">
-                  <Pole etykieta="Termin wskazania innego nabywcy (dni)" podpowiedz="Nie dłuższy niż miesiąc (art. 300(39) § 3 KSH).">
-                    <PoleLiczbowe sufiks="dni" max={31} wartosc={zgoda.zgoda_termin_wskazania_dni} przyZmianie={(v) => ustawZgode((p) => ({ ...p, zgoda_termin_wskazania_dni: v }))} />
-                  </Pole>
-                  <Pole etykieta="Termin zapłaty (dni)">
-                    <PoleLiczbowe sufiks="dni" wartosc={zgoda.zgoda_termin_zaplaty_dni} przyZmianie={(v) => ustawZgode((p) => ({ ...p, zgoda_termin_zaplaty_dni: v }))} />
-                  </Pole>
-                  <Pole etykieta="Sposób ustalenia ceny">
-                    <input type="text" value={zgoda.zgoda_cena_opis} onChange={(z) => ustawZgode((p) => ({ ...p, zgoda_cena_opis: z.target.value }))} />
-                  </Pole>
-                </div>
+                <Pole
+                  etykieta="Treść postanowienia umowy spółki"
+                  podpowiedz="Dosłowny cytat klauzuli — przydatny przy zbyciu akcji, nawet zanim szczegóły niżej zostaną ustalone."
+                >
+                  <textarea
+                    value={zgoda.tresc_postanowienia}
+                    onChange={(z) => ustawZgode((p) => ({ ...p, tresc_postanowienia: z.target.value }))}
+                  />
+                </Pole>
+                <Sekcja tytul="Szczegóły postanowienia (termin, cena, zapłata) — opcjonalne teraz">
+                  <div className="siatka-3">
+                    <Pole etykieta="Termin wskazania innego nabywcy (dni)" podpowiedz="Nie dłuższy niż miesiąc (art. 300(39) § 3 KSH).">
+                      <PoleLiczbowe sufiks="dni" max={31} wartosc={zgoda.zgoda_termin_wskazania_dni} przyZmianie={(v) => ustawZgode((p) => ({ ...p, zgoda_termin_wskazania_dni: v }))} />
+                    </Pole>
+                    <Pole etykieta="Termin zapłaty (dni)">
+                      <PoleLiczbowe sufiks="dni" wartosc={zgoda.zgoda_termin_zaplaty_dni} przyZmianie={(v) => ustawZgode((p) => ({ ...p, zgoda_termin_zaplaty_dni: v }))} />
+                    </Pole>
+                    <Pole etykieta="Sposób ustalenia ceny">
+                      <input type="text" value={zgoda.zgoda_cena_opis} onChange={(z) => ustawZgode((p) => ({ ...p, zgoda_cena_opis: z.target.value }))} />
+                    </Pole>
+                  </div>
+                </Sekcja>
                 {zgodaNiekompletna && (
                   <Komunikat
-                    odmiana="uwaga"
-                    tresc="Bez kompletu tych trzech pól postanowienie o zgodzie spółki jest bezskuteczne — akcja może być zbyta bez ograniczenia. Uzupełnij wszystkie albo odznacz zgodę spółki."
+                    odmiana="info"
+                    tresc="Postanowienie jest na razie bezskuteczne bez kompletu tych trzech pól (art. 300(39) KSH) — można je uzupełnić później, przed pierwszym wpisem zbycia akcji tej spółki."
                   />
                 )}
               </>
             )}
 
-            <label className="chk">
-              <input
-                type="checkbox"
-                checked={zgoda.prawo_pierwszenstwa}
-                onChange={(z) => ustawZgode((p) => ({ ...p, prawo_pierwszenstwa: z.target.checked }))}
-              />
-              <span className="chk-tresc">
-                Pozostałym akcjonariuszom przysługuje prawo pierwszeństwa
-                <div className="podstawa-prawna">art. 300(42) KSH</div>
-              </span>
-            </label>
+            <Sekcja tytul="Postanowienia umowy spółki" domyslnieOtwarta>
+              <label className="chk">
+                <input
+                  type="checkbox"
+                  checked={zgoda.prawo_pierwszenstwa}
+                  onChange={(z) => ustawZgode((p) => ({ ...p, prawo_pierwszenstwa: z.target.checked }))}
+                />
+                <span className="chk-tresc">
+                  Pozostałym akcjonariuszom przysługuje prawo pierwszeństwa
+                  <div className="podstawa-prawna">art. 300(42) KSH</div>
+                </span>
+              </label>
 
-            <Pole etykieta="Zakaz prawa głosu zastawnika lub użytkownika" podpowiedz="art. 300(23) § 2 KSH">
-              <select {...pole('zakaz_glosu_zastawnika_umowa')}>
-                <option value="">umowa spółki nie ogranicza</option>
-                <option value="zakazane">umowa spółki zakazuje wprost</option>
-                <option value="wymaga_zgody_organu">umowa spółki uzależnia od zgody organu</option>
-              </select>
-            </Pole>
-            <Pole etykieta="Ograniczenie podziału akcji między spadkobierców" podpowiedz="art. 300(41) § 3 KSH — treść klauzuli, zostaw puste jeśli umowa spółki nie ogranicza.">
-              <textarea {...pole('ograniczenie_dziedziczenia_umowa')} />
-            </Pole>
+              <Pole etykieta="Zakaz prawa głosu zastawnika lub użytkownika" podpowiedz="art. 300(23) § 2 KSH">
+                <select {...pole('zakaz_glosu_zastawnika_umowa')}>
+                  <option value="">umowa spółki nie ogranicza</option>
+                  <option value="zakazane">umowa spółki zakazuje wprost</option>
+                  <option value="wymaga_zgody_organu">umowa spółki uzależnia od zgody organu</option>
+                </select>
+              </Pole>
+              <Pole etykieta="Ograniczenie podziału akcji między spadkobierców" podpowiedz="art. 300(41) § 3 KSH — treść klauzuli, zostaw puste jeśli umowa spółki nie ogranicza.">
+                <textarea {...pole('ograniczenie_dziedziczenia_umowa')} />
+              </Pole>
+            </Sekcja>
+
             <Pole etykieta="Dodatkowe informacje ujawniane w rejestrze" podpowiedz="art. 300(33) § 2 KSH">
               <textarea {...pole('dodatkowe_informacje_umowa_spolki')} />
             </Pole>
@@ -570,28 +723,30 @@ function EkranNowejSpolki() {
         {krok === 2 && (
           <>
             <div className="card-h">Pierwsza emisja</div>
-            <div className="siatka-2">
+            <div className="siatka-3">
               <Pole etykieta="Oznaczenie serii" wymagane>
                 <input type="text" value={emisja.seria} onChange={(z) => ustawEmisje((p) => ({ ...p, seria: z.target.value }))} placeholder="A" />
               </Pole>
               <Pole etykieta="Liczba akcji" wymagane>
                 <PoleLiczbowe sufiks="akcji" wartosc={emisja.ilosc} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, ilosc: v }))} />
               </Pole>
-            </div>
-            <div className="siatka-2">
               <Pole etykieta="Numer pierwszej akcji" podpowiedz="Domyślnie 1.">
                 <PoleLiczbowe wartosc={emisja.nr_pierwszy} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, nr_pierwszy: v || 1 }))} />
               </Pole>
-              <Pole etykieta="Cena emisyjna jednej akcji">
-                <PoleKwoty grosze={emisja.cena_emisyjna_grosze} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, cena_emisyjna_grosze: v }))} />
-              </Pole>
             </div>
             <div className="siatka-3">
-              <Pole etykieta="Data emisji" wymagane>
+              <Pole
+                etykieta="Data emisji"
+                wymagane
+                podpowiedz="Przy emisji założycielskiej to data zawarcia umowy spółki (krok 1) — uzupełniona automatycznie, można nadpisać."
+              >
                 <PoleDaty wartosc={emisja.data_emisji} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, data_emisji: v }))} />
               </Pole>
-              <Pole etykieta="Data wpisu emisji do KRS" podpowiedz="Puste = akcje formalnie nie istnieją do czasu uzupełnienia (art. 300(30) § 2 KSH).">
-                <PoleDaty wartosc={emisja.data_wpisu_krs} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, data_wpisu_krs: v }))} />
+              <Pole
+                etykieta="Data wpisu emisji do KRS"
+                podpowiedz="Emisja założycielska rejestruje się razem ze spółką — to zawsze data rejestracji w KRS z kroku 1. Bez tej daty nie można dokonać wpisu akcji do rejestru akcjonariuszy (art. 300(30) § 2 KSH)."
+              >
+                <PoleDaty wartosc={dane.data_utworzenia_spolki} wylaczone />
               </Pole>
               <Pole etykieta="Rodzaj akcji" podpowiedz="art. 300(33) § 1 pkt 4 KSH">
                 <select value={emisja.rodzaj_akcji} onChange={(z) => ustawEmisje((p) => ({ ...p, rodzaj_akcji: z.target.value }))}>
@@ -603,6 +758,9 @@ function EkranNowejSpolki() {
               </Pole>
             </div>
             <Pole etykieta="Tytuł emisji"><input type="text" value={emisja.tytul} onChange={(z) => ustawEmisje((p) => ({ ...p, tytul: z.target.value }))} placeholder="Emisja założycielska" /></Pole>
+            <Pole etykieta="Podstawa emisji" podpowiedz='Np. „umowa spółki z dnia 04.07.2024” — uzupełniona automatycznie, można nadpisać.'>
+              <input type="text" value={emisja.podstawa_prawna} onChange={(z) => ustawEmisje((p) => ({ ...p, podstawa_prawna: z.target.value }))} />
+            </Pole>
             <Pole etykieta="Obowiązki wobec spółki związane z akcją" podpowiedz="art. 300(33) § 1 pkt 11 KSH — opcjonalne.">
               <textarea value={emisja.obowiazki_wobec_spolki} onChange={(z) => ustawEmisje((p) => ({ ...p, obowiazki_wobec_spolki: z.target.value }))} />
             </Pole>
@@ -629,6 +787,17 @@ function EkranNowejSpolki() {
                 (!przekroczonyBilans && sumaObjeta < ileAkcji && ileAkcji > 0 ? ' Reszta zostanie zapisana jako nieobjęta.' : '')
               }
             />
+            {pozycjeWyceniane.length > 0 && sumaWkladowGrosze > 0 && (
+              <Komunikat
+                odmiana={kapitalNiezgodny ? 'uwaga' : 'info'}
+                tresc={
+                  `Suma wkładów pieniężnych i aportowych: ${fmt.zlote(sumaWkladowGrosze)}` +
+                  (dane.kapital_akcyjny_grosze != null ? ` — kapitał akcyjny z KRS: ${fmt.zlote(dane.kapital_akcyjny_grosze)}.` : '.') +
+                  (kapitalNiezgodny ? ' Kwoty się różnią — sprawdź przed otwarciem rejestru.' : '') +
+                  (!wszystkieWycenione ? ' Nie wszystkie pozycje mają wpisaną cenę emisyjną — suma jest niepełna.' : '')
+                }
+              />
+            )}
           </>
         )}
 

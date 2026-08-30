@@ -102,6 +102,42 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'POST /informacja',
     'POST /login',
     'POST /logout',
+    // Etap 3A: publiczny formularz zgloszenia wstepnego, PRZED bramka
+    // `wymagajKonta` (linia z komentarzem w portal.js) - swiadomie bez
+    // identyfikatora spolki, bo w tym momencie zadna spolka jeszcze nie
+    // istnieje w systemie. Nie niesie `spolka_id` ani `:spolkaId`, wiec
+    // D3 (izolacja miedzy klientami) go nie dotyczy.
+    'POST /zgloszenia',
+    // Etap 3B: aktywacja konta zaproszonego przez kancelarie - rowniez
+    // PRZED bramka `wymagajKonta` (konto jeszcze nieaktywne w tym momencie,
+    // wiec sesji portalowej po prostu jeszcze nie ma). Parametr sciezki to
+    // `:token`, nie `:spolkaId` - D3 go nie dotyczy z tego samego powodu.
+    'GET /aktywacja/:token',
+    'POST /aktywacja/:token',
+    // Etap 3B.1: potwierdzenie klauzuli RODO - dziala na WLASNYM koncie
+    // (zad.konto.id z sesji), zadnego cudzego identyfikatora nie przyjmuje.
+    'POST /rodo',
+    // Etap 3C: wniosek o prowadzenie rejestru - dziala na WLASNYM wniosku
+    // (znaleziony przez konto_id z sesji), zaden z tych URL-i nie przyjmuje
+    // cudzego identyfikatora spolki - spolka w tym momencie jeszcze nie
+    // istnieje w systemie.
+    'GET /wniosek',
+    'PUT /wniosek',
+    'GET /wniosek/z-krs/:numer',
+    // Etap 3D: akcjonariusze proponowani we wniosku - dostep przez konto_id
+    // z sesji (posrednio, jak `wczytajSpraweDlaKonta`), zaden identyfikator
+    // spolki nie wystepuje - spolka jeszcze nie istnieje.
+    'GET /wniosek/akcjonariusze',
+    'POST /wniosek/akcjonariusze',
+    'PUT /wniosek/akcjonariusze/:id',
+    'DELETE /wniosek/akcjonariusze/:id',
+    // Etap 3E: zlozenie wniosku, projekt umowy, odeslanie podpisanej kopii -
+    // rowniez WYLACZNIE po konto_id z sesji, zaden URL nie przyjmuje cudzego
+    // identyfikatora.
+    'POST /wniosek/zloz',
+    'GET /wniosek/umowa-projekt',
+    'POST /wniosek/umowa-podpisana',
+    'GET /wniosek/umowa-podpisana',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
   ].sort();

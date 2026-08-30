@@ -51,6 +51,7 @@ const API = {
   post: (s, c) => zapytaj('POST', s, c === undefined ? {} : c),
   put: (s, c) => zapytaj('PUT', s, c),
   patch: (s, c) => zapytaj('PATCH', s, c === undefined ? {} : c),
+  delete: (s) => zapytaj('DELETE', s),
 };
 
 /* ─────────────────────────────────────────────────────

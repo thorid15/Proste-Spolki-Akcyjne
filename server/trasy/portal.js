@@ -39,8 +39,12 @@ const dokumentyTresc = require('../logika/dokumenty-tresc');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
-const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany } = require('../pomocnicze/odpowiedzi');
+const wzoryDysk = require('../logika/wzory-dysk');
+const docx = require('../logika/docx');
+const kontekstPisma = require('../logika/kontekst-pisma');
+const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
+const { pobierzZKrs } = require('./krs');
 
 const router = express.Router();
 
@@ -55,6 +59,8 @@ function widokKonta(k) {
     spolka_id: k.spolka_id,
     osoba_id: k.osoba_id,
     ostatnie_logowanie: k.ostatnie_logowanie,
+    // Etap 3B.1 - bramka przed formularzem wniosku (etap 3C), patrz POST /rodo.
+    rodo_zaakceptowano: k.rodo_zaakceptowano,
   };
 }
 
@@ -118,6 +124,96 @@ router.get(
   })
 );
 
+// ─────────────────────────────────────────────────────────────
+// Zgloszenie wstepne (etap 3A) - PUBLICZNE, bez zadnej sesji. Pierwszy
+// kontakt nieznanego dotad klienta: wylacznie dane kontaktowe, zadnego
+// PESEL ani adresu. Kancelaria decyduje, czy wyslac zaproszenie (etap 3B).
+// ─────────────────────────────────────────────────────────────
+
+const WZORZEC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+router.post(
+  '/zgloszenia',
+  asy((zad, odp) => {
+    const cialo = zad.body || {};
+    const email = znormalizujEmail(cialo.email);
+    if (!email || !WZORZEC_EMAIL.test(email)) {
+      throw bledneZadanie('Podaj prawidłowy adres e-mail.');
+    }
+
+    // Miekki, ogolny limit zapytan na adres IP - formularz jest publiczny
+    // i niezalogowany, wiec to jedyna dostepna ochrona przed zalewem
+    // (limiter.js liczy tu KAZDA probe, nie tylko nieudane logowanie).
+    limiter.sprawdz(zad.ip, 'zgloszenie');
+    limiter.zanotujNieudana(zad.ip, 'zgloszenie');
+
+    const dane = {
+      email,
+      telefon: String(cialo.telefon || '').trim() || null,
+      nazwa_spolki: String(cialo.nazwa_spolki || '').trim() || null,
+      opis: String(cialo.opis || '').trim() || null,
+      status: 'nowe',
+      utworzono: czas.terazIso(),
+    };
+
+    const kolumny = Object.keys(dane);
+    db()
+      .prepare(`INSERT INTO psa_zgloszenia (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
+      .run(dane);
+
+    odp.status(201).json({ ok: true });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Aktywacja konta (etap 3B) - PUBLICZNE, bez sesji. Kancelaria zaklada
+// konto (rola 'wnioskodawca', aktywne=0) po zaakceptowaniu zgloszenia
+// (`server/trasy/zgloszenia.js: POST /:id/zapros`) i wysyla token mailem -
+// klient go tu wymienia na haslo i od razu ma otwarta sesje portalowa.
+// ─────────────────────────────────────────────────────────────
+
+function znajdzKontoDoAktywacji(token) {
+  const konto = db().prepare('SELECT * FROM psa_konta WHERE token_aktywacji = ?').get(String(token || ''));
+  if (!konto || konto.aktywne || !konto.token_wygasa || new Date(konto.token_wygasa) < new Date()) {
+    return null;
+  }
+  return konto;
+}
+
+router.get(
+  '/aktywacja/:token',
+  asy((zad, odp) => {
+    const konto = znajdzKontoDoAktywacji(zad.params.token);
+    if (!konto) throw nieZnaleziono('Link aktywacyjny jest nieprawidłowy albo wygasł.');
+    odp.json({ email: konto.email });
+  })
+);
+
+router.post(
+  '/aktywacja/:token',
+  asy(async (zad, odp) => {
+    const konto = znajdzKontoDoAktywacji(zad.params.token);
+    if (!konto) throw nieZnaleziono('Link aktywacyjny jest nieprawidłowy albo wygasł.');
+
+    const haslo = String((zad.body || {}).haslo || '');
+    const ocena = hasla.ocenSile(haslo);
+    if (!ocena.ok) throw bledneZadanie(ocena.powod);
+
+    const hash = await hasla.hashuj(haslo);
+    db()
+      .prepare(
+        `UPDATE psa_konta
+            SET hash_hasla = ?, aktywne = 1, token_aktywacji = NULL, token_wygasa = NULL,
+                ostatnie_logowanie = ?
+          WHERE id = ?`
+      )
+      .run(hash, czas.terazIso(), konto.id);
+
+    autoryzacja.zalogujKonto(zad, odp, konto.id);
+    odp.json({ konto: widokKonta({ ...konto, aktywne: 1 }) });
+  })
+);
+
 // Od tego miejsca kazda trasa wymaga zalogowanego konta portalowego.
 router.use(autoryzacja.wymagajKonta);
 
@@ -162,6 +258,437 @@ function wymagajDostepuDoSpolkiWCiele(zad, odp, dalej) {
   dalej();
 }
 router.use(wymagajDostepuDoSpolkiWCiele);
+
+// ─────────────────────────────────────────────────────────────
+// Klauzula informacyjna RODO (etap 3B.1) - potwierdzenie zapoznania sie,
+// jednorazowe na konto. Bramkuje formularz wniosku (etap 3C) po stronie
+// frontu; ten endpoint tylko zapisuje znacznik czasu.
+// ─────────────────────────────────────────────────────────────
+
+router.post(
+  '/rodo',
+  asy((zad, odp) => {
+    db()
+      .prepare('UPDATE psa_konta SET rodo_zaakceptowano = ? WHERE id = ?')
+      .run(czas.terazIso(), zad.konto.id);
+    odp.json({ konto: widokKonta({ ...zad.konto, rodo_zaakceptowano: czas.terazIso() }) });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Wniosek o prowadzenie rejestru (etap 3C) - dane spolki i reprezentanta,
+// zbierane PRZED istnieniem spolki w systemie (psa_spolki powstaje dopiero,
+// gdy kancelaria przyjmie wniosek - etap 3F). Wylacznie rola 'wnioskodawca' -
+// inne role maja juz prawdziwa spolke/akcje, nie wniosek do wypelnienia.
+// ─────────────────────────────────────────────────────────────
+
+const POLA_WNIOSKU = [
+  'krs', 'nip', 'regon', 'nazwa', 'forma_prawna', 'kraj', 'kod_pocztowy', 'miejscowosc',
+  'siedziba_miejscownik', 'ulica', 'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial',
+  'telefon', 'email', 'www', 'organ_rodzaj', 'data_utworzenia_spolki', 'data_ostatniego_wpisu_krs',
+  'adres_edorecze', 'kapital_akcyjny_grosze', 'data_zawarcia_umowy_spolki',
+  'reprezentant_imie_nazwisko', 'reprezentant_plec', 'reprezentant_funkcja', 'reprezentant_reprezentacja',
+  'reprezentant_rodzice', 'reprezentant_dowod', 'reprezentant_pesel', 'reprezentant_adres',
+  'reprezentant_biernik_recznie', 'reprezentant_funkcja_biernik_recznie', 'reprezentant_rodzice_recznie',
+];
+
+function wyczyscWniosek(cialo) {
+  const wynik = {};
+  for (const pole of POLA_WNIOSKU) {
+    if (cialo[pole] === undefined) continue;
+    const v = cialo[pole];
+    wynik[pole] = v === '' || v === null ? null : String(v).trim();
+  }
+  return wynik;
+}
+
+/**
+ * Walidacja WNIOSKU jest celowo luzniejsza niz `spolki.js: sprawdzDaneSpolki`
+ * (regula domenowa "miekkie ostrzezenia przy wprowadzaniu, twarde blokady
+ * dopiero przy operacji rejestrowej") - klient zapisuje czesciowy postep
+ * wielokrotnie w trakcie wypelniania, wiec sprawdzamy wylacznie FORMAT juz
+ * podanych wartosci, nigdy kompletnosc. Kompletnosc sprawdza sie dopiero
+ * przy zlozeniu wniosku (etap 3D/3E).
+ */
+function sprawdzDaneWniosku(dane) {
+  if (dane.krs && !/^\d{10}$/.test(dane.krs)) {
+    throw bledneZadanie('Numer KRS składa się z 10 cyfr.');
+  }
+  if (dane.nip && !/^\d{10}$/.test(String(dane.nip).replace(/[\s-]/g, ''))) {
+    throw bledneZadanie('NIP składa się z 10 cyfr.');
+  }
+  for (const pole of ['data_utworzenia_spolki', 'data_ostatniego_wpisu_krs', 'data_zawarcia_umowy_spolki']) {
+    if (dane[pole] && !czas.poprawnaData(dane[pole])) {
+      throw bledneZadanie(`Pole „${pole}” musi być datą w formacie RRRR-MM-DD.`);
+    }
+  }
+  if (dane.reprezentant_plec && !['mezczyzna', 'kobieta'].includes(dane.reprezentant_plec)) {
+    throw bledneZadanie('Płeć reprezentanta musi być „mężczyzna” albo „kobieta”.');
+  }
+}
+
+function wymagajWnioskodawcy(zad, odp, dalej) {
+  if (zad.konto.rola !== 'wnioskodawca') {
+    return dalej(brakUprawnien('Ta operacja jest dostępna wyłącznie dla wniosków o prowadzenie rejestru.'));
+  }
+  dalej();
+}
+
+/** Wczytuje wniosek biezacego konta, zakladajac pusty przy pierwszym uzyciu. */
+function wczytajLubZalozWniosek(kontoId) {
+  let wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(kontoId);
+  if (!wniosek) {
+    const wynik = db()
+      .prepare('INSERT INTO psa_wnioski (konto_id, utworzono) VALUES (?, ?)')
+      .run(kontoId, czas.terazIso());
+    wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wynik.lastInsertRowid);
+  }
+  return wniosek;
+}
+
+router.get(
+  '/wniosek',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    odp.json({ wniosek: wczytajLubZalozWniosek(zad.konto.id) });
+  })
+);
+
+router.put(
+  '/wniosek',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const biezacy = wczytajLubZalozWniosek(zad.konto.id);
+    if (!['w_przygotowaniu', 'do_uzupelnienia'].includes(biezacy.status)) {
+      throw bledneZadanie(`Wniosek ma status „${biezacy.status}” — nie można go już edytować.`);
+    }
+    const dane = wyczyscWniosek(zad.body || {});
+    sprawdzDaneWniosku(dane);
+    if (Object.keys(dane).length > 0) {
+      db()
+        .prepare(
+          `UPDATE psa_wnioski
+              SET ${Object.keys(dane).map((k) => `${k} = @${k}`).join(', ')}, zaktualizowano = @zaktualizowano
+            WHERE id = @id`
+        )
+        .run({ ...dane, zaktualizowano: czas.terazIso(), id: biezacy.id });
+    }
+    odp.json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(biezacy.id) });
+  })
+);
+
+/** Pobranie danych z otwartego API KRS - lustro server/trasy/spolki.js: GET /z-krs/:numer. */
+router.get(
+  '/wniosek/z-krs/:numer',
+  wymagajWnioskodawcy,
+  asy(async (zad, odp) => {
+    const numer = String(zad.params.numer || '').replace(/\D/g, '');
+    if (numer.length !== 10) {
+      return odp.json({
+        znaleziono: false,
+        komunikat: 'Numer KRS składa się z 10 cyfr. Uzupełnij dane ręcznie.',
+      });
+    }
+    const wynik = await pobierzZKrs(numer);
+    odp.json(wynik);
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Akcjonariusze proponowani we wniosku (etap 3D) - dane do PRZYSZLEJ
+// kartoteki, nie sama kartoteka (patrz komentarz przy migracji 25).
+// ─────────────────────────────────────────────────────────────
+
+const POLA_AKCJONARIUSZA_WNIOSKU = [
+  'typ', 'nazwisko', 'imie', 'nazwa', 'pesel', 'data_urodzenia', 'plec',
+  'nip', 'regon', 'numer_w_rejestrze', 'nazwa_rejestru',
+  'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu', 'nr_lokalu',
+  'adres_doreczen', 'adres_edoreczen', 'email', 'telefon', 'zgoda_email',
+];
+
+function wyczyscAkcjonariuszaWniosku(cialo) {
+  const wynik = {};
+  for (const pole of POLA_AKCJONARIUSZA_WNIOSKU) {
+    if (cialo[pole] === undefined) continue;
+    if (pole === 'zgoda_email') {
+      wynik[pole] = cialo[pole] ? 1 : 0;
+      continue;
+    }
+    const v = cialo[pole];
+    wynik[pole] = v === '' || v === null ? null : String(v).trim();
+  }
+  return wynik;
+}
+
+function sprawdzAkcjonariuszaWniosku(dane) {
+  if (dane.typ && !['fizyczna', 'prawna'].includes(dane.typ)) {
+    throw bledneZadanie('Typ musi być „fizyczna” albo „prawna”.');
+  }
+  if (dane.pesel && !/^\d{11}$/.test(dane.pesel)) {
+    throw bledneZadanie('PESEL składa się z 11 cyfr.');
+  }
+  if (dane.data_urodzenia && !czas.poprawnaData(dane.data_urodzenia)) {
+    throw bledneZadanie('Data urodzenia musi mieć format RRRR-MM-DD.');
+  }
+  if (dane.plec && !['mezczyzna', 'kobieta'].includes(dane.plec)) {
+    throw bledneZadanie('Płeć musi być „mężczyzna” albo „kobieta”.');
+  }
+}
+
+/**
+ * Wymaga ISTNIEJACEGO, edytowalnego wniosku - dla mutacji akcjonariuszy
+ * (POST/PUT/DELETE). W odroznieniu od `wczytajLubZalozWniosek` (uzywanego
+ * przez GET/PUT samego wniosku) NIE zaklada wniosku - musi juz istniec,
+ * bo tylko wtedy ma sens dopisywac do niego akcjonariuszy.
+ */
+function wymagajWniosku(zad, odp, dalej) {
+  const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+  if (!wniosek) return dalej(nieZnaleziono('Najpierw otwórz formularz wniosku (krok „Spółka i umowa”), żeby go założyć.'));
+  if (!['w_przygotowaniu', 'do_uzupelnienia'].includes(wniosek.status)) {
+    return dalej(bledneZadanie(`Wniosek ma już status „${wniosek.status}” — nie można go edytować.`));
+  }
+  zad.psaWniosek = wniosek;
+  dalej();
+}
+
+function wczytajAkcjonariuszaWniosku(wniosekId, id) {
+  const wiersz = db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(id);
+  if (!wiersz || Number(wiersz.wniosek_id) !== Number(wniosekId)) return null;
+  return wiersz;
+}
+
+router.get(
+  '/wniosek/akcjonariusze',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek) return odp.json({ akcjonariusze: [] });
+    const wiersze = db()
+      .prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ? ORDER BY kolejnosc, id')
+      .all(wniosek.id);
+    odp.json({ akcjonariusze: wiersze });
+  })
+);
+
+router.post(
+  '/wniosek/akcjonariusze',
+  wymagajWnioskodawcy,
+  wymagajWniosku,
+  asy((zad, odp) => {
+    const dane = wyczyscAkcjonariuszaWniosku(zad.body || {});
+    sprawdzAkcjonariuszaWniosku(dane);
+    const maks = db()
+      .prepare('SELECT COALESCE(MAX(kolejnosc), -1) AS m FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ?')
+      .get(zad.psaWniosek.id).m;
+    const kolumny = Object.keys(dane);
+    const wynik = db()
+      .prepare(
+        `INSERT INTO psa_wnioski_akcjonariusze (wniosek_id, kolejnosc${kolumny.length ? ', ' + kolumny.join(', ') : ''}, utworzono)
+         VALUES (@wniosek_id, @kolejnosc${kolumny.length ? ', ' + kolumny.map((k) => `@${k}`).join(', ') : ''}, @utworzono)`
+      )
+      .run({ ...dane, wniosek_id: zad.psaWniosek.id, kolejnosc: maks + 1, utworzono: czas.terazIso() });
+    odp.status(201).json({
+      akcjonariusz: db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(wynik.lastInsertRowid),
+    });
+  })
+);
+
+router.put(
+  '/wniosek/akcjonariusze/:id',
+  wymagajWnioskodawcy,
+  wymagajWniosku,
+  asy((zad, odp) => {
+    const istniejacy = wczytajAkcjonariuszaWniosku(zad.psaWniosek.id, Number(zad.params.id));
+    if (!istniejacy) throw nieZnaleziono('Nie odnaleziono pozycji akcjonariusza.');
+    const dane = wyczyscAkcjonariuszaWniosku(zad.body || {});
+    sprawdzAkcjonariuszaWniosku(dane);
+    if (Object.keys(dane).length > 0) {
+      db()
+        .prepare(
+          `UPDATE psa_wnioski_akcjonariusze
+              SET ${Object.keys(dane).map((k) => `${k} = @${k}`).join(', ')}, zaktualizowano = @zaktualizowano
+            WHERE id = @id`
+        )
+        .run({ ...dane, zaktualizowano: czas.terazIso(), id: istniejacy.id });
+    }
+    odp.json({ akcjonariusz: db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(istniejacy.id) });
+  })
+);
+
+router.delete(
+  '/wniosek/akcjonariusze/:id',
+  wymagajWnioskodawcy,
+  wymagajWniosku,
+  asy((zad, odp) => {
+    const istniejacy = wczytajAkcjonariuszaWniosku(zad.psaWniosek.id, Number(zad.params.id));
+    if (!istniejacy) throw nieZnaleziono('Nie odnaleziono pozycji akcjonariusza.');
+    db().prepare('DELETE FROM psa_wnioski_akcjonariusze WHERE id = ?').run(istniejacy.id);
+    odp.json({ ok: true });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Zlozenie wniosku, projekt umowy, odeslanie podpisanej kopii (etap 3E)
+// ─────────────────────────────────────────────────────────────
+
+function katalogWnioskuDokumenty(wniosekId) {
+  return path.join(konfiguracja.KATALOG_DOKUMENTOW, 'wnioski', `wniosek_${wniosekId}`);
+}
+
+/**
+ * Zlozenie wniosku: klient nie ma tu nic wiecej do zrobienia poza uzupelnieniem
+ * danych, wiec jedno klikniecie i zamyka edycje (status -> zlozony), i - zgodnie
+ * z opisem przebiegu w promptcie ("system generuje projekt umowy", bez osobnego
+ * kroku) - odrazu generuje projekt umowy (status -> umowa_wygenerowana).
+ * Kompletnosc danych NIE jest tu twardo blokowana (regula ogolna nr 3 -
+ * miekkie ostrzezenia przy wprowadzaniu, twarde blokady dopiero przy
+ * faktycznej operacji rejestrowej, a otwarcie rejestru to etap 3F, nie ten) -
+ * poza dwoma minimalnymi warunkami SENSOWNOSCI zlozenia (nazwa i choc jeden
+ * akcjonariusz), ktore sa organizacyjne, nie merytoryczno-prawne.
+ */
+router.post(
+  '/wniosek/zloz',
+  wymagajWnioskodawcy,
+  wymagajWniosku,
+  asy((zad, odp) => {
+    const wniosek = zad.psaWniosek;
+    if (!wniosek.nazwa) throw bledneZadanie('Uzupełnij nazwę spółki (krok „Spółka i umowa”), zanim złożysz wniosek.');
+    const liczbaAkcjonariuszy = db()
+      .prepare('SELECT COUNT(*) AS ile FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ?')
+      .get(wniosek.id).ile;
+    if (liczbaAkcjonariuszy === 0) {
+      throw bledneZadanie('Dodaj przynajmniej jednego akcjonariusza (krok „Akcjonariusze”), zanim złożysz wniosek.');
+    }
+
+    const teraz = czas.terazIso();
+    db().prepare('UPDATE psa_wnioski SET status = ?, zaktualizowano = ? WHERE id = ?').run('zlozony', teraz, wniosek.id);
+
+    const dane = kontekstPisma.umowaOProwadzenieRejestru({ spolka: wniosek, dzis: czas.dzisIso() });
+    const wynik = wzoryDysk.wypelnij('01', dane);
+    const katalog = katalogWnioskuDokumenty(wniosek.id);
+    fs.mkdirSync(katalog, { recursive: true });
+    const nazwaZapisu = `${crypto.randomUUID()}-projekt-umowy.docx`;
+    fs.writeFileSync(path.join(katalog, nazwaZapisu), wynik.plik);
+    const sciezkaWzgledna = path.relative(konfiguracja.KATALOG_DOKUMENTOW, path.join(katalog, nazwaZapisu));
+
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET status = 'umowa_wygenerowana', umowa_projekt_sciezka = ?,
+                umowa_projekt_wygenerowano = ?, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(sciezkaWzgledna, teraz, czas.terazIso(), wniosek.id);
+
+    odp.json({
+      wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
+      brakujace: wynik.brakujace,
+      ostrzezenia: wynik.ostrzezenia,
+    });
+  })
+);
+
+router.get(
+  '/wniosek/umowa-projekt',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek || !wniosek.umowa_projekt_sciezka) throw nieZnaleziono('Projekt umowy nie został jeszcze wygenerowany.');
+
+    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.umowa_projekt_sciezka);
+    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+
+    odp.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    odp.setHeader('Content-Disposition', 'attachment; filename="projekt-umowy-o-prowadzenie-rejestru.docx"');
+    fs.createReadStream(pelnaSciezka).pipe(odp);
+  })
+);
+
+const ROZSZERZENIA_UMOWY_PODPISANEJ_DOZWOLONE = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
+const LIMIT_ROZMIARU_UMOWY_PODPISANEJ_BAJTY = 20 * 1024 * 1024;
+
+const uploadUmowyPodpisanej = multer({
+  storage: multer.diskStorage({
+    destination(zad, plik, wywolaj) {
+      const katalog = katalogWnioskuDokumenty(zad.psaWniosek.id);
+      fs.mkdirSync(katalog, { recursive: true });
+      wywolaj(null, katalog);
+    },
+    filename(zad, plik, wywolaj) {
+      const bezpiecznaNazwa = path.basename(plik.originalname).replace(/[^\w.\- ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/gu, '_');
+      wywolaj(null, `${crypto.randomUUID()}-${bezpiecznaNazwa}`);
+    },
+  }),
+  limits: { fileSize: LIMIT_ROZMIARU_UMOWY_PODPISANEJ_BAJTY, files: 1 },
+  fileFilter(zad, plik, wywolaj) {
+    const rozszerzenie = path.extname(plik.originalname).toLowerCase();
+    if (!ROZSZERZENIA_UMOWY_PODPISANEJ_DOZWOLONE.has(rozszerzenie)) {
+      return wywolaj(
+        new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Dozwolone: PDF albo skan/zdjęcie (JPG, PNG).`)
+      );
+    }
+    wywolaj(null, true);
+  },
+});
+
+/** Wstrzykuje wniosek do `zad` PRZED multerem - potrzebny do wyznaczenia katalogu docelowego. */
+function zaladujWlasnyWniosekDoUploadu(zad, odp, dalej) {
+  const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+  if (!wniosek) return dalej(nieZnaleziono('Najpierw złóż wniosek.'));
+  if (wniosek.status !== 'umowa_wygenerowana') {
+    return dalej(bledneZadanie(`Wniosek ma status „${wniosek.status}” — w tym momencie nie oczekujemy podpisanej umowy.`));
+  }
+  zad.psaWniosek = wniosek;
+  dalej();
+}
+
+router.post(
+  '/wniosek/umowa-podpisana',
+  wymagajWnioskodawcy,
+  zaladujWlasnyWniosekDoUploadu,
+  (zad, odp, dalej) => uploadUmowyPodpisanej.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  asy((zad, odp) => {
+    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    const teraz = czas.terazIso();
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET status = 'umowa_podpisana', umowa_podpisana_sciezka = ?, umowa_podpisana_nazwa_pliku = ?,
+                umowa_podpisana_mime = ?, umowa_podpisana_wgrano = ?, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(
+        path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path),
+        zad.file.originalname,
+        zad.file.mimetype,
+        teraz,
+        teraz,
+        zad.psaWniosek.id
+      );
+
+    odp.status(201).json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(zad.psaWniosek.id) });
+  })
+);
+
+router.get(
+  '/wniosek/umowa-podpisana',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek || !wniosek.umowa_podpisana_sciezka) throw nieZnaleziono('Nie odnaleziono przesłanej umowy.');
+
+    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.umowa_podpisana_sciezka);
+    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+
+    odp.setHeader('Content-Type', wniosek.umowa_podpisana_mime || 'application/octet-stream');
+    odp.setHeader('Content-Disposition', `attachment; filename="${wniosek.umowa_podpisana_nazwa_pliku}"`);
+    fs.createReadStream(pelnaSciezka).pipe(odp);
+  })
+);
 
 // ─────────────────────────────────────────────────────────────
 // Moje spolki / akcje
@@ -477,3 +1004,12 @@ router.post(
 );
 
 module.exports = router;
+// Etap 3F: kancelaria koryguje dane wniosku (server/trasy/wnioski.js) - ta
+// sama walidacja formatu, co przy zapisie klienta, zeby korekta kancelarii
+// nie mogla wpisac danych w gorszym ksztalcie niz sam klient.
+module.exports.POLA_WNIOSKU = POLA_WNIOSKU;
+module.exports.wyczyscWniosek = wyczyscWniosek;
+module.exports.sprawdzDaneWniosku = sprawdzDaneWniosku;
+module.exports.POLA_AKCJONARIUSZA_WNIOSKU = POLA_AKCJONARIUSZA_WNIOSKU;
+module.exports.wyczyscAkcjonariuszaWniosku = wyczyscAkcjonariuszaWniosku;
+module.exports.sprawdzAkcjonariuszaWniosku = sprawdzAkcjonariuszaWniosku;

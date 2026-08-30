@@ -130,6 +130,60 @@ test('POST /:id/otworz-rejestr zapisuje emisję + objęcie atomowo w jednym wywo
   assert.equal(spolkaBogata.razem_akcji, 100);
 });
 
+test('POST /:id/otworz-rejestr: cena emisyjna jest per pozycja akcjonariatu, nie wspólna dla emisji (etap 2.6)', async () => {
+  const [, spolkaOdp] = await zapytaj('POST', '/api/psa/spolki', { nazwa: 'Cena Per Osoba P.S.A.', krs: '0000777999' }, { Cookie: ciastkoSesji });
+  const spolkaId = spolkaOdp.spolka.id;
+
+  const [, osobaA] = await zapytaj(
+    'POST', '/api/psa/osoby',
+    { typ: 'fizyczna', nazwisko: 'Gotówkowy', imie: 'Adam', data_urodzenia: '1990-01-01', email: 'adam.cena@example.pl', aml_status: 'wykonane' },
+    { Cookie: ciastkoSesji }
+  );
+  const [, osobaB] = await zapytaj(
+    'POST', '/api/psa/osoby',
+    { typ: 'fizyczna', nazwisko: 'Aportowa', imie: 'Beata', data_urodzenia: '1990-01-01', email: 'beata.cena@example.pl', aml_status: 'wykonane' },
+    { Cookie: ciastkoSesji }
+  );
+
+  const [status, dane] = await zapytaj(
+    'POST',
+    `/api/psa/spolki/${spolkaId}/otworz-rejestr`,
+    {
+      zdarzenia: [
+        {
+          typ: 'emisja',
+          klucz_tymczasowy: 'emisja-A',
+          data_zdarzenia: '2026-01-10',
+          dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
+        },
+        {
+          typ: 'objecie',
+          data_zdarzenia: '2026-01-10',
+          dane: {
+            emisja_zdarzenie_id: { __odwolanie_do_partii: 'emisja-A' },
+            pozycje: [
+              { osoba_id: osobaA.osoba.id, ilosc: 60, cena_emisyjna_grosze: 10000 },
+              { osoba_id: osobaB.osoba.id, ilosc: 40, cena_emisyjna_grosze: 25000 },
+            ],
+          },
+        },
+      ],
+    },
+    { Cookie: ciastkoSesji }
+  );
+
+  assert.equal(status, 201);
+  const objecieId = dane.zdarzenia.find((z) => z.typ === 'objecie').id;
+  const wiersz = db().prepare('SELECT dane_json FROM psa_zdarzenia WHERE id = ?').get(objecieId);
+  const pozycje = JSON.parse(wiersz.dane_json).pozycje;
+  assert.equal(pozycje.find((p) => p.osoba_id === osobaA.osoba.id).cena_emisyjna_grosze, 10000);
+  assert.equal(pozycje.find((p) => p.osoba_id === osobaB.osoba.id).cena_emisyjna_grosze, 25000);
+
+  const emisjaId = dane.zdarzenia.find((z) => z.typ === 'emisja').id;
+  const wierszEmisji = db().prepare('SELECT dane_json FROM psa_zdarzenia WHERE id = ?').get(emisjaId);
+  assert.equal(JSON.parse(wierszEmisji.dane_json).cena_emisyjna_grosze, null);
+});
+
 test('POST /:id/otworz-rejestr: nieudane drugie zdarzenie cofa całą partię, łącznie z pierwszym', async () => {
   const [, spolkaOdp] = await zapytaj('POST', '/api/psa/spolki', { nazwa: 'Otwarcie Nieudane P.S.A.', krs: '0000777888' }, { Cookie: ciastkoSesji });
   const spolkaId = spolkaOdp.spolka.id;

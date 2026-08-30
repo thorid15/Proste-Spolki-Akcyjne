@@ -17,6 +17,8 @@ const MENU = [
       { sciezka: '/sprawy', nazwa: 'Kolejka spraw', ikona: 'sprawy' },
       { sciezka: '/spolki', nazwa: 'Spółki', ikona: 'spolki' },
       { sciezka: '/osoby', nazwa: 'Kartoteka osób', ikona: 'osoby' },
+      { sciezka: '/zgloszenia', nazwa: 'Zgłoszenia', ikona: 'sprawy' },
+      { sciezka: '/wnioski', nazwa: 'Wnioski', ikona: 'sprawy' },
     ],
   },
   {
@@ -29,7 +31,9 @@ const MENU = [
       { sciezka: '/konfiguracja/stawki', nazwa: 'Stawki i terminy', ikona: 'stawki' },
       { sciezka: '/konfiguracja/szablony', nazwa: 'Szablony dokumentów', ikona: 'szablony', admin: true },
       { sciezka: '/konfiguracja/uzytkownicy', nazwa: 'Użytkownicy', ikona: 'uzytkownicy', admin: true },
-      { sciezka: '/podglad', nazwa: 'Podgląd systemu', ikona: 'podglad' },
+      // Etap 5.2: diagnostyka (stan bazy, integralność łańcucha zdarzeń) nie
+      // jest codzienną pracą notariusza — wyłącznie dla roli administratora.
+      { sciezka: '/podglad', nazwa: 'Podgląd systemu', ikona: 'podglad', admin: true },
     ],
   },
 ];
@@ -180,6 +184,8 @@ function opisTrasy(segmenty) {
     sprawy: { tytul: 'Kolejka spraw', podtytul: 'Cel wewnętrzny 3 dni, termin ustawowy 7 dni (art. 300³⁴ § 1 KSH) — sprawy posortowane po pozostałym czasie.' },
     spolki: { tytul: 'Spółki', podtytul: 'Rejestry prowadzone przez kancelarię.' },
     osoby: { tytul: 'Kartoteka osób', podtytul: 'Wspólna dla wszystkich prowadzonych rejestrów — jeden inwestor wpisywany raz.' },
+    zgloszenia: { tytul: 'Zgłoszenia', podtytul: 'Pierwszy kontakt z publicznego formularza portalu — do oceny przed wysłaniem zaproszenia.' },
+    wnioski: { tytul: 'Wnioski', podtytul: 'Wnioski o prowadzenie rejestru złożone przez portal klienta — porównanie z KRS i akceptacja.' },
     oplaty: { tytul: 'Opłaty', podtytul: 'Naliczenia za czynności rejestrowe i prowadzenie rejestru.' },
     podglad: { tytul: 'Podgląd systemu', podtytul: 'Katalog komponentów modułu — paleta, typografia, pola, tabele i stany.' },
     konfiguracja: { tytul: 'Konfiguracja', podtytul: 'Stawki, terminy, szablony dokumentów i użytkownicy modułu.' },
@@ -200,7 +206,9 @@ function Aplikacja() {
 
   function ekran() {
     if (segmenty.length === 0) return <EkranPulpitu />;
-    if (segmenty[0] === 'podglad') return <EkranPodgladu />;
+    if (segmenty[0] === 'podglad') {
+      return sesja.uzytkownik.rola === 'admin' ? <EkranPodgladu /> : <NieZnaleziono />;
+    }
 
     if (segmenty[0] === 'spolki') {
       if (segmenty.length === 1) return <EkranSpolek />;
@@ -230,6 +238,13 @@ function Aplikacja() {
     }
 
     if (segmenty[0] === 'osoby') return <EkranOsob />;
+    if (segmenty[0] === 'zgloszenia') return <EkranZgloszenWstepnych />;
+    if (segmenty[0] === 'wnioski') {
+      if (segmenty.length === 1) return <EkranWnioski />;
+      const id = Number(segmenty[1]);
+      if (!Number.isInteger(id)) return <NieZnaleziono />;
+      return <EkranWniosekSzczegoly wniosekId={id} />;
+    }
     if (segmenty[0] === 'oplaty') return <EkranOplat />;
     if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'stawki') return <EkranStawek />;
     if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'szablony') {
@@ -251,7 +266,8 @@ function Aplikacja() {
   // metryka), więc topbar zostaje przy samej nazwie modułu.
   const wlasnyNaglowek =
     (segmenty[0] === 'spolki' && segmenty.length >= 2) ||
-    (segmenty[0] === 'sprawy' && segmenty.length >= 2);
+    (segmenty[0] === 'sprawy' && segmenty.length >= 2) ||
+    (segmenty[0] === 'wnioski' && segmenty.length >= 2);
   const opis = wlasnyNaglowek
     ? { tytul: 'Rejestr akcjonariuszy', podtytul: null }
     : opisTrasy(segmenty);

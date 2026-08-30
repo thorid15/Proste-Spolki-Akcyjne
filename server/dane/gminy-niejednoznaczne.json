@@ -1,0 +1,287 @@
+{
+  "ALEKSANDRÓW": [
+    "lodz-xx",
+    "lublin-vi"
+  ],
+  "BARANÓW": [
+    "lodz-xx",
+    "lublin-vi",
+    "poznan-ix"
+  ],
+  "BIAŁA": [
+    "lodz-xx",
+    "opole-viii"
+  ],
+  "BIAŁOBRZEGI": [
+    "lublin-vi",
+    "rzeszow-xii"
+  ],
+  "BOLESŁAWIEC": [
+    "lodz-xx",
+    "wroclaw-ix"
+  ],
+  "BRODNICA": [
+    "poznan-ix",
+    "torun-vii"
+  ],
+  "BRODY": [
+    "kielce-x",
+    "zielona-gora-viii"
+  ],
+  "BRZEZINY": [
+    "lodz-xx",
+    "poznan-ix"
+  ],
+  "BRZEŹNICA": [
+    "krakow-xii",
+    "zielona-gora-viii"
+  ],
+  "CHMIELNIK": [
+    "kielce-x",
+    "rzeszow-xii"
+  ],
+  "CHRZANÓW": [
+    "krakow-xii",
+    "lublin-vi"
+  ],
+  "CZARNOCIN": [
+    "kielce-x",
+    "lodz-xx"
+  ],
+  "CZERMIN": [
+    "poznan-ix",
+    "rzeszow-xii"
+  ],
+  "CZERNICHÓW": [
+    "bielsko-biala-viii",
+    "krakow-xii"
+  ],
+  "DOBRA": [
+    "krakow-xii",
+    "poznan-ix",
+    "szczecin-xiii"
+  ],
+  "DOBRE": [
+    "lublin-vi",
+    "torun-vii"
+  ],
+  "DĄBIE": [
+    "poznan-ix",
+    "zielona-gora-viii"
+  ],
+  "DĄBROWA": [
+    "bydgoszcz-xiii",
+    "opole-viii"
+  ],
+  "DĘBNO": [
+    "krakow-xii",
+    "szczecin-xiii"
+  ],
+  "DĘBOWIEC": [
+    "bielsko-biala-viii",
+    "rzeszow-xii"
+  ],
+  "GORZYCE": [
+    "gliwice-x",
+    "rzeszow-xii"
+  ],
+  "GÓRZNO": [
+    "lublin-vi",
+    "torun-vii"
+  ],
+  "JABŁONNA": [
+    "lublin-vi",
+    "warszawa-xiv"
+  ],
+  "JANÓW": [
+    "bialystok-xii",
+    "czestochowa-xvii"
+  ],
+  "JAROCIN": [
+    "poznan-ix",
+    "rzeszow-xii"
+  ],
+  "JÓZEFÓW": [
+    "lublin-vi",
+    "warszawa-xiv"
+  ],
+  "KAMIEŃ": [
+    "lublin-vi",
+    "rzeszow-xii"
+  ],
+  "KOLNO": [
+    "bialystok-xii",
+    "olsztyn-viii"
+  ],
+  "KRASNE": [
+    "bialystok-xii",
+    "rzeszow-xii"
+  ],
+  "KŁODAWA": [
+    "poznan-ix",
+    "zielona-gora-viii"
+  ],
+  "LESZNO": [
+    "poznan-ix",
+    "warszawa-xiv"
+  ],
+  "LIPNO": [
+    "poznan-ix",
+    "torun-vii"
+  ],
+  "LUBRZA": [
+    "opole-viii",
+    "zielona-gora-viii"
+  ],
+  "MASZEWO": [
+    "szczecin-xiii",
+    "zielona-gora-viii"
+  ],
+  "MICHAŁOWICE": [
+    "krakow-xii",
+    "warszawa-xiv"
+  ],
+  "MOSZCZENICA": [
+    "krakow-xii",
+    "lodz-xx"
+  ],
+  "OLESNO": [
+    "krakow-xii",
+    "opole-viii"
+  ],
+  "OLEŚNICA": [
+    "kielce-x",
+    "wroclaw-ix"
+  ],
+  "OLSZANKA": [
+    "lublin-vi",
+    "opole-viii"
+  ],
+  "OLSZTYN": [
+    "czestochowa-xvii",
+    "olsztyn-viii"
+  ],
+  "OPATÓW": [
+    "czestochowa-xvii",
+    "kielce-x"
+  ],
+  "OSIECZNA": [
+    "gdansk-vii",
+    "poznan-ix"
+  ],
+  "OSIEK": [
+    "gdansk-vii",
+    "kielce-x",
+    "krakow-xii",
+    "torun-vii"
+  ],
+  "OSTRÓWEK": [
+    "lodz-xx",
+    "lublin-vi"
+  ],
+  "PIASKI": [
+    "lublin-vi",
+    "poznan-ix"
+  ],
+  "PNIEWY": [
+    "lublin-vi",
+    "poznan-ix"
+  ],
+  "POŚWIĘTNE": [
+    "bialystok-xii",
+    "lodz-xx",
+    "warszawa-xiv"
+  ],
+  "RADKÓW": [
+    "kielce-x",
+    "wroclaw-ix"
+  ],
+  "RADZANÓW": [
+    "lodz-xx",
+    "lublin-vi"
+  ],
+  "RADŁÓW": [
+    "krakow-xii",
+    "opole-viii"
+  ],
+  "ROGOWO": [
+    "bydgoszcz-xiii",
+    "torun-vii"
+  ],
+  "ROKIETNICA": [
+    "poznan-ix",
+    "rzeszow-xii"
+  ],
+  "RUDNIK": [
+    "gliwice-x",
+    "lublin-vi"
+  ],
+  "RYBNO": [
+    "lodz-xx",
+    "olsztyn-viii"
+  ],
+  "RZGÓW": [
+    "lodz-xx",
+    "poznan-ix"
+  ],
+  "STĘŻYCA": [
+    "gdansk-viii",
+    "lublin-vi"
+  ],
+  "SULMIERZYCE": [
+    "lodz-xx",
+    "poznan-ix"
+  ],
+  "SZYDŁOWO": [
+    "lodz-xx",
+    "poznan-ix"
+  ],
+  "SŁAWNO": [
+    "koszalin-ix",
+    "lodz-xx"
+  ],
+  "SŁUBICE": [
+    "lodz-xx",
+    "zielona-gora-viii"
+  ],
+  "SŁUPIA": [
+    "kielce-x",
+    "lodz-xx"
+  ],
+  "UJAZD": [
+    "lodz-xx",
+    "opole-viii"
+  ],
+  "WILKÓW": [
+    "lublin-vi",
+    "opole-viii"
+  ],
+  "WIŚNIOWA": [
+    "krakow-xii",
+    "rzeszow-xii"
+  ],
+  "WĄSOSZ": [
+    "bialystok-xii",
+    "wroclaw-ix"
+  ],
+  "ZAKRZEWO": [
+    "poznan-ix",
+    "torun-vii"
+  ],
+  "ZDUNY": [
+    "lodz-xx",
+    "poznan-ix"
+  ],
+  "ŁAGÓW": [
+    "kielce-x",
+    "zielona-gora-viii"
+  ],
+  "ŁUBNICE": [
+    "kielce-x",
+    "lodz-xx"
+  ],
+  "ŚWIDNICA": [
+    "wroclaw-ix",
+    "zielona-gora-viii"
+  ]
+}

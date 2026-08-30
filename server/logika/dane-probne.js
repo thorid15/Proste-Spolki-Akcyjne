@@ -143,7 +143,6 @@ const DANE_PROBNE =
   wpis_deklaratoryjny: [],
   zgoda: [ {} ],
   podstawa_dokument: [ {} ],
-  spolka_vat: [ {} ],
   adresat_zadajacy: [ {} ],
   adresat_spolka: []
 };

@@ -265,14 +265,8 @@ ustep(d, '2.', 'Do kwot wskazanych w ust. 1 dolicza się podatek od towarów i u
                'obowiązującej w dniu dokonania czynności.')
 ustep(d, '3.', 'Warunkiem rozpoczęcia prowadzenia Rejestru, dokonania Wpisu oraz udzielenia informacji z Rejestru '
                'jest uiszczenie Taksy.')
-p = akapit(d, 'left', po=0)
-pisz(p, '{{#spolka_vat}}')
-ustep(d, '4.', 'Spółka oświadcza, że jest podatnikiem podatku od towarów i usług (VAT) i upoważnia Notariusza '
-               'do wystawienia faktury VAT bez podpisu odbiorcy.')
-p = akapit(d, 'left', po=0)
-pisz(p, '{{/spolka_vat}}')
-ustep(d, '5.', 'Spółka wyraża zgodę na otrzymywanie faktur w postaci elektronicznej.')
-ustep(d, '6.', 'Niezależnie od Taksy Notariuszowi przysługuje zwrot poniesionych wydatków, w szczególności kosztów '
+ustep(d, '4.', 'Spółka wyraża zgodę na otrzymywanie faktur w postaci elektronicznej.')
+ustep(d, '5.', 'Niezależnie od Taksy Notariuszowi przysługuje zwrot poniesionych wydatków, w szczególności kosztów '
                'obowiązkowej korespondencji wynikającej z przepisów prawa, kierowanej do Spółki lub Akcjonariuszy '
                'i wysłanej pocztą tradycyjną. Zwrot wydatków następuje w terminie 7 dni od doręczenia Spółce faktury '
                'lub noty obciążeniowej.')

@@ -84,7 +84,6 @@ SEKCJE = {
     'przyczyny':        ['przyczyna_opis'],
     'zgoda':            [],                      # warunkowa 0/1 — art. 300(34) § 3
     'podstawa_dokument': [],                     # warunkowa 0/1 — wpis oparty na dokumencie
-    'spolka_vat':       [],                      # warunkowa 0/1 — oświadczenie o statusie VAT
     'adresat_zadajacy': [],                      # warunkowa 0/1 — wariant adresata wzoru 07
     'adresat_spolka':   [],                      # warunkowa 0/1 — wariant adresata wzoru 07
     'wpis_konstytutywny': [],                    # warunkowa 0/1 — art. 300(37) § 1

@@ -138,10 +138,30 @@ function sprawdzOgraniczenia(stanPrzed, propozycja, bledy, ostrzezenia) {
         n.nakladaja(o.zakresy, zakresy));
     if (!dotyczy) continue;
 
-    if (o.wymaga_zgody_spolki && !dane.zgoda_spolki) {
+    // Postanowienie o zgodzie spolki jest SKUTECZNE (art. 300(39) § 1, 3 KSH)
+    // wylacznie z kompletem trzech szczegolow - kreator dopuszcza zapisanie
+    // niekompletnego postanowienia juz przy zakladaniu spolki (etap 2.7
+    // poprawek, server/logika/kreator.js), wiec twarda blokada zapada TU,
+    // przy faktycznym zbyciu, i tylko dla postanowien kompletnych. Niekompletne
+    // dostaje miekkie ostrzezenie - jest bezskuteczne, ale notariusz powinien
+    // sprawdzic tresc postanowienia recznie, zanim wpisze zbycie bez zgody.
+    const zgodaKompletna =
+      o.zgoda_termin_wskazania_dni != null &&
+      o.zgoda_cena_opis != null &&
+      o.zgoda_termin_zaplaty_dni != null;
+    if (o.wymaga_zgody_spolki && zgodaKompletna && !dane.zgoda_spolki) {
       bledy.push(
         `Rozporządzenie akcjami wymaga zgody spółki (${przepisy.PODSTAWY.OGRANICZENIA_ROZPORZADZANIA})` +
           `${o.opis ? `: ${o.opis}` : ''}. Zgoda nie została odnotowana.`
+      );
+    }
+    if (o.wymaga_zgody_spolki && !zgodaKompletna) {
+      ostrzezenia.push(
+        `Postanowienie umowy spółki o zgodzie na zbycie akcji jest niekompletne (brak terminu wskazania ` +
+          `nabywcy, sposobu ustalenia ceny albo terminu zapłaty) — bez kompletu jest bezskuteczne ` +
+          `(${przepisy.PODSTAWY.ZGODA_SPOLKI_NA_ZBYCIE}).` +
+          `${o.tresc_postanowienia ? ` Treść z umowy spółki: „${o.tresc_postanowienia}”.` : ''} ` +
+          'Sprawdź ręcznie, czy zgoda spółki nie jest mimo to wymagana, zanim wpiszesz zbycie.'
       );
     }
     if (o.prawo_pierwszenstwa && !dane.pierwszenstwo_wyczerpane) {

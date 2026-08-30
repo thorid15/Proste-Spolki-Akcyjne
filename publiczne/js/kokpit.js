@@ -589,7 +589,48 @@ const NAZWY_UMOWE_ZAWARL = {
   osoba_upowazniona: 'osoba upoważniona',
 };
 
-function MetrykaBoczna({ spolka, dane, spolkaId }) {
+/**
+ * Przelacznik "stosuje procedure AML" (etap 3.1) - wylaczony domyslnie.
+ * Wlacza go zbieranie skanow dokumentow, oswiadczenia PEP i beneficjenta
+ * rzeczywistego przy edycji akcjonariuszy TEJ spolki (patrz FormularzOsoby
+ * w osoby.js) - domyslnie (wylaczony) kartoteka zbiera wylacznie dane Z
+ * dokumentu, bez pliku.
+ */
+function KartaProceduryAml({ spolka, spolkaId, odswiez }) {
+  const [zapisywanie, ustawZapisywanie] = useState(false);
+
+  async function przelacz() {
+    ustawZapisywanie(true);
+    try {
+      await API.put(`/api/psa/spolki/${spolkaId}`, { stosuje_procedure_aml: !spolka.stosuje_procedure_aml });
+      odswiez();
+    } catch (e) {
+      window.alert(e instanceof BladApi ? e.message : 'Nie udało się zmienić ustawienia procedury AML.');
+    } finally {
+      ustawZapisywanie(false);
+    }
+  }
+
+  const wlaczona = Boolean(Number(spolka.stosuje_procedure_aml));
+
+  return (
+    <Karta tytul="Procedura AML">
+      <div className="metryka-pion">
+        <label className="chk" style={{ padding: '4px 0' }}>
+          <input type="checkbox" checked={wlaczona} onChange={przelacz} disabled={zapisywanie} />
+          <span className="chk-tresc">Stosuje procedurę AML dla tej spółki</span>
+        </label>
+        <div className="podpowiedz">
+          {wlaczona
+            ? 'Włączona: przy edycji akcjonariuszy tej spółki można dodać skan dokumentu tożsamości, oświadczenie PEP i wskazać beneficjenta rzeczywistego.'
+            : 'Wyłączona (domyślnie): kartoteka zbiera wyłącznie dane z dokumentu tożsamości (status, data weryfikacji, notatka) — bez pliku.'}
+        </div>
+      </div>
+    </Karta>
+  );
+}
+
+function MetrykaBoczna({ spolka, dane, spolkaId, odswiez }) {
   const integralnosc = useDane('/api/psa/integralnosc');
   const terminy = useDane(`/api/psa/sprawy?spolka_id=${spolkaId}`);
   const sprawyWToku = terminy.dane ? terminy.dane.sprawy : [];
@@ -666,6 +707,8 @@ function MetrykaBoczna({ spolka, dane, spolkaId }) {
         )}
       </Karta>
 
+      <KartaProceduryAml spolka={spolka} spolkaId={spolkaId} odswiez={odswiez} />
+
       <Karta tytul="Dokumenty">
         <div className="metryka-pion">
           <div className="male wyciszony">Umowa, RODO, uchwała, lista dla sądu, klauzula zbycia.</div>
@@ -724,6 +767,16 @@ function EkranKokpitu({ spolkaId }) {
     if (!el) return;
     const bezRuchu = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     el.scrollIntoView({ behavior: bezRuchu ? 'auto' : 'smooth', block: 'center' });
+  }
+
+  /** Etap 5.1: skok miedzy zdarzeniem prostowanym a prostujacym - link dziala w OBIE strony. */
+  function skoczDoZdarzenia(id) {
+    const el = document.getElementById(`zdarzenie-${id}`);
+    if (!el) return;
+    const bezRuchu = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: bezRuchu ? 'auto' : 'smooth', block: 'center' });
+    el.classList.add('podswietlone');
+    setTimeout(() => el.classList.remove('podswietlone'), 1600);
   }
 
   async function przelicz() {
@@ -1006,18 +1059,38 @@ function EkranKokpitu({ spolkaId }) {
               ) : (
                 <div className="zdarzenia-czas">
                   {zdarzenia.map((z) => (
-                    <div key={z.id} className="zdarzenie-poz">
+                    <div
+                      key={z.id}
+                      id={`zdarzenie-${z.id}`}
+                      className={`zdarzenie-poz ${z.typ === 'sprostowanie' || z.sprostowane_przez_id ? 'sprostowane' : ''}`}
+                    >
                       <div className="rzad-rozdzielony">
                         <div className="zdarzenie-data">
                           {fmt.data(z.data_zdarzenia)} · zdarzenie #{z.id}
                         </div>
-                        {!wstecz && z.typ !== 'sprostowanie' && (
+                        {!wstecz && z.typ !== 'sprostowanie' && !z.sprostowane_przez_id && (
                           <button className="btn btn-maly bez-druku" onClick={() => ustawSprostowanie(z)}>
                             Sprostuj
                           </button>
                         )}
                       </div>
                       <div className="zdarzenie-tresc">{z.podsumowanie || `Zdarzenie typu „${z.typ}”.`}</div>
+                      {z.typ === 'sprostowanie' && z.zdarzenie_prostowane_id != null && (
+                        <button
+                          className="btn-tekstowy bez-druku"
+                          onClick={() => skoczDoZdarzenia(z.zdarzenie_prostowane_id)}
+                        >
+                          → zobacz zdarzenie prostowane #{z.zdarzenie_prostowane_id}
+                        </button>
+                      )}
+                      {z.sprostowane_przez_id != null && (
+                        <button
+                          className="btn-tekstowy bez-druku"
+                          onClick={() => skoczDoZdarzenia(z.sprostowane_przez_id)}
+                        >
+                          Sprostowane zdarzeniem #{z.sprostowane_przez_id} →
+                        </button>
+                      )}
                       <div className="zdarzenie-meta">
                         wpisano {fmt.dataCzas(z.data_wpisu)} · {z.autor} · skrót {z.hash_skrocony}…
                       </div>
@@ -1039,7 +1112,7 @@ function EkranKokpitu({ spolkaId }) {
           </div>
         </div>
 
-        <MetrykaBoczna spolka={spolka} dane={dane} spolkaId={spolkaId} />
+        <MetrykaBoczna spolka={spolka} dane={dane} spolkaId={spolkaId} odswiez={odswiez} />
       </div>
 
       {sprostowanie && (

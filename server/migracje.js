@@ -962,6 +962,378 @@ const MIGRACJE = [
         ON psa_dziennik_dostepu (chwila);
     `,
   },
+  {
+    wersja: 17,
+    nazwa: 'poprawki PSA (etap 1.6): usuniecie statusu VAT spolki',
+    sql: `
+      -- ── Status VAT wycofany calkowicie z modulu ──────────────────────────
+      -- Dodane migracja 12 dla warunkowego oswiadczenia w umowie o
+      -- prowadzenie rejestru ({{#spolka_vat}}, wzor 01). Decyzja: to nie jest
+      -- element rejestru (art. 300(33) § 1 KSH), zmienia sie niezaleznie od
+      -- KRS i wprowadzalo myslace trojstanowe pole w kreatorze. Usuniete z
+      -- formularza, z API i z tresci wzoru 01 (sekcja ust. 4 usunieta z
+      -- generatora, plik przegenerowany) - kolumna usuwana tu, zeby stan bazy
+      -- byl spojny z reszta aplikacji.
+      ALTER TABLE psa_spolki DROP COLUMN platnik_vat;
+    `,
+  },
+  {
+    wersja: 18,
+    nazwa: 'poprawki PSA (etap 2.2/2.3): umowa jako fakt juz zaistnialy, dane reprezentanta w mianowniku',
+    sql: `
+      -- ── Krok 2 kreatora przestaje "otwierac" podpisywanie umowy ─────────
+      -- Zamiast tego rejestruje FAKT juz zawartej umowy: sposob zawarcia
+      -- i skan/plik. Data zawarcia to juz istniejace "data_umowy".
+      ALTER TABLE psa_spolki ADD COLUMN umowa_sposob_zawarcia TEXT
+        CHECK (umowa_sposob_zawarcia IS NULL OR umowa_sposob_zawarcia IN
+          ('pisemna', 'elektroniczna_kwalifikowany'));
+      ALTER TABLE psa_spolki ADD COLUMN umowa_zalacznik_sciezka TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN umowa_zalacznik_nazwa_pliku TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN umowa_zalacznik_mime TEXT;
+
+      -- ── Dane reprezentanta: mianownik zamiast recznie wpisywanych form ──
+      -- 'reprezentant_biernik' i 'reprezentant_funkcja_biernik' przechowywaly
+      -- WARTOSC JUZ ODMIENIONA - uzytkownik musial sam znac biernik. Teraz
+      -- wpisuje mianownik ('reprezentant_imie_nazwisko', 'reprezentant_funkcja'),
+      -- a odmiane liczy server/logika/deklinacja.js w locie (kontekst-pisma.js).
+      -- 'reprezentant_rodzice' NIE zmienia nazwy, ale zmienia sens: dotad
+      -- dopelniacz wpisywany recznie ("Piotra i Anny"), teraz mianownik
+      -- ("Piotr i Anna") - deklinowany automatycznie tak samo jak reszta.
+      -- Trzy kolumny "_recznie" to pole korekty z sekcji 2.3 promptu
+      -- ("deklinator ma byc pomoca, nie wyrocznia") - gdy wypelnione, maja
+      -- pierwszenstwo przed wynikiem automatu.
+      ALTER TABLE psa_spolki DROP COLUMN reprezentant_biernik;
+      ALTER TABLE psa_spolki DROP COLUMN reprezentant_funkcja_biernik;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_imie_nazwisko TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_funkcja TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_biernik_recznie TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_funkcja_biernik_recznie TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_rodzice_recznie TEXT;
+    `,
+  },
+  {
+    wersja: 19,
+    nazwa: 'poprawki PSA (etap 2.5): data zawarcia umowy spolki (akt zalozycielski)',
+    sql: `
+      -- ── Data zawarcia umowy spolki - RÓŻNA od daty rejestracji w KRS ────
+      -- ("data_utworzenia_spolki") i od daty umowy o PROWADZENIE REJESTRU
+      -- ("data_umowy"). To data aktu notarialnego zawiazania spolki (albo,
+      -- przy spolce zakladanej w S24, data podpisania w systemie) -
+      -- podstawa do autouzupelnienia "data emisji" serii zalozycielskiej.
+      -- Import z API KRS: dzial1.umowaStatut.informacjaOZawarciuZmianieUmowyStatutu[0]
+      -- (potwierdzone na zywej odpowiedzi, KRS 0001114217) - pierwszy wpis w tej
+      -- tablicy to zawarcie, kolejne to pozniejsze zmiany umowy spolki.
+      ALTER TABLE psa_spolki ADD COLUMN data_zawarcia_umowy_spolki TEXT;
+    `,
+  },
+  {
+    wersja: 20,
+    nazwa: 'poprawki PSA (etap 2.7): tresc postanowienia umowy spolki o zgodzie na zbycie',
+    sql: `
+      -- Doslowny cytat klauzuli umowy spolki o zgodzie spolki na zbycie akcji
+      -- (art. 300(39) § 1, 3 KSH) - obok juz istniejacych ustrukturyzowanych
+      -- pol (termin wskazania nabywcy, sposob ustalenia ceny, termin
+      -- zaplaty). Kreator rejestracji dopuszcza zapisanie tego postanowienia
+      -- BEZ kompletu trzech szczegolow (byly dotad wymagane razem) - notariusz
+      -- moze ich jeszcze nie znac przy zakladaniu spolki. Twarda blokada
+      -- (postanowienie niekompletne = bezskuteczne) przenosi sie na moment
+      -- FAKTYCZNEGO zbycia akcji (server/logika/walidacje.js).
+      ALTER TABLE psa_ograniczenia ADD COLUMN tresc_postanowienia TEXT;
+    `,
+  },
+  {
+    wersja: 21,
+    nazwa: 'etap 3A: zgloszenia wstepne portalu (lekki formularz publiczny)',
+    sql: `
+      -- Pierwszy kontakt nowego, nieznanego dotad klienta - WYLACZNIE dane
+      -- kontaktowe (e-mail, telefon, nazwa spolki, krotki opis), bez PESEL
+      -- i bez adresow. Zadnego konta portalowego ani sprawy nie zaklada -
+      -- to kancelaria decyduje, czy wyslac zaproszenie (etap 3B) czy odrzucic.
+      -- Celowo NIE jest tabela append-only (jak psa_zdarzenia) - to wylacznie
+      -- lead przed jakakolwiek weryfikacja tozsamosci, wolno go edytowac
+      -- i usuwac (np. RODO - zadanie usuniecia danych przed zawarciem umowy).
+      CREATE TABLE IF NOT EXISTS psa_zgloszenia (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        email               TEXT NOT NULL,
+        telefon             TEXT,
+        nazwa_spolki        TEXT,
+        opis                TEXT,
+        status              TEXT NOT NULL DEFAULT 'nowe'
+                              CHECK (status IN ('nowe','zaproszono','odrzucone')),
+        notatka_wewnetrzna  TEXT,
+        obsluzone_przez     TEXT,
+        obsluzone_kiedy     TEXT,
+        utworzono           TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_zgloszenia_status
+        ON psa_zgloszenia (status, utworzono);
+    `,
+  },
+  {
+    wersja: 22,
+    nazwa: 'etap 3B: rola wnioskodawca w psa_konta (zaproszenie przed istnieniem spolki)',
+    sql: `
+      -- SQLite nie pozwala zmienic CHECK-a przez ALTER TABLE - psa_konta nie
+      -- jest append-only (to nie psa_zdarzenia), wiec przepisujemy ja z nowa
+      -- rola 'wnioskodawca': konto zaproszone przez kancelarie (etap 3B),
+      -- ktore NIE ma jeszcze ani spolka_id (spolka nie istnieje w systemie
+      -- do czasu przyjecia wniosku), ani osoba_id (nie jest jeszcze
+      -- akcjonariuszem zadnej spolki). Rownowaznosc dwoch CHECK-ow zamiast
+      -- jednego wylicza poprawnie wszystkie trzy role:
+      --   spolka        -> spolka_id wymagane,  osoba_id NULL
+      --   akcjonariusz  -> spolka_id NULL,       osoba_id wymagane
+      --   wnioskodawca  -> spolka_id NULL,       osoba_id NULL
+      --
+      -- hash_hasla staje sie NULLOWALNE - konto istnieje juz PRZED
+      -- aktywacja (link mailowy), haslo ustawia dopiero klient w tym
+      -- momencie (logika/hasla.js: zweryfikuj juz dzis bezpiecznie
+      -- traktuje brak hasha jako "nie pasuje", zero zmian po tej stronie).
+      -- token_wygasa - link aktywacyjny nie moze byc wazny bezterminowo.
+      CREATE TABLE psa_konta_v22 (
+        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+        email              TEXT NOT NULL UNIQUE,
+        hash_hasla         TEXT,
+        rola               TEXT NOT NULL CHECK (rola IN ('spolka','akcjonariusz','wnioskodawca')),
+        spolka_id          INTEGER REFERENCES psa_spolki(id),
+        osoba_id           INTEGER REFERENCES psa_osoby(id),
+        aktywne            INTEGER NOT NULL DEFAULT 0 CHECK (aktywne IN (0,1)),
+        token_aktywacji    TEXT,
+        token_wygasa       TEXT,
+        ostatnie_logowanie TEXT,
+        utworzono          TEXT NOT NULL,
+        CHECK ((rola = 'spolka') = (spolka_id IS NOT NULL)),
+        CHECK ((rola = 'akcjonariusz') = (osoba_id IS NOT NULL))
+      );
+      INSERT INTO psa_konta_v22
+        (id, email, hash_hasla, rola, spolka_id, osoba_id, aktywne, token_aktywacji, ostatnie_logowanie, utworzono)
+        SELECT id, email, hash_hasla, rola, spolka_id, osoba_id, aktywne, token_aktywacji, ostatnie_logowanie, utworzono
+          FROM psa_konta;
+      DROP TABLE psa_konta;
+      ALTER TABLE psa_konta_v22 RENAME TO psa_konta;
+
+      CREATE INDEX IF NOT EXISTS psa_ix_konta_spolka
+        ON psa_konta (spolka_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_konta_osoba
+        ON psa_konta (osoba_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_konta_token
+        ON psa_konta (token_aktywacji);
+    `,
+  },
+  {
+    wersja: 23,
+    nazwa: 'etap 3B.1: potwierdzenie klauzuli informacyjnej RODO przed wnioskiem',
+    sql: `
+      -- Znacznik czasu potwierdzenia klauzuli informacyjnej o przetwarzaniu
+      -- danych osobowych - blokuje dostep do formularza wniosku (etap 3C)
+      -- dopoki wnioskodawca jej nie potwierdzi. To NIE jest "zgoda" w
+      -- rozumieniu art. 6 ust. 1 lit. a) RODO (podstawa przetwarzania danych
+      -- rejestru to umowa/obowiazek prawny, nie zgoda - wiec zgody sie tu nie
+      -- "zbiera") - to potwierdzenie ZAPOZNANIA SIE z obowiazkiem
+      -- informacyjnym (art. 13 RODO). Osobna, prawdziwa zgoda (na komunikacje
+      -- elektroniczna) zyje przy danych akcjonariusza, nie przy koncie.
+      ALTER TABLE psa_konta ADD COLUMN rodo_zaakceptowano TEXT;
+    `,
+  },
+  {
+    wersja: 24,
+    nazwa: 'etap 3C: psa_wnioski (dane spolki i reprezentanta z portalu klienta)',
+    sql: `
+      -- Wniosek klienta o prowadzenie rejestru - dane spolki i reprezentanta
+      -- zbierane PRZED istnieniem samej spolki w systemie (psa_spolki
+      -- powstaje dopiero, gdy kancelaria przyjmie wniosek - etap 3F,
+      -- podobnie jak dzis przy "Otworz rejestr" w kreatorze wewnetrznym).
+      -- Kolumny CELOWO lustrza podzbior psa_spolki (plus reprezentant_* z
+      -- etapu 2.2/2.3) - zeby projekt umowy (etap 3E) dalo sie wygenerowac
+      -- wolawac server/logika/kontekst-pisma.js: umowaOProwadzenieRejestru()
+      -- na obiekcie wniosku DOKLADNIE tak samo, jak dzis na obiekcie spolki,
+      -- bez przepisywania mapowania pol.
+      CREATE TABLE IF NOT EXISTS psa_wnioski (
+        id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+        konto_id                    INTEGER NOT NULL UNIQUE REFERENCES psa_konta(id),
+        status                      TEXT NOT NULL DEFAULT 'w_przygotowaniu'
+                                      CHECK (status IN (
+                                        'w_przygotowaniu','zlozony','do_uzupelnienia',
+                                        'umowa_wygenerowana','umowa_podpisana','przyjety','odrzucony'
+                                      )),
+        krs                         TEXT,
+        nip                         TEXT,
+        regon                       TEXT,
+        nazwa                       TEXT,
+        forma_prawna                TEXT NOT NULL DEFAULT 'PROSTA SPÓŁKA AKCYJNA',
+        kraj                        TEXT DEFAULT 'Polska',
+        kod_pocztowy                TEXT,
+        miejscowosc                 TEXT,
+        siedziba_miejscownik        TEXT,
+        ulica                       TEXT,
+        nr_domu                     TEXT,
+        nr_lokalu                   TEXT,
+        sad_rejestrowy              TEXT,
+        wydzial                     TEXT,
+        telefon                     TEXT,
+        email                       TEXT,
+        www                         TEXT,
+        organ_rodzaj                TEXT,
+        data_utworzenia_spolki      TEXT,
+        data_ostatniego_wpisu_krs   TEXT,
+        adres_edorecze              TEXT,
+        kapital_akcyjny_grosze      INTEGER,
+        data_zawarcia_umowy_spolki  TEXT,
+        -- Reprezentant, ktory bedzie podpisywal umowe w imieniu spolki -
+        -- mianownik (etap 2.3), te same klucze co psa_spolki.
+        reprezentant_imie_nazwisko           TEXT,
+        reprezentant_plec                    TEXT,
+        reprezentant_funkcja                 TEXT,
+        reprezentant_reprezentacja           TEXT,
+        reprezentant_rodzice                 TEXT,
+        reprezentant_dowod                   TEXT,
+        reprezentant_pesel                   TEXT,
+        reprezentant_adres                   TEXT,
+        reprezentant_biernik_recznie         TEXT,
+        reprezentant_funkcja_biernik_recznie TEXT,
+        reprezentant_rodzice_recznie         TEXT,
+        utworzono                   TEXT NOT NULL,
+        zaktualizowano              TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_wnioski_status
+        ON psa_wnioski (status);
+    `,
+  },
+  {
+    wersja: 25,
+    nazwa: 'etap 3D: psa_wnioski_akcjonariusze (dane do kartoteki + zgoda elektroniczna)',
+    sql: `
+      -- Proponowani akcjonariusze zbierani przez klienta w portalu - dane do
+      -- PRZYSZLEJ kartoteki wspolnej (psa_osoby), nie sama kartoteka: dopoki
+      -- kancelaria nie zweryfikuje wniosku (etap 3F), te wiersze NIE tworza
+      -- realnych psa_osoby (regula domenowa nr 10 - jeden inwestor wpisany
+      -- raz - wpis nieprzejrzanych danych zaśmiecałby wspólną kartotekę
+      -- wykorzystywaną przez WSZYSTKIE spolki kancelarii).
+      -- Pola lustrza podzbior psa_osoby (bez AML/beneficjenta/PEP - to
+      -- warstwa etapu 3.1, nie czesc wniosku klienta).
+      CREATE TABLE IF NOT EXISTS psa_wnioski_akcjonariusze (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        wniosek_id        INTEGER NOT NULL REFERENCES psa_wnioski(id),
+        kolejnosc         INTEGER NOT NULL DEFAULT 0,
+        typ               TEXT NOT NULL DEFAULT 'fizyczna' CHECK (typ IN ('fizyczna','prawna')),
+        nazwisko          TEXT,
+        imie              TEXT,
+        nazwa             TEXT,
+        pesel             TEXT,
+        data_urodzenia    TEXT,
+        plec              TEXT,
+        nip               TEXT,
+        regon             TEXT,
+        numer_w_rejestrze TEXT,
+        nazwa_rejestru    TEXT,
+        kod_pocztowy      TEXT,
+        miejscowosc       TEXT,
+        ulica             TEXT,
+        nr_domu           TEXT,
+        nr_lokalu         TEXT,
+        adres_doreczen    TEXT,
+        adres_edoreczen   TEXT,
+        email             TEXT,
+        telefon           TEXT,
+        -- Swiadoma zgoda na komunikacje elektroniczna (opis promptu, etap 3
+        -- "zakres danych"): adres do doreczen elektronicznych trafia do
+        -- rejestru WYLACZNIE za zgoda akcjonariusza.
+        zgoda_email       INTEGER NOT NULL DEFAULT 0 CHECK (zgoda_email IN (0,1)),
+        utworzono         TEXT NOT NULL,
+        zaktualizowano    TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_wnioski_akcjonariusze_wniosek
+        ON psa_wnioski_akcjonariusze (wniosek_id, kolejnosc);
+    `,
+  },
+  {
+    wersja: 26,
+    nazwa: 'etap 3E: projekt umowy o prowadzenie rejestru i odeslanie podpisanej kopii',
+    sql: `
+      -- Projekt umowy generowany AUTOMATYCZNIE przy zlozeniu wniosku (wzor 01,
+      -- server/logika/wzory-dysk.js + kontekst-pisma.js: umowaOProwadzenieRejestru
+      -- - dziala bez zmian na wierszu psa_wnioski, bo kolumny lustrza psa_spolki).
+      -- Wzor psa_spolki.umowa_zalacznik_* (migracja 18) - te same trzy kolumny,
+      -- inna nazwa (umowa_podpisana_*, nie umowa_zalacznik_*), bo to podpisana
+      -- kopia PROJEKTU wygenerowanego tutaj, nie skan zewnetrznego dokumentu.
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_projekt_sciezka TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_projekt_wygenerowano TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_sciezka TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_nazwa_pliku TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_mime TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_wgrano TEXT;
+    `,
+  },
+  {
+    wersja: 27,
+    nazwa: 'etap 3F: weryfikacja wniosku przez kancelarie - porownanie z KRS, akceptacja pozycja po pozycji',
+    sql: `
+      -- Slad obslugi wniosku (jak psa_zgloszenia.obsluzone_przez/kiedy) i
+      -- notatka kancelarii przy odeslaniu do uzupelnienia albo odrzuceniu.
+      -- spolka_id: wypelniane dopiero przy przyjeciu wniosku (POST .../przyjmij)
+      -- - dowiazuje wniosek do REALNEJ spolki zalozonej w kartotece, bez
+      -- ktorej dalszy krok (otwarcie rejestru z emisja zalozycielska) dzieje
+      -- sie w istniejacym kreatorze wewnetrznym (server/trasy/spolki.js).
+      ALTER TABLE psa_wnioski ADD COLUMN notatka_weryfikacji TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN spolka_id INTEGER REFERENCES psa_spolki(id);
+      ALTER TABLE psa_wnioski ADD COLUMN obsluzone_przez TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN obsluzone_kiedy TEXT;
+
+      -- "Akceptacja pozycja po pozycji" (opis etapu 3 promptu): kazda
+      -- proponowana pozycja akcjonariusza jest oddzielnie zaznaczana jako
+      -- zweryfikowana przez kancelarie, zanim POST .../przyjmij zamieni ja
+      -- w realny wpis w psa_osoby (albo dowiaze do JUZ istniejacego wpisu,
+      -- jesli kancelaria dopasowala pozycje do kogos z kartoteki - osoba_id).
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN zweryfikowano INTEGER NOT NULL DEFAULT 0 CHECK (zweryfikowano IN (0,1));
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN osoba_id INTEGER REFERENCES psa_osoby(id);
+    `,
+  },
+  {
+    wersja: 28,
+    nazwa: 'etap 3.1: modul AML konfigurowalny per spolka - skany dokumentow, wylaczony domyslnie',
+    sql: `
+      -- Przelacznik per spolka (domyslnie WYLACZONY - opis etapu 3.1 promptu:
+      -- "nie zbierac skanow dowodow jako domyslne zachowanie"). Status/data/
+      -- notatka AML na psa_osoby (migracja 1) i PEP/beneficjent (migracja
+      -- ok. sesji 8, blok C) istnieja juz i zostaja dostepne zawsze - to
+      -- "dane z dokumentu bez pliku", minimalny domyslny zakres. Ten
+      -- przelacznik odblokowuje wylacznie SKAN pliku (i w interfejsie -
+      -- oswiadczenie PEP/beneficjenta, ktore w praktyce towarzyszy pelnej
+      -- procedurze AML, nie samej ewidencji statusu).
+      ALTER TABLE psa_spolki ADD COLUMN stosuje_procedure_aml INTEGER NOT NULL DEFAULT 0 CHECK (stosuje_procedure_aml IN (0,1));
+
+      -- Skany sa przypisane DO OSOBY (kartoteka wspolna, regula domenowa
+      -- nr 10 - jeden inwestor, jeden komplet dokumentow), ale niosa
+      -- spolka_id: procedura AML jest wlaczana PER SPOLKA, wiec skan
+      -- zebrany w zwiazku z jedna spolka nie powinien pojawiac sie w
+      -- kontekscie innej bez swiadomej decyzji. Retencja (kolumna retencja_do)
+      -- jest polem RECZNYM - okres przechowywania danych KYC to decyzja
+      -- polityki AML kancelarii/notariusza, nie wartosc do zgadniecia w
+      -- kodzie (por. ogolna zasada nr 2 z promptu etapu 3).
+      CREATE TABLE IF NOT EXISTS psa_osoby_skany_aml (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        osoba_id       INTEGER NOT NULL REFERENCES psa_osoby(id),
+        spolka_id      INTEGER NOT NULL REFERENCES psa_spolki(id),
+        typ_dokumentu  TEXT NOT NULL DEFAULT 'inny'
+                         CHECK (typ_dokumentu IN ('dowod_osobisty','paszport','inny')),
+        nazwa_pliku    TEXT NOT NULL,
+        sciezka        TEXT NOT NULL,
+        mime           TEXT,
+        rozmiar        INTEGER,
+        hash           TEXT,
+        retencja_do    TEXT,
+        wgral          TEXT NOT NULL,
+        utworzono      TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_aml_skany_osoba
+        ON psa_osoby_skany_aml (osoba_id);
+      CREATE INDEX IF NOT EXISTS psa_ix_aml_skany_spolka
+        ON psa_osoby_skany_aml (spolka_id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

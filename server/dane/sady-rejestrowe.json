@@ -1,0 +1,8790 @@
+{
+  "wersja_danych": "2025-02-01",
+  "obowiazuje_od": "2025-02-01",
+  "podstawa_prawna": "Rozporządzenie Ministra Sprawiedliwości z dnia 28 grudnia 2018 r. w sprawie ustalenia siedzib i obszarów właściwości sądów apelacyjnych, sądów okręgowych i sądów rejonowych oraz zakresu rozpoznawanych przez nie spraw (Dz.U. 2018 poz. 2548, tekst jednolity z późn. zm.) — obszary właściwości wg wykazu MS „Właściwość sądów powszechnych”, stan na 1 lutego 2025 r.",
+  "zrodlo_wydzialow_krs": "Ministerstwo Sprawiedliwości — „Lista Wydziałów Gospodarczych Krajowego Rejestru Sądowego” (gov.pl/web/sprawiedliwosc), stan na luty 2025 r.",
+  "uwaga_niejednoznaczne": "70 nazw gmin/miast powtarza się w więcej niż jednym obszarze właściwości (te same nazwy w różnych regionach Polski) i zostały CELOWO pominięte w tabeli poniżej — bez danych powiat/gmina -> województwo (TERYT) nie da się ich jednoznacznie rozstrzygnąć bez zgadywania. Pełna lista w server/dane/gminy-niejednoznaczne.json.",
+  "uwaga_warszawa_krakow": "Warszawa i Kraków NIE występują w tabeli `gminy` — obie mają wewnętrzny podział właściwości KRS na poziomie dzielnicy (nie gminy), którego nie da się rozstrzygnąć na podstawie pól zwracanych przez API KRS (brak pola „dzielnica”). Przyległe gminy tych obszarów (np. Wieliczka, Piaseczno) są rozstrzygane normalnie i występują w tabeli.",
+  "wydzialy": [
+    {
+      "id": "bialystok-xii",
+      "sad": "Sąd Rejonowy w Białymstoku",
+      "numer_wydzialu": "XII",
+      "nazwa_pelna": "XII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "bielsko-biala-viii",
+      "sad": "Sąd Rejonowy w Bielsku-Białej",
+      "numer_wydzialu": "VIII",
+      "nazwa_pelna": "VIII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "bydgoszcz-xiii",
+      "sad": "Sąd Rejonowy w Bydgoszczy",
+      "numer_wydzialu": "XIII",
+      "nazwa_pelna": "XIII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "czestochowa-xvii",
+      "sad": "Sąd Rejonowy w Częstochowie",
+      "numer_wydzialu": "XVII",
+      "nazwa_pelna": "XVII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "gdansk-vii",
+      "sad": "Sąd Rejonowy Gdańsk-Północ w Gdańsku",
+      "numer_wydzialu": "VII",
+      "nazwa_pelna": "VII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "gdansk-viii",
+      "sad": "Sąd Rejonowy Gdańsk-Północ w Gdańsku",
+      "numer_wydzialu": "VIII",
+      "nazwa_pelna": "VIII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "gliwice-x",
+      "sad": "Sąd Rejonowy w Gliwicach",
+      "numer_wydzialu": "X",
+      "nazwa_pelna": "X Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "katowice-viii",
+      "sad": "Sąd Rejonowy Katowice-Wschód w Katowicach",
+      "numer_wydzialu": "VIII",
+      "nazwa_pelna": "VIII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "kielce-x",
+      "sad": "Sąd Rejonowy w Kielcach",
+      "numer_wydzialu": "X",
+      "nazwa_pelna": "X Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "koszalin-ix",
+      "sad": "Sąd Rejonowy w Koszalinie",
+      "numer_wydzialu": "IX",
+      "nazwa_pelna": "IX Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "krakow-xi",
+      "sad": "Sąd Rejonowy dla Krakowa-Śródmieścia w Krakowie",
+      "numer_wydzialu": "XI",
+      "nazwa_pelna": "XI Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "krakow-xii",
+      "sad": "Sąd Rejonowy dla Krakowa-Śródmieścia w Krakowie",
+      "numer_wydzialu": "XII",
+      "nazwa_pelna": "XII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "lublin-vi",
+      "sad": "Sąd Rejonowy Lublin-Wschód w Lublinie z siedzibą w Świdniku",
+      "numer_wydzialu": "VI",
+      "nazwa_pelna": "VI Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "lodz-xx",
+      "sad": "Sąd Rejonowy dla Łodzi-Śródmieścia w Łodzi",
+      "numer_wydzialu": "XX",
+      "nazwa_pelna": "XX Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "olsztyn-viii",
+      "sad": "Sąd Rejonowy w Olsztynie",
+      "numer_wydzialu": "VIII",
+      "nazwa_pelna": "VIII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "opole-viii",
+      "sad": "Sąd Rejonowy w Opolu",
+      "numer_wydzialu": "VIII",
+      "nazwa_pelna": "VIII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "poznan-viii",
+      "sad": "Sąd Rejonowy Poznań-Nowe Miasto i Wilda w Poznaniu",
+      "numer_wydzialu": "VIII",
+      "nazwa_pelna": "VIII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "poznan-ix",
+      "sad": "Sąd Rejonowy Poznań-Nowe Miasto i Wilda w Poznaniu",
+      "numer_wydzialu": "IX",
+      "nazwa_pelna": "IX Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "rzeszow-xii",
+      "sad": "Sąd Rejonowy w Rzeszowie",
+      "numer_wydzialu": "XII",
+      "nazwa_pelna": "XII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "szczecin-xiii",
+      "sad": "Sąd Rejonowy Szczecin-Centrum w Szczecinie",
+      "numer_wydzialu": "XIII",
+      "nazwa_pelna": "XIII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "torun-vii",
+      "sad": "Sąd Rejonowy w Toruniu",
+      "numer_wydzialu": "VII",
+      "nazwa_pelna": "VII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "warszawa-xii",
+      "sad": "Sąd Rejonowy dla miasta stołecznego Warszawy w Warszawie",
+      "numer_wydzialu": "XII",
+      "nazwa_pelna": "XII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "warszawa-xiii",
+      "sad": "Sąd Rejonowy dla miasta stołecznego Warszawy w Warszawie",
+      "numer_wydzialu": "XIII",
+      "nazwa_pelna": "XIII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "warszawa-xiv",
+      "sad": "Sąd Rejonowy dla miasta stołecznego Warszawy w Warszawie",
+      "numer_wydzialu": "XIV",
+      "nazwa_pelna": "XIV Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "wroclaw-vi",
+      "sad": "Sąd Rejonowy dla Wrocławia-Fabrycznej we Wrocławiu",
+      "numer_wydzialu": "VI",
+      "nazwa_pelna": "VI Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "wroclaw-ix",
+      "sad": "Sąd Rejonowy dla Wrocławia-Fabrycznej we Wrocławiu",
+      "numer_wydzialu": "IX",
+      "nazwa_pelna": "IX Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    },
+    {
+      "id": "zielona-gora-viii",
+      "sad": "Sąd Rejonowy w Zielonej Górze",
+      "numer_wydzialu": "VIII",
+      "nazwa_pelna": "VIII Wydział Gospodarczy Krajowego Rejestru Sądowego"
+    }
+  ],
+  "gminy": [
+    {
+      "gmina": "ABRAMÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ADAMÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ADAMÓWKA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ALEKSANDRÓW KUJAWSKI",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "ALEKSANDRÓW ŁÓDZKI",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ALWERNIA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ANDRESPOL",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ANDRYCHÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ANDRZEJEWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ANNOPOL",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "AUGUSTÓW",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BABIAK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "BABICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BABIMOST",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "BABORÓW",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "BABOSZEWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BAKAŁARZEWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BALIGRÓD",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BANIE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "BANIE MAZURSKIE",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "BARANOWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BARANÓW SANDOMIERSKI",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BARCIANY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "BARCIN",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "BARCZEWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "BARDO",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "BARGŁÓW KOŚCIELNY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BARLINEK",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "BARTNICZKA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "BARTOSZYCE",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "BARUCHOWO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "BARWICE",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "BATORZ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BAĆKOWICE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "BAŁTÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "BEDLNO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BEJSCE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "BELSK DUŻY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BESKO",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BESTWINA",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "BEŁCHATÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BEŁŻEC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BEŁŻYCE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BIAŁA PISKA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "BIAŁA PODLASKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BIAŁA RAWSKA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BIAŁACZÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BIAŁE BŁOTA",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "BIAŁOGARD",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "BIAŁOPOLE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BIAŁOWIEŻA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BIAŁOŚLIWIE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "BIAŁY BÓR",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "BIAŁY DUNAJEC",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BIAŁYSTOK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BIECZ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BIELANY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BIELAWA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "BIELAWY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BIELICE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "BIELINY",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "BIELSK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BIELSK PODLASKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BIELSKO-BIAŁA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "BIERAWA",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "BIERUTÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "BIERUŃ",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "BIERZWNIK",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "BIESIEKIERZ",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "BIEŻUŃ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BIRCZA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BISKUPICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BISKUPIEC",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "BISZCZA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BISZTYNEK",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "BIŁGORAJ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BLACHOWNIA",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "BLEDZEW",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "BLIZANÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "BLIŻYN",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "BOBOLICE",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "BOBOWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BOBOWO",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "BOBROWICE",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "BOBROWNIKI",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "BOBROWO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "BOCHNIA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BODZANÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BODZECHÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "BODZENTYN",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "BOGATYNIA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "BOGDANIEC",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "BOGORIA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "BOGUCHWAŁA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BOGUSZÓW-GORCE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "BOGUTY-PIANKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BOJADŁA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "BOJANOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "BOJANÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BOJSZOWY",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "BOLESZKOWICE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "BOLESŁAW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BOLIMÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BOLKÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "BONIEWO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "BOREK WIELKOPOLSKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "BORKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BORKOWICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BORNE SULINOWO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "BORONÓW",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "BOROWA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BOROWIE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BORZECHÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BORZYTUCHOM",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "BORZĘCIN",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BORÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "BOĆKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BRALIN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "BRANICE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "BRANIEWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "BRAŃSK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BRAŃSZCZYK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BRENNA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "BROCHÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BROJCE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "BROK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "BRUDZEW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "BRUDZEŃ DUŻY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BRUSY",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "BRWINÓW",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "BRZEG",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "BRZEG DOLNY",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "BRZESKO",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BRZESZCZE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BRZEŚĆ KUJAWSKI",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "BRZEŹNIO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BRZEŻNO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "BRZOSTEK",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BRZOZIE",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "BRZOZÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BRZUZE",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "BRZYSKA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BRÓJCE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BRĄSZEWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BUCZEK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BUCZKOWICE",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "BUDRY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "BUDZISZEWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BUDZYŃ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "BUDZÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BUK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "BUKOWIEC",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "BUKOWINA TATRZAŃSKA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BUKOWNO",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BUKOWSKO",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BULKOWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BURZENIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BUSKO-ZDRÓJ",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "BYCHAWA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "BYCZYNA",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "BYDGOSZCZ",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "BYSTRA-SIDZINA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "BYSTRZYCA KŁODZKA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "BYTNICA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "BYTOM",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "BYTOM ODRZAŃSKI",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "BYTOŃ",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "BYTÓW",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "BĄDKOWO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "BĘDKÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BĘDZINO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "BŁASZKI",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "BŁAŻOWA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "BŁONIE",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "BŁĘDÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "CEDRY WIELKIE",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "CEDYNIA",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "CEGŁÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "CEKCYN",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "CEKÓW-KOLONIA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "CELESTYNÓW",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "CERANÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "CEWICE",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "CHARSZNICA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "CHEŁM",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "CHEŁM ŚLĄSKI",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "CHEŁMEK",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "CHEŁMIEC",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "CHEŁMNO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "CHEŁMŻA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "CHLEWISKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "CHMIELNO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "CHOCEŃ",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "CHOCIANÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "CHOCIWEL",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "CHOCZ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "CHOCZEWO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "CHODECZ",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "CHODEL",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "CHODZIEŻ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "CHODÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "CHOJNA",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "CHOJNICE",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "CHOJNÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "CHORKÓWKA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "CHOROSZCZ",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "CHORZELE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "CHORZÓW",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "CHOSZCZNO",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "CHOTCZA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "CHROSTKOWO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "CHRZYPSKO WIELKIE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "CHRZĄSTOWICE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "CHYBIE",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "CHYNÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "CHĄŚNO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "CHĘCINY",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "CHŁOPICE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "CIASNA",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "CIECHANOWIEC",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "CIECHANÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "CIECHOCIN",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "CIECHOCINEK",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "CIELĄDZ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "CIEPIELÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "CIEPŁOWODY",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "CIESZANÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "CIESZKÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "CIESZYN",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "CISEK",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "CISNA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "CIĘŻKOWICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "CMOLAS",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "CYBINKA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "CYCÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "CZAJKÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "CZAPLINEK",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "CZARNA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "CZARNA BIAŁOSTOCKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "CZARNA DĄBRÓWKA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "CZARNA WODA",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "CZARNE",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "CZARNIA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "CZARNKÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "CZARNOŻYŁY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "CZARNY BÓR",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "CZARNY DUNAJEC",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "CZASTARY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "CZCHÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "CZECHOWICE-DZIEDZICE",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "CZEMIERNIKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "CZEMPIŃ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "CZEREMCHA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "CZERNICA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "CZERNICE BOROWE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "CZERNIEJEWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "CZERNIEWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "CZERNIKOWO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "CZERSK",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "CZERWIEŃSK",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "CZERWIN",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "CZERWIONKA-LESZCZYNY",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "CZERWIŃSK NAD WISŁĄ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "CZERWONAK",
+      "wydzial_id": "poznan-viii"
+    },
+    {
+      "gmina": "CZERWONKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "CZORSZTYN",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "CZOSNÓW",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "CZUDEC",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "CZYŻE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "CZYŻEW",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "CZĘSTOCHOWA",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "CZŁOPA",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "CZŁUCHÓW",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "DALESZYCE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "DALIKÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DAMASŁAWEK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "DAMNICA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "DARŁOWO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "DASZYNA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DEBRZNO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "DESZCZNO",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "DMOSIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DOBCZYCE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "DOBIEGNIEW",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "DOBRCZ",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "DOBRE MIASTO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "DOBRODZIEŃ",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "DOBROMIERZ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "DOBROSZYCE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "DOBROŃ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DOBRYSZYCE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DOBRZANY",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "DOBRZEŃ WIELKI",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "DOBRZYCA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "DOBRZYNIEWO DUŻE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "DOBRZYŃ NAD WISŁĄ",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "DOLICE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "DOLSK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "DOMANICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "DOMANIEWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DOMANIÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "DOMARADZ",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "DOMASZOWICE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "DOMINOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "DOPIEWO",
+      "wydzial_id": "poznan-viii"
+    },
+    {
+      "gmina": "DOROHUSK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "DORUCHÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "DOŁHOBYCZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "DRAGACZ",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "DRAWNO",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "DRAWSKO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "DRAWSKO POMORSKIE",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "DRELÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "DREZDENKO",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "DROBIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DROHICZYN",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "DRUŻBICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DRWINIA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "DRZEWICA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DRZYCIM",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "DUBENINKI",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "DUBICZE CERKIEWNE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "DUBIECKO",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "DUBIENKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "DUKLA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "DUSZNIKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "DUSZNIKI-ZDRÓJ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "DWIKOZY",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "DYDNIA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "DYGOWO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "DYNÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "DYWITY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "DZIADKOWICE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "DZIADOWA KŁODA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "DZIAŁDOWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "DZIAŁOSZYCE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "DZIAŁOSZYN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DZIEMIANY",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "DZIERZGOWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DZIERZGOŃ",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "DZIERZKOWICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "DZIERZĄŻNIA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DZIERŻONIÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "DZIKOWIEC",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "DZIWNÓW",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "DZWOLA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "DĄBROWA BIAŁOSTOCKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "DĄBROWA BISKUPIA",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "DĄBROWA CHEŁMIŃSKA",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "DĄBROWA GÓRNICZA",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "DĄBROWA TARNOWSKA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "DĄBROWA ZIELONA",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "DĄBROWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DĄBRÓWKA",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "DĄBRÓWNO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "DĘBE WIELKIE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "DĘBICA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "DĘBLIN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "DĘBNICA KASZUBSKA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "DĘBOWA KŁODA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "DĘBOWA ŁĄKA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "DŁUGOSIODŁO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "DŁUGOŁĘKA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "DŁUTÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "DŹWIERZUTY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "ELBLĄG",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "EŁK",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "FABIANKI",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "FAJSŁAWICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "FAŁKÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "FILIPÓW",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "FIRLEJ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "FRAMPOL",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "FREDROPOL",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "FROMBORK",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "FRYSZTAK",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "GALEWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GARBATKA-LETNISKO",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GARBÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GARDEJA",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "GARWOLIN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GASZOWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "GAWORZYCE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "GAWŁUSZOWICE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "GAĆ",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "GDAŃSK",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "GDYNIA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "GDÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "GIBY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "GIDLE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GIELNIÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GIERAŁTOWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "GIETRZWAŁD",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "GILOWICE",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "GIZAŁKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GIŻYCKO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "GLINOJECK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GLIWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "GMINY PAWŁOWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "GNIEW",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "GNIEWINO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "GNIEWKOWO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "GNIEWOSZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GNIEZNO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GNOJNIK",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "GNOJNO",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "GOCZAŁKOWICE-ZDRÓJ",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "GODKOWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "GODZIANÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GODZIESZE WIELKIE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GODZISZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GODÓW",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "GOGOLIN",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "GOLCZEWO",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "GOLENIÓW",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "GOLESZÓW",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "GOLINA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GOLUB-DOBRZYŃ",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "GOMUNICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GONIĄDZ",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "GORAJ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GORLICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "GORZKOWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GORZKÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GORZÓW WIELKOPOLSKI",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "GORZÓW ŚLĄSKI",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "GOSTYCYN",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "GOSTYNIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GOSTYŃ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GOSZCZANÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GOSZCZYN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GOWARCZÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "GOWOROWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "GOZDNICA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "GOZDOWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GOŁAŃCZ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GOŁCZA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "GOŁDAP",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "GOŁUCHÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GOŁYMIN-OŚRODEK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GOŚCIERADÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GOŚCINO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "GRABICA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GRABOWIEC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GRABOWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "GRABÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GRABÓW NAD PILICĄ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GRABÓW NAD PROSNĄ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GRABÓWKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "GRAJEWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "GRANOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GRODKÓW",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "GRODZICZNO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "GRODZIEC",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GRODZISK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "GRODZISK MAZOWIECKI",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "GRODZISK WIELKOPOLSKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GRODZISKO DOLNE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "GROMADKA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "GROMNIK",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "GRONOWO ELBLĄSKIE",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "GRUDUSK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GRUDZIĄDZ",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "GRUNWALD",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "GRUTA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "GRYBÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "GRYFICE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "GRYFINO",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "GRYFÓW ŚLĄSKI",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "GRZEGORZEW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "GRZMIĄCA",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "GRÓDEK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "GRÓDEK NAD DUNAJCEM",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "GRÓJEC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GRĘBKÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GRĘBOCICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "GRĘBOSZÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "GRĘBÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "GUBIN",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "GZY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "GÓRA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "GÓRA KALWARIA",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "GÓRA ŚWIĘTEJ MAŁGORZATY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GÓRNO",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "GÓROWO IŁAWECKIE",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "GÓRZYCA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "GÓZD",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GĄBIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GĄSAWA",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "GŁOGÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "GŁOGÓW MAŁOPOLSKI",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "GŁOGÓWEK",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "GŁOWACZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GŁOWNO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GŁUBCZYCE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "GŁUCHOŁAZY",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "GŁUCHÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "GŁUSK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "GŁUSZYCA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "GŁÓWCZYCE",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "HACZÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "HAJNÓWKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "HALINÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "HANNA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "HARASIUKI",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "HAŃSK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "HAŻLACH",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "HEL",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "HERBY",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "HORODŁO",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "HORYNIEC-ZDRÓJ",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "HRUBIESZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "HUSZLEW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "HYŻNE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "IGOŁOMIA-WAWRZEŃCZYCE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "IMIELIN",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "IMIELNO",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "INOWROCŁAW",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "INOWŁÓDZ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "IRZĄDZE",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "ISTEBNA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "IWANISKA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "IWANOWICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "IWIERZYCE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "IWKOWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "IWONICZ-ZDRÓJ",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "IZABELIN",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "IZBICA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "IZBICA KUJAWSKA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "IZBICKO",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "IŁAWA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "IŁOWA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "IŁOWO-OSADA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "IŁÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "IŁŻA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "IŃSKO",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "JABŁONKA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "JABŁONNA LACKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JABŁONOWO POMORSKIE",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "JABŁOŃ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JADÓW",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "JAKTORÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "JAKUBÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JANIKOWO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "JANOWICE WIELKIE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "JANOWIEC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JANOWIEC KOŚCIELNY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "JANOWIEC WIELKOPOLSKI",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "JANOWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "JANÓW LUBELSKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JANÓW PODLASKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JARACZEWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "JARCZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JAROSŁAW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "JASIENICA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "JASIENICA ROSIELNA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "JASIENIEC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JASIEŃ",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "JASIONÓWKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "JASTARNIA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "JASTROWIE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "JASTRZĄB",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JASTRZĘBIA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JASTRZĘBIE-ZDRÓJ",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "JASŁO",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "JAWOR",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "JAWORNIK POLSKI",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "JAWORZE",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "JAWORZNO",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "JAWORZYNA ŚLĄSKA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "JAŚLISKA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "JAŚWIŁY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "JEDLICZE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "JEDLINA-ZDRÓJ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "JEDLIŃSK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JEDLNIA LETNISKO",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JEDNOROŻEC",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "JEDWABNE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "JEDWABNO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "JEJKOWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "JELCZ-LASKOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "JELENIA GÓRA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "JELENIEWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "JELEŚNIA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "JEMIELNICA",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "JEMIELNO",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "JERZMANOWA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "JERZMANOWICE-PRZEGINIA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "JEZIORA WIELKIE",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "JEZIORANY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "JEZIORZANY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JEŻEWO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "JEŻOWE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "JEŻÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "JEŻÓW SUDECKI",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "JODŁOWA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "JODŁOWNIK",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "JONIEC",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "JONKOWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "JORDANÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "JORDANÓW ŚLĄSKI",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "JUCHNOWIEC KOŚCIELNY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "JUTROSIN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "JÓZEFÓW NAD WISŁĄ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "JĘDRZEJÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "KACZORY",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KADZIDŁO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KALETY",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "KALINOWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "KALISKA",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "KALISZ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KALISZ POMORSKI",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "KALWARIA ZEBRZYDOWSKA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KAMIENICA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KAMIENICA POLSKA",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "KAMIENIEC",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KAMIENIEC ZĄBKOWICKI",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KAMIENNA GÓRA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KAMIENNIK",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "KAMIEŃ KRAJEŃSKI",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "KAMIEŃ POMORSKI",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "KAMIEŃSK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KAMIONKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KAMIONKA WIELKA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KAMPINOS",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "KARCZEW",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "KARCZMISKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KARGOWA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "KARLINO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "KARNICE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "KARNIEWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KARPACZ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KARSIN",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "KARTUZY",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "KATOWICE",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "KAWĘCZYN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KAZANÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KAZIMIERZ BISKUPI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KAZIMIERZ DOLNY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KAZIMIERZA WIELKA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "KAŁUSZYN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KAŃCZUGA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KAŹMIERZ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KCYNIA",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "KIELCE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "KIERNOZIA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KIETRZ",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "KIEŁCZYGŁÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KIJE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "KIJEWO KRÓLEWSKIE",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "KIKÓŁ",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "KISIELICE",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "KISZKOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KIWITY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "KLECZEW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KLEMBÓW",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "KLESZCZELE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KLESZCZEWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KLESZCZÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KLIMONTÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "KLONOWA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KLUCZBORK",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "KLUCZE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KLUCZEWSKO",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "KLUKI",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KLUKOWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KLWÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KNURÓW",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "KNYSZYN",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KOBIELE WIELKIE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KOBIERZYCE",
+      "wydzial_id": "wroclaw-vi"
+    },
+    {
+      "gmina": "KOBIÓR",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "KOBYLA GÓRA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KOBYLANKA",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "KOBYLIN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KOBYLIN-BORZYMY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KOBYLNICA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "KOBYŁKA",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "KOCHANOWICE",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "KOCIERZEW POŁUDNIOWY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KOCK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KOCMYRZÓW-LUBORZYCA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KOCZAŁA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "KODEŃ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KODRĄB",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KOLBUDY",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "KOLBUSZOWA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KOLONOWSKIE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "KOLSKO",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "KOLUSZKI",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KOMARÓW-OSADA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KOMARÓWKA PODLASKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KOMAŃCZA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KOMORNIKI",
+      "wydzial_id": "poznan-viii"
+    },
+    {
+      "gmina": "KOMPRACHCICE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "KONARZYNY",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "KONDRATOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KONECK",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "KONIECPOL",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "KONIN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KONIUSZA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KONOPISKA",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "KONOPNICA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KONSTANCIN-JEZIORNA",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "KONSTANTYNÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KONSTANTYNÓW ŁÓDZKI",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KOPRZYWNICA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "KORCZEW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KORCZYNA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KORFANTÓW",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "KORNOWAC",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "KORONOWO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "KORSZE",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "KORYCIN",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KORYTNICA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KORZENNA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KOSAKOWO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "KOSTOMŁOTY",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KOSTRZYN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KOSTRZYN NAD ODRĄ",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "KOSZALIN",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "KOSZARAWA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "KOSZYCE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KOSZĘCIN",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "KOSÓW LACKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KOTLIN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KOTUŃ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KOTŁA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KOWAL",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "KOWALA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KOWALE OLECKIE",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "KOWALEWO POMORSKIE",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "KOWARY",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KOWIESY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KOZIEGŁOWY",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "KOZIELICE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "KOZIENICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KOZY",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "KOZŁOWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "KOZŁÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KOŁACZKOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KOŁACZYCE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KOŁAKI KOŚCIELNE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KOŁBIEL",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "KOŁCZYGŁOWY",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "KOŁO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KOŁOBRZEG",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "KOŃSKIE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "KOŃSKOWOLA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KOŚCIAN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KOŚCIELEC",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KOŚCIELISKO",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KOŚCIERZYNA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "KOŹMIN WIELKOPOLSKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KOŹMINEK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KOŻUCHÓW",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "KRAJENKA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KRAMSK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KRAPKOWICE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "KRASICZYN",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KRASNOBRÓD",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KRASNOPOL",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KRASNOSIELC",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KRASNYSTAW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KRASOCIN",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "KRASZEWICE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KRAŚNICZYN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KRAŚNIK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KREMPNA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KROBIA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KROCZYCE",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "KROKOWA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "KROSNO",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KROSNO ODRZAŃSKIE",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "KROTOSZYCE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KROTOSZYN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KROŚCIENKO NAD DUNAJCEM",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KROŚCIENKO WYŻNE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KROŚNICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KROŚNIEWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KRUKLANKI",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "KRUPSKI MŁYN",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "KRUSZWICA",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "KRUSZYNA",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "KRYNICA MORSKA",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "KRYNICA-ZDRÓJ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KRYNICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KRYNKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KRYPNO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KRZANOWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "KRZCZONÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KRZEMIENIEWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KRZEPICE",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "KRZESZOWICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KRZESZYCE",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "KRZESZÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KRZYKOSY",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KRZYMÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KRZYNOWŁOGA MAŁA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KRZYWCZA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KRZYWDA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KRZYWIŃ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KRZYŻ WIELKOPOLSKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KRZYŻANOWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "KRZYŻANÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KRZĘCIN",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "KSAWERÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KSIĄŻ WIELKI",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KSIĄŻ WIELKOPOLSKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KSIĄŻKI",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "KSIĘŻPOL",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KUCZBORK-OSADA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KUDOWA-ZDRÓJ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KULESZE KOŚCIELNE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KUNICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KUNÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "KURYŁÓWKA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "KURZĘTNIK",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "KURÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KUTNO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "KUŚLIN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KUŹNIA RACIBORSKA",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "KUŹNICA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "KWIDZYN",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "KWILCZ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KÓRNIK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KĄKOLEWNICA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KĄTY WROCŁAWSKIE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KĘDZIERZYN-KOŹLE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "KĘPICE",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "KĘPNO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KĘSOWO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "KĘTRZYN",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "KĘTY",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KŁAJ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "KŁECKO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "KŁOBUCK",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "KŁOCZEW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "KŁODZKO",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "KŁOMNICE",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "LANCKORONA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "LASKOWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "LASOWICE WIELKIE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "LASZKI",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "LATOWICZ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "LEGIONOWO",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "LEGNICA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "LEGNICKIE POLE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "LELIS",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "LELKOWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "LELÓW",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "LEONCIN",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "LESKO",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "LESZNOWOLA",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "LEWIN BRZESKI",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "LEWIN KŁODZKI",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "LEŚNA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "LEŚNA PODLASKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "LEŚNICA",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "LEŚNIOWICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "LEŻAJSK",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "LGOTA WIELKA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "LIBIĄŻ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "LICHNOWY",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "LIDZBARK",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "LIDZBARK WARMIŃSKI",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "LIMANOWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "LINIA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "LINIEWO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "LIPCE REYMONTOWSKIE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "LIPIANY",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "LIPIE",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "LIPINKI",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "LIPINKI ŁUŻYCKIE",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "LIPKA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "LIPNICA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "LIPNICA MUROWANA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "LIPNICA WIELKA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "LIPNIK",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "LIPOWA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "LIPOWIEC KOŚCIELNY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "LIPSK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "LIPSKO",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "LIPUSZ",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "LISEWO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "LISIA GÓRA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "LISKÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "LISZKI",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "LIW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "LNIANO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "LUBACZÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "LUBANIE",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "LUBARTÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "LUBASZ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "LUBAWA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "LUBAWKA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "LUBAŃ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "LUBENIA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "LUBICHOWO",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "LUBICZ",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "LUBIEWO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "LUBIEŃ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "LUBIEŃ KUJAWSKI",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "LUBIN",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "LUBISZYN",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "LUBLIN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "LUBLINIEC",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "LUBNIEWICE",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "LUBOCHNIA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "LUBOMIA",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "LUBOMIERZ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "LUBOMINO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "LUBOWIDZ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "LUBRANIEC",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "LUBSKO",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "LUBSZA",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "LUBYCZA KRÓLEWSKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "LUDWIN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "LUTOCIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "LUTOMIERSK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "LUTOWISKA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "LUTUTÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "LUZINO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "LWÓWEK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "LWÓWEK ŚLĄSKI",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "LYSKI",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "LĄDEK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "LĄDEK-ZDRÓJ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "LĘBORK",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "LĘDZINY",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "MACIEJOWICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MAGNUSZEW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MAJDAN KRÓLEWSKI",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "MAKÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "MAKÓW MAZOWIECKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "MAKÓW PODHALAŃSKI",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "MALANÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MALBORK",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "MALCZYCE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MALECHOWO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "MANOWO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "MARCINOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MARCISZÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MARGONIN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MARIANOWO",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "MARKI",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "MARKLOWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "MARKOWA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "MARKUSY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "MARKUSZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MASŁOWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "MASŁÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "MAŁA WIEŚ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "MAŁDYTY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "MAŁKINIA GÓRNA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "MAŁOGOSZCZ",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "MAŁOMICE",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "MAŁY PŁOCK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "MEDYKA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "MEŁGIEW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MIASTECZKO KRAJEŃSKIE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MIASTECZKO ŚLĄSKIE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "MIASTKO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "MIASTKOWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "MIASTKÓW KOŚCIELNY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MICHAŁOWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "MICHAŁÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "MICHÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MIECHÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "MIEDZIANA GÓRA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "MIEDZICHOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MIEDZNA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MIEDŹNA",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "MIEDŹNO",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "MIEJSCE PIASTOWE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "MIEJSKA GÓRKA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MIELEC",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "MIELESZYN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MIELNIK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "MIELNO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "MIEROSZÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MIERZĘCICE",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "MIESZKOWICE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "MIETKÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MIEŚCISKO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MIKOŁAJKI",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "MIKOŁAJKI POMORSKIE",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "MIKOŁÓW",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "MIKSTAT",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MILANÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MILANÓWEK",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "MILEJCZYCE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "MILEJEWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "MILEJÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MILICZ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MILÓWKA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "MIRCZE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MIROSŁAWIEC",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "MIRSK",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MIRZEC",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "MIRÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MIĄCZYN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MIĘDZYBÓRZ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MIĘDZYCHÓD",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MIĘDZYLESIE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MIĘDZYRZEC PODLASKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MIĘDZYRZECZ",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "MIĘDZYZDROJE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "MIĘKINIA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MIŁAKOWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "MIŁKI",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "MIŁKOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MIŁOMŁYN",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "MIŁORADZ",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "MIŁOSŁAW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MIŃSK MAZOWIECKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MNISZKÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "MNIÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "MOCHOWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "MODLIBORZYCE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MOGIELNICA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MOGILANY",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "MOGILNO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "MOKOBODY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MOKRSKO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "MORAWICA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "MORDY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MORYŃ",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "MORZESZCZYN",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "MORĄG",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "MOSINA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MOSKORZEW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "MOŃKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "MROCZA",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "MROZY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "MRĄGOWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "MSTÓW",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "MSZANA",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "MSZANA DOLNA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "MSZCZONÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "MUCHARZ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "MUROWANA GOŚLINA",
+      "wydzial_id": "poznan-viii"
+    },
+    {
+      "gmina": "MURÓW",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "MUSZYNA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "MYCIELIN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "MYKANÓW",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "MYSZKÓW",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "MYSZYNIEC",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "MYSŁAKOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MYSŁOWICE",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "MYŚLENICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "MYŚLIBÓRZ",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "MĘCINKA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "MĘDRZECHÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "MŁAWA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "MŁODZIESZYN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "MŁYNARY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "MŁYNARZE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "MŚCIWOJÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "NADARZYN",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "NAGŁOWICE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "NAKŁO NAD NOTECIĄ",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "NAMYSŁÓW",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "NAREW",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "NAREWKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "NAROL",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "NARUSZEWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "NASIELSK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "NAWOJOWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "NAŁĘCZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "NEKLA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "NIDZICA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "NIEBORÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "NIEBYLEC",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "NIECHANOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "NIECHLÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "NIEDRZWICA DUŻA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "NIEDŹWIADA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "NIEDŹWIEDŹ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "NIEGOSŁAWICE",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "NIEGOWA",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "NIELISZ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "NIEMCE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "NIEMCZA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "NIEMODLIN",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "NIEPORĘT",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "NIEPOŁOMICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "NIESZAWA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "NISKO",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "NIWISKA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "NOWA BRZEŹNICA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "NOWA DĘBA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "NOWA KARCZMA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "NOWA RUDA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "NOWA SARZYNA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "NOWA SUCHA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "NOWA SÓL",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "NOWA SŁUPIA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "NOWA WIEŚ LĘBORSKA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "NOWA WIEŚ WIELKA",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "NOWE",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "NOWE BRZESKO",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "NOWE MIASTECZKO",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "NOWE MIASTO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "NOWE MIASTO LUBAWSKIE",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "NOWE MIASTO NAD PILICĄ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "NOWE MIASTO NAD WARTĄ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "NOWE OSTROWY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "NOWE PIEKUTY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "NOWE SKALMIERZYCE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "NOWINKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "NOWINY",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "NOWODWÓR",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "NOWOGARD",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "NOWOGRODZIEC",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "NOWOGRÓD",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "NOWOGRÓD BOBRZAŃSKI",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "NOWOGRÓDEK POMORSKI",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "NOWOSOLNA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "NOWY DUNINÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "NOWY DWÓR",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "NOWY DWÓR GDAŃSKI",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "NOWY DWÓR MAZOWIECKI",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "NOWY KAWĘCZYN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "NOWY KORCZYN",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "NOWY STAW",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "NOWY SĄCZ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "NOWY TARG",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "NOWY TOMYŚL",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "NOWY WIŚNICZ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "NOWY ŻMIGRÓD",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "NOZDRZEC",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "NUR",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "NURZEC-STACJA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "NYSA",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "NĘDZA",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "OBORNIKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "OBORNIKI ŚLĄSKIE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "OBRAZÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "OBROWO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "OBRYTE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "OBRZYCKO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "OBSZA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "OCHOTNICA DOLNA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ODOLANÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ODRZYWÓŁ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "OGRODZIENIEC",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "OJRZEŃ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "OKONEK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "OKSA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "OLECKO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "OLESZYCE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "OLKUSZ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "OLSZANICA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "OLSZEWO-BORKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "OLSZTYNEK",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "OLSZYNA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "OLSZÓWKA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "OPALENICA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "OPATOWIEC",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "OPATÓWEK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "OPINOGÓRA GÓRNA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "OPOCZNO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "OPOLE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "OPOLE LUBELSKIE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "OPORÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ORCHOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ORLA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ORNETA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "ORNONTOWICE",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "OROŃSKO",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ORZESZE",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "ORZYSZ",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "ORŁY",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "OSIE",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "OSIECK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "OSIECZNICA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "OSIEK JASIELSKI",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "OSIEK MAŁY",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "OSIELSKO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "OSINA",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "OSIĘCINY",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "OSJAKÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "OSTASZEWO",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "OSTRORÓG",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "OSTROWIEC ŚWIĘTOKRZYSKI",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "OSTROWITE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "OSTROŁĘKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "OSTRZESZÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "OSTRÓDA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "OSTRÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "OSTRÓW LUBELSKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "OSTRÓW MAZOWIECKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "OSTRÓW WIELKOPOLSKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "OTMUCHÓW",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "OTWOCK",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "OTYŃ",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "OZIMEK",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "OZORKÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "OŁAWA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "OŚNO LUBUSKIE",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "OŚWIĘCIM",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "OŻAROWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "OŻARÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "OŻARÓW MAZOWIECKI",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "PABIANICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PACANÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "PACYNA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PACZKÓW",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "PADEW NARODOWA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "PAJĘCZNO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PAKOSŁAW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "PAKOSŁAWICE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "PAKOŚĆ",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "PANKI",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "PAPOWO BISKUPIE",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "PAPROTNIA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PARADYŻ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PARCHOWO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "PARCZEW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PARYSÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PARZĘCZEW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PASYM",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "PASZOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PASŁĘK",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "PAWONKÓW",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "PAWŁOSIÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "PAWŁOWICZKI",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "PAWŁÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "PAŁECZNICA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "PCIM",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "PELPLIN",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "PERLEJEWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "PERZÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "PEŁCZYCE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "PIASECZNO",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "PIASTÓW",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "PIECHOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PIECKI",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "PIEKARY ŚLĄSKIE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "PIEKOSZÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "PIELGRZYMKA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PIENIĘŻNO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "PIERZCHNICA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "PIESZYCE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PIETROWICE WIELKIE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "PIEŃSK",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PILAWA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PILCHOWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "PILICA",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "PILZNO",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "PIONKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PIOTRKÓW KUJAWSKI",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "PIOTRKÓW TRYBUNALSKI",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PISZ",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "PISZCZAC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PIWNICZNA-ZDRÓJ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "PIĄTEK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PIĄTNICA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "PIŁA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "PIŁAWA GÓRNA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PIŃCZÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "PLATERÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PLATERÓWKA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PLESZEW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "PLEŚNA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "POBIEDZISKA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "POCZESNA",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "PODDĘBICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PODEDWÓRZE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PODEGRODZIE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "PODGÓRZYN",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PODKOWA LEŚNA",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "POGORZELA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "POKRZYWNICA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "POKÓJ",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "POLANICA-ZDRÓJ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "POLANKA WIELKA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "POLANÓW",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "POLICZNA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "POLKOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "POLSKA CEREKIEW",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "POMIECHÓWEK",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "PONIATOWA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PONIEC",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "POPIELÓW",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "POPÓW",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "PORAJ",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "PORONIN",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "PORĄBKA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "PORĘBA",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "POSTOMINO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "POTOK GÓRNY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "POTOK WIELKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "POTWORÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "POTĘGOWO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "POWIDZ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "POZEZDRZE",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "POZNAŃ",
+      "wydzial_id": "poznan-viii"
+    },
+    {
+      "gmina": "POŁAJEWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "POŁANIEC",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "POŁCZYN-ZDRÓJ",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "PRABUTY",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "PRASZKA",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "PRAŻMÓW",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "PROCHOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PROMNA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PROSTKI",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "PROSZOWICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "PRUCHNIK",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "PRUDNIK",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "PRUSICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PRUSZCZ",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "PRUSZCZ GDAŃSKI",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "PRUSZKÓW",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "PRZASNYSZ",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "PRZECHLEWO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "PRZECISZÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "PRZECŁAW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "PRZEDBÓRZ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PRZEDECZ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "PRZELEWICE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "PRZEMKÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PRZEMYŚL",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "PRZEMĘT",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "PRZEROŚL",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "PRZESMYKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PRZEWORNO",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PRZEWORSK",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "PRZEWÓZ",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "PRZODKOWO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "PRZYBIERNÓW",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "PRZYGODZICE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "PRZYKONA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "PRZYRÓW",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "PRZYSTAJŃ",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "PRZYSUCHA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PRZYTOCZNA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "PRZYTUŁY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "PRZYTYK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PRZYWIDZ",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "PRZYŁĘK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PRÓSZKÓW",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "PSZCZEW",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "PSZCZYNA",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "PSZCZÓŁKI",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "PSZÓW",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "PUCHACZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PUCK",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "PURDA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "PUSZCZA MARIAŃSKA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PUŁAWY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "PUŁTUSK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "PUŃSK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "PYRZYCE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "PYSKOWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "PYSZNICA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "PYZDRY",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "PĄTNÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PĘCZNIEW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PĘCŁAW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "PĘPOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "PŁASKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "PŁOCK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PŁONIAWY-BRAMURA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "PŁOSKINIA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "PŁOTY",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "PŁOŃSK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "PŁOŚNICA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "PŁUŻNICA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "RABA WYŻNA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "RABKA-ZDRÓJ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "RACHANIE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "RACIBÓRZ",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "RACIECHOWICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "RACIĄŻ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "RACIĄŻEK",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "RACZKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "RACŁAWICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "RADECZNICA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "RADGOSZCZ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "RADLIN",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "RADOM",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "RADOMIN",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "RADOMSKO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "RADOMYŚL NAD SANEM",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "RADOMYŚL WIELKI",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "RADOSZYCE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "RADOWO MAŁE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "RADWANICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "RADYMNO",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "RADZANOWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "RADZIECHOWY-WIEPRZ",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "RADZIEJOWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "RADZIEJÓW",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "RADZIEMICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "RADZIONKÓW",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "RADZIŁÓW",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "RADZYMIN",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "RADZYŃ CHEŁMIŃSKI",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "RADZYŃ PODLASKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "RAJCZA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "RAJGRÓD",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "RAKONIEWICE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "RAKSZAWA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "RAKÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "RANIŻÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "RASZKÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "RASZYN",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "RAWA MAZOWIECKA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "RAWICZ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "RECZ",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "REDA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "REDZIKOWO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "REGIMIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "REGNÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "REJOWIEC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "REJOWIEC FABRYCZNY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "REPKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "RESKO",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "RESZEL",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "REWAL",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "REŃSKA WIEŚ",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "ROGOŹNO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ROGÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ROGÓŹNO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "ROJEWO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "ROKICINY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ROKITNO",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ROPA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ROPCZYCE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ROSSOSZ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ROZDRAŻEW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ROZOGI",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "ROZPRZA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ROŚCISZEWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ROŹWIENICA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "RUCIANE-NIDA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "RUDA MALENIECKA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "RUDA ŚLĄSKA",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "RUDA-HUTA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "RUDKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "RUDNA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "RUDNIK NAD SANEM",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "RUDNIKI",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "RUDZINIEC",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "RUJA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "RUMIA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "RUSIEC",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "RUSINÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "RUTKA-TARTAK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "RUTKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "RYBCZEWICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "RYBNIK",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "RYCHLIKI",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "RYCHTAL",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "RYCHWAŁ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "RYCZYWÓŁ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "RYDUŁTOWY",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "RYDZYNA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "RYGLICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "RYJEWO",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "RYKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "RYMANÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "RYMAŃ",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "RYN",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "RYPIN",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "RYTRO",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "RYTWIANY",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "RYŃSK",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "RZECZENICA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "RZECZNIÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "RZECZYCA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "RZEKUŃ",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "RZEPIENNIK STRZYŻEWSKI",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "RZEPIN",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "RZESZÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "RZEWNIE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "RZEZAWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "RZĄŚNIA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "RZĄŚNIK",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "RÓŻAN",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "RĄBINO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "RĘCZNO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "RĘDZINY",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "SABNIE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SADKI",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "SADKOWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SADLINKI",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "SADOWIE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SADOWNE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SAMBORZEC",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SANDOMIERZ",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SANNIKI",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SANOK",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "SANTOK",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "SARNAKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SAWIN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SECEMIN",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SEJNY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SERNIKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SEROCK",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "SEROKOMLA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SIANÓW",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "SICIENKO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "SIDRA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SIECHNICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "SIECIECHÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SIEDLCE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SIEDLEC",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SIEDLISKO",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "SIEDLISZCZE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SIEKIERCZYN",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "SIEMIANOWICE ŚLĄSKIE",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "SIEMIATYCZE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SIEMIEŃ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SIEMIĄTKOWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SIEMKOWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SIEMYŚL",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "SIENIAWA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "SIENNICA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SIENNICA RÓŻANA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SIENNO",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SIEPRAW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SIERADZ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SIERAKOWICE",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "SIERAKÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SIEROSZEWICE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SIERPC",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SIEWIERZ",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "SITNO",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SKALBMIERZ",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SKARBIMIERZ",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "SKARSZEWY",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "SKARYSZEW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SKARŻYSKO KOŚCIELNE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SKARŻYSKO-KAMIENNA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SKAWINA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SKAŁA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SKIERBIESZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SKIERNIEWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SKOCZÓW",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "SKOKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SKOMLIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SKOROSZYCE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "SKOŁYSZYN",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "SKRWILNO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "SKRZYSZÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SKULSK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SKWIERZYNA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "SKÓRCZ",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "SKÓRZEC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SKĄPE",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "SKĘPE",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "SMOŁDZINO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "SMYKÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SMĘTOWO GRANICZNE",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "SOBIENIE-JEZIORY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SOBKÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SOBOLEW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SOBÓTKA",
+      "wydzial_id": "wroclaw-vi"
+    },
+    {
+      "gmina": "SOCHACZEW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SOCHOCIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SOKOLNIKI",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SOKOŁY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SOKOŁÓW MAŁOPOLSKI",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "SOKOŁÓW PODLASKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SOKÓŁKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SOLEC KUJAWSKI",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "SOLEC NAD WISŁĄ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SOLEC-ZDRÓJ",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SOLINA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "SOMIANKA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SOMONINO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "SOMPOLNO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SOPOT",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "SORKWITY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "SOSNOWICA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SOSNOWIEC",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "SOSNÓWKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SOŃSK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SOŚNICOWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "SOŚNIE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SOŚNO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "SPICZYN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SPYTKOWICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SROKOWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "STALOWA WOLA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "STANIN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "STANISŁAWÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "STARA BIAŁA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "STARA BŁOTNICA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "STARA DĄBROWA",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "STARA KAMIENICA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "STARA KISZEWA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "STARA KORNICA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "STARACHOWICE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "STARCZA",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "STARE BABICE",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "STARE BOGACZOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "STARE CZARNOWO",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "STARE JUCHY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "STARE KUROWO",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "STARE MIASTO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "STARE POLE",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "STARGARD",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "STAROGARD GDAŃSKI",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "STAROŹREBY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "STARY BRUS",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "STARY DZIERZGOŃ",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "STARY DZIKÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "STARY LUBOTYŃ",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "STARY SĄCZ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "STARY TARG",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "STARY ZAMOŚĆ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "STASZÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "STAWIGUDA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "STAWISKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "STAWISZYN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "STEGNA",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "STEPNICA",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "STERDYŃ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "STOCZEK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "STOCZEK ŁUKOWSKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "STOLNO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "STOPNICA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "STOSZOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "STRACHÓWKA",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "STRAWCZYN",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "STROMIEC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "STRONIE ŚLĄSKIE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "STRUMIEŃ",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "STRYKÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "STRYSZAWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "STRYSZÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "STRZAŁKOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "STRZEGOM",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "STRZEGOWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "STRZELCE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "STRZELCE KRAJEŃSKIE",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "STRZELCE OPOLSKIE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "STRZELCE WIELKIE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "STRZELECZKI",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "STRZELIN",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "STRZELNO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "STRZYŻEWICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "STRZYŻÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "STUBNO",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "STUDZIENICE",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "STUPSK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "STĄPORKÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "STĘSZEW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SUBKOWY",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "SUCHA BESKIDZKA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SUCHAŃ",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "SUCHEDNIÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SUCHOWOLA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SUCHOŻEBRY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SUCHY DĄB",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "SUCHY LAS",
+      "wydzial_id": "poznan-viii"
+    },
+    {
+      "gmina": "SULECHÓW",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "SULEJÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SULEJÓWEK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SULIKÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "SULĘCIN",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "SULĘCZYNO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "SUPRAŚL",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SURAŻ",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SUSIEC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SUSZ",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "SUSZEC",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "SUWAŁKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SUŁKOWICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SUŁOSZOWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SUŁÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SWARZĘDZ",
+      "wydzial_id": "poznan-viii"
+    },
+    {
+      "gmina": "SYCÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "SYPNIEWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SZADEK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SZAFLARY",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SZAMOCIN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SZAMOTUŁY",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SZASTARKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SZCZANIEC",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "SZCZAWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SZCZAWIN KOŚCIELNY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SZCZAWNICA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SZCZAWNO-ZDRÓJ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "SZCZEBRZESZYN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SZCZECIN",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "SZCZECINEK",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "SZCZEKOCINY",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "SZCZERCÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SZCZUCIN",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SZCZUCZYN",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SZCZUROWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SZCZUTOWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SZCZYRK",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "SZCZYTNA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "SZCZYTNIKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SZCZYTNO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "SZELKÓW",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SZEMUD",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "SZEPIETOWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SZERZYNY",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SZKLARSKA PORĘBA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "SZLICHTYNGOWA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "SZPROTAWA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "SZREŃSK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SZTABIN",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SZTUM",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "SZTUTOWO",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "SZUBIN",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "SZUDZIAŁOWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SZULBORZE WIELKIE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SZUMOWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SZYDŁOWIEC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SZYDŁÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SZYPLISZKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "SĘDZIEJOWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SĘDZISZÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SĘDZISZÓW MAŁOPOLSKI",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "SĘKOWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SĘPOPOL",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "SĘPÓLNO KRAJEŃSKIE",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "SŁABOSZÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SŁAWA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "SŁAWATYCZE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "SŁAWKÓW",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "SŁAWOBORZE",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "SŁOMNIKI",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SŁOPNICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "SŁOŃSK",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "SŁUPCA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "SŁUPIA KONECKA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "SŁUPNO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "SŁUPSK",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "TARCZYN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TARNAWATKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TARNOBRZEG",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "TARNOGRÓD",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TARNOWIEC",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "TARNOWO PODGÓRNE",
+      "wydzial_id": "poznan-viii"
+    },
+    {
+      "gmina": "TARNOWSKIE GÓRY",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "TARNÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "TARNÓW OPOLSKI",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "TARNÓWKA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "TARŁÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "TCZEW",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "TCZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TELATYN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TERESIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "TERESPOL",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TERESZPOL",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TOKARNIA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "TOLKMICKO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "TOMASZÓW LUBELSKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TOMASZÓW MAZOWIECKI",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "TOMICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "TOPÓLKA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "TORUŃ",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "TORZYM",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "TOSZEK",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "TRAWNIKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TROJANÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TROSZYN",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "TRYŃCZA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "TRZCIANA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "TRZCIANKA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "TRZCIANNE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "TRZCIEL",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "TRZCINICA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "TRZCIŃSKO-ZDRÓJ",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "TRZEBIATÓW",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "TRZEBIECHÓW",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "TRZEBIEL",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "TRZEBIELINO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "TRZEBIESZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TRZEBINIA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "TRZEBNICA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "TRZEBOWNISKO",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "TRZEMESZNO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "TRZESZCZANY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TRZYCIĄŻ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "TRZYDNIK DUŻY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TRĄBKI WIELKIE",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "TUCHOLA",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "TUCHOMIE",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "TUCHÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "TUCZNA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TUCZNO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "TUCZĘPY",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "TULISZKÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "TUPLICE",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "TURAWA",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "TUREK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "TUROBIN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TUROŚL",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "TUROŚŃ KOŚCIELNA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "TUSZYN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "TUSZÓW NARODOWY",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "TUŁOWICE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "TWARDOGÓRA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "TWORÓG",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "TYCHOWO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "TYCHY",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "TYCZYN",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "TYKOCIN",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "TYMBARK",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "TYRAWA WOŁOSKA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "TYSZOWCE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "TŁUCHOWO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "TŁUSZCZ",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "UCHANIE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "UDANIN",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "UJSOŁY",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "UJŚCIE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ULAN-MAJORAT",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ULANÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ULHÓWEK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "UNIEJÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "UNISŁAW",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "URSZULIN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "URZĘDÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "USTKA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "USTRONIE MORSKIE",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "USTROŃ",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "USTRZYKI DOLNE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "UŁĘŻ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "UŚCIE GORLICKIE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "UŚCIMÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WADOWICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "WADOWICE GÓRNE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "WAGANIEC",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "WALCE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "WALIM",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "WAPNO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WARKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WARLUBIE",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "WARNICE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "WARTA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WARTA BOLESŁAWIECKA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "WARTKOWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WASILKÓW",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "WAŁBRZYCH",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "WAŁCZ",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "WAŚNIÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "WEJHEROWO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "WERBKOWICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WICKO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "WIDAWA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WIDUCHOWA",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "WIECZFNIA KOŚCIELNA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WIELBARK",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "WIELEŃ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WIELGIE",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "WIELGOMŁYNY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WIELICHOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WIELICZKA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "WIELICZKI",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "WIELISZEW",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "WIELKA NIESZAWKA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "WIELKA WIEŚ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "WIELKIE OCZY",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "WIELOPOLE SKRZYŃSKIE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "WIELOWIEŚ",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "WIELUŃ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WIENIAWA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WIEPRZ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "WIERUSZÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WIERZBICA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WIERZBINEK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WIERZBNO",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WIERZCHLAS",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WIERZCHOSŁAWICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "WIERZCHOWO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "WIETRZYCHOWICE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "WIJEWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WILAMOWICE",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "WILCZYCE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "WILCZYN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WILCZĘTA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "WILGA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WILKOWICE",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "WILKOŁAZ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WINNICA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "WISKITKI",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WISZNIA MAŁA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "WISZNICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WISŁA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "WITKOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WITNICA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "WITONIA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WIZNA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "WIĄZOWNA",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "WIĄZOWNICA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "WIĄZÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "WIĘCBORK",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "WIŃSKO",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "WIŚLICA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "WIŚNIEW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WIŚNIEWO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WIŻAJNY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "WLEŃ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "WODYNIE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WODZIERADY",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WODZISŁAW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "WODZISŁAW ŚLĄSKI",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "WOHYŃ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WOJASZÓWKA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "WOJCIECHOWICE",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "WOJCIECHÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WOJCIESZKÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WOJCIESZÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "WOJNICZ",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "WOJSŁAWICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WOLA KRZYSZTOPORSKA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WOLA MYSŁOWSKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WOLA UHRUSKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WOLANÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WOLBROM",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "WOLBÓRZ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WOLIN",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "WOLSZTYN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WOŁCZYN",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "WOŁOMIN",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "WOŁÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "WOŹNIKI",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "WROCŁAW",
+      "wydzial_id": "wroclaw-vi"
+    },
+    {
+      "gmina": "WRONKI",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WRZEŚNIA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WRÓBLEW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WRĘCZYCA WIELKA",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "WSCHOWA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "WYDMINY",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "WYMIARKI",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "WYRY",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "WYRYKI",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WYRZYSK",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WYSOKA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WYSOKIE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WYSOKIE MAZOWIECKIE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "WYSZKI",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "WYSZKÓW",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "WYSZOGRÓD",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "WYŚMIERZYCE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WÓLKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WĄBRZEŹNO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "WĄCHOCK",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "WĄDROŻE WIELKIE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "WĄGROWIEC",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WĄPIELSK",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "WĄSEWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "WĄWOLNICA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WĘGIERSKA GÓRKA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "WĘGLINIEC",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "WĘGORZEWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "WĘGORZYNO",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "WĘGRÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WŁADYSŁAWOWO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "WŁADYSŁAWÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WŁOCŁAWEK",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "WŁODAWA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "WŁODOWICE",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "WŁOSZAKOWICE",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "WŁOSZCZOWA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "ZABIERZÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ZABRODZIE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ZABRZE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "ZABÓR",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "ZABŁUDÓW",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ZADZIM",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ZAGNAŃSK",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "ZAGRODNO",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ZAGÓRZ",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ZAGÓRÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ZAKLICZYN",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ZAKLIKÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ZAKOPANE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ZAKROCZYM",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "ZAKRZEW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ZAKRZÓWEK",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ZALESIE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ZALESZANY",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ZALEWO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "ZAMBRÓW",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ZAMOŚĆ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ZANIEMYŚL",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ZAPOLICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ZARSZYN",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ZARZECZE",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ZARĘBY KOŚCIELNE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ZATOR",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ZATORY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ZAWADY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ZAWADZKIE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "ZAWICHOST",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "ZAWIDZ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ZAWIDÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ZAWIERCIE",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "ZAWOJA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ZAWONIA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ZAŁUSKI",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ZBICZNO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "ZBLEWO",
+      "wydzial_id": "gdansk-vii"
+    },
+    {
+      "gmina": "ZBROSŁAWICE",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "ZBUCZYN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ZBÓJNA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ZBÓJNO",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "ZBĄSZYNEK",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "ZBĄSZYŃ",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ZDUŃSKA WOLA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ZDZIESZOWICE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "ZEBRZYDOWICE",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "ZELÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ZEMBRZYCE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ZGIERZ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ZGORZELEC",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ZIELONA GÓRA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "ZIELONKA",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "ZIELONKI",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ZIĘBICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ZWIERZYN",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "ZWIERZYNIEC",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ZWOLEŃ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ZĄBKI",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "ZĄBKOWICE ŚLĄSKIE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ZĘBOWICE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "ZŁAWIEŚ WIELKA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "ZŁOCIENIEC",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "ZŁOCZEW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ZŁOTA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "ZŁOTNIKI KUJAWSKIE",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "ZŁOTORYJA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ZŁOTY STOK",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ZŁOTÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ĆMIELÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "ŁABISZYN",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "ŁABOWA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ŁABUNIE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŁADZICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŁAGIEWNIKI",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ŁAMBINOWICE",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "ŁANIĘTA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŁAPANÓW",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ŁAPSZE NIŻNE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ŁAPY",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ŁASIN",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "ŁASK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŁASKARZEW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŁASZCZÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŁAZISKA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŁAZISKA GÓRNE",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "ŁAZY",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "ŁAŃCUT",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ŁEBA",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "ŁOBEZ",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "ŁOBŻENICA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ŁOCHÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŁODYGOWICE",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "ŁOMAZY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŁOMIANKI",
+      "wydzial_id": "warszawa-xiv"
+    },
+    {
+      "gmina": "ŁOMŻA",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ŁONIÓW",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "ŁOPIENNIK GÓRNY",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŁOPUSZNO",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "ŁOSICE",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŁOSOSINA DOLNA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ŁOWICZ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŁUBIANKA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "ŁUBNIANY",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "ŁUBOWO",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ŁUKOWA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŁUKOWICA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ŁUKTA",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "ŁUKÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŁUŻNA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ŁYSE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ŁYSOMICE",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "ŁYSZKOWICE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŁÓDŹ",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŁĄCK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŁĄCKO",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ŁĄCZNA",
+      "wydzial_id": "kielce-x"
+    },
+    {
+      "gmina": "ŁĘCZNA",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŁĘCZYCA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŁĘCZYCE",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "ŁĘKA OPATOWSKA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ŁĘKAWICA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "ŁĘKI SZLACHECKIE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŁĘKNICA",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "ŚCINAWA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ŚLEMIEŃ",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "ŚLESIN",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ŚLIWICE",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "ŚMIGIEL",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ŚNIADOWO",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ŚREM",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ŚRODA WIELKOPOLSKA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ŚRODA ŚLĄSKA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ŚWIDWIN",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "ŚWIEBODZICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ŚWIEBODZIN",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "ŚWIECIE",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "ŚWIECIE NAD OSĄ",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "ŚWIEDZIEBNIA",
+      "wydzial_id": "torun-vii"
+    },
+    {
+      "gmina": "ŚWIEKATOWO",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "ŚWIERADÓW-ZDRÓJ",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ŚWIERCZE",
+      "wydzial_id": "bialystok-xii"
+    },
+    {
+      "gmina": "ŚWIERCZÓW",
+      "wydzial_id": "opole-viii"
+    },
+    {
+      "gmina": "ŚWIERKLANIEC",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "ŚWIERKLANY",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "ŚWIERZAWA",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ŚWIERZNO",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "ŚWIESZYNO",
+      "wydzial_id": "koszalin-ix"
+    },
+    {
+      "gmina": "ŚWILCZA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ŚWINICE WARCKIE",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŚWINNA",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "ŚWINOUJŚCIE",
+      "wydzial_id": "szczecin-xiii"
+    },
+    {
+      "gmina": "ŚWIĄTKI",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "ŚWIĄTNIKI GÓRNE",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ŚWIĘCIECHOWA",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ŚWIĘTAJNO",
+      "wydzial_id": "olsztyn-viii"
+    },
+    {
+      "gmina": "ŚWIĘTOCHŁOWICE",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "ŻABIA WOLA",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŻABNO",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ŻAGAŃ",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "ŻARKI",
+      "wydzial_id": "czestochowa-xvii"
+    },
+    {
+      "gmina": "ŻARNOWIEC",
+      "wydzial_id": "katowice-viii"
+    },
+    {
+      "gmina": "ŻARNÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŻARY",
+      "wydzial_id": "zielona-gora-viii"
+    },
+    {
+      "gmina": "ŻARÓW",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ŻEGOCINA",
+      "wydzial_id": "krakow-xii"
+    },
+    {
+      "gmina": "ŻELAZKÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ŻELECHLINEK",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŻELECHÓW",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŻERKÓW",
+      "wydzial_id": "poznan-ix"
+    },
+    {
+      "gmina": "ŻMIGRÓD",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ŻMUDŹ",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŻNIN",
+      "wydzial_id": "bydgoszcz-xiii"
+    },
+    {
+      "gmina": "ŻORY",
+      "wydzial_id": "gliwice-x"
+    },
+    {
+      "gmina": "ŻOŁYNIA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ŻUKOWICE",
+      "wydzial_id": "wroclaw-ix"
+    },
+    {
+      "gmina": "ŻUKOWO",
+      "wydzial_id": "gdansk-viii"
+    },
+    {
+      "gmina": "ŻURAWICA",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ŻUROMIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŻYCHLIN",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŻYRAKÓW",
+      "wydzial_id": "rzeszow-xii"
+    },
+    {
+      "gmina": "ŻYRARDÓW",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŻYRZYN",
+      "wydzial_id": "lublin-vi"
+    },
+    {
+      "gmina": "ŻYTNO",
+      "wydzial_id": "lodz-xx"
+    },
+    {
+      "gmina": "ŻYWIEC",
+      "wydzial_id": "bielsko-biala-viii"
+    },
+    {
+      "gmina": "ŻÓRAWINA",
+      "wydzial_id": "wroclaw-vi"
+    },
+    {
+      "gmina": "ŻÓŁKIEWKA",
+      "wydzial_id": "lublin-vi"
+    }
+  ]
+}

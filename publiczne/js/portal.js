@@ -75,8 +75,253 @@ function EkranLoginPortal({ przyZalogowaniu }) {
         <div className="podpowiedz" style={{ marginTop: 14, textAlign: 'center' }}>
           Dostęp do portalu zakłada kancelaria po weryfikacji tożsamości. Nie ma tu samodzielnej rejestracji.
         </div>
+        <div style={{ textAlign: 'center', marginTop: 10 }}>
+          <button type="button" className="btn btn-sm btn-cichy" onClick={() => idz('/zglos-sie')}>
+            Nie masz jeszcze konta? Zgłoś zainteresowanie
+          </button>
+        </div>
       </form>
     </div>
+  );
+}
+
+/* Etap 3A — publiczny, niezalogowany formularz pierwszego kontaktu. Zbiera
+   WYŁĄCZNIE dane kontaktowe (bez PESEL, bez adresu) — to lead do oceny przez
+   kancelarię, nie wniosek. Kancelaria odpowiada zaproszeniem (etap 3B), po
+   którym dopiero zaczyna się właściwy wniosek o prowadzenie rejestru. */
+function EkranZgloszenieWstepne() {
+  const [email, ustawEmail] = useState('');
+  const [telefon, ustawTelefon] = useState('');
+  const [nazwaSpolki, ustawNazwaSpolki] = useState('');
+  const [opis, ustawOpis] = useState('');
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const [gotowe, ustawGotowe] = useState(false);
+
+  async function wyslij(zdarzenie) {
+    zdarzenie.preventDefault();
+    if (!email.trim()) return;
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      await API.post('/api/psa/portal/zgloszenia', {
+        email: email.trim(),
+        telefon: telefon.trim() || undefined,
+        nazwa_spolki: nazwaSpolki.trim() || undefined,
+        opis: opis.trim() || undefined,
+      });
+      ustawGotowe(true);
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się wysłać zgłoszenia.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  if (gotowe) {
+    return (
+      <div className="ekran-logowania">
+        <div className="card" style={{ width: 440, maxWidth: '92vw' }}>
+          <Pusto
+            tytul="Dziękujemy za zgłoszenie"
+            opis="Kancelaria skontaktuje się z Tobą, żeby ustalić szczegóły i przesłać zaproszenie do złożenia właściwego wniosku o prowadzenie rejestru akcjonariuszy."
+            akcja={<button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ekran-logowania">
+      <form className="card" style={{ width: 440, maxWidth: '92vw' }} onSubmit={wyslij}>
+        <div className="card-h" style={{ marginBottom: 4 }}>Zgłoś zainteresowanie</div>
+        <div className="podtytul-strony" style={{ marginBottom: 22 }}>
+          Prowadzenie rejestru akcjonariuszy — Kancelaria Notarialna Łukasza Kozona
+        </div>
+
+        <Komunikat odmiana="blad" tresc={blad} />
+
+        <Pole etykieta="E-mail" wymagane>
+          <input type="email" autoFocus value={email} onChange={(z) => ustawEmail(z.target.value)} autoComplete="email" />
+        </Pole>
+        <Pole etykieta="Telefon">
+          <input type="tel" value={telefon} onChange={(z) => ustawTelefon(z.target.value)} autoComplete="tel" />
+        </Pole>
+        <Pole etykieta="Nazwa spółki" podpowiedz="Jeśli już istnieje i jest wpisana do KRS.">
+          <input type="text" value={nazwaSpolki} onChange={(z) => ustawNazwaSpolki(z.target.value)} />
+        </Pole>
+        <Pole etykieta="Krótki opis" podpowiedz="Kilka zdań — na tym etapie nie zbieramy danych osobowych ani PESEL.">
+          <textarea rows={3} value={opis} onChange={(z) => ustawOpis(z.target.value)} />
+        </Pole>
+
+        <button className="btn btn-primary" type="submit" disabled={wysylanie || !email.trim()} style={{ width: '100%', marginTop: 8 }}>
+          {wysylanie ? 'Wysyłanie…' : 'Wyślij zgłoszenie'}
+        </button>
+        <div style={{ textAlign: 'center', marginTop: 10 }}>
+          <button type="button" className="btn btn-sm btn-cichy" onClick={() => idz('/')}>← Wróć do logowania</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* Etap 3B — publiczny, niezalogowany ekran wymiany tokenu z maila
+   zapraszającego na hasło. Po sukcesie backend od razu zakłada sesję
+   portalową (ciasteczko), więc wystarczy wrócić na „/” — świeże
+   `usePortalSesja()` samo ją odkryje. */
+function EkranAktywacjaKonta({ token }) {
+  const [email, ustawEmail] = useState(null);
+  const [sprawdzanie, ustawSprawdzanie] = useState(true);
+  const [bladTokenu, ustawBladTokenu] = useState(null);
+  const [haslo, ustawHaslo] = useState('');
+  const [powtorzHaslo, ustawPowtorzHaslo] = useState('');
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+
+  useEffect(() => {
+    API.get(`/api/psa/portal/aktywacja/${token}`)
+      .then((d) => ustawEmail(d.email))
+      .catch((e) => ustawBladTokenu(e instanceof BladApi ? e.message : 'Link aktywacyjny jest nieprawidłowy albo wygasł.'))
+      .finally(() => ustawSprawdzanie(false));
+  }, [token]);
+
+  async function aktywuj(zdarzenie) {
+    zdarzenie.preventDefault();
+    if (haslo !== powtorzHaslo) {
+      ustawBlad('Hasła nie są takie same.');
+      return;
+    }
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      await API.post(`/api/psa/portal/aktywacja/${token}`, { haslo });
+      idz('/');
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się aktywować konta.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  if (sprawdzanie) return <div className="ekran-logowania"><Spinner /></div>;
+
+  if (bladTokenu) {
+    return (
+      <div className="ekran-logowania">
+        <div className="card" style={{ width: 440, maxWidth: '92vw' }}>
+          <Pusto
+            tytul="Link jest nieważny"
+            opis={bladTokenu}
+            akcja={<button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ekran-logowania">
+      <form className="card" style={{ width: 400, maxWidth: '92vw' }} onSubmit={aktywuj}>
+        <div className="card-h" style={{ marginBottom: 4 }}>Aktywacja konta</div>
+        <div className="podtytul-strony" style={{ marginBottom: 22 }}>{email}</div>
+
+        <Komunikat odmiana="blad" tresc={blad} />
+
+        <Pole etykieta="Hasło" wymagane podpowiedz="Co najmniej 10 znaków, litera i cyfra.">
+          <input type="password" autoFocus value={haslo} onChange={(z) => ustawHaslo(z.target.value)} autoComplete="new-password" />
+        </Pole>
+        <Pole etykieta="Powtórz hasło" wymagane>
+          <input type="password" value={powtorzHaslo} onChange={(z) => ustawPowtorzHaslo(z.target.value)} autoComplete="new-password" />
+        </Pole>
+
+        <button className="btn btn-primary" type="submit" disabled={wysylanie || !haslo || !powtorzHaslo} style={{ width: '100%', marginTop: 8 }}>
+          {wysylanie ? 'Aktywowanie…' : 'Aktywuj konto'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/* Etap 3B.1 — informacja o przetwarzaniu danych osobowych (art. 13 RODO),
+   potwierdzana JEDNORAZOWO przed wejściem do formularza wniosku (etap 3C).
+   To NIE jest zgoda z art. 6 ust. 1 lit. a) RODO — podstawą przetwarzania
+   danych treści rejestru jest umowa / obowiązek prawny, więc "zgody" na
+   samo przetwarzanie się tu nie zbiera; potwierdza się WYŁĄCZNIE zapoznanie
+   z obowiązkiem informacyjnym. Prawdziwa zgoda (komunikacja elektroniczna)
+   żyje przy danych akcjonariusza — etap 3D, zgodnie z opisem promptu. */
+function EkranKlauzulaRodo({ przyAkceptacji }) {
+  const { dane } = useDane('/api/wspolne/kancelaria');
+  const kancelaria = dane && dane.kancelaria;
+  const [potwierdzono, ustawPotwierdzono] = useState(false);
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+
+  async function dalej() {
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      await API.post('/api/psa/portal/rodo');
+      przyAkceptacji();
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zapisać potwierdzenia.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  return (
+    <Karta tytul="Informacja o przetwarzaniu danych osobowych">
+      <div className="pion" style={{ gap: 14 }}>
+        <p>
+          Zanim przejdziesz do wypełnienia wniosku o prowadzenie rejestru akcjonariuszy, zapoznaj się
+          z poniższą informacją.
+        </p>
+        <div className="pion" style={{ gap: 8 }}>
+          <div>
+            <strong>Administrator danych:</strong>{' '}
+            {kancelaria ? kancelaria.nazwa : '—'}
+            {kancelaria && kancelaria.adres ? `, ${kancelaria.adres}` : ''}
+            {kancelaria && kancelaria.miejscowosc ? `, ${kancelaria.miejscowosc}` : ''}
+            {kancelaria && kancelaria.email ? ` (${kancelaria.email})` : ''}.
+          </div>
+          <div>
+            <strong>Cel przetwarzania:</strong> zawarcie i wykonanie umowy o prowadzenie rejestru
+            akcjonariuszy prostej spółki akcyjnej (art. 300(31) i nast. Kodeksu spółek handlowych),
+            w tym zebranie danych stanowiących treść rejestru.
+          </div>
+          <div>
+            <strong>Podstawa prawna:</strong> art. 6 ust. 1 lit. b) RODO (niezbędność do zawarcia
+            i wykonania umowy) oraz art. 6 ust. 1 lit. c) RODO (obowiązek prawny wynikający
+            z Kodeksu spółek handlowych) — w zakresie, w jakim dane stanowią obligatoryjną treść rejestru.
+          </div>
+          <div>
+            <strong>Zakres danych:</strong> dane spółki, dane reprezentanta podpisującego umowę oraz
+            dane akcjonariuszy (imię, nazwisko, PESEL, data urodzenia, adres, dane kontaktowe).
+          </div>
+          <div>
+            <strong>Okres przechowywania:</strong> przez czas prowadzenia rejestru akcjonariuszy oraz
+            przez okres wynikający z obowiązków archiwizacyjnych kancelarii notarialnej.
+          </div>
+          <div>
+            <strong>Prawa osoby, której dane dotyczą:</strong> dostęp do danych, sprostowanie oraz —
+            w zakresie przewidzianym przepisami — ograniczenie przetwarzania i wniesienie skargi do
+            Prezesa Urzędu Ochrony Danych Osobowych.
+          </div>
+        </div>
+
+        <Komunikat odmiana="blad" tresc={blad} />
+
+        <label className="chk">
+          <input type="checkbox" checked={potwierdzono} onChange={(z) => ustawPotwierdzono(z.target.checked)} />
+          <span className="chk-tresc">Przeczytałem/-am i rozumiem powyższą informację.</span>
+        </label>
+
+        <button className="btn btn-primary" disabled={!potwierdzono || wysylanie} onClick={dalej} style={{ alignSelf: 'flex-start' }}>
+          {wysylanie ? 'Zapisywanie…' : 'Przejdź dalej'}
+        </button>
+      </div>
+    </Karta>
   );
 }
 
@@ -87,6 +332,13 @@ const KARTY_NAWIGACJI = [
   { sciezka: '/', nazwa: 'Moje spółki' },
   { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
 ];
+
+const ETYKIETA_ROLI_KONTA = {
+  spolka: 'konto spółki',
+  akcjonariusz: 'konto akcjonariusza',
+  // Etap 3B: zaproszone, ale wniosek jeszcze nie zlozony/przyjety.
+  wnioskodawca: 'konto wnioskodawcy',
+};
 
 function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
   const [wylogowywanie, ustawWylogowywanie] = useState(false);
@@ -105,7 +357,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
       <header className="portal-topbar pasek-gorny bez-druku" style={{ padding: '14px 28px' }}>
         <div>
           <div className="tytul-strony" style={{ fontSize: 17 }}>Portal klienta — Rejestr akcjonariuszy P.S.A.</div>
-          <div className="podpowiedz">{konto.email} · {konto.rola === 'spolka' ? 'konto spółki' : 'konto akcjonariusza'}</div>
+          <div className="podpowiedz">{konto.email} · {ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola}</div>
         </div>
         <div className="row-g">
           {KARTY_NAWIGACJI.map((k) => (
@@ -437,13 +689,34 @@ function EkranInformacjaPortal({ spolkaId }) {
    ───────────────────────────────────────────────────── */
 function AplikacjaPortal() {
   const trasa = useTrasa();
-  const sesja = usePortalSesja();
   const { segmenty, sciezka } = trasa;
+
+  // Etap 3A/3B: jedyne trasy publiczne portalu — MUSZĄ wyprzedzić bramkę
+  // sesji poniżej, inaczej niezalogowany gość zawsze wyląduje na ekranie
+  // logowania (konto z aktywacji NIE MA jeszcze ważnej sesji w tym momencie).
+  if (segmenty[0] === 'zglos-sie') return <EkranZgloszenieWstepne />;
+  if (segmenty[0] === 'aktywuj' && segmenty[1]) return <EkranAktywacjaKonta token={segmenty[1]} />;
+
+  return <AplikacjaPortalZSesja segmenty={segmenty} sciezka={sciezka} />;
+}
+
+function AplikacjaPortalZSesja({ segmenty, sciezka }) {
+  const sesja = usePortalSesja();
 
   if (sesja.ladowanie) return <Spinner />;
   if (!sesja.zalogowany) return <EkranLoginPortal przyZalogowaniu={() => sesja.odswiez()} />;
 
   function ekran() {
+    // Etap 3B: konto zaproszone (rola 'wnioskodawca') nie ma jeszcze ani
+    // spółki, ani statusu akcjonariusza — `EkranMoje` (poniżej) dla niego
+    // nie ma sensu. Zanim zobaczy formularz wniosku (etap 3C), musi
+    // najpierw potwierdzić klauzulę RODO (etap 3B.1).
+    if (sesja.konto.rola === 'wnioskodawca') {
+      if (!sesja.konto.rodo_zaakceptowano) {
+        return <EkranKlauzulaRodo przyAkceptacji={() => sesja.odswiez()} />;
+      }
+      return <EkranWniosku />;
+    }
     if (segmenty.length === 0) return <EkranMoje />;
     if (segmenty[0] === 'sprawy') return <EkranSprawyPortal />;
     if (segmenty[0] === 'rejestr' && segmenty[1]) return <EkranRejestrPortal spolkaId={Number(segmenty[1])} />;

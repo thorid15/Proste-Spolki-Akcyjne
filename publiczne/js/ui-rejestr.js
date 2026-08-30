@@ -519,7 +519,7 @@ function Kalendarz({ wartosc, przyWyborze, min, max, przyZamknieciu }) {
  * `wartosc`/`przyZmianie` operują na ISO `RRRR-MM-DD` — segmenty są
  * wyłącznie sposobem wpisywania, nie formatem danych.
  */
-function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFocus }) {
+function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFocus, wylaczone = false }) {
   const [dzien, ustawDzien] = useState('');
   const [miesiac, ustawMiesiac] = useState('');
   const [rok, ustawRok] = useState('');
@@ -621,10 +621,10 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
   return (
     <>
       <div className="pole-daty">
-        <div className={`data-segmenty ${blad ? 'bledne' : ''}`} onPaste={wklej}>
+        <div className={`data-segmenty ${blad ? 'bledne' : ''} ${wylaczone ? 'wylaczone' : ''}`} onPaste={wklej}>
           <input
             ref={refDzien} className="data-segment" data-szer="2" inputMode="numeric"
-            placeholder="DD" value={dzien} autoFocus={autoFocus}
+            placeholder="DD" value={dzien} autoFocus={autoFocus} disabled={wylaczone}
             onChange={(z) => zmien('d', z.target.value)}
             onKeyDown={(z) => klawisz('d', z)}
             aria-label="Dzień"
@@ -632,7 +632,7 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
           <span className="data-rozdzielacz">.</span>
           <input
             ref={refMiesiac} className="data-segment" data-szer="2" inputMode="numeric"
-            placeholder="MM" value={miesiac}
+            placeholder="MM" value={miesiac} disabled={wylaczone}
             onChange={(z) => zmien('m', z.target.value)}
             onKeyDown={(z) => klawisz('m', z)}
             aria-label="Miesiąc"
@@ -640,34 +640,36 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
           <span className="data-rozdzielacz">.</span>
           <input
             ref={refRok} className="data-segment" data-szer="4" inputMode="numeric"
-            placeholder="RRRR" value={rok}
+            placeholder="RRRR" value={rok} disabled={wylaczone}
             onChange={(z) => zmien('r', z.target.value)}
             onKeyDown={(z) => klawisz('r', z)}
             aria-label="Rok"
           />
         </div>
 
-        <div className="kalendarz-kotwica">
-          <button
-            className="btn btn-maly"
-            onClick={() => ustawKalendarz((k) => !k)}
-            aria-label="Otwórz kalendarz"
-            aria-expanded={kalendarz}
-          >
-            ▦
-          </button>
-          {kalendarz && (
-            <Kalendarz
-              wartosc={wartosc}
-              min={min}
-              max={max}
-              przyWyborze={przyZmianie}
-              przyZamknieciu={() => ustawKalendarz(false)}
-            />
-          )}
-        </div>
+        {!wylaczone && (
+          <div className="kalendarz-kotwica">
+            <button
+              className="btn btn-maly"
+              onClick={() => ustawKalendarz((k) => !k)}
+              aria-label="Otwórz kalendarz"
+              aria-expanded={kalendarz}
+            >
+              ▦
+            </button>
+            {kalendarz && (
+              <Kalendarz
+                wartosc={wartosc}
+                min={min}
+                max={max}
+                przyWyborze={przyZmianie}
+                przyZamknieciu={() => ustawKalendarz(false)}
+              />
+            )}
+          </div>
+        )}
 
-        {skroty && (
+        {skroty && !wylaczone && (
           <div className="pigulki-skrotow">
             <button className="btn btn-maly btn-cichy" onClick={() => przyZmianie(dzis)}>dziś</button>
             <button className="btn btn-maly btn-cichy" onClick={() => przyZmianie(dodajDniIso(dzis, -1))}>wczoraj</button>
@@ -756,6 +758,7 @@ function WyborZKartoteki({ wartosc, przyZmianie, placeholder = 'Zacznij pisać n
   const [otwarte, ustawOtwarte] = useState(false);
   const [podswietlony, ustawPodswietlony] = useState(0);
   const [wybrana, ustawWybrana] = useState(null);
+  const [modalNowejOsoby, ustawModalNowejOsoby] = useState(false);
 
   useEffect(() => {
     if (!wartosc) { ustawWybrana(null); return; }
@@ -825,7 +828,12 @@ function WyborZKartoteki({ wartosc, przyZmianie, placeholder = 'Zacznij pisać n
       {otwarte && szukaj.trim().length >= 3 && (
         <div className="kartoteka-lista">
           {wyniki.length === 0 ? (
-            <div className="kartoteka-poz wyciszony">Nikt nie pasuje — załóż nową osobę w kartotece.</div>
+            <button
+              className="kartoteka-poz wyciszony"
+              onMouseDown={(z) => { z.preventDefault(); ustawOtwarte(false); ustawModalNowejOsoby(true); }}
+            >
+              Nikt nie pasuje — załóż nową osobę w kartotece.
+            </button>
           ) : (
             wyniki.map((o, i) => (
               <button
@@ -842,6 +850,17 @@ function WyborZKartoteki({ wartosc, przyZmianie, placeholder = 'Zacznij pisać n
             ))
           )}
         </div>
+      )}
+
+      {modalNowejOsoby && (
+        <FormularzOsoby
+          osoba={{ nazwisko: szukaj.trim() }}
+          przyZamknieciu={() => ustawModalNowejOsoby(false)}
+          przyZapisie={(nowaOsoba) => {
+            ustawModalNowejOsoby(false);
+            wybierz(nowaOsoba);
+          }}
+        />
       )}
     </div>
   );
