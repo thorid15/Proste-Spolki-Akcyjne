@@ -32,8 +32,8 @@ router.get(
   '/meta',
   asy((zad, odp) => {
     odp.json({
-      sprint: SPRINT_KREATORA,
       portal_wlaczony: konfiguracja.PORTAL_WLACZONY,
+      podglad_systemu: konfiguracja.PODGLAD_SYSTEMU,
       typy_zdarzen: typyZdarzen.TYPY,
       typy_w_kreatorze: typyZdarzen.dostepneWKreatorze(SPRINT_KREATORA).map((t) => t.kod),
       zrodla_sprawy: przepisy.ZRODLA_SPRAWY,
@@ -53,7 +53,6 @@ router.get(
       umowe_zawarl: przepisy.UMOWE_ZAWARL,
       charakter_wpisu: przepisy.CHARAKTER_WPISU,
       podstawy: przepisy.PODSTAWY,
-      nowelizacja: przepisy.NOWELIZACJA,
       pola_wrazliwe: przepisy.POLA_WRAZLIWE,
       dzisiaj: czas.dzisIso(),
     });

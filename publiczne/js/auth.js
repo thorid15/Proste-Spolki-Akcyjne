@@ -44,9 +44,9 @@ function EkranLogowania({ przyZalogowaniu }) {
   return (
     <div className="ekran-logowania">
       <form className="card" style={{ width: 380, maxWidth: '92vw' }} onSubmit={zaloguj}>
-        <div className="card-h" style={{ marginBottom: 4 }}>Rejestr akcjonariuszy P.S.A.</div>
+        <div className="card-h" style={{ marginBottom: 4 }}>Kancelaria Notarialna Łukasz Kozon</div>
         <div className="podtytul-strony" style={{ marginBottom: 22 }}>
-          Kancelaria Notarialna Łukasza Kozona
+          Rejestr akcjonariuszy prostych spółek akcyjnych
         </div>
 
         <Komunikat odmiana="blad" tresc={blad} />

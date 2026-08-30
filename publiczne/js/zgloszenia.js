@@ -12,6 +12,9 @@ function EkranZgloszenWstepnych() {
   );
   const [notatki, ustawNotatki] = useState({});
   const [przetwarzanie, ustawPrzetwarzanie] = useState(null);
+  // Zaproszenie, którego nie udało się wysłać mailem — link trzeba przekazać
+  // klientowi ręcznie, więc pokazujemy go do skopiowania zamiast gubić.
+  const [linkDoPrzekazania, ustawLinkDoPrzekazania] = useState(null);
 
   async function odrzuc(id) {
     ustawPrzetwarzanie(id);
@@ -30,7 +33,11 @@ function EkranZgloszenWstepnych() {
     try {
       const wynik = await API.post(`/api/psa/zgloszenia/${id}/zapros`, {});
       if (!wynik.email_wyslany) {
-        window.alert(`Konto założone, ale e-mail nie został wysłany: ${wynik.powod || 'brak konfiguracji SMTP'}.`);
+        ustawLinkDoPrzekazania({
+          email: (zgloszenia.find((z) => z.id === id) || {}).email || '',
+          link: wynik.link_aktywacyjny || null,
+          powod: wynik.powod || 'brak konfiguracji SMTP',
+        });
       }
       odswiez();
     } catch (e) {
@@ -44,6 +51,12 @@ function EkranZgloszenWstepnych() {
 
   return (
     <>
+      {linkDoPrzekazania && (
+        <ModalLinkAktywacyjny
+          dane={linkDoPrzekazania}
+          przyZamknieciu={() => ustawLinkDoPrzekazania(null)}
+        />
+      )}
       <div className="pasek-narzedzi">
         <select value={filtrStatus} onChange={(z) => ustawFiltrStatus(z.target.value)}>
           <option value="">Wszystkie statusy</option>
@@ -122,6 +135,50 @@ function EkranZgloszenWstepnych() {
         </Karta>
       )}
     </>
+  );
+}
+
+/* Konto zostało założone, ale e-mail nie wyszedł. Link aktywacyjny jest
+   jednorazowy i ma termin ważności — kancelaria przekazuje go klientowi
+   innym kanałem (telefon, e-mail z własnej skrzynki). To także jedyna
+   droga aktywacji konta, gdy SMTP nie jest jeszcze skonfigurowany. */
+function ModalLinkAktywacyjny({ dane, przyZamknieciu }) {
+  const [skopiowano, ustawSkopiowano] = useState(false);
+
+  async function kopiuj() {
+    try {
+      await navigator.clipboard.writeText(dane.link);
+      ustawSkopiowano(true);
+    } catch (e) {
+      ustawSkopiowano(false);
+    }
+  }
+
+  return (
+    <Modal tytul="Zaproszenie założone, e-mail nie wyszedł" przyZamknieciu={przyZamknieciu} szerokosc={560}>
+      <Komunikat odmiana="uwaga" tresc={dane.powod} />
+      <p className="male">
+        Konto portalowe dla <strong>{dane.email}</strong> zostało założone. Przekaż klientowi poniższy
+        link aktywacyjny — po jego otwarciu klient ustawi hasło i przejdzie do wniosku.
+      </p>
+      {dane.link ? (
+        <>
+          <div className="dane" style={{ wordBreak: 'break-all', padding: 'var(--od-12)', background: 'var(--papier)', borderRadius: 'var(--r-sm)' }}>
+            {dane.link}
+          </div>
+          <div className="rzad odstep-g">
+            <button className="btn btn-glowny" onClick={kopiuj}>
+              {skopiowano ? 'Skopiowano' : 'Kopiuj link'}
+            </button>
+            <button className="btn" onClick={przyZamknieciu}>Zamknij</button>
+          </div>
+        </>
+      ) : (
+        <div className="rzad odstep-g">
+          <button className="btn" onClick={przyZamknieciu}>Zamknij</button>
+        </div>
+      )}
+    </Modal>
   );
 }
 

@@ -1380,7 +1380,7 @@ function EkranNowejSprawy({ spolkaId }) {
                 <select value={zrodlo} onChange={(z) => ustawZrodlo(z.target.value)} disabled={Boolean(definicjaTypu && definicjaTypu.z_urzedu)}>
                   {!definicjaTypu?.z_urzedu && <option value="papier">papierowo</option>}
                   {!definicjaTypu?.z_urzedu && <option value="email">e-mail</option>}
-                  {!definicjaTypu?.z_urzedu && <option value="portal">portal (przyszły kanał)</option>}
+                  {!definicjaTypu?.z_urzedu && <option value="portal">portal klienta</option>}
                   {definicjaTypu?.z_urzedu && <option value="z_urzedu">z urzędu</option>}
                 </select>
               </Pole>

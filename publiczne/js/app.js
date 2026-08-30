@@ -9,6 +9,15 @@
    Tytuł ekranu mieszka w topbarze, nie w treści — dzięki temu każdy ekran
    zaczyna się od rzeczy, a nie od powtórzonego nagłówka. */
 
+/* Pasek marki i stopka biora dane kancelarii z `/api/wspolne/kancelaria`,
+   a nie z zaszytego tekstu - po scaleniu z rdzeniem kancelarii zrodlo sie
+   zmieni, a widok zostanie ten sam. */
+const KANCELARIA_ZAPASOWA = {
+  nazwa: 'Kancelaria Notarialna Łukasz Kozon',
+  www: 'https://notariusz.gdansk.pl',
+  www_psa: 'https://notariusz.gdansk.pl',
+};
+
 const MENU = [
   {
     grupa: 'Praca',
@@ -31,19 +40,20 @@ const MENU = [
       { sciezka: '/konfiguracja/stawki', nazwa: 'Stawki i terminy', ikona: 'stawki' },
       { sciezka: '/konfiguracja/szablony', nazwa: 'Szablony dokumentów', ikona: 'szablony', admin: true },
       { sciezka: '/konfiguracja/uzytkownicy', nazwa: 'Użytkownicy', ikona: 'uzytkownicy', admin: true },
-      // Etap 5.2: diagnostyka (stan bazy, integralność łańcucha zdarzeń) nie
-      // jest codzienną pracą notariusza — wyłącznie dla roli administratora.
-      { sciezka: '/podglad', nazwa: 'Podgląd systemu', ikona: 'podglad', admin: true },
+      // Katalog komponentów systemu wizualnego — narzędzie DEWELOPERSKIE,
+      // nie ekran pracy notariusza. Pokazuje się wyłącznie, gdy serwer ma
+      // ustawione PODGLAD_SYSTEMU=true (domyślnie: nie ma).
+      { sciezka: '/podglad', nazwa: 'Podgląd systemu', ikona: 'podglad', admin: true, deweloperski: true },
     ],
   },
 ];
 
-function Szyna({ sciezka, uzytkownik }) {
-  const { dane } = useDane('/api/wspolne/kancelaria');
-  const kancelaria = dane && dane.kancelaria;
-
+function Szyna({ sciezka, uzytkownik, kancelaria, podgladSystemu }) {
   const aktywna = (poz) =>
     poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka);
+
+  const widoczna = (poz) =>
+    (!poz.admin || uzytkownik.rola === 'admin') && (!poz.deweloperski || podgladSystemu);
 
   return (
     <nav className="szyna bez-druku">
@@ -58,32 +68,74 @@ function Szyna({ sciezka, uzytkownik }) {
       {MENU.map((g) => (
         <div className="szyna-grupa" key={g.grupa}>
           <div className="szyna-grupa-tytul">{g.grupa}</div>
-          {g.pozycje
-            .filter((poz) => !poz.admin || uzytkownik.rola === 'admin')
-            .map((poz) => (
-              <button
-                key={poz.sciezka}
-                className={`szyna-poz ${aktywna(poz) ? 'aktywna' : ''} ${poz.faza ? 'zablokowana' : ''}`}
-                disabled={Boolean(poz.faza)}
-                title={poz.faza ? `Wchodzi w fazie ${poz.faza}` : undefined}
-                onClick={() => !poz.faza && idz(poz.sciezka)}
-              >
-                <Ikona nazwa={poz.ikona} rozmiar={17} />
-                <span className="szyna-poz-etykieta">{poz.nazwa}</span>
-                {poz.faza && <Pigulka>faza {poz.faza}</Pigulka>}
-              </button>
-            ))}
+          {g.pozycje.filter(widoczna).map((poz) => (
+            <button
+              key={poz.sciezka}
+              className={`szyna-poz ${aktywna(poz) ? 'aktywna' : ''}`}
+              onClick={() => idz(poz.sciezka)}
+            >
+              <Ikona nazwa={poz.ikona} rozmiar={17} />
+              <span className="szyna-poz-etykieta">{poz.nazwa}</span>
+            </button>
+          ))}
         </div>
       ))}
 
       <div className="szyna-pomoc">
         <div className="szyna-pomoc-tytul">Podstawa prawna</div>
         <div className="szyna-pomoc-tresc">
-          Rejestr prowadzony na podstawie art. 300³¹ § 1 KSH przez
-          {kancelaria ? ` ${kancelaria.nazwa}` : ' kancelarię notarialną'}.
+          {kancelaria ? kancelaria.nazwa : 'Kancelaria notarialna'} prowadzi rejestr
+          na podstawie art. 300³¹ § 1 KSH.
         </div>
       </div>
     </nav>
+  );
+}
+
+/* Pasek marki — pierwsza rzecz widoczna na każdym ekranie. Rejestr prowadzi
+   KANCELARIA (art. 300(31) § 1 KSH), więc jej nazwa stoi nad nazwą modułu,
+   a nie obok niej. Nie drukuje się: pisma mają własny nagłówek. */
+function PasekMarki({ kancelaria }) {
+  const k = kancelaria || KANCELARIA_ZAPASOWA;
+  return (
+    <div className="marka-pasek bez-druku">
+      <div className="marka-pasek-nazwa">{k.nazwa}</div>
+      <div className="marka-pasek-opis">Rejestr akcjonariuszy prostych spółek akcyjnych</div>
+      {k.www && (
+        <a className="marka-pasek-link" href={k.www} target="_blank" rel="noopener noreferrer">
+          {k.www.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+        </a>
+      )}
+    </div>
+  );
+}
+
+/** Stopka — dane kancelarii i odesłanie do zakładki „Proste Spółki Akcyjne". */
+function StopkaKancelarii({ kancelaria }) {
+  const k = kancelaria || KANCELARIA_ZAPASOWA;
+  const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
+  const kontakt = [k.telefon, k.email].filter(Boolean).join(' · ');
+  return (
+    <footer className="stopka bez-druku">
+      <div className="stopka-kolumna">
+        <div className="stopka-nazwa">{k.nazwa}</div>
+        {adres && <div>{adres}</div>}
+        {kontakt && <div>{kontakt}</div>}
+      </div>
+      <div className="stopka-kolumna stopka-kolumna-prawa">
+        <div>
+          Rejestr prowadzony na podstawie art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych.
+        </div>
+        {(k.www_psa || k.www) && (
+          <div>
+            Informacje o prowadzeniu rejestru — zakładka „Proste Spółki Akcyjne":{' '}
+            <a href={k.www_psa || k.www} target="_blank" rel="noopener noreferrer">
+              {(k.www_psa || k.www).replace(/^https?:\/\//, '').replace(/\/$/, '')}
+            </a>
+          </div>
+        )}
+      </div>
+    </footer>
   );
 }
 
@@ -187,7 +239,6 @@ function opisTrasy(segmenty) {
     zgloszenia: { tytul: 'Zgłoszenia', podtytul: 'Pierwszy kontakt z publicznego formularza portalu — do oceny przed wysłaniem zaproszenia.' },
     wnioski: { tytul: 'Wnioski', podtytul: 'Wnioski o prowadzenie rejestru złożone przez portal klienta — porównanie z KRS i akceptacja.' },
     oplaty: { tytul: 'Opłaty', podtytul: 'Naliczenia za czynności rejestrowe i prowadzenie rejestru.' },
-    podglad: { tytul: 'Podgląd systemu', podtytul: 'Katalog komponentów modułu — paleta, typografia, pola, tabele i stany.' },
     konfiguracja: { tytul: 'Konfiguracja', podtytul: 'Stawki, terminy, szablony dokumentów i użytkownicy modułu.' },
   };
   return wg[segmenty[0]] || { tytul: 'Rejestr akcjonariuszy', podtytul: null };
@@ -199,6 +250,12 @@ function Aplikacja() {
   const paleta = usePaletaPolecen();
   const { segmenty, zapytanie, sciezka } = trasa;
 
+  const { dane: daneKancelarii } = useDane('/api/wspolne/kancelaria');
+  const kancelaria = daneKancelarii && daneKancelarii.kancelaria;
+  // `/api/psa/meta` mowi, czy serwer wystawia katalog komponentow (`/podglad`).
+  const { dane: meta } = useDane('/api/psa/meta');
+  const podgladSystemu = Boolean(meta && meta.podglad_systemu);
+
   // Licznik na dzwonku: sprawy w toku. Odświeżany przy każdej zmianie trasy,
   // żeby po dokonaniu wpisu nie pokazywał nieaktualnej liczby.
   const { dane: sprawyDane } = useDane(sesja.zalogowany ? '/api/psa/sprawy' : null, [sciezka]);
@@ -207,7 +264,7 @@ function Aplikacja() {
   function ekran() {
     if (segmenty.length === 0) return <EkranPulpitu />;
     if (segmenty[0] === 'podglad') {
-      return sesja.uzytkownik.rola === 'admin' ? <EkranPodgladu /> : <NieZnaleziono />;
+      return podgladSystemu && sesja.uzytkownik.rola === 'admin' ? <EkranPodgladu /> : <NieZnaleziono />;
     }
 
     if (segmenty[0] === 'spolki') {
@@ -274,7 +331,13 @@ function Aplikacja() {
 
   return (
     <div className="powloka">
-      <Szyna sciezka={sciezka} uzytkownik={sesja.uzytkownik} />
+      <PasekMarki kancelaria={kancelaria} />
+      <Szyna
+        sciezka={sciezka}
+        uzytkownik={sesja.uzytkownik}
+        kancelaria={kancelaria}
+        podgladSystemu={podgladSystemu}
+      />
       <div className="obszar">
         <Topbar
           tytul={opis.tytul}
@@ -285,6 +348,7 @@ function Aplikacja() {
           liczbaSpraw={liczbaSpraw}
         />
         <main className="tresc">{ekran()}</main>
+        <StopkaKancelarii kancelaria={kancelaria} />
       </div>
       {paleta.otwarta && <PaletaPolecen przyZamknieciu={paleta.zamknij} />}
     </div>
