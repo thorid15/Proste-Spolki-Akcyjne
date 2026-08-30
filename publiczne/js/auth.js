@@ -20,7 +20,28 @@ function useSesja() {
   return { ...stan, odswiez };
 }
 
+const PUNKTY_KANCELARII = [
+  {
+    ikona: 'zdarzenie',
+    tytul: 'Rejestr, którego nie da się cofnąć',
+    tresc: 'Każde zdarzenie niesie skrót poprzedniego — art. 300³¹ § 4 KSH.',
+  },
+  {
+    ikona: 'zegar',
+    tytul: 'Terminy pod kontrolą',
+    tresc: 'Cel wewnętrzny 3 dni przy siedmiodniowym terminie ustawowym.',
+  },
+  {
+    ikona: 'dokument',
+    tytul: 'Pisma z wzorów kancelarii',
+    tresc: 'Zawiadomienia i wezwania wypełniane danymi z rejestru.',
+  },
+];
+
 function EkranLogowania({ przyZalogowaniu }) {
+  const { dane: daneKancelarii } = useDane('/api/wspolne/kancelaria');
+  const kancelaria = daneKancelarii && daneKancelarii.kancelaria;
+  const www = (kancelaria && kancelaria.www) || KANCELARIA_ZAPASOWA.www;
   const [email, ustawEmail] = useState('');
   const [haslo, ustawHaslo] = useState('');
   const [wysylanie, ustawWysylanie] = useState(false);
@@ -42,42 +63,74 @@ function EkranLogowania({ przyZalogowaniu }) {
   }
 
   return (
-    <div className="ekran-logowania">
-      <form className="card" style={{ width: 380, maxWidth: '92vw' }} onSubmit={zaloguj}>
-        <div className="card-h" style={{ marginBottom: 4 }}>Kancelaria Notarialna Łukasz Kozon</div>
-        <div className="podtytul-strony" style={{ marginBottom: 22 }}>
-          Rejestr akcjonariuszy prostych spółek akcyjnych
+    <div className="pion" style={{ minHeight: '100vh' }}>
+      <div className="marka-pasek bez-druku">
+        <div className="marka-pasek-nazwa">
+          {kancelaria ? kancelaria.nazwa : KANCELARIA_ZAPASOWA.nazwa}
+        </div>
+        {www && (
+          <a className="marka-pasek-link" href={www} target="_blank" rel="noopener noreferrer">
+            {www.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+          </a>
+        )}
+      </div>
+
+      <div className="brama">
+        <div className="brama-opis">
+          <div className="brama-tytul">Rejestr akcjonariuszy P.S.A.</div>
+          <div className="brama-lead">
+            Aplikacja kancelarii do prowadzenia rejestrów akcjonariuszy prostych spółek akcyjnych
+            na podstawie art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych.
+          </div>
+          <div className="brama-punkty">
+            {PUNKTY_KANCELARII.map((p) => (
+              <div className="brama-punkt" key={p.tytul}>
+                <span className="brama-punkt-ikona"><Ikona nazwa={p.ikona} rozmiar={15} /></span>
+                <span className="brama-punkt-tresc">
+                  <strong>{p.tytul}</strong>
+                  {p.tresc}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <Komunikat odmiana="blad" tresc={blad} />
+        <form className="brama-karta" onSubmit={zaloguj}>
+          <div className="brama-karta-tytul">Zaloguj się</div>
+          <div className="brama-karta-podtytul">Konto pracownika kancelarii</div>
 
-        <Pole etykieta="E-mail" wymagane>
-          <input
-            type="email"
-            autoFocus
-            value={email}
-            onChange={(z) => ustawEmail(z.target.value)}
-            autoComplete="username"
-          />
-        </Pole>
-        <Pole etykieta="Hasło" wymagane>
-          <input
-            type="password"
-            value={haslo}
-            onChange={(z) => ustawHaslo(z.target.value)}
-            autoComplete="current-password"
-          />
-        </Pole>
+          <Komunikat odmiana="blad" tresc={blad} />
 
-        <button
-          className="btn btn-primary"
-          type="submit"
-          disabled={wysylanie || !email.trim() || !haslo}
-          style={{ width: '100%', marginTop: 8 }}
-        >
-          {wysylanie ? 'Logowanie…' : 'Zaloguj się'}
-        </button>
-      </form>
+          <Pole etykieta="E-mail" wymagane>
+            <input
+              type="email"
+              autoFocus
+              value={email}
+              onChange={(z) => ustawEmail(z.target.value)}
+              autoComplete="username"
+            />
+          </Pole>
+          <Pole etykieta="Hasło" wymagane>
+            <input
+              type="password"
+              value={haslo}
+              onChange={(z) => ustawHaslo(z.target.value)}
+              autoComplete="current-password"
+            />
+          </Pole>
+
+          <button
+            className="btn btn-glowny btn-duzy"
+            type="submit"
+            disabled={wysylanie || !email.trim() || !haslo}
+            style={{ width: '100%', marginTop: 'var(--od-8)' }}
+          >
+            {wysylanie ? 'Logowanie…' : 'Zaloguj się'}
+          </button>
+        </form>
+      </div>
+
+      <StopkaKancelarii kancelaria={kancelaria} />
     </div>
   );
 }
