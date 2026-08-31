@@ -16,6 +16,9 @@ const PUSTA_OSOBA = {
   // Sesja 8, blok C — przegląd okresowy, beneficjent rzeczywisty, oświadczenie PEP:
   aml_data_przegladu: '', beneficjent_rzeczywisty_id: null,
   pep_oswiadczenie: '', pep_oswiadczenie_data: '',
+  // Etap 14 — status PEP jako DANA (ocena kancelarii, katalog z przepisy.js),
+  // obok `pep_oswiadczenie`, ktore jest oswiadczeniem zlozonym przez osobe.
+  pep: 'nie', pep_opis: '',
 };
 
 const TYPY_DOKUMENTU_AML = [
@@ -362,6 +365,40 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
           <ZnacznikPrzegladuAml wymaga={edycja && osoba.wymaga_przegladu_aml} />
         </div>
       </div>
+      {/* Status PEP jest DANĄ osoby, nie tylko treścią oświadczenia: wobec
+          osoby zajmującej eksponowane stanowisko polityczne kancelaria
+          stosuje wzmożone środki bezpieczeństwa finansowego, więc musi go
+          widzieć na ekranie, a nie odczytywać z papieru w aktach. */}
+      <Przelacznik
+        wlaczony={Boolean(dane.pep) && dane.pep !== 'nie'}
+        przyZmianie={(v) =>
+          ustawDane((p) => ({ ...p, pep: v ? 'tak' : 'nie', pep_opis: v ? p.pep_opis : '' }))
+        }
+        etykieta="Eksponowane stanowisko polityczne (PEP)"
+        opis="Osoba pełniąca znaczącą funkcję publiczną, członek jej rodziny albo bliski współpracownik — ustawa o przeciwdziałaniu praniu pieniędzy. Wobec takiej osoby stosuje się WZMOŻONE środki bezpieczeństwa finansowego."
+        dzieci={
+          <>
+            <Pole etykieta="Na czym polega status" wymagane>
+              <select
+                value={dane.pep && dane.pep !== 'nie' ? dane.pep : 'tak'}
+                onChange={(z) => ustawDane((p) => ({ ...p, pep: z.target.value }))}
+              >
+                <option value="tak">Zajmuje eksponowane stanowisko polityczne</option>
+                <option value="rodzina">Jest członkiem rodziny takiej osoby</option>
+                <option value="wspolpracownik">Jest bliskim współpracownikiem takiej osoby</option>
+              </select>
+            </Pole>
+            <Pole
+              etykieta={dane.pep === 'tak' ? 'Stanowisko lub funkcja' : 'Osoba i charakter relacji'}
+              wymagane
+              podpowiedz="Trafia wprost do oświadczenia AML przygotowanego do podpisu."
+            >
+              <input type="text" {...pole('pep_opis')} />
+            </Pole>
+          </>
+        }
+      />
+
       <Pole etykieta="Notatka AML" podpowiedz="Nigdy nie trafia na wydruki dla klienta.">
         <textarea {...pole('aml_notatka')} style={{ minHeight: 70 }} />
       </Pole>

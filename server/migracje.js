@@ -1552,6 +1552,35 @@ const MIGRACJE = [
         ON psa_spolki_dokumenty (spolka_id, id);
     `,
   },
+  {
+    wersja: 35,
+    nazwa: 'status PEP przy osobie, nie tylko na papierze',
+    sql: `
+      -- Eksponowane stanowisko polityczne (PEP) - art. 2 ust. 2 pkt 11 ustawy
+      -- z 1 marca 2018 r. o przeciwdzialaniu praniu pieniedzy oraz finansowaniu
+      -- terroryzmu. Notariusz prowadzacy rejestr akcjonariuszy jest instytucja
+      -- obowiazana (art. 2 ust. 1 pkt 12 tej ustawy) i stosuje wobec
+      -- akcjonariuszy srodki bezpieczenstwa finansowego; wobec PEP - wzmozone.
+      --
+      -- Dotad status PEP istnial WYLACZNIE jako pole do odhaczenia na
+      -- drukowanym oswiadczeniu AML. Papier wraca do akt i nikt go pozniej nie
+      -- przeglada, wiec kancelaria nie miala jak zobaczyc na ekranie, ktory
+      -- akcjonariusz wymaga wzmozonych srodkow. Teraz to dana, nie tylko tresc
+      -- dokumentu - i wchodzi wprost do oswiadczenia, zamiast czekac na
+      -- odhaczenie dlugopisem.
+      --
+      -- 'nie' / 'tak' / 'rodzina' / 'wspolpracownik' - ustawa traktuje te trzy
+      -- ostatnie tak samo co do obowiazkow, ale rozroznia je co do podstawy,
+      -- a kancelaria musi wiedziec, ktora zachodzi.
+      ALTER TABLE psa_osoby ADD COLUMN pep TEXT NOT NULL DEFAULT 'nie'
+        CHECK (pep IN ('nie','tak','rodzina','wspolpracownik'));
+      ALTER TABLE psa_osoby ADD COLUMN pep_opis TEXT;
+
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep TEXT NOT NULL DEFAULT 'nie'
+        CHECK (pep IN ('nie','tak','rodzina','wspolpracownik'));
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_opis TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

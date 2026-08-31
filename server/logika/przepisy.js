@@ -494,6 +494,36 @@ const OPISY_RODZAJOW_WSPOLWLASNOSCI = {
   [RODZAJE_WSPOLWLASNOSCI.ULAMKOWA]: 'współwłasność w częściach ułamkowych',
 };
 
+/**
+ * Eksponowane stanowisko polityczne — art. 2 ust. 2 pkt 11 ustawy z dnia
+ * 1 marca 2018 r. o przeciwdziałaniu praniu pieniędzy oraz finansowaniu
+ * terroryzmu. Notariusz prowadzący rejestr akcjonariuszy jest instytucją
+ * obowiązaną (art. 2 ust. 1 pkt 12) i wobec PEP stosuje WZMOŻONE środki
+ * bezpieczeństwa finansowego (art. 46).
+ *
+ * Ustawa zrównuje trzy sytuacje co do obowiązków, ale rozróżnia je co do
+ * podstawy — członek rodziny (art. 2 ust. 2 pkt 3) i bliski współpracownik
+ * (art. 2 ust. 2 pkt 12) to osobne przesłanki, nie warianty tej samej.
+ */
+const STATUSY_PEP = {
+  NIE: 'nie',
+  TAK: 'tak',
+  RODZINA: 'rodzina',
+  WSPOLPRACOWNIK: 'wspolpracownik',
+};
+
+const OPISY_STATUSOW_PEP = {
+  [STATUSY_PEP.NIE]: 'nie zajmuje eksponowanego stanowiska politycznego',
+  [STATUSY_PEP.TAK]: 'zajmuje eksponowane stanowisko polityczne',
+  [STATUSY_PEP.RODZINA]: 'jest członkiem rodziny osoby zajmującej eksponowane stanowisko polityczne',
+  [STATUSY_PEP.WSPOLPRACOWNIK]: 'jest bliskim współpracownikiem osoby zajmującej eksponowane stanowisko polityczne',
+};
+
+/** Czy status wymaga wzmożonych środków bezpieczeństwa finansowego (art. 46 ustawy AML). */
+function pepWymagaWzmozonych(status) {
+  return Boolean(status) && status !== STATUSY_PEP.NIE;
+}
+
 const RODZAJE_AKCJI = ['zwykla', 'uprzywilejowana', 'zalozycielska', 'niema'];
 
 /** PRZEPISY-PSA.md art. 300(33) § 1 pkt 9 🟢 - wzmianka o pokryciu. NULL (nieustalone) jest dozwolonym stanem poza tym katalogiem. */
@@ -719,6 +749,9 @@ module.exports = {
   OPISY_STATUSOW_ZGODY_EMAIL,
   RODZAJE_WSPOLWLASNOSCI,
   OPISY_RODZAJOW_WSPOLWLASNOSCI,
+  STATUSY_PEP,
+  OPISY_STATUSOW_PEP,
+  pepWymagaWzmozonych,
   STANY_POKRYCIA,
   UMOWE_ZAWARL,
   CHARAKTER_WPISU,

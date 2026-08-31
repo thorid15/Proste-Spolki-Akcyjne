@@ -27,6 +27,9 @@ const PUSTY_AKCJONARIUSZ_WNIOSKU = {
   zgoda_email_status: 'brak',
   // Art. 300(33) § 1 pkt 5 KSH — współwłasność akcji.
   wspolwlasnosc: 'brak', wspolwlasciciele: '', udzial_licznik: '', udzial_mianownik: '',
+  // Ustawa o przeciwdziałaniu praniu pieniędzy — eksponowane stanowisko
+  // polityczne. Nie z KSH, ale o tej samej osobie i w tym samym formularzu.
+  pep: 'nie', pep_opis: '',
 };
 
 const OPIS_ADRESU_REJESTROWEGO = {
@@ -239,6 +242,10 @@ function brakiUstawoweAkcjonariusza(a) {
     braki.push(`${kto}: zaznaczono zgodę na komunikację elektroniczną, ale nie podano adresu e-mail.`);
   }
 
+  if (a.pep && a.pep !== 'nie' && pusty(a.pep_opis)) {
+    braki.push(`${kto}: zaznaczono eksponowane stanowisko polityczne, ale nie opisano, jakiej funkcji albo relacji dotyczy.`);
+  }
+
   if (a.wspolwlasnosc && a.wspolwlasnosc !== 'brak') {
     if (pusty(a.wspolwlasciciele)) {
       braki.push(`${kto}: przy współwłasności akcji wpisz pozostałych współwłaścicieli.`);
@@ -300,176 +307,241 @@ function PozycjaAkcjonariuszaWniosku({ pozycja, edytowalne, przyZapisie, przyUsu
     <Karta>
       <Komunikat odmiana="blad" tresc={blad} />
 
-      <Pole etykieta="Rodzaj podmiotu" wymagane>
-        <select value={dane.typ} onChange={(z) => ustawDane((p) => ({ ...p, typ: z.target.value }))} disabled={!edytowalne}>
-          <option value="fizyczna">Osoba fizyczna</option>
-          <option value="prawna">Osoba prawna lub jednostka organizacyjna</option>
-        </select>
-      </Pole>
-
-      {dane.typ === 'fizyczna' ? (
-        <>
-          <div className="siatka-2">
-            <Pole etykieta="Nazwisko" wymagane><input type="text" {...pole('nazwisko')} /></Pole>
-            <Pole etykieta="Imię"><input type="text" {...pole('imie')} /></Pole>
-          </div>
-          <div className="siatka-2">
-            <Pole
-              etykieta="PESEL"
-              podpowiedz={!bezPesel ? 'Data urodzenia uzupełni się automatycznie po wpisaniu 11 cyfr — można ją potem nadpisać.' : null}
-            >
-              <div className="pole-z-odznaczeniem">
-                {!bezPesel && <input type="text" {...pole('pesel')} maxLength={11} />}
-                <label className="chk chk-w-linii">
-                  <input
-                    type="checkbox"
-                    checked={bezPesel}
-                    onChange={(z) =>
-                      ustawDane((p) => ({
-                        ...p,
-                        bez_pesel: z.target.checked ? 1 : 0,
-                        // Deklaracja braku PESEL-u i wpisany numer wykluczają się —
-                        // serwer odrzuciłby taki zapis, więc czyścimy pole od razu.
-                        pesel: z.target.checked ? '' : p.pesel,
-                      }))
-                    }
-                    disabled={!edytowalne}
-                  />
-                  <span className="chk-tresc">Nie posiada</span>
-                </label>
-              </div>
-            </Pole>
-            <Pole etykieta="Data urodzenia" wymagane={bezPesel}>
-              <PoleDaty
-                wartosc={dane.data_urodzenia || ''}
-                przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))}
-                wylaczone={!edytowalne}
-              />
-            </Pole>
-          </div>
-          {pesel && !pesel.poprawnaSumaKontrolna && (
-            <Komunikat
-              odmiana="uwaga"
-              tresc="Suma kontrolna numeru PESEL się nie zgadza — sprawdź numer. Zapis nie jest blokowany."
-            />
-          )}
-          <Pole etykieta="Płeć">
-            <select value={dane.plec || ''} onChange={(z) => ustawDane((p) => ({ ...p, plec: z.target.value }))} disabled={!edytowalne}>
-              <option value="">— nie podano —</option>
-              <option value="mezczyzna">mężczyzna</option>
-              <option value="kobieta">kobieta</option>
-            </select>
-          </Pole>
-        </>
-      ) : (
-        <>
-          <Pole etykieta="Firma (nazwa)" wymagane><input type="text" {...pole('nazwa')} /></Pole>
-          <div className="siatka-2">
-            <Pole
-              etykieta="Numer we właściwym rejestrze"
-              podpowiedz="Jeżeli podmiot jest wpisany do rejestru — art. 300³³ § 1 pkt 2 KSH."
-            >
-              <input type="text" {...pole('numer_w_rejestrze')} />
-            </Pole>
-            <Pole etykieta="Nazwa rejestru" podpowiedz="np. KRS.">
-              <input type="text" {...pole('nazwa_rejestru')} />
-            </Pole>
-          </div>
-          <div className="siatka-2">
-            <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
-            <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
-          </div>
-        </>
-      )}
-
-      <div className="rozdzielacz" />
-      <div className="card-h">Adres</div>
-      <Komunikat
-        odmiana="info"
-        tresc="Wpisz tyle adresów, ile akcjonariusz faktycznie posiada — do treści rejestru trafia jeden z nich (art. 300³³ § 1 pkt 3 KSH), kancelaria wskaże który przy weryfikacji wniosku."
-      />
-      <div className="siatka-3">
-        <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
-        <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
-        <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
-      </div>
-      <div className="siatka-2">
-        <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
-        <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
-      </div>
-      <div className="siatka-2">
-        <Pole etykieta="Inny adres do doręczeń" podpowiedz="Jeśli akcjonariusz go posiada i chce, żeby korespondencja szła gdzie indziej.">
-          <input type="text" {...pole('adres_doreczen')} />
-        </Pole>
-        <Pole etykieta="Adres do doręczeń elektronicznych" podpowiedz="Jeśli akcjonariusz go posiada (skrzynka e-Doręczeń).">
-          <input type="text" {...pole('adres_edoreczen')} placeholder="AE:PL-…" />
-        </Pole>
-      </div>
-
-      <div className="rozdzielacz" />
-      <div className="card-h">Kontakt i zgoda na komunikację elektroniczną</div>
-      <div className="siatka-2">
-        <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
-        <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
-      </div>
-      <Komunikat
-        odmiana="info"
-        tresc="Adres e-mail wchodzi do rejestru tylko wtedy, gdy akcjonariusz wyrazi zgodę na komunikację elektroniczną (art. 300³³ § 1 pkt 4 KSH). Zgoda jest oświadczeniem samego akcjonariusza — zarząd nie może jej złożyć za niego. Zaznacz „zadeklarowana”, a przygotujemy oświadczenie do podpisu."
-      />
-      <Pole etykieta="Zgoda na komunikację elektroniczną">
-        <select
-          value={dane.zgoda_email_status || 'brak'}
-          onChange={(z) => ustawDane((p) => ({ ...p, zgoda_email_status: z.target.value }))}
-          disabled={!edytowalne}
-        >
-          <option value="brak">Brak — adres e-mail nie wejdzie do rejestru</option>
-          <option value="zadeklarowana">Zadeklarowana — akcjonariusz podpisze oświadczenie</option>
-        </select>
-      </Pole>
-      {dane.zgoda_email_status === 'potwierdzona' && (
-        <Komunikat odmiana="ok" tresc="Zgoda potwierdzona podpisanym oświadczeniem akcjonariusza." />
-      )}
-      {dane.zgoda_email_status && dane.zgoda_email_status !== 'brak' && !dane.email && (
-        <Komunikat odmiana="uwaga" tresc="Zaznaczono zgodę, ale nie podano adresu e-mail." />
-      )}
-
-      <div className="rozdzielacz" />
-      <div className="card-h">Współwłasność akcji</div>
-      <Pole
-        etykieta="Rodzaj współwłasności"
-        podpowiedz="Wypełnij tylko, jeśli akcje należą do kilku osób wspólnie — art. 300³³ § 1 pkt 5 KSH."
+      <SekcjaFormularza
+        tytul="Kto to jest"
+        opis="Dane wpisywane do rejestru akcjonariuszy — art. 300³³ § 1 pkt 2 KSH. Podaj je dokładnie tak, jak widnieją w dokumencie tożsamości albo w rejestrze przedsiębiorców."
       >
-        <select
-          value={dane.wspolwlasnosc || 'brak'}
-          onChange={(z) => ustawDane((p) => ({ ...p, wspolwlasnosc: z.target.value }))}
-          disabled={!edytowalne}
-        >
-          <option value="brak">Brak — akcje należą wyłącznie do tej osoby</option>
-          <option value="laczna">Współwłasność łączna (np. małżeńska)</option>
-          <option value="ulamkowa">Współwłasność w częściach ułamkowych</option>
-        </select>
-      </Pole>
-      {dane.wspolwlasnosc && dane.wspolwlasnosc !== 'brak' && (
-        <>
-          <Pole
-            etykieta="Pozostali współwłaściciele"
-            wymagane
-            podpowiedz="Imiona i nazwiska albo firmy (nazwy), oddzielone przecinkami."
-          >
-            <input type="text" {...pole('wspolwlasciciele')} />
-          </Pole>
-          {dane.wspolwlasnosc === 'ulamkowa' && (
+        <Pole etykieta="Rodzaj podmiotu" wymagane>
+          <select value={dane.typ} onChange={(z) => ustawDane((p) => ({ ...p, typ: z.target.value }))} disabled={!edytowalne}>
+            <option value="fizyczna">Osoba fizyczna</option>
+            <option value="prawna">Osoba prawna lub jednostka organizacyjna</option>
+          </select>
+        </Pole>
+
+        {dane.typ === 'fizyczna' ? (
+          <>
             <div className="siatka-2">
-              <Pole etykieta="Udział — licznik" wymagane>
-                <input type="number" min="1" {...pole('udzial_licznik')} />
+              <Pole etykieta="Imię"><input type="text" {...pole('imie')} /></Pole>
+              <Pole etykieta="Nazwisko" wymagane><input type="text" {...pole('nazwisko')} /></Pole>
+            </div>
+            <div className="siatka-2">
+              <Pole
+                etykieta="PESEL"
+                podpowiedz={!bezPesel ? 'Data urodzenia uzupełni się automatycznie po wpisaniu 11 cyfr — można ją potem nadpisać.' : null}
+              >
+                <div className="pole-z-odznaczeniem">
+                  {!bezPesel && <input type="text" {...pole('pesel')} maxLength={11} />}
+                  <label className="chk chk-w-linii">
+                    <input
+                      type="checkbox"
+                      checked={bezPesel}
+                      onChange={(z) =>
+                        ustawDane((p) => ({
+                          ...p,
+                          bez_pesel: z.target.checked ? 1 : 0,
+                          // Deklaracja braku PESEL-u i wpisany numer wykluczają się —
+                          // serwer odrzuciłby taki zapis, więc czyścimy pole od razu.
+                          pesel: z.target.checked ? '' : p.pesel,
+                        }))
+                      }
+                      disabled={!edytowalne}
+                    />
+                    <span className="chk-tresc">Nie posiada</span>
+                  </label>
+                </div>
               </Pole>
-              <Pole etykieta="Udział — mianownik" wymagane>
-                <input type="number" min="1" {...pole('udzial_mianownik')} />
+              <Pole etykieta="Data urodzenia" wymagane={bezPesel}>
+                <PoleDaty
+                  wartosc={dane.data_urodzenia || ''}
+                  przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))}
+                  wylaczone={!edytowalne}
+                />
               </Pole>
             </div>
-          )}
-        </>
-      )}
+            {pesel && !pesel.poprawnaSumaKontrolna && (
+              <Komunikat
+                odmiana="uwaga"
+                tresc="Suma kontrolna numeru PESEL się nie zgadza — sprawdź numer. Zapis nie jest blokowany."
+              />
+            )}
+            <Pole etykieta="Płeć (opcjonalnie)">
+              <select value={dane.plec || ''} onChange={(z) => ustawDane((p) => ({ ...p, plec: z.target.value }))} disabled={!edytowalne}>
+                <option value="">— nie podano —</option>
+                <option value="mezczyzna">mężczyzna</option>
+                <option value="kobieta">kobieta</option>
+              </select>
+            </Pole>
+          </>
+        ) : (
+          <>
+            <Pole etykieta="Firma (nazwa)" wymagane><input type="text" {...pole('nazwa')} /></Pole>
+            <div className="siatka-2">
+              <Pole
+                etykieta="Numer we właściwym rejestrze"
+                podpowiedz="Jeżeli podmiot jest wpisany do rejestru — art. 300³³ § 1 pkt 2 KSH."
+              >
+                <input type="text" {...pole('numer_w_rejestrze')} />
+              </Pole>
+              <Pole etykieta="Nazwa rejestru" podpowiedz="np. KRS.">
+                <input type="text" {...pole('nazwa_rejestru')} />
+              </Pole>
+            </div>
+            <div className="siatka-2">
+              <Pole etykieta="NIP (opcjonalnie)"><input type="text" {...pole('nip')} /></Pole>
+              <Pole etykieta="REGON (opcjonalnie)"><input type="text" {...pole('regon')} /></Pole>
+            </div>
+          </>
+        )}
+      </SekcjaFormularza>
+
+      <SekcjaFormularza
+        tytul="Adres"
+        opis="Wpisz tyle adresów, ile akcjonariusz faktycznie posiada. Do treści rejestru trafia jeden z nich (art. 300³³ § 1 pkt 3 KSH) — który, wskaże kancelaria przy weryfikacji wniosku."
+      >
+        <div className="siatka-3">
+          <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
+          <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
+          <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
+        </div>
+        <div className="siatka-2">
+          <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
+          <Pole etykieta="Nr lokalu (opcjonalnie)"><input type="text" {...pole('nr_lokalu')} /></Pole>
+        </div>
+
+        <ZwijanaSekcja
+          tytul="Inne adresy do doręczeń"
+          wypelniona={Boolean(dane.adres_doreczen || dane.adres_edoreczen)}
+        >
+          <Pole
+            etykieta="Inny adres do doręczeń"
+            podpowiedz="Jeśli korespondencja ma iść gdzie indziej niż na adres zamieszkania albo siedziby."
+          >
+            <input type="text" {...pole('adres_doreczen')} />
+          </Pole>
+          <Pole
+            etykieta="Adres do doręczeń elektronicznych"
+            podpowiedz="Skrzynka e-Doręczeń, jeśli akcjonariusz ją posiada."
+          >
+            <input type="text" {...pole('adres_edoreczen')} placeholder="AE:PL-…" />
+          </Pole>
+        </ZwijanaSekcja>
+      </SekcjaFormularza>
+
+      <SekcjaFormularza
+        tytul="Kontakt"
+        opis="Adres e-mail wchodzi do rejestru tylko wtedy, gdy akcjonariusz wyrazi zgodę na komunikację elektroniczną (art. 300³³ § 1 pkt 4 KSH). Zgoda jest oświadczeniem samego akcjonariusza — zarząd nie może jej złożyć za niego."
+      >
+        <div className="siatka-2">
+          <Pole etykieta="Adres e-mail (opcjonalnie)">
+            <input type="text" {...pole('email')} placeholder="przyklad@example.com" />
+          </Pole>
+          <Pole etykieta="Numer telefonu (opcjonalnie)"><input type="text" {...pole('telefon')} /></Pole>
+        </div>
+        <Przelacznik
+          wlaczony={Boolean(dane.zgoda_email_status) && dane.zgoda_email_status !== 'brak'}
+          wylaczony={!edytowalne || dane.zgoda_email_status === 'potwierdzona'}
+          przyZmianie={(v) =>
+            ustawDane((p) => ({ ...p, zgoda_email_status: v ? 'zadeklarowana' : 'brak' }))
+          }
+          etykieta="Akcjonariusz wyraża zgodę na komunikację elektroniczną"
+          opis="Po zaznaczeniu przygotujemy oświadczenie do podpisu. Dopiero podpisane oświadczenie wprowadza adres e-mail do treści rejestru — art. 300³³ § 1 pkt 4 KSH."
+        />
+        {dane.zgoda_email_status === 'potwierdzona' && (
+          <Komunikat odmiana="ok" tresc="Zgoda potwierdzona podpisanym oświadczeniem akcjonariusza." />
+        )}
+        {dane.zgoda_email_status && dane.zgoda_email_status !== 'brak' && !dane.email && (
+          <Komunikat odmiana="uwaga" tresc="Zaznaczono zgodę, ale nie podano adresu e-mail." />
+        )}
+      </SekcjaFormularza>
+
+      <SekcjaFormularza
+        tytul="Oświadczenia"
+        opis="Kancelaria notarialna prowadząca rejestr akcjonariuszy jest instytucją obowiązaną w rozumieniu ustawy o przeciwdziałaniu praniu pieniędzy oraz finansowaniu terroryzmu i stosuje wobec akcjonariuszy środki bezpieczeństwa finansowego."
+      >
+        <Przelacznik
+          wlaczony={Boolean(dane.pep) && dane.pep !== 'nie'}
+          wylaczony={!edytowalne}
+          przyZmianie={(v) =>
+            ustawDane((p) => ({ ...p, pep: v ? 'tak' : 'nie', pep_opis: v ? p.pep_opis : '' }))
+          }
+          etykieta="Wskazana osoba zajmuje eksponowane stanowisko polityczne (PEP)"
+          opis="Zaznacz, jeśli ta osoba pełni lub pełniła znaczącą funkcję publiczną, jest członkiem rodziny takiej osoby albo jej bliskim współpracownikiem. Oświadczenie składa się pod rygorem odpowiedzialności karnej za złożenie fałszywego oświadczenia."
+          dzieci={
+            <>
+              <Pole etykieta="Na czym polega status" wymagane>
+                <select
+                  value={dane.pep && dane.pep !== 'nie' ? dane.pep : 'tak'}
+                  onChange={(z) => ustawDane((p) => ({ ...p, pep: z.target.value }))}
+                  disabled={!edytowalne}
+                >
+                  <option value="tak">Zajmuje eksponowane stanowisko polityczne</option>
+                  <option value="rodzina">Jest członkiem rodziny takiej osoby</option>
+                  <option value="wspolpracownik">Jest bliskim współpracownikiem takiej osoby</option>
+                </select>
+              </Pole>
+              <Pole
+                etykieta={dane.pep === 'tak' ? 'Stanowisko lub funkcja' : 'Osoba i charakter relacji'}
+                wymagane
+                podpowiedz="Trafia wprost do oświadczenia przygotowanego do podpisu."
+              >
+                <input type="text" {...pole('pep_opis')} />
+              </Pole>
+            </>
+          }
+        />
+      </SekcjaFormularza>
+
+      <SekcjaFormularza
+        tytul="Współwłasność akcji"
+        opis="Wypełnij tylko, jeśli akcje należą do kilku osób wspólnie — art. 300³³ § 1 pkt 5 KSH."
+      >
+        <Przelacznik
+          wlaczony={Boolean(dane.wspolwlasnosc) && dane.wspolwlasnosc !== 'brak'}
+          wylaczony={!edytowalne}
+          przyZmianie={(v) =>
+            ustawDane((p) => ({
+              ...p,
+              wspolwlasnosc: v ? 'laczna' : 'brak',
+              wspolwlasciciele: v ? p.wspolwlasciciele : '',
+              udzial_licznik: v ? p.udzial_licznik : '',
+              udzial_mianownik: v ? p.udzial_mianownik : '',
+            }))
+          }
+          etykieta="Akcje należą do kilku osób wspólnie"
+          opis="Przy współwłasności rejestr wymienia pozostałych współwłaścicieli, a przy współwłasności ułamkowej także wielkość udziału."
+          dzieci={
+            <>
+              <Pole etykieta="Rodzaj współwłasności" wymagane>
+                <select
+                  value={dane.wspolwlasnosc && dane.wspolwlasnosc !== 'brak' ? dane.wspolwlasnosc : 'laczna'}
+                  onChange={(z) => ustawDane((p) => ({ ...p, wspolwlasnosc: z.target.value }))}
+                  disabled={!edytowalne}
+                >
+                  <option value="laczna">Współwłasność łączna (np. małżeńska)</option>
+                  <option value="ulamkowa">Współwłasność w częściach ułamkowych</option>
+                </select>
+              </Pole>
+              <Pole
+                etykieta="Pozostali współwłaściciele"
+                wymagane
+                podpowiedz="Imiona i nazwiska albo firmy (nazwy), oddzielone przecinkami."
+              >
+                <input type="text" {...pole('wspolwlasciciele')} />
+              </Pole>
+              {dane.wspolwlasnosc === 'ulamkowa' && (
+                <div className="siatka-2">
+                  <Pole etykieta="Udział — licznik" wymagane>
+                    <input type="number" min="1" {...pole('udzial_licznik')} />
+                  </Pole>
+                  <Pole etykieta="Udział — mianownik" wymagane>
+                    <input type="number" min="1" {...pole('udzial_mianownik')} />
+                  </Pole>
+                </div>
+              )}
+            </>
+          }
+        />
+      </SekcjaFormularza>
 
       {edytowalne && (
         <div className="row-g" style={{ justifyContent: 'flex-end', paddingTop: 8 }}>

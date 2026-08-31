@@ -1462,6 +1462,12 @@ select {
   margin-right: var(--od-8);
   color: var(--atrament-3);
 }
+/* PEP nie jest kolejna cecha w rzedzie — uruchamia wzmozone srodki
+   bezpieczenstwa finansowego, wiec ma sie rzucac w oczy. */
+.podsumowanie-cechy > span.cecha-pep {
+  color: var(--mosiadz);
+  font-weight: 600;
+}
 
 /* ─────────────────────────────────────────────────────
    EKRAN LOGOWANIA / EKRAN PUBLICZNY PORTALU
@@ -1639,4 +1645,97 @@ select {
   padding-top: var(--od-12);
   border-top: 1px solid var(--linia);
   color: var(--atrament-2);
+}
+
+/* ─────────────────────────────────────────────────────
+   FORMULARZE DANYCH OSOBOWYCH
+   Sekcje, zwijane grupy pól i przełączniki oświadczeń.
+   ───────────────────────────────────────────────────── */
+
+.sekcja-formularza { margin-bottom: var(--od-24); }
+.sekcja-formularza + .sekcja-formularza {
+  padding-top: var(--od-24);
+  border-top: 1px solid var(--linia-2);
+}
+.sekcja-formularza-tytul {
+  font-family: var(--font-display);
+  font-size: var(--st-20);
+  font-weight: 500;
+  line-height: 1.3;
+  margin: 0 0 var(--od-4);
+}
+.sekcja-formularza-opis {
+  margin: 0 0 var(--od-16);
+  font-size: var(--st-13);
+  line-height: 1.55;
+  color: var(--atrament-2);
+  max-width: 60ch;
+}
+
+/* ── Zwijana grupa pól ── */
+.zwijana {
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  margin-bottom: var(--od-16);
+  overflow: hidden;
+}
+.zwijana-naglowek {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--od-12);
+  width: 100%;
+  padding: var(--od-12) var(--od-16);
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--atrament);
+}
+.zwijana-naglowek:hover { background: var(--papier); }
+.zwijana-otwarta .zwijana-naglowek { border-bottom: 1px solid var(--linia); }
+.zwijana-tytul { font-size: var(--st-13); font-weight: 600; }
+.zwijana-opcjonalna { font-weight: 400; color: var(--atrament-3); }
+.zwijana-strzalka { color: var(--atrament-3); font-size: var(--st-15); line-height: 1; }
+.zwijana-tresc { padding: var(--od-16); }
+
+/* ── Przełącznik oświadczenia ──
+   Całe pole jest klikalne: przy oświadczeniu o skutkach prawnych trafienie
+   w sam prostokąt przełącznika nie może być warunkiem jego złożenia. */
+.przelacznik-blok {
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  padding: var(--od-16);
+  margin-bottom: var(--od-16);
+  transition: border-color var(--ruch-wiersz), background var(--ruch-wiersz);
+}
+.przelacznik-blok-wlaczony { border-color: var(--mosiadz); background: var(--mosiadz-tlo); }
+.przelacznik-glowna { display: flex; align-items: flex-start; gap: var(--od-12); cursor: pointer; }
+.przelacznik-pole { position: absolute; opacity: 0; width: 0; height: 0; }
+.przelacznik-tor {
+  flex-shrink: 0;
+  position: relative;
+  width: 40px; height: 22px;
+  margin-top: 2px;
+  background: var(--linia);
+  border-radius: 999px;
+  transition: background var(--ruch-wiersz);
+}
+.przelacznik-suwak {
+  position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px;
+  background: var(--karta);
+  border-radius: 50%;
+  box-shadow: var(--cien-s);
+  transition: transform var(--ruch-wiersz);
+}
+.przelacznik-pole:checked + .przelacznik-tor { background: var(--mosiadz); }
+.przelacznik-pole:checked + .przelacznik-tor .przelacznik-suwak { transform: translateX(18px); }
+.przelacznik-pole:focus-visible + .przelacznik-tor { outline: 2px solid var(--rejestr); outline-offset: 2px; }
+.przelacznik-pole:disabled + .przelacznik-tor { opacity: 0.5; }
+.przelacznik-tekst { display: flex; flex-direction: column; gap: var(--od-4); }
+.przelacznik-etykieta { font-size: var(--st-13); font-weight: 600; }
+.przelacznik-opis { font-size: var(--st-11); line-height: 1.55; color: var(--atrament-2); max-width: 62ch; }
+.przelacznik-rozwiniecie {
+  margin-top: var(--od-12);
+  padding-top: var(--od-12);
+  border-top: 1px solid var(--linia);
 }

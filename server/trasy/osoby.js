@@ -127,6 +127,15 @@ function ostrzezeniaOsoby(dane) {
   if (dane.pesel && !poprawnyPesel(dane.pesel)) {
     ostrzezenia.push('Suma kontrolna numeru PESEL się nie zgadza — sprawdź numer.');
   }
+  // `pep` to ustalenie kancelarii, `pep_oswiadczenie` - to, co oswiadczyla
+  // osoba. Wolno im sie roznic (po to sa dwa pola), ale roznica musi byc
+  // widoczna, bo to ona uruchamia wzmozone srodki mimo zaprzeczenia klienta.
+  if (przepisy.pepWymagaWzmozonych(dane.pep) && dane.pep_oswiadczenie === 'nie') {
+    ostrzezenia.push(
+      'Kartoteka wskazuje na eksponowane stanowisko polityczne, a osoba oświadczyła, że go nie zajmuje — '
+        + 'rozbieżność wymaga wyjaśnienia, wzmożone środki bezpieczeństwa stosuje się mimo oświadczenia.'
+    );
+  }
   return ostrzezenia;
 }
 

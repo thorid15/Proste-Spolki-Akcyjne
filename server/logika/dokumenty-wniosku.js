@@ -309,13 +309,26 @@ function oswiadczenieAml({ wniosek, akcjonariusz, dzis }) {
         + 'wskazanych wyżej. Dotyczy to także członków rodziny takiej osoby oraz osób znanych '
         + 'jako jej bliscy współpracownicy.'
       );
-      p.opcja('Nie jestem osobą zajmującą eksponowane stanowisko polityczne, '
-        + 'członkiem rodziny takiej osoby ani jej bliskim współpracownikiem.');
-      p.opcja('Jestem osobą zajmującą eksponowane stanowisko polityczne.');
-      p.opcja('Jestem członkiem rodziny osoby zajmującej eksponowane stanowisko polityczne.');
-      p.opcja('Jestem bliskim współpracownikiem osoby zajmującej eksponowane stanowisko polityczne.');
+      // Status podany w formularzu zaznaczamy z góry — podpisujący go
+      // potwierdza podpisem, zamiast wypełniać drugi raz to samo.
+      const pep = akcjonariusz.pep || przepisy.STATUSY_PEP.NIE;
+      p.opcja(
+        'Nie jestem osobą zajmującą eksponowane stanowisko polityczne, '
+        + 'członkiem rodziny takiej osoby ani jej bliskim współpracownikiem.',
+        pep === przepisy.STATUSY_PEP.NIE
+      );
+      p.opcja('Jestem osobą zajmującą eksponowane stanowisko polityczne.',
+        pep === przepisy.STATUSY_PEP.TAK);
+      p.opcja('Jestem członkiem rodziny osoby zajmującej eksponowane stanowisko polityczne.',
+        pep === przepisy.STATUSY_PEP.RODZINA);
+      p.opcja('Jestem bliskim współpracownikiem osoby zajmującej eksponowane stanowisko polityczne.',
+        pep === przepisy.STATUSY_PEP.WSPOLPRACOWNIK);
       p.odstep(0.4);
-      p.polaDoWypelnienia(['Stanowisko lub funkcja', 'Osoba, z którą łączy mnie relacja']);
+      if (przepisy.pepWymagaWzmozonych(pep) && !pusty(akcjonariusz.pep_opis)) {
+        p.pola([['Stanowisko, funkcja albo relacja', akcjonariusz.pep_opis]]);
+      } else {
+        p.polaDoWypelnienia(['Stanowisko lub funkcja', 'Osoba, z którą łączy mnie relacja']);
+      }
 
       p.sekcja('III. Źródło pochodzenia środków');
       p.polaDoWypelnienia(['Źródło majątku i środków przeznaczonych na pokrycie akcji']);

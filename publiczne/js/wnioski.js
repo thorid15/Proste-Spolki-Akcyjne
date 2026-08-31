@@ -115,6 +115,15 @@ const OPIS_WSPOLWLASNOSCI_WNIOSKU = {
   laczna: 'współwłasność łączna',
   ulamkowa: 'współwłasność ułamkowa',
 };
+// Etap 14 — status PEP jest widoczny juz przy weryfikacji wniosku, a nie
+// dopiero w kartotece: to on decyduje o WZMOZONYCH srodkach bezpieczenstwa
+// finansowego (art. 46 ustawy o przeciwdzialaniu praniu pieniedzy), wiec
+// notariusz musi go zobaczyc, zanim wniosek przyjmie.
+const OPIS_PEP_WNIOSKU = {
+  tak: 'PEP — eksponowane stanowisko polityczne',
+  rodzina: 'PEP — członek rodziny osoby na eksponowanym stanowisku',
+  wspolpracownik: 'PEP — bliski współpracownik osoby na eksponowanym stanowisku',
+};
 
 function PorownanieZKrs({ wniosek, krs }) {
   if (!wniosek.krs) {
@@ -221,6 +230,12 @@ function PozycjaAkcjonariuszaWeryfikacja({ pozycja, wniosekId, zablokowane, odsw
               {OPIS_ADRESU_REJESTROWEGO_WNIOSKU[pozycja.rodzaj_adresu_rejestrowego] || 'adres niewskazany'}
             </span>
             <span>{OPIS_ZGODY_EMAIL_WNIOSKU[pozycja.zgoda_email_status || 'brak']}</span>
+            {OPIS_PEP_WNIOSKU[pozycja.pep] && (
+              <span className="cecha-pep" title={pozycja.pep_opis || undefined}>
+                {OPIS_PEP_WNIOSKU[pozycja.pep]}
+                {pozycja.pep_opis ? ` — ${pozycja.pep_opis}` : ''}
+              </span>
+            )}
             {pozycja.wspolwlasnosc && pozycja.wspolwlasnosc !== 'brak' && (
               <span>
                 {OPIS_WSPOLWLASNOSCI_WNIOSKU[pozycja.wspolwlasnosc]}

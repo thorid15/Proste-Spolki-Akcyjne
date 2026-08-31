@@ -1088,6 +1088,84 @@ function StanZapisu({ stan }) {
 
 window.Stronicowanie = Stronicowanie;
 window.Iskra = Iskra;
+/* ─────────────────────────────────────────────────────
+   FORMULARZE DANYCH OSOBOWYCH
+
+   Długi formularz o jednej osobie czyta się źle jako ciąg pól: nie widać,
+   gdzie kończy się jedna sprawa, a zaczyna następna. Te trzy elementy dzielą
+   go tak, jak dzieli się rozmowa — nagłówek sekcji mówi, o czym teraz jest,
+   sprawy poboczne siedzą zwinięte, a oświadczenia mają formę przełącznika,
+   nie kolejnego pola tekstowego.
+   ───────────────────────────────────────────────────── */
+
+function SekcjaFormularza({ tytul, opis, children }) {
+  return (
+    <section className="sekcja-formularza">
+      {tytul && <h3 className="sekcja-formularza-tytul">{tytul}</h3>}
+      {opis && <p className="sekcja-formularza-opis">{opis}</p>}
+      {children}
+    </section>
+  );
+}
+
+/**
+ * Zwijana grupa pól — dla danych, których większość osób nie ma. Domyślnie
+ * zamknięta, ale otwiera się sama, gdy cokolwiek w środku jest wypełnione:
+ * ukryta wartość, o której nikt nie wie, jest gorsza niż dłuższy formularz.
+ */
+function ZwijanaSekcja({ tytul, opcjonalna = true, wypelniona = false, children }) {
+  const [otwarta, ustawOtwarta] = useState(wypelniona);
+  useEffect(() => { if (wypelniona) ustawOtwarta(true); }, [wypelniona]);
+
+  return (
+    <div className={`zwijana ${otwarta ? 'zwijana-otwarta' : ''}`}>
+      <button
+        type="button"
+        className="zwijana-naglowek"
+        aria-expanded={otwarta}
+        onClick={() => ustawOtwarta((p) => !p)}
+      >
+        <span className="zwijana-tytul">
+          {tytul}
+          {opcjonalna && <span className="zwijana-opcjonalna"> (opcjonalnie)</span>}
+        </span>
+        <span className="zwijana-strzalka" aria-hidden="true">{otwarta ? '⌃' : '⌄'}</span>
+      </button>
+      {otwarta && <div className="zwijana-tresc">{children}</div>}
+    </div>
+  );
+}
+
+/**
+ * Przełącznik do oświadczeń „tak/nie". Etykieta i wyjaśnienie są klikalne
+ * razem z samym przełącznikiem — przy oświadczeniu o skutkach prawnych
+ * trafienie w 40-pikselowy prostokąt nie może być warunkiem złożenia go.
+ */
+function Przelacznik({ wlaczony, przyZmianie, etykieta, opis, wylaczony = false, dzieci }) {
+  return (
+    <div className={`przelacznik-blok ${wlaczony ? 'przelacznik-blok-wlaczony' : ''}`}>
+      <label className="przelacznik-glowna">
+        <input
+          type="checkbox"
+          className="przelacznik-pole"
+          checked={Boolean(wlaczony)}
+          disabled={wylaczony}
+          onChange={(z) => przyZmianie(z.target.checked)}
+        />
+        <span className="przelacznik-tor" aria-hidden="true"><span className="przelacznik-suwak" /></span>
+        <span className="przelacznik-tekst">
+          <span className="przelacznik-etykieta">{etykieta}</span>
+          {opis && <span className="przelacznik-opis">{opis}</span>}
+        </span>
+      </label>
+      {wlaczony && dzieci && <div className="przelacznik-rozwiniecie">{dzieci}</div>}
+    </div>
+  );
+}
+
+window.SekcjaFormularza = SekcjaFormularza;
+window.ZwijanaSekcja = ZwijanaSekcja;
+window.Przelacznik = Przelacznik;
 window.Spinner = Spinner;
 window.Karta = Karta;
 window.Pigulka = Pigulka;

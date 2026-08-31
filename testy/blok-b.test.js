@@ -110,3 +110,47 @@ test('PRZYCZYNY_ODMOWY_WPISU: katalog zamkniety, „inna” wymaga opisu', () =>
     assert.ok(przepisy.OPISY_PRZYCZYN_ODMOWY_WPISU[kod], `brak opisu dla „${kod}”`);
   }
 });
+
+// ─────────────────────────────────────────────────────────────
+// PEP — eksponowane stanowisko polityczne (etap 14)
+// ─────────────────────────────────────────────────────────────
+
+test('STATUSY_PEP: baza przyjmuje kazdy status, a wzmozone srodki tylko poza "nie"', () => {
+  const db = bazaTestowa();
+  for (const kod of Object.values(przepisy.STATUSY_PEP)) {
+    assert.ok(przepisy.OPISY_STATUSOW_PEP[kod], `brak opisu dla „${kod}”`);
+    db.prepare(
+      `INSERT INTO psa_osoby (typ, nazwisko, imie, pep, utworzono)
+       VALUES ('fizyczna', 'Testowy', 'Jan', ?, '2026-01-01T00:00:00.000Z')`
+    ).run(kod);
+  }
+  assert.equal(
+    db.prepare('SELECT COUNT(DISTINCT pep) c FROM psa_osoby').get().c,
+    Object.values(przepisy.STATUSY_PEP).length
+  );
+
+  assert.equal(przepisy.pepWymagaWzmozonych(przepisy.STATUSY_PEP.NIE), false);
+  assert.equal(przepisy.pepWymagaWzmozonych(przepisy.STATUSY_PEP.TAK), true);
+  assert.equal(przepisy.pepWymagaWzmozonych(przepisy.STATUSY_PEP.RODZINA), true);
+  assert.equal(przepisy.pepWymagaWzmozonych(przepisy.STATUSY_PEP.WSPOLPRACOWNIK), true);
+  assert.equal(przepisy.pepWymagaWzmozonych(null), false, 'brak wartosci to nie jest PEP');
+});
+
+test('akcjonariusz: PEP bez opisu jest brakiem, nieznany status jest bledem', () => {
+  const akcjonariusz = require('../server/logika/akcjonariusz');
+  const osoba = { typ: 'fizyczna', imie: 'Anna', nazwisko: 'Nowak', pesel: '85030512345', miejscowosc: 'Gdańsk' };
+
+  // Sam status nie wystarcza: wzmozone srodki wymagaja wiedzy, na czym polega.
+  const braki = akcjonariusz.ostrzezenia({ ...osoba, pep: 'rodzina' });
+  assert.ok(braki.some((b) => /eksponowane stanowisko polityczne/.test(b)));
+  assert.deepEqual(
+    akcjonariusz.ostrzezenia({ ...osoba, pep: 'rodzina', pep_opis: 'Siostra posła' })
+      .filter((b) => /eksponowane/.test(b)),
+    []
+  );
+  assert.deepEqual(akcjonariusz.ostrzezenia({ ...osoba, pep: 'nie' }).filter((b) => /eksponowane/.test(b)), []);
+
+  assert.ok(akcjonariusz.bledy({ pep: 'prezydent' }).some((b) => /Nieznany status PEP/.test(b)));
+  assert.deepEqual(akcjonariusz.bledy({ pep: 'tak' }), []);
+  assert.equal(akcjonariusz.znormalizuj({ pep: '' }).pep, 'nie', 'puste normalizuje sie do „nie”');
+});
