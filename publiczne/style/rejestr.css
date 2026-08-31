@@ -1385,20 +1385,6 @@ select {
   color: var(--atrament-3);
 }
 
-/* Etap 4.6: raport wewnętrzny (bez podpisu notariusza) nosi znak wodny -
-   odróżnia dokument roboczy od informacji z rejestru wydawanej na zewnątrz. */
-.raport-znak-wodny {
-  margin-top: var(--od-24);
-  text-align: center;
-  font-size: var(--st-11);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--atrament-3);
-  border: 1px solid var(--linia);
-  padding: var(--od-8);
-}
-
 @media print {
   /* Margines niesie `.raport` paddingiem — patrz komentarz wyżej. */
   @page { margin: 0; }

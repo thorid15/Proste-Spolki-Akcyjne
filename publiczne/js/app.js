@@ -305,9 +305,12 @@ function Aplikacja() {
       }
       if (segmenty[2] === 'migracja') return <EkranMigracji spolkaId={id} />;
       if (segmenty[2] === 'wydruk') {
+        // Aplikacja wystawia JEDEN dokument ze stanu rejestru — informację
+        // z art. 300(35) § 3 KSH (etap 12). Stary adres `/wydruk/raport`
+        // prowadzi do niej samej: linki mogły trafić do czyichś zakładek,
+        // a nie ma dokąd indziej ich skierować.
         const data = zapytanie.get('data') || undefined;
-        if (segmenty[3] === 'raport') return <EkranRaportu spolkaId={id} dataPoczatkowa={data} />;
-        if (segmenty[3] === 'informacja') return <EkranInformacji spolkaId={id} dataPoczatkowa={data} />;
+        return <EkranInformacji spolkaId={id} dataPoczatkowa={data} />;
       }
       return <NieZnaleziono />;
     }

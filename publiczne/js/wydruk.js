@@ -117,29 +117,27 @@ function SekcjaRaportu({ tytul, children }) {
  * nagłówku/sekcji „Podmiot prowadzący rejestr” — stopka zostaje wyłącznie
  * przy klauzuli ustawowej, żeby nie powtarzać tych samych faktów trzeci raz.
  *
- * Etap 4.6: dokument roboczy (raport wewnętrzny, `roboczy`) nie jest pismem
- * wydawanym na zewnątrz — bez podpisu notariusza, ze znakiem wodnym.
- * Informacja z rejestru (art. 300(35) § 3 KSH) zachowuje miejsce na podpis.
+ * Etap 12: aplikacja wystawia JEDEN dokument — informację z rejestru
+ * akcjonariuszy (art. 300(35) § 3 KSH). Wariant „dokumentu roboczego"
+ * (osobny raport wewnętrzny ze znakiem wodnym) zniknął: ustawa go nie zna,
+ * a notariusz nie ma po co podpisywać dwóch pism o tej samej treści.
+ * Potrzebę „spojrzenia na wszystko bez maskowania" pokrywa ten sam dokument
+ * z odbiorcą „kancelaria", a surowe dane do dalszej obróbki — eksport CSV.
  */
-function StopkaRaportu({ oznaczenie, dodatek, roboczy = false }) {
+function StopkaRaportu({ oznaczenie, dodatek }) {
   return (
     <>
       <div className="raport-stopka">
         <div>
-          {roboczy
-            ? 'Dokument roboczy sporządzony na potrzeby wewnętrzne kancelarii — nie stanowi informacji z rejestru akcjonariuszy w rozumieniu art. 300(35) § 3 Kodeksu spółek handlowych.'
-            : 'Dokument stanowi informację z rejestru akcjonariuszy w rozumieniu art. 300(35) § 3 Kodeksu spółek handlowych.'}
+          Dokument stanowi informację z rejestru akcjonariuszy w rozumieniu
+          art. 300(35) § 3 Kodeksu spółek handlowych.
         </div>
         {oznaczenie && <div style={{ marginTop: 4 }}>Oznaczenie dokumentu: {oznaczenie}</div>}
         {dodatek && <div style={{ marginTop: 4 }}>{dodatek}</div>}
       </div>
-      {roboczy ? (
-        <div className="raport-znak-wodny">DOKUMENT ROBOCZY</div>
-      ) : (
-        <div className="raport-podpis">
-          <div className="raport-podpis-linia">podpis i pieczęć notariusza</div>
-        </div>
-      )}
+      <div className="raport-podpis">
+        <div className="raport-podpis-linia">podpis i pieczęć notariusza</div>
+      </div>
     </>
   );
 }
@@ -318,175 +316,21 @@ function PaskiWydruku({ spolkaId, data, ustawDate, dzieci }) {
 }
 
 /* ─────────────────────────────────────────────────────
-   RAPORT SPÓŁKI
-   ───────────────────────────────────────────────────── */
-function EkranRaportu({ spolkaId, dataPoczatkowa }) {
-  const [data, ustawDate] = useState(dataPoczatkowa || fmt.dzisIso());
-  const stan = useDane(`/api/psa/spolki/${spolkaId}/stan?data=${data}`, [data]);
-  const rdzen = useDane('/api/wspolne/kancelaria');
+   INFORMACJA Z REJESTRU (art. 300(35) § 3 KSH)
 
-  const nazwaSpolki = stan.dane && stan.dane.spolka ? stan.dane.spolka.nazwa : null;
+   JEDYNY dokument, jaki aplikacja wystawia ze stanu rejestru. Wcześniej stał
+   obok niego „raport" — dokument roboczy kancelarii o tej samej treści, bez
+   maskowania i bez podpisu. Ustawa czegoś takiego nie zna: art. 300(35) zna
+   prawo dostępu do danych (§ 2) i prawo żądania INFORMACJI z rejestru (§ 3),
+   nic ponadto. Zostaje więc jedno pismo, a różnicę „dla kogo" niesie wybór
+   odbiorcy, od którego zależy maskowanie z § 1(1).
 
-  /* Nazwa pliku PDF proponowana przez przeglądarkę bierze się z `document.title`
-     — bez tego zapisany raport nazywałby się „Rejestr akcjonariuszy P.S.A.". */
-  useEffect(() => {
-    if (!nazwaSpolki) return undefined;
-    const poprzedni = document.title;
-    document.title = `Rejestr ${nazwaSpolki} ${data}`;
-    return () => { document.title = poprzedni; };
-  }, [nazwaSpolki, data]);
-
-  if (stan.ladowanie || rdzen.ladowanie) return <Spinner />;
-  if (stan.blad) return <Komunikat odmiana="blad" tresc={stan.blad.message} />;
-
-  const d = stan.dane;
-  const kancelaria = rdzen.dane ? rdzen.dane.kancelaria : null;
-  const adres = [
-    d.spolka.ulica && `${d.spolka.ulica} ${d.spolka.nr_domu || ''}${d.spolka.nr_lokalu ? `/${d.spolka.nr_lokalu}` : ''}`,
-    [d.spolka.kod_pocztowy, d.spolka.miejscowosc].filter(Boolean).join(' '),
-  ].filter(Boolean).join(', ');
-
-  return (
-    <>
-      <PaskiWydruku
-        spolkaId={spolkaId}
-        data={data}
-        ustawDate={ustawDate}
-        dzieci={
-          <a className="btn" href={`/api/psa/spolki/${spolkaId}/stan.csv?data=${data}`}>
-            Eksport roboczy CSV
-          </a>
-        }
-      />
-
-      <div className="raport">
-        <NaglowekRaportu
-          tytul="Rejestr akcjonariuszy"
-          podtytul={`${d.spolka.nazwa} — stan na dzień ${fmt.data(data)}`}
-          kancelaria={kancelaria}
-          sporzadzono={sporzadzonoTeraz()}
-        />
-
-        <SekcjaRaportu tytul="Spółka">
-          <dl className="pary">
-            <Para etykieta="Firma">{d.spolka.nazwa}</Para>
-            <Para etykieta="Forma prawna">{d.spolka.forma_prawna}</Para>
-            <Para etykieta="Numer KRS">{d.spolka.krs}</Para>
-            <Para etykieta="NIP">{d.spolka.nip}</Para>
-            <Para etykieta="REGON">{d.spolka.regon}</Para>
-            <Para etykieta="Siedziba i adres">{adres}</Para>
-            <Para etykieta="Sąd rejestrowy">
-              {[d.spolka.sad_rejestrowy, d.spolka.wydzial].filter(Boolean).join(', ')}
-            </Para>
-            <Para etykieta="Status">{NAZWY_STATUSU[d.spolka.status] || d.spolka.status}</Para>
-          </dl>
-        </SekcjaRaportu>
-
-        <SekcjaRaportu tytul={<>Podmiot prowadzący rejestr</>}>
-          <dl className="pary">
-            <Para etykieta="Podmiot">{kancelaria ? kancelaria.nazwa : '—'}</Para>
-            <Para etykieta="Podstawa prowadzenia">art. 300(31) § 1 KSH</Para>
-            <Para etykieta="Data uchwały o wyborze">{fmt.data(d.spolka.data_uchwaly_wyboru)}</Para>
-            <Para etykieta="Data umowy o prowadzenie rejestru">{fmt.data(d.spolka.data_umowy)}</Para>
-            <Para etykieta="Data otwarcia rejestru">{fmt.data(d.spolka.data_otwarcia_rejestru)}</Para>
-          </dl>
-        </SekcjaRaportu>
-
-        {d.spolka.opis && (
-          <SekcjaRaportu tytul={<>Opis</>}>
-            <div style={{ fontSize: 13, lineHeight: 1.6 }}>{d.spolka.opis}</div>
-          </SekcjaRaportu>
-        )}
-
-        {d.uprawnienia.length > 0 && (
-          <SekcjaRaportu tytul={<>Uprawnienia, przywileje i obowiązki</>}>
-            <table className="tabela">
-              <thead>
-                <tr><th>Rodzaj</th><th>Dotyczy</th><th>Tytuł</th><th>Treść</th><th>Od dnia</th></tr>
-              </thead>
-              <tbody>
-                {d.uprawnienia.map((u) => (
-                  <tr key={u.klucz}>
-                    <td>{u.rodzaj}</td>
-                    <td>{u.osoba ? u.osoba.oznaczenie : u.seria || 'cała spółka'}</td>
-                    <td>{u.tytul || '—'}</td>
-                    <td className="zawijaj">{u.tresc || '—'}</td>
-                    <td>{fmt.data(u.data_ustanowienia)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </SekcjaRaportu>
-        )}
-
-        <SekcjaRaportu tytul={<>Emisje akcji</>}>
-          {d.emisje.length === 0 ? (
-            <div className="wyciszony">Rejestr nie wykazuje emisji.</div>
-          ) : (
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th>Seria</th><th>Tytuł</th><th>Podstawa</th><th>Numery</th>
-                  <th className="do-prawej">Wyemitowane</th><th className="do-prawej">Umorzone</th>
-                  <th className="do-prawej">W obrocie</th><th className="do-prawej">Cena emisyjna</th><th>Data</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.emisje.map((e) => {
-                  const b = d.bilans.find((x) => x.emisja_klucz === e.klucz) || {};
-                  return (
-                    <tr key={e.klucz}>
-                      <td style={{ fontWeight: 600 }}>{e.seria}</td>
-                      <td>{e.tytul || '—'}</td>
-                      <td>{e.podstawa_prawna || '—'}</td>
-                      <td className="kol-dane">{e.zakres}</td>
-                      <td className="do-prawej">{fmt.liczba(e.ilosc)}</td>
-                      <td className="do-prawej">{fmt.liczba(b.umorzone || 0)}</td>
-                      <td className="do-prawej">{fmt.liczba(b.w_obrocie || 0)}</td>
-                      <td className="do-prawej">{fmt.zlote(e.cena_emisyjna_grosze)}</td>
-                      <td>{fmt.data(e.data_emisji)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </SekcjaRaportu>
-
-        <SekcjaRaportu tytul="Akcjonariusze">
-          <TabelaAkcjonariuszyRaport akcjonariusze={d.akcjonariusze} razem={d.razem_akcji} />
-        </SekcjaRaportu>
-
-        {d.obciazenia.length > 0 && (
-          <SekcjaRaportu tytul={<>Obciążenia i zajęcia</>}>
-            <table className="tabela">
-              <thead>
-                <tr><th>Typ</th><th>Seria</th><th>Numery</th><th>Uprawniony</th><th>Prawo głosu</th><th>Od dnia</th></tr>
-              </thead>
-              <tbody>
-                {d.obciazenia.map((o) => (
-                  <tr key={o.klucz}>
-                    <td>{o.typ === 'zajecie' ? 'zajęcie' : o.typ}</td>
-                    <td>{o.seria}</td>
-                    <td className="kol-dane">{o.numery}</td>
-                    <td>{o.uprawniony ? o.uprawniony.oznaczenie : '—'}</td>
-                    <td>{o.prawo_glosu ? 'tak' : 'nie'}</td>
-                    <td>{fmt.data(o.data_od)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </SekcjaRaportu>
-        )}
-
-        <StopkaRaportu roboczy />
-      </div>
-    </>
-  );
-}
-
-/* ─────────────────────────────────────────────────────
-   INFORMACJA Z REJESTRU (art. 300(35) KSH)
+   Treść odpowiada zakresowi rejestru z art. 300(33) § 1 KSH:
+     pkt 1–2  — firma, siedziba, adres, sąd rejestrowy i numer KRS
+     pkt 3–4  — daty emisji, serie, numery, rodzaj akcji i uprawnienia z akcji
+     pkt 5    — akcjonariusze wraz z adresami
+     pkt 6–8  — obciążenia i prawo głosu z akcji obciążonej
+     pkt 10   — ograniczenia w rozporządzaniu akcją
    ───────────────────────────────────────────────────── */
 function EkranInformacji({ spolkaId, dataPoczatkowa }) {
   const [data, ustawDate] = useState(dataPoczatkowa || fmt.dzisIso());
@@ -500,6 +344,17 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
   const stan = useDane(zapytanie, [data, rola, odbiorca]);
   const rdzen = useDane('/api/wspolne/kancelaria');
 
+  const nazwaSpolki = stan.dane && stan.dane.spolka ? stan.dane.spolka.nazwa : null;
+
+  /* Nazwa pliku PDF proponowana przez przeglądarkę bierze się z `document.title`
+     — bez tego zapisany dokument nazywałby się „Rejestr akcjonariuszy P.S.A.". */
+  useEffect(() => {
+    if (!nazwaSpolki) return undefined;
+    const poprzedni = document.title;
+    document.title = `Informacja z rejestru ${nazwaSpolki} ${data}`;
+    return () => { document.title = poprzedni; };
+  }, [nazwaSpolki, data]);
+
   if (stan.ladowanie || rdzen.ladowanie) return <Spinner />;
   if (stan.blad) return <Komunikat odmiana="blad" tresc={stan.blad.message} />;
 
@@ -507,6 +362,10 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
   const kancelaria = rdzen.dane ? rdzen.dane.kancelaria : null;
   const zamaskowane = d.akcjonariusze.some((a) => a.osoba && a.osoba.zamaskowane);
   const odbiorcaOsoba = d.akcjonariusze.find((a) => String(a.osoba_id) === String(odbiorca));
+  const adresSpolki = [
+    d.spolka.ulica && `${d.spolka.ulica} ${d.spolka.nr_domu || ''}${d.spolka.nr_lokalu ? `/${d.spolka.nr_lokalu}` : ''}`,
+    [d.spolka.kod_pocztowy, d.spolka.miejscowosc].filter(Boolean).join(' '),
+  ].filter(Boolean).join(', ');
 
   const opisOdbiorcy = {
     kancelaria: 'podmiot prowadzący rejestr',
@@ -552,6 +411,11 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
                 <option value="administracyjny organ egzekucyjny">administracyjny organ egzekucyjny</option>
               </select>
             )}
+            {/* Eksport surowych danych do dalszej obróbki — narzędzie, nie
+                dokument: nic nie podpisuje i niczego nie zaświadcza. */}
+            <a className="btn" href={`/api/psa/spolki/${spolkaId}/stan.csv?data=${data}`}>
+              Eksport CSV
+            </a>
           </>
         }
       />
@@ -581,43 +445,150 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
 
         <div className="raport-sekcja">
           <dl className="pary">
-            <Para etykieta="Spółka">{d.spolka.nazwa}</Para>
-            <Para etykieta="Numer KRS">{d.spolka.krs}</Para>
-            <Para etykieta="Podmiot prowadzący rejestr">{kancelaria ? kancelaria.nazwa : '—'}</Para>
             <Para etykieta="Odbiorca informacji">{opisOdbiorcy}</Para>
             <Para etykieta="Stan na dzień">{fmt.data(data)}</Para>
           </dl>
         </div>
 
+        {/* art. 300(33) § 1 pkt 1–2 KSH */}
+        <SekcjaRaportu tytul="Spółka">
+          <dl className="pary">
+            <Para etykieta="Firma">{d.spolka.nazwa}</Para>
+            <Para etykieta="Forma prawna">{d.spolka.forma_prawna}</Para>
+            <Para etykieta="Siedziba i adres">{adresSpolki}</Para>
+            <Para etykieta="Sąd rejestrowy">
+              {[d.spolka.sad_rejestrowy, d.spolka.wydzial].filter(Boolean).join(', ')}
+            </Para>
+            <Para etykieta="Numer KRS">{d.spolka.krs}</Para>
+            <Para etykieta="NIP">{d.spolka.nip}</Para>
+            <Para etykieta="REGON">{d.spolka.regon}</Para>
+            <Para etykieta="Status">{NAZWY_STATUSU[d.spolka.status] || d.spolka.status}</Para>
+          </dl>
+        </SekcjaRaportu>
+
+        <SekcjaRaportu tytul="Podmiot prowadzący rejestr">
+          <dl className="pary">
+            <Para etykieta="Podmiot">{kancelaria ? kancelaria.nazwa : '—'}</Para>
+            <Para etykieta="Podstawa prowadzenia">art. 300(31) § 1 KSH</Para>
+            <Para etykieta="Data uchwały o wyborze">{fmt.data(d.spolka.data_uchwaly_wyboru)}</Para>
+            <Para etykieta="Data umowy o prowadzenie rejestru">{fmt.data(d.spolka.data_umowy)}</Para>
+            <Para etykieta="Data otwarcia rejestru">{fmt.data(d.spolka.data_otwarcia_rejestru)}</Para>
+          </dl>
+        </SekcjaRaportu>
+
+        {/* art. 300(33) § 1 pkt 5 KSH */}
         <SekcjaRaportu tytul="Akcjonariusze">
           <TabelaAkcjonariuszyRaport akcjonariusze={d.akcjonariusze} razem={d.razem_akcji} />
         </SekcjaRaportu>
 
-        <SekcjaRaportu tytul="Serie akcji">
-          <table className="tabela">
-            <thead>
-              <tr>
-                <th>Seria</th><th>Numery</th>
-                <th className="do-prawej">Wyemitowane</th>
-                <th className="do-prawej">Umorzone</th>
-                <th className="do-prawej">W obrocie</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.bilans.map((b) => (
-                <tr key={b.emisja_klucz}>
-                  <td style={{ fontWeight: 600 }}>{b.seria}</td>
-                  <td className="kol-dane">
-                    {(d.emisje.find((e) => e.klucz === b.emisja_klucz) || {}).zakres}
-                  </td>
-                  <td className="do-prawej">{fmt.liczba(b.wyemitowane)}</td>
-                  <td className="do-prawej">{fmt.liczba(b.umorzone)}</td>
-                  <td className="do-prawej">{fmt.liczba(b.w_obrocie)}</td>
+        {/* art. 300(33) § 1 pkt 3–4 KSH */}
+        <SekcjaRaportu tytul="Emisje i serie akcji">
+          {d.emisje.length === 0 ? (
+            <div className="wyciszony">Rejestr nie wykazuje emisji.</div>
+          ) : (
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th>Seria</th><th>Tytuł</th><th>Podstawa</th><th>Numery</th>
+                  <th className="do-prawej">Wyemitowane</th>
+                  <th className="do-prawej">Umorzone</th>
+                  <th className="do-prawej">W obrocie</th>
+                  <th>Data</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {d.emisje.map((e) => {
+                  const b = d.bilans.find((x) => x.emisja_klucz === e.klucz) || {};
+                  return (
+                    <tr key={e.klucz}>
+                      <td style={{ fontWeight: 600 }}>{e.seria}</td>
+                      <td>{e.tytul || '—'}</td>
+                      <td>{e.podstawa_prawna || '—'}</td>
+                      <td className="kol-dane">{e.zakres}</td>
+                      <td className="do-prawej">{fmt.liczba(e.ilosc)}</td>
+                      <td className="do-prawej">{fmt.liczba(b.umorzone || 0)}</td>
+                      <td className="do-prawej">{fmt.liczba(b.w_obrocie || 0)}</td>
+                      <td>{fmt.data(e.data_emisji)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </SekcjaRaportu>
+
+        {/* art. 300(33) § 1 pkt 4 KSH — uprawnienia szczególne z akcji.
+            Sekcje warunkowe: pusta tabela „uprawnień" na piśmie do sądu
+            sugerowałaby, że o coś nie zapytano, a nie że ich nie ma. */}
+        {d.uprawnienia.length > 0 && (
+          <SekcjaRaportu tytul="Uprawnienia, przywileje i obowiązki związane z akcjami">
+            <table className="tabela">
+              <thead>
+                <tr><th>Rodzaj</th><th>Dotyczy</th><th>Tytuł</th><th>Treść</th><th>Od dnia</th></tr>
+              </thead>
+              <tbody>
+                {d.uprawnienia.map((u) => (
+                  <tr key={u.klucz}>
+                    <td>{u.rodzaj}</td>
+                    <td>{u.osoba ? u.osoba.oznaczenie : u.seria || 'cała spółka'}</td>
+                    <td>{u.tytul || '—'}</td>
+                    <td className="zawijaj">{u.tresc || '—'}</td>
+                    <td>{fmt.data(u.data_ustanowienia)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SekcjaRaportu>
+        )}
+
+        {/* art. 300(33) § 1 pkt 6–8 KSH */}
+        {d.obciazenia.length > 0 && (
+          <SekcjaRaportu tytul="Obciążenia i zajęcia akcji">
+            <table className="tabela">
+              <thead>
+                <tr><th>Typ</th><th>Seria</th><th>Numery</th><th>Uprawniony</th><th>Prawo głosu</th><th>Od dnia</th></tr>
+              </thead>
+              <tbody>
+                {d.obciazenia.map((o) => (
+                  <tr key={o.klucz}>
+                    <td>{o.typ === 'zajecie' ? 'zajęcie' : o.typ}</td>
+                    <td>{o.seria}</td>
+                    <td className="kol-dane">{o.numery}</td>
+                    <td>{o.uprawniony ? o.uprawniony.oznaczenie : '—'}</td>
+                    <td>{o.prawo_glosu ? 'tak' : 'nie'}</td>
+                    <td>{fmt.data(o.data_od)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SekcjaRaportu>
+        )}
+
+        {/* art. 300(33) § 1 pkt 10 KSH */}
+        {d.ograniczenia && d.ograniczenia.length > 0 && (
+          <SekcjaRaportu tytul="Ograniczenia w rozporządzaniu akcjami">
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th>Zakres</th><th>Seria</th><th>Numery</th>
+                  <th>Zgoda spółki</th><th>Prawo pierwszeństwa</th><th>Opis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.ograniczenia.map((o) => (
+                  <tr key={o.klucz}>
+                    <td>{o.zakres === 'spolka' ? 'cała spółka' : o.zakres}</td>
+                    <td>{o.seria || '—'}</td>
+                    <td className="kol-dane">{o.numery || '—'}</td>
+                    <td>{o.wymaga_zgody_spolki ? 'tak' : 'nie'}</td>
+                    <td>{o.prawo_pierwszenstwa ? 'tak' : 'nie'}</td>
+                    <td className="zawijaj">{o.opis || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SekcjaRaportu>
+        )}
 
         <StopkaRaportu
           oznaczenie={`odbiorca: ${opisOdbiorcy}`}
@@ -633,5 +604,4 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
   );
 }
 
-window.EkranRaportu = EkranRaportu;
 window.EkranInformacji = EkranInformacji;
