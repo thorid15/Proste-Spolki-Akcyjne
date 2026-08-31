@@ -29,6 +29,7 @@ const PODSTAWA_AML = 'ustawa z dnia 1 marca 2018 r. o przeciwdziałaniu praniu p
 
 /** Katalog dokumentów pakietu — `kod` jest identyfikatorem typu w bazie. */
 const TYPY = {
+  UMOWA_REJESTRU: 'umowa_rejestru',
   UCHWALA_WYBORU: 'uchwala_wyboru_projekt',
   ZGODA_EMAIL: 'zgoda_email',
   OSWIADCZENIE_RODO: 'oswiadczenie_rodo',
@@ -37,11 +38,28 @@ const TYPY = {
 };
 
 const NAZWY = {
+  [TYPY.UMOWA_REJESTRU]: 'Umowa o prowadzenie rejestru',
   [TYPY.UCHWALA_WYBORU]: 'Uchwała o wyborze podmiotu prowadzącego rejestr',
   [TYPY.ZGODA_EMAIL]: 'Zgoda na komunikację elektroniczną',
   [TYPY.OSWIADCZENIE_RODO]: 'Oświadczenie o zapoznaniu się z informacją o przetwarzaniu danych',
   [TYPY.OSWIADCZENIE_AML]: 'Oświadczenie o beneficjencie rzeczywistym i statusie PEP',
   [TYPY.ZADANIE_PIERWSZEGO_WPISU]: 'Żądanie dokonania pierwszego wpisu wraz ze zgodą',
+};
+
+/**
+ * Kolejność na liście do podpisu. Wprost, a nie „jak wyszło z pętli":
+ * najpierw dwa dokumenty założycielskie podpisywane raz w imieniu spółki
+ * i przez ogół akcjonariuszy, potem oświadczenia indywidualne, na końcu
+ * wspólne żądanie wpisu. Ta sama kolejność ma obowiązywać także wtedy,
+ * gdy komplet powstaje po raz drugi (wniosek wrócił do uzupełnienia).
+ */
+const KOLEJNOSC = {
+  [TYPY.UMOWA_REJESTRU]: 10,
+  [TYPY.UCHWALA_WYBORU]: 20,
+  [TYPY.ZGODA_EMAIL]: 30,
+  [TYPY.OSWIADCZENIE_RODO]: 31,
+  [TYPY.OSWIADCZENIE_AML]: 32,
+  [TYPY.ZADANIE_PIERWSZEGO_WPISU]: 40,
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -420,16 +438,25 @@ async function zlozPakiet({ wniosek, akcjonariusze, dzis }) {
     });
   }
 
-  return dokumenty.map((d) => {
-    const akcjonariusz = d.akcjonariuszId
-      ? akcjonariusze.find((a) => a.id === d.akcjonariuszId)
-      : null;
-    return {
-      ...d,
-      nazwa: NAZWY[d.typ],
-      nazwaPliku: nazwaPliku({ typ: d.typ, wniosek, akcjonariusz }),
-    };
-  });
+  return dokumenty.map((d) => opisz(d, { wniosek, akcjonariusze }));
 }
 
-module.exports = { TYPY, NAZWY, zlozPakiet, nazwaPliku, oznaczenie };
+/**
+ * Dokłada do surowej pozycji pakietu to, co widzi klient: nazwę dokumentu,
+ * nazwę pliku i miejsce na liście. Wspólne dla dokumentów składanych tutaj
+ * i dla umowy, która powstaje w trasie portalu (`server/trasy/portal.js`) —
+ * na liście do podpisu mają wyglądać tak samo.
+ */
+function opisz(d, { wniosek, akcjonariusze = [] }) {
+  const akcjonariusz = d.akcjonariuszId
+    ? akcjonariusze.find((a) => a.id === d.akcjonariuszId)
+    : null;
+  return {
+    ...d,
+    nazwa: NAZWY[d.typ],
+    nazwaPliku: nazwaPliku({ typ: d.typ, wniosek, akcjonariusz }),
+    kolejnosc: KOLEJNOSC[d.typ] ?? 100,
+  };
+}
+
+module.exports = { TYPY, NAZWY, KOLEJNOSC, zlozPakiet, opisz, nazwaPliku, oznaczenie };

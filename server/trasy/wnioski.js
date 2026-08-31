@@ -21,10 +21,13 @@
  * mając już założoną spółkę i akcjonariuszy w kartotece do wyboru.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const express = require('express');
 
 const { db } = require('../baza');
 const czas = require('../pomocnicze/czas');
+const konfiguracja = require('../konfiguracja');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 const { pobierzZKrs } = require('./krs');
 const portal = require('./portal');
@@ -35,6 +38,74 @@ const akcjonariuszLogika = require('../logika/akcjonariusz');
 const router = express.Router();
 
 const STATUSY_ZAMKNIETE = ['przyjety', 'odrzucony'];
+
+/**
+ * Przenosi komplet dokumentow wniosku do AKT SPOLKI.
+ *
+ * Wniosek jest sprawa w toku - zamyka sie i przestaje byc miejscem, do
+ * ktorego ktokolwiek zaglada. Dokumenty zalozycielskie zyja dalej: to na ich
+ * podstawie kancelaria prowadzi rejestr i to je pokazuje, gdy ktos pyta,
+ * skad wzial sie pierwszy wpis. Kopiujemy PLIKI, nie tylko wiersze - akta
+ * spolki maja przetrwac skasowanie wniosku.
+ *
+ * Zapisujemy oba egzemplarze kazdego dokumentu: 'wzor' (to, co wystawila
+ * kancelaria) i 'podpisany' (to, co odeslal klient). Bez wzoru nie da sie
+ * pozniej stwierdzic, pod czym dokladnie zlozono podpis.
+ */
+function przeniesDokumentyDoSpolki(wniosek, spolkaId, teraz) {
+  const dokumenty = db()
+    .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE wniosek_id = ? ORDER BY kolejnosc, id')
+    .all(wniosek.id);
+  if (dokumenty.length === 0) return 0;
+
+  const katalog = path.join(konfiguracja.KATALOG_DOKUMENTOW, `spolka_${spolkaId}`, 'zalozycielskie');
+  fs.mkdirSync(katalog, { recursive: true });
+
+  const wstaw = db().prepare(
+    `INSERT INTO psa_spolki_dokumenty
+       (spolka_id, wniosek_id, typ, nazwa, nazwa_pliku, sciezka, mime, rozmiar, rola, utworzono)
+     VALUES (@spolka_id, @wniosek_id, @typ, @nazwa, @nazwa_pliku, @sciezka, @mime,
+             @rozmiar, @rola, @utworzono)`
+  );
+
+  let ile = 0;
+  for (const d of dokumenty) {
+    const egzemplarze = [
+      { rola: 'wzor', sciezka: d.sciezka, nazwaPliku: d.nazwa_pliku, mime: d.mime, rozmiar: d.rozmiar },
+      d.podpis_sciezka
+        ? {
+          rola: 'podpisany',
+          sciezka: d.podpis_sciezka,
+          nazwaPliku: d.podpis_nazwa_pliku,
+          mime: d.podpis_mime,
+          rozmiar: d.podpis_rozmiar,
+        }
+        : null,
+    ].filter(Boolean);
+
+    for (const e of egzemplarze) {
+      const zrodlo = path.join(konfiguracja.KATALOG_DOKUMENTOW, e.sciezka);
+      if (!zrodlo.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(zrodlo)) continue;
+      const nazwaNaDysku = `${e.rola}-${path.basename(e.sciezka)}`;
+      const cel = path.join(katalog, nazwaNaDysku);
+      fs.copyFileSync(zrodlo, cel);
+      wstaw.run({
+        spolka_id: spolkaId,
+        wniosek_id: wniosek.id,
+        typ: d.typ,
+        nazwa: d.nazwa,
+        nazwa_pliku: e.nazwaPliku || d.nazwa_pliku,
+        sciezka: path.relative(konfiguracja.KATALOG_DOKUMENTOW, cel),
+        mime: e.mime || 'application/pdf',
+        rozmiar: e.rozmiar,
+        rola: e.rola,
+        utworzono: teraz,
+      });
+      ile += 1;
+    }
+  }
+  return ile;
+}
 
 function wczytajWniosek(id) {
   return db()
@@ -97,7 +168,46 @@ router.get(
       if (lista.length > 0) braki[a.id] = lista;
     }
 
-    odp.json({ wniosek, akcjonariusze, krs, braki_ustawowe: braki });
+    // Komplet do podpisu wraz z informacja, co juz wrocilo podpisane -
+    // kancelaria musi to widziec, zanim przyjmie wniosek.
+    const dokumenty = db()
+      .prepare(
+        `SELECT id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id,
+                podpis_nazwa_pliku, podpis_rozmiar, podpis_wgrano
+           FROM psa_wnioski_dokumenty WHERE wniosek_id = ? ORDER BY kolejnosc, id`
+      )
+      .all(wniosek.id);
+
+    odp.json({ wniosek, akcjonariusze, krs, braki_ustawowe: braki, dokumenty });
+  })
+);
+
+/** Wystawiony wzor albo odeslany skan — `?egzemplarz=podpisany` po ten drugi. */
+router.get(
+  '/:id/dokumenty/:dokId',
+  asy((zad, odp) => {
+    const dokument = db()
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
+      .get(Number(zad.params.dokId), Number(zad.params.id));
+    if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+
+    const podpisany = zad.query.egzemplarz === 'podpisany';
+    if (podpisany && !dokument.podpis_sciezka) throw nieZnaleziono('Klient nie odesłał jeszcze tego dokumentu.');
+
+    const sciezka = podpisany ? dokument.podpis_sciezka : dokument.sciezka;
+    const nazwaPliku = podpisany ? dokument.podpis_nazwa_pliku : dokument.nazwa_pliku;
+    const mime = podpisany ? dokument.podpis_mime : dokument.mime;
+
+    const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, sciezka);
+    if (!pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelna)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+    odp.setHeader('Content-Type', mime || 'application/octet-stream');
+    odp.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(nazwaPliku || 'dokument')}`
+    );
+    fs.createReadStream(pelna).pipe(odp);
   })
 );
 
@@ -363,11 +473,14 @@ router.post(
         .run(spolkaId, kontoWnioskodawcy.id);
     }
 
+    const przeniesione = przeniesDokumentyDoSpolki(wniosek, spolkaId, teraz);
+
     odp.json({
       wniosek: wczytajWniosek(wniosek.id),
       akcjonariusze: wczytajAkcjonariuszy(wniosek.id),
       spolka_id: spolkaId,
       konto_przepiete: przepiete,
+      dokumenty_przeniesione: przeniesione,
     });
   })
 );

@@ -25,6 +25,7 @@ process.env.PORTAL_WLACZONY = 'true';
 const app = require('../serwer');
 const { db } = require('../server/baza');
 const hasla = require('../server/logika/hasla');
+const { KATALOG_DOKUMENTOW } = require('../server/konfiguracja');
 
 let serwer;
 let baza;
@@ -204,6 +205,31 @@ test('POST /api/psa/wnioski/:id/przyjmij: zaklada spolke i osobe, dowiazuje wnio
   assert.ok(akcjonariuszPo.osoba_id, 'nowa osoba zalozona i dowiazana do pozycji wniosku');
   const osoba = db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(akcjonariuszPo.osoba_id);
   assert.equal(osoba.nazwisko, 'Nowak');
+
+  // Komplet dokumentow przechodzi z wniosku do AKT SPOLKI: wniosek sie
+  // zamyka, dokumenty zalozycielskie zyja dalej.
+  const [, akta] = await zapytaj(
+    'GET', `/api/psa/spolki/${wynik.spolka_id}/dokumenty-zalozycielskie`, undefined, ciastkoPracownik
+  );
+  assert.ok(akta.dokumenty.length > 0, 'akta spolki nie sa puste');
+  assert.ok(
+    akta.dokumenty.some((d) => d.typ === 'umowa_rejestru' && d.rola === 'wzor'),
+    'wystawiona umowa jest w aktach spolki'
+  );
+  // Podpisana umowa wrocila w `wnioskGotowyDoWeryfikacji`, wiec oba
+  // egzemplarze maja tu byc: bez wzoru nie wiadomo, pod czym podpisano.
+  assert.ok(
+    akta.dokumenty.some((d) => d.typ === 'umowa_rejestru' && d.rola === 'podpisany'),
+    'odeslany skan umowy jest w aktach spolki'
+  );
+  // Sciezki na dysku sa wewnetrzne — trasa ich nie zwraca, wiec do
+  // sprawdzenia, czy kopie faktycznie powstaly, siegamy do bazy.
+  const kopie = db()
+    .prepare('SELECT sciezka FROM psa_spolki_dokumenty WHERE spolka_id = ?')
+    .all(wynik.spolka_id)
+    .map((d) => path.join(KATALOG_DOKUMENTOW, d.sciezka));
+  assert.equal(kopie.length, akta.dokumenty.length);
+  assert.ok(kopie.every((s) => fs.existsSync(s)), 'kazdy wiersz akt ma swoj plik na dysku');
 
   const [stPonownie] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, undefined, ciastkoPracownik);
   assert.equal(stPonownie, 400, 'wniosek przyjety jest juz zamkniety');

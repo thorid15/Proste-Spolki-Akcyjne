@@ -822,6 +822,56 @@ router.post(
   })
 );
 
+/**
+ * Dokumenty założycielskie spółki — komplet przeniesiony z wniosku przy jego
+ * przyjęciu (`server/trasy/wnioski.js`). Dla każdego dokumentu dwa
+ * egzemplarze: wystawiony wzór i odesłany przez klienta podpisany skan.
+ */
+router.get(
+  '/:id/dokumenty-zalozycielskie',
+  asy((zad, odp) => {
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const dokumenty = db()
+      .prepare(
+        `SELECT id, wniosek_id, typ, nazwa, nazwa_pliku, rozmiar, rola, utworzono
+           FROM psa_spolki_dokumenty WHERE spolka_id = ? ORDER BY id`
+      )
+      .all(spolka.id);
+    odp.json({ dokumenty });
+  })
+);
+
+router.get(
+  '/:id/dokumenty-zalozycielskie/:dokId',
+  asy((zad, odp) => {
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const dokument = db()
+      .prepare('SELECT * FROM psa_spolki_dokumenty WHERE id = ? AND spolka_id = ?')
+      .get(Number(zad.params.dokId), spolka.id);
+    if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+
+    const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, dokument.sciezka);
+    if (!pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelna)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik', spolkaId: spolka.id,
+      akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU,
+      opis: `dokument założycielski #${dokument.id} (${dokument.typ}, ${dokument.rola})`,
+    });
+
+    odp.setHeader('Content-Type', dokument.mime || 'application/octet-stream');
+    odp.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(dokument.nazwa_pliku)}`
+    );
+    fs.createReadStream(pelna).pipe(odp);
+  })
+);
+
 /** Historia dokumentów wystawionych na żądanie (bez powiązania ze sprawą). */
 router.get(
   '/:id/wydane',

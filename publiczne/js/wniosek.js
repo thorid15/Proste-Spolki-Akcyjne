@@ -47,6 +47,113 @@ function etykietaDokumentu(nazwaPliku) {
 }
 
 /**
+ * Jedna pozycja listy „Dokumenty do podpisu": wystawiony dokument do
+ * pobrania i miejsce na jego podpisany skan.
+ *
+ * Slot na skan siedzi PRZY dokumencie, a nie w osobnym formularzu na dole
+ * ekranu: klient odsyła kilka plików, każdy do czego innego, i bez tego
+ * powiązania musiałby pamiętać, co czym jest — a kancelaria zgadywać.
+ */
+function PozycjaDokumentu({ dokument, edytowalne, przyZmianie }) {
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const wejscie = useRef(null);
+  const podpisany = Boolean(dokument.podpis_nazwa_pliku);
+
+  async function wyslij(plik) {
+    if (!plik) return;
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      const formularz = new FormData();
+      formularz.append('plik', plik);
+      const odp = await fetch(`/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`, {
+        method: 'POST',
+        body: formularz,
+      });
+      const tresc = await odp.json().catch(() => ({}));
+      if (!odp.ok) throw new Error(tresc.blad || `Nie udało się przesłać pliku (błąd ${odp.status}).`);
+      przyZmianie(tresc);
+    } catch (e) {
+      ustawBlad(e.message);
+    } finally {
+      ustawWysylanie(false);
+      if (wejscie.current) wejscie.current.value = '';
+    }
+  }
+
+  async function usun() {
+    if (!window.confirm('Usunąć przesłany skan tego dokumentu?')) return;
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      przyZmianie(await API.delete(`/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`));
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się usunąć pliku.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  return (
+    <div className={`dokument-pozycja ${podpisany ? 'dokument-pozycja-gotowa' : ''}`}>
+      <div className="dokument-pozycja-glowna">
+        <Ikona nazwa="pobierz" rozmiar={17} />
+        <a
+          className="dokument-pozycja-nazwa"
+          href={`/api/psa/portal/wniosek/dokumenty/${dokument.id}`}
+          target="_blank"
+          rel="noopener"
+        >
+          {etykietaDokumentu(dokument.nazwa_pliku)}
+        </a>
+        <span className="dokument-pozycja-rozmiar">
+          {Math.max(1, Math.round((dokument.rozmiar || 0) / 1024))} kB
+        </span>
+      </div>
+
+      <div className="dokument-pozycja-podpis">
+        {podpisany ? (
+          <>
+            <Znacznik odmiana="zielony">podpisany</Znacznik>
+            <a
+              className="dokument-pozycja-skan"
+              href={`/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`}
+              target="_blank"
+              rel="noopener"
+            >
+              {dokument.podpis_nazwa_pliku}
+            </a>
+            {edytowalne && (
+              <button className="btn btn-sm" onClick={usun} disabled={wysylanie}>
+                {wysylanie ? 'Usuwanie…' : 'Usuń'}
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <span className="dokument-pozycja-czeka">czeka na podpisany skan</span>
+            {edytowalne && (
+              <>
+                <input
+                  ref={wejscie}
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  disabled={wysylanie}
+                  onChange={(z) => wyslij(z.target.files[0])}
+                />
+                {wysylanie && <span className="podpowiedz">Przesyłanie…</span>}
+              </>
+            )}
+          </>
+        )}
+      </div>
+      <Komunikat odmiana="blad" tresc={blad} />
+    </div>
+  );
+}
+
+/**
  * Podsumowanie mówi, JAKIE adresy klient podał — nie który z nich trafi do
  * rejestru. Wyboru wymaganego przez art. 300(33) § 1 pkt 3 KSH dokonuje
  * kancelaria przy weryfikacji (formularz klienta nie ma już tego pola), więc
@@ -390,12 +497,7 @@ function EkranWniosku() {
   const [bladSkladania, ustawBladSkladania] = useState(null);
   const [ostrzezeniaZlozenia, ustawOstrzezeniaZlozenia] = useState([]);
   const [dokumenty, ustawDokumenty] = useState([]);
-  const [plikPodpisanejUmowy, ustawPlikPodpisanejUmowy] = useState(null);
-  const [wysylaniePodpisanej, ustawWysylaniePodpisanej] = useState(false);
-  const [bladPodpisanej, ustawBladPodpisanej] = useState(null);
-  // Adres kancelarii do odesłania podpisanych oświadczeń — formularz niżej
-  // przyjmuje wyłącznie sam egzemplarz umowy (jeden plik, jedna kolumna
-  // w `psa_wnioski`), więc instrukcja podpisu musi wskazać, gdzie trafia reszta.
+  // Adres kancelarii — na wypadek pytań o sam przebieg podpisywania.
   const { dane: daneKancelarii } = useDane('/api/wspolne/kancelaria');
   const emailKancelarii = daneKancelarii && daneKancelarii.kancelaria
     ? daneKancelarii.kancelaria.email
@@ -417,6 +519,13 @@ function EkranWniosku() {
   }, []);
 
   const wniosekEdytowalny = Boolean(dane) && ['w_przygotowaniu', 'do_uzupelnienia'].includes(dane.status);
+  // Lista dokumentow zostaje na ekranie takze PO odeslaniu umowy: reszta
+  // skanow moze jeszcze wracac, a klient ma widziec, czego brakuje.
+  const dokumentyWidoczne = Boolean(dane)
+    && ['umowa_wygenerowana', 'umowa_podpisana'].includes(dane.status)
+    && dokumenty.length > 0;
+  const dokumentyEdytowalne = dokumentyWidoczne;
+  const podpisanych = dokumenty.filter((d) => d.podpis_nazwa_pliku).length;
 
   // Dane spółki zapisują się same. Bez tego dawało się wypełnić formularz,
   // zobaczyć komplet na ekranie i dostać przy składaniu „uzupełnij nazwę
@@ -476,25 +585,6 @@ function EkranWniosku() {
       ustawBladSkladania(e instanceof BladApi ? e.message : 'Nie udało się złożyć wniosku.');
     } finally {
       ustawSkladanie(false);
-    }
-  }
-
-  async function wyslijPodpisanaUmowe() {
-    if (!plikPodpisanejUmowy) return;
-    ustawWysylaniePodpisanej(true);
-    ustawBladPodpisanej(null);
-    try {
-      const formularz = new FormData();
-      formularz.append('plik', plikPodpisanejUmowy);
-      const odp = await fetch('/api/psa/portal/wniosek/umowa-podpisana', { method: 'POST', body: formularz });
-      const tresc = await odp.json().catch(() => ({}));
-      if (!odp.ok) throw new Error(tresc.blad || `Nie udało się przesłać pliku (błąd ${odp.status}).`);
-      ustawDane(tresc.wniosek);
-      ustawPlikPodpisanejUmowy(null);
-    } catch (e) {
-      ustawBladPodpisanej(e.message);
-    } finally {
-      ustawWysylaniePodpisanej(false);
     }
   }
 
@@ -788,7 +878,7 @@ function EkranWniosku() {
               <Komunikat odmiana="info" tresc="Wniosek złożony — trwa przygotowywanie projektu umowy." />
             )}
 
-            {dane.status === 'umowa_wygenerowana' && (
+            {dokumentyWidoczne && (
               <>
                 <Komunikat
                   odmiana="ok"
@@ -809,30 +899,32 @@ function EkranWniosku() {
                   tresc="Umowę podpisuje reprezentant spółki. Uchwałę o wyborze podmiotu prowadzącego rejestr oraz żądanie pierwszego wpisu podpisują wszyscy akcjonariusze wspólnie. Pozostałe oświadczenia każdy akcjonariusz podpisuje osobiście — zarząd nie może złożyć ich za niego."
                 />
                 <div className="lista-dokumentow">
-                  <a
-                    className="lista-dokumentow-poz"
-                    href="/api/psa/portal/wniosek/umowa-projekt"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    <Ikona nazwa="pobierz" rozmiar={17} />
-                    <span className="lista-dokumentow-nazwa">Umowa o prowadzenie rejestru</span>
-                  </a>
                   {dokumenty.map((d) => (
-                    <a
+                    <PozycjaDokumentu
                       key={d.id}
-                      className="lista-dokumentow-poz"
-                      href={`/api/psa/portal/wniosek/dokumenty/${d.id}`}
-                      target="_blank"
-                      rel="noopener"
-                    >
-                      <Ikona nazwa="pobierz" rozmiar={17} />
-                      <span className="lista-dokumentow-nazwa">{etykietaDokumentu(d.nazwa_pliku)}</span>
-                      <span className="lista-dokumentow-rozmiar">
-                        {Math.max(1, Math.round((d.rozmiar || 0) / 1024))} kB
-                      </span>
-                    </a>
+                      dokument={d}
+                      edytowalne={dokumentyEdytowalne}
+                      przyZmianie={(wynik) => {
+                        if (wynik.dokumenty) ustawDokumenty(wynik.dokumenty);
+                        if (wynik.wniosek) ustawDane(wynik.wniosek);
+                      }}
+                    />
                   ))}
+                </div>
+
+                <div className="podsumowanie-podpisow">
+                  {podpisanych === dokumenty.length ? (
+                    <Komunikat
+                      odmiana="ok"
+                      tytul="Komplet podpisanych dokumentów wrócił do kancelarii"
+                      tresc="Nic więcej nie musisz robić. Kancelaria zweryfikuje dane i otworzy rejestr akcjonariuszy — o wyniku poinformujemy e-mailem."
+                    />
+                  ) : (
+                    <Komunikat
+                      odmiana="info"
+                      tresc={`Odesłano ${podpisanych} z ${dokumenty.length} dokumentów. Pozostałe wgraj przy odpowiadających im pozycjach powyżej — wniosek trafi do kancelarii, gdy wróci podpisana umowa.`}
+                    />
+                  )}
                 </div>
 
                 <div className="instrukcja-podpisu">
@@ -854,42 +946,18 @@ function EkranWniosku() {
                   </ul>
                   <div className="instrukcja-podpisu-uwaga">
                     Każda strona dokumentu musi być czytelna, a podpis widoczny w całości.
-                    Podpisaną umowę odeślij formularzem poniżej. Pozostałe podpisane dokumenty
-                    prześlij kancelarii
+                    Podpisany plik wgraj przy tej pozycji, do której należy — dzięki temu
+                    kancelaria od razu widzi, co już wróciło, a czego jeszcze brakuje.
+                    W razie pytań napisz do kancelarii
                     {emailKancelarii ? (
                       <> na adres <a href={`mailto:${emailKancelarii}`}>{emailKancelarii}</a></>
-                    ) : ' pocztą elektroniczną'}
-                    {' '}albo dostarcz je osobiście.
+                    ) : ' pocztą elektroniczną'}.
                   </div>
                 </div>
 
-                <div className="rozdzielacz" />
-                <Pole etykieta="Podpisana umowa (PDF, JPG albo PNG)">
-                  <input
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={(z) => ustawPlikPodpisanejUmowy(z.target.files[0] || null)}
-                  />
-                  {plikPodpisanejUmowy && <div className="podpowiedz">{plikPodpisanejUmowy.name}</div>}
-                </Pole>
-                <Komunikat odmiana="blad" tresc={bladPodpisanej} />
-                <button
-                  className="btn btn-glowny"
-                  onClick={wyslijPodpisanaUmowe}
-                  disabled={!plikPodpisanejUmowy || wysylaniePodpisanej}
-                >
-                  {wysylaniePodpisanej ? 'Przesyłanie…' : 'Prześlij podpisaną umowę'}
-                </button>
               </>
             )}
 
-            {dane.status === 'umowa_podpisana' && (
-              <Komunikat
-                odmiana="ok"
-                tytul="Umowa podpisana i przesłana"
-                tresc="Sprawa trafiła do kolejki kancelarii. Po weryfikacji danych kancelaria otworzy rejestr akcjonariuszy — o dalszych krokach poinformujemy e-mailem."
-              />
-            )}
 
             {dane.status === 'przyjety' && (
               <Komunikat

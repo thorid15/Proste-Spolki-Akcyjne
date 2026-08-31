@@ -144,6 +144,13 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     // z URL-a nigdy nie jest jedynym warunkiem dostepu.
     'GET /wniosek/dokumenty',
     'GET /wniosek/dokumenty/:id',
+    // Etap 13: podpisany skan wraca do KONKRETNEGO dokumentu z kompletu.
+    // `:id` to identyfikator dokumentu, nie spolki - a i tak nie wystarcza:
+    // zapytanie szuka go zawsze razem z `wniosek_id` wniosku znalezionego
+    // po konto_id z sesji, wiec cudzy numer nie trafia w nic.
+    'POST /wniosek/dokumenty/:id/podpis',
+    'GET /wniosek/dokumenty/:id/podpis',
+    'DELETE /wniosek/dokumenty/:id/podpis',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
   ].sort();

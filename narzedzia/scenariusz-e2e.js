@@ -299,9 +299,8 @@ async function main() {
   }
   if (zlozenie.blad_pakietu) info(`UWAGA: nie złożono kompletu dokumentów — ${zlozenie.blad_pakietu}`);
 
-  krok('klient', 'Odsyła podpisany egzemplarz umowy');
-  const formularz = new FormData();
-  // Minimalny, poprawny plik PDF — zastępuje skan podpisanej umowy.
+  krok('klient', 'Odsyła podpisane skany całego kompletu');
+  // Minimalny, poprawny plik PDF — zastępuje skan podpisanego dokumentu.
   const pdf = Buffer.from(
     '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n' +
       '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
@@ -309,9 +308,14 @@ async function main() {
       'trailer<</Root 1 0 R>>\n%%EOF\n',
     'utf8'
   );
-  formularz.append('plik', new Blob([pdf], { type: 'application/pdf' }), 'umowa-podpisana.pdf');
-  const podpisana = await zapytaj(klient, 'POST', '/api/psa/portal/wniosek/umowa-podpisana', formularz);
-  info(`status wniosku: ${podpisana.wniosek.status}`);
+  let podpisana = null;
+  for (const d of zlozenie.dokumenty || []) {
+    const formularz = new FormData();
+    formularz.append('plik', new Blob([pdf], { type: 'application/pdf' }), `podpisany-${d.typ}.pdf`);
+    podpisana = await zapytaj(klient, 'POST', `/api/psa/portal/wniosek/dokumenty/${d.id}/podpis`, formularz);
+    info(`odesłano podpisany: ${d.nazwa}`);
+  }
+  info(`status wniosku: ${podpisana ? podpisana.wniosek.status : '(brak dokumentów)'}`);
   ekran(`${ADRES}/#/wnioski`);
   if (koniec('umowa')) return;
 
@@ -332,6 +336,8 @@ async function main() {
 
   const przyjecie = await zapytaj(kancelaria, 'POST', `/api/psa/wnioski/${wniosek.id}/przyjmij`, {});
   const spolkaId = przyjecie.spolka_id;
+  info(`dokumenty przeniesione do akt spółki: ${przyjecie.dokumenty_przeniesione}`);
+  if (przyjecie.konto_przepiete) info('konto klienta przepięte z roli wnioskodawcy na spółkę');
   info(`wniosek przyjęty — założono spółkę #${spolkaId} i osoby w kartotece`);
   ekran(`${ADRES}/#/spolki/${spolkaId}`);
   if (koniec('przyjecie')) return;

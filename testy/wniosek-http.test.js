@@ -289,6 +289,62 @@ test('POST /api/psa/portal/wniosek/zloz: generuje projekt umowy, zmienia status,
   assert.equal(bajty.subarray(0, 4).toString('latin1'), '%PDF');
 });
 
+test('POST /api/psa/portal/wniosek/dokumenty/:id/podpis: skan wraca do KAZDEGO dokumentu, umowa przenosi status', async () => {
+  const { ciastko } = await kontoWnioskodawcy('podpisy-per-dokument@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
+  await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Podpisy P.S.A.' }, ciastko);
+  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Nowak', imie: 'Anna' }, ciastko);
+  const [, zlozenie] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+
+  // Umowa jest czescia kompletu i stoi na jego czele.
+  const umowa = zlozenie.dokumenty.find((d) => d.typ === 'umowa_rejestru');
+  assert.ok(umowa, 'umowa jest jedna z pozycji kompletu');
+  assert.equal(zlozenie.dokumenty[0].typ, 'umowa_rejestru', 'umowa pierwsza na liscie');
+  assert.ok(zlozenie.dokumenty.every((d) => !d.podpis_nazwa_pliku), 'na starcie nic nie jest podpisane');
+
+  async function wyslijSkan(dokumentId, nazwa) {
+    const formularz = new FormData();
+    formularz.append('plik', new Blob(['skan'], { type: 'application/pdf' }), nazwa);
+    const odp = await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${dokumentId}/podpis`, {
+      method: 'POST', headers: { Cookie: ciastko }, body: formularz,
+    });
+    return [odp.status, await odp.json().catch(() => ({}))];
+  }
+
+  // Skan oswiadczenia NIE rusza statusu — umowy wciaz nie ma.
+  const rodo = zlozenie.dokumenty.find((d) => d.typ === 'oswiadczenie_rodo');
+  const [stRodo, poRodo] = await wyslijSkan(rodo.id, 'rodo.pdf');
+  assert.equal(stRodo, 201);
+  assert.equal(poRodo.wniosek.status, 'umowa_wygenerowana');
+  assert.equal(poRodo.dokumenty.find((d) => d.id === rodo.id).podpis_nazwa_pliku, 'rodo.pdf');
+
+  // Skan UMOWY przenosi wniosek do stanu gotowego do przyjecia.
+  const [stUmowa, poUmowie] = await wyslijSkan(umowa.id, 'umowa.pdf');
+  assert.equal(stUmowa, 201);
+  assert.equal(poUmowie.wniosek.status, 'umowa_podpisana');
+  assert.ok(poUmowie.wniosek.umowa_podpisana_sciezka, 'sciezka podpisanej umowy zapisana na wniosku');
+
+  // Zdjecie skanu umowy cofa status — bez niej nie ma czego przyjmowac.
+  const [stUsun, poUsunieciu] = await zapytaj(
+    'DELETE', `/api/psa/portal/wniosek/dokumenty/${umowa.id}/podpis`, undefined, ciastko
+  );
+  assert.equal(stUsun, 200);
+  assert.equal(poUsunieciu.wniosek.status, 'umowa_wygenerowana');
+  assert.equal(poUsunieciu.wniosek.umowa_podpisana_sciezka, null);
+  assert.ok(
+    poUsunieciu.dokumenty.find((d) => d.id === rodo.id).podpis_nazwa_pliku,
+    'zdjecie skanu umowy nie rusza pozostalych dokumentow'
+  );
+
+  // Cudzy numer dokumentu nie trafia w nic — zapytanie zawsze idzie razem
+  // z wnioskiem znalezionym po konto_id z sesji.
+  const obcy = await kontoWnioskodawcy('podpisy-obcy@example.pl');
+  const [stObcy] = await zapytaj(
+    'DELETE', `/api/psa/portal/wniosek/dokumenty/${umowa.id}/podpis`, undefined, obcy.ciastko
+  );
+  assert.equal(stObcy, 404, 'dokument z cudzego wniosku jest nie do ruszenia');
+});
+
 test('GET /api/psa/portal/wniosek/umowa-projekt: 404 przed zlozeniem wniosku', async () => {
   const { ciastko } = await kontoWnioskodawcy('projekt-przed-zlozeniem@example.pl');
   await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);

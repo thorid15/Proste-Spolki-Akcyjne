@@ -1578,6 +1578,43 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Pozycja listy „Dokumenty do podpisu" ──
+   Dwa wiersze w jednej ramce: co pobrać (góra) i co wróciło podpisane (dół).
+   Slot na skan siedzi PRZY dokumencie, bo klient odsyła kilka plików, każdy
+   do czego innego — bez tej bliskości trzeba by je kojarzyć z pamięci. */
+.dokument-pozycja {
+  border: 1px solid var(--linia-2);
+  border-radius: var(--r-sm);
+  margin-bottom: var(--od-8);
+  padding: var(--od-12);
+}
+.dokument-pozycja-gotowa { border-color: var(--rejestr); background: var(--rejestr-tlo); }
+.dokument-pozycja-glowna { display: flex; align-items: center; gap: var(--od-12); }
+.dokument-pozycja-glowna svg { flex-shrink: 0; color: var(--rejestr); }
+.dokument-pozycja-nazwa {
+  flex: 1; min-width: 0;
+  font-size: var(--st-13);
+  color: var(--atrament);
+  overflow-wrap: anywhere;
+}
+.dokument-pozycja-rozmiar {
+  flex-shrink: 0;
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  font-variant-numeric: tabular-nums;
+}
+.dokument-pozycja-podpis {
+  display: flex; align-items: center; gap: var(--od-8); flex-wrap: wrap;
+  margin-top: var(--od-8);
+  padding-top: var(--od-8);
+  border-top: 1px dashed var(--linia);
+  font-size: var(--st-11);
+}
+.dokument-pozycja-czeka { color: var(--atrament-3); font-size: var(--st-11); }
+.dokument-pozycja-skan { font-size: var(--st-11); overflow-wrap: anywhere; }
+.dokument-pozycja-podpis input[type="file"] { font-size: var(--st-11); max-width: 100%; }
+.podsumowanie-podpisow { margin-top: var(--od-12); }
+
 /* ── Instrukcja podpisu pod listą dokumentów ──
    Nie komunikat (te sygnalizują stan), tylko trwały blok pomocy: stoi pod
    listą zawsze, bo dotyczy każdej z jej pozycji. */

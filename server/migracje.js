@@ -1506,6 +1506,52 @@ const MIGRACJE = [
       ALTER TABLE psa_sprawy RENAME COLUMN dokument_rodzaj_v33 TO dokument_rodzaj;
     `,
   },
+  {
+    wersja: 34,
+    nazwa: 'podpisane skany wracaja przez portal i wisza przy spolce',
+    sql: `
+      -- Kazdy WYGENEROWANY dokument dostaje miejsce na swoja podpisana,
+      -- zeskanowana wersje. Kolumny przy dokumencie, a nie osobna tabela:
+      -- do jednego wzoru wraca dokladnie jeden podpisany egzemplarz, wiec
+      -- para "wzor -> podpis" jest tu relacja jeden do jednego i nie ma
+      -- czego zliczac ani porzadkowac.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_sciezka TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_nazwa_pliku TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_mime TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_rozmiar INTEGER;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_wgrano TEXT;
+
+      -- Kolejnosc na liscie do podpisu przestaje zalezec od kolejnosci
+      -- wstawiania: umowa ma stac pierwsza takze wtedy, gdy komplet
+      -- powstal ponownie po odeslaniu wniosku do uzupelnienia.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN kolejnosc INTEGER NOT NULL DEFAULT 100;
+
+      -- Dokumenty zalozycielskie SPOLKI. Po przyjeciu wniosku komplet
+      -- przestaje byc zalacznikiem sprawy w toku i staje sie czescia akt
+      -- spolki: wzor i podpisany egzemplarz kazdego dokumentu, na stale.
+      -- Wniosek zostaje w kolumnie jako slad pochodzenia - po to, zeby
+      -- dalo sie odpowiedziec "skad to sie wzielo", gdy spolka ma juz
+      -- za soba kilka lat wpisow.
+      CREATE TABLE IF NOT EXISTS psa_spolki_dokumenty (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        spolka_id    INTEGER NOT NULL REFERENCES psa_spolki(id),
+        wniosek_id   INTEGER REFERENCES psa_wnioski(id),
+        typ          TEXT NOT NULL,
+        nazwa        TEXT NOT NULL,
+        nazwa_pliku  TEXT NOT NULL,
+        sciezka      TEXT NOT NULL,
+        mime         TEXT NOT NULL DEFAULT 'application/pdf',
+        rozmiar      INTEGER,
+        -- 'wzor' - dokument wystawiony przez kancelarie,
+        -- 'podpisany' - egzemplarz odeslany przez klienta z podpisami.
+        rola         TEXT NOT NULL CHECK (rola IN ('wzor','podpisany')),
+        utworzono    TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_spolki_dokumenty_spolka
+        ON psa_spolki_dokumenty (spolka_id, id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
