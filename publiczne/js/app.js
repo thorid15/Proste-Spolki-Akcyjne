@@ -112,14 +112,6 @@ function Szyna({ sciezka, uzytkownik, kancelaria, podgladSystemu, liczniki }) {
 /* Pasek marki — pierwsza rzecz widoczna na każdym ekranie. Rejestr prowadzi
    KANCELARIA (art. 300(31) § 1 KSH), więc jej nazwa stoi nad nazwą modułu,
    a nie obok niej. Nie drukuje się: pisma mają własny nagłówek. */
-function PasekMarki({ kancelaria }) {
-  const k = kancelaria || KANCELARIA_ZAPASOWA;
-  return (
-    <div className="marka-pasek bez-druku">
-      <div className="marka-pasek-nazwa">{k.nazwa}</div>
-    </div>
-  );
-}
 
 /** Adres bez protokołu i bez końcowego ukośnika — tak, jak się go czyta na wizytówce. */
 /** Pigułka konta w topbarze — inicjały, imię, menu z wylogowaniem. */
@@ -329,7 +321,7 @@ function Aplikacja() {
 
   return (
     <div className="powloka">
-      <PasekMarki kancelaria={kancelaria} />
+      <NaglowekKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
       <Szyna
         sciezka={sciezka}
         uzytkownik={sesja.uzytkownik}
@@ -347,7 +339,6 @@ function Aplikacja() {
           liczbaSpraw={liczbaSpraw}
         />
         <main className="tresc">{ekran()}</main>
-        <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
       </div>
       {paleta.otwarta && <PaletaPolecen przyZamknieciu={paleta.zamknij} />}
     </div>

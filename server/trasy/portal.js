@@ -1307,10 +1307,14 @@ router.post(
       spolka: stan.spolka,
       data,
       stan,
+      odbiorca: { rola: rolaOdbioru(konto) },
+      // Dokument otwiera sie pod adresem serwera (GET nizej), wiec sciezka
+      // wzgledna do godla ma sie do czego odniesc.
+      zeZnakiem: true,
     });
 
     const autorWpisu = `Portal — ${konto.email}`;
-    db()
+    const wynikZapisu = db()
       .prepare(
         `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, odbiorca_osoba_id, kanal, tresc_html, wyslano, autor, utworzono)
          VALUES (?, 'informacja_z_rejestru', ?, 'portal', ?, ?, ?, ?)`
@@ -1336,7 +1340,39 @@ router.post(
       notatka: `Informacja z rejestru — portal, ${data}`,
     });
 
-    odp.json({ tresc_html: trescHtml, oplata });
+    odp.json({ dokument_id: Number(wynikZapisu.lastInsertRowid), oplata });
+  })
+);
+
+/**
+ * Wydany dokument pod wlasnym adresem. Portal otwieral informacje jako
+ * `blob:` sklejony z odpowiedzi POST — dokument nie mial wtedy adresu (nie
+ * dalo sie go otworzyc ponownie ani wyslac linkiem), przegladarka
+ * proponowala mu przypadkowa nazwe pliku, a sciezki wzgledne w srodku (godlo)
+ * nie mialy sie do czego odniesc.
+ *
+ * GET niczego nie generuje i NIE NALICZA OPLATY: oddaje tresc zapisana przy
+ * wydaniu. Ponowne otwarcie raz wydanego dokumentu jest bezplatne — platna
+ * jest czynnosc wydania, nie zaglodniecie do wlasnej szuflady.
+ */
+router.get(
+  '/informacja/:id',
+  asy((zad, odp) => {
+    const konto = zad.konto;
+    const dokument = db()
+      .prepare(
+        `SELECT id, spolka_id, tresc_html FROM psa_wydane_dokumenty
+          WHERE id = ? AND typ = 'informacja_z_rejestru'`
+      )
+      .get(Number(zad.params.id));
+
+    // Cudzy dokument to dla portalu dokument NIEISTNIEJACY: 403 potwierdzalby,
+    // ze taki numer jest zajety.
+    if (!dokument || !maDostepDoSpolki(konto, dokument.spolka_id)) {
+      throw nieZnaleziono('Nie odnaleziono dokumentu.');
+    }
+
+    odp.type('text/html').send(dokument.tresc_html);
   })
 );
 

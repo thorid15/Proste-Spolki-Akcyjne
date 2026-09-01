@@ -249,7 +249,7 @@ test('dokumenty: upload do wlasnej sprawy dziala, do cudzej jest odrzucany', asy
   assert.equal(cudzy.status, 404);
 });
 
-test('informacja z rejestru: generuje HTML i zapisuje slad audytowy', async () => {
+test('informacja z rejestru: wydanie zapisuje slad, dokument ma wlasny adres', async () => {
   const odp = await fetch(`${baza}/api/psa/portal/informacja`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
@@ -257,14 +257,43 @@ test('informacja z rejestru: generuje HTML i zapisuje slad audytowy', async () =
   });
   assert.equal(odp.status, 200);
   const dane = await odp.json();
-  assert.match(dane.tresc_html, /Informacja z rejestru akcjonariuszy/);
-  assert.match(dane.tresc_html, /Portal Testowa P\.S\.A\./);
+  assert.ok(Number.isInteger(dane.dokument_id), 'wydanie zwraca identyfikator dokumentu');
 
   const slad = db()
     .prepare(`SELECT * FROM psa_wydane_dokumenty WHERE spolka_id = ? AND typ = 'informacja_z_rejestru'`)
     .all(spolkaId);
   assert.equal(slad.length, 1);
   assert.equal(slad[0].kanal, 'portal');
+  assert.equal(slad[0].id, dane.dokument_id);
+
+  // Dokument otwiera sie pod adresem, a nie z odpowiedzi POST — dzieki temu
+  // da sie go otworzyc ponownie i wydrukowac z sensowna nazwa pliku.
+  const pobrany = await fetch(`${baza}/api/psa/portal/informacja/${dane.dokument_id}`, {
+    headers: { Cookie: ciastkoAkcjonariusz },
+  });
+  assert.equal(pobrany.status, 200);
+  assert.match(pobrany.headers.get('content-type') || '', /text\/html/);
+  const html = await pobrany.text();
+  assert.match(html, /Informacja z rejestru akcjonariuszy/);
+  assert.match(html, /Portal Testowa P\.S\.A\./);
+  // Pelna tresc ustawowa, nie sama tabela akcjonariuszy (art. 300(33) § 1).
+  assert.match(html, /Podmiot prowadzący rejestr/);
+  assert.match(html, /Emisje i serie akcji/);
+
+  // Ponowne otwarcie jest BEZPLATNE: platna jest czynnosc wydania.
+  const przedOplaty = db()
+    .prepare(`SELECT COUNT(*) c FROM psa_wydane_dokumenty WHERE spolka_id = ? AND typ = 'informacja_z_rejestru'`)
+    .get(spolkaId).c;
+  await fetch(`${baza}/api/psa/portal/informacja/${dane.dokument_id}`, {
+    headers: { Cookie: ciastkoAkcjonariusz },
+  });
+  assert.equal(
+    db()
+      .prepare(`SELECT COUNT(*) c FROM psa_wydane_dokumenty WHERE spolka_id = ? AND typ = 'informacja_z_rejestru'`)
+      .get(spolkaId).c,
+    przedOplaty,
+    'ponowne otwarcie nie wydaje dokumentu drugi raz'
+  );
 });
 
 test('portal wylaczony flaga: PORTAL_WLACZONY=false zwraca 503 dla wszystkich tras portalu', async () => {

@@ -55,7 +55,14 @@ const STYL = `
   max-width: 640px; margin: 0 auto; padding: 8px;
 `;
 
-function szkielet({ tytul, kancelaria, tresc, stopkaDodatkowa }) {
+/**
+ * `zeZnakiem` dokłada godło Notariatu ścieżką WZGLĘDNĄ. Ma sens wyłącznie
+ * tam, gdzie dokument otwiera się pod adresem serwera (portal, ekran
+ * kancelarii). W e-mailu ścieżka względna nie ma się do czego odnieść,
+ * a wklejanie 100 kB base64 do każdego zapisanego dokumentu rozdmuchałoby
+ * archiwum `psa_wydane_dokumenty` — dlatego domyślnie wyłączone.
+ */
+function szkielet({ tytul, kancelaria, tresc, stopkaDodatkowa, zeZnakiem = false }) {
   return `
 <!doctype html>
 <html lang="pl"><head><meta charset="utf-8"><title>${esc(tytul)}</title>
@@ -64,6 +71,10 @@ function szkielet({ tytul, kancelaria, tresc, stopkaDodatkowa }) {
 <meta name="format-detection" content="telephone=no,date=no,address=no"></head>
 <body style="${STYL}">
   <div style="border-bottom: 2px solid ${ATRAMENT}; padding-bottom: 12px; margin-bottom: 20px;">
+    ${zeZnakiem
+      ? `<img src="/obrazy/notariat.png" alt="Notariat Rzeczypospolitej Polskiej"
+             style="height: 34px; width: auto; display: block; margin-bottom: 10px;">`
+      : ''}
     <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: ${ATRAMENT_2};">
       ${esc(kancelaria.nazwa)}
     </div>
@@ -191,63 +202,256 @@ function wezwanieDoUzupelnienia({ kancelaria, spolka, typZdarzenie, powodWstrzym
   });
 }
 
+/* ── Informacja z rejestru: elementy skladowe ──
+   Dokument ma siedem sekcji o tej samej budowie, wiec skladamy je z trzech
+   klockow zamiast powtarzac ten sam HTML siedem razy. Style w atrybutach,
+   nie w klasach — ten sam dokument idzie jako tresc e-maila, a poczta nie
+   czyta arkuszy. */
+
+function sekcjaHtml(tytul, wnetrze) {
+  return `
+    <div style="margin-top: 22px;">
+      <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+                  text-transform: uppercase; color: ${ATRAMENT_2};
+                  padding-bottom: 6px; margin-bottom: 10px;
+                  border-bottom: 1px solid ${LINIA};">${esc(tytul)}</div>
+      ${wnetrze}
+    </div>`;
+}
+
 /**
- * art. 300(35) KSH — informacja z rejestru. `stan` to gotowy wynik
- * `widoki.widokStanu()` — maskowanie jest juz zastosowane wzgledem roli
- * odbiorcy, tu tylko ukladamy HTML (sekcja 10: czego NIE umieszczac na
- * wydrukach — pole `uwagi`, checklisty, notatki AML, hash — widokStanu ich
- * juz nie zwraca dla roli innej niz kancelaria).
+ * Pary „etykieta — wartosc". Pozycje bez wartosci WYPADAJA: puste „NIP: —"
+ * w informacji dla sadu czyta sie jak brak danych w rejestrze, a nie jak
+ * dane, ktorych spolka nie ma.
  */
-function informacjaZRejestru({ kancelaria, spolka, data, stan }) {
-  const wiersze = stan.akcjonariusze
-    .map((a) => {
-      const oznaczenie = a.osoba ? esc(a.osoba.oznaczenie) : 'nieznany';
-      const identyfikator = a.osoba && a.osoba.jawny_identyfikator ? ` · ${esc(a.osoba.jawny_identyfikator)}` : '';
-      const obciazone = a.obciazenia && a.obciazenia.length ? ' 🔒' : '';
-      return `
-        <tr>
-          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA};">${oznaczenie}${identyfikator}${obciazone}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA};">${esc(a.seria)}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; text-align: right;">${esc(a.ilosc)}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; font-family: ${FONT_DANE}; font-size: 11px;">${esc(a.numery)}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; text-align: right;">${esc(a.procent)}%</td>
-        </tr>`;
-    })
+function paryHtml(pary) {
+  const wiersze = pary
+    .filter(([, wartosc]) => wartosc !== null && wartosc !== undefined && String(wartosc).trim() !== '')
+    .map(([etykieta, wartosc]) => `
+      <tr>
+        <td style="padding: 3px 12px 3px 0; color: ${ATRAMENT_2}; white-space: nowrap;
+                   vertical-align: top; width: 200px;">${esc(etykieta)}</td>
+        <td style="padding: 3px 0; vertical-align: top;">${esc(wartosc)}</td>
+      </tr>`)
     .join('');
+  if (!wiersze) return '';
+  return `<table style="width: 100%; border-collapse: collapse; font-size: 13px;">${wiersze}</table>`;
+}
+
+/**
+ * Tabela. `kolumny` to `[nazwa, doPrawej?, mono?]`, `wiersze` to tablice
+ * gotowych, juz zescapowanych komorek.
+ */
+function tabelaHtml(kolumny, wiersze, pustaTresc) {
+  if (!wiersze.length) {
+    return `<div style="font-size: 13px; color: ${ATRAMENT_2};">${esc(pustaTresc)}</div>`;
+  }
+  // Odstep miedzy kolumnami niesie PRAWY margines kazdej komorki — przy
+  // kolumnie wyrownanej do prawej to on oddziela liczbe od tresci sasiada
+  // („500” i „1–100” sklejaly sie w „5001–100”). Ostatnia kolumna go nie ma,
+  // zeby tabela konczyla sie rowno z reszta dokumentu.
+  const odstep = (i) => (i === kolumny.length - 1 ? 'padding-right: 0;' : 'padding-right: 16px;');
+  const glowa = kolumny
+    .map(([nazwa, doPrawej], i) => `<th style="padding-top: 5px; padding-bottom: 5px; ${odstep(i)}
+        text-align: ${doPrawej ? 'right' : 'left'};
+        font-weight: 600; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
+        color: ${ATRAMENT_2}; border-bottom: 1px solid ${LINIA}; white-space: nowrap;">${esc(nazwa)}</th>`)
+    .join('');
+  const cialo = wiersze
+    .map((w) => `<tr>${w
+      .map((komorka, i) => {
+        const [, doPrawej, mono] = kolumny[i];
+        return `<td style="padding-top: 6px; padding-bottom: 6px; ${odstep(i)}
+          text-align: ${doPrawej ? 'right' : 'left'};
+          border-bottom: 1px solid ${LINIA}; vertical-align: top;
+          ${mono ? `font-family: ${FONT_DANE}; font-size: 11px;` : ''}">${komorka}</td>`;
+      })
+      .join('')}</tr>`)
+    .join('');
+  return `<table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+    <thead><tr>${glowa}</tr></thead><tbody>${cialo}</tbody></table>`;
+}
+
+const OPISY_ODBIORCY = {
+  kancelaria: 'podmiot prowadzący rejestr',
+  spolka: 'spółka, której rejestr dotyczy',
+  akcjonariusz: 'akcjonariusz',
+  organ: 'sąd, prokurator, komornik albo organ egzekucyjny',
+};
+
+/**
+ * art. 300(35) KSH — informacja z rejestru akcjonariuszy. JEDYNY dokument,
+ * jaki aplikacja wystawia ze stanu rejestru, i JEDYNE miejsce, w ktorym
+ * powstaje jego tresc: ten sam HTML oglada kancelaria na ekranie, dostaje
+ * klient w portalu i niesie e-mail. Wczesniej byly dwa rendery tego samego
+ * pisma — React w `publiczne/js/wydruk.js` i ten — wiec poprawka tresci
+ * musiala trafic w oba albo klient dostawal co innego niz notariusz.
+ *
+ * `stan` to gotowy wynik `widoki.widokStanu()`: maskowanie jest juz
+ * zastosowane wzgledem roli odbiorcy, tu tylko ukladamy HTML. Czego NIE
+ * umieszczamy (sekcja 10): pole `uwagi`, checklisty weryfikacji, notatki
+ * AML, hashe lancucha — `widokStanu` nie zwraca ich dla roli innej niz
+ * kancelaria.
+ *
+ * `zeZnakiem` wlacza godlo Notariatu jako `<img src="/obrazy/notariat.png">`.
+ * Wlaczamy je tam, gdzie dokument oglada sie pod adresem serwera (portal,
+ * ekran kancelarii); w e-mailu zostaje wylaczone, bo sciezka wzgledna nie
+ * ma sie tam do czego odniesc, a wklejanie 100 kB base64 do KAZDEGO
+ * zapisanego dokumentu rozdmuchaloby archiwum `psa_wydane_dokumenty`.
+ */
+function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, zeZnakiem = false }) {
+  const opisOdbiorcy = (odbiorca && odbiorca.opis)
+    || OPISY_ODBIORCY[(odbiorca && odbiorca.rola) || stan.rola]
+    || OPISY_ODBIORCY.spolka;
+
+  const adresSpolki = [
+    spolka.ulica
+      ? `${spolka.ulica} ${spolka.nr_domu || ''}${spolka.nr_lokalu ? `/${spolka.nr_lokalu}` : ''}`.trim()
+      : null,
+    [spolka.kod_pocztowy, spolka.miejscowosc].filter(Boolean).join(' '),
+  ].filter(Boolean).join(', ');
+
+  const zamaskowane = stan.akcjonariusze.some((a) => a.osoba && a.osoba.zamaskowane);
+
+  // ── Akcjonariusze (art. 300(33) § 1 pkt 2–5) ──
+  const wierszeAkcjonariuszy = stan.akcjonariusze.map((a) => {
+    const oznaczenie = a.osoba ? esc(a.osoba.oznaczenie) : 'nieznany';
+    const identyfikator = a.osoba && a.osoba.jawny_identyfikator
+      ? `<div style="color: ${ATRAMENT_2}; font-size: 11px;">${esc(a.osoba.jawny_identyfikator)}</div>`
+      : '';
+    const obciazone = a.obciazenia && a.obciazenia.length
+      ? `<div style="color: ${ATRAMENT_2}; font-size: 11px;">akcje obciążone</div>`
+      : '';
+    return [
+      `${oznaczenie}${identyfikator}${obciazone}`,
+      esc(a.seria),
+      esc(a.ilosc),
+      esc(a.numery),
+      `${esc(a.procent)}%`,
+    ];
+  });
+
+  // ── Emisje i serie (art. 300(33) § 1 pkt 3–4) ──
+  const bilansWgKlucza = new Map((stan.bilans || []).map((b) => [b.emisja_klucz, b]));
+  const wierszeEmisji = (stan.emisje || []).map((e) => {
+    const b = bilansWgKlucza.get(e.klucz) || {};
+    return [
+      esc(e.seria),
+      esc(e.tytul || '—'),
+      esc(e.podstawa_prawna || '—'),
+      esc(e.zakres),
+      esc(e.ilosc),
+      esc(b.umorzone || 0),
+      esc(b.w_obrocie == null ? '—' : b.w_obrocie),
+      dataPl(e.data_emisji),
+    ];
+  });
+
+  // Sekcje ponizej sa WARUNKOWE: pusta tabela „uprawnien" w pismie do sadu
+  // sugeruje, ze o cos nie zapytano, a nie ze ich nie ma.
+  const uprawnienia = stan.uprawnienia || [];
+  const obciazenia = stan.obciazenia || [];
+  const ograniczenia = stan.ograniczenia || [];
 
   const tresc = `
-    <p>
-      Informacja z rejestru akcjonariuszy spółki <strong>${esc(spolka.nazwa)}</strong>
-      ${spolka.krs ? ` (KRS ${esc(spolka.krs)})` : ''}, sporządzona na podstawie art. 300(35)
-      Kodeksu spółek handlowych, według stanu na dzień <strong>${dataPl(data)}</strong>.
-    </p>
-    <table style="width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px;">
-      <thead>
-        <tr style="text-align: left; color: ${ATRAMENT_2}; font-size: 11px; text-transform: uppercase;">
-          <th style="padding: 6px 8px;">Akcjonariusz</th>
-          <th style="padding: 6px 8px;">Seria</th>
-          <th style="padding: 6px 8px; text-align: right;">Ilość</th>
-          <th style="padding: 6px 8px;">Numery</th>
-          <th style="padding: 6px 8px; text-align: right;">Udział</th>
-        </tr>
-      </thead>
-      <tbody>${wiersze || '<tr><td colspan="5" style="padding:6px 8px;">Brak wpisanych akcjonariuszy.</td></tr>'}</tbody>
-    </table>
-    <p style="font-size: 12px; color: ${ATRAMENT_2};">
-      Razem akcji wyemitowanych i objętych: ${esc(stan.razem_akcji)}.
-      ${'🔒'} oznacza akcje obciążone zastawem, użytkowaniem lub zajęciem.
-    </p>
-    <p style="font-size: 11px; color: ${ATRAMENT_3};">
-      Dane osób innych niż wnioskujący mogą być częściowo zamaskowane zgodnie z art. 300(35) § 1(1) KSH.
-    </p>
-    <!-- Ten sam blok, co na wydruku kancelarii (publiczne/js/wydruk.js:
-         StopkaRaportu, wariant nieroboczy). Klient dostaje TEN SAM dokument
-         ustawowy, więc musi się on tak samo przedstawiać i mieć miejsce na
-         podpis — inaczej pobrana informacja niczym nie różni się od notatki. -->
-    <p style="margin-top: 26px; font-size: 12px;">
+    ${paryHtml([
+      ['Spółka', spolka.nazwa],
+      ['Stan na dzień', dataPl(data)],
+      ['Odbiorca informacji', opisOdbiorcy],
+    ])}
+
+    ${sekcjaHtml('Spółka', paryHtml([
+      ['Firma', spolka.nazwa],
+      ['Forma prawna', spolka.forma_prawna],
+      ['Siedziba i adres', adresSpolki],
+      ['Sąd rejestrowy', [spolka.sad_rejestrowy, spolka.wydzial].filter(Boolean).join(', ')],
+      ['Numer KRS', spolka.krs],
+      ['NIP', spolka.nip],
+      ['REGON', spolka.regon],
+    ]))}
+
+    ${sekcjaHtml('Podmiot prowadzący rejestr', paryHtml([
+      ['Podmiot', kancelaria.nazwa],
+      // Podstawy prawnej NIE powtarzamy: niesie ja stopka dokumentu.
+      ['Data uchwały o wyborze', spolka.data_uchwaly_wyboru ? dataPl(spolka.data_uchwaly_wyboru) : null],
+      ['Data umowy o prowadzenie rejestru', spolka.data_umowy ? dataPl(spolka.data_umowy) : null],
+      ['Data otwarcia rejestru', spolka.data_otwarcia_rejestru ? dataPl(spolka.data_otwarcia_rejestru) : null],
+    ]))}
+
+    ${sekcjaHtml('Akcjonariusze', `
+      ${tabelaHtml(
+        [['Akcjonariusz'], ['Seria'], ['Ilość', true], ['Numery', false, true], ['Udział', true]],
+        wierszeAkcjonariuszy,
+        'Rejestr nie wykazuje akcjonariuszy.'
+      )}
+      <div style="margin-top: 8px; font-size: 12px; color: ${ATRAMENT_2};">
+        Razem akcji wyemitowanych i objętych: ${esc(stan.razem_akcji)}.
+      </div>`)}
+
+    ${sekcjaHtml('Emisje i serie akcji', tabelaHtml(
+      [['Seria'], ['Tytuł'], ['Podstawa'], ['Numery', false, true],
+       ['Wyemitowane', true], ['Umorzone', true], ['W obrocie', true], ['Data']],
+      wierszeEmisji,
+      'Rejestr nie wykazuje emisji.'
+    ))}
+
+    ${uprawnienia.length === 0 ? '' : sekcjaHtml(
+      'Uprawnienia, przywileje i obowiązki związane z akcjami',
+      tabelaHtml(
+        [['Rodzaj'], ['Dotyczy'], ['Tytuł'], ['Treść'], ['Od dnia']],
+        uprawnienia.map((u) => [
+          esc(u.rodzaj),
+          esc(u.osoba ? u.osoba.oznaczenie : u.seria || 'cała spółka'),
+          esc(u.tytul || '—'),
+          esc(u.tresc || '—'),
+          dataPl(u.data_ustanowienia),
+        ]),
+        ''
+      )
+    )}
+
+    ${obciazenia.length === 0 ? '' : sekcjaHtml(
+      'Obciążenia i zajęcia akcji',
+      tabelaHtml(
+        [['Typ'], ['Seria'], ['Numery', false, true], ['Uprawniony'], ['Prawo głosu'], ['Od dnia']],
+        obciazenia.map((o) => [
+          esc(o.typ === 'zajecie' ? 'zajęcie' : o.typ),
+          esc(o.seria || '—'),
+          esc(o.numery),
+          esc(o.uprawniony ? o.uprawniony.oznaczenie : '—'),
+          o.prawo_glosu ? 'tak' : 'nie',
+          dataPl(o.data_od),
+        ]),
+        ''
+      )
+    )}
+
+    ${ograniczenia.length === 0 ? '' : sekcjaHtml(
+      'Ograniczenia w rozporządzaniu akcjami',
+      tabelaHtml(
+        [['Zakres'], ['Seria'], ['Numery', false, true], ['Zgoda spółki'], ['Prawo pierwszeństwa'], ['Opis']],
+        ograniczenia.map((o) => [
+          esc(o.zakres === 'spolka' ? 'cała spółka' : o.zakres),
+          esc(o.seria || '—'),
+          esc(o.numery || '—'),
+          o.wymaga_zgody_spolki ? 'tak' : 'nie',
+          o.prawo_pierwszenstwa ? 'tak' : 'nie',
+          esc(o.opis || '—'),
+        ]),
+        ''
+      )
+    )}
+
+    <p style="margin-top: 28px; font-size: 12px;">
       Dokument stanowi informację z rejestru akcjonariuszy w rozumieniu
       art. 300(35) § 3 Kodeksu spółek handlowych.
     </p>
+    ${zamaskowane ? `
+    <p style="font-size: 11px; color: ${ATRAMENT_3};">
+      Numery PESEL, daty urodzenia i adresy zamieszkania pozostałych akcjonariuszy
+      zostały zasłonięte — art. 300(35) § 1(1) Kodeksu spółek handlowych.
+    </p>` : ''}
+
     <div style="margin-top: 46px; text-align: right;">
       <div style="display: inline-block; border-top: 1px solid ${ATRAMENT}; padding-top: 6px;
                   font-size: 11px; color: ${ATRAMENT_2}; min-width: 220px; text-align: center;">
@@ -255,10 +459,12 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan }) {
       </div>
     </div>
   `;
+
   return szkielet({
     tytul: 'Informacja z rejestru akcjonariuszy',
     kancelaria,
     tresc,
+    zeZnakiem,
   });
 }
 

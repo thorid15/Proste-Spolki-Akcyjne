@@ -27,15 +27,6 @@ function useKancelaria() {
 }
 
 
-/** Pasek marki — wspólny dla ekranów publicznych i zalogowanych. */
-function PasekMarkiPortal() {
-  const k = useKancelaria();
-  return (
-    <div className="marka-pasek bez-druku">
-      <div className="marka-pasek-nazwa">{k.nazwa}</div>
-    </div>
-  );
-}
 
 /**
  * Kolumna opisowa ekranów publicznych — mówi, czym jest ten portal i czego
@@ -67,12 +58,11 @@ function OpisPortalu({ tytul, lead, punkty }) {
 function RamaPubliczna({ opis, children }) {
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <PasekMarkiPortal />
+      <NaglowekKancelarii kancelaria={useKancelaria()} />
       <div className="brama">
         {opis}
         <div className="brama-karta">{children}</div>
       </div>
-      <StopkaKancelarii kancelaria={useKancelaria()} />
     </div>
   );
 }
@@ -479,7 +469,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
 
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <PasekMarkiPortal />
+      <NaglowekKancelarii kancelaria={useKancelaria()} />
       <header className="portal-topbar pasek-gorny bez-druku" style={{ padding: '14px 28px' }}>
         <div>
           <div className="tytul-strony" style={{ fontSize: 17 }}>Rejestr akcjonariuszy P.S.A.</div>
@@ -499,7 +489,6 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
         </div>
       </header>
       <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
-      <StopkaKancelarii kancelaria={useKancelaria()} />
     </div>
   );
 }
@@ -860,9 +849,11 @@ function EkranInformacjaPortal({ spolkaId }) {
     ustawPobieranie(true);
     ustawBlad(null);
     try {
+      // Dokument dostaje wlasny adres, wiec da sie go otworzyc ponownie,
+      // wydrukowac z sensowna nazwa pliku i przeslac linkiem. Wczesniej
+      // szedl jako `blob:` sklejony z odpowiedzi — bez adresu i bez nazwy.
       const wynik = await API.post('/api/psa/portal/informacja', { spolka_id: spolkaId, data });
-      const blob = new Blob([wynik.tresc_html], { type: 'text/html' });
-      window.open(URL.createObjectURL(blob), '_blank');
+      window.open(`/api/psa/portal/informacja/${wynik.dokument_id}`, '_blank');
     } catch (e) {
       ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się przygotować informacji.');
     } finally {

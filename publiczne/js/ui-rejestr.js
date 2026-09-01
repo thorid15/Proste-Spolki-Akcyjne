@@ -1248,73 +1248,44 @@ function Przelacznik({ wlaczony, przyZmianie, etykieta, opis, wylaczony = false,
 }
 
 /* ─────────────────────────────────────────────────
-   STOPKA
+   NAGŁÓWEK KANCELARII
 
-   Jedna stopka dla obu aplikacji. Wcześniej stały dwie identyczne kopie —
-   w app.js i w portal.js — i każda poprawka musiała trafić w obie, albo
-   klient widział co innego niż kancelaria.
+   Kto prowadzi rejestr, gdzie go prowadzi i jak się z nim skontaktować —
+   raz, na górze ekranu, tak jak na papierze firmowym.
 
-   Trzy rzeczy, w tej kolejności: kto prowadzi rejestr (ze znakiem
-   samorządu), na jakiej podstawie prawnej, i dokąd pójść po więcej.
-   Numeru telefonu tu nie ma — kontakt do kancelarii jest na jej stronie,
-   a stopka aplikacji to nie wizytówka.
+   Wcześniej te same dane leżały w stopce, i to w dwóch osobnych poziomach:
+   blok adresowy nad cienką linią, rok i adres strony pod nią. Rozbijało to
+   jedną informację na dwie i nie dawało nic w zamian. Podstawa prawna też
+   stąd znika — jest tam, gdzie ma znaczenie, czyli na samym dokumencie
+   z rejestru.
    ───────────────────────────────────────────────── */
-
-const ZNAK_NOTARIATU = '/obrazy/notariat.png';
 
 function skrocAdresWww(url) {
   return String(url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
-function StopkaKancelarii({ kancelaria }) {
-  const [znakNieudany, ustawZnakNieudany] = useState(false);
+function NaglowekKancelarii({ kancelaria }) {
   const k = kancelaria || {};
   const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
   const link = k.www_psa || k.www;
-  const rok = new Date().getFullYear();
 
   return (
-    <footer className="stopka bez-druku">
-      <div className="stopka-srodek">
-        <div className="stopka-glowna">
-          <div className="stopka-kancelaria">
-            {!znakNieudany && (
-              <img
-                className="stopka-znak"
-                src={ZNAK_NOTARIATU}
-                alt="Notariat Rzeczypospolitej Polskiej"
-                onError={() => ustawZnakNieudany(true)}
-              />
-            )}
-            <div>
-              <div className="stopka-nazwa">{k.nazwa}</div>
-              {adres && <div className="stopka-linia">{adres}</div>}
-              {k.email && (
-                <a className="stopka-mail" href={`mailto:${k.email}`}>{k.email}</a>
-              )}
-            </div>
-          </div>
-
-          <p className="stopka-podstawa">
-            Rejestr akcjonariuszy prowadzony na podstawie
-            {' '}art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych.
-          </p>
-        </div>
-
-        <div className="stopka-dol">
-          <span>© {rok} {k.nazwa}</span>
+    <header className="marka-pasek bez-druku">
+      <div className="marka-pasek-nazwa">{k.nazwa}</div>
+      {(adres || k.email || link) && (
+        <div className="marka-pasek-dane">
+          {adres && <span>{adres}</span>}
+          {k.email && <a href={`mailto:${k.email}`}>{k.email}</a>}
           {link && (
-            <a className="stopka-link" href={link} target="_blank" rel="noopener noreferrer">
-              {skrocAdresWww(link)}
-            </a>
+            <a href={link} target="_blank" rel="noopener noreferrer">{skrocAdresWww(link)}</a>
           )}
         </div>
-      </div>
-    </footer>
+      )}
+    </header>
   );
 }
 
-window.StopkaKancelarii = StopkaKancelarii;
+window.NaglowekKancelarii = NaglowekKancelarii;
 window.skrocAdresWww = skrocAdresWww;
 window.KrokNaglowek = KrokNaglowek;
 window.WierszPodmiotu = WierszPodmiotu;

@@ -95,6 +95,11 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     .sort();
 
   const oczekiwane = [
+    // Etap 17: raz wydana informacja z rejestru pod wlasnym adresem. Nie
+    // niesie `spolka_id` ani `:spolkaId`, wiec zadna z automatycznych bramek
+    // D3 jej nie widzi — trasa sprawdza dostep SAMA, przez `spolka_id`
+    // wczytane z wiersza dokumentu (patrz `maDostepDoSpolki` w portal.js).
+    'GET /informacja/:id',
     'GET /moje',
     'GET /rejestr/:spolkaId',
     'GET /whoami',

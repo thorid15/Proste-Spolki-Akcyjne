@@ -18,6 +18,7 @@ const typyZdarzen = require('../logika/typy-zdarzen');
 const wzoryDysk = require('../logika/wzory-dysk');
 const docx = require('../logika/docx');
 const kontekstPisma = require('../logika/kontekst-pisma');
+const dokumentyTresc = require('../logika/dokumenty-tresc');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
@@ -502,6 +503,59 @@ router.get(
     const stan = widoki.widokStanu(db(), id, data, { rola, odbiorcaOsobaId: odbiorca });
     if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
     odp.json(stan);
+  })
+);
+
+/**
+ * Informacja z rejestru akcjonariuszy (art. 300(35) KSH) jako gotowy
+ * dokument HTML — TEN SAM, ktory dostaje klient w portalu.
+ *
+ * Ekran kancelarii mial wlasny render tego pisma w Reakcie
+ * (`publiczne/js/wydruk.js`), a klient dostawal wersje generowana na
+ * serwerze: dwa kody, jeden dokument ustawowy, wiec kazda poprawka tresci
+ * musiala trafic w oba albo notariusz podpisywal co innego, niz widzial
+ * klient. Zostaje jeden generator; ekran tylko pokazuje jego wynik.
+ *
+ * Nic nie zapisuje i nic nie nalicza — to podglad wewnetrzny na tych samych
+ * danych, co `GET /:id/stan`. Odplatne wydanie dokumentu klientowi idzie
+ * przez portal (`POST /api/psa/portal/informacja`).
+ */
+router.get(
+  '/:id/informacja.html',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const data = zad.query.data ? String(zad.query.data) : czas.dzisIso();
+    if (!czas.poprawnaDataAlboChwila(data)) {
+      throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD albo RRRR-MM-DDTGG:MM.');
+    }
+
+    const rola = String(zad.query.rola || przepisy.ROLE_ODBIORCY.KANCELARIA);
+    if (!Object.values(przepisy.ROLE_ODBIORCY).includes(rola)) {
+      throw bledneZadanie(`Nieznana rola odbiorcy: „${rola}”.`);
+    }
+    const odbiorcaId = zad.query.odbiorca ? Number(zad.query.odbiorca) : null;
+
+    const stan = widoki.widokStanu(db(), id, data, { rola, odbiorcaOsobaId: odbiorcaId });
+    if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
+
+    // Przy roli „akcjonariusz” i „organ” dokument nazywa KONKRETNEGO
+    // odbiorce: „akcjonariusz” bez nazwiska nie mowi, komu wydano pismo,
+    // a przy organie liczy sie, czy pyta sad, czy komornik.
+    const wybrany = odbiorcaId
+      ? stan.akcjonariusze.find((a) => String(a.osoba_id) === String(odbiorcaId))
+      : null;
+    const opis = rola === przepisy.ROLE_ODBIORCY.AKCJONARIUSZ && wybrany && wybrany.osoba
+      ? wybrany.osoba.oznaczenie
+      : (rola === przepisy.ROLE_ODBIORCY.ORGAN && zad.query.organ ? String(zad.query.organ) : null);
+
+    odp.type('text/html').send(dokumentyTresc.informacjaZRejestru({
+      kancelaria: konfiguracja.KANCELARIA,
+      spolka: stan.spolka,
+      data,
+      stan,
+      odbiorca: { rola, opis },
+      zeZnakiem: true,
+    }));
   })
 );
 

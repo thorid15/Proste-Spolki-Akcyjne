@@ -188,9 +188,11 @@ body {
   grid-column: 1 / -1;
   min-height: var(--marka);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0 var(--od-24);
+  gap: 2px;
+  padding: var(--od-12) var(--od-24);
   background: var(--rejestr);
   color: var(--karta);
   border-bottom: 1px solid var(--rejestr-2);
@@ -198,87 +200,35 @@ body {
 .marka-pasek-nazwa {
   font-family: var(--font-display);
   font-size: var(--st-20);
-  line-height: 1.1;
+  line-height: 1.15;
   text-align: center;
+}
+/* Adres, poczta i strona jednym krojem i jednym rozmiarem — to jeden ciąg
+   danych kancelarii, a nie nagłówek z wyróżnionym odnośnikiem. Odnośniki
+   różni od reszty wyłącznie podkreślenie przy najechaniu. */
+.marka-pasek-dane {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 2px var(--od-12);
+  font-size: var(--st-11);
+  color: var(--rejestr-tlo);
+  text-align: center;
+}
+.marka-pasek-dane a { color: inherit; text-decoration: none; }
+.marka-pasek-dane a:hover { text-decoration: underline; }
+/* Kropka rozdziela pozycje, ale tylko wtedy, gdy stoją w jednym wierszu —
+   po zawinięciu pierwsza pozycja nowego wiersza zaczynałaby się od kropki. */
+.marka-pasek-dane > * + *::before {
+  content: '·';
+  margin-right: var(--od-12);
+  color: var(--rejestr-3);
 }
 @media (max-width: 640px) {
   .marka-pasek { padding: var(--od-8) var(--od-16); }
 }
 
-/* ── Stopka: trzy kolumny na jednej linii bazowej, z realną hierarchią
-   tekstu — nazwa kancelarii i odnośnik czytelne, drobny druk osobno. Stara
-   wersja upychała wszystko w 11 px i zawijała się nierówno; ta ma stałe
-   kolumny w gridzie, więc się nie rozjeżdża. ── */
-.stopka {
-  margin-top: auto;
-  border-top: 1px solid var(--linia);
-  background: var(--karta);
-  color: var(--atrament-2);
-  font-size: var(--st-13);
-  line-height: 1.6;
-}
-/* Treść stopki trzyma się tej samej osi, co treść strony nad nią. Bez tego
-   nazwa kancelarii wisiała przy krawędzi okna, a kolumna tekstu zaczynała
-   się 200 px dalej — wyglądało to jak dwie różne strony sklejone razem. */
-.stopka-srodek {
-  max-width: var(--tresc);
-  margin-inline: auto;
-  padding: var(--od-40) var(--od-40) var(--od-24);
-}
-.stopka-glowna {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: var(--od-40);
-  padding-bottom: var(--od-24);
-}
-.stopka-kancelaria { display: flex; align-items: flex-start; gap: var(--od-16); min-width: 0; }
-/* Znak samorządu na tyle duży, żeby dało się przeczytać „Notariat
-   Rzeczypospolitej" — przy 42 px napis zlewał się w plamę. Marginesy
-   optycznie równa `margin-top`, bo znak ma u góry belkę, a nazwa obok
-   zaczyna się od wersalika. */
-.stopka-znak { height: 60px; width: auto; flex-shrink: 0; margin-top: 2px; }
-.stopka-nazwa {
-  font-family: var(--font-display);
-  font-size: var(--st-20);
-  line-height: 1.25;
-  color: var(--atrament);
-  margin-bottom: var(--od-4);
-}
-.stopka-linia { color: var(--atrament-2); }
-.stopka-mail { color: var(--atrament-2); text-decoration: none; border-bottom: 1px solid var(--linia); }
-.stopka-mail:hover { color: var(--rejestr); border-bottom-color: var(--rejestr); }
-/* Podstawa prawna zdaniem, nie parą „etykieta: wartość". Etykieta
-   „PODSTAWA PROWADZENIA REJESTRU" nad numerem artykułu nic nie dodawała —
-   z samego zdania widać, czym ten numer jest. */
-.stopka-podstawa {
-  margin: 0;
-  max-width: 32ch;
-  color: var(--atrament-3);
-}
-.stopka-dol {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: var(--od-16);
-  padding-top: var(--od-16);
-  border-top: 1px solid var(--linia-2);
-  font-size: var(--st-11);
-  color: var(--atrament-3);
-}
-.stopka-link {
-  font-weight: 600;
-  color: var(--rejestr);
-  text-decoration: none;
-}
-.stopka-link:hover { text-decoration: underline; }
-
-@media (max-width: 700px) {
-  .stopka-srodek { padding: var(--od-24); }
-  .stopka-glowna { flex-direction: column; gap: var(--od-24); }
-  .stopka-podstawa { max-width: none; }
-  .stopka-dol { flex-direction: column; align-items: flex-start; gap: var(--od-8); }
-}
-
-/* Ekrany publiczne portalu (`.ekran-logowania`) same w sobie maja 100vh -
-   w ramie z marka i stopka ta wysokosc musi ustapic, inaczej stopka lezy
-   pod zagieciem. */
+/* Ekrany publiczne portalu (`.ekran-logowania`) same w sobie maja 100vh —
+   w ramie z naglowkiem kancelarii ta wysokosc musi ustapic, inaczej dol
+   ekranu lezy pod zagieciem. */
 .rama-publiczna-tresc { flex: 1; display: flex; }
 .rama-publiczna-tresc > .ekran-logowania { flex: 1; min-height: 0; }
 
@@ -1273,178 +1223,23 @@ select {
 }
 
 /* ─────────────────────────────────────────────────────
-   RAPORT Z REJESTRU — dokument kancelaryjny (faza 4)
+   PODGLĄD DOKUMENTU
 
-   Zastępuje wygląd wydruku z systemu zewnętrznego: zamiast niebieskich
-   belek — nagłówki serifem na tle rejestru, zamiast luźnej listy —
-   sekcje o wyraźnej hierarchii. Struktura treści zostaje bez zmian.
+   Informacja z rejestru nie jest już składana w tej aplikacji — przychodzi
+   z serwera jako gotowy plik HTML (ten sam, który dostaje klient), więc
+   niesie własne style w atrybutach i nie potrzebuje niczego stąd. Ekran
+   kancelarii pokazuje ją w ramce; drukuje się ramkę, nie stronę wokół niej.
    ───────────────────────────────────────────────────── */
+/* Etykieta i jej pole zawijają się razem, nie osobno. */
+.pasek-pole { display: inline-flex; align-items: center; gap: var(--od-8); }
 
-.raport {
-  background: var(--karta);
-  color: var(--atrament);
-  /* Margines robimy paddingiem, nie @page — inaczej tła nagłówków sekcji
-     urywałyby się na krawędzi obszaru drukowalnego. */
-  padding: 18mm 16mm;
-  max-width: 210mm;
-  margin: 0 auto;
-}
-
-/* ── Nagłówek: logotypy samorządu, tytuł, dane kancelarii ── */
-.raport-naglowek {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: var(--od-16);
-  align-items: start;
-  padding-bottom: var(--od-12);
-  border-bottom: 2px solid var(--atrament);
-}
-
-/* Miejsca na pliki dostarczane przez kancelarię — celowo NIE rysujemy
-   żadnego godła ani orła: znaki samorządu notarialnego nie mogą być
-   odtwarzane ani generowane. Do czasu dostarczenia plików widać ramkę
-   o właściwych proporcjach. */
-.raport-logotypy { display: flex; gap: var(--od-8); align-items: flex-start; }
-
-.raport-logo {
-  width: 46px;
-  height: 46px;
-  display: grid;
-  place-items: center;
-  border: 1px dashed var(--linia);
-  border-radius: 4px;
-  font-size: 7px;
-  line-height: 1.25;
-  text-align: center;
-  color: var(--atrament-3);
-  letter-spacing: 0.02em;
-  padding: 3px;
-}
-.raport-logo img { max-width: 100%; max-height: 100%; }
-/* Kafel z przerywaną ramką to zastępnik na czas, gdy pliku znaku nie ma.
-   Gdy znak się wczyta, ramka znika — obramowany logotyp wygląda jak błąd. */
-.raport-logo-znak { border: none; padding: 0; }
-/* Znak „Notariat Rzeczypospolitej" jest szeroki, nie kwadratowy — kwadratowy
-   kafel ścisnąłby go do nieczytelnej wysokości. Wysokość ustawiamy na samym
-   obrazie: kafel ma `width: auto`, więc `max-width: 100%` na obrazie nie ma
-   się do czego odnieść i znak rozpychał kolumnę z tytułem dokumentu. */
-.raport-logo-szeroki { width: auto; height: auto; }
-.raport-logo-szeroki img { height: 34px; width: auto; max-width: none; max-height: none; }
-
-.raport-tytul {
-  font-family: var(--font-display);
-  font-size: 22px;
-  line-height: 1.2;
-  margin: 0;
-}
-.raport-podtytul {
-  font-size: var(--st-13);
-  color: var(--atrament-3);
-  margin-top: 3px;
-}
-.raport-kancelaria {
-  text-align: right;
-  font-size: var(--st-11);
-  color: var(--atrament-3);
-  line-height: 1.5;
-}
-.raport-kancelaria strong {
-  display: block;
-  color: var(--atrament);
-  font-size: var(--st-13);
-  font-weight: 600;
-}
-
-/* ── Sekcje ── */
-.raport-sekcja { margin-top: var(--od-24); break-inside: avoid; }
-.raport-sekcja-tytul {
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 500;
-  background: var(--rejestr-tlo);
-  color: var(--rejestr);
-  padding: 6px 10px;
-  border-radius: 4px;
-  margin-bottom: var(--od-8);
-}
-
-/* Tabele raportu muszą zmieścić się w SZEROKOŚCI STRONY, nie ekranu.
-   `.tabela` jest zestrojona z widokami aplikacji: 24 px odstępu po obu
-   stronach każdej komórki i nagłówki bez zawijania. Na A4 zostaje po
-   marginesach ~178 mm, więc przy siedmiu kolumnach same odstępy zjadały
-   pół szerokości i tabela emisji urywała się na krawędzi kartki (kolumny
-   „w obrocie" i „cena emisyjna" po prostu nie wchodziły na wydruk).
-   Tu więc: ciaśniejsze komórki, łamane nagłówki i układ stały, który
-   dzieli brakujące miejsce między kolumny zamiast wypychać je poza stronę. */
-.raport .tabela {
-  font-size: var(--st-11);
+.podglad-dokumentu {
   width: 100%;
-}
-.raport .tabela th {
-  background: none;
-  border-bottom: 1px solid var(--atrament);
-  color: var(--atrament-2);
-  /* Nagłówek łamie się na kilka wierszy zamiast rozpychać kolumnę —
-     „wyemitowane" i „cena emisyjna" są dłuższe niż liczby pod nimi. */
-  white-space: normal;
-  padding: 6px var(--od-4);
-  letter-spacing: 0.04em;
-  vertical-align: bottom;
-}
-.raport .tabela td {
-  height: auto;
-  padding: 5px var(--od-4);
-  vertical-align: top;
-}
-/* Skrajne kolumny bez odstępu na zewnątrz — tabela zaczyna się i kończy
-   równo z pozostałymi sekcjami raportu. */
-.raport .tabela th:first-child,
-.raport .tabela td:first-child { padding-left: 0; }
-.raport .tabela th:last-child,
-.raport .tabela td:last-child { padding-right: 0; }
-.raport .tabela tr { break-inside: avoid; }
-/* Liczby, daty i zakresy numerów nigdy się nie łamią — „30.08.2026"
-   przeniesione po trzecim znaku przestaje być datą. */
-.raport .tabela .do-prawej,
-.raport .tabela .mono { white-space: nowrap; }
-
-/* Ułamkowa część akcji — „1/3 akcji nr 96". Zapis wprost, bez skrótów:
-   na wydruku dla sądu musi być czytelny bez znajomości aplikacji. */
-.raport-ulamek { font-variant-numeric: tabular-nums; }
-
-/* ── Stopka ── */
-.raport-stopka {
-  margin-top: var(--od-24);
-  padding-top: var(--od-12);
-  border-top: 1px solid var(--linia);
-  font-size: var(--st-11);
-  color: var(--atrament-3);
-  line-height: 1.6;
-}
-.raport-podpis {
-  margin-top: 26mm;
-  display: flex;
-  justify-content: flex-end;
-  break-inside: avoid;
-}
-.raport-podpis-linia {
-  width: 62mm;
-  border-top: 1px solid var(--atrament-3);
-  padding-top: 5px;
-  text-align: center;
-  font-size: var(--st-11);
-  color: var(--atrament-3);
-}
-
-@media print {
-  /* Margines niesie `.raport` paddingiem — patrz komentarz wyżej. */
-  @page { margin: 0; }
-  /* Tła nagłówków sekcji i pigułek muszą wyjść na papier. */
-  html, body, .raport { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .raport { padding: 16mm 15mm; max-width: none; }
-  /* Oś akcji nie trafia na wydruk — kreskowanie ginie na druku
-     czarno-białym (SESJA-PSA-6-INTERFEJS.md, faza 4). */
-  .os-akcji, .raport-bez-druku { display: none !important; }
+  min-height: 78vh;
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  background: var(--karta);
+  display: block;
 }
 
 /* ── Wskaźnik autozapisu ──

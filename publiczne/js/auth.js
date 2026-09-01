@@ -63,11 +63,7 @@ function EkranLogowania({ przyZalogowaniu }) {
 
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <div className="marka-pasek bez-druku">
-        <div className="marka-pasek-nazwa">
-          {kancelaria ? kancelaria.nazwa : KANCELARIA_ZAPASOWA.nazwa}
-        </div>
-      </div>
+      <NaglowekKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
 
       <div className="brama">
         <div className="brama-opis">
@@ -124,7 +120,6 @@ function EkranLogowania({ przyZalogowaniu }) {
         </form>
       </div>
 
-      <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
     </div>
   );
 }
