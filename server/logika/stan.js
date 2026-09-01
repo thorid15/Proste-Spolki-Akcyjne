@@ -1012,8 +1012,11 @@ function bilansNaDzien(stan, data) {
       umorzone_zakresy: umorzone,
       uniewaznione: n.ilosc(uniewaznione),
       uniewaznione_zakresy: uniewaznione,
-      // Poza obrotem sa i umorzone, i uniewaznione - roznica miedzy nimi jest
-      // prawna (uchwala spolki vs orzeczenie sadu), nie bilansowa.
+      // Akcje emisji, ktore NADAL ISTNIEJA. Kodeks nie zna pojecia „akcje
+      // w obrocie" — to reszta bilansowa: wyemitowane minus te, ktore byt
+      // prawny utracily. Umorzone i uniewaznione odejmuje sie tak samo,
+      // bo roznica miedzy nimi jest w PODSTAWIE (uchwala spolki wobec
+      // orzeczenia sadu), a nie w skutku dla liczby akcji.
       w_obrocie: e.ilosc - n.ilosc(umorzone) - n.ilosc(uniewaznione),
     };
   });

@@ -3,11 +3,15 @@
 /**
  * Informacja z rejestru akcjonariuszy — art. 300(35) § 3 KSH.
  *
- * Dokument jest JEDYNYM pismem, jakie aplikacja wystawia ze stanu rejestru,
- * i ma odpowiadac katalogowi z art. 300(33) § 1 pkt 1–11 KSH. Test pilnuje
- * wlasnie tego: nie tego, jak dokument wyglada, tylko czy niesie to, czego
- * wymaga ustawa. Zakres da sie zgubic po cichu — wystarczy, ze pole przestanie
- * dochodzic z `widoki.widokStanu()` i sekcja zniknie bez sladu.
+ * Dokument jest JEDYNYM pismem, jakie aplikacja wystawia ze stanu rejestru.
+ * Ustawa nie okresla, co ma w nim byc — art. 300(35) § 3 KSH daje tylko prawo
+ * zadania wydania informacji. Granice wyznaczaja dwa inne przepisy: art.
+ * 300(33) § 1 pkt 1–11 mowi, co zawiera REJESTR, a art. 300(35) § 1(1)
+ * zabiera z informacji dane wrazliwe pozostalych akcjonariuszy.
+ *
+ * Test pilnuje wlasnie tego zakresu, nie wygladu. Zakres da sie zgubic po
+ * cichu — wystarczy, ze pole przestanie dochodzic z `widoki.widokStanu()`
+ * i cala sekcja zniknie bez sladu.
  */
 
 const test = require('node:test');
@@ -110,7 +114,7 @@ function dokument(nadpisania = {}) {
 // Zakres ustawowy
 // ─────────────────────────────────────────────────────────────
 
-test('informacja niesie caly katalog z art. 300(33) § 1 pkt 1–11 KSH', () => {
+test('informacja pokazuje caly rejestr z art. 300(33) § 1 pkt 1–11 KSH', () => {
   const html = dokument();
 
   // pkt 1–2: firma, siedziba, adres, sad rejestrowy i numer KRS.
@@ -151,8 +155,8 @@ test('informacja niesie caly katalog z art. 300(33) § 1 pkt 1–11 KSH', () => 
   assert.match(html, /Obowiązki wobec spółki/);
   assert.match(html, /powtarzających się świadczeń niepieniężnych/);
 
-  // Podstawa wydania samego dokumentu.
-  assert.match(html, /art\. 300³⁵ § 3/);
+  // Kto wydal dokument — w glowce, nie w osobnej sekcji nizej.
+  assert.match(html, /podmiot prowadzący rejestr akcjonariuszy/);
 });
 
 /**
@@ -207,7 +211,7 @@ test('adres zamaskowany jest nazwany wprost, a nie przemilczany', () => {
   };
   const html = dokument({ stan });
   assert.match(html, /adres zamieszkania zasłonięty/);
-  assert.match(html, /art\. 300³⁵ § 1¹/, 'podstawa maskowania podana wprost');
+  assert.match(html, /nie udostępnia się akcjonariuszowi/, 'brak danych jest nazwany, nie przemilczany');
 });
 
 /**

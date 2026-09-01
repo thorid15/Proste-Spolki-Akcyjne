@@ -15,9 +15,15 @@
  * Wolno jej wiec miec prawdziwy arkusz, reguly `@page` i kroje pisma —
  * i dlatego ma wlasny plik, zamiast ciagnac tamte ograniczenia bez potrzeby.
  *
- * ZAKRES TRESCI wyznacza art. 300(33) § 1 pkt 1–11 KSH. Kazda sekcja niesie
- * numer punktu, ktory realizuje — to nie ozdoba: notariusz i sad sprawdzaja
- * wypis wlasnie wzgledem tego katalogu, wiec numer jest tu informacja.
+ * ZAKRES TRESCI. Ustawa NIE okresla, co ma zawierac sama informacja —
+ * art. 300(35) § 3 KSH daje tylko prawo zadania jej wydania. Granice
+ * wyznaczaja dwa inne przepisy: art. 300(33) § 1 pkt 1–11 KSH mowi, co
+ * zawiera REJESTR (a wiec czego informacja moze dotyczyc), a art. 300(35)
+ * § 1(1) KSH zabiera z niej dane wrazliwe pozostalych akcjonariuszy.
+ * Dokument pokazuje wiec caly rejestr w zakresie dostepnym odbiorcy.
+ *
+ * Numerow przepisow w tresci NIE drukujemy: sa ogolnodostepne, a osiem
+ * dodatkowych wierszy kosztuje miejsce na kartce.
  *
  * Czego NIE umieszczamy (sekcja 10 specyfikacji): pola `uwagi`, checklist
  * weryfikacji, notatek AML, skrotow lancucha. `widoki.widokStanu()` nie
@@ -161,10 +167,18 @@ body {
   font-size: 12pt;
   font-weight: 500;
   color: var(--atrament);
-  margin-bottom: 0.5mm;
+}
+/* Rola kancelarii stoi przy jej danych, a nie w osobnej sekcji niżej:
+   to ta sama informacja co nazwa i adres — kto wydał ten dokument. */
+.glowka-rola {
+  display: block;
+  font-size: 8pt;
+  letter-spacing: 0.02em;
+  color: var(--rejestr);
+  margin-bottom: 1mm;
 }
 
-/* ── Tytuł i podstawa ── */
+/* ── Tytuł ── */
 .tytul {
   font-family: 'EB Garamond', 'Iowan Old Style', Georgia, serif;
   font-size: 21pt;
@@ -173,11 +187,6 @@ body {
   letter-spacing: -0.005em;
   margin: 8mm 0 1.5mm;
   text-wrap: balance;
-}
-.podstawa {
-  font-size: 9pt;
-  color: var(--atrament-2);
-  margin: 0 0 6mm;
 }
 
 /* ── Metryka: trzy fakty, które identyfikują ten konkretny wypis ──
@@ -203,18 +212,8 @@ body {
 .metryka-wartosc { font-size: 10.5pt; line-height: 1.35; }
 .metryka-wartosc strong { font-weight: 600; }
 
-/* ── Sekcje ──
-   Numer punktu ustawy stoi nad tytułem sekcji, bo to on mówi, po co ta
-   sekcja w dokumencie jest — wypis sprawdza się właśnie wobec katalogu
-   z art. 300(33) § 1. */
+/* ── Sekcje ── */
 .sekcja { margin-bottom: 6mm; break-inside: avoid; }
-.sekcja-przepis {
-  font-family: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
-  font-size: 7.5pt;
-  letter-spacing: 0.02em;
-  color: var(--rejestr);
-  margin-bottom: 0.5mm;
-}
 .sekcja-tytul {
   font-family: 'EB Garamond', 'Iowan Old Style', Georgia, serif;
   font-size: 13.5pt;
@@ -376,11 +375,10 @@ function ponumeruj(sekcje) {
   }).join('');
 }
 
-function sekcja({ przepis, tytul, wnetrze, pusto }) {
+function sekcja({ tytul, wnetrze, pusto }) {
   if (!wnetrze && !pusto) return '';
   return `
   <section class="sekcja">
-    ${przepis ? `<div class="sekcja-przepis">${esc(przepis)}</div>` : ''}
     <h2 class="sekcja-tytul"><span class="sekcja-numer">{{NR}}.</span> ${esc(tytul)}</h2>
     ${wnetrze || `<p class="sekcja-pusto">${esc(pusto)}</p>`}
   </section>`;
@@ -528,7 +526,6 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
 
   const sekcje = ponumeruj([
     sekcja({
-      przepis: 'art. 300³³ § 1 pkt 1–3 KSH',
       tytul: 'Spółka',
       wnetrze: pary([
         ['Firma', spolka.nazwa, 'mocno'],
@@ -543,29 +540,25 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
       }),
 
     sekcja({
-      przepis: 'art. 300³¹ § 1 KSH',
-      tytul: 'Podmiot prowadzący rejestr',
+      tytul: 'Rejestr akcjonariuszy',
       wnetrze: pary([
-        ['Podmiot', kancelaria.nazwa, 'mocno'],
-        ['Data uchwały o wyborze', dataPl(spolka.data_uchwaly_wyboru)],
+        ['Data uchwały o wyborze podmiotu', dataPl(spolka.data_uchwaly_wyboru)],
         ['Data umowy o prowadzenie rejestru', dataPl(spolka.data_umowy)],
         ['Data otwarcia rejestru', dataPl(spolka.data_otwarcia_rejestru)],
     ]),
       }),
 
     sekcja({
-      przepis: 'art. 300³³ § 1 pkt 3–4 KSH',
       tytul: 'Emisje i serie akcji',
       wnetrze: tabela(
         [['Seria'], ['Rodzaj akcji'], ['Numery', 'numery'], ['Wyemitowane', 'do-prawej'],
-         ['Umorzone', 'do-prawej'], ['W obrocie', 'do-prawej'], ['Data emisji']],
+         ['Umorzone', 'do-prawej'], ['Istniejące', 'do-prawej'], ['Data emisji']],
         wierszeEmisji
     ),
       pusto: 'Rejestr nie wykazuje emisji akcji.',
       }),
 
     sekcja({
-      przepis: 'art. 300³³ § 1 pkt 5 i 9 KSH',
       tytul: 'Akcjonariusze',
       wnetrze: wierszeAkcjonariuszy.length
         ? tabela(
@@ -582,7 +575,6 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
       }),
 
     uprawnienia.length === 0 ? '' : sekcja({
-      przepis: 'art. 300³³ § 1 pkt 4 KSH',
       tytul: 'Uprawnienia szczególne z akcji',
       wnetrze: tabela(
         [['Rodzaj'], ['Dotyczy'], ['Tytuł'], ['Treść'], ['Od dnia']],
@@ -597,7 +589,6 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
       }),
 
     obciazenia.length === 0 ? '' : sekcja({
-      przepis: 'art. 300³³ § 1 pkt 6–8 KSH',
       tytul: 'Obciążenia i zajęcia akcji',
       wnetrze: tabela(
         [['Rodzaj'], ['Seria'], ['Numery', 'numery'], ['Uprawniony'], ['Prawo głosu'], ['Od dnia']],
@@ -613,7 +604,6 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
       }),
 
     ograniczenia.length === 0 ? '' : sekcja({
-      przepis: 'art. 300³³ § 1 pkt 10 KSH',
       tytul: 'Ograniczenia w rozporządzaniu akcjami',
       wnetrze: tabela(
         [['Zakres'], ['Seria'], ['Numery', 'numery'], ['Zgoda spółki'], ['Prawo pierwszeństwa'], ['Opis']],
@@ -629,7 +619,6 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
       }),
 
     obowiazki.length === 0 ? '' : sekcja({
-      przepis: 'art. 300³³ § 1 pkt 11 KSH',
       tytul: 'Obowiązki wobec spółki związane z akcjami',
       wnetrze: tabela(
         [['Seria'], ['Treść obowiązku']],
@@ -641,25 +630,13 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
   const tresc = `
   ${sekcje}
 
-  <div class="zakonczenie">
+  ${zamaskowane ? `
   <div class="klauzula">
-    <p style="margin: 0;">
-      Dokument stanowi informację z rejestru akcjonariuszy w rozumieniu
-      art. 300³⁵ § 3 Kodeksu spółek handlowych i przedstawia stan rejestru
-      na dzień ${esc(dataPl(data))}.
-    </p>
-    ${zamaskowane ? `
-    <p class="klauzula-drobne">
+    <p class="klauzula-drobne" style="margin: 0;">
       Numeru PESEL, daty urodzenia ani adresu zamieszkania pozostałych akcjonariuszy
-      nie udostępnia się akcjonariuszowi — art. 300³⁵ § 1¹ Kodeksu spółek handlowych.
-      Dane własne odbiorcy przedstawiono w całości.
-    </p>` : ''}
-  </div>
-
-  <div class="podpis">
-    <div class="podpis-linia">podpis i pieczęć notariusza</div>
-  </div>
-  </div>`;
+      nie udostępnia się akcjonariuszowi. Dane własne odbiorcy przedstawiono w całości.
+    </p>
+  </div>` : ''}`;
 
   const sporzadzonoOpis = sporzadzono
     ? `Sporządzono ${esc(String(sporzadzono).slice(0, 10).split('-').reverse().join('.'))}`
@@ -697,6 +674,7 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
     <img class="glowka-znak" src="/obrazy/notariat.png" alt="Notariat Rzeczypospolitej Polskiej">
     <div class="glowka-kancelaria">
       <strong>${esc(kancelaria.nazwa)}</strong>
+      <span class="glowka-rola">podmiot prowadzący rejestr akcjonariuszy</span>
       ${pusty(kancelaria.adres) ? '' : `${esc(kancelaria.adres)}<br>`}
       ${pusty(kancelaria.miejscowosc) ? '' : `${esc(kancelaria.miejscowosc)}<br>`}
       ${pusty(kancelaria.email) ? '' : esc(kancelaria.email)}
@@ -704,11 +682,6 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
   </header>
 
   <h1 class="tytul">Informacja z rejestru akcjonariuszy</h1>
-  <p class="podstawa">
-    Wydana na podstawie art. 300³⁵ § 3 Kodeksu spółek handlowych. Rejestr prowadzony
-    na podstawie art. 300³¹ § 1 tej ustawy.
-  </p>
-
   <div class="metryka">
     <div>
       <div class="metryka-etykieta">Spółka</div>

@@ -277,7 +277,7 @@ test('informacja z rejestru: wydanie zapisuje slad, dokument ma wlasny adres', a
   assert.match(html, /Informacja z rejestru akcjonariuszy/);
   assert.match(html, /Portal Testowa P\.S\.A\./);
   // Pelna tresc ustawowa, nie sama tabela akcjonariuszy (art. 300(33) § 1).
-  assert.match(html, /Podmiot prowadzący rejestr/);
+  assert.match(html, /podmiot prowadzący rejestr akcjonariuszy/, 'kto wydał — w główce');
   assert.match(html, /Emisje i serie akcji/);
 
   // Ponowne otwarcie jest BEZPLATNE: platna jest czynnosc wydania.
