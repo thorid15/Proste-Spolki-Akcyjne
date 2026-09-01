@@ -1248,44 +1248,57 @@ function Przelacznik({ wlaczony, przyZmianie, etykieta, opis, wylaczony = false,
 }
 
 /* ─────────────────────────────────────────────────
-   NAGŁÓWEK KANCELARII
+   STOPKA
 
-   Kto prowadzi rejestr, gdzie go prowadzi i jak się z nim skontaktować —
-   raz, na górze ekranu, tak jak na papierze firmowym.
+   Kto prowadzi rejestr, gdzie i jak się z nim skontaktować — jeden blok,
+   jeden poziom. Wcześniejsza wersja rozbijała to na dwa piętra: dane
+   adresowe nad cienką linią, rok i adres strony pod nią. Strona
+   internetowa stoi teraz przy pozostałych danych kancelarii, bo jest
+   jednym z jej adresów, a nie osobną informacją.
 
-   Wcześniej te same dane leżały w stopce, i to w dwóch osobnych poziomach:
-   blok adresowy nad cienką linią, rok i adres strony pod nią. Rozbijało to
-   jedną informację na dwie i nie dawało nic w zamian. Podstawa prawna też
-   stąd znika — jest tam, gdzie ma znaczenie, czyli na samym dokumencie
-   z rejestru.
+   Podstawy prawnej tu nie ma — jej miejsce jest na dokumencie z rejestru,
+   gdzie coś znaczy, a nie pod każdym ekranem aplikacji.
    ───────────────────────────────────────────────── */
+
+const ZNAK_NOTARIATU = '/obrazy/notariat.png';
 
 function skrocAdresWww(url) {
   return String(url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
-function NaglowekKancelarii({ kancelaria }) {
+function StopkaKancelarii({ kancelaria }) {
+  const [znakNieudany, ustawZnakNieudany] = useState(false);
   const k = kancelaria || {};
   const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
   const link = k.www_psa || k.www;
 
   return (
-    <header className="marka-pasek bez-druku">
-      <div className="marka-pasek-nazwa">{k.nazwa}</div>
-      {(adres || k.email || link) && (
-        <div className="marka-pasek-dane">
-          {adres && <span>{adres}</span>}
-          {k.email && <a href={`mailto:${k.email}`}>{k.email}</a>}
-          {link && (
-            <a href={link} target="_blank" rel="noopener noreferrer">{skrocAdresWww(link)}</a>
-          )}
+    <footer className="stopka bez-druku">
+      <div className="stopka-srodek">
+        {!znakNieudany && (
+          <img
+            className="stopka-znak"
+            src={ZNAK_NOTARIATU}
+            alt="Notariat Rzeczypospolitej Polskiej"
+            onError={() => ustawZnakNieudany(true)}
+          />
+        )}
+        <div className="stopka-dane">
+          <div className="stopka-nazwa">{k.nazwa}</div>
+          <div className="stopka-linia">
+            {adres && <span>{adres}</span>}
+            {k.email && <a href={`mailto:${k.email}`}>{k.email}</a>}
+            {link && (
+              <a href={link} target="_blank" rel="noopener noreferrer">{skrocAdresWww(link)}</a>
+            )}
+          </div>
         </div>
-      )}
-    </header>
+      </div>
+    </footer>
   );
 }
 
-window.NaglowekKancelarii = NaglowekKancelarii;
+window.StopkaKancelarii = StopkaKancelarii;
 window.skrocAdresWww = skrocAdresWww;
 window.KrokNaglowek = KrokNaglowek;
 window.WierszPodmiotu = WierszPodmiotu;

@@ -56,13 +56,17 @@ function OpisPortalu({ tytul, lead, punkty }) {
 
 /** Rama ekranów publicznych: marka na górze, stopka na dole, dwie kolumny w środku. */
 function RamaPubliczna({ opis, children }) {
+  const kancelaria = useKancelaria();
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <NaglowekKancelarii kancelaria={useKancelaria()} />
-      <div className="brama">
+      <div className="marka-pasek bez-druku">
+        <div className="marka-pasek-nazwa">{kancelaria.nazwa}</div>
+      </div>
+      <div className="brama rama-publiczna-tresc">
         {opis}
         <div className="brama-karta">{children}</div>
       </div>
+      <StopkaKancelarii kancelaria={kancelaria} />
     </div>
   );
 }
@@ -457,6 +461,7 @@ const ETYKIETA_ROLI_KONTA = {
 
 function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
   const [wylogowywanie, ustawWylogowywanie] = useState(false);
+  const kancelaria = useKancelaria();
 
   async function wyloguj() {
     ustawWylogowywanie(true);
@@ -469,7 +474,9 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
 
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <NaglowekKancelarii kancelaria={useKancelaria()} />
+      <div className="marka-pasek bez-druku">
+        <div className="marka-pasek-nazwa">{kancelaria.nazwa}</div>
+      </div>
       <header className="portal-topbar pasek-gorny bez-druku" style={{ padding: '14px 28px' }}>
         <div>
           <div className="tytul-strony" style={{ fontSize: 17 }}>Rejestr akcjonariuszy P.S.A.</div>
@@ -489,6 +496,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
         </div>
       </header>
       <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
+      <StopkaKancelarii kancelaria={kancelaria} />
     </div>
   );
 }

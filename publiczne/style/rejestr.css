@@ -188,11 +188,9 @@ body {
   grid-column: 1 / -1;
   min-height: var(--marka);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: var(--od-12) var(--od-24);
+  padding: 0 var(--od-24);
   background: var(--rejestr);
   color: var(--karta);
   border-bottom: 1px solid var(--rejestr-2);
@@ -200,27 +198,8 @@ body {
 .marka-pasek-nazwa {
   font-family: var(--font-display);
   font-size: var(--st-20);
-  line-height: 1.15;
+  line-height: 1.1;
   text-align: center;
-}
-/* Adres, poczta i strona jednym krojem i jednym rozmiarem — to jeden ciąg
-   danych kancelarii, a nie nagłówek z wyróżnionym odnośnikiem. Odnośniki
-   różni od reszty wyłącznie podkreślenie przy najechaniu. */
-.marka-pasek-dane {
-  display: flex; flex-wrap: wrap; justify-content: center;
-  gap: 2px var(--od-12);
-  font-size: var(--st-11);
-  color: var(--rejestr-tlo);
-  text-align: center;
-}
-.marka-pasek-dane a { color: inherit; text-decoration: none; }
-.marka-pasek-dane a:hover { text-decoration: underline; }
-/* Kropka rozdziela pozycje, ale tylko wtedy, gdy stoją w jednym wierszu —
-   po zawinięciu pierwsza pozycja nowego wiersza zaczynałaby się od kropki. */
-.marka-pasek-dane > * + *::before {
-  content: '·';
-  margin-right: var(--od-12);
-  color: var(--rejestr-3);
 }
 @media (max-width: 640px) {
   .marka-pasek { padding: var(--od-8) var(--od-16); }
@@ -1230,6 +1209,56 @@ select {
    niesie własne style w atrybutach i nie potrzebuje niczego stąd. Ekran
    kancelarii pokazuje ją w ramce; drukuje się ramkę, nie stronę wokół niej.
    ───────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────
+   STOPKA
+   Jeden poziom: znak samorządu i przy nim wszystkie adresy kancelarii —
+   pocztowy, e-mail i internetowy. Wcześniejsza wersja dzieliła to na dwa
+   piętra rozdzielone linią, przez co jedna informacja czytała się jak dwie.
+   ───────────────────────────────────────────────────── */
+.stopka {
+  margin-top: auto;
+  border-top: 1px solid var(--linia);
+  background: var(--karta);
+  color: var(--atrament-2);
+  font-size: var(--st-13);
+  line-height: 1.6;
+}
+/* Treść stopki trzyma się tej samej osi, co treść strony nad nią. */
+.stopka-srodek {
+  max-width: var(--tresc);
+  margin-inline: auto;
+  padding: var(--od-24) var(--od-40);
+  display: flex; align-items: center; gap: var(--od-16);
+}
+/* Znak na tyle duży, żeby dało się przeczytać „Notariat Rzeczypospolitej" —
+   przy 42 px napis zlewał się w plamę. */
+.stopka-znak { height: 56px; width: auto; flex-shrink: 0; }
+.stopka-dane { min-width: 0; }
+.stopka-nazwa {
+  font-family: var(--font-display);
+  font-size: var(--st-20);
+  line-height: 1.25;
+  color: var(--atrament);
+  margin-bottom: 2px;
+}
+/* Adres pocztowy, e-mail i strona to trzy adresy TEJ SAMEJ kancelarii,
+   więc idą jednym ciągiem, jednym krojem i jednym rozmiarem. Odnośniki
+   różni od reszty wyłącznie podkreślenie przy najechaniu. */
+.stopka-linia { display: flex; flex-wrap: wrap; gap: 2px var(--od-12); }
+.stopka-linia a { color: inherit; text-decoration: none; }
+.stopka-linia a:hover { color: var(--rejestr); text-decoration: underline; }
+/* Kropka rozdziela pozycje tylko w obrębie wiersza — po zawinięciu nowy
+   wiersz nie zaczyna się od kropki. */
+.stopka-linia > * + *::before {
+  content: '·';
+  margin-right: var(--od-12);
+  color: var(--atrament-3);
+}
+
+@media (max-width: 700px) {
+  .stopka-srodek { padding: var(--od-24); align-items: flex-start; }
+}
+
 /* Etykieta i jej pole zawijają się razem, nie osobno. */
 .pasek-pole { display: inline-flex; align-items: center; gap: var(--od-8); }
 

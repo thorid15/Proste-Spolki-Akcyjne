@@ -98,6 +98,12 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
       cena_emisyjna_grosze: e.cena_emisyjna_grosze,
       waluta: e.waluta,
       data_emisji: e.data_emisji,
+      // art. 300(33) § 1 pkt 3 KSH - data wpisu emisji do KRS.
+      data_wpisu_krs: e.data_wpisu_krs,
+      // art. 300(33) § 1 pkt 4 KSH - rodzaj akcji.
+      rodzaj_akcji: e.rodzaj_akcji,
+      // art. 300(33) § 1 pkt 11 KSH - obowiazki wobec spolki zwiazane z akcja.
+      obowiazki_wobec_spolki: e.obowiazki_wobec_spolki,
       status: e.status,
       opis: e.opis,
       ...(rola === ROLE.KANCELARIA ? { uwagi: e.uwagi } : {}),
@@ -118,6 +124,8 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
       // („1/3 akcji nr 96"), bo na wydruku dla sadu skrot bylby nieczytelny.
       czesci_ulamkowe: p.czesci_ulamkowe || [],
       data_nabycia: p.data_najstarszego_nabycia,
+      // art. 300(33) § 1 pkt 9 KSH - wzmianka o pokryciu akcji.
+      pokryta: p.pokryta,
       obciazenia: p.obciazenia.map((o) => ({
         typ: o.typ,
         numery: n.opisz(o.zakresy),

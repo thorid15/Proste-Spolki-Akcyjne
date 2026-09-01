@@ -321,7 +321,9 @@ function Aplikacja() {
 
   return (
     <div className="powloka">
-      <NaglowekKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
+      <div className="marka-pasek bez-druku">
+        <div className="marka-pasek-nazwa">{(kancelaria || KANCELARIA_ZAPASOWA).nazwa}</div>
+      </div>
       <Szyna
         sciezka={sciezka}
         uzytkownik={sesja.uzytkownik}
@@ -339,6 +341,7 @@ function Aplikacja() {
           liczbaSpraw={liczbaSpraw}
         />
         <main className="tresc">{ekran()}</main>
+        <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
       </div>
       {paleta.otwarta && <PaletaPolecen przyZamknieciu={paleta.zamknij} />}
     </div>

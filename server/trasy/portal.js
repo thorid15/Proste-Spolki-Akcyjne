@@ -38,6 +38,7 @@ const numery = require('../logika/numery');
 const hasla = require('../logika/hasla');
 const limiter = require('../logika/limiter');
 const dokumentyTresc = require('../logika/dokumenty-tresc');
+const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
@@ -1302,15 +1303,13 @@ router.post(
     });
     if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
 
-    const trescHtml = dokumentyTresc.informacjaZRejestru({
+    const trescHtml = informacjaDokument.informacjaZRejestru({
       kancelaria: konfiguracja.KANCELARIA,
       spolka: stan.spolka,
       data,
       stan,
       odbiorca: { rola: rolaOdbioru(konto) },
-      // Dokument otwiera sie pod adresem serwera (GET nizej), wiec sciezka
-      // wzgledna do godla ma sie do czego odniesc.
-      zeZnakiem: true,
+      sporzadzono: czas.terazIso(),
     });
 
     const autorWpisu = `Portal — ${konto.email}`;

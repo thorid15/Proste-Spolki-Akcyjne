@@ -18,7 +18,7 @@ const typyZdarzen = require('../logika/typy-zdarzen');
 const wzoryDysk = require('../logika/wzory-dysk');
 const docx = require('../logika/docx');
 const kontekstPisma = require('../logika/kontekst-pisma');
-const dokumentyTresc = require('../logika/dokumenty-tresc');
+const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
@@ -548,13 +548,13 @@ router.get(
       ? wybrany.osoba.oznaczenie
       : (rola === przepisy.ROLE_ODBIORCY.ORGAN && zad.query.organ ? String(zad.query.organ) : null);
 
-    odp.type('text/html').send(dokumentyTresc.informacjaZRejestru({
+    odp.type('text/html').send(informacjaDokument.informacjaZRejestru({
       kancelaria: konfiguracja.KANCELARIA,
       spolka: stan.spolka,
       data,
       stan,
       odbiorca: { rola, opis },
-      zeZnakiem: true,
+      sporzadzono: czas.terazIso(),
     }));
   })
 );
