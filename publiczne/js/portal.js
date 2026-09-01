@@ -26,38 +26,6 @@ function useKancelaria() {
   return (dane && dane.kancelaria) || KANCELARIA_ZAPASOWA_PORTAL;
 }
 
-function skrocAdresWww(url) {
-  return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-}
-
-/** Stopka portalu — kto prowadzi rejestr i gdzie o tym poczytać. */
-function StopkaPortalu() {
-  const k = useKancelaria();
-  const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
-  const kontakt = [k.telefon, k.email].filter(Boolean).join(' · ');
-  const link = k.www_psa || k.www;
-  return (
-    <footer className="stopka bez-druku">
-      <div className="stopka-kolumna">
-        <div className="stopka-nazwa">{k.nazwa}</div>
-        {adres && <div className="stopka-linia">{adres}</div>}
-        {kontakt && <div className="stopka-linia">{kontakt}</div>}
-      </div>
-      <div className="stopka-kolumna">
-        <div className="stopka-etykieta">Podstawa prowadzenia rejestru</div>
-        <div className="stopka-linia">art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych</div>
-      </div>
-      {link && (
-        <div className="stopka-kolumna stopka-kolumna-link">
-          <div className="stopka-etykieta">Proste Spółki Akcyjne</div>
-          <a className="stopka-link" href={link} target="_blank" rel="noopener noreferrer">
-            {skrocAdresWww(link)}
-          </a>
-        </div>
-      )}
-    </footer>
-  );
-}
 
 /** Pasek marki — wspólny dla ekranów publicznych i zalogowanych. */
 function PasekMarkiPortal() {
@@ -104,7 +72,7 @@ function RamaPubliczna({ opis, children }) {
         {opis}
         <div className="brama-karta">{children}</div>
       </div>
-      <StopkaPortalu />
+      <StopkaKancelarii kancelaria={useKancelaria()} />
     </div>
   );
 }
@@ -531,7 +499,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
         </div>
       </header>
       <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
-      <StopkaPortalu />
+      <StopkaKancelarii kancelaria={useKancelaria()} />
     </div>
   );
 }

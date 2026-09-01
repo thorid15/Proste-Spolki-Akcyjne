@@ -44,11 +44,14 @@ function sporzadzonoTeraz() {
  * czego brakuje — dokument nigdy nie pokazuje pustego kwadratu ani
  * ikony zepsutego obrazka.
  */
-function LogoSamorzadu({ zrodlo, opis }) {
+function LogoSamorzadu({ zrodlo, opis, szeroki = false }) {
   const [nieudane, ustawNieudane] = useState(false);
   const pokazObraz = Boolean(zrodlo) && !nieudane;
   return (
-    <div className="raport-logo" title={opis}>
+    <div
+      className={`raport-logo ${pokazObraz ? 'raport-logo-znak' : ''} ${szeroki && pokazObraz ? 'raport-logo-szeroki' : ''}`}
+      title={opis}
+    >
       {pokazObraz
         ? <img src={zrodlo} alt={opis} onError={() => ustawNieudane(true)} />
         : opis}
@@ -57,22 +60,21 @@ function LogoSamorzadu({ zrodlo, opis }) {
 }
 
 /**
- * Znak „Notariat Rzeczypospolitej Polskiej" na wydrukach. Żeby go włączyć,
- * wystarczy wgrać plik do repozytorium pod tę ścieżkę (SVG albo PNG
- * z przezroczystym tłem, w proporcji zbliżonej do kwadratu):
+ * Znak „Notariat Rzeczypospolitej Polskiej" na wydrukach — plik dostarczony
+ * przez kancelarię, leży w repozytorium. Gdyby zniknął albo nie dał się
+ * wczytać, `LogoSamorzadu` wraca do ramki z nazwą znaku; wydruk nigdy nie
+ * pokazuje pustego prostokąta ani ikony zepsutego obrazka.
  *
- *   publiczne/obrazy/notariat.svg
- *
- * Nic więcej nie trzeba zmieniać — bez pliku nagłówek pokazuje ramkę
- * z nazwą znaku, dokładnie jak dotąd.
+ * Znak jest szeroki (498 × 220), nie kwadratowy — stąd osobna szerokość
+ * kafla w `.raport-logo-szeroki`.
  */
-const LOGO_NOTARIAT = '/obrazy/notariat.svg';
+const LOGO_NOTARIAT = '/obrazy/notariat.png';
 
 function NaglowekRaportu({ tytul, podtytul, kancelaria, sporzadzono, logoNotariat = LOGO_NOTARIAT, logoIzba }) {
   return (
     <div className="raport-naglowek">
       <div className="raport-logotypy">
-        <LogoSamorzadu zrodlo={logoNotariat} opis="Notariat Rzeczypospolitej Polskiej" />
+        <LogoSamorzadu zrodlo={logoNotariat} opis="Notariat Rzeczypospolitej Polskiej" szeroki />
         {/* Etap 4.7: rejestr prowadzi KANCELARIA (art. 300(31) § 1 KSH), nie
             izba notarialna - znak izby jest opcją, domyślnie wyłączoną, żeby
             nagłówek nie sugerował, że dokument pochodzi od samorządu. */}

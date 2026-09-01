@@ -344,10 +344,7 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
 
   return (
     <>
-      <KrokNaglowek
-        tytul={nazwany ? nazwaAkcjonariusza(dane) : 'Nowy akcjonariusz'}
-        opis="Dane wpisywane do rejestru akcjonariuszy. Podaj je dokładnie tak, jak widnieją w dokumencie tożsamości albo w rejestrze przedsiębiorców — art. 300³³ § 1 KSH."
-      />
+      <KrokNaglowek tytul={nazwany ? nazwaAkcjonariusza(dane) : 'Nowy akcjonariusz'} />
       <Komunikat odmiana="blad" tresc={blad} />
 
       <Pole etykieta="Rodzaj podmiotu">
@@ -727,10 +724,7 @@ function EkranWniosku() {
       <Karta>
         {krok === 0 && (
           <>
-            <KrokNaglowek
-              tytul="Dane spółki"
-              opis="Zacznij od numeru KRS — resztę pobierzemy z rejestru przedsiębiorców i wystarczy ją sprawdzić."
-            />
+            <KrokNaglowek tytul="Dane spółki" />
 
             <Pole etykieta="Numer KRS">
               <div className="row-g">
@@ -877,7 +871,7 @@ function EkranWniosku() {
           <>
             <KrokNaglowek
               tytul="Akcjonariusze"
-              opis="Osoby, które mają zostać wpisane do rejestru. Kancelaria porówna te dane z rejestrem KRS i odezwie się, gdyby coś się nie zgadzało."
+              opis="Aktualni akcjonariusze spółki, wpisz dane wszystkich osób."
             />
             <Komunikat odmiana="blad" tresc={bladAkcjonariuszy} />
 

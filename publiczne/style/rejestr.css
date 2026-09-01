@@ -211,42 +211,69 @@ body {
    kolumny w gridzie, więc się nie rozjeżdża. ── */
 .stopka {
   margin-top: auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--od-24) var(--od-40);
-  padding: var(--od-24) var(--od-40);
-  border-top: 1px solid var(--linia-2);
+  border-top: 1px solid var(--linia);
   background: var(--karta);
-  font-size: var(--st-13);
   color: var(--atrament-2);
+  font-size: var(--st-13);
   line-height: 1.6;
 }
-.stopka-kolumna { min-width: 0; }
-.stopka-kolumna-link { text-align: right; }
+/* Treść stopki trzyma się tej samej osi, co treść strony nad nią. Bez tego
+   nazwa kancelarii wisiała przy krawędzi okna, a kolumna tekstu zaczynała
+   się 200 px dalej — wyglądało to jak dwie różne strony sklejone razem. */
+.stopka-srodek {
+  max-width: var(--tresc);
+  margin-inline: auto;
+  padding: var(--od-40) var(--od-40) var(--od-24);
+}
+.stopka-glowna {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--od-40);
+  padding-bottom: var(--od-24);
+}
+.stopka-kancelaria { display: flex; align-items: flex-start; gap: var(--od-16); min-width: 0; }
+/* Znak samorządu na tyle duży, żeby dało się przeczytać „Notariat
+   Rzeczypospolitej" — przy 42 px napis zlewał się w plamę. Marginesy
+   optycznie równa `margin-top`, bo znak ma u góry belkę, a nazwa obok
+   zaczyna się od wersalika. */
+.stopka-znak { height: 60px; width: auto; flex-shrink: 0; margin-top: 2px; }
 .stopka-nazwa {
   font-family: var(--font-display);
   font-size: var(--st-20);
+  line-height: 1.25;
   color: var(--atrament);
   margin-bottom: var(--od-4);
 }
 .stopka-linia { color: var(--atrament-2); }
-.stopka-etykieta {
-  font-size: var(--st-11);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+.stopka-mail { color: var(--atrament-2); text-decoration: none; border-bottom: 1px solid var(--linia); }
+.stopka-mail:hover { color: var(--rejestr); border-bottom-color: var(--rejestr); }
+/* Podstawa prawna zdaniem, nie parą „etykieta: wartość". Etykieta
+   „PODSTAWA PROWADZENIA REJESTRU" nad numerem artykułu nic nie dodawała —
+   z samego zdania widać, czym ten numer jest. */
+.stopka-podstawa {
+  margin: 0;
+  max-width: 32ch;
   color: var(--atrament-3);
-  margin-bottom: var(--od-4);
+}
+.stopka-dol {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--od-16);
+  padding-top: var(--od-16);
+  border-top: 1px solid var(--linia-2);
+  font-size: var(--st-11);
+  color: var(--atrament-3);
 }
 .stopka-link {
-  font-size: var(--st-15);
   font-weight: 600;
   color: var(--rejestr);
   text-decoration: none;
 }
 .stopka-link:hover { text-decoration: underline; }
+
 @media (max-width: 700px) {
-  .stopka { grid-template-columns: minmax(0, 1fr); gap: var(--od-16); padding: var(--od-24); }
-  .stopka-kolumna-link { text-align: left; }
+  .stopka-srodek { padding: var(--od-24); }
+  .stopka-glowna { flex-direction: column; gap: var(--od-24); }
+  .stopka-podstawa { max-width: none; }
+  .stopka-dol { flex-direction: column; align-items: flex-start; gap: var(--od-8); }
 }
 
 /* Ekrany publiczne portalu (`.ekran-logowania`) same w sobie maja 100vh -
@@ -1294,6 +1321,15 @@ select {
   padding: 3px;
 }
 .raport-logo img { max-width: 100%; max-height: 100%; }
+/* Kafel z przerywaną ramką to zastępnik na czas, gdy pliku znaku nie ma.
+   Gdy znak się wczyta, ramka znika — obramowany logotyp wygląda jak błąd. */
+.raport-logo-znak { border: none; padding: 0; }
+/* Znak „Notariat Rzeczypospolitej" jest szeroki, nie kwadratowy — kwadratowy
+   kafel ścisnąłby go do nieczytelnej wysokości. Wysokość ustawiamy na samym
+   obrazie: kafel ma `width: auto`, więc `max-width: 100%` na obrazie nie ma
+   się do czego odnieść i znak rozpychał kolumnę z tytułem dokumentu. */
+.raport-logo-szeroki { width: auto; height: auto; }
+.raport-logo-szeroki img { height: 34px; width: auto; max-width: none; max-height: none; }
 
 .raport-tytul {
   font-family: var(--font-display);

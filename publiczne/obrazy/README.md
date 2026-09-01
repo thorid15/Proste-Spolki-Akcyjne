@@ -1,27 +1,25 @@
-# Obrazy wstawiane do dokumentów
+# Znaki graficzne
 
-Katalog na pliki graficzne, których aplikacja **nie generuje** — dostarcza
-je kancelaria. Serwer udostępnia go statycznie pod `/obrazy/...`.
+## `notariat.png` — znak „Notariat Rzeczypospolitej Polskiej"
 
-## `notariat.svg` — znak „Notariat Rzeczypospolitej Polskiej"
+Plik dostarczony przez kancelarię. Względem oryginału przycięty został
+wyłącznie biały margines wokół znaku (594 × 261 → 498 × 220); sam znak jest
+nietknięty. Zapisany bezstratnie w PNG, bo to płaskie plamy koloru, na
+których JPEG zostawia widoczne obwódki.
 
-Nagłówek raportu i informacji z rejestru (`publiczne/js/wydruk.js`) szuka
-znaku samorządu pod ścieżką:
+Używany w dwóch miejscach:
 
-    publiczne/obrazy/notariat.svg
+- `publiczne/js/ui-rejestr.js` — stopka obu aplikacji (`ZNAK_NOTARIATU`),
+- `publiczne/js/wydruk.js` — nagłówek informacji z rejestru (`LOGO_NOTARIAT`).
 
-Wystarczy wgrać tu plik i odświeżyć stronę — nic więcej nie trzeba zmieniać
-w kodzie. Dopóki pliku nie ma (albo gdy się nie wczyta), nagłówek pokazuje
-ramkę z nazwą znaku, tak jak dotychczas.
+Oba miejsca mają zapas na wypadek, gdyby pliku zabrakło: stopka nie pokazuje
+wtedy nic, wydruk wraca do ramki z nazwą znaku. Żadne z nich nie rysuje
+godła samodzielnie — znaków samorządu notarialnego się nie odtwarza ani nie
+generuje. Gdyby znak trzeba było wymienić, wystarczy podmienić ten plik.
 
-Zalecenia:
+## Znak izby notarialnej (opcjonalny)
 
-- format **SVG** (ostry na wydruku w każdej skali) albo **PNG** z tłem
-  przezroczystym, co najmniej 300 × 300 px;
-- proporcja zbliżona do kwadratu — nagłówek rezerwuje na znak kwadratowe
-  pole (`.raport-logo` w `publiczne/style/rejestr.css`);
-- przy PNG trzeba zmienić rozszerzenie w stałej `LOGO_NOTARIAT`
-  (`publiczne/js/wydruk.js`).
-
-Znaków samorządu notarialnego **nie odtwarzamy ani nie pobieramy z sieci** —
-plik musi pochodzić z oficjalnego źródła, którym dysponuje kancelaria.
+Nagłówek wydruku umie pokazać obok drugi znak — izby notarialnej — ale
+domyślnie tego nie robi: rejestr prowadzi KANCELARIA (art. 300³¹ § 1 KSH),
+nie izba, a dwa znaki obok siebie sugerowałyby, że dokument pochodzi od
+samorządu. Włącza to pole `pokaz_znak_izby` w danych kancelarii.

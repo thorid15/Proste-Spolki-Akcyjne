@@ -122,39 +122,6 @@ function PasekMarki({ kancelaria }) {
 }
 
 /** Adres bez protokołu i bez końcowego ukośnika — tak, jak się go czyta na wizytówce. */
-function skrocAdresWww(url) {
-  return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-}
-
-/** Stopka — dane kancelarii i odesłanie do zakładki „Proste Spółki Akcyjne". */
-function StopkaKancelarii({ kancelaria }) {
-  const k = kancelaria || KANCELARIA_ZAPASOWA;
-  const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
-  const kontakt = [k.telefon, k.email].filter(Boolean).join(' · ');
-  const link = k.www_psa || k.www;
-  return (
-    <footer className="stopka bez-druku">
-      <div className="stopka-kolumna">
-        <div className="stopka-nazwa">{k.nazwa}</div>
-        {adres && <div className="stopka-linia">{adres}</div>}
-        {kontakt && <div className="stopka-linia">{kontakt}</div>}
-      </div>
-      <div className="stopka-kolumna">
-        <div className="stopka-etykieta">Podstawa prowadzenia rejestru</div>
-        <div className="stopka-linia">art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych</div>
-      </div>
-      {link && (
-        <div className="stopka-kolumna stopka-kolumna-link">
-          <div className="stopka-etykieta">Proste Spółki Akcyjne</div>
-          <a className="stopka-link" href={link} target="_blank" rel="noopener noreferrer">
-            {skrocAdresWww(link)}
-          </a>
-        </div>
-      )}
-    </footer>
-  );
-}
-
 /** Pigułka konta w topbarze — inicjały, imię, menu z wylogowaniem. */
 function Konto({ uzytkownik, przyWylogowaniu }) {
   const [otwarte, ustawOtwarte] = useState(false);
@@ -380,7 +347,7 @@ function Aplikacja() {
           liczbaSpraw={liczbaSpraw}
         />
         <main className="tresc">{ekran()}</main>
-        <StopkaKancelarii kancelaria={kancelaria} />
+        <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
       </div>
       {paleta.otwarta && <PaletaPolecen przyZamknieciu={paleta.zamknij} />}
     </div>

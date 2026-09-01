@@ -124,7 +124,7 @@ function EkranLogowania({ przyZalogowaniu }) {
         </form>
       </div>
 
-      <StopkaKancelarii kancelaria={kancelaria} />
+      <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
     </div>
   );
 }

@@ -1247,6 +1247,75 @@ function Przelacznik({ wlaczony, przyZmianie, etykieta, opis, wylaczony = false,
   );
 }
 
+/* ─────────────────────────────────────────────────
+   STOPKA
+
+   Jedna stopka dla obu aplikacji. Wcześniej stały dwie identyczne kopie —
+   w app.js i w portal.js — i każda poprawka musiała trafić w obie, albo
+   klient widział co innego niż kancelaria.
+
+   Trzy rzeczy, w tej kolejności: kto prowadzi rejestr (ze znakiem
+   samorządu), na jakiej podstawie prawnej, i dokąd pójść po więcej.
+   Numeru telefonu tu nie ma — kontakt do kancelarii jest na jej stronie,
+   a stopka aplikacji to nie wizytówka.
+   ───────────────────────────────────────────────── */
+
+const ZNAK_NOTARIATU = '/obrazy/notariat.png';
+
+function skrocAdresWww(url) {
+  return String(url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
+function StopkaKancelarii({ kancelaria }) {
+  const [znakNieudany, ustawZnakNieudany] = useState(false);
+  const k = kancelaria || {};
+  const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
+  const link = k.www_psa || k.www;
+  const rok = new Date().getFullYear();
+
+  return (
+    <footer className="stopka bez-druku">
+      <div className="stopka-srodek">
+        <div className="stopka-glowna">
+          <div className="stopka-kancelaria">
+            {!znakNieudany && (
+              <img
+                className="stopka-znak"
+                src={ZNAK_NOTARIATU}
+                alt="Notariat Rzeczypospolitej Polskiej"
+                onError={() => ustawZnakNieudany(true)}
+              />
+            )}
+            <div>
+              <div className="stopka-nazwa">{k.nazwa}</div>
+              {adres && <div className="stopka-linia">{adres}</div>}
+              {k.email && (
+                <a className="stopka-mail" href={`mailto:${k.email}`}>{k.email}</a>
+              )}
+            </div>
+          </div>
+
+          <p className="stopka-podstawa">
+            Rejestr akcjonariuszy prowadzony na podstawie
+            {' '}art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych.
+          </p>
+        </div>
+
+        <div className="stopka-dol">
+          <span>© {rok} {k.nazwa}</span>
+          {link && (
+            <a className="stopka-link" href={link} target="_blank" rel="noopener noreferrer">
+              {skrocAdresWww(link)}
+            </a>
+          )}
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+window.StopkaKancelarii = StopkaKancelarii;
+window.skrocAdresWww = skrocAdresWww;
 window.KrokNaglowek = KrokNaglowek;
 window.WierszPodmiotu = WierszPodmiotu;
 window.WierszDodania = WierszDodania;
