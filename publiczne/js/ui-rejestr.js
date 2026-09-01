@@ -431,16 +431,32 @@ function Iskra({ punkty, podpisy }) {
    Etykieta ZAWSZE nad polem, nigdy jako placeholder.
    ═════════════════════════════════════════════════════ */
 
-function Pole({ etykieta, podpowiedz, blad, echo, wymagane, children }) {
+function Pole({ etykieta, podpowiedz, blad, echo, wymagane, opcjonalne, children }) {
+  // Etykieta musi WSKAZYWAĆ pole, inaczej czytnik ekranu jej nie przeczyta,
+  // a kliknięcie w nią nie ustawia kursora. Identyfikator dostaje wyłącznie
+  // pojedyncze pole formularza — układy złożone (pole plus odznaczenie obok)
+  // zostają bez powiązania, bo nie wiadomo, które z nich etykieta opisuje.
+  const id = useId();
+  const dziecko = React.isValidElement(children)
+    && ['input', 'select', 'textarea'].includes(children.type)
+    && !children.props.id
+    ? React.cloneElement(children, { id })
+    : children;
+  const powiazane = dziecko !== children;
+
   return (
     <div className="pole">
       {etykieta && (
-        <label className="pole-etykieta">
+        <label className="pole-etykieta" htmlFor={powiazane ? id : undefined}>
           {etykieta}
           {wymagane && <span className="pole-wymagane"> *</span>}
+          {/* „(opcjonalnie)" przy etykiecie, a nie w podpowiedzi pod polem:
+              o tym, czy pole trzeba wypełnić, decyduje się PATRZĄC na nie,
+              zanim się w nie kliknie. */}
+          {opcjonalne && <span className="pole-opcjonalne"> (opcjonalnie)</span>}
         </label>
       )}
-      {children}
+      {dziecko}
       {blad && <div className="pole-blad">{blad}</div>}
       {!blad && echo && <div className="pole-echo">{echo}</div>}
       {podpowiedz && <div className="pole-podpowiedz">{podpowiedz}</div>}
@@ -1088,23 +1104,89 @@ function StanZapisu({ stan }) {
 
 window.Stronicowanie = Stronicowanie;
 window.Iskra = Iskra;
-/* ─────────────────────────────────────────────────────
-   FORMULARZE DANYCH OSOBOWYCH
+/* ─────────────────────────────────────────────────
+   KREATOR: NAGŁÓWEK KROKU, LISTA PODMIOTÓW, NAWIGACJA
 
-   Długi formularz o jednej osobie czyta się źle jako ciąg pól: nie widać,
-   gdzie kończy się jedna sprawa, a zaczyna następna. Te trzy elementy dzielą
-   go tak, jak dzieli się rozmowa — nagłówek sekcji mówi, o czym teraz jest,
-   sprawy poboczne siedzą zwinięte, a oświadczenia mają formę przełącznika,
-   nie kolejnego pola tekstowego.
-   ───────────────────────────────────────────────────── */
+   Formularz nie tłumaczy sam siebie. Nagłówek kroku mówi, co się teraz
+   wypełnia — i to jest jedyne zdanie wyjaśnienia na ekranie. Pola dalej
+   niosą własne etykiety i nie potrzebują śródtytułów w rodzaju „Adres”:
+   każdy wie, czym jest adres.
 
-function SekcjaFormularza({ tytul, opis, children }) {
+   Dane wielu osób zbiera się listą, nie stosem rozwiniętych formularzy —
+   widać całość, a szczegóły otwiera się po jednym.
+   ───────────────────────────────────────────────── */
+
+/** Tytuł kroku kreatora i jedno zdanie o tym, po co ten krok jest. */
+function KrokNaglowek({ tytul, opis }) {
   return (
-    <section className="sekcja-formularza">
-      {tytul && <h3 className="sekcja-formularza-tytul">{tytul}</h3>}
-      {opis && <p className="sekcja-formularza-opis">{opis}</p>}
-      {children}
-    </section>
+    <header className="krok-naglowek">
+      <h2 className="krok-naglowek-tytul">{tytul}</h2>
+      {opis && <p className="krok-naglowek-opis">{opis}</p>}
+    </header>
+  );
+}
+
+/**
+ * Wiersz listy podmiotów — jedna osoba, jeden akcjonariusz, jedna rola.
+ * Klika się CAŁY wiersz, nie strzałkę na jego końcu: cel wielkości palca,
+ * nie cel wielkości ikony.
+ */
+function WierszPodmiotu({ ikona = 'osoby', tytul, opis, znacznik, przyKliknieciu, wylaczony = false }) {
+  return (
+    <button type="button" className="wiersz-podmiotu" onClick={przyKliknieciu} disabled={wylaczony}>
+      <span className="wiersz-podmiotu-ikona"><Ikona nazwa={ikona} rozmiar={20} /></span>
+      <span className="wiersz-podmiotu-tresc">
+        <span className="wiersz-podmiotu-tytul">
+          {tytul}
+          {znacznik && <span className="wiersz-podmiotu-znacznik">{znacznik}</span>}
+        </span>
+        {opis && <span className="wiersz-podmiotu-opis">{opis}</span>}
+      </span>
+      <span className="wiersz-podmiotu-strzalka" aria-hidden="true">
+        <Ikona nazwa="strzalkaPrawo" rozmiar={18} />
+      </span>
+    </button>
+  );
+}
+
+/** Dopisanie kolejnej pozycji do listy — szerokość wiersza, nie guzika. */
+function WierszDodania({ etykieta, przyKliknieciu, wylaczony = false }) {
+  return (
+    <button type="button" className="wiersz-dodaj" onClick={przyKliknieciu} disabled={wylaczony}>
+      <Ikona nazwa="plus" rozmiar={18} />
+      {etykieta}
+    </button>
+  );
+}
+
+/**
+ * Para przycisków zamykająca krok. Są duże, bo to jedyne rzeczy do
+ * kliknięcia na dole ekranu — i bo „dalej” po długim formularzu ma być
+ * zaproszeniem, a nie drobnym odnośnikiem do wypatrzenia.
+ */
+function NawigacjaKreatora({ wstecz, dalej }) {
+  return (
+    <div className="nawigacja-kreatora">
+      {wstecz
+        ? (
+          <button type="button" className="btn btn-nawigacja" onClick={wstecz.przy} disabled={wstecz.wylaczony}>
+            {wstecz.etykieta}
+          </button>
+        )
+        : <span />}
+      {dalej
+        ? (
+          <button
+            type="button"
+            className="btn btn-glowny btn-nawigacja"
+            onClick={dalej.przy}
+            disabled={dalej.wylaczony}
+          >
+            {dalej.etykieta}
+          </button>
+        )
+        : <span />}
+    </div>
   );
 }
 
@@ -1129,7 +1211,9 @@ function ZwijanaSekcja({ tytul, opcjonalna = true, wypelniona = false, children 
           {tytul}
           {opcjonalna && <span className="zwijana-opcjonalna"> (opcjonalnie)</span>}
         </span>
-        <span className="zwijana-strzalka" aria-hidden="true">{otwarta ? '⌃' : '⌄'}</span>
+        <span className="zwijana-strzalka" aria-hidden="true">
+          <Ikona nazwa="strzalkaDol" rozmiar={18} />
+        </span>
       </button>
       {otwarta && <div className="zwijana-tresc">{children}</div>}
     </div>
@@ -1163,7 +1247,10 @@ function Przelacznik({ wlaczony, przyZmianie, etykieta, opis, wylaczony = false,
   );
 }
 
-window.SekcjaFormularza = SekcjaFormularza;
+window.KrokNaglowek = KrokNaglowek;
+window.WierszPodmiotu = WierszPodmiotu;
+window.WierszDodania = WierszDodania;
+window.NawigacjaKreatora = NawigacjaKreatora;
 window.ZwijanaSekcja = ZwijanaSekcja;
 window.Przelacznik = Przelacznik;
 window.Spinner = Spinner;

@@ -609,13 +609,16 @@ body {
    Etykieta ZAWSZE nad polem, nigdy jako placeholder.
    ───────────────────────────────────────────────────── */
 .pole { margin-bottom: var(--od-16); }
+/* Zdaniowo, nie wersalikami. WERSALIKI Z ROZSTRZELENIEM czyta się wolniej
+   niż zwykły zapis, a etykieta pola ma być przeczytana od razu — to ona
+   mówi, co wpisać. Rozmiar 13 px zamiast 11 px z tego samego powodu. */
 .pole-etykieta {
   display: block;
-  font-size: var(--st-11); font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--atrament-2); margin-bottom: var(--od-8);
+  font-size: var(--st-13); font-weight: 500;
+  color: var(--atrament); margin-bottom: var(--od-8);
 }
 .pole-wymagane { color: var(--sygnal); }
+.pole-opcjonalne { color: var(--atrament-3); font-weight: 400; }
 .pole-podpowiedz { font-size: var(--st-11); color: var(--atrament-3); margin-top: var(--od-4); line-height: 1.5; }
 .pole-blad { font-size: var(--st-11); color: var(--sygnal); margin-top: var(--od-4); }
 .pole-echo { font-size: var(--st-11); color: var(--rejestr); margin-top: var(--od-4); }
@@ -650,6 +653,11 @@ select {
 
 /* Pole daty segmentowe DD.MM.RRRR */
 .pole-daty { display: flex; align-items: center; gap: var(--od-8); flex-wrap: wrap; }
+/* Ramka pola daty rozciąga się na całą kolumnę, tak jak sąsiednie pola
+   tekstowe. Same segmenty DD.MM.RRRR zostają wąskie i wyrównane do lewej —
+   chodzi o to, żeby para pól obok siebie miała jedną linię, a nie o to,
+   żeby rozstrzelić cyfry. */
+.pole-daty > .data-segmenty { flex: 1 1 auto; justify-content: flex-start; }
 .data-segmenty {
   display: inline-flex; align-items: center;
   padding: var(--od-8) var(--od-12);
@@ -974,6 +982,13 @@ select {
 }
 .krok.biezacy { color: var(--rejestr); border-bottom-color: var(--rejestr); font-weight: 600; }
 .krok.zrobiony { color: var(--atrament-2); border-bottom-color: var(--rejestr-3); }
+/* Cztery kroki nie mieszczą się w jednym rzędzie na telefonie — w rzędzie
+   rozpychały stronę na tyle, że pasek górny i stopka przestawały sięgać jej
+   krawędzi. Dwa rzędy po dwa mieszczą się i nie chowają żadnej nazwy. */
+@media (max-width: 640px) {
+  .kroki { flex-wrap: wrap; gap: var(--od-4) var(--od-8); }
+  .krok { flex: 1 1 40%; padding: var(--od-8); font-size: var(--st-11); }
+}
 .krok-numer {
   width: 20px; height: 20px; border-radius: var(--r-pigulka);
   border: 1px solid currentColor;
@@ -1648,41 +1663,132 @@ select {
 }
 
 /* ─────────────────────────────────────────────────────
-   FORMULARZE DANYCH OSOBOWYCH
-   Sekcje, zwijane grupy pól i przełączniki oświadczeń.
+   KREATOR: NAGŁÓWEK KROKU, LISTA PODMIOTÓW, NAWIGACJA
    ───────────────────────────────────────────────────── */
 
-.sekcja-formularza { margin-bottom: var(--od-24); }
-.sekcja-formularza + .sekcja-formularza {
+/* Kreator czyta się w jednej kolumnie. Szeroki formularz zmusza oko do
+   skakania w bok między etykietą a polem — wąski prowadzi je w dół. */
+.kreator-waski { max-width: 760px; margin-inline: auto; width: 100%; }
+
+.krok-naglowek { margin-bottom: var(--od-24); }
+.krok-naglowek-tytul {
+  font-family: var(--font-display);
+  font-size: var(--st-28);
+  font-weight: 500;
+  line-height: 1.2;
+  margin: 0;
+}
+.krok-naglowek-opis {
+  margin: var(--od-8) 0 0;
+  font-size: var(--st-15);
+  line-height: 1.55;
+  color: var(--atrament-2);
+  max-width: 58ch;
+}
+
+/* ── Lista podmiotów ──
+   Osoby zbiera się listą, nie stosem rozwiniętych formularzy. */
+.lista-podmiotow { display: flex; flex-direction: column; gap: var(--od-12); }
+.wiersz-podmiotu {
+  display: flex; align-items: center; gap: var(--od-16);
+  width: 100%;
+  padding: var(--od-16);
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+  transition: border-color var(--ruch-wiersz), box-shadow var(--ruch-wiersz);
+}
+.wiersz-podmiotu:hover:not(:disabled) { border-color: var(--rejestr-3); box-shadow: var(--cien-s); }
+.wiersz-podmiotu:focus-visible { outline: 2px solid var(--rejestr); outline-offset: 2px; }
+.wiersz-podmiotu:disabled { cursor: not-allowed; background: var(--papier); }
+.wiersz-podmiotu-ikona {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 40px; height: 40px;
+  border-radius: var(--r-sm);
+  background: var(--rejestr-tlo);
+  color: var(--rejestr);
+}
+.wiersz-podmiotu-tresc { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.wiersz-podmiotu-tytul { font-size: var(--st-15); font-weight: 600; color: var(--atrament); }
+.wiersz-podmiotu-opis { font-size: var(--st-13); color: var(--atrament-2); overflow-wrap: anywhere; }
+/* Braki oznacza mosiądz, nie czerwień: pozycja jest niedokończona,
+   a nie błędna — nikt jeszcze niczego nie zrobił źle. */
+.wiersz-podmiotu-znacznik {
+  margin-left: var(--od-8);
+  font-size: var(--st-11); font-weight: 500;
+  color: var(--mosiadz);
+}
+.wiersz-podmiotu-strzalka { flex-shrink: 0; color: var(--atrament-3); display: flex; }
+
+.wiersz-dodaj {
+  display: flex; align-items: center; justify-content: center; gap: var(--od-8);
+  width: 100%;
+  padding: var(--od-16);
+  background: none;
+  border: 1px dashed var(--linia);
+  border-radius: var(--r);
+  font: inherit; font-size: var(--st-13); font-weight: 600;
+  color: var(--rejestr);
+  cursor: pointer;
+  transition: border-color var(--ruch-wiersz), background var(--ruch-wiersz);
+}
+.wiersz-dodaj:hover:not(:disabled) { border-color: var(--rejestr); background: var(--rejestr-tlo); }
+.wiersz-dodaj:focus-visible { outline: 2px solid var(--rejestr); outline-offset: 2px; }
+.wiersz-dodaj:disabled { color: var(--atrament-3); cursor: not-allowed; }
+
+/* ── Nawigacja kroku ──
+   Duże, bo to jedyne rzeczy do kliknięcia na dole ekranu, i bo „dalej"
+   po długim formularzu ma być zaproszeniem, nie odnośnikiem do wypatrzenia. */
+.nawigacja-kreatora {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--od-16);
+  margin-top: var(--od-40);
   padding-top: var(--od-24);
   border-top: 1px solid var(--linia-2);
 }
-.sekcja-formularza-tytul {
-  font-family: var(--font-display);
-  font-size: var(--st-20);
-  font-weight: 500;
-  line-height: 1.3;
-  margin: 0 0 var(--od-4);
+.btn-nawigacja {
+  flex: 1 1 0;
+  max-width: 240px;
+  min-height: 52px;
+  padding-inline: var(--od-24);
+  font-size: var(--st-15); font-weight: 600;
+  border-radius: var(--r);
 }
-.sekcja-formularza-opis {
-  margin: 0 0 var(--od-16);
-  font-size: var(--st-13);
-  line-height: 1.55;
-  color: var(--atrament-2);
-  max-width: 60ch;
+@media (max-width: 640px) {
+  /* Odwrócona kolejność: „dalej" ląduje nad „wstecz", czyli tam,
+     gdzie pada wzrok po skończeniu formularza. */
+  .nawigacja-kreatora { flex-direction: column-reverse; align-items: stretch; }
+  .btn-nawigacja { max-width: none; }
+  .nawigacja-kreatora > span:empty { display: none; }
 }
 
-/* ── Zwijana grupa pól ── */
-.zwijana {
-  border: 1px solid var(--linia);
-  border-radius: var(--r);
-  margin-bottom: var(--od-16);
-  overflow: hidden;
+/* Usunięcie pozycji stoi POD nawigacją i wygląda inaczej niż ona: przycisk
+   niszczący obok zielonego „Gotowe" zamienia pomyłkę w utratę danych. */
+.akcja-niszczaca {
+  display: flex; align-items: center; gap: var(--od-12);
+  margin-top: var(--od-16);
 }
+.akcja-niszczaca .stan-zapisu { margin-left: auto; }
+
+/* „Zapisano" nie należy do żadnego pola — to stan całego kroku, więc stoi
+   pod kartą, nie w niej. */
+.stan-zapisu-kreatora { display: flex; justify-content: flex-end; }
+
+/* ─────────────────────────────────────────────────────
+   FORMULARZE DANYCH OSOBOWYCH
+   Zwijane grupy pól i przełączniki oświadczeń.
+   ───────────────────────────────────────────────────── */
+
+/* ── Zwijana grupa pól ── */
+/* Bez ramki i tła: to nie osobna karta, tylko dalszy ciąg formularza,
+   odcięty włosową linią. Ramka udawałaby, że w środku jest coś innego. */
+.zwijana { border-top: 1px solid var(--linia-2); margin-bottom: var(--od-16); }
+.zwijana:last-child { border-bottom: 1px solid var(--linia-2); }
+.zwijana-otwarta:last-child { border-bottom: none; }
 .zwijana-naglowek {
   display: flex; align-items: center; justify-content: space-between; gap: var(--od-12);
   width: 100%;
-  padding: var(--od-12) var(--od-16);
+  padding: var(--od-16) 0;
   background: none;
   border: none;
   font: inherit;
@@ -1690,24 +1796,35 @@ select {
   cursor: pointer;
   color: var(--atrament);
 }
-.zwijana-naglowek:hover { background: var(--papier); }
-.zwijana-otwarta .zwijana-naglowek { border-bottom: 1px solid var(--linia); }
-.zwijana-tytul { font-size: var(--st-13); font-weight: 600; }
+.zwijana-naglowek:hover .zwijana-tytul { color: var(--rejestr); }
+.zwijana-naglowek:focus-visible { outline: 2px solid var(--rejestr); outline-offset: 2px; }
+.zwijana-tytul { font-size: var(--st-15); font-weight: 500; transition: color var(--ruch-wiersz); }
 .zwijana-opcjonalna { font-weight: 400; color: var(--atrament-3); }
-.zwijana-strzalka { color: var(--atrament-3); font-size: var(--st-15); line-height: 1; }
-.zwijana-tresc { padding: var(--od-16); }
+.zwijana-strzalka { color: var(--atrament-3); display: flex; transition: transform var(--ruch-wiersz); }
+.zwijana-otwarta .zwijana-strzalka { transform: rotate(180deg); }
+.zwijana-tresc { padding-bottom: var(--od-16); }
 
 /* ── Przełącznik oświadczenia ──
    Całe pole jest klikalne: przy oświadczeniu o skutkach prawnych trafienie
    w sam prostokąt przełącznika nie może być warunkiem jego złożenia. */
+/* Wyłączony przełącznik nie ma ramki: to wciąż ten sam formularz, a nie
+   osobna karta. Ramka i tło pojawiają się dopiero po włączeniu — wtedy
+   oświadczenie faktycznie zostało złożone i ma być widać, że coś się
+   zmieniło. */
 .przelacznik-blok {
-  border: 1px solid var(--linia);
+  border: 1px solid transparent;
+  border-top-color: var(--linia-2);
+  border-radius: 0;
+  padding: var(--od-16) 0;
+  transition: border-color var(--ruch-wiersz), background var(--ruch-wiersz), padding var(--ruch-wiersz);
+}
+.przelacznik-blok-wlaczony {
+  border-color: var(--mosiadz);
   border-radius: var(--r);
+  background: var(--mosiadz-tlo);
   padding: var(--od-16);
   margin-bottom: var(--od-16);
-  transition: border-color var(--ruch-wiersz), background var(--ruch-wiersz);
 }
-.przelacznik-blok-wlaczony { border-color: var(--mosiadz); background: var(--mosiadz-tlo); }
 .przelacznik-glowna { display: flex; align-items: flex-start; gap: var(--od-12); cursor: pointer; }
 .przelacznik-pole { position: absolute; opacity: 0; width: 0; height: 0; }
 .przelacznik-tor {

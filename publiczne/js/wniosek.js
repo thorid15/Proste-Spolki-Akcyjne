@@ -1,16 +1,23 @@
-/* wniosek.js — formularz wniosku o prowadzenie rejestru, portal klienta (etap 3C).
-   Krok „Spółka i umowa" lustrzy krok 1 kreatora wewnętrznego
-   (publiczne/js/spolki.js: EkranNowejSpolki) na tyle, na ile dane są takie
-   same — dane spółki (z importem z KRS) i reprezentant w mianowniku
-   (odmianę liczy backend przy generowaniu projektu umowy, etap 3E).
-   Krok „Akcjonariusze" (etap 3D) zbiera dane do PRZYSZŁEJ kartoteki
-   (server/trasy/portal.js: psa_wnioski_akcjonariusze) — te wiersze NIE są
-   jeszcze prawdziwymi osobami w kartotece wspólnej, dopóki kancelaria nie
-   zweryfikuje wniosku (etap 3F). Każda pozycja zapisuje się osobno
-   (POST przy dodaniu, PUT przy „Zapisz”, DELETE przy „Usuń”) — inaczej niż
-   krok „Spółka”, który zapisuje się jednym PUT całości. */
+/* wniosek.js — wniosek o prowadzenie rejestru akcjonariuszy, portal klienta.
 
-const KROKI_WNIOSKU = ['Spółka i umowa', 'Akcjonariusze', 'Weryfikacja'];
+   Kreator prowadzi przez cztery etapy: spółka, reprezentant, akcjonariusze,
+   podsumowanie. Podział nie jest kosmetyczny — pierwotnie spółka i
+   reprezentant stały w jednym kroku, co dawało ekran z dwudziestoma kilkoma
+   polami i dwoma różnymi tematami; nie da się go objąć wzrokiem ani wrócić
+   do właściwego miejsca po przerwie.
+
+   Akcjonariuszy zbiera LISTA, nie stos rozwiniętych formularzy: widać
+   wszystkich naraz, a dane jednego otwiera się osobno i zamyka po
+   wypełnieniu. Kolejnego można dopisać dopiero, gdy poprzedni ma nazwisko
+   albo firmę — inaczej lista zapełnia się pustymi wierszami, o których nikt
+   już nie pamięta, kto miał w nich być.
+
+   Dane trafiają do `psa_wnioski_akcjonariusze` (server/trasy/portal.js), a NIE
+   do kartoteki wspólnej: prawdziwymi osobami stają się dopiero, gdy
+   kancelaria wniosek przyjmie. Krok spółki i reprezentanta zapisuje się
+   jednym PUT całości, każdy akcjonariusz osobno. */
+
+const KROKI_WNIOSKU = ['Spółka', 'Reprezentant', 'Akcjonariusze', 'Podsumowanie'];
 
 const PUSTY_AKCJONARIUSZ_WNIOSKU = {
   typ: 'fizyczna',
@@ -27,9 +34,6 @@ const PUSTY_AKCJONARIUSZ_WNIOSKU = {
   zgoda_email_status: 'brak',
   // Art. 300(33) § 1 pkt 5 KSH — współwłasność akcji.
   wspolwlasnosc: 'brak', wspolwlasciciele: '', udzial_licznik: '', udzial_mianownik: '',
-  // Ustawa o przeciwdziałaniu praniu pieniędzy — eksponowane stanowisko
-  // polityczne. Nie z KSH, ale o tej samej osobie i w tym samym formularzu.
-  pep: 'nie', pep_opis: '',
 };
 
 const OPIS_ADRESU_REJESTROWEGO = {
@@ -242,10 +246,6 @@ function brakiUstawoweAkcjonariusza(a) {
     braki.push(`${kto}: zaznaczono zgodę na komunikację elektroniczną, ale nie podano adresu e-mail.`);
   }
 
-  if (a.pep && a.pep !== 'nie' && pusty(a.pep_opis)) {
-    braki.push(`${kto}: zaznaczono eksponowane stanowisko polityczne, ale nie opisano, jakiej funkcji albo relacji dotyczy.`);
-  }
-
   if (a.wspolwlasnosc && a.wspolwlasnosc !== 'brak') {
     if (pusty(a.wspolwlasciciele)) {
       braki.push(`${kto}: przy współwłasności akcji wpisz pozostałych współwłaścicieli.`);
@@ -258,10 +258,26 @@ function brakiUstawoweAkcjonariusza(a) {
   return braki;
 }
 
-/** Jedna proponowana pozycja akcjonariatu w kroku „Akcjonariusze” wniosku klienta. */
-function PozycjaAkcjonariuszaWniosku({ pozycja, edytowalne, przyZapisie, przyUsunieciu }) {
-  const [dane, ustawDane] = useState({ ...PUSTY_AKCJONARIUSZ_WNIOSKU, ...pozycja });
+/**
+ * Formularz JEDNEGO akcjonariusza — otwierany z listy, zamykany po
+ * wypełnieniu. Bez śródtytułów: pola same mówią, co w nich wpisać, a
+ * nagłówek „Adres" nad polem „Kod pocztowy" nie dodaje żadnej wiedzy.
+ *
+ * Kolejność jest kolejnością dokumentu tożsamości: kto to jest, jak go
+ * zidentyfikować, gdzie mieszka, jak się z nim skontaktować. Rzadkie dane
+ * (dalsze adresy, współwłasność akcji) siedzą zwinięte na dole.
+ */
+function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieciu, przyZamknieciu }) {
+  // Kolumny puste w bazie wracają jako `null`, a rozwinięcie `...pozycja`
+  // nadpisałoby nimi wartości domyślne — dlatego wartości puste odpadają
+  // przed scaleniem. Bez tego świeża pozycja gubiła np. „KRS” w polu
+  // „Nazwa rejestru” i wracała potem jako brak ustawowy.
+  const [dane, ustawDane] = useState({
+    ...PUSTY_AKCJONARIUSZ_WNIOSKU,
+    ...Object.fromEntries(Object.entries(pozycja).filter(([, v]) => v !== null && v !== undefined)),
+  });
   const [usuwanie, ustawUsuwanie] = useState(false);
+  const [zamykanie, ustawZamykanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
   const stanZapisu = useAutozapis(
     dane,
@@ -275,8 +291,8 @@ function PozycjaAkcjonariuszaWniosku({ pozycja, edytowalne, przyZapisie, przyUsu
     disabled: !edytowalne,
   });
 
-  // Etap 2.8 / 3D: autouzupelnienie daty urodzenia i plci z PESEL,
-  // jednorazowe (uzupelnia tylko puste pola).
+  // Autouzupelnienie daty urodzenia i plci z numeru PESEL — jednorazowe,
+  // uzupelnia wylacznie puste pola, wiec nie nadpisuje niczyjej poprawki.
   const pesel = dane.typ === 'fizyczna' ? parsujPesel(dane.pesel) : null;
   useEffect(() => {
     if (!pesel) return;
@@ -289,7 +305,7 @@ function PozycjaAkcjonariuszaWniosku({ pozycja, edytowalne, przyZapisie, przyUsu
   }, [dane.pesel]);
 
   async function usun() {
-    if (!window.confirm('Usunąć tę pozycję z wniosku?')) return;
+    if (!window.confirm('Usunąć tego akcjonariusza z wniosku?')) return;
     ustawUsuwanie(true);
     ustawBlad(null);
     try {
@@ -301,262 +317,226 @@ function PozycjaAkcjonariuszaWniosku({ pozycja, edytowalne, przyZapisie, przyUsu
     }
   }
 
+  /**
+   * Autozapis czeka 800 ms od ostatniej zmiany, a „Gotowe" wraca do listy
+   * natychmiast. Bez domknięcia zapisu ostatnie wpisane pole zdążyłoby
+   * zniknąć z ekranu, zanim trafi na serwer.
+   */
+  async function zamknij() {
+    if (!edytowalne) { przyZamknieciu(); return; }
+    ustawZamykanie(true);
+    ustawBlad(null);
+    try {
+      const wynik = await API.put(`/api/psa/portal/wniosek/akcjonariusze/${pozycja.id}`, dane);
+      przyZapisie(wynik.akcjonariusz);
+      przyZamknieciu();
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zapisać danych.');
+      ustawZamykanie(false);
+    }
+  }
+
   const bezPesel = Boolean(Number(dane.bez_pesel));
+  const osobaFizyczna = dane.typ === 'fizyczna';
+  // Dopóki pozycja nie ma nazwiska ani firmy, nagłówek nie udaje, że kogoś
+  // opisuje: „osoba bez nazwiska" nad pustym formularzem brzmi jak zarzut.
+  const nazwany = String(osobaFizyczna ? dane.nazwisko : dane.nazwa || '').trim() !== '';
 
   return (
-    <Karta>
+    <>
+      <KrokNaglowek
+        tytul={nazwany ? nazwaAkcjonariusza(dane) : 'Nowy akcjonariusz'}
+        opis="Dane wpisywane do rejestru akcjonariuszy. Podaj je dokładnie tak, jak widnieją w dokumencie tożsamości albo w rejestrze przedsiębiorców — art. 300³³ § 1 KSH."
+      />
       <Komunikat odmiana="blad" tresc={blad} />
 
-      <SekcjaFormularza
-        tytul="Kto to jest"
-        opis="Dane wpisywane do rejestru akcjonariuszy — art. 300³³ § 1 pkt 2 KSH. Podaj je dokładnie tak, jak widnieją w dokumencie tożsamości albo w rejestrze przedsiębiorców."
-      >
-        <Pole etykieta="Rodzaj podmiotu" wymagane>
-          <select value={dane.typ} onChange={(z) => ustawDane((p) => ({ ...p, typ: z.target.value }))} disabled={!edytowalne}>
-            <option value="fizyczna">Osoba fizyczna</option>
-            <option value="prawna">Osoba prawna lub jednostka organizacyjna</option>
-          </select>
-        </Pole>
+      <Pole etykieta="Rodzaj podmiotu">
+        <select
+          value={dane.typ}
+          onChange={(z) => ustawDane((p) => ({ ...p, typ: z.target.value }))}
+          disabled={!edytowalne}
+        >
+          <option value="fizyczna">Osoba fizyczna</option>
+          <option value="prawna">Osoba prawna lub jednostka organizacyjna</option>
+        </select>
+      </Pole>
 
-        {dane.typ === 'fizyczna' ? (
-          <>
-            <div className="siatka-2">
-              <Pole etykieta="Imię"><input type="text" {...pole('imie')} /></Pole>
-              <Pole etykieta="Nazwisko" wymagane><input type="text" {...pole('nazwisko')} /></Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole
-                etykieta="PESEL"
-                podpowiedz={!bezPesel ? 'Data urodzenia uzupełni się automatycznie po wpisaniu 11 cyfr — można ją potem nadpisać.' : null}
-              >
-                <div className="pole-z-odznaczeniem">
-                  {!bezPesel && <input type="text" {...pole('pesel')} maxLength={11} />}
-                  <label className="chk chk-w-linii">
-                    <input
-                      type="checkbox"
-                      checked={bezPesel}
-                      onChange={(z) =>
-                        ustawDane((p) => ({
-                          ...p,
-                          bez_pesel: z.target.checked ? 1 : 0,
-                          // Deklaracja braku PESEL-u i wpisany numer wykluczają się —
-                          // serwer odrzuciłby taki zapis, więc czyścimy pole od razu.
-                          pesel: z.target.checked ? '' : p.pesel,
-                        }))
-                      }
-                      disabled={!edytowalne}
-                    />
-                    <span className="chk-tresc">Nie posiada</span>
-                  </label>
-                </div>
+      {osobaFizyczna ? (
+        <>
+          <div className="siatka-2">
+            <Pole etykieta="Imię"><input type="text" {...pole('imie')} /></Pole>
+            <Pole etykieta="Nazwisko" wymagane><input type="text" {...pole('nazwisko')} /></Pole>
+          </div>
+          <div className="siatka-2">
+            {!bezPesel && (
+              <Pole etykieta="PESEL" podpowiedz="Datę urodzenia uzupełnimy automatycznie.">
+                <input type="text" {...pole('pesel')} maxLength={11} placeholder="11 cyfr" />
               </Pole>
-              <Pole etykieta="Data urodzenia" wymagane={bezPesel}>
-                <PoleDaty
-                  wartosc={dane.data_urodzenia || ''}
-                  przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))}
-                  wylaczone={!edytowalne}
-                />
-              </Pole>
-            </div>
-            {pesel && !pesel.poprawnaSumaKontrolna && (
-              <Komunikat
-                odmiana="uwaga"
-                tresc="Suma kontrolna numeru PESEL się nie zgadza — sprawdź numer. Zapis nie jest blokowany."
-              />
             )}
-            <Pole etykieta="Płeć (opcjonalnie)">
-              <select value={dane.plec || ''} onChange={(z) => ustawDane((p) => ({ ...p, plec: z.target.value }))} disabled={!edytowalne}>
-                <option value="">— nie podano —</option>
-                <option value="mezczyzna">mężczyzna</option>
-                <option value="kobieta">kobieta</option>
+            <Pole etykieta="Data urodzenia" wymagane={bezPesel}>
+              <PoleDaty
+                wartosc={dane.data_urodzenia || ''}
+                przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))}
+                wylaczone={!edytowalne}
+              />
+            </Pole>
+          </div>
+          <label className="chk">
+            <input
+              type="checkbox"
+              checked={bezPesel}
+              onChange={(z) =>
+                ustawDane((p) => ({
+                  ...p,
+                  bez_pesel: z.target.checked ? 1 : 0,
+                  // Deklaracja braku PESEL-u i wpisany numer wykluczają się —
+                  // serwer odrzuciłby taki zapis, więc czyścimy pole od razu.
+                  pesel: z.target.checked ? '' : p.pesel,
+                }))
+              }
+              disabled={!edytowalne}
+            />
+            <span className="chk-tresc">Akcjonariusz nie posiada numeru PESEL</span>
+          </label>
+          {pesel && !pesel.poprawnaSumaKontrolna && (
+            <Komunikat
+              odmiana="uwaga"
+              tresc="Suma kontrolna numeru PESEL się nie zgadza — sprawdź numer. Zapis nie jest blokowany."
+            />
+          )}
+        </>
+      ) : (
+        <>
+          <Pole etykieta="Firma (nazwa)" wymagane><input type="text" {...pole('nazwa')} /></Pole>
+          <div className="siatka-2">
+            <Pole etykieta="Numer we właściwym rejestrze">
+              <input type="text" {...pole('numer_w_rejestrze')} placeholder="0000123456" />
+            </Pole>
+            <Pole etykieta="Nazwa rejestru"><input type="text" {...pole('nazwa_rejestru')} /></Pole>
+          </div>
+          <div className="siatka-2">
+            <Pole etykieta="NIP" opcjonalne><input type="text" {...pole('nip')} /></Pole>
+            <Pole etykieta="REGON" opcjonalne><input type="text" {...pole('regon')} /></Pole>
+          </div>
+        </>
+      )}
+
+      <div className="siatka-2">
+        <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} placeholder="00-000" /></Pole>
+        <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
+      </div>
+      <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
+      <div className="siatka-2">
+        <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
+        <Pole etykieta="Nr lokalu" opcjonalne><input type="text" {...pole('nr_lokalu')} /></Pole>
+      </div>
+
+      <div className="siatka-2">
+        <Pole etykieta="Adres e-mail" opcjonalne>
+          <input type="text" {...pole('email')} placeholder="przyklad@example.com" />
+        </Pole>
+        <Pole etykieta="Numer telefonu" opcjonalne><input type="text" {...pole('telefon')} /></Pole>
+      </div>
+
+      <Przelacznik
+        wlaczony={Boolean(dane.zgoda_email_status) && dane.zgoda_email_status !== 'brak'}
+        wylaczony={!edytowalne || dane.zgoda_email_status === 'potwierdzona'}
+        przyZmianie={(v) =>
+          ustawDane((p) => ({ ...p, zgoda_email_status: v ? 'zadeklarowana' : 'brak' }))
+        }
+        etykieta="Akcjonariusz wyraża zgodę na komunikację elektroniczną"
+        opis="Przygotujemy oświadczenie do podpisu. Dopiero podpisane oświadczenie wprowadza adres e-mail do treści rejestru — art. 300³³ § 1 pkt 4 KSH; zarząd nie może złożyć go za akcjonariusza."
+      />
+      {dane.zgoda_email_status === 'potwierdzona' && (
+        <Komunikat odmiana="ok" tresc="Zgoda potwierdzona podpisanym oświadczeniem akcjonariusza." />
+      )}
+      {dane.zgoda_email_status && dane.zgoda_email_status !== 'brak' && !dane.email && (
+        <Komunikat odmiana="uwaga" tresc="Zaznaczono zgodę, ale nie podano adresu e-mail." />
+      )}
+
+      <Przelacznik
+        wlaczony={Boolean(dane.wspolwlasnosc) && dane.wspolwlasnosc !== 'brak'}
+        wylaczony={!edytowalne}
+        przyZmianie={(v) =>
+          ustawDane((p) => ({
+            ...p,
+            wspolwlasnosc: v ? 'laczna' : 'brak',
+            wspolwlasciciele: v ? p.wspolwlasciciele : '',
+            udzial_licznik: v ? p.udzial_licznik : '',
+            udzial_mianownik: v ? p.udzial_mianownik : '',
+          }))
+        }
+        etykieta="Akcje należą do kilku osób wspólnie"
+        opis="Przy współwłasności rejestr wymienia pozostałych współwłaścicieli, a przy współwłasności ułamkowej także wielkość udziału — art. 300³³ § 1 pkt 5 KSH."
+        dzieci={
+          <>
+            <Pole etykieta="Rodzaj współwłasności">
+              <select
+                value={dane.wspolwlasnosc && dane.wspolwlasnosc !== 'brak' ? dane.wspolwlasnosc : 'laczna'}
+                onChange={(z) => ustawDane((p) => ({ ...p, wspolwlasnosc: z.target.value }))}
+                disabled={!edytowalne}
+              >
+                <option value="laczna">Współwłasność łączna (np. małżeńska)</option>
+                <option value="ulamkowa">Współwłasność w częściach ułamkowych</option>
               </select>
             </Pole>
+            <Pole etykieta="Pozostali współwłaściciele" wymagane podpowiedz="Imiona i nazwiska albo firmy (nazwy), oddzielone przecinkami.">
+              <input type="text" {...pole('wspolwlasciciele')} />
+            </Pole>
+            {dane.wspolwlasnosc === 'ulamkowa' && (
+              <div className="siatka-2">
+                <Pole etykieta="Udział — licznik" wymagane>
+                  <input type="number" min="1" {...pole('udzial_licznik')} />
+                </Pole>
+                <Pole etykieta="Udział — mianownik" wymagane>
+                  <input type="number" min="1" {...pole('udzial_mianownik')} />
+                </Pole>
+              </div>
+            )}
           </>
-        ) : (
-          <>
-            <Pole etykieta="Firma (nazwa)" wymagane><input type="text" {...pole('nazwa')} /></Pole>
-            <div className="siatka-2">
-              <Pole
-                etykieta="Numer we właściwym rejestrze"
-                podpowiedz="Jeżeli podmiot jest wpisany do rejestru — art. 300³³ § 1 pkt 2 KSH."
-              >
-                <input type="text" {...pole('numer_w_rejestrze')} />
-              </Pole>
-              <Pole etykieta="Nazwa rejestru" podpowiedz="np. KRS.">
-                <input type="text" {...pole('nazwa_rejestru')} />
-              </Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole etykieta="NIP (opcjonalnie)"><input type="text" {...pole('nip')} /></Pole>
-              <Pole etykieta="REGON (opcjonalnie)"><input type="text" {...pole('regon')} /></Pole>
-            </div>
-          </>
-        )}
-      </SekcjaFormularza>
+        }
+      />
 
-      <SekcjaFormularza
-        tytul="Adres"
-        opis="Wpisz tyle adresów, ile akcjonariusz faktycznie posiada. Do treści rejestru trafia jeden z nich (art. 300³³ § 1 pkt 3 KSH) — który, wskaże kancelaria przy weryfikacji wniosku."
+      <ZwijanaSekcja
+        tytul="Inne adresy do doręczeń"
+        wypelniona={Boolean(dane.adres_doreczen || dane.adres_edoreczen)}
       >
-        <div className="siatka-3">
-          <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
-          <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
-          <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
-        </div>
-        <div className="siatka-2">
-          <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
-          <Pole etykieta="Nr lokalu (opcjonalnie)"><input type="text" {...pole('nr_lokalu')} /></Pole>
-        </div>
-
-        <ZwijanaSekcja
-          tytul="Inne adresy do doręczeń"
-          wypelniona={Boolean(dane.adres_doreczen || dane.adres_edoreczen)}
+        <Pole
+          etykieta="Inny adres do doręczeń"
+          podpowiedz="Jeśli korespondencja ma iść gdzie indziej niż na adres zamieszkania albo siedziby."
         >
-          <Pole
-            etykieta="Inny adres do doręczeń"
-            podpowiedz="Jeśli korespondencja ma iść gdzie indziej niż na adres zamieszkania albo siedziby."
-          >
-            <input type="text" {...pole('adres_doreczen')} />
-          </Pole>
-          <Pole
-            etykieta="Adres do doręczeń elektronicznych"
-            podpowiedz="Skrzynka e-Doręczeń, jeśli akcjonariusz ją posiada."
-          >
-            <input type="text" {...pole('adres_edoreczen')} placeholder="AE:PL-…" />
-          </Pole>
-        </ZwijanaSekcja>
-      </SekcjaFormularza>
+          <input type="text" {...pole('adres_doreczen')} />
+        </Pole>
+        <Pole etykieta="Adres do doręczeń elektronicznych" podpowiedz="Skrzynka e-Doręczeń, jeśli akcjonariusz ją posiada.">
+          <input type="text" {...pole('adres_edoreczen')} placeholder="AE:PL-…" />
+        </Pole>
+      </ZwijanaSekcja>
 
-      <SekcjaFormularza
-        tytul="Kontakt"
-        opis="Adres e-mail wchodzi do rejestru tylko wtedy, gdy akcjonariusz wyrazi zgodę na komunikację elektroniczną (art. 300³³ § 1 pkt 4 KSH). Zgoda jest oświadczeniem samego akcjonariusza — zarząd nie może jej złożyć za niego."
-      >
-        <div className="siatka-2">
-          <Pole etykieta="Adres e-mail (opcjonalnie)">
-            <input type="text" {...pole('email')} placeholder="przyklad@example.com" />
-          </Pole>
-          <Pole etykieta="Numer telefonu (opcjonalnie)"><input type="text" {...pole('telefon')} /></Pole>
-        </div>
-        <Przelacznik
-          wlaczony={Boolean(dane.zgoda_email_status) && dane.zgoda_email_status !== 'brak'}
-          wylaczony={!edytowalne || dane.zgoda_email_status === 'potwierdzona'}
-          przyZmianie={(v) =>
-            ustawDane((p) => ({ ...p, zgoda_email_status: v ? 'zadeklarowana' : 'brak' }))
-          }
-          etykieta="Akcjonariusz wyraża zgodę na komunikację elektroniczną"
-          opis="Po zaznaczeniu przygotujemy oświadczenie do podpisu. Dopiero podpisane oświadczenie wprowadza adres e-mail do treści rejestru — art. 300³³ § 1 pkt 4 KSH."
-        />
-        {dane.zgoda_email_status === 'potwierdzona' && (
-          <Komunikat odmiana="ok" tresc="Zgoda potwierdzona podpisanym oświadczeniem akcjonariusza." />
-        )}
-        {dane.zgoda_email_status && dane.zgoda_email_status !== 'brak' && !dane.email && (
-          <Komunikat odmiana="uwaga" tresc="Zaznaczono zgodę, ale nie podano adresu e-mail." />
-        )}
-      </SekcjaFormularza>
-
-      <SekcjaFormularza
-        tytul="Oświadczenia"
-        opis="Kancelaria notarialna prowadząca rejestr akcjonariuszy jest instytucją obowiązaną w rozumieniu ustawy o przeciwdziałaniu praniu pieniędzy oraz finansowaniu terroryzmu i stosuje wobec akcjonariuszy środki bezpieczeństwa finansowego."
-      >
-        <Przelacznik
-          wlaczony={Boolean(dane.pep) && dane.pep !== 'nie'}
-          wylaczony={!edytowalne}
-          przyZmianie={(v) =>
-            ustawDane((p) => ({ ...p, pep: v ? 'tak' : 'nie', pep_opis: v ? p.pep_opis : '' }))
-          }
-          etykieta="Wskazana osoba zajmuje eksponowane stanowisko polityczne (PEP)"
-          opis="Zaznacz, jeśli ta osoba pełni lub pełniła znaczącą funkcję publiczną, jest członkiem rodziny takiej osoby albo jej bliskim współpracownikiem. Oświadczenie składa się pod rygorem odpowiedzialności karnej za złożenie fałszywego oświadczenia."
-          dzieci={
-            <>
-              <Pole etykieta="Na czym polega status" wymagane>
-                <select
-                  value={dane.pep && dane.pep !== 'nie' ? dane.pep : 'tak'}
-                  onChange={(z) => ustawDane((p) => ({ ...p, pep: z.target.value }))}
-                  disabled={!edytowalne}
-                >
-                  <option value="tak">Zajmuje eksponowane stanowisko polityczne</option>
-                  <option value="rodzina">Jest członkiem rodziny takiej osoby</option>
-                  <option value="wspolpracownik">Jest bliskim współpracownikiem takiej osoby</option>
-                </select>
-              </Pole>
-              <Pole
-                etykieta={dane.pep === 'tak' ? 'Stanowisko lub funkcja' : 'Osoba i charakter relacji'}
-                wymagane
-                podpowiedz="Trafia wprost do oświadczenia przygotowanego do podpisu."
-              >
-                <input type="text" {...pole('pep_opis')} />
-              </Pole>
-            </>
-          }
-        />
-      </SekcjaFormularza>
-
-      <SekcjaFormularza
-        tytul="Współwłasność akcji"
-        opis="Wypełnij tylko, jeśli akcje należą do kilku osób wspólnie — art. 300³³ § 1 pkt 5 KSH."
-      >
-        <Przelacznik
-          wlaczony={Boolean(dane.wspolwlasnosc) && dane.wspolwlasnosc !== 'brak'}
-          wylaczony={!edytowalne}
-          przyZmianie={(v) =>
-            ustawDane((p) => ({
-              ...p,
-              wspolwlasnosc: v ? 'laczna' : 'brak',
-              wspolwlasciciele: v ? p.wspolwlasciciele : '',
-              udzial_licznik: v ? p.udzial_licznik : '',
-              udzial_mianownik: v ? p.udzial_mianownik : '',
-            }))
-          }
-          etykieta="Akcje należą do kilku osób wspólnie"
-          opis="Przy współwłasności rejestr wymienia pozostałych współwłaścicieli, a przy współwłasności ułamkowej także wielkość udziału."
-          dzieci={
-            <>
-              <Pole etykieta="Rodzaj współwłasności" wymagane>
-                <select
-                  value={dane.wspolwlasnosc && dane.wspolwlasnosc !== 'brak' ? dane.wspolwlasnosc : 'laczna'}
-                  onChange={(z) => ustawDane((p) => ({ ...p, wspolwlasnosc: z.target.value }))}
-                  disabled={!edytowalne}
-                >
-                  <option value="laczna">Współwłasność łączna (np. małżeńska)</option>
-                  <option value="ulamkowa">Współwłasność w częściach ułamkowych</option>
-                </select>
-              </Pole>
-              <Pole
-                etykieta="Pozostali współwłaściciele"
-                wymagane
-                podpowiedz="Imiona i nazwiska albo firmy (nazwy), oddzielone przecinkami."
-              >
-                <input type="text" {...pole('wspolwlasciciele')} />
-              </Pole>
-              {dane.wspolwlasnosc === 'ulamkowa' && (
-                <div className="siatka-2">
-                  <Pole etykieta="Udział — licznik" wymagane>
-                    <input type="number" min="1" {...pole('udzial_licznik')} />
-                  </Pole>
-                  <Pole etykieta="Udział — mianownik" wymagane>
-                    <input type="number" min="1" {...pole('udzial_mianownik')} />
-                  </Pole>
-                </div>
-              )}
-            </>
-          }
-        />
-      </SekcjaFormularza>
+      <NawigacjaKreatora
+        wstecz={{ etykieta: 'Wróć do listy', przy: przyZamknieciu }}
+        dalej={edytowalne
+          ? { etykieta: zamykanie ? 'Zapisywanie…' : 'Gotowe', przy: zamknij, wylaczony: zamykanie }
+          : null}
+      />
 
       {edytowalne && (
-        <div className="row-g" style={{ justifyContent: 'flex-end', paddingTop: 8 }}>
+        // Usuwanie stoi POD nawigacją i wygląda inaczej niż ona: sąsiedztwo
+        // z zielonym „Gotowe" zamieniałoby pomyłkę w utratę danych.
+        <div className="akcja-niszczaca">
           <StanZapisu stan={stanZapisu} />
           <button className="btn btn-maly btn-sygnal" onClick={usun} disabled={usuwanie}>
-            {usuwanie ? 'Usuwanie…' : 'Usuń pozycję'}
+            {usuwanie ? 'Usuwanie…' : 'Usuń akcjonariusza'}
           </button>
         </div>
       )}
-    </Karta>
+    </>
   );
 }
 
 function EkranWniosku() {
   const [krok, ustawKrok] = useState(0);
+  // Otwarty akcjonariusz zasłania listę: jeden temat na ekranie naraz.
+  const [otwartyAkcjonariusz, ustawOtwartyAkcjonariusz] = useState(null);
   const [dane, ustawDane] = useState(null);
   const [ladowanie, ustawLadowanie] = useState(true);
   const [blad, ustawBlad] = useState(null);
@@ -590,13 +570,16 @@ function EkranWniosku() {
       .finally(() => ustawLadowanie(false));
   }, []);
 
+  // Przejście między krokami przewija na górę. Bez tego dłuższy krok
+  // zostawia następny zaczęty w połowie — z niewidocznym nagłówkiem.
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [krok, otwartyAkcjonariusz]);
+
   const wniosekEdytowalny = Boolean(dane) && ['w_przygotowaniu', 'do_uzupelnienia'].includes(dane.status);
   // Lista dokumentow zostaje na ekranie takze PO odeslaniu umowy: reszta
   // skanow moze jeszcze wracac, a klient ma widziec, czego brakuje.
   const dokumentyWidoczne = Boolean(dane)
     && ['umowa_wygenerowana', 'umowa_podpisana'].includes(dane.status)
     && dokumenty.length > 0;
-  const dokumentyEdytowalne = dokumentyWidoczne;
   const podpisanych = dokumenty.filter((d) => d.podpis_nazwa_pliku).length;
 
   // Dane spółki zapisują się same. Bez tego dawało się wypełnić formularz,
@@ -614,6 +597,9 @@ function EkranWniosku() {
     try {
       const wynik = await API.post('/api/psa/portal/wniosek/akcjonariusze', {});
       ustawAkcjonariusze((p) => [...p, wynik.akcjonariusz]);
+      // Nowa pozycja od razu się otwiera: dodanie akcjonariusza i wpisanie
+      // jego danych to jedna czynność, nie dwie.
+      ustawOtwartyAkcjonariusz(wynik.akcjonariusz.id);
     } catch (e) {
       ustawBladAkcjonariuszy(e instanceof BladApi ? e.message : 'Nie udało się dodać pozycji.');
     } finally {
@@ -627,6 +613,7 @@ function EkranWniosku() {
 
   function poUsunieciuAkcjonariusza(id) {
     ustawAkcjonariusze((p) => p.filter((a) => a.id !== id));
+    ustawOtwartyAkcjonariusz(null);
   }
 
   async function zlozWniosek() {
@@ -663,6 +650,7 @@ function EkranWniosku() {
   const pole = (klucz) => ({
     value: (dane && dane[klucz]) ?? '',
     onChange: (z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value })),
+    disabled: !wniosekEdytowalny,
   });
 
   async function pobierzZKrs() {
@@ -706,20 +694,45 @@ function EkranWniosku() {
   // tu wyłącznie po to, żeby braki było widać PRZED wysłaniem, a nie dopiero
   // w odpowiedzi.
   const brakiUstawowe = akcjonariusze.flatMap(brakiUstawoweAkcjonariusza);
+  const otwarty = akcjonariusze.find((a) => a.id === otwartyAkcjonariusz) || null;
+  // Kolejnego akcjonariusza dopisuje się dopiero, gdy poprzedni ma nazwisko
+  // albo firmę. Inaczej lista zapełnia się pustymi wierszami „osoba bez
+  // nazwiska”, których po tygodniu nikt już nie rozróżnia.
+  const wszyscyNazwani = akcjonariusze.every((a) =>
+    String(a.typ === 'prawna' ? a.nazwa : a.nazwisko || '').trim() !== '');
+  const ostatniKrok = KROKI_WNIOSKU.length - 1;
+
+  function nawigacja(dodatkoweDalej) {
+    return (
+      <NawigacjaKreatora
+        wstecz={krok > 0 ? { etykieta: 'Wstecz', przy: () => ustawKrok((k) => k - 1) } : null}
+        dalej={krok < ostatniKrok
+          ? { etykieta: 'Dalej', przy: () => ustawKrok((k) => k + 1), ...(dodatkoweDalej || {}) }
+          : null}
+      />
+    );
+  }
 
   return (
-    <div className="pion" style={{ gap: 16 }}>
+    <div className="pion kreator-waski" style={{ gap: 16 }}>
       <Kroki kroki={KROKI_WNIOSKU} biezacy={krok} />
       <Komunikat odmiana="blad" tresc={blad} />
+      {!wniosekEdytowalny && krok < ostatniKrok && (
+        <Komunikat
+          odmiana="uwaga"
+          tresc="Wniosek został już złożony — dane są tylko do wglądu. Jeśli trzeba je poprawić, kancelaria odeśle wniosek do uzupełnienia."
+        />
+      )}
 
       <Karta>
         {krok === 0 && (
           <>
-            <div className="card-h">Dane spółki</div>
-            <Pole
-              etykieta="Numer KRS"
-              podpowiedz="Pobierzemy dane z otwartego rejestru przedsiębiorców; przy niepowodzeniu uzupełnij je ręcznie."
-            >
+            <KrokNaglowek
+              tytul="Dane spółki"
+              opis="Zacznij od numeru KRS — resztę pobierzemy z rejestru przedsiębiorców i wystarczy ją sprawdzić."
+            />
+
+            <Pole etykieta="Numer KRS">
               <div className="row-g">
                 <input type="text" {...pole('krs')} maxLength={10} placeholder="0000123456" />
                 <button
@@ -736,9 +749,29 @@ function EkranWniosku() {
             <Pole etykieta="Firma (nazwa) spółki" wymagane>
               <input type="text" {...pole('nazwa')} />
             </Pole>
+            <div className="siatka-2">
+              <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
+              <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
+            </div>
+
+            <div className="siatka-2">
+              <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} placeholder="00-000" /></Pole>
+              <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
+            </div>
+            <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
+            <div className="siatka-2">
+              <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
+              <Pole etykieta="Nr lokalu" opcjonalne><input type="text" {...pole('nr_lokalu')} /></Pole>
+            </div>
+
+            <div className="siatka-2">
+              <Pole etykieta="Sąd rejestrowy"><input type="text" {...pole('sad_rejestrowy')} /></Pole>
+              <Pole etykieta="Wydział"><input type="text" {...pole('wydzial')} /></Pole>
+            </div>
+
             <Pole
               etykieta="Organ zarządzający"
-              podpowiedz="P.S.A. może mieć zarząd albo (struktura monistyczna) radę dyrektorów — decyduje umowa spółki."
+              podpowiedz="P.S.A. może mieć zarząd albo — w strukturze monistycznej — radę dyrektorów; decyduje umowa spółki."
             >
               <select {...pole('organ_rodzaj')}>
                 <option value="">— nie ustalono —</option>
@@ -746,51 +779,58 @@ function EkranWniosku() {
                 <option value="rada_dyrektorow">Rada Dyrektorów</option>
               </select>
             </Pole>
-            <div className="siatka-2">
-              <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
-              <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
-              <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
-            </div>
-            <div className="siatka-3">
-              <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
-              <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
-              <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole etykieta="Sąd rejestrowy"><input type="text" {...pole('sad_rejestrowy')} /></Pole>
-              <Pole etykieta="Wydział"><input type="text" {...pole('wydzial')} /></Pole>
-            </div>
-            <div className="siatka-3">
-              <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
-              <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
-              <Pole etykieta="Adres do doręczeń elektronicznych">
-                <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
-              </Pole>
-            </div>
+
             <div className="siatka-2">
               <Pole etykieta="Data rejestracji w KRS">
-                <PoleDaty wartosc={dane.data_utworzenia_spolki || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_utworzenia_spolki: v }))} />
+                <PoleDaty
+                  wartosc={dane.data_utworzenia_spolki || ''}
+                  przyZmianie={(v) => ustawDane((p) => ({ ...p, data_utworzenia_spolki: v }))}
+                  wylaczone={!wniosekEdytowalny}
+                />
               </Pole>
               <Pole etykieta="Kapitał akcyjny">
-                <PoleKwoty grosze={dane.kapital_akcyjny_grosze} przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))} />
+                <PoleKwoty
+                  grosze={dane.kapital_akcyjny_grosze}
+                  przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))}
+                />
               </Pole>
             </div>
             <Pole
               etykieta="Data zawarcia umowy spółki"
-              podpowiedz="Data aktu notarialnego zawiązania spółki — przy spółce założonej w S24 data podpisania w systemie."
+              podpowiedz="Data aktu notarialnego zawiązania spółki; przy spółce założonej w S24 — data podpisania w systemie."
             >
-              <PoleDaty wartosc={dane.data_zawarcia_umowy_spolki || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_zawarcia_umowy_spolki: v }))} />
+              <PoleDaty
+                wartosc={dane.data_zawarcia_umowy_spolki || ''}
+                przyZmianie={(v) => ustawDane((p) => ({ ...p, data_zawarcia_umowy_spolki: v }))}
+                wylaczone={!wniosekEdytowalny}
+              />
             </Pole>
 
-            <div className="rozdzielacz" />
-            <div className="card-h">Reprezentant, który podpisze umowę</div>
-            <Komunikat
-              odmiana="info"
-              tresc="Osoba, która w imieniu SPÓŁKI podpisze umowę o prowadzenie rejestru. Wpisz dane dokładnie tak, jak widnieją w dokumencie tożsamości — umowa użyje ich w tej samej postaci."
+            <div className="siatka-2">
+              <Pole etykieta="Adres e-mail spółki"><input type="text" {...pole('email')} /></Pole>
+              <Pole etykieta="Telefon" opcjonalne><input type="text" {...pole('telefon')} /></Pole>
+            </div>
+
+            <ZwijanaSekcja
+              tytul="Adres do doręczeń elektronicznych"
+              wypelniona={Boolean(dane.adres_edorecze)}
+            >
+              <Pole etykieta="Adres do doręczeń elektronicznych" podpowiedz="Skrzynka e-Doręczeń spółki, jeśli została uruchomiona.">
+                <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
+              </Pole>
+            </ZwijanaSekcja>
+
+            {nawigacja()}
+          </>
+        )}
+
+        {krok === 1 && (
+          <>
+            <KrokNaglowek
+              tytul="Reprezentant spółki"
+              opis="Osoba, która w imieniu spółki podpisze umowę o prowadzenie rejestru. Wpisz dane dokładnie tak, jak widnieją w dokumencie tożsamości — umowa użyje ich w tej samej postaci."
             />
+
             <div className="siatka-2">
               <Pole etykieta="Imię i nazwisko">
                 <input type="text" {...pole('reprezentant_imie_nazwisko')} placeholder="np. Jan Kowalski" />
@@ -799,121 +839,153 @@ function EkranWniosku() {
                 <input type="text" {...pole('reprezentant_funkcja')} placeholder="np. Prezes Zarządu" />
               </Pole>
             </div>
-            {/* Sposób reprezentacji NIE jest już polem do wypełnienia — kancelaria
-                sprawdza go na podstawie wydruku z KRS przy podpisaniu umowy;
-                gdy dane spółki pobrano przyciskiem „Pobierz z KRS” wyżej,
-                wartość dochodzi razem z resztą i trafia do umowy bez udziału
-                tego formularza. */}
-            <div className="siatka-2">
-              <Pole etykieta="Imiona rodziców">
-                <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
-              </Pole>
-              <Pole etykieta="Dowód osobisty">
-                <input type="text" {...pole('reprezentant_dowod')} />
-              </Pole>
-            </div>
+            {/* Sposób reprezentacji NIE jest polem do wypełnienia — kancelaria
+                sprawdza go na wydruku z KRS przy podpisaniu umowy, a przy
+                pobraniu danych przyciskiem „Pobierz z KRS” wartość dochodzi
+                razem z resztą i trafia do umowy bez udziału tego formularza. */}
             <div className="siatka-2">
               <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
-              <Pole etykieta="Adres zamieszkania"><input type="text" {...pole('reprezentant_adres')} /></Pole>
+              <Pole etykieta="Dowód osobisty"><input type="text" {...pole('reprezentant_dowod')} placeholder="ABC 123456" /></Pole>
             </div>
+            <Pole etykieta="Imiona rodziców">
+              <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
+            </Pole>
+            <Pole etykieta="Adres zamieszkania">
+              <input type="text" {...pole('reprezentant_adres')} />
+            </Pole>
             <Pole
               etykieta="Adres e-mail"
               podpowiedz="Na ten adres trafi projekt umowy do podpisu i korespondencja w sprawie jej zawarcia."
             >
               <input type="email" {...pole('reprezentant_email')} />
             </Pole>
+
+            {nawigacja()}
           </>
         )}
 
-        {krok === 1 && (
-          <div className="pion" style={{ gap: 16 }}>
-            <div className="card-h">Akcjonariusze</div>
-            <Komunikat
-              odmiana="info"
-              tresc="Wpisz osoby, które mają zostać wpisane do rejestru jako akcjonariusze. Kancelaria porówna te dane z rejestrem KRS i skontaktuje się w razie rozbieżności, zanim rejestr zostanie otwarty."
+        {krok === 2 && (otwarty ? (
+          <FormularzAkcjonariusza
+            key={otwarty.id}
+            pozycja={otwarty}
+            edytowalne={wniosekEdytowalny}
+            przyZapisie={poZapisieAkcjonariusza}
+            przyUsunieciu={poUsunieciuAkcjonariusza}
+            przyZamknieciu={() => ustawOtwartyAkcjonariusz(null)}
+          />
+        ) : (
+          <>
+            <KrokNaglowek
+              tytul="Akcjonariusze"
+              opis="Osoby, które mają zostać wpisane do rejestru. Kancelaria porówna te dane z rejestrem KRS i odezwie się, gdyby coś się nie zgadzało."
             />
-            {!wniosekEdytowalny && dane.status && (
-              <Komunikat
-                odmiana="uwaga"
-                tresc={`Wniosek ma status „${dane.status}” — lista akcjonariuszy jest już tylko do wglądu.`}
-              />
-            )}
             <Komunikat odmiana="blad" tresc={bladAkcjonariuszy} />
 
-            {akcjonariusze.length === 0 && (
+            {akcjonariusze.length === 0 ? (
               <Pusto
-                tytul="Brak akcjonariuszy"
-                opis="Dodaj przynajmniej jedną osobę, która obejmie akcje w spółce."
+                ikona="osoby"
+                tytul="Nie dodano jeszcze żadnego akcjonariusza"
+                opis="Wniosek wymaga przynajmniej jednej osoby, która obejmie akcje w spółce."
+                akcja={wniosekEdytowalny && (
+                  <button
+                    className="btn btn-glowny btn-nawigacja"
+                    onClick={dodajAkcjonariusza}
+                    disabled={dodawanieAkcjonariusza}
+                  >
+                    {dodawanieAkcjonariusza ? 'Dodawanie…' : 'Dodaj akcjonariusza'}
+                  </button>
+                )}
               />
+            ) : (
+              <>
+                <div className="lista-podmiotow">
+                  {akcjonariusze.map((a) => {
+                    const braki = brakiUstawoweAkcjonariusza(a).length;
+                    return (
+                      <WierszPodmiotu
+                        key={a.id}
+                        ikona={a.typ === 'prawna' ? 'spolki' : 'osoby'}
+                        tytul={nazwaAkcjonariusza(a)}
+                        znacznik={braki > 0 ? 'do uzupełnienia' : null}
+                        opis={[identyfikatorAkcjonariusza(a), opisAdresowAkcjonariusza(a)].join(' · ')}
+                        przyKliknieciu={() => ustawOtwartyAkcjonariusz(a.id)}
+                      />
+                    );
+                  })}
+                </div>
+
+                {wniosekEdytowalny && (
+                  <>
+                    <WierszDodania
+                      etykieta={dodawanieAkcjonariusza ? 'Dodawanie…' : 'Dodaj kolejnego akcjonariusza'}
+                      przyKliknieciu={dodajAkcjonariusza}
+                      wylaczony={dodawanieAkcjonariusza || !wszyscyNazwani}
+                    />
+                    {!wszyscyNazwani && (
+                      <div className="podpowiedz">
+                        Uzupełnij nazwisko albo firmę poprzedniego akcjonariusza, zanim dodasz kolejnego.
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
 
-            {akcjonariusze.map((a) => (
-              <PozycjaAkcjonariuszaWniosku
-                key={a.id}
-                pozycja={a}
-                edytowalne={wniosekEdytowalny}
-                przyZapisie={poZapisieAkcjonariusza}
-                przyUsunieciu={poUsunieciuAkcjonariusza}
-              />
-            ))}
+            {nawigacja()}
+          </>
+        ))}
 
-            {wniosekEdytowalny && (
-              <button className="btn btn-maly" onClick={dodajAkcjonariusza} disabled={dodawanieAkcjonariusza}>
-                {dodawanieAkcjonariusza ? 'Dodawanie…' : '+ Dodaj akcjonariusza'}
-              </button>
-            )}
-          </div>
-        )}
-
-        {krok === 2 && (
-          <div className="pion" style={{ gap: 16 }}>
-            <div className="card-h">Weryfikacja i złożenie wniosku</div>
+        {krok === 3 && (
+          <>
+            <KrokNaglowek
+              tytul="Podsumowanie"
+              opis="Sprawdź dane przed złożeniem wniosku. Po złożeniu przygotujemy komplet dokumentów do podpisu."
+            />
             <Komunikat odmiana="blad" tresc={bladSkladania} />
 
-            <Karta tytul="Spółka">
-              <dl className="podsumowanie">
-                <dt>Firma (nazwa)</dt>
-                <dd>{dane.nazwa || <span className="brak">nie uzupełniono</span>}</dd>
-                <dt>Numer KRS</dt>
-                <dd className="kol-dane">{dane.krs || <span className="brak">nie uzupełniono</span>}</dd>
-                <dt>Siedziba</dt>
-                <dd>{adresSpolki || <span className="brak">nie uzupełniono</span>}</dd>
-                <dt>Reprezentant</dt>
-                <dd>
-                  {dane.reprezentant_imie_nazwisko || <span className="brak">nie uzupełniono</span>}
-                  {dane.reprezentant_funkcja && (
-                    <span className="podsumowanie-dopisek">{dane.reprezentant_funkcja}</span>
-                  )}
-                </dd>
-                <dt>E-mail reprezentanta</dt>
-                <dd>{dane.reprezentant_email || <span className="brak">nie uzupełniono</span>}</dd>
-              </dl>
-            </Karta>
+            <dl className="podsumowanie">
+              <dt>Firma (nazwa)</dt>
+              <dd>{dane.nazwa || <span className="brak">nie uzupełniono</span>}</dd>
+              <dt>Numer KRS</dt>
+              <dd className="kol-dane">{dane.krs || <span className="brak">nie uzupełniono</span>}</dd>
+              <dt>Siedziba</dt>
+              <dd>{adresSpolki || <span className="brak">nie uzupełniono</span>}</dd>
+              <dt>Reprezentant</dt>
+              <dd>
+                {dane.reprezentant_imie_nazwisko || <span className="brak">nie uzupełniono</span>}
+                {dane.reprezentant_funkcja && (
+                  <span className="podsumowanie-dopisek">{dane.reprezentant_funkcja}</span>
+                )}
+              </dd>
+              <dt>E-mail reprezentanta</dt>
+              <dd>{dane.reprezentant_email || <span className="brak">nie uzupełniono</span>}</dd>
+            </dl>
 
-            <Karta tytul={`Akcjonariusze (${akcjonariusze.length})`}>
-              {akcjonariusze.length === 0 ? (
-                <Pusto
-                  tytul="Brak akcjonariuszy"
-                  opis="Wróć do kroku „Akcjonariusze” i dodaj przynajmniej jedną osobę."
-                />
-              ) : (
-                <div className="podsumowanie-lista">
-                  {akcjonariusze.map((a) => (
-                    <div key={a.id} className="podsumowanie-pozycja">
-                      <div className="podsumowanie-nazwa">{nazwaAkcjonariusza(a)}</div>
-                      <div className="podsumowanie-cechy">
-                        <span>{identyfikatorAkcjonariusza(a)}</span>
-                        <span>{opisAdresowAkcjonariusza(a)}</span>
-                        <span>{OPIS_ZGODY_EMAIL[a.zgoda_email_status || 'brak']}</span>
-                        {a.wspolwlasnosc && a.wspolwlasnosc !== 'brak' && (
-                          <span>{OPIS_WSPOLWLASNOSCI[a.wspolwlasnosc]}</span>
-                        )}
-                      </div>
+            <div className="rozdzielacz" />
+            <div className="card-h">{`Akcjonariusze (${akcjonariusze.length})`}</div>
+            {akcjonariusze.length === 0 ? (
+              <Pusto
+                ikona="osoby"
+                tytul="Brak akcjonariuszy"
+                opis="Wróć do kroku „Akcjonariusze” i dodaj przynajmniej jedną osobę."
+              />
+            ) : (
+              <div className="podsumowanie-lista">
+                {akcjonariusze.map((a) => (
+                  <div key={a.id} className="podsumowanie-pozycja">
+                    <div className="podsumowanie-nazwa">{nazwaAkcjonariusza(a)}</div>
+                    <div className="podsumowanie-cechy">
+                      <span>{identyfikatorAkcjonariusza(a)}</span>
+                      <span>{opisAdresowAkcjonariusza(a)}</span>
+                      <span>{OPIS_ZGODY_EMAIL[a.zgoda_email_status || 'brak']}</span>
+                      {a.wspolwlasnosc && a.wspolwlasnosc !== 'brak' && (
+                        <span>{OPIS_WSPOLWLASNOSCI[a.wspolwlasnosc]}</span>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </Karta>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {brakiUstawowe.length > 0 && (
               <Komunikat
@@ -928,22 +1000,27 @@ function EkranWniosku() {
               <>
                 <Komunikat
                   odmiana="info"
-                  tresc="Po złożeniu wniosku system automatycznie przygotuje projekt umowy o prowadzenie rejestru na podstawie powyższych danych. Dane spółki i listę akcjonariuszy będzie można poprawić tylko, jeśli kancelaria odeśle wniosek do uzupełnienia."
+                  tresc="Po złożeniu wniosku przygotujemy projekt umowy o prowadzenie rejestru na podstawie powyższych danych. Dane spółki i listę akcjonariuszy będzie można poprawić tylko, jeśli kancelaria odeśle wniosek do uzupełnienia."
                 />
-                <button
-                  className="btn btn-glowny"
-                  onClick={zlozWniosek}
-                  disabled={skladanie || !dane.nazwa || akcjonariusze.length === 0}
-                >
-                  {skladanie ? 'Składanie…' : 'Złóż wniosek'}
-                </button>
                 {(!dane.nazwa || akcjonariusze.length === 0) && (
                   <div className="podpowiedz">
-                    {!dane.nazwa && 'Uzupełnij nazwę spółki (krok „Spółka i umowa”). '}
+                    {!dane.nazwa && 'Uzupełnij nazwę spółki (krok „Spółka”). '}
                     {akcjonariusze.length === 0 && 'Dodaj przynajmniej jednego akcjonariusza (krok „Akcjonariusze”).'}
                   </div>
                 )}
+                <NawigacjaKreatora
+                  wstecz={{ etykieta: 'Wstecz', przy: () => ustawKrok((k) => k - 1) }}
+                  dalej={{
+                    etykieta: skladanie ? 'Składanie…' : 'Złóż wniosek',
+                    przy: zlozWniosek,
+                    wylaczony: skladanie || !dane.nazwa || akcjonariusze.length === 0,
+                  }}
+                />
               </>
+            )}
+
+            {!wniosekEdytowalny && (
+              <NawigacjaKreatora wstecz={{ etykieta: 'Wstecz', przy: () => ustawKrok((k) => k - 1) }} />
             )}
 
             {dane.status === 'zlozony' && (
@@ -952,6 +1029,8 @@ function EkranWniosku() {
 
             {dokumentyWidoczne && (
               <>
+                <div className="rozdzielacz" />
+                <div className="card-h">Dokumenty do podpisu</div>
                 <Komunikat
                   odmiana="ok"
                   tresc="Komplet dokumentów jest gotowy. Pobierz wszystkie pozycje z listy poniżej, zbierz podpisy i odeślij je kancelarii."
@@ -963,9 +1042,6 @@ function EkranWniosku() {
                     lista={ostrzezeniaZlozenia}
                   />
                 )}
-
-                <div className="rozdzielacz" />
-                <div className="card-h">Dokumenty do podpisu</div>
                 <Komunikat
                   odmiana="info"
                   tresc="Umowę podpisuje reprezentant spółki. Uchwałę o wyborze podmiotu prowadzącego rejestr oraz żądanie pierwszego wpisu podpisują wszyscy akcjonariusze wspólnie. Pozostałe oświadczenia każdy akcjonariusz podpisuje osobiście — zarząd nie może złożyć ich za niego."
@@ -975,7 +1051,7 @@ function EkranWniosku() {
                     <PozycjaDokumentu
                       key={d.id}
                       dokument={d}
-                      edytowalne={dokumentyEdytowalne}
+                      edytowalne={dokumentyWidoczne}
                       przyZmianie={(wynik) => {
                         if (wynik.dokumenty) ustawDokumenty(wynik.dokumenty);
                         if (wynik.wniosek) ustawDane(wynik.wniosek);
@@ -1026,10 +1102,8 @@ function EkranWniosku() {
                     ) : ' pocztą elektroniczną'}.
                   </div>
                 </div>
-
               </>
             )}
-
 
             {dane.status === 'przyjety' && (
               <Komunikat
@@ -1046,29 +1120,13 @@ function EkranWniosku() {
                 tresc="Kancelaria odrzuciła wniosek. W razie pytań prosimy o kontakt z kancelarią."
               />
             )}
-          </div>
+          </>
         )}
-
-        {/* Pasek nawigacji przykleja się do dołu okna PO TO, żeby „Dalej"
-            było w zasięgu przy długim kroku. Na ostatnim kroku „Dalej" jest
-            wyłączone, więc przyklejony pasek już tylko zasłaniałby treść —
-            tam zostaje w tekście. */}
-        <div className={`kreator-stopka ${krok === KROKI_WNIOSKU.length - 1 ? 'kreator-stopka-statyczna' : ''}`}>
-          <button className="btn" onClick={() => ustawKrok((k) => Math.max(0, k - 1))} disabled={krok === 0}>
-            Wstecz
-          </button>
-          <div className="kreator-stopka-prawa row-g">
-            <StanZapisu stan={stanZapisuSpolki} />
-            <button
-              className="btn btn-glowny"
-              onClick={() => ustawKrok((k) => Math.min(KROKI_WNIOSKU.length - 1, k + 1))}
-              disabled={krok === KROKI_WNIOSKU.length - 1}
-            >
-              Dalej
-            </button>
-          </div>
-        </div>
       </Karta>
+
+      {krok < ostatniKrok && wniosekEdytowalny && (
+        <div className="stan-zapisu-kreatora"><StanZapisu stan={stanZapisuSpolki} /></div>
+      )}
     </div>
   );
 }
