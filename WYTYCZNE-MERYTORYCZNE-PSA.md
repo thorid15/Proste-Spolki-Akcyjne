@@ -308,3 +308,23 @@ umowy albo z aktualizacją danych.
    będzie potrzebny. Rekomendacja: teraz, bo jest to argument w umowie i w ofercie.
 4. **Dane dodatkowe z umowy spółki** — czy przyjmujemy spółki, których umowa żąda danych spoza
    naszego modelu, i jak je wtedy obsługujemy (pole swobodne vs odmowa zawarcia umowy).
+5. **Zakres danych osobowych w informacji z rejestru** — do przemyślenia szerzej. Dziś dokument
+   pokazuje adres akcjonariusza, a wobec innego akcjonariusza zasłania go zgodnie z art. 300³⁵
+   § 1¹ KSH. Pytanie postawione przez kancelarię: skoro PESEL i adres i tak są maskowane, może
+   w ogóle usunąć te pozycje z informacji?
+
+   Co trzeba rozstrzygnąć, zanim to zrobimy:
+   - § 1¹ ogranicza dostęp **tylko pozostałym akcjonariuszom**. Spółka (§ 1) oraz sąd, prokurator,
+     komornik i administracyjny organ egzekucyjny (§ 4) mają prawo do pełnych danych — usunięcie
+     kolumn dla wszystkich odebrałoby im to, do czego są uprawnieni;
+   - art. 300³⁵ § 3 **nie określa treści** samej informacji, więc nie ma przeszkody, żeby wydawać
+     ją w zakresie węższym niż rejestr. Do ustalenia: zakres domyślny i zakres na żądanie;
+   - RODO (minimalizacja) przemawia za tym, żeby akcjonariuszowi nie wysyłać nawet zasłoniętych
+     rubryk cudzych danych — pusta rubryka „adres" i tak mówi, że adres w rejestrze jest;
+   - kontrargument: informacja ma dowodzić **stanu rejestru**. Brak rubryki i zasłonięta rubryka
+     znaczą co innego, a wypis bez adresów może nie wystarczyć spółce do doręczeń.
+
+   Możliwy kierunek do sprawdzenia: kolumna znika, gdy odbiorca nie ma prawa do **żadnej** wartości
+   w niej (dziś: akcjonariusz), a zostaje w całości tam, gdzie prawo do danych jest pełne. Wtedy
+   wypis dla akcjonariusza w ogóle nie wspomina o cudzych adresach, a wypis dla spółki i organu
+   zostaje bez zmian. Wymaga decyzji, czy „węższy wypis" nie podważa jego mocy dowodowej.
