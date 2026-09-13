@@ -255,6 +255,23 @@ test('POST /api/psa/wnioski/:id/przyjmij: zaklada spolke i osobe, dowiazuje wnio
   assert.equal(kopie.length, akta.dokumenty.length);
   assert.ok(kopie.every((s) => fs.existsSync(s)), 'kazdy wiersz akt ma swoj plik na dysku');
 
+  // Sekcja "Dokumenty" w kokpicie pyta o CALA teczke jednym zapytaniem —
+  // komplet zalozycielski musi sie w niej znalezc z data i adresem pliku.
+  const [stAkta, teczka] = await zapytaj(
+    'GET', `/api/psa/spolki/${wynik.spolka_id}/akta`, undefined, ciastkoPracownik
+  );
+  assert.equal(stAkta, 200);
+  const zalozycielskie = teczka.dokumenty.filter((d) => d.grupa === 'zalozycielski');
+  // Teczka laczy oba egzemplarze jednego dokumentu w JEDNA pozycje z dwoma
+  // odnosnikami, wiec wierszy jest tyle, ile dokumentow — nie ile plikow.
+  const wystawione = akta.dokumenty.filter((d) => d.rola === 'wzor');
+  assert.equal(zalozycielskie.length, wystawione.length, 'teczka zawiera caly komplet z wniosku');
+  assert.ok(zalozycielskie.every((d) => d.data && d.url), 'kazda pozycja teczki ma date i adres pobrania');
+  assert.ok(
+    zalozycielskie.some((d) => d.url_podpisany && d.opis === 'wystawiony i podpisany'),
+    'pozycja z odeslanym skanem ma odnosnik do obu egzemplarzy'
+  );
+
   const [stPonownie] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, undefined, ciastkoPracownik);
   assert.equal(stPonownie, 400, 'wniosek przyjety jest juz zamkniety');
 

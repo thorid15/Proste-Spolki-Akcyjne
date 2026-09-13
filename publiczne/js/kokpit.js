@@ -1,414 +1,19 @@
 /* kokpit.js — kokpit spółki: JEDEN EKRAN (sekcja 9 specyfikacji).
-   Sesja SESJA-PSA-6-INTERFEJS.md, faza 2.
 
-   Układ dwukolumnowy (2 — Plan projektu, FAZA 2): oś akcji i tabela
-   akcjonariatu po lewej, przyklejona metryka rejestru po prawej.
-   Oś akcji zastępuje dawny „pasek serii" i suwak dnia jako element
-   sygnaturowy — wykres numer akcji × czas z playheadem zatrzaskującym
-   się na zdarzeniach (2.5), nie na dniach kalendarzowych. */
+   Układ idzie za rejestrem akcjonariuszy prowadzonym przez notariuszy
+   (Krajowa Rada Notarialna): u góry metryka spółki, niżej rozwijane
+   REJESTRY o tych samych nazwach, których używa się w kancelarii —
+   akcjonariuszy, akcji, uprawnień, zajęć — a na końcu akta i łańcuch
+   zdarzeń. Każdy rejestr ma WŁASNY przycisk wpisu: nie ma jednego
+   „Nowe zdarzenie", po którym trzeba było dopiero wybierać typ z listy
+   dwudziestu kafelków. Wchodząc do sekcji „Rejestr akcji" wiadomo, że
+   wpisuje się emisję — kreator dostaje typ z adresu i otwiera się od razu
+   na podstawie wpisu.
 
-/* ═════════════════════════════════════════════════════
-   OŚ AKCJI (2.1, 2.4, 2.5)
-   ═════════════════════════════════════════════════════ */
+   Dawna „oś akcji" (wykres numer akcji × czas z playheadem) została
+   usunięta — stan na dzień wsteczny wybiera się zwykłym polem daty
+   w nagłówku, bo tylko po to oś była w praktyce używana. */
 
-// Warianty jasności zieleni rejestru (patrz rejestr.css) — WYŁĄCZNIE ta
-// jedna barwa w różnych jasnościach, nigdy tęcza kolorów (2.1).
-const ODCIENIE_AKCJONARIUSZY = [
-  '--rejestr', '--rejestr-2', '--rejestr-3',
-  '--rejestr-cien-4', '--rejestr-cien-5', '--rejestr-cien-6',
-];
-
-const WYSOKOSC_SEKCJI = 72;
-const WYSOKOSC_ETYKIETY = 18;
-const ODSTEP_SEKCJI = 20;
-const WYSOKOSC_OSI_CZASU = 30;
-const VB_SZEROKOSC = 1000;
-
-function nazwaOsoby(o) {
-  return o && o.osoba ? o.osoba.oznaczenie : o && o.osoba_id != null ? `osoba #${o.osoba_id}` : 'nieobjęte';
-}
-
-/** Ten sam akcjonariusz = ten sam odcień na całym wykresie (wszystkie emisje). */
-function przypiszOdcienie(pasma) {
-  const mapa = new Map();
-  for (const p of pasma) {
-    if (p.kategoria !== 'akcjonariusz' || p.osoba_id == null) continue;
-    if (!mapa.has(p.osoba_id)) {
-      mapa.set(p.osoba_id, ODCIENIE_AKCJONARIUSZY[mapa.size % ODCIENIE_AKCJONARIUSZY.length]);
-    }
-  }
-  return mapa;
-}
-
-/** Odcinki jednej emisji uporządkowane wg numeru (nakładka nieobjęte/umorzone/akcjonariusz). */
-function pasmaEmisji(pasma, emisjaKlucz) {
-  return pasma.filter((p) => p.emisja_klucz === emisjaKlucz);
-}
-
-/** Pozycja ordynalna zdarzenia na wspólnej osi czasu — nie kalendarz (2.5). */
-function polozenieCzasowe(zdarzenieOdId, zdarzenieDoId, indeksZdarzenia, pozycjaDzis) {
-  const start = indeksZdarzenia.has(zdarzenieOdId) ? indeksZdarzenia.get(zdarzenieOdId) : 0;
-  const koniec =
-    zdarzenieDoId != null && indeksZdarzenia.has(zdarzenieDoId) ? indeksZdarzenia.get(zdarzenieDoId) : pozycjaDzis;
-  return [start, koniec];
-}
-
-/** Przecięcie dwóch przedziałów liczbowych zamkniętych — null, gdy rozłączne. */
-function przetnij(aOd, aDo, bOd, bDo) {
-  const od = Math.max(aOd, bOd);
-  const doo = Math.min(aDo, bDo);
-  return od <= doo ? [od, doo] : null;
-}
-
-function SekcjaEmisji({
-  emisja, y, pasma, obciazenia, indeksZdarzenia, pozycjaDzis, xSkala, ySkala,
-  kolorOsoby, naKlikniecie, wspolwlasnoscDoListy,
-}) {
-  const odcinki = pasmaEmisji(pasma, emisja.klucz);
-  const obciazeniaEmisji = obciazenia.filter((o) => o.emisja_klucz === emisja.klucz);
-
-  return (
-    <g>
-      <text x={0} y={y - 6} className="os-akcji-etykieta-seria">
-        Seria {emisja.seria}
-        <tspan className="przyciemniona"> · nr {emisja.nr_pierwszy}–{emisja.nr_pierwszy + emisja.ilosc - 1} · {emisja.ilosc} akcji</tspan>
-      </text>
-
-      {odcinki.map((p, i) => {
-        const [xOd, xDo] = polozenieCzasowe(p.zdarzenie_od_id, p.zdarzenie_do_id, indeksZdarzenia, pozycjaDzis);
-        const x1 = xSkala(xOd);
-        const x2 = Math.max(xSkala(xDo), x1 + 1.5);
-        const yTop = y + ySkala(emisja, p.nr_do + 1);
-        const yBottom = y + ySkala(emisja, p.nr_od);
-        const wys = Math.max(yBottom - yTop, p.nr_od === p.nr_do ? 2.5 : 1);
-
-        const wspolna = p.kategoria === 'akcjonariusz' ? null : null; // placeholder dla czytelności ponizej
-        const ulamkowa = p.kategoria === 'akcjonariusz' && (p.czesc_mianownik || 1) !== 1;
-        // Numer objety wspolwlasnoscia: wiecej niz jedno pasmo akcjonariusza
-        // na TYM SAMYM numerze i w NAKLADAJACYM sie czasie. Wykrywane z
-        // samych pasm (bez zmiany kontraktu) — jak dawny pasek serii.
-        if (ulamkowa) {
-          wspolwlasnoscDoListy.push({ ...p, emisja });
-        }
-
-        const klasy = ['os-akcji-pasmo'];
-        let fill;
-        let tytul;
-        if (p.kategoria === 'nieobjeta') {
-          fill = 'url(#siatka-nieobjete)';
-          tytul = `nr ${opiszZakresNr(p)} — nieobjęte`;
-          klasy.push('niekliknieta');
-        } else if (p.kategoria === 'umorzona') {
-          fill = 'url(#siatka-umorzone)';
-          tytul = `nr ${opiszZakresNr(p)} — umorzone`;
-          klasy.push('niekliknieta');
-        } else {
-          fill = ulamkowa ? 'url(#kreska-ulamek)' : `var(${kolorOsoby.get(p.osoba_id) || '--rejestr'})`;
-          tytul = ulamkowa
-            ? `nr ${p.nr_od} — ${u.opisz({ licznik: p.czesc_licznik, mianownik: p.czesc_mianownik })} akcji, ${nazwaOsoby(p)}`
-            : `${nazwaOsoby(p)} — nr ${opiszZakresNr(p)}`;
-        }
-
-        return (
-          <rect
-            key={i}
-            className={klasy.join(' ')}
-            x={x1}
-            y={yTop}
-            width={x2 - x1}
-            height={wys}
-            fill={fill}
-            rx={1}
-          >
-            <title>{tytul}</title>
-            {p.kategoria === 'akcjonariusz' && (
-              <animate attributeName="opacity" begin="0s" dur="0.01s" values="1" fill="freeze" />
-            )}
-          </rect>
-        );
-      })}
-
-      {/* Kreskowanie obciążeń NAKŁADA się na pasmo (2.1) — osobne prostokąty
-          na przecięciu czasu obciążenia i czasu pasma, numeru obciążenia
-          i numeru pasma; jedno obciążenie może dotykać kilku pasm. */}
-      {obciazeniaEmisji.map((o, i) =>
-        o.zakresy.map((z, j) => {
-          const [oxOd, oxDo] = polozenieCzasowe(o.zdarzenie_od_id, o.zdarzenie_do_id, indeksZdarzenia, pozycjaDzis);
-          return odcinki
-            .filter((p) => p.kategoria === 'akcjonariusz')
-            .map((p, k) => {
-              const przetCzas = przetnij(oxOd, oxDo, ...polozenieCzasowe(p.zdarzenie_od_id, p.zdarzenie_do_id, indeksZdarzenia, pozycjaDzis));
-              const przetNr = przetnij(z.nr_od, z.nr_do, p.nr_od, p.nr_do);
-              if (!przetCzas || !przetNr) return null;
-              const x1 = xSkala(przetCzas[0]);
-              const x2 = Math.max(xSkala(przetCzas[1]), x1 + 1.5);
-              const yTop = y + ySkala(emisja, przetNr[1] + 1);
-              const yBottom = y + ySkala(emisja, przetNr[0]);
-              return (
-                <rect
-                  key={`${i}-${j}-${k}`}
-                  className="os-akcji-pasmo niekliknieta"
-                  x={x1}
-                  y={yTop}
-                  width={x2 - x1}
-                  height={Math.max(yBottom - yTop, 2)}
-                  fill="url(#kreska-obciazenie)"
-                >
-                  <title>{`${o.typ === 'zajecie' ? 'zajęcie' : o.typ} — nr ${n.opisz([przetNr.length ? { nr_od: przetNr[0], nr_do: przetNr[1] } : z])} — ${o.uprawniony ? nazwaOsoby({ osoba: o.uprawniony }) : 'brak wskazanego uprawnionego'}`}</title>
-                </rect>
-              );
-            });
-        })
-      )}
-    </g>
-  );
-
-  function opiszZakresNr(p) {
-    return p.nr_od === p.nr_do ? String(p.nr_od) : `${p.nr_od}–${p.nr_do}`;
-  }
-}
-
-/**
- * Oś akcji — wykres numer akcji (pionowo) × czas (poziomo), 2.1/2.4.
- * Jeden SVG, sekcja na emisję, wspólna oś czasu ordynalna (pozycje = tyle,
- * ile spółka ma zdarzeń, plus „dziś"). Playhead to natywny `input[range]`
- * pod wykresem — dostaje ←/→/Home/End i przeciąganie za darmo, a wykres
- * tylko odczytuje jego pozycję.
- */
-function OsAkcji({ os, pozycja, ustawPozycje, naKlikniecieAkcjonariusza }) {
-  const zdarzenia = os.zdarzenia;
-  const pozycjaDzis = zdarzenia.length;
-  const indeksZdarzenia = useMemo(() => new Map(zdarzenia.map((z, i) => [z.id, i])), [zdarzenia]);
-  const kolorOsoby = useMemo(() => przypiszOdcienie(os.pasma), [os.pasma]);
-  const pozycjaLiczbowa = pozycja === 'dzis' ? pozycjaDzis : pozycja;
-
-  if (zdarzenia.length === 0) {
-    return (
-      <div className="os-akcji">
-        <div className="os-akcji-pusto">Rejestr jeszcze się nie zaczął — pierwszym zdarzeniem jest emisja akcji.</div>
-      </div>
-    );
-  }
-
-  const szerokoscWykresu = VB_SZEROKOSC - 8;
-  const xSkala = (poz) => 4 + (poz / pozycjaDzis) * szerokoscWykresu;
-  const ySkala = (emisja, nr) => WYSOKOSC_SEKCJI - ((nr - emisja.nr_pierwszy) / emisja.ilosc) * WYSOKOSC_SEKCJI;
-
-  let y = WYSOKOSC_ETYKIETY;
-  const wspolwlasnoscDoListy = [];
-  const sekcje = os.emisje.map((e) => {
-    const el = (
-      <SekcjaEmisji
-        key={e.klucz}
-        emisja={e}
-        y={y}
-        pasma={os.pasma}
-        obciazenia={os.obciazenia}
-        indeksZdarzenia={indeksZdarzenia}
-        pozycjaDzis={pozycjaDzis}
-        xSkala={xSkala}
-        ySkala={ySkala}
-        kolorOsoby={kolorOsoby}
-        wspolwlasnoscDoListy={wspolwlasnoscDoListy}
-      />
-    );
-    y += WYSOKOSC_SEKCJI + WYSOKOSC_ETYKIETY + ODSTEP_SEKCJI;
-    return el;
-  });
-  const wysokoscBandow = y - ODSTEP_SEKCJI;
-  const yOsCzasu = wysokoscBandow + 10;
-  const vbWysokosc = yOsCzasu + WYSOKOSC_OSI_CZASU;
-
-  function klikniecieTla(zdarzenie) {
-    // Klik na pasmo akcjonariusza przewija do wiersza w tabeli TYLKO gdy
-    // ten akcjonariusz jest widoczny w bieżącym przekroju (2.4) — inaczej
-    // przenosi playhead na początek tego pasma, żeby dało się je obejrzeć.
-  }
-
-  return (
-    <div className="os-akcji">
-      <svg
-        className="os-akcji-svg"
-        viewBox={`0 0 ${VB_SZEROKOSC} ${vbWysokosc}`}
-        preserveAspectRatio="none"
-        style={{ height: vbWysokosc * 0.6 }}
-        role="img"
-        aria-hidden="true"
-        onClick={(z) => {
-          const cel = z.target.closest('rect.os-akcji-pasmo');
-          if (!cel || cel.classList.contains('niekliknieta')) return;
-          const osobaId = cel.getAttribute('data-osoba');
-          const emisjaKlucz = cel.getAttribute('data-emisja');
-          if (osobaId) naKlikniecieAkcjonariusza(Number(osobaId), Number(emisjaKlucz));
-        }}
-      >
-        <defs>
-          <pattern id="siatka-nieobjete" width="6" height="6" patternUnits="userSpaceOnUse">
-            <rect width="6" height="6" fill="var(--papier)" />
-            <path d="M0 0V6M0 0H6" stroke="var(--linia)" strokeWidth="1" />
-          </pattern>
-          <pattern id="siatka-umorzone" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="6" height="6" fill="var(--papier)" />
-            <line x1="0" y1="0" x2="0" y2="6" stroke="var(--atrament-3)" strokeWidth="1.5" />
-          </pattern>
-          <pattern id="kreska-obciazenie" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
-            <rect width="6" height="6" fill="var(--mosiadz)" fillOpacity="0.22" />
-            <line x1="0" y1="0" x2="0" y2="6" stroke="var(--mosiadz)" strokeWidth="1.6" />
-          </pattern>
-          <pattern id="kreska-ulamek" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="5" height="5" fill="var(--atrament-3)" />
-            <line x1="0" y1="0" x2="0" y2="5" stroke="var(--atrament-2)" strokeWidth="1.4" />
-          </pattern>
-        </defs>
-
-        {sekcje}
-
-        {/* Wspólna oś czasu: linia + znaczniki zdarzeń (mosiężne kropki) + „dziś". */}
-        <line
-          className="os-akcji-oś-czasu-linia"
-          x1={xSkala(0)} y1={yOsCzasu} x2={xSkala(pozycjaDzis)} y2={yOsCzasu}
-        />
-        {zdarzenia.map((z, i) => (
-          <circle
-            key={z.id}
-            className="os-akcji-znacznik"
-            cx={xSkala(i)} cy={yOsCzasu} r={i === pozycjaLiczbowa ? 4.5 : 3}
-            onClick={() => ustawPozycje(i === pozycjaDzis ? 'dzis' : i)}
-            style={{ cursor: 'pointer' }}
-          >
-            <title>{`${fmt.data(z.data_zdarzenia)} — ${z.podsumowanie}`}</title>
-          </circle>
-        ))}
-        <circle
-          className="os-akcji-znacznik-obwodka"
-          cx={xSkala(pozycjaDzis)} cy={yOsCzasu} r={pozycjaLiczbowa === pozycjaDzis ? 5.5 : 4}
-          onClick={() => ustawPozycje('dzis')}
-          style={{ cursor: 'pointer' }}
-        >
-          <title>dziś — stan bieżący</title>
-        </circle>
-
-        <line
-          className="os-akcji-playhead-linia"
-          x1={xSkala(pozycjaLiczbowa)} y1={0} x2={xSkala(pozycjaLiczbowa)} y2={yOsCzasu}
-        />
-      </svg>
-
-      <SterowaniePlayheadem
-        zdarzenia={zdarzenia}
-        pozycjaDzis={pozycjaDzis}
-        pozycjaLiczbowa={pozycjaLiczbowa}
-        pozycja={pozycja}
-        ustawPozycje={ustawPozycje}
-      />
-
-      {wspolwlasnoscDoListy.length > 0 && (
-        <div className="os-akcji-wspolwlasnosc">
-          <strong className="male">Współwłasność ułamkowa w tym przekroju czasu</strong>
-          {wspolwlasnoscDoListy.map((p, i) => (
-            <div key={i} className="male">
-              nr {p.nr_od} (seria {p.emisja.seria}) — {u.opisz({ licznik: p.czesc_licznik, mianownik: p.czesc_mianownik })} akcji: {nazwaOsoby(p)}
-              {p.przedstawiciel && <> · przedstawiciel: {nazwaOsoby({ osoba: p.przedstawiciel })}</>}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Rozwinięcie ułamka na czytelny tekst „1/3", bez importu logiki serwerowej. */
-const u = {
-  opisz({ licznik, mianownik }) {
-    if (!mianownik || mianownik === 1) return String(licznik);
-    return `${licznik}/${mianownik}`;
-  },
-};
-/** Zapis zakresu numerów — lokalna kopia formatu z półpauzą (2.2), bez zależności od serwera. */
-const n = {
-  opisz(zakresy) {
-    return zakresy
-      .map((z) => (z.nr_od === z.nr_do ? String(z.nr_od) : `${z.nr_od}–${z.nr_do}`))
-      .join(', ');
-  },
-};
-
-/**
- * Playhead (2.5): natywny `input[range]` o tylu położeniach, ile spółka ma
- * zdarzeń (+1 na „dziś") — bez migotania, bo stan przelicza się dopiero po
- * zatrzaśnięciu na pozycji, nie przy każdym pikselu. ←/→/Home/End działają
- * przez sam input (fokus + klawiatura), przyciski obok są dla myszy.
- */
-function SterowaniePlayheadem({ zdarzenia, pozycjaDzis, pozycjaLiczbowa, pozycja, ustawPozycje }) {
-  const [skokDoDaty, ustawSkokDoDaty] = useState('');
-
-  function idzDo(i) {
-    ustawPozycje(i >= pozycjaDzis ? 'dzis' : Math.max(i, 0));
-  }
-
-  function skocz(data) {
-    ustawSkokDoDaty(data);
-    if (!data) return;
-    // Ostatnie zdarzenie NIE PÓŹNIEJSZE niż wskazana data (po data_zdarzenia —
-    // ta sama semantyka, co dawny suwak dnia); brak takiego = pierwsze zdarzenie.
-    let znaleziono = 0;
-    for (let i = 0; i < zdarzenia.length; i += 1) {
-      if (zdarzenia[i].data_zdarzenia <= data) znaleziono = i;
-    }
-    const dzis = fmt.dzisIso();
-    idzDo(data >= dzis ? pozycjaDzis : znaleziono);
-  }
-
-  const etykieta =
-    pozycja === 'dzis'
-      ? 'stan bieżący'
-      : `stan po zdarzeniu z ${fmt.data(zdarzenia[pozycjaLiczbowa].data_zdarzenia)}`;
-
-  return (
-    <div className="os-akcji-sterowanie bez-druku">
-      <button className="btn btn-maly" onClick={() => idzDo(0)} title="Początek (Home)" aria-label="Pierwsze zdarzenie">
-        <Ikona nazwa="strzalkaLewo" rozmiar={14} />
-      </button>
-      <button
-        className="btn btn-maly"
-        onClick={() => idzDo(pozycjaLiczbowa - 1)}
-        disabled={pozycjaLiczbowa === 0}
-        aria-label="Poprzednie zdarzenie"
-      >
-        ‹
-      </button>
-      <input
-        className="os-akcji-suwak"
-        type="range"
-        min={0}
-        max={pozycjaDzis}
-        step={1}
-        value={pozycjaLiczbowa}
-        onChange={(z) => idzDo(Number(z.target.value))}
-        aria-label="Stan na zdarzenie"
-      />
-      <button
-        className="btn btn-maly"
-        onClick={() => idzDo(pozycjaLiczbowa + 1)}
-        disabled={pozycjaLiczbowa === pozycjaDzis}
-        aria-label="Następne zdarzenie"
-      >
-        ›
-      </button>
-      <button className="btn btn-maly" onClick={() => idzDo(pozycjaDzis)} title="Dziś (End)" aria-label="Stan bieżący">
-        <Ikona nazwa="strzalkaPrawo" rozmiar={14} />
-      </button>
-
-      <span className="os-akcji-etykieta-chwili">{etykieta}</span>
-
-      <PoleDaty
-        wartosc={skokDoDaty}
-        przyZmianie={skocz}
-        max={fmt.dzisIso()}
-      />
-    </div>
-  );
-}
 
 /* ═════════════════════════════════════════════════════
    TABELA AKCJONARIATU + PRZEŁĄCZNIK UPROSZCZONY/SZCZEGÓŁOWY (2.4)
@@ -637,7 +242,6 @@ function MetrykaBoczna({ spolka, dane, spolkaId, odswiez }) {
   const najpilniejsza = sprawyWToku
     .filter((s) => s.termin && s.termin.dni_pozostale != null)
     .sort((a, b) => a.termin.dni_pozostale - b.termin.dni_pozostale)[0];
-  const [wystawianie, ustawWystawianie] = useState(false);
 
   return (
     <aside className="siatka-tresc-prawa bez-druku">
@@ -708,18 +312,6 @@ function MetrykaBoczna({ spolka, dane, spolkaId, odswiez }) {
       </Karta>
 
       <KartaProceduryAml spolka={spolka} spolkaId={spolkaId} odswiez={odswiez} />
-
-      <Karta tytul="Dokumenty">
-        <div className="metryka-pion">
-          <div className="male wyciszony">Umowa, RODO, uchwała, lista dla sądu, klauzula zbycia.</div>
-          <button className="btn btn-maly" onClick={() => ustawWystawianie(true)}>
-            Wystaw dokument
-          </button>
-        </div>
-      </Karta>
-      {wystawianie && (
-        <ModalWystawDokumentu spolkaId={spolkaId} przyZamknieciu={() => ustawWystawianie(false)} />
-      )}
     </aside>
   );
 }
@@ -735,39 +327,193 @@ function MetrykaPoz({ etykieta, wartosc, dane, podpowiedz }) {
 }
 
 /* ═════════════════════════════════════════════════════
+   WPISY: KAŻDY REJESTR MA SWÓJ PRZYCISK
+   ═════════════════════════════════════════════════════ */
+
+/**
+ * Przycisk zakładający sprawę o KONKRETNYM typie zdarzenia.
+ *
+ * Dawniej wszystko szło przez jedno „Nowe zdarzenie" i ekran z dwudziestoma
+ * kafelkami, na którym trzeba było dopiero znaleźć właściwy. Skoro przycisk
+ * stoi przy rejestrze zajęć, to wiadomo, że wpisuje się zajęcie — typ jedzie
+ * w adresie, a kreator otwiera się od razu na podstawie wpisu.
+ */
+function PrzyciskWpisu({ spolkaId, typ, emisja, glowny, dzieci, children }) {
+  const tresc = children ?? dzieci;
+  const adres =
+    `/spolki/${spolkaId}/zdarzenie?typ=${typ}` + (emisja ? `&emisja=${encodeURIComponent(emisja)}` : '');
+  return (
+    <button className={`btn btn-maly ${glowny ? 'btn-glowny' : ''}`} onClick={() => idz(adres)}>
+      {glowny && <Ikona nazwa="plus" rozmiar={14} />}
+      {tresc}
+    </button>
+  );
+}
+
+/** Rząd wpisów rzadszych — pod tabelą, nie w nagłówku sekcji. */
+function DalszeWpisy({ tytul, dzieci, children }) {
+  return (
+    <div className="dalsze-wpisy bez-druku">
+      <span className="dalsze-wpisy-tytul">{tytul}</span>
+      {children ?? dzieci}
+    </div>
+  );
+}
+
+/**
+ * „Dodaj akcjonariusza" — pytanie, którego rejestr naprawdę potrzebuje.
+ *
+ * Akcjonariusz nie pojawia się w rejestrze sam z siebie: albo OBEJMUJE akcje
+ * nowo wyemitowane, albo NABYWA je od kogoś, kto już je ma. To dwa różne
+ * zdarzenia, z inną podstawą wpisu i innymi skutkami — więc zamiast kazać
+ * wybierać typ z listy, pytamy wprost, co się stało. Ile akcji czeka na
+ * objęcie, system wie sam i podpowiada.
+ */
+function ModalDodajAkcjonariusza({ spolkaId, nieobjete, sanAkcjonariusze, przyZamknieciu }) {
+  function idzDo(typ) {
+    idz(`/spolki/${spolkaId}/zdarzenie?typ=${typ}`);
+  }
+  return (
+    <Modal
+      tytul="Skąd ten akcjonariusz ma akcje?"
+      przyZamknieciu={przyZamknieciu}
+      szerokosc={620}
+      stopka={<button className="btn" onClick={przyZamknieciu}>Anuluj</button>}
+    >
+      <div className="kafelki-wyboru">
+        <button className="kafelek-wyboru" onClick={() => idzDo('objecie')} disabled={nieobjete === 0}>
+          <Ikona nazwa="akcje" rozmiar={20} />
+          <span className="kafelek-wyboru-tytul">Obejmuje akcje nowej emisji</span>
+          <span className="kafelek-wyboru-opis">
+            {nieobjete > 0
+              ? `${fmt.AKCJE(nieobjete)} czeka na objęcie.`
+              : 'Żadna emisja nie czeka na objęcie — najpierw wpisz emisję w rejestrze akcji.'}
+          </span>
+        </button>
+        <button className="kafelek-wyboru" onClick={() => idzDo('przeniesienie')} disabled={!sanAkcjonariusze}>
+          <Ikona nazwa="zdarzenie" rozmiar={20} />
+          <span className="kafelek-wyboru-tytul">Nabył akcje od akcjonariusza</span>
+          <span className="kafelek-wyboru-opis">
+            {sanAkcjonariusze
+              ? 'Sprzedaż, darowizna, dziedziczenie, wniesienie aportem.'
+              : 'W rejestrze nie ma jeszcze nikogo, kto mógłby zbyć akcje.'}
+          </span>
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/* ═════════════════════════════════════════════════════
+   DOKUMENTY SPÓŁKI (AKTA)
+   ═════════════════════════════════════════════════════ */
+
+const NAZWY_GRUP_AKT = {
+  zalozycielski: 'Z wniosku o prowadzenie rejestru',
+  sprawa: 'Odesłane przy żądaniach wpisu',
+  wydany: 'Wystawione przez kancelarię',
+};
+
+/**
+ * Teczka spółki — komplet z wniosku, skany dosłane przy kolejnych żądaniach
+ * (umowa sprzedaży akcji trafia tu razem ze sprawą, w której ją złożono)
+ * i wszystko, co kancelaria wystawiła. Dotąd te trzy zbiory mieszkały na
+ * trzech ekranach.
+ */
+function ZawartoscAkt({ dokumenty, ladowanie, spolkaId }) {
+  const [wystawianie, ustawWystawianie] = useState(false);
+  if (ladowanie) return <Spinner />;
+
+  const grupy = Object.keys(NAZWY_GRUP_AKT)
+    .map((g) => [g, dokumenty.filter((d) => d.grupa === g)])
+    .filter(([, lista]) => lista.length > 0);
+
+  return (
+    <div className="sekcja-tresc">
+      {grupy.length === 0 ? (
+        <Pusto
+          ikona="dokument"
+          tytul="Akta są jeszcze puste"
+          opis="Trafią tu dokumenty z wniosku, skany dosyłane przy żądaniach wpisu i pisma wystawione przez kancelarię."
+        />
+      ) : (
+        grupy.map(([grupa, lista]) => (
+          <div key={grupa} className="akta-grupa">
+            <div className="akta-grupa-tytul">{NAZWY_GRUP_AKT[grupa]}</div>
+            <table className="tabela">
+              <thead>
+                <tr><th>Dokument</th><th>Opis</th><th>Data</th><th className="do-prawej">Plik</th></tr>
+              </thead>
+              <tbody>
+                {lista.map((d) => (
+                  <tr key={`${d.grupa}-${d.id}`}>
+                    <td style={{ fontWeight: 500 }}>{d.nazwa}</td>
+                    <td className="wyciszony">{d.opis}</td>
+                    <td className="wyciszony">{fmt.data(d.data)}</td>
+                    <td className="do-prawej">
+                      <span className="rzad" style={{ justifyContent: 'flex-end' }}>
+                        {d.url ? (
+                          <a className="btn btn-maly" href={d.url} target="_blank" rel="noopener">
+                            {d.url_podpisany ? 'Wystawiony' : 'Pobierz'}
+                          </a>
+                        ) : (
+                          <span className="wyciszony male">bez pliku</span>
+                        )}
+                        {d.url_podpisany && (
+                          <a className="btn btn-maly btn-glowny" href={d.url_podpisany} target="_blank" rel="noopener">
+                            Podpisany
+                          </a>
+                        )}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))
+      )}
+      <DalszeWpisy tytul="Wystaw dokument:">
+        <button className="btn btn-maly" onClick={() => ustawWystawianie(true)}>
+          Informacja, zaświadczenie, pismo
+        </button>
+      </DalszeWpisy>
+      {wystawianie && (
+        <ModalWystawDokumentu spolkaId={spolkaId} przyZamknieciu={() => ustawWystawianie(false)} />
+      )}
+    </div>
+  );
+}
+
+/* ═════════════════════════════════════════════════════
    EKRAN KOKPITU
    ═════════════════════════════════════════════════════ */
 
+/** Zdarzenia, które mają własny rejestr — w „Rejestrze zdarzeń" byłyby powtórką. */
+const TYPY_WE_WLASNYCH_REJESTRACH = [
+  'emisja', 'objecie', 'przeniesienie', 'umorzenie', 'uniewaznienie',
+  'obciazenie', 'wykreslenie_obciazenia', 'prawo_glosu_zastawnika',
+  'zajecie', 'wykreslenie_zajecia', 'uprawnienie', 'ograniczenie',
+];
+
 function EkranKokpitu({ spolkaId }) {
-  // Pozycja playheada: liczba = indeks zdarzenia w `os.zdarzenia` (ordynalnie,
-  // nie kalendarzowo — 2.5), albo literał 'dzis'. Nie zależy od `os` w chwili
-  // startu, więc nie ma wyścigu z jego wczytaniem.
-  const [pozycja, ustawPozycje] = useState('dzis');
+  // Stan rejestru na wskazany dzień (art. 300(35) KSH — informacja wydaje się
+  // NA DZIEŃ). Dawniej wybierało się go playheadem na osi akcji; oś zniknęła,
+  // więc została sama data, czyli to, o co naprawdę chodziło.
+  const [data, ustawDate] = useState(fmt.dzisIso());
   const [szczegolowy, ustawSzczegolowy] = useState(false);
   const [przeliczanie, ustawPrzeliczanie] = useState(null);
   const [sprostowanie, ustawSprostowanie] = useState(null);
+  const [dodawanieAkcjonariusza, ustawDodawanieAkcjonariusza] = useState(false);
 
-  const os = useDane(`/api/psa/spolki/${spolkaId}/os-akcji`);
-
-  const wstecz = pozycja !== 'dzis';
-  // Chwila zdarzenia po data_wpisu (sekcja 2.3) — dokładność do minuty
-  // odróżnia dwa wpisy tego samego dnia, dokładnie jak dawny suwak z godziną.
-  const data =
-    pozycja === 'dzis' || !os.dane
-      ? fmt.dzisIso()
-      : os.dane.zdarzenia[pozycja].data_wpisu.slice(0, 19);
+  const wstecz = data !== fmt.dzisIso();
 
   const { dane, ladowanie, blad, odswiez } = useDane(
     `/api/psa/spolki/${spolkaId}?data=${encodeURIComponent(data)}`,
     [data]
   );
-
-  function naKlikniecieAkcjonariusza(osobaId, emisjaKlucz) {
-    const el = document.getElementById(`akcjonariusz-${osobaId}-${emisjaKlucz}`);
-    if (!el) return;
-    const bezRuchu = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: bezRuchu ? 'auto' : 'smooth', block: 'center' });
-  }
+  const wszystkieZdarzenia = useDane(`/api/psa/spolki/${spolkaId}/zdarzenia`);
+  const akta = useDane(`/api/psa/spolki/${spolkaId}/akta`);
 
   /** Etap 5.1: skok miedzy zdarzeniem prostowanym a prostujacym - link dziala w OBIE strony. */
   function skoczDoZdarzenia(id) {
@@ -794,8 +540,12 @@ function EkranKokpitu({ spolkaId }) {
   if (blad) return <Komunikat odmiana="blad" tytul="Nie udało się wczytać spółki" tresc={blad.message} />;
   if (!dane) return null;
 
-  const { spolka, emisje, bilans, akcjonariusze, obciazenia, uprawnienia, ograniczenia, zdarzenia } = dane;
+  const { spolka, emisje, bilans, akcjonariusze, obciazenia, uprawnienia, ograniczenia } = dane;
   const nieobjete = bilans.reduce((s, b) => s + b.nieobjete, 0);
+  const zdarzenia = wszystkieZdarzenia.dane ? wszystkieZdarzenia.dane.zdarzenia : dane.zdarzenia;
+  const zdarzeniaPozostale = zdarzenia.filter((z) => !TYPY_WE_WLASNYCH_REJESTRACH.includes(z.typ));
+  const dokumentyAkt = akta.dane ? akta.dane.dokumenty : [];
+  const liczbaAkcjonariuszy = new Set(akcjonariusze.map((a) => a.osoba_id)).size;
 
   return (
     <>
@@ -813,10 +563,7 @@ function EkranKokpitu({ spolkaId }) {
             {wstecz && (
               <span className="pigulka-archiwalna">
                 <Ikona nazwa="zegar" rozmiar={13} />
-                Stan na {fmt.dataCzas(data)}
-                <button className="btn btn-maly" onClick={() => ustawPozycje('dzis')} style={{ marginLeft: 4 }}>
-                  Wróć do dziś
-                </button>
+                Stan na {fmt.data(data)}
               </span>
             )}
           </div>
@@ -826,11 +573,18 @@ function EkranKokpitu({ spolkaId }) {
           </div>
         </div>
         <div className="naglowek-strony-akcje">
+          {/* Stan wsteczny to ODCZYT, nie zmiana — zostaje też w trybie
+              archiwalnym, tak jak wydruki. */}
+          <div className="stan-na-dzien bez-druku">
+            <span className="stan-na-dzien-etykieta">Stan na dzień</span>
+            <PoleDaty wartosc={data} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDate(v)} />
+            {wstecz && (
+              <button className="btn btn-maly" onClick={() => ustawDate(fmt.dzisIso())}>Dziś</button>
+            )}
+          </div>
           <button className="btn" onClick={() => idz(`/spolki/${spolkaId}/wydruk/informacja?data=${data}`)}>
             <Ikona nazwa="dokument" rozmiar={16} /> Informacja z rejestru
           </button>
-          {/* Tryb archiwalny (2.5): przyciski akcji ZNIKAJĄ Z DOM, nie disabled —
-              wydruki zostają, bo to odczyt stanu na wskazany dzień, nie jego zmiana. */}
           {!wstecz && dane.liczba_zdarzen === 0 && (
             <button
               className="btn"
@@ -838,11 +592,6 @@ function EkranKokpitu({ spolkaId }) {
               title="Wprowadzenie stanu przeniesionego z innego rejestru (np. Rejestrów Notarialnych), z datami historycznymi."
             >
               Migracja — stan otwarcia
-            </button>
-          )}
-          {!wstecz && (
-            <button className="btn btn-glowny" onClick={() => idz(`/spolki/${spolkaId}/zdarzenie`)}>
-              <Ikona nazwa="plus" rozmiar={16} /> Nowe zdarzenie
             </button>
           )}
         </div>
@@ -872,176 +621,313 @@ function EkranKokpitu({ spolkaId }) {
             />
           )}
 
-          <Karta scisla tytul="Oś akcji">
-            <div style={{ padding: 'var(--od-16) var(--od-24)' }}>
-              {os.ladowanie ? (
-                <Spinner />
-              ) : os.dane ? (
-                <OsAkcji
-                  os={os.dane}
-                  pozycja={pozycja}
-                  ustawPozycje={ustawPozycje}
-                  naKlikniecieAkcjonariusza={naKlikniecieAkcjonariusza}
-                />
-              ) : (
-                <div className="os-akcji-pusto">Nie udało się wczytać osi akcji.</div>
-              )}
-            </div>
-          </Karta>
-
-          <Karta
-            scisla
-            tytul={`Akcjonariat na ${fmt.dataCzas(data)}`}
+          {/* ─── 1. REJESTR AKCJONARIUSZY ─────────────────────────────── */}
+          <Sekcja
+            tytul="Rejestr akcjonariuszy"
+            licznik={liczbaAkcjonariuszy}
+            domyslnieOtwarta
             akcje={
-              <div className="rzad bez-druku" role="group" aria-label="Widok tabeli akcjonariatu">
-                <button
-                  className={`btn btn-maly ${!szczegolowy ? 'btn-glowny' : ''}`}
-                  onClick={() => ustawSzczegolowy(false)}
-                  title="Jeden wiersz na akcjonariusza"
-                >
-                  Uproszczony
-                </button>
-                <button
-                  className={`btn btn-maly ${szczegolowy ? 'btn-glowny' : ''}`}
-                  onClick={() => ustawSzczegolowy(true)}
-                  title="Jeden wiersz na przedział numeryczny — widać obciążenia i współwłasność co do numeru"
-                >
-                  Szczegółowy
-                </button>
-              </div>
+              <>
+                <div className="rzad bez-druku" role="group" aria-label="Widok tabeli akcjonariatu">
+                  <button
+                    className={`btn btn-maly ${!szczegolowy ? 'btn-glowny' : ''}`}
+                    onClick={() => ustawSzczegolowy(false)}
+                    title="Jeden wiersz na akcjonariusza"
+                  >
+                    Uproszczony
+                  </button>
+                  <button
+                    className={`btn btn-maly ${szczegolowy ? 'btn-glowny' : ''}`}
+                    onClick={() => ustawSzczegolowy(true)}
+                    title="Jeden wiersz na przedział numeryczny — widać obciążenia i współwłasność co do numeru"
+                  >
+                    Szczegółowy
+                  </button>
+                </div>
+                {!wstecz && (
+                  <button className="btn btn-maly btn-glowny" onClick={() => ustawDodawanieAkcjonariusza(true)}>
+                    <Ikona nazwa="plus" rozmiar={14} /> Dodaj akcjonariusza
+                  </button>
+                )}
+              </>
             }
           >
-            <TabelaAkcjonariatu
-              akcjonariusze={szczegolowy ? rozbijNaSzczegoly(akcjonariusze) : akcjonariusze}
-              razem={dane.razem_akcji}
-            />
-          </Karta>
+            <div className="sekcja-tresc">
+              <TabelaAkcjonariatu
+                akcjonariusze={szczegolowy ? rozbijNaSzczegoly(akcjonariusze) : akcjonariusze}
+                razem={dane.razem_akcji}
+              />
+              {!wstecz && (
+                <DalszeWpisy tytul="Dalsze wpisy:">
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="przeniesienie">Przeniesienie akcji</PrzyciskWpisu>
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="zmiana_danych_akcjonariusza">
+                    Zmiana danych akcjonariusza
+                  </PrzyciskWpisu>
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="przedstawiciel">
+                    Przedstawiciel współuprawnionych
+                  </PrzyciskWpisu>
+                </DalszeWpisy>
+              )}
+            </div>
+          </Sekcja>
 
-          <Sekcja tytul="Emisje" licznik={emisje.length}>
-            {emisje.length === 0 ? (
-              <Pusto tytul="Brak emisji" opis="Pierwszym zdarzeniem w rejestrze jest emisja akcji." />
-            ) : (
-              <table className="tabela">
-                <thead>
-                  <tr>
-                    <th>Seria</th><th>Tytuł</th><th>Numery</th>
-                    <th className="do-prawej">Wyemitowane</th>
-                    <th className="do-prawej">Nieobjęte</th>
-                    <th className="do-prawej">Umorzone</th>
-                    <th className="do-prawej">Cena emisyjna</th>
-                    <th>Data emisji</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {emisje.map((e) => {
-                    const b = bilans.find((x) => x.emisja_klucz === e.klucz) || {};
-                    return (
-                      <tr key={e.klucz}>
-                        <td style={{ fontWeight: 600 }}>{e.seria}</td>
-                        <td>{e.tytul || '—'}</td>
-                        <td className="kol-dane">{e.zakres}</td>
-                        <td className="do-prawej">{fmt.liczba(e.ilosc)}</td>
-                        <td className="do-prawej">
-                          {b.nieobjete ? <span style={{ color: 'var(--mosiadz)' }}>{fmt.liczba(b.nieobjete)}</span> : '—'}
-                        </td>
-                        <td className="do-prawej">{b.umorzone ? fmt.liczba(b.umorzone) : '—'}</td>
-                        <td className="do-prawej">{fmt.zlote(e.cena_emisyjna_grosze)}</td>
-                        <td className="wyciszony">{fmt.data(e.data_emisji)}</td>
+          {/* ─── 2. REJESTR AKCJI ─────────────────────────────────────── */}
+          <Sekcja
+            tytul="Rejestr akcji"
+            licznik={emisje.length}
+            akcje={
+              !wstecz && (
+                <PrzyciskWpisu spolkaId={spolkaId} typ="emisja" glowny>Nowa emisja</PrzyciskWpisu>
+              )
+            }
+          >
+            <div className="sekcja-tresc">
+              {emisje.length === 0 ? (
+                <Pusto
+                  ikona="akcje"
+                  tytul="Brak emisji"
+                  opis="Pierwszym zdarzeniem w rejestrze jest emisja akcji — zwykle założycielska, z umowy spółki."
+                />
+              ) : (
+                <table className="tabela">
+                  <thead>
+                    <tr>
+                      <th>Seria</th><th>Tytuł</th><th>Numery</th>
+                      <th className="do-prawej">Wyemitowane</th>
+                      <th className="do-prawej">Nieobjęte</th>
+                      <th className="do-prawej">Umorzone</th>
+                      <th className="do-prawej">Cena emisyjna</th>
+                      <th>Data emisji</th>
+                      {/* Kolumna akcji pojawia się TYLKO wtedy, gdy jest co
+                          obejmować — pusty nagłówek zabierał miejsce ośmiu
+                          kolumnom, które zawsze mają treść. */}
+                      {!wstecz && nieobjete > 0 && <th />}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emisje.map((e) => {
+                      const b = bilans.find((x) => x.emisja_klucz === e.klucz) || {};
+                      return (
+                        <tr key={e.klucz}>
+                          <td style={{ fontWeight: 600 }}>{e.seria}</td>
+                          <td>{e.tytul || '—'}</td>
+                          <td className="kol-dane">{e.zakres}</td>
+                          <td className="do-prawej">{fmt.liczba(e.ilosc)}</td>
+                          <td className="do-prawej">
+                            {b.nieobjete ? <span style={{ color: 'var(--mosiadz)' }}>{fmt.liczba(b.nieobjete)}</span> : '—'}
+                          </td>
+                          <td className="do-prawej">{b.umorzone ? fmt.liczba(b.umorzone) : '—'}</td>
+                          <td className="do-prawej">{fmt.zlote(e.cena_emisyjna_grosze)}</td>
+                          <td className="wyciszony">{fmt.data(e.data_emisji)}</td>
+                          {/* Emisja bez objęcia to akcje, których nikt nie ma —
+                              wskazanie obejmującego zaczyna się przy tym wierszu,
+                              z już wybraną serią. */}
+                          {!wstecz && nieobjete > 0 && (
+                            <td className="do-prawej bez-druku">
+                              {b.nieobjete ? (
+                                <PrzyciskWpisu spolkaId={spolkaId} typ="objecie" emisja={e.klucz} glowny>
+                                  Kto obejmuje
+                                </PrzyciskWpisu>
+                              ) : null}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+              {!wstecz && (
+                <DalszeWpisy tytul="Dalsze wpisy:">
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="umorzenie">Umorzenie akcji</PrzyciskWpisu>
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="uniewaznienie">Unieważnienie przez sąd</PrzyciskWpisu>
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="pokrycie_akcji">Pokrycie akcji wkładem</PrzyciskWpisu>
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="przeniesienie_ulamka">Zbycie ułamka akcji</PrzyciskWpisu>
+                </DalszeWpisy>
+              )}
+            </div>
+          </Sekcja>
+
+          {/* ─── 3. REJESTR UPRAWNIEŃ, PRZYWILEJÓW I OBOWIĄZKÓW ───────── */}
+          <Sekcja
+            tytul="Rejestr uprawnień, przywilejów i obowiązków"
+            licznik={uprawnienia.length + ograniczenia.length}
+            akcje={
+              !wstecz && (
+                <PrzyciskWpisu spolkaId={spolkaId} typ="uprawnienie" glowny>Wpisz uprawnienie</PrzyciskWpisu>
+              )
+            }
+          >
+            <div className="sekcja-tresc">
+              {uprawnienia.length === 0 ? (
+                <Pusto
+                  tytul="Brak zarejestrowanych uprawnień"
+                  opis="Uprawnienia osobiste, przywileje i obowiązki związane z akcją — art. 300(33) § 1 pkt 9 KSH."
+                />
+              ) : (
+                <table className="tabela">
+                  <thead>
+                    <tr><th>Rodzaj</th><th>Zakres</th><th>Tytuł</th><th>Treść</th><th>Od</th></tr>
+                  </thead>
+                  <tbody>
+                    {uprawnienia.map((u2) => (
+                      <tr key={u2.klucz}>
+                        <td>{u2.rodzaj}</td>
+                        <td>{u2.osoba ? u2.osoba.oznaczenie : u2.seria || 'cała spółka'}</td>
+                        <td>{u2.tytul || '—'}</td>
+                        <td className="zawijaj">{u2.tresc || '—'}</td>
+                        <td className="wyciszony">{fmt.data(u2.data_ustanowienia)}</td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {/* Ograniczenie w rozporządzaniu jest OBOWIĄZKIEM akcjonariusza
+                  (zgoda spółki, prawo pierwszeństwa), więc siedzi w tym samym
+                  rejestrze co przywileje — osobno tylko dlatego, że ma inne
+                  kolumny. */}
+              <div className="akta-grupa">
+                <div className="akta-grupa-tytul">Ograniczenia w rozporządzaniu akcjami</div>
+                {ograniczenia.length === 0 ? (
+                  <div className="male wyciszony" style={{ padding: '0 var(--od-24) var(--od-16)' }}>
+                    Brak ograniczeń — art. 300(33) § 1 pkt 10 KSH.
+                  </div>
+                ) : (
+                  <table className="tabela">
+                    <thead>
+                      <tr><th>Zakres</th><th>Numery</th><th>Zgoda spółki</th><th>Prawo pierwszeństwa</th><th>Opis</th></tr>
+                    </thead>
+                    <tbody>
+                      {ograniczenia.map((o) => (
+                        <tr key={o.klucz}>
+                          <td>{o.seria || o.zakres}</td>
+                          <td className="kol-dane">{o.numery || '—'}</td>
+                          <td>{o.wymaga_zgody_spolki ? 'wymagana' : 'nie'}</td>
+                          <td>{o.prawo_pierwszenstwa ? 'tak' : 'nie'}</td>
+                          <td className="zawijaj">{o.opis || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {!wstecz && (
+                <DalszeWpisy tytul="Dalsze wpisy:">
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="ograniczenie">Ograniczenie w rozporządzaniu</PrzyciskWpisu>
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="zobowiazanie">
+                    Zobowiązanie do przeniesienia lub obciążenia
+                  </PrzyciskWpisu>
+                </DalszeWpisy>
+              )}
+            </div>
           </Sekcja>
 
-          <Sekcja tytul="Uprawnienia i przywileje" licznik={uprawnienia.length}>
-            {uprawnienia.length === 0 ? (
-              <Pusto
-                tytul="Brak zarejestrowanych uprawnień"
-                opis="Uprawnienia, przywileje i obowiązki akcjonariuszy zakładasz przez zdarzenie „Uprawnienie”."
-              />
-            ) : (
-              <table className="tabela">
-                <thead>
-                  <tr><th>Rodzaj</th><th>Zakres</th><th>Tytuł</th><th>Treść</th><th>Od</th></tr>
-                </thead>
-                <tbody>
-                  {uprawnienia.map((u2) => (
-                    <tr key={u2.klucz}>
-                      <td>{u2.rodzaj}</td>
-                      <td>{u2.osoba ? u2.osoba.oznaczenie : u2.seria || 'cała spółka'}</td>
-                      <td>{u2.tytul || '—'}</td>
-                      <td className="zawijaj">{u2.tresc || '—'}</td>
-                      <td className="wyciszony">{fmt.data(u2.data_ustanowienia)}</td>
+          {/* ─── 4. REJESTR ZAJĘĆ, ZASTAWÓW, UŻYTKOWANIA ──────────────── */}
+          <Sekcja
+            tytul="Rejestr zajęć, zastawów, użytkowania"
+            licznik={obciazenia.length}
+            akcje={
+              !wstecz && (
+                <PrzyciskWpisu spolkaId={spolkaId} typ="obciazenie" glowny>Zastaw lub użytkowanie</PrzyciskWpisu>
+              )
+            }
+          >
+            <div className="sekcja-tresc">
+              {obciazenia.length === 0 ? (
+                <Pusto
+                  tytul="Brak obciążeń i zajęć"
+                  opis="Zastaw, użytkowanie i zajęcie egzekucyjne wpisuje się na konkretne numery akcji."
+                />
+              ) : (
+                <table className="tabela">
+                  <thead>
+                    <tr>
+                      <th>Typ</th><th>Seria</th><th>Numery</th><th>Uprawniony</th>
+                      <th>Prawo głosu</th><th>Blokuje rozporządzanie</th><th>Od</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  </thead>
+                  <tbody>
+                    {obciazenia.map((o) => (
+                      <tr key={o.klucz}>
+                        <td>{o.typ === 'zajecie' ? 'zajęcie' : o.typ}</td>
+                        <td>{o.seria}</td>
+                        <td className="kol-dane">{o.numery}</td>
+                        <td>{o.uprawniony ? o.uprawniony.oznaczenie : '—'}</td>
+                        <td>{o.prawo_glosu ? 'tak' : 'nie'}</td>
+                        <td>{o.blokuje_rozporzadzanie ? 'tak' : 'nie'}</td>
+                        <td className="wyciszony">{fmt.data(o.data_od)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {!wstecz && (
+                <DalszeWpisy tytul="Dalsze wpisy:">
+                  {/* Zajęcie idzie Z URZĘDU — bez żądania i bez opłaty
+                      (art. 300(34) § 2 KSH), dlatego stoi obok, a nie
+                      w jednym rzędzie z wpisami na wniosek. */}
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="zajecie">Zajęcie egzekucyjne (z urzędu)</PrzyciskWpisu>
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="prawo_glosu_zastawnika">
+                    Prawo głosu zastawnika
+                  </PrzyciskWpisu>
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="wykreslenie_obciazenia">Wykreślenie obciążenia</PrzyciskWpisu>
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="wykreslenie_zajecia">Uchylenie zajęcia</PrzyciskWpisu>
+                </DalszeWpisy>
+              )}
+            </div>
           </Sekcja>
 
-          <Sekcja tytul="Obciążenia i zajęcia" licznik={obciazenia.length}>
-            {obciazenia.length === 0 ? (
-              <Pusto
-                tytul="Brak obciążeń i zajęć"
-                opis="Zastawy, użytkowanie i zajęcia egzekucyjne zakładasz przez odpowiednie zdarzenie w kreatorze."
-              />
-            ) : (
-              <table className="tabela">
-                <thead>
-                  <tr>
-                    <th>Typ</th><th>Seria</th><th>Numery</th><th>Uprawniony</th>
-                    <th>Prawo głosu</th><th>Blokuje rozporządzanie</th><th>Od</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {obciazenia.map((o) => (
-                    <tr key={o.klucz}>
-                      <td>{o.typ === 'zajecie' ? 'zajęcie' : o.typ}</td>
-                      <td>{o.seria}</td>
-                      <td className="kol-dane">{o.numery}</td>
-                      <td>{o.uprawniony ? o.uprawniony.oznaczenie : '—'}</td>
-                      <td>{o.prawo_glosu ? 'tak' : 'nie'}</td>
-                      <td>{o.blokuje_rozporzadzanie ? 'tak' : 'nie'}</td>
-                      <td className="wyciszony">{fmt.data(o.data_od)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          {/* ─── 5. REJESTR ZDARZEŃ ───────────────────────────────────── */}
+          {/* Wpisy, które nie mają własnej tabeli stanu: zmiana danych,
+              zobowiązanie, sprostowanie, zdarzenie odnotowane „inne".
+              Zdarzenia widoczne w rejestrach wyżej nie powtarzają się tutaj —
+              pełny łańcuch jest w historii na końcu. */}
+          <Sekcja
+            tytul="Rejestr zdarzeń"
+            licznik={zdarzeniaPozostale.length}
+            akcje={
+              !wstecz && (
+                <PrzyciskWpisu spolkaId={spolkaId} typ="zdarzenie_inne" glowny>Odnotuj zdarzenie</PrzyciskWpisu>
+              )
+            }
+          >
+            <div className="sekcja-tresc">
+              {zdarzeniaPozostale.length === 0 ? (
+                <Pusto
+                  ikona="zdarzenie"
+                  tytul="Brak takich zdarzeń"
+                  opis="Zmiany danych, zobowiązania i sprostowania pojawią się tutaj."
+                />
+              ) : (
+                <table className="tabela">
+                  <thead>
+                    <tr><th>Data</th><th>Zdarzenie</th><th>Wpisano</th></tr>
+                  </thead>
+                  <tbody>
+                    {zdarzeniaPozostale.map((z) => (
+                      <tr key={z.id}>
+                        <td className="wyciszony">{fmt.data(z.data_zdarzenia)}</td>
+                        <td className="zawijaj">{z.podsumowanie || `Zdarzenie typu „${z.typ}”.`}</td>
+                        <td className="wyciszony">{fmt.dataCzas(z.data_wpisu)} · {z.autor}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </Sekcja>
 
-          <Sekcja tytul="Ograniczenia w rozporządzaniu" licznik={ograniczenia.length}>
-            {ograniczenia.length === 0 ? (
-              <Pusto
-                tytul="Brak ograniczeń"
-                opis="Ograniczenia z art. 300(33) § 1 pkt 10 KSH zakładasz przez zdarzenie „Ograniczenie”."
-              />
-            ) : (
-              <table className="tabela">
-                <thead>
-                  <tr><th>Zakres</th><th>Numery</th><th>Zgoda spółki</th><th>Prawo pierwszeństwa</th><th>Opis</th></tr>
-                </thead>
-                <tbody>
-                  {ograniczenia.map((o) => (
-                    <tr key={o.klucz}>
-                      <td>{o.seria || o.zakres}</td>
-                      <td className="kol-dane">{o.numery || '—'}</td>
-                      <td>{o.wymaga_zgody_spolki ? 'wymagana' : 'nie'}</td>
-                      <td>{o.prawo_pierwszenstwa ? 'tak' : 'nie'}</td>
-                      <td className="zawijaj">{o.opis || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          {/* ─── 6. DOKUMENTY ─────────────────────────────────────────── */}
+          <Sekcja tytul="Dokumenty" licznik={akta.ladowanie ? undefined : dokumentyAkt.length}>
+            <ZawartoscAkt dokumenty={dokumentyAkt} ladowanie={akta.ladowanie} spolkaId={spolkaId} />
           </Sekcja>
 
+          {/* ─── 7. HISTORIA ZDARZEŃ ──────────────────────────────────── */}
           <Sekcja
             tytul="Historia zdarzeń"
             licznik={dane.liczba_zdarzen}
-            domyslnieOtwarta
             akcje={
               !wstecz && (
                 <button className="btn btn-maly" onClick={przelicz} title="Odbudowa stanu ze zdarzeń">
@@ -1093,11 +979,6 @@ function EkranKokpitu({ spolkaId }) {
                       </div>
                     </div>
                   ))}
-                  {dane.liczba_zdarzen > zdarzenia.length && (
-                    <div className="podstawa-prawna">
-                      Pokazano {zdarzenia.length} z {dane.liczba_zdarzen} zdarzeń.
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -1111,6 +992,15 @@ function EkranKokpitu({ spolkaId }) {
 
         <MetrykaBoczna spolka={spolka} dane={dane} spolkaId={spolkaId} odswiez={odswiez} />
       </div>
+
+      {dodawanieAkcjonariusza && (
+        <ModalDodajAkcjonariusza
+          spolkaId={spolkaId}
+          nieobjete={nieobjete}
+          sanAkcjonariusze={akcjonariusze.length > 0}
+          przyZamknieciu={() => ustawDodawanieAkcjonariusza(false)}
+        />
+      )}
 
       {sprostowanie && (
         <ModalSprostowania

@@ -325,23 +325,6 @@ router.get(
   })
 );
 
-/**
- * Pełna historia przedziałów własnościowych — dane dla osi akcji (sesja 6,
- * faza 2.1/2.4). Osobna trasa od `GET /:id`, żeby kontrakt kokpitu (używany
- * też gdzie indziej) zostawał nietknięty — to dokłada się wyłącznie tam,
- * gdzie się faktycznie rysuje wykres.
- */
-router.get(
-  '/:id/os-akcji',
-  asy((zad, odp) => {
-    const id = Number(zad.params.id);
-    const os = widoki.widokOsiAkcji(db(), id);
-    if (!os) throw nieZnaleziono('Nie odnaleziono spółki.');
-    odp.json(os);
-  })
-);
-
-/** Zmiana danych spolki - tworzy zdarzenie `zmiana_danych_spolki`. */
 router.put(
   '/:id',
   asy((zad, odp) => {
@@ -923,6 +906,108 @@ router.get(
       `attachment; filename*=UTF-8''${encodeURIComponent(dokument.nazwa_pliku)}`
     );
     fs.createReadStream(pelna).pipe(odp);
+  })
+);
+
+/**
+ * AKTA SPOLKI — wszystkie dokumenty tej spolki w jednym miejscu, po dacie.
+ *
+ * Dotad kazdy komplet mieszkal gdzie indziej: zalozycielski przy spolce,
+ * skan umowy sprzedazy przy sprawie, zawiadomienie w wydanych. Zeby zobaczyc
+ * „co mamy na te spolke", trzeba bylo obejsc trzy ekrany. Sekcja „Dokumenty"
+ * w kokpicie pyta tu raz i dostaje cala teczke — kazda pozycja z data,
+ * zrodlem i adresem do pobrania.
+ */
+router.get(
+  '/:id/akta',
+  asy((zad, odp) => {
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+
+    // Kazdy dokument zalozycielski ma DWA egzemplarze w osobnych wierszach
+    // (wzor i podpisany skan), wstawiane parami jeden po drugim. W teczce ma
+    // byc jedna pozycja z dwoma odnosnikami, nie dwie prawie identyczne
+    // linijki — inaczej komplet osmiu dokumentow rozlewa sie na szesnascie.
+    const wiersze = db()
+      .prepare(
+        `SELECT id, wniosek_id, typ, nazwa, nazwa_pliku, rozmiar, rola, utworzono
+           FROM psa_spolki_dokumenty WHERE spolka_id = ? ORDER BY id`
+      )
+      .all(spolka.id);
+
+    const zalozycielskie = [];
+    for (const d of wiersze) {
+      const adres = `/api/psa/spolki/${spolka.id}/dokumenty-zalozycielskie/${d.id}`;
+      const poprzedni = zalozycielskie[zalozycielskie.length - 1];
+      if (d.rola === 'podpisany' && poprzedni && poprzedni.typ === d.typ && poprzedni.nazwa === d.nazwa
+          && !poprzedni.url_podpisany) {
+        poprzedni.url_podpisany = adres;
+        poprzedni.nazwa_pliku_podpisany = d.nazwa_pliku;
+        poprzedni.opis = 'wystawiony i podpisany';
+        continue;
+      }
+      zalozycielskie.push({
+        grupa: 'zalozycielski',
+        id: d.id,
+        typ: d.typ,
+        nazwa: d.nazwa,
+        nazwa_pliku: d.nazwa_pliku,
+        rozmiar: d.rozmiar,
+        opis: d.rola === 'podpisany' ? 'egzemplarz podpisany' : 'egzemplarz wystawiony',
+        data: d.utworzono,
+        url: adres,
+        url_podpisany: null,
+      });
+    }
+
+    // Zalaczniki spraw — tu trafia skan umowy sprzedazy akcji, ktory klient
+    // dosyla RAZEM z zadaniem wpisu. Numer sprawy zostaje przy pozycji, bo
+    // to on tlumaczy, po co ten plik w aktach jest.
+    const zeSpraw = db()
+      .prepare(
+        `SELECT d.id, d.nazwa_pliku, d.rozmiar, d.typ_dokumentu, d.utworzono,
+                s.id AS sprawa_id, s.typ_zdarzenia
+           FROM psa_dokumenty d JOIN psa_sprawy s ON s.id = d.sprawa_id
+          WHERE s.spolka_id = ? ORDER BY d.id`
+      )
+      .all(spolka.id)
+      .map((d) => ({
+        grupa: 'sprawa',
+        id: d.id,
+        sprawa_id: d.sprawa_id,
+        nazwa: d.nazwa_pliku,
+        nazwa_pliku: d.nazwa_pliku,
+        rozmiar: d.rozmiar,
+        opis: `${d.typ_dokumentu.replace(/_/g, ' ')} — sprawa #${d.sprawa_id}`,
+        data: d.utworzono,
+        url: `/api/psa/sprawy/${d.sprawa_id}/dokumenty/${d.id}`,
+      }));
+
+    const wydane = db()
+      .prepare(
+        `SELECT id, sprawa_id, typ, kanal, sciezka_plik, wyslano, utworzono
+           FROM psa_wydane_dokumenty WHERE spolka_id = ? ORDER BY id`
+      )
+      .all(spolka.id)
+      .map((d) => ({
+        grupa: 'wydany',
+        id: d.id,
+        sprawa_id: d.sprawa_id,
+        nazwa: d.typ.replace(/_/g, ' '),
+        nazwa_pliku: null,
+        rozmiar: null,
+        opis: `wydany ${d.kanal === 'email' ? 'e-mailem' : d.kanal === 'portal' ? 'przez portal' : 'na papierze'}`,
+        data: d.wyslano || d.utworzono,
+        // Wystawione bez pliku (sam HTML) nie maja czego pobrac — front
+        // pokazuje je wtedy jako slad, bez odnosnika.
+        url: d.sciezka_plik
+          ? d.sprawa_id
+            ? `/api/psa/sprawy/${d.sprawa_id}/wydane/${d.id}/plik`
+            : `/api/psa/spolki/${spolka.id}/wydane/${d.id}/plik`
+          : null,
+      }));
+
+    odp.json({ dokumenty: [...zalozycielskie, ...zeSpraw, ...wydane] });
   })
 );
 

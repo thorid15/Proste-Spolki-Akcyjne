@@ -929,10 +929,18 @@ select {
 .sekcja-naglowek {
   display: flex; align-items: center; justify-content: space-between; gap: var(--od-12);
   width: 100%; padding: var(--od-16) var(--od-24);
-  background: none; border: none; cursor: pointer;
-  font: inherit; color: var(--atrament); text-align: left;
+  color: var(--atrament);
 }
-.sekcja-naglowek:hover { background: var(--papier); }
+/* Rozwijanie bierze na siebie cała lewa strona nagłówka; przyciski wpisu
+   stoją obok, jako rodzeństwo, nie w środku przycisku. */
+.sekcja-przelacznik {
+  flex: 1; min-width: 0; display: flex; align-items: center;
+  margin: calc(-1 * var(--od-16)) 0 calc(-1 * var(--od-16)) calc(-1 * var(--od-24));
+  padding: var(--od-16) var(--od-12) var(--od-16) var(--od-24);
+  background: none; border: none; cursor: pointer;
+  font: inherit; color: inherit; text-align: left;
+}
+.sekcja-przelacznik:hover { background: var(--papier); }
 .sekcja-tytul { display: flex; align-items: center; gap: var(--od-8); font-weight: 600; font-size: var(--st-13); }
 .strzalka { color: var(--atrament-3); display: inline-flex; transition: transform var(--ruch-wiersz); }
 .strzalka.otwarta { transform: rotate(90deg); }
@@ -988,6 +996,11 @@ select {
 }
 .kafelek-wyboru:hover { border-color: var(--atrament-3); }
 .kafelek-wyboru.wybrany { border-color: var(--rejestr); box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10); }
+/* Droga, którą stan rejestru wyklucza (np. objęcie, gdy żadna emisja nie
+   czeka), zostaje widoczna razem z powodem — zamiast znikać i zostawiać
+   pytanie „gdzie to było". */
+.kafelek-wyboru:disabled { opacity: 0.55; cursor: not-allowed; }
+.kafelek-wyboru:disabled:hover { border-color: var(--linia); }
 .kafelek-wyboru-tytul { font-weight: 600; font-size: var(--st-15); color: var(--atrament); padding-right: var(--od-64); }
 .kafelek-wyboru-opis { font-size: var(--st-11); color: var(--atrament-2); line-height: 1.5; }
 .kafelek-wyboru-kategoria { position: absolute; top: var(--od-12); right: var(--od-12); }
@@ -1040,84 +1053,52 @@ select {
 }
 
 /* ─────────────────────────────────────────────────────
-   OŚ AKCJI (faza 2.1/2.4/2.5) — element sygnaturowy kokpitu.
-   Wykres numer akcji (pionowo) × czas (poziomo), jeden SVG na spółkę,
-   emisje jako sekcje ułożone pionowo ze wspólną osią czasu. Playhead
-   zatrzaskuje się na zdarzeniach — tyle położeń, ile zdarzeń, plus „dziś".
-   Czysty SVG, bez bibliotek wykresów.
-   ───────────────────────────────────────────────────── */
-.os-akcji { margin-bottom: var(--od-16); }
-.os-akcji-svg { width: 100%; height: auto; display: block; }
-.os-akcji-etykieta-seria {
-  font-family: var(--font-dane);
-  font-size: 10.5px;
-  fill: var(--atrament-2);
-}
-.os-akcji-etykieta-seria tspan.przyciemniona { fill: var(--atrament-3); }
-.os-akcji-pasmo {
-  cursor: pointer;
-  transition: opacity var(--ruch-pasma), x var(--ruch-pasma), width var(--ruch-pasma);
-}
-.os-akcji-pasmo:hover { opacity: 0.85; }
-.os-akcji-pasmo.niekliknieta { cursor: default; }
-.os-akcji-oś-czasu-linia { stroke: var(--linia); stroke-width: 1; }
-.os-akcji-znacznik {
-  fill: var(--mosiadz);
-  cursor: pointer;
-}
-.os-akcji-znacznik-obwodka {
-  fill: none;
-  stroke: var(--mosiadz);
-  stroke-width: 1.5;
-}
-.os-akcji-playhead-linia {
-  stroke: var(--mosiadz);
-  stroke-width: 1.5;
-  transition: x1 var(--ruch-pasma), x2 var(--ruch-pasma);
-}
-.os-akcji-playhead-uchwyt {
-  fill: var(--mosiadz);
-  cursor: ew-resize;
-  transition: cx var(--ruch-pasma);
-}
-@media (prefers-reduced-motion: reduce) {
-  .os-akcji-pasmo, .os-akcji-playhead-linia, .os-akcji-playhead-uchwyt { transition: none; }
-}
+   STAN NA DZIEŃ — następca dawnej osi akcji.
 
-/* Sterowanie playheadem pod wykresem — suwak zostaje (2.5), ale ma tyle
-   dyskretnych położeń, ile spółka ma zdarzeń, nie tysiąc pikseli. */
-.os-akcji-sterowanie {
+   Wykres „numer akcji × czas" z playheadem zniknął: jedyne, po co go
+   używano, to obejrzenie rejestru na dzień wsteczny, a do tego wystarczy
+   pole daty w nagłówku (art. 300³⁵ KSH mówi o informacji NA DZIEŃ).
+   ───────────────────────────────────────────────────── */
+.stan-na-dzien {
   display: flex;
   align-items: center;
-  gap: var(--od-12);
-  margin-top: var(--od-8);
-  flex-wrap: wrap;
+  gap: var(--od-8);
 }
-.os-akcji-suwak { flex: 1; min-width: 160px; accent-color: var(--mosiadz); }
-.os-akcji-etykieta-chwili {
-  font-size: var(--st-13);
-  font-weight: 500;
-  white-space: nowrap;
-  min-width: 0;
-}
-.os-akcji-pusto {
-  padding: var(--od-40) var(--od-24);
-  text-align: center;
+.stan-na-dzien-etykieta {
+  font-size: var(--st-11);
   color: var(--atrament-3);
-  font-size: var(--st-13);
+  white-space: nowrap;
 }
 
-/* Lista współwłasności ułamkowej pod wykresem — pozycje niewidoczne
-   w skali (2.4: „pasmo o wysokości jednej akcji") trafiają tu w pełnej
-   precyzji (dokładny ułamek, nie tylko lista współuprawnionych). */
-.os-akcji-wspolwlasnosc {
-  margin-top: var(--od-8);
-  padding-top: var(--od-8);
+/* Zawartość rozwiniętej sekcji rejestru i rząd wpisów rzadszych pod tabelą:
+   przycisk sekcji prowadzi do wpisu najczęstszego, reszta stoi niżej, żeby
+   nagłówek nie zamienił się w pasek dziesięciu przycisków. */
+.sekcja-tresc > .tabela { margin-bottom: 0; }
+/* Rejestr akcji ma dziewięć kolumn — na wąskim ekranie ostatnia (cena
+   emisyjna) uciekała poza kartę. Tabela przewija się w poziomie sama,
+   reszta strony nie. */
+.sekcja-tresc { overflow-x: auto; }
+.dalsze-wpisy {
+  display: flex;
+  align-items: center;
+  gap: var(--od-8);
+  flex-wrap: wrap;
+  padding: var(--od-12) var(--od-24);
   border-top: 1px solid var(--linia-2);
-  font-size: var(--st-13);
-  color: var(--atrament-2);
 }
-.os-akcji-wspolwlasnosc div + div { margin-top: 3px; }
+.dalsze-wpisy-tytul {
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+}
+.akta-grupa + .akta-grupa { border-top: 1px solid var(--linia-2); }
+.akta-grupa-tytul {
+  padding: var(--od-16) var(--od-24) var(--od-8);
+  font-size: var(--st-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--atrament-3);
+}
 
 /* Pigułka „stan na…” w archiwum, wspólna z trybem archiwalnym (2.5). */
 .pigulka-archiwalna {
@@ -1203,7 +1184,7 @@ select {
    DRUK — szczegóły wydruku w fazie 4
    ───────────────────────────────────────────────────── */
 @media print {
-  .szyna, .topbar, .bez-druku, .btn, .okruszki, .paleta-nakladka, .stronicowanie, .os-akcji { display: none !important; }
+  .szyna, .topbar, .bez-druku, .btn, .okruszki, .paleta-nakladka, .stronicowanie { display: none !important; }
   .powloka { display: block; margin: 0; border: none; border-radius: 0; box-shadow: none; max-width: none; }
   .obszar { background: var(--karta); }
   .tresc { max-width: none; padding: 0; }

@@ -169,20 +169,22 @@ function Sekcja({ tytul, licznik, domyslnieOtwarta = false, akcje, children }) {
   const [otwarta, ustawOtwarta] = useState(domyslnieOtwarta);
   return (
     <div className="sekcja">
-      <button className="sekcja-naglowek" onClick={() => ustawOtwarta((o) => !o)}>
-        <span className="sekcja-tytul">
-          <span className={`strzalka ${otwarta ? 'otwarta' : ''}`}>▶</span>
-          {tytul}
-          {licznik !== undefined && licznik !== null && (
-            <Znacznik odmiana="neutralny">{licznik}</Znacznik>
-          )}
-        </span>
-        {akcje && (
-          <span className="row-g" onClick={(z) => z.stopPropagation()}>
-            {akcje}
+      <div className="sekcja-naglowek">
+        <button
+          className="sekcja-przelacznik"
+          aria-expanded={otwarta}
+          onClick={() => ustawOtwarta((o) => !o)}
+        >
+          <span className="sekcja-tytul">
+            <span className={`strzalka ${otwarta ? 'otwarta' : ''}`}>▶</span>
+            {tytul}
+            {licznik !== undefined && licznik !== null && (
+              <Znacznik odmiana="neutralny">{licznik}</Znacznik>
+            )}
           </span>
-        )}
-      </button>
+        </button>
+        {akcje && <span className="row-g">{akcje}</span>}
+      </div>
       {otwarta && <div className="sekcja-tresc bez-marginesu">{children}</div>}
     </div>
   );

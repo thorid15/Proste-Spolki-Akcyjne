@@ -4,10 +4,7 @@ Lista uwag z przeglądu po wdrożeniu przebiegu „dokumenty wystawia kancelaria
 Etapy są ułożone tak, żeby każdy dało się wdrożyć i sprawdzić osobno, a te
 trudniejsze stoją za tymi, od których zależą.
 
-**Stan: etapy A, B i C wykonane. Zostaje etap D** — przebudowa kokpitu spółki
-na układ rejestru Krajowej Rady Notarialnej. To przepisanie dwóch największych
-plików w projekcie (`kokpit.js` i `kreator.js`, razem ~2700 linii), więc idzie
-osobną sesją.
+**Stan: wszystkie etapy (A, B, C, D) wykonane.**
 
 ---
 
@@ -111,34 +108,47 @@ takiego stanu nie da się już wytworzyć.
 
 ---
 
-## Etap D — przebudowa kokpitu spółki (DO ZROBIENIA)
+## Etap D — przebudowa kokpitu spółki ✔
 
-Największa pozycja, jedyna pozostała. Kokpit ma być ułożony jak rejestr Krajowej Rady
-Notarialnej: podsumowanie u góry i rozwijane sekcje o tych nazwach:
+Kokpit jest ułożony jak rejestr Krajowej Rady Notarialnej: metryka u góry,
+niżej rozwijane sekcje, każda z własnym przyciskiem wpisu.
 
-1. **Rejestr akcjonariuszy** (otwarty domyślnie) — przycisk „Dodaj akcjonariusza",
-2. **Rejestr akcji** — „Nowa emisja", a zaraz po dodaniu emisji wskazanie,
-   kto ją obejmuje,
-3. **Rejestr uprawnień, przywilejów i obowiązków** — powiązane z konkretnymi
-   akcjami,
-4. **Rejestr zajęć, zastawów, użytkowania**,
-5. **Rejestr zdarzeń**,
-6. **Dokumenty** — dziś panel po prawej, ma być taką samą rozwijaną sekcją:
-   komplet z wniosku (podpisana umowa, uchwała, zgody) plus wszystko, co klient
-   dośle później, z datami. Skan umowy sprzedaży akcji ma się tu pojawiać razem
-   z nowym żądaniem wpisu,
-7. **Historia zdarzeń** — na końcu, tak jak dziś.
+1. **Rejestr akcjonariuszy** (otwarty domyślnie) — „Dodaj akcjonariusza"
+   pyta o jedno: czy akcjonariusz OBEJMUJE nowo wyemitowane akcje, czy
+   NABYŁ je od kogoś, kto już je ma. Droga wykluczona stanem rejestru
+   (objęcie, gdy żadna emisja nie czeka) zostaje widoczna razem z powodem.
+   Pod tabelą: przeniesienie, zmiana danych, przedstawiciel współuprawnionych.
+2. **Rejestr akcji** — „Nowa emisja"; przy emisji z akcjami nieobjętymi stoi
+   w jej wierszu „Kto obejmuje" z już wybraną serią. Pod tabelą: umorzenie,
+   unieważnienie, pokrycie wkładem, zbycie ułamka.
+3. **Rejestr uprawnień, przywilejów i obowiązków** — razem z ograniczeniami
+   w rozporządzaniu (art. 300³³ § 1 pkt 10 KSH to obowiązek akcjonariusza,
+   nie osobny rejestr).
+4. **Rejestr zajęć, zastawów, użytkowania** — zajęcie egzekucyjne osobno,
+   bo idzie z urzędu (art. 300³⁴ § 2 KSH).
+5. **Rejestr zdarzeń** — wpisy bez własnej tabeli stanu: zmiany danych,
+   zobowiązania, sprostowania, zdarzenia „inne".
+6. **Dokumenty** — rozwijana sekcja zamiast panelu po prawej. Jeden nowy
+   endpoint `GET /api/psa/spolki/:id/akta` zbiera całą teczkę: komplet
+   z wniosku (oba egzemplarze w jednej pozycji, dwa odnośniki), skany
+   dosyłane przy żądaniach wpisu (tu trafia umowa sprzedaży akcji, razem
+   z numerem sprawy) i pisma wystawione przez kancelarię.
+7. **Historia zdarzeń** — łańcuch skrótów, sprostowania, „Przelicz stan".
 
 Przy okazji:
-* **znika osobny przycisk „Nowe zdarzenie"** — każda sekcja ma własną akcję,
-* **znika oś akcji** (`publiczne/js/ui-rejestr.js`, `Iskra` i widok osi) —
-  niepotrzebna,
-* każde zdarzenie trzeba przemyśleć od nowa pod kątem: co system już wie
-  i o co naprawdę musi zapytać.
+* **zniknął przycisk „Nowe zdarzenie"** — typ zdarzenia jedzie w adresie
+  (`?typ=…`), więc kreator otwiera się od razu na podstawie wpisu, bez
+  ekranu z dwudziestoma kafelkami;
+* **zniknęła oś akcji** — wykres „numer akcji × czas" z playheadem, razem
+  z trasą `GET /:id/os-akcji`, projekcją `widokOsiAkcji` i jej testami.
+  Stan na dzień wsteczny wybiera się polem daty w nagłówku (art. 300³⁵ KSH
+  mówi o informacji NA DZIEŃ — po to oś była używana);
+* nagłówek sekcji przestał być przyciskiem w przycisku: rozwijanie i wpis
+  to teraz rodzeństwo, nie zagnieżdżenie.
 
-Pliki: `publiczne/js/kokpit.js` (1130 linii), `publiczne/js/kreator.js`
-(1533 linie), `publiczne/js/os-akcji*`. To przepisanie, nie poprawka —
-warto je zrobić osobną sesją, po etapach A–C.
+Pliki: `publiczne/js/kokpit.js`, `publiczne/js/ui-rejestr.js`,
+`publiczne/js/ui.js`, `publiczne/style/rejestr.css`,
+`server/trasy/spolki.js`, `server/widoki.js`.
 
 ---
 

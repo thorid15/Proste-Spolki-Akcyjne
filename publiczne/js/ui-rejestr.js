@@ -209,18 +209,32 @@ function Modal({ tytul, children, stopka, przyZamknieciu, szerokosc }) {
   );
 }
 
+/**
+ * Rozwijana sekcja z własnym przyciskiem akcji w nagłówku.
+ *
+ * Przełącznik jest OSOBNYM przyciskiem obok akcji, a nie przyciskiem, który
+ * je obejmuje: przycisk w przycisku to nieprawidłowy HTML, a odkąd każdy
+ * rejestr w kokpicie ma w nagłówku swój wpis („Nowa emisja", „Zastaw lub
+ * użytkowanie"), zdarzałoby się to na każdej sekcji.
+ */
 function Sekcja({ tytul, licznik, domyslnieOtwarta = false, akcje, children }) {
   const [otwarta, ustawOtwarta] = useState(domyslnieOtwarta);
   return (
     <div className="sekcja">
-      <button className="sekcja-naglowek" onClick={() => ustawOtwarta((o) => !o)}>
-        <span className="sekcja-tytul">
-          <span className={`strzalka ${otwarta ? 'otwarta' : ''}`}><Ikona nazwa="strzalkaPrawo" rozmiar={14} /></span>
-          {tytul}
-          {licznik !== undefined && licznik !== null && <Pigulka>{licznik}</Pigulka>}
-        </span>
-        {akcje && <span className="rzad" onClick={(z) => z.stopPropagation()}>{akcje}</span>}
-      </button>
+      <div className="sekcja-naglowek">
+        <button
+          className="sekcja-przelacznik"
+          aria-expanded={otwarta}
+          onClick={() => ustawOtwarta((o) => !o)}
+        >
+          <span className="sekcja-tytul">
+            <span className={`strzalka ${otwarta ? 'otwarta' : ''}`}><Ikona nazwa="strzalkaPrawo" rozmiar={14} /></span>
+            {tytul}
+            {licznik !== undefined && licznik !== null && <Pigulka>{licznik}</Pigulka>}
+          </span>
+        </button>
+        {akcje && <span className="rzad">{akcje}</span>}
+      </div>
       {otwarta && <div>{children}</div>}
     </div>
   );
