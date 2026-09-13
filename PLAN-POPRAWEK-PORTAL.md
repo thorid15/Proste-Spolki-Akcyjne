@@ -85,9 +85,11 @@ zgodny z systemem wizualnym reszty aplikacji: jeden zestaw krojów, treść
 w kolumnie zamiast w rogach ekranu, czytelne odstępy i wielkości pisma.
 Wszystkie widoki klienta mają wyglądać jak jedna aplikacja.
 
-## Etap 6 — pakiet dokumentów po złożeniu wniosku
+## Etap 6 — pakiet dokumentów do podpisu
 
-Po złożeniu wniosku, obok projektu umowy, powstaje komplet dokumentów:
+Komplet wystawia **kancelaria** po sprawdzeniu danych wniosku (pierwotnie
+powstawał sam, w chwili złożenia — przez co błędne dane klienta wędrowały
+wprost do umowy). Klient widzi go dopiero po świadomym udostępnieniu:
 
 | Dokument | Ile sztuk |
 |---|---|
@@ -123,22 +125,32 @@ spółkę**, a rejestr wpisuje adres dopiero po otrzymaniu **podpisanego
 oświadczenia akcjonariusza** (dokument z etapu 6). Do tego czasu adres e-mail
 figuruje w aktach sprawy, ale nie jako element treści rejestru.
 
-### Co poszło w PDF, a co zostało w `.docx`
+### Jak powstaje komplet (stan po przebudowie)
 
-| Dokument | Format | Dlaczego |
-|---|---|---|
-| Umowa o prowadzenie rejestru | `.docx` | dokument **negocjowany** — notariusz edytuje jego wzór w Wordzie, a klient może zgłosić uwagi przed podpisem |
-| Zgoda na komunikację elektroniczną | PDF | oświadczenie o ustalonej treści |
-| Oświadczenie RODO | PDF | jw. |
-| Oświadczenie GIIF (beneficjent, PEP) | PDF | jw. |
-| Żądanie pierwszego wpisu ze zgodą | PDF | jw. |
+Wszystkie dokumenty wychodzą w **PDF** i wszystkie powstają tak samo:
+jako lista bloków (`server/logika/bloki-dokumentu.js`) składana własnym
+silnikiem (`server/logika/pdf.js`).
 
-Umowa zostaje w formacie edytowalnym świadomie: to jedyny z tych dokumentów,
-którego treść bywa uzgadniana, a jego wzór jest w rękach notariusza
-(`wzory/01-...docx`). Gdyby miała wychodzić w PDF, potrzebny byłby konwerter
-`.docx` → PDF na serwerze (np. LibreOffice w trybie bezokienkowym) — do
-decyzji przy wdrożeniu. Autor w metadanych i nazwa pliku są poprawione
-niezależnie od formatu.
+| Dokument | Skąd treść |
+|---|---|
+| Umowa o prowadzenie rejestru | wzór `.docx` (01) wypełniony danymi wniosku, zamieniony na bloki |
+| Uchwała o wyborze podmiotu prowadzącego rejestr | wzór `.docx` (03), jak wyżej |
+| Zgoda na komunikację elektroniczną | bloki w `logika/dokumenty-wniosku.js` |
+| Oświadczenie RODO | jw. |
+| Oświadczenie GIIF (beneficjent, PEP) | jw. |
+| Żądanie pierwszego wpisu ze zgodą | jw. |
+
+Wzory `.docx` zostają źródłem treści umowy i uchwały — notariusz redaguje je
+w Wordzie. Zmienił się tylko sposób ich wydania: zamiast konwersji przez
+LibreOffice (`soffice --convert-to pdf`) tekst wzoru zamienia się na bloki
+i składa tym samym silnikiem, co pozostałe oświadczenia. Powód jest prozaiczny:
+gdy LibreOffice w systemie nie było albo brakowało filtrów Writera, konwersja
+cicho się wywracała i **umowa znikała z kompletu** — klient dostawał do podpisu
+wszystko poza dokumentem najważniejszym.
+
+Skutek uboczny, o który chodziło od początku: treść każdego dokumentu da się
+teraz przeczytać i poprawić w portalu pracownika, a PDF składa się od nowa
+z poprawionej treści.
 
 ---
 
@@ -148,9 +160,6 @@ niezależnie od formatu.
   dopracowania merytorycznego (zakres danych, okresy przechowywania, podstawy
   przetwarzania przy poszczególnych kategoriach danych). Dziś jest wersja
   robocza; do przejścia z notariuszem przed wdrożeniem.
-* **Umowa o prowadzenie rejestru w PDF** — wymaga konwertera `.docx` → PDF
-  po stronie serwera. Do rozstrzygnięcia, czy wdrożenie ma mieć zainstalowane
-  LibreOffice, czy umowa zostaje edytowalna.
 * **Konto klienta po przyjęciu wniosku** nie przepina się z roli
   „wnioskodawca" na „spółka", więc klient nie widzi jeszcze podglądu rejestru.
   Do decyzji, czy ma się to dziać automatycznie przy przyjęciu wniosku, czy

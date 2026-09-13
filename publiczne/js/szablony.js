@@ -183,6 +183,27 @@ function EkranSzablonow() {
         </div>
       </div>
 
+      {/* Dwa źródła treści, dwa miejsca do jej poprawiania — bez tej
+          informacji szukanie „gdzie zmienić zdanie w oświadczeniu" kończy
+          się na tym ekranie, na którym akurat tego zdania nie ma. */}
+      <Komunikat
+        odmiana="info"
+        tytul="Gdzie się zmienia treść dokumentów"
+        tresc={
+          <>
+            Wzory poniżej to pliki <span className="kol-dane">.docx</span> — redaguje się je w Wordzie
+            i podmienia w katalogu <span className="kol-dane">wzory/</span>. Zmiana obowiązuje od
+            następnego wystawienia dokumentu.
+            {' '}
+            Treść KONKRETNEGO dokumentu wystawionego przy wniosku (także umowy i uchwały, które
+            z tych wzorów powstają) poprawia się przy samym wniosku:
+            {' '}
+            <a href="#/wnioski">Wnioski</a> → zakładka „Dokumenty” → „Edytuj treść”. Tamta poprawka
+            dotyczy jednej sprawy i nie rusza wzoru.
+          </>
+        }
+      />
+
       {szablony.length === 0 ? (
         <Karta>
           <Pusto tytul="Katalog wzory/ jest pusty" opis="Wgraj pliki .docx zgodnie z wzory/README.md." />

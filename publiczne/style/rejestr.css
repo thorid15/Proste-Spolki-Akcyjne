@@ -828,9 +828,17 @@ select {
   overflow-y: auto; padding: var(--od-24);
 }
 .modal-tytul { font-family: var(--font-display); font-size: var(--st-20); margin-bottom: var(--od-16); }
+/* Przyciski modala zostają w polu widzenia także wtedy, gdy treść jest
+   dłuższa niż okno — edytor treści dokumentu potrafi mieć sto kilkadziesiąt
+   bloków, a „Zapisz" schowane pod nimi wygląda jak brak zapisu. */
 .modal-stopka {
+  position: sticky;
+  bottom: calc(-1 * var(--od-24));
   display: flex; justify-content: flex-end; gap: var(--od-8);
   margin-top: var(--od-24); padding-top: var(--od-16);
+  margin-bottom: calc(-1 * var(--od-24));
+  padding-bottom: var(--od-24);
+  background: var(--karta);
   border-top: 1px solid var(--linia-2);
 }
 
@@ -1211,9 +1219,10 @@ select {
    ───────────────────────────────────────────────────── */
 /* ─────────────────────────────────────────────────────
    STOPKA
-   Jeden poziom: znak samorządu i przy nim wszystkie adresy kancelarii —
-   pocztowy, e-mail i internetowy. Wcześniejsza wersja dzieliła to na dwa
-   piętra rozdzielone linią, przez co jedna informacja czytała się jak dwie.
+   Trzy kolumny — kto prowadzi, jak się skontaktować, na jakich zasadach —
+   i pasek z notą o prawach pod cienką linią. Poprzednia wersja mieściła
+   wszystko w jednym rzędzie rozdzielonym kropkami; przy pięciu pozycjach
+   zamieniało się to w jedno zdanie bez hierarchii.
    ───────────────────────────────────────────────────── */
 .stopka {
   margin-top: auto;
@@ -1227,37 +1236,111 @@ select {
 .stopka-srodek {
   max-width: var(--tresc);
   margin-inline: auto;
-  padding: var(--od-24) var(--od-40);
-  display: flex; align-items: center; gap: var(--od-16);
+  padding: var(--od-40) var(--od-40) var(--od-24);
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--od-40);
+  align-items: start;
 }
-/* Znak na tyle duży, żeby dało się przeczytać „Notariat Rzeczypospolitej" —
-   przy 42 px napis zlewał się w plamę. */
-.stopka-znak { height: 56px; width: auto; flex-shrink: 0; }
-.stopka-dane { min-width: 0; }
+.stopka-kolumna { display: flex; flex-direction: column; gap: var(--od-4); min-width: 0; }
+.stopka-marka { gap: var(--od-12); }
+
+/* Szerokość, nie wysokość — i dokładnie trzecia część oryginału (498 px),
+   bo całkowity stosunek pomniejszenia rysuje ostre krawędzie. Przy dawnych
+   56 px wysokości znak schodził do 127 px szerokości (3,92 : 1) i drugi
+   wiersz napisu zlewał się w plamę. */
+.stopka-znak { width: 166px; height: auto; flex-shrink: 0; }
+
 .stopka-nazwa {
   font-family: var(--font-display);
   font-size: var(--st-20);
   line-height: 1.25;
   color: var(--atrament);
-  margin-bottom: 2px;
 }
-/* Adres pocztowy, e-mail i strona to trzy adresy TEJ SAMEJ kancelarii,
-   więc idą jednym ciągiem, jednym krojem i jednym rozmiarem. Odnośniki
-   różni od reszty wyłącznie podkreślenie przy najechaniu. */
-.stopka-linia { display: flex; flex-wrap: wrap; gap: 2px var(--od-12); }
-.stopka-linia a { color: inherit; text-decoration: none; }
-.stopka-linia a:hover { color: var(--rejestr); text-decoration: underline; }
-/* Kropka rozdziela pozycje tylko w obrębie wiersza — po zawinięciu nowy
-   wiersz nie zaczyna się od kropki. */
-.stopka-linia > * + *::before {
-  content: '·';
-  margin-right: var(--od-12);
+.stopka-adres { color: var(--atrament-2); }
+
+/* Nagłówek kolumny — wielkością podpisu, nie tytułu: ma porządkować, a nie
+   konkurować z nazwą kancelarii obok. */
+.stopka-naglowek {
+  font-size: var(--st-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--atrament-3);
+  margin-bottom: var(--od-4);
+}
+.stopka-kolumna a {
+  color: inherit;
+  text-decoration: none;
+  width: fit-content;
+  overflow-wrap: anywhere;
+}
+.stopka-kolumna a:hover { color: var(--rejestr); text-decoration: underline; }
+
+/* Pasek dolny: nota o prawach i jedno zdanie o tym, czym jest aplikacja.
+   Najcichszy stopień pisma w całej stopce — to przypis, nie treść. */
+.stopka-dol {
+  max-width: var(--tresc);
+  margin-inline: auto;
+  padding: var(--od-16) var(--od-40);
+  border-top: 1px solid var(--linia-2);
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--od-8) var(--od-24);
+  font-size: var(--st-11);
   color: var(--atrament-3);
 }
+.stopka-dol-opis { text-align: right; }
 
-@media (max-width: 700px) {
-  .stopka-srodek { padding: var(--od-24); align-items: flex-start; }
+@media (max-width: 900px) {
+  .stopka-srodek { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--od-24); }
+  .stopka-marka { grid-column: 1 / -1; }
 }
+@media (max-width: 700px) {
+  .stopka-srodek { grid-template-columns: minmax(0, 1fr); padding: var(--od-24); }
+  .stopka-dol { padding: var(--od-16) var(--od-24); }
+  .stopka-dol-opis { text-align: left; }
+}
+
+/* ─────────────────────────────────────────────────────
+   DOKUMENTY PRAWNE (polityka prywatności, regulamin)
+   Jedna kolumna o szerokości wygodnej do czytania, numerowane ustępy,
+   rytm pisma bliższy dokumentowi niż ekranowi aplikacji.
+   ───────────────────────────────────────────────────── */
+.dokument-prawny {
+  max-width: 72ch;
+  margin-inline: auto;
+  padding-block: var(--od-24);
+  font-size: var(--st-15);
+  line-height: 1.7;
+  color: var(--atrament);
+}
+.dokument-prawny-tytul {
+  font-family: var(--font-display);
+  font-size: var(--st-28);
+  font-weight: 500;
+  line-height: 1.2;
+}
+.dokument-prawny-wersja {
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  margin-top: var(--od-4);
+}
+.dokument-prawny-wstep {
+  margin-top: var(--od-16);
+  color: var(--atrament-2);
+}
+.dokument-prawny-ustep { margin-top: var(--od-24); }
+.dokument-prawny-ustep h2 {
+  font-family: var(--font-display);
+  font-size: var(--st-20);
+  font-weight: 500;
+  line-height: 1.3;
+  margin-bottom: var(--od-8);
+}
+.dokument-prawny-ustep p + p { margin-top: var(--od-12); }
+.dokument-prawny-ustep ul { margin: 0; padding-left: var(--od-24); }
+.dokument-prawny-ustep li { margin-bottom: var(--od-8); }
+.dokument-prawny-ustep li:last-child { margin-bottom: 0; }
+.dokument-prawny a { color: var(--rejestr); }
 
 /* Etykieta i jej pole zawijają się razem, nie osobno. */
 .pasek-pole { display: inline-flex; align-items: center; gap: var(--od-8); }
@@ -1313,6 +1396,21 @@ select {
 @media (max-width: 640px) {
   .podsumowanie { grid-template-columns: minmax(0, 1fr); gap: 2px var(--od-8); }
   .podsumowanie dd { margin-bottom: var(--od-12); }
+}
+
+/* Śródtytuł w podsumowaniu („Akcjonariusze (2)", „Dokumenty do podpisu").
+   Wcześniej stała tu klasa `.card-h` z warstwy zgodności — inny krój i inny
+   stopień niż reszta kreatora, przez co ostatni krok wyglądał, jakby był
+   składany osobno. Linia nad tytułem zastępuje osobny rozdzielacz. */
+.podsumowanie-naglowek {
+  margin: var(--od-24) 0 var(--od-12);
+  padding-top: var(--od-24);
+  border-top: 1px solid var(--linia-2);
+  font-family: var(--font-display);
+  font-size: var(--st-20);
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--atrament);
 }
 
 /* Lista akcjonariuszy w podsumowaniu: nazwa na pierwszym planie, cechy
@@ -1538,12 +1636,16 @@ select {
   line-height: 1.2;
   margin: 0;
 }
+/* Opis kroku ma tę samą szerokość, co pola pod nim. Wcześniej stało tu
+   `max-width: 58ch` — zdanie łamało się w połowie karty, a pola biegły dalej,
+   więc krok wyglądał jak dwa różne układy sklejone jeden pod drugim.
+   Miary pilnuje sam kreator (`.kreator-waski`), nie ta reguła. */
 .krok-naglowek-opis {
   margin: var(--od-8) 0 0;
   font-size: var(--st-15);
   line-height: 1.55;
   color: var(--atrament-2);
-  max-width: 58ch;
+  max-width: 100%;
 }
 
 /* ── Lista podmiotów ──
@@ -1715,4 +1817,89 @@ select {
   margin-top: var(--od-12);
   padding-top: var(--od-12);
   border-top: 1px solid var(--linia);
+}
+
+/* ─────────────────────────────────────────────────────
+   WNIOSEK PO STRONIE KANCELARII
+   Ten sam rytm, co w portalu klienta: karta, zakładki, lista podmiotów.
+   Poniżej wyłącznie to, czego portal klienta nie ma — bo kancelaria robi
+   z wnioskiem rzeczy, których klient nie robi: porównuje z odpisem KRS
+   i redaguje treść wystawianych dokumentów.
+   ───────────────────────────────────────────────────── */
+
+/* Śródtytuł nad grupą pól w formularzu korekty. Bez niego dwadzieścia kilka
+   pól spółki i reprezentanta stoi jednym ciągiem, bez żadnego podziału. */
+.grupa-pol-tytul {
+  font-size: var(--st-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--atrament-3);
+  margin: var(--od-16) 0 var(--od-8);
+}
+.grupa-pol-tytul:first-child { margin-top: 0; }
+
+/* Rozbieżność wobec odpisu KRS. Czerwień znaczy w tej aplikacji „odmowa,
+   po terminie, akcja niszcząca" — a rozbieżność to sygnał do sprawdzenia,
+   nie błąd. Stąd mosiądz i znak obok wartości, nie samo zabarwienie. */
+.rozbieznosc-krs { color: var(--mosiadz); font-weight: 600; }
+.rozbieznosc-znak { font-weight: 400; }
+
+/* Nazwa dokumentu otwierająca podgląd — wygląda jak odnośnik, bo nim jest
+   w odbiorze; przyciskiem jest dlatego, że nie prowadzi pod żaden adres. */
+.jak-odnosnik {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--rejestr);
+  text-align: left;
+  cursor: pointer;
+}
+.jak-odnosnik:hover { text-decoration: underline; }
+
+/* ── Edytor treści dokumentu ──
+   Jeden blok = jedna całość dokumentu (akapit, nagłówek, wiersz danych).
+   Ramka i pasek z rodzajem są po to, żeby po dwudziestu blokach nadal było
+   widać, gdzie kończy się jeden, a zaczyna następny. */
+.edytor-blokow { display: flex; flex-direction: column; gap: var(--od-12); }
+.blok-tresci {
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  padding: var(--od-12);
+  background: var(--papier-2);
+}
+.blok-tresci-pasek {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--od-8);
+  margin-bottom: var(--od-8);
+}
+.blok-tresci-rodzaj {
+  font-size: var(--st-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--atrament-3);
+}
+.blok-tresci .pole:last-child { margin-bottom: 0; }
+
+/* Komu wystawiono dokument — przy oświadczeniach indywidualnych to jedyne,
+   co odróżnia od siebie kolejne pozycje o tej samej nazwie. */
+.dokument-pozycja-dla {
+  display: block;
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  margin-top: 1px;
+}
+
+/* Pole wyboru pliku sterowane własnym przyciskiem. `display: none` wyłączyłoby
+   je z nawigacji klawiaturą, więc pole zostaje na stronie — tylko niewidoczne
+   i o zerowej powierzchni. */
+.pole-pliku-ukryte {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
 }

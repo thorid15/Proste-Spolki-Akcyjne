@@ -101,9 +101,18 @@ async function wnioskGotowyDoWeryfikacji(email, { zAkcjonariuszem = true, dodatk
   }
   await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
 
-  const formularz = new FormData();
-  formularz.append('plik', new Blob(['podpisana tresc'], { type: 'application/pdf' }), 'podpisana-umowa.pdf');
-  await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, { method: 'POST', headers: { Cookie: ciastko }, body: formularz });
+  const zlozony = db().prepare(`SELECT * FROM psa_wnioski WHERE konto_id = (SELECT id FROM psa_konta WHERE email = ?)`).get(email);
+
+  // Komplet do podpisu wystawia i udostepnia KANCELARIA — zlozenie wniosku
+  // samo w sobie nie daje klientowi czego podpisac.
+  if (zAkcjonariuszem) {
+    await zapytaj('POST', `/api/psa/wnioski/${zlozony.id}/dokumenty/wystaw`, {}, ciastkoPracownik);
+    await zapytaj('POST', `/api/psa/wnioski/${zlozony.id}/dokumenty/udostepnij`, {}, ciastkoPracownik);
+
+    const formularz = new FormData();
+    formularz.append('plik', new Blob(['podpisana tresc'], { type: 'application/pdf' }), 'podpisana-umowa.pdf');
+    await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, { method: 'POST', headers: { Cookie: ciastko }, body: formularz });
+  }
 
   const wiersz = db().prepare(`SELECT * FROM psa_wnioski WHERE konto_id = (SELECT id FROM psa_konta WHERE email = ?)`).get(email);
   return { wniosekId: wiersz.id, ciastkoKlienta: ciastko };

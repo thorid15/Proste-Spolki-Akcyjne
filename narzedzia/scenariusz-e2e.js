@@ -284,20 +284,37 @@ async function main() {
   ekran(`${ADRES}/portal.html#/`);
   if (koniec('wniosek')) return;
 
-  // ── 5. Złożenie wniosku i podpisana umowa (klient) ────────────────────
-  krok('klient', 'Składa wniosek — system generuje projekt umowy');
+  // ── 5. Złożenie wniosku, komplet od kancelarii, podpisane skany ───────
+  krok('klient', 'Składa wniosek — bez generowania czegokolwiek');
   const zlozenie = await zapytaj(klient, 'POST', '/api/psa/portal/wniosek/zloz', {});
-  info(`status wniosku: ${zlozenie.wniosek.status}`);
-  if (zlozenie.brakujace && zlozenie.brakujace.length) {
-    info(`pola niewypełnione w projekcie umowy: ${zlozenie.brakujace.join(', ')}`);
+  info(`status wniosku: ${zlozenie.wniosek.status} (dokumentów: ${(zlozenie.dokumenty || []).length})`);
+  if ((zlozenie.braki_akcjonariuszy || []).length) {
+    info(`braki wobec art. 300(33) § 1 KSH: ${zlozenie.braki_akcjonariuszy.join(' ')}`);
   }
-  if (zlozenie.blad_umowy) info(`UWAGA: nie wygenerowano PDF-u umowy — ${zlozenie.blad_umowy}`);
+
+  // Komplet wystawia KANCELARIA, po sprawdzeniu danych — i dopiero świadome
+  // udostępnienie wpuszcza go do portalu klienta.
+  krok('kancelaria', 'Wystawia komplet dokumentów i udostępnia go klientowi');
+  const kolejka = await zapytaj(kancelaria, 'GET', '/api/psa/wnioski');
+  const doWystawienia = kolejka.wnioski.find((w) => w.konto_email === EMAIL_KLIENTA);
+  if (!doWystawienia) throw new Error('Nie odnaleziono wniosku w kolejce kancelarii.');
+  ekran(`${ADRES}/#/wnioski/${doWystawienia.id}`);
+  const wystawienie = await zapytaj(
+    kancelaria, 'POST', `/api/psa/wnioski/${doWystawienia.id}/dokumenty/wystaw`, {}
+  );
+  for (const d of wystawienie.dokumenty || []) {
+    const puste = d.brakujace.length ? `, pustych miejsc: ${d.brakujace.length}` : '';
+    info(`wystawiono: ${d.nazwa_pliku} (${Math.round(d.rozmiar / 1024)} kB${puste})`);
+  }
+  const udostepnienie = await zapytaj(
+    kancelaria, 'POST', `/api/psa/wnioski/${doWystawienia.id}/dokumenty/udostepnij`, {}
+  );
+  info(`status wniosku: ${udostepnienie.wniosek.status}`);
+  if (!udostepnienie.email_wyslany) info(`powiadomienie e-mail: ${udostepnienie.powod}`);
+
   const projekt = await zapytaj(klient, 'GET', '/api/psa/portal/wniosek/umowa-projekt');
   info(`pobrano projekt umowy (.pdf, ${projekt.byteLength} B)`);
-  for (const d of zlozenie.dokumenty || []) {
-    info(`dokument do podpisu: ${d.nazwa_pliku} (${Math.round(d.rozmiar / 1024)} kB)`);
-  }
-  if (zlozenie.blad_pakietu) info(`UWAGA: nie złożono kompletu dokumentów — ${zlozenie.blad_pakietu}`);
+  zlozenie.dokumenty = udostepnienie.dokumenty;
 
   krok('klient', 'Odsyła podpisane skany całego kompletu');
   // Minimalny, poprawny plik PDF — zastępuje skan podpisanego dokumentu.

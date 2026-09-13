@@ -330,6 +330,21 @@ function Metryka({ pozycje }) {
   );
 }
 
+/**
+ * Jedna para „etykieta — wartość" wewnątrz listy `<dl className="pary">`.
+ * Komponent był używany (ekran „Stawki i terminy"), ale nigdzie nie
+ * zdefiniowany — przez co cały ekran wywracał się na `ReferenceError`
+ * i pokazywał pustą stronę.
+ */
+function Para({ etykieta, dane = false, children }) {
+  return (
+    <>
+      <dt>{etykieta}</dt>
+      <dd className={dane ? 'kol-dane' : undefined}>{children}</dd>
+    </>
+  );
+}
+
 /** Pole szukania z ikoną w środku — używane w paskach narzędzi list. */
 function Szukajka({ wartosc, przyZmianie, placeholder = 'Szukaj…' }) {
   return (
@@ -1013,6 +1028,7 @@ window.Ikona = Ikona;
 window.Kafel = Kafel;
 window.WierszListy = WierszListy;
 window.Zakladki = Zakladki;
+window.Para = Para;
 window.Metryka = Metryka;
 window.Szukajka = Szukajka;
 window.SzybkieAkcje = SzybkieAkcje;
@@ -1262,37 +1278,83 @@ function Przelacznik({ wlaczony, przyZmianie, etykieta, opis, wylaczony = false,
 
 const ZNAK_NOTARIATU = '/obrazy/notariat.png';
 
+/* Znak jest dostarczonym rastrem 498 × 220 px, w którym najdrobniejszy napis
+   („Lex est quod notamus") ma raptem kilkanaście pikseli wysokości. Dotąd
+   stopka skalowała go WYSOKOŚCIĄ do 56 px — czyli do 127 px szerokości, a to
+   przeskalowanie 3,92 : 1, po którym drugi i trzeci wiersz znaku zlewały się
+   w plamę. Teraz szerokość jest ustalona wprost na 166 px, czyli DOKŁADNIE
+   trzecią część oryginału: całkowity stosunek pomniejszenia daje ostre krawędzie
+   zamiast rozmycia z uśredniania pikseli, a napis znowu da się przeczytać.
+   Oryginalne wymiary idą też do atrybutów `width`/`height`, żeby miejsce na
+   znak było zarezerwowane, zanim plik się wczyta. */
+const ZNAK_NOTARIATU_SZEROKOSC = 498;
+const ZNAK_NOTARIATU_WYSOKOSC = 220;
+
 function skrocAdresWww(url) {
   return String(url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
+/**
+ * Stopka obu aplikacji.
+ *
+ * Trzy kolumny i pasek pod nimi. Kolumna pierwsza mówi, CZYJ to portal (znak
+ * samorządu, nazwa, adres pocztowy), druga — jak się skontaktować, trzecia —
+ * na jakich zasadach to działa. Pod cienką linią rok, właściciel praw i jedno
+ * zdanie o tym, czym jest ta aplikacja.
+ *
+ * Wcześniej stopka była jednym rzędem: znak i przy nim wszystkie adresy
+ * ciągiem, rozdzielone kropkami. Przy trzech pozycjach to się czytało; przy
+ * pięciu — z regulaminem, polityką prywatności i notą o prawach — zamieniało
+ * się w jedno długie zdanie, w którym nic nie było ważniejsze od reszty.
+ *
+ * Podstawy prawnej tu nie ma — jej miejsce jest na dokumencie z rejestru,
+ * gdzie coś znaczy, a nie pod każdym ekranem aplikacji.
+ */
 function StopkaKancelarii({ kancelaria }) {
   const [znakNieudany, ustawZnakNieudany] = useState(false);
   const k = kancelaria || {};
   const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
   const link = k.www_psa || k.www;
+  const rok = new Date().getFullYear();
 
   return (
     <footer className="stopka bez-druku">
       <div className="stopka-srodek">
-        {!znakNieudany && (
-          <img
-            className="stopka-znak"
-            src={ZNAK_NOTARIATU}
-            alt="Notariat Rzeczypospolitej Polskiej"
-            onError={() => ustawZnakNieudany(true)}
-          />
-        )}
-        <div className="stopka-dane">
+        <div className="stopka-kolumna stopka-marka">
+          {!znakNieudany && (
+            <img
+              className="stopka-znak"
+              src={ZNAK_NOTARIATU}
+              width={ZNAK_NOTARIATU_SZEROKOSC}
+              height={ZNAK_NOTARIATU_WYSOKOSC}
+              alt="Notariat Rzeczypospolitej Polskiej"
+              onError={() => ustawZnakNieudany(true)}
+            />
+          )}
           <div className="stopka-nazwa">{k.nazwa}</div>
-          <div className="stopka-linia">
-            {adres && <span>{adres}</span>}
-            {k.email && <a href={`mailto:${k.email}`}>{k.email}</a>}
-            {link && (
-              <a href={link} target="_blank" rel="noopener noreferrer">{skrocAdresWww(link)}</a>
-            )}
-          </div>
+          {adres && <div className="stopka-adres">{adres}</div>}
         </div>
+
+        <div className="stopka-kolumna">
+          <div className="stopka-naglowek">Kontakt</div>
+          {k.email && <a href={`mailto:${k.email}`}>{k.email}</a>}
+          {k.telefon && <a href={`tel:${String(k.telefon).replace(/\s/g, '')}`}>{k.telefon}</a>}
+          {link && <a href={link} target="_blank" rel="noopener noreferrer">{skrocAdresWww(link)}</a>}
+        </div>
+
+        <div className="stopka-kolumna">
+          <div className="stopka-naglowek">Zasady</div>
+          <a href="#/regulamin">Regulamin portalu</a>
+          <a href="#/polityka-prywatnosci">Polityka prywatności</a>
+          {k.email && <a href={`mailto:${k.email}`}>Zgłoś uwagę</a>}
+        </div>
+      </div>
+
+      <div className="stopka-dol">
+        <span>© {rok} {k.nazwa || 'Kancelaria Notarialna'}. Wszelkie prawa zastrzeżone.</span>
+        <span className="stopka-dol-opis">
+          Rejestr akcjonariuszy prostych spółek akcyjnych
+        </span>
       </div>
     </footer>
   );
