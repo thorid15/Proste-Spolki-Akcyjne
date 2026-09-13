@@ -876,9 +876,33 @@ function BlokEdycja({ blok, przyZmianie }) {
   }
 }
 
+/** Kafel otwierający jeden egzemplarz dokumentu jako PDF w nowej karcie. */
+function EgzemplarzDokumentu({ nazwa, opis, href, glowny }) {
+  return (
+    <a
+      className={`dok-egzemplarz ${glowny ? 'dok-egzemplarz-glowny' : ''}`}
+      href={href}
+      target="_blank"
+      rel="noopener"
+    >
+      <Ikona nazwa="dokument" rozmiar={20} />
+      <span className="dok-egzemplarz-tresc">
+        <span className="dok-egzemplarz-nazwa">{nazwa}</span>
+        <span className="dok-egzemplarz-plik">{opis}</span>
+      </span>
+      <span className="dok-egzemplarz-akcja">Otwórz PDF</span>
+    </a>
+  );
+}
+
 /**
  * Okno dokumentu: czytanie i — dopóki nikt go nie podpisał — poprawianie
  * treści w miejscu.
+ *
+ * Po podpisaniu okno NIE pokazuje już treści złożonej z bloków. Podpis
+ * dotyczy pliku, nie zapisu w bazie, więc jedynym wiarygodnym obrazem tego,
+ * co zostało podpisane, jest sam PDF — oba egzemplarze otwiera się w nowej
+ * karcie, a w oknie zostaje sama decyzja o prawidłowości podpisu.
  */
 function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZapisie }) {
   const [stan, ustawStan] = useState({ ladowanie: true, dokument: null, rodzaje: {} });
@@ -891,6 +915,12 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
   const doPoprawy = !podpisany && !zablokowane && dokument.edytowalny;
 
   useEffect(() => {
+    // Podpisanego dokumentu nie ma po co wczytywać — jego treści i tak się
+    // nie pokazuje ani nie zmienia.
+    if (podpisany) {
+      ustawStan({ ladowanie: false, dokument: null, rodzaje: {} });
+      return;
+    }
     API.get(`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/tresc`)
       .then((d) => {
         ustawStan({ ladowanie: false, dokument: d.dokument, rodzaje: d.rodzaje });
@@ -900,7 +930,7 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
         ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się wczytać treści dokumentu.');
         ustawStan((p) => ({ ...p, ladowanie: false }));
       });
-  }, [wniosekId, dokument.id]);
+  }, [wniosekId, dokument.id, podpisany]);
 
   function zmienBlok(i, nowy) {
     ustawBloki((p) => p.map((b, idx) => (idx === i ? nowy : b)));
@@ -988,24 +1018,27 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
       <Komunikat odmiana="blad" tresc={blad} />
 
       {podpisany && (
-        <Komunikat
-          odmiana="uwaga"
-          tytul="Dokument został podpisany"
-          tresc={
-            <>
-              Treści nie można już zmieniać — podpis dotyczy tego brzmienia dokumentu.
-              Sprawdź odesłany skan:{' '}
-              <a
-                href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}?egzemplarz=podpisany`}
-                target="_blank"
-                rel="noopener"
-              >
-                {dokument.podpis_nazwa_pliku}
-              </a>
-              .
-            </>
-          }
-        />
+        <>
+          <Komunikat
+            odmiana="uwaga"
+            tytul="Dokument został podpisany"
+            tresc="Treści nie można już zmieniać — podpis dotyczy tego brzmienia dokumentu.
+              Oba egzemplarze otwierają się jako pliki PDF w nowej karcie."
+          />
+          <div className="dok-egzemplarze">
+            <EgzemplarzDokumentu
+              nazwa="Egzemplarz wystawiony"
+              opis={dokument.nazwa_pliku || dokument.nazwa}
+              href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}?podglad=1`}
+            />
+            <EgzemplarzDokumentu
+              nazwa="Skan odesłany przez klienta"
+              opis={dokument.podpis_nazwa_pliku}
+              href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}?egzemplarz=podpisany&podglad=1`}
+              glowny
+            />
+          </div>
+        </>
       )}
 
       {!podpisany && stan.dokument && stan.dokument.brakujace.length > 0 && (
@@ -1017,7 +1050,7 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
         />
       )}
 
-      {stan.ladowanie ? (
+      {podpisany ? null : stan.ladowanie ? (
         <Spinner />
       ) : (
         <>
@@ -1117,8 +1150,11 @@ function PozycjaDokumentuKancelarii({ wniosekId, dokument, dlaKogo, przyOtwarciu
         <span className="row-g" style={{ marginLeft: 'auto' }}>
           {/* Jeden przycisk zamiast „Podgląd" i „Edytuj treść": dokument
               otwiera się do czytania, a poprawia się go w tym samym oknie,
-              klikając w to, co wymaga poprawy. */}
-          <button className="btn btn-maly btn-glowny" onClick={przyOtwarciu}>Otwórz</button>
+              klikając w to, co wymaga poprawy. Po podpisaniu nie ma czego
+              poprawiać — zostaje sprawdzenie obu egzemplarzy w PDF. */}
+          <button className="btn btn-maly btn-glowny" onClick={przyOtwarciu}>
+            {podpisany ? 'Sprawdź podpis' : 'Otwórz'}
+          </button>
           <a
             className="btn btn-maly"
             href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}`}

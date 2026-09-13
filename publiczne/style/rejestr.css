@@ -1925,6 +1925,44 @@ a.stopka-poz:hover span { text-decoration: underline; }
   color: var(--atrament-3);
   margin-bottom: var(--od-12);
 }
+/* Po podpisaniu w oknie nie ma już kartki z treścią — są dwa kafle,
+   każdy otwiera swój egzemplarz jako PDF. Podpis dotyczy pliku, więc tylko
+   plik pokazuje, co naprawdę zostało podpisane. */
+.dok-egzemplarze {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--od-12);
+}
+@media (max-width: 700px) { .dok-egzemplarze { grid-template-columns: 1fr; } }
+.dok-egzemplarz {
+  display: flex;
+  align-items: center;
+  gap: var(--od-12);
+  padding: var(--od-16);
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  color: var(--atrament);
+  text-decoration: none;
+}
+.dok-egzemplarz:hover { border-color: var(--rejestr); background: var(--rejestr-tlo); }
+.dok-egzemplarz-glowny { border-left: 3px solid var(--rejestr); }
+.dok-egzemplarz-tresc { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dok-egzemplarz-nazwa { font-size: var(--st-13); font-weight: 600; }
+.dok-egzemplarz-plik {
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dok-egzemplarz-akcja {
+  margin-left: auto;
+  font-size: var(--st-11);
+  color: var(--rejestr);
+  white-space: nowrap;
+}
+
 .dok-strona {
   background: var(--karta);
   border: 1px solid var(--linia);
