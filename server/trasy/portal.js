@@ -38,10 +38,12 @@ const numery = require('../logika/numery');
 const hasla = require('../logika/hasla');
 const limiter = require('../logika/limiter');
 const dokumentyTresc = require('../logika/dokumenty-tresc');
+const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
 const wzoryDysk = require('../logika/wzory-dysk');
+const docxPdf = require('../logika/docx-pdf');
 const docx = require('../logika/docx');
 const kontekstPisma = require('../logika/kontekst-pisma');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien } = require('../pomocnicze/odpowiedzi');
@@ -50,7 +52,7 @@ const { pobierzZKrs } = require('./krs');
 
 const router = express.Router();
 
-const TYPY_DOKUMENTU = ['umowa_zbycia', 'uchwala', 'zgoda', 'postanowienie', 'pelnomocnictwo', 'inny'];
+const TYPY_DOKUMENTU = Object.values(przepisy.RODZAJE_DOKUMENTU);
 
 function widokKonta(k) {
   if (!k) return null;
@@ -582,18 +584,27 @@ router.post(
     const wynik = wzoryDysk.wypelnij('01', dane);
     const katalog = katalogWnioskuDokumenty(wniosek.id);
     fs.mkdirSync(katalog, { recursive: true });
-    const nazwaZapisu = `${crypto.randomUUID()}-projekt-umowy.docx`;
-    fs.writeFileSync(path.join(katalog, nazwaZapisu), wynik.plik);
-    const sciezkaWzgledna = path.relative(konfiguracja.KATALOG_DOKUMENTOW, path.join(katalog, nazwaZapisu));
 
-    db()
-      .prepare(
-        `UPDATE psa_wnioski
-            SET status = 'umowa_wygenerowana', umowa_projekt_sciezka = ?,
-                umowa_projekt_wygenerowano = ?, zaktualizowano = ?
-          WHERE id = ?`
-      )
-      .run(sciezkaWzgledna, teraz, czas.terazIso(), wniosek.id);
+    // Umowa NIE jest negocjowalna po stronie klienta - dostaje ja gotowa,
+    // w PDF, ktorego nie da sie zmienic w edytorze tekstu tak jak .docx
+    // (zob. komentarz na gorze `logika/docx-pdf.js`). Blad konwersji
+    // (np. LibreOffice niedostepne) NIE cofa juz dokonanego zlozenia wniosku -
+    // wniosek zostaje w stanie "zlozony", a projekt umowy da sie wygenerowac
+    // ponownie, gdy kancelaria zauwazy problem.
+    let bladUmowy = null;
+    let umowaDoPakietu = null;
+    try {
+      umowaDoPakietu = {
+        typ: dokumentyWniosku.TYPY.UMOWA_REJESTRU,
+        akcjonariuszId: null,
+        plik: await docxPdf.zPdf(wynik.plik, {
+          autor: konfiguracja.KANCELARIA.nazwa,
+          tytul: dokumentyWniosku.NAZWY[dokumentyWniosku.TYPY.UMOWA_REJESTRU],
+        }),
+      };
+    } catch (e) {
+      bladUmowy = e.message;
+    }
 
     // Braki wobec art. 300(33) § 1 KSH liczymy na KOMPLETNYM wierszu, przy
     // skladaniu - nie przy kazdym zapisie. Nie blokuja zlozenia: kancelaria
@@ -604,17 +615,33 @@ router.post(
       .all(wniosek.id);
     const brakiAkcjonariuszy = akcjonariusze.flatMap((a) => akcjonariuszLogika.ostrzezenia(a));
 
-    // Komplet oswiadczen do podpisu (PDF). Skladamy go PO umowie i poza
-    // transakcja - to zapis na dysk, ktory nie moze cofnac juz dokonanej
-    // zmiany statusu wniosku. Blad skladania nie przewraca zlozenia:
-    // dokumenty da sie wystawic ponownie, wniosku - nie.
-    const wniosekPoZlozeniu = db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id);
+    // Komplet dokumentow do podpisu - RAZEM z umowa, jedna lista i jeden
+    // zapis. Skladamy go poza transakcja: to zapis na dysk, ktory nie moze
+    // cofnac juz dokonanej zmiany statusu wniosku. Blad skladania nie
+    // przewraca zlozenia: dokumenty da sie wystawic ponownie, wniosku - nie.
     let bladPakietu = null;
     try {
-      await zapiszPakietDokumentow(wniosekPoZlozeniu, akcjonariusze);
+      const sciezkaUmowy = await zapiszPakietDokumentow(
+        db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
+        akcjonariusze,
+        umowaDoPakietu
+      );
+      // Status i sciezka projektu umowy zostaja na wniosku: to one prowadza
+      // caly przebieg (zlozony -> umowa_wygenerowana -> umowa_podpisana).
+      if (sciezkaUmowy) {
+        db()
+          .prepare(
+            `UPDATE psa_wnioski
+                SET status = 'umowa_wygenerowana', umowa_projekt_sciezka = ?,
+                    umowa_projekt_wygenerowano = ?, zaktualizowano = ?
+              WHERE id = ?`
+          )
+          .run(sciezkaUmowy, teraz, czas.terazIso(), wniosek.id);
+      }
     } catch (e) {
       bladPakietu = e.message;
     }
+    const wniosekPoZlozeniu = db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id);
 
     odp.json({
       wniosek: wniosekPoZlozeniu,
@@ -622,23 +649,38 @@ router.post(
       ostrzezenia: wynik.ostrzezenia,
       braki_akcjonariuszy: brakiAkcjonariuszy,
       dokumenty: wczytajDokumentyWniosku(wniosek.id),
+      blad_umowy: bladUmowy,
       blad_pakietu: bladPakietu,
     });
   })
 );
 
 /**
- * Sklada komplet oswiadczen do podpisu i zapisuje je obok projektu umowy.
+ * Sklada CALY komplet dokumentow do podpisu - razem z umowa - i zapisuje go
+ * na dysku oraz w `psa_wnioski_dokumenty`. Jedna lista, jeden zapis: klient
+ * widzi wszystko w jednym miejscu, a kazda pozycja ma to samo miejsce na
+ * odeslanie podpisanego skanu.
+ *
  * Wywolywana ponownie NADPISUJE poprzedni komplet - wniosek odeslany do
  * uzupelnienia i zlozony po raz drugi ma miec dokumenty z aktualnych danych,
- * a nie dwa zestawy roznych.
+ * a nie dwa zestawy roznych. Wraz z nimi znikaja wgrane skany: dotyczyly
+ * NIEAKTUALNYCH juz tresci, wiec ich zachowanie sugerowaloby, ze podpisano
+ * to, co klient ma teraz przed soba.
+ *
+ * @param {object|null} umowa pozycja `{typ, akcjonariuszId, plik}` z umowa,
+ *   albo `null`, gdy konwersja do PDF sie nie powiodla
+ * @returns {Promise<string|null>} wzgledna sciezka zapisanej umowy
  */
-async function zapiszPakietDokumentow(wniosek, akcjonariusze) {
-  const pakiet = await dokumentyWniosku.zlozPakiet({
+async function zapiszPakietDokumentow(wniosek, akcjonariusze, umowa = null) {
+  const oswiadczenia = await dokumentyWniosku.zlozPakiet({
     wniosek,
     akcjonariusze,
     dzis: czas.dzisIso(),
   });
+  const pakiet = [
+    ...(umowa ? [dokumentyWniosku.opisz(umowa, { wniosek, akcjonariusze })] : []),
+    ...oswiadczenia,
+  ];
 
   const katalog = path.join(katalogWnioskuDokumenty(wniosek.id), 'oswiadczenia');
   fs.rmSync(katalog, { recursive: true, force: true });
@@ -647,17 +689,21 @@ async function zapiszPakietDokumentow(wniosek, akcjonariusze) {
   const teraz = czas.terazIso();
   db().prepare('DELETE FROM psa_wnioski_dokumenty WHERE wniosek_id = ?').run(wniosek.id);
 
+  let sciezkaUmowy = null;
   for (const d of pakiet) {
     // Nazwa NA DYSKU jest techniczna (UUID), zeby nie zalezec od znakow
     // w nazwisku; nazwa widoczna dla klienta siedzi w kolumnie.
     const nazwaNaDysku = `${crypto.randomUUID()}.pdf`;
     fs.writeFileSync(path.join(katalog, nazwaNaDysku), d.plik);
+    const sciezka = path.relative(konfiguracja.KATALOG_DOKUMENTOW, path.join(katalog, nazwaNaDysku));
+    if (d.typ === dokumentyWniosku.TYPY.UMOWA_REJESTRU) sciezkaUmowy = sciezka;
     db()
       .prepare(
         `INSERT INTO psa_wnioski_dokumenty
-           (wniosek_id, akcjonariusz_id, typ, nazwa, nazwa_pliku, sciezka, mime, rozmiar, utworzono)
+           (wniosek_id, akcjonariusz_id, typ, nazwa, nazwa_pliku, sciezka, mime,
+            rozmiar, kolejnosc, utworzono)
          VALUES (@wniosek_id, @akcjonariusz_id, @typ, @nazwa, @nazwa_pliku, @sciezka,
-                 'application/pdf', @rozmiar, @utworzono)`
+                 'application/pdf', @rozmiar, @kolejnosc, @utworzono)`
       )
       .run({
         wniosek_id: wniosek.id,
@@ -665,23 +711,44 @@ async function zapiszPakietDokumentow(wniosek, akcjonariusze) {
         typ: d.typ,
         nazwa: d.nazwa,
         nazwa_pliku: d.nazwaPliku,
-        sciezka: path.relative(konfiguracja.KATALOG_DOKUMENTOW, path.join(katalog, nazwaNaDysku)),
+        sciezka,
         rozmiar: d.plik.length,
+        kolejnosc: d.kolejnosc,
         utworzono: teraz,
       });
   }
+  return sciezkaUmowy;
 }
 
 function wczytajDokumentyWniosku(wniosekId) {
   return db()
     .prepare(
-      `SELECT id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id
-         FROM psa_wnioski_dokumenty WHERE wniosek_id = ? ORDER BY id`
+      `SELECT id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id,
+              podpis_nazwa_pliku, podpis_rozmiar, podpis_wgrano
+         FROM psa_wnioski_dokumenty WHERE wniosek_id = ? ORDER BY kolejnosc, id`
     )
     .all(wniosekId);
 }
 
-/** Lista dokumentow do podpisu — umowa ma wlasna trase, tu sa oswiadczenia. */
+/**
+ * Odsyla plik z katalogu dokumentow. Sprawdzenie przedrostka sciezki
+ * zostaje przy KAZDYM pobraniu: sciezka idzie z bazy, ale to nadal jest
+ * skladanie sciezki z danych - jedno miejsce, w ktorym to pilnujemy.
+ */
+function wyslijPlikDokumentu(odp, sciezkaWzgledna, nazwaPliku, mime) {
+  const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, sciezkaWzgledna);
+  if (!pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelna)) {
+    throw nieZnaleziono('Plik nie jest już dostępny.');
+  }
+  odp.setHeader('Content-Type', mime || 'application/octet-stream');
+  odp.setHeader(
+    'Content-Disposition',
+    `attachment; filename*=UTF-8''${encodeURIComponent(nazwaPliku || 'dokument')}`
+  );
+  fs.createReadStream(pelna).pipe(odp);
+}
+
+/** Komplet dokumentow do podpisu — od etapu 13 razem z umowa. */
 router.get(
   '/wniosek/dokumenty',
   wymagajWnioskodawcy,
@@ -702,17 +769,7 @@ router.get(
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
       .get(Number(zad.params.id), wniosek.id);
     if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
-
-    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, dokument.sciezka);
-    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
-      throw nieZnaleziono('Plik nie jest już dostępny.');
-    }
-    odp.setHeader('Content-Type', dokument.mime);
-    odp.setHeader(
-      'Content-Disposition',
-      `attachment; filename*=UTF-8''${encodeURIComponent(dokument.nazwa_pliku)}`
-    );
-    fs.createReadStream(pelnaSciezka).pipe(odp);
+    wyslijPlikDokumentu(odp, dokument.sciezka, dokument.nazwa_pliku, dokument.mime);
   })
 );
 
@@ -733,22 +790,22 @@ router.get(
       wniosek.krs ? `KRS ${wniosek.krs}` : null,
     ].filter(Boolean).join(' — ').replace(/[\\/:*?"<>|]/g, '-');
 
-    odp.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    odp.setHeader('Content-Type', 'application/pdf');
     odp.setHeader(
       'Content-Disposition',
-      `attachment; filename*=UTF-8''${encodeURIComponent(`${nazwaPliku}.docx`)}`
+      `attachment; filename*=UTF-8''${encodeURIComponent(`${nazwaPliku}.pdf`)}`
     );
     fs.createReadStream(pelnaSciezka).pipe(odp);
   })
 );
 
-const ROZSZERZENIA_UMOWY_PODPISANEJ_DOZWOLONE = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
-const LIMIT_ROZMIARU_UMOWY_PODPISANEJ_BAJTY = 20 * 1024 * 1024;
+const ROZSZERZENIA_PODPISU_DOZWOLONE = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
+const LIMIT_ROZMIARU_PODPISU_BAJTY = 20 * 1024 * 1024;
 
-const uploadUmowyPodpisanej = multer({
+const uploadPodpisanego = multer({
   storage: multer.diskStorage({
     destination(zad, plik, wywolaj) {
-      const katalog = katalogWnioskuDokumenty(zad.psaWniosek.id);
+      const katalog = path.join(katalogWnioskuDokumenty(zad.psaWniosek.id), 'podpisane');
       fs.mkdirSync(katalog, { recursive: true });
       wywolaj(null, katalog);
     },
@@ -757,10 +814,10 @@ const uploadUmowyPodpisanej = multer({
       wywolaj(null, `${crypto.randomUUID()}-${bezpiecznaNazwa}`);
     },
   }),
-  limits: { fileSize: LIMIT_ROZMIARU_UMOWY_PODPISANEJ_BAJTY, files: 1 },
+  limits: { fileSize: LIMIT_ROZMIARU_PODPISU_BAJTY, files: 1 },
   fileFilter(zad, plik, wywolaj) {
     const rozszerzenie = path.extname(plik.originalname).toLowerCase();
-    if (!ROZSZERZENIA_UMOWY_PODPISANEJ_DOZWOLONE.has(rozszerzenie)) {
+    if (!ROZSZERZENIA_PODPISU_DOZWOLONE.has(rozszerzenie)) {
       return wywolaj(
         new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Dozwolone: PDF albo skan/zdjęcie (JPG, PNG).`)
       );
@@ -769,25 +826,54 @@ const uploadUmowyPodpisanej = multer({
   },
 });
 
+/**
+ * Stany, w ktorych klient moze jeszcze odsylac podpisane skany. Po przyjeciu
+ * albo odrzuceniu wniosku komplet jest zamkniety; przed wygenerowaniem
+ * dokumentow nie ma czego odsylac.
+ */
+const STATUSY_PRZYJMUJACE_PODPISY = new Set(['umowa_wygenerowana', 'umowa_podpisana']);
+
 /** Wstrzykuje wniosek do `zad` PRZED multerem - potrzebny do wyznaczenia katalogu docelowego. */
 function zaladujWlasnyWniosekDoUploadu(zad, odp, dalej) {
   const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
   if (!wniosek) return dalej(nieZnaleziono('Najpierw złóż wniosek.'));
-  if (wniosek.status !== 'umowa_wygenerowana') {
-    return dalej(bledneZadanie(`Wniosek ma status „${wniosek.status}” — w tym momencie nie oczekujemy podpisanej umowy.`));
+  if (!STATUSY_PRZYJMUJACE_PODPISY.has(wniosek.status)) {
+    return dalej(bledneZadanie(`Wniosek ma status „${wniosek.status}” — w tym momencie nie oczekujemy podpisanych dokumentów.`));
   }
   zad.psaWniosek = wniosek;
   dalej();
 }
 
-router.post(
-  '/wniosek/umowa-podpisana',
-  wymagajWnioskodawcy,
-  zaladujWlasnyWniosekDoUploadu,
-  (zad, odp, dalej) => uploadUmowyPodpisanej.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
-  asy((zad, odp) => {
-    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
-    const teraz = czas.terazIso();
+/**
+ * Zapisuje podpisany skan przy KONKRETNYM wygenerowanym dokumencie.
+ *
+ * Umowa jest jednym z tych dokumentow, ale niesie dodatkowo STAN calego
+ * wniosku (`umowa_wygenerowana` -> `umowa_podpisana`) - to ona jest umowa
+ * o prowadzenie rejestru, bez ktorej nie ma czego przyjmowac. Dlatego przy
+ * niej, i tylko przy niej, aktualizujemy tez kolumny `umowa_podpisana_*`
+ * i status: reszta trasy portalu i kancelarii czyta stan wlasnie stamtad.
+ */
+function zapiszPodpisanySkan(wniosek, dokument, plik) {
+  const teraz = czas.terazIso();
+  const sciezka = path.relative(konfiguracja.KATALOG_DOKUMENTOW, plik.path);
+
+  // Poprzedni skan tego samego dokumentu przestaje byc potrzebny - zostalby
+  // na dysku jako plik, do ktorego nic juz nie prowadzi.
+  if (dokument.podpis_sciezka) {
+    const stary = path.join(konfiguracja.KATALOG_DOKUMENTOW, dokument.podpis_sciezka);
+    if (stary.startsWith(konfiguracja.KATALOG_DOKUMENTOW)) fs.rmSync(stary, { force: true });
+  }
+
+  db()
+    .prepare(
+      `UPDATE psa_wnioski_dokumenty
+          SET podpis_sciezka = ?, podpis_nazwa_pliku = ?, podpis_mime = ?,
+              podpis_rozmiar = ?, podpis_wgrano = ?
+        WHERE id = ?`
+    )
+    .run(sciezka, plik.originalname, plik.mimetype, plik.size, teraz, dokument.id);
+
+  if (dokument.typ === dokumentyWniosku.TYPY.UMOWA_REJESTRU) {
     db()
       .prepare(
         `UPDATE psa_wnioski
@@ -795,16 +881,121 @@ router.post(
                 umowa_podpisana_mime = ?, umowa_podpisana_wgrano = ?, zaktualizowano = ?
           WHERE id = ?`
       )
-      .run(
-        path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path),
-        zad.file.originalname,
-        zad.file.mimetype,
-        teraz,
-        teraz,
-        zad.psaWniosek.id
-      );
+      .run(sciezka, plik.originalname, plik.mimetype, teraz, teraz, wniosek.id);
+  }
+}
 
-    odp.status(201).json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(zad.psaWniosek.id) });
+/** Podpisany skan JEDNEGO dokumentu z kompletu. */
+router.post(
+  '/wniosek/dokumenty/:id/podpis',
+  wymagajWnioskodawcy,
+  zaladujWlasnyWniosekDoUploadu,
+  (zad, odp, dalej) => uploadPodpisanego.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  asy((zad, odp) => {
+    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    const dokument = db()
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
+      .get(Number(zad.params.id), zad.psaWniosek.id);
+    if (!dokument) {
+      fs.rmSync(zad.file.path, { force: true });
+      throw nieZnaleziono('Nie odnaleziono dokumentu.');
+    }
+
+    zapiszPodpisanySkan(zad.psaWniosek, dokument, zad.file);
+    odp.status(201).json({
+      wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(zad.psaWniosek.id),
+      dokumenty: wczytajDokumentyWniosku(zad.psaWniosek.id),
+    });
+  })
+);
+
+/** Pobranie WLASNEGO odeslanego skanu - do sprawdzenia, co poszlo. */
+router.get(
+  '/wniosek/dokumenty/:id/podpis',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
+    const dokument = db()
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
+      .get(Number(zad.params.id), wniosek.id);
+    if (!dokument || !dokument.podpis_sciezka) throw nieZnaleziono('Nie odesłano jeszcze tego dokumentu.');
+    wyslijPlikDokumentu(odp, dokument.podpis_sciezka, dokument.podpis_nazwa_pliku, dokument.podpis_mime);
+  })
+);
+
+/**
+ * Zdjecie odeslanego skanu - klient zorientowal sie, ze wgral nie ten plik
+ * albo nieczytelny. Przy umowie cofa tez status: bez podpisanej umowy
+ * wniosek nie jest gotowy do przyjecia.
+ */
+router.delete(
+  '/wniosek/dokumenty/:id/podpis',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
+    if (!STATUSY_PRZYJMUJACE_PODPISY.has(wniosek.status)) {
+      throw bledneZadanie(`Wniosek ma status „${wniosek.status}” — nie można już zmieniać przesłanych dokumentów.`);
+    }
+    const dokument = db()
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
+      .get(Number(zad.params.id), wniosek.id);
+    if (!dokument || !dokument.podpis_sciezka) throw nieZnaleziono('Nie odesłano jeszcze tego dokumentu.');
+
+    const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, dokument.podpis_sciezka);
+    if (pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW)) fs.rmSync(pelna, { force: true });
+
+    db()
+      .prepare(
+        `UPDATE psa_wnioski_dokumenty
+            SET podpis_sciezka = NULL, podpis_nazwa_pliku = NULL, podpis_mime = NULL,
+                podpis_rozmiar = NULL, podpis_wgrano = NULL
+          WHERE id = ?`
+      )
+      .run(dokument.id);
+
+    if (dokument.typ === dokumentyWniosku.TYPY.UMOWA_REJESTRU) {
+      db()
+        .prepare(
+          `UPDATE psa_wnioski
+              SET status = 'umowa_wygenerowana', umowa_podpisana_sciezka = NULL,
+                  umowa_podpisana_nazwa_pliku = NULL, umowa_podpisana_mime = NULL,
+                  umowa_podpisana_wgrano = NULL, zaktualizowano = ?
+            WHERE id = ?`
+        )
+        .run(czas.terazIso(), wniosek.id);
+    }
+
+    odp.json({
+      wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
+      dokumenty: wczytajDokumentyWniosku(wniosek.id),
+    });
+  })
+);
+
+/**
+ * Stara trasa odsylania umowy. Zostaje, bo umowa jest szczegolna (przenosi
+ * status wniosku) i bo prowadzi do niej gotowy formularz - ale zapisuje
+ * dokladnie to samo, co trasa ogolna wyzej: jeden mechanizm, nie dwa.
+ */
+router.post(
+  '/wniosek/umowa-podpisana',
+  wymagajWnioskodawcy,
+  zaladujWlasnyWniosekDoUploadu,
+  (zad, odp, dalej) => uploadPodpisanego.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  asy((zad, odp) => {
+    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    const umowa = db()
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE wniosek_id = ? AND typ = ?')
+      .get(zad.psaWniosek.id, dokumentyWniosku.TYPY.UMOWA_REJESTRU);
+    if (!umowa) throw nieZnaleziono('Projekt umowy nie został jeszcze wygenerowany.');
+
+    zapiszPodpisanySkan(zad.psaWniosek, umowa, zad.file);
+    odp.status(201).json({
+      wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(zad.psaWniosek.id),
+      dokumenty: wczytajDokumentyWniosku(zad.psaWniosek.id),
+    });
   })
 );
 
@@ -838,6 +1029,17 @@ router.get(
     if (konto.rola === 'spolka') {
       const spolka = rejestr.wczytajSpolke(db(), konto.spolka_id);
       return odp.json({ rola: 'spolka', spolki: spolka ? [{ ...spolka, uwagi: undefined }] : [] });
+    }
+
+    // Wnioskodawca nie ma jeszcze ani spolki, ani akcji - jego "Moje spolki"
+    // to STAN WNIOSKU. Bez tego ekran pokazywal "brak powiazanych spolek",
+    // co po zlozeniu wniosku i odeslaniu podpisanej umowy jest po prostu
+    // nieprawda: sprawa jest w toku, tylko po stronie kancelarii.
+    if (konto.rola === 'wnioskodawca') {
+      const wniosek = db()
+        .prepare('SELECT id, status, nazwa, krs, zaktualizowano FROM psa_wnioski WHERE konto_id = ?')
+        .get(konto.id);
+      return odp.json({ rola: 'wnioskodawca', spolki: [], wniosek: wniosek || null });
     }
 
     const wiersze = db()
@@ -1101,15 +1303,17 @@ router.post(
     });
     if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
 
-    const trescHtml = dokumentyTresc.informacjaZRejestru({
+    const trescHtml = informacjaDokument.informacjaZRejestru({
       kancelaria: konfiguracja.KANCELARIA,
       spolka: stan.spolka,
       data,
       stan,
+      odbiorca: { rola: rolaOdbioru(konto) },
+      sporzadzono: czas.terazIso(),
     });
 
     const autorWpisu = `Portal — ${konto.email}`;
-    db()
+    const wynikZapisu = db()
       .prepare(
         `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, odbiorca_osoba_id, kanal, tresc_html, wyslano, autor, utworzono)
          VALUES (?, 'informacja_z_rejestru', ?, 'portal', ?, ?, ?, ?)`
@@ -1135,7 +1339,39 @@ router.post(
       notatka: `Informacja z rejestru — portal, ${data}`,
     });
 
-    odp.json({ tresc_html: trescHtml, oplata });
+    odp.json({ dokument_id: Number(wynikZapisu.lastInsertRowid), oplata });
+  })
+);
+
+/**
+ * Wydany dokument pod wlasnym adresem. Portal otwieral informacje jako
+ * `blob:` sklejony z odpowiedzi POST — dokument nie mial wtedy adresu (nie
+ * dalo sie go otworzyc ponownie ani wyslac linkiem), przegladarka
+ * proponowala mu przypadkowa nazwe pliku, a sciezki wzgledne w srodku (godlo)
+ * nie mialy sie do czego odniesc.
+ *
+ * GET niczego nie generuje i NIE NALICZA OPLATY: oddaje tresc zapisana przy
+ * wydaniu. Ponowne otwarcie raz wydanego dokumentu jest bezplatne — platna
+ * jest czynnosc wydania, nie zaglodniecie do wlasnej szuflady.
+ */
+router.get(
+  '/informacja/:id',
+  asy((zad, odp) => {
+    const konto = zad.konto;
+    const dokument = db()
+      .prepare(
+        `SELECT id, spolka_id, tresc_html FROM psa_wydane_dokumenty
+          WHERE id = ? AND typ = 'informacja_z_rejestru'`
+      )
+      .get(Number(zad.params.id));
+
+    // Cudzy dokument to dla portalu dokument NIEISTNIEJACY: 403 potwierdzalby,
+    // ze taki numer jest zajety.
+    if (!dokument || !maDostepDoSpolki(konto, dokument.spolka_id)) {
+      throw nieZnaleziono('Nie odnaleziono dokumentu.');
+    }
+
+    odp.type('text/html').send(dokument.tresc_html);
   })
 );
 

@@ -71,6 +71,14 @@ aplikacja.use('/api', (zad, odp) => {
   odp.status(404).json({ blad: `Nieznany endpoint: ${zad.method} /api${zad.path}` });
 });
 
+// Brakujacy plik statyczny ma byc 404, a nie strona aplikacji. Bez tego
+// `<img src="/obrazy/notariat.svg">` dostawal w odpowiedzi index.html
+// z kodem 200 - przegladarka i tak nie zrobila z tego obrazka, ale
+// "200 OK" na nieistniejacy plik myli przy kazdej diagnozie.
+aplikacja.use(['/obrazy', '/style', '/js', '/vendor'], (zad, odp) => {
+  odp.status(404).type('text/plain').send('Nie odnaleziono pliku.');
+});
+
 // Pozostale sciezki obsluguje aplikacja jednostronicowa.
 aplikacja.get('*', (zad, odp) => {
   odp.sendFile(path.join(__dirname, 'publiczne', 'index.html'));

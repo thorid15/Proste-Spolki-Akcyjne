@@ -826,11 +826,8 @@ function EkranKokpitu({ spolkaId }) {
           </div>
         </div>
         <div className="naglowek-strony-akcje">
-          <button className="btn" onClick={() => idz(`/spolki/${spolkaId}/wydruk/raport?data=${data}`)}>
-            <Ikona nazwa="dokument" rozmiar={16} /> Raport
-          </button>
           <button className="btn" onClick={() => idz(`/spolki/${spolkaId}/wydruk/informacja?data=${data}`)}>
-            Informacja z rejestru
+            <Ikona nazwa="dokument" rozmiar={16} /> Informacja z rejestru
           </button>
           {/* Tryb archiwalny (2.5): przyciski akcji ZNIKAJĄ Z DOM, nie disabled —
               wydruki zostają, bo to odczyt stanu na wskazany dzień, nie jego zmiana. */}

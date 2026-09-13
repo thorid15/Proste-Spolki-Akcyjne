@@ -1456,6 +1456,131 @@ const MIGRACJE = [
         ON psa_wnioski_dokumenty (wniosek_id, id);
     `,
   },
+  {
+    wersja: 33,
+    nazwa: 'umowa spolki jako rodzaj dokumentu bedacego podstawa wpisu',
+    sql: `
+      -- Akcje obejmowane przy zawiazaniu spolki powstaja z samej UMOWY SPOLKI
+      -- (art. 300(3) i art. 300(9) KSH), a nie z pozniejszej uchwaly o emisji.
+      -- Dotad katalog rodzajow dokumentu tej pozycji nie mial, wiec pierwsza
+      -- emisja musiala isc jako "uchwala" (nieprawda) albo "inny dokument"
+      -- (bez tresci) - a rodzaj trafia wprost na pismo do akcjonariusza
+      -- (art. 300(34) § 4 KSH), wiec falszywy opis podstawy nie jest drobiazgiem.
+      --
+      -- CHECK-a nie da sie w SQLite zmienic w miejscu. Przy psa_dokumenty
+      -- (tabela liscia - nic jej nie wskazuje) przebudowujemy tabele, jak
+      -- w migracjach 4, 7, 13, 14 i 22. Przy psa_sprawy, na ktora wskazuja
+      -- trzy inne tabele, podmieniamy SAMA KOLUMNE - przebudowa tabeli
+      -- zerwalaby te powiazania.
+
+      CREATE TABLE psa_dokumenty_v33 (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        sprawa_id      INTEGER NOT NULL REFERENCES psa_sprawy(id),
+        nazwa_pliku    TEXT NOT NULL,
+        sciezka        TEXT NOT NULL,
+        mime           TEXT,
+        rozmiar        INTEGER,
+        typ_dokumentu  TEXT NOT NULL
+                         CHECK (typ_dokumentu IN
+                           ('umowa_spolki','umowa_zbycia','uchwala','zgoda',
+                            'postanowienie','pelnomocnictwo','inny')),
+        hash           TEXT,
+        wgral          TEXT NOT NULL,
+        utworzono      TEXT NOT NULL
+      );
+      INSERT INTO psa_dokumenty_v33
+        SELECT id, sprawa_id, nazwa_pliku, sciezka, mime, rozmiar, typ_dokumentu,
+               hash, wgral, utworzono
+          FROM psa_dokumenty;
+      DROP TABLE psa_dokumenty;
+      ALTER TABLE psa_dokumenty_v33 RENAME TO psa_dokumenty;
+
+      CREATE INDEX IF NOT EXISTS psa_ix_dokumenty_sprawa ON psa_dokumenty (sprawa_id);
+
+      ALTER TABLE psa_sprawy ADD COLUMN dokument_rodzaj_v33 TEXT
+        CHECK (dokument_rodzaj_v33 IS NULL OR dokument_rodzaj_v33 IN
+          ('umowa_spolki','umowa_zbycia','uchwala','zgoda',
+           'postanowienie','pelnomocnictwo','inny'));
+      UPDATE psa_sprawy SET dokument_rodzaj_v33 = dokument_rodzaj;
+      ALTER TABLE psa_sprawy DROP COLUMN dokument_rodzaj;
+      ALTER TABLE psa_sprawy RENAME COLUMN dokument_rodzaj_v33 TO dokument_rodzaj;
+    `,
+  },
+  {
+    wersja: 34,
+    nazwa: 'podpisane skany wracaja przez portal i wisza przy spolce',
+    sql: `
+      -- Kazdy WYGENEROWANY dokument dostaje miejsce na swoja podpisana,
+      -- zeskanowana wersje. Kolumny przy dokumencie, a nie osobna tabela:
+      -- do jednego wzoru wraca dokladnie jeden podpisany egzemplarz, wiec
+      -- para "wzor -> podpis" jest tu relacja jeden do jednego i nie ma
+      -- czego zliczac ani porzadkowac.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_sciezka TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_nazwa_pliku TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_mime TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_rozmiar INTEGER;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_wgrano TEXT;
+
+      -- Kolejnosc na liscie do podpisu przestaje zalezec od kolejnosci
+      -- wstawiania: umowa ma stac pierwsza takze wtedy, gdy komplet
+      -- powstal ponownie po odeslaniu wniosku do uzupelnienia.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN kolejnosc INTEGER NOT NULL DEFAULT 100;
+
+      -- Dokumenty zalozycielskie SPOLKI. Po przyjeciu wniosku komplet
+      -- przestaje byc zalacznikiem sprawy w toku i staje sie czescia akt
+      -- spolki: wzor i podpisany egzemplarz kazdego dokumentu, na stale.
+      -- Wniosek zostaje w kolumnie jako slad pochodzenia - po to, zeby
+      -- dalo sie odpowiedziec "skad to sie wzielo", gdy spolka ma juz
+      -- za soba kilka lat wpisow.
+      CREATE TABLE IF NOT EXISTS psa_spolki_dokumenty (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        spolka_id    INTEGER NOT NULL REFERENCES psa_spolki(id),
+        wniosek_id   INTEGER REFERENCES psa_wnioski(id),
+        typ          TEXT NOT NULL,
+        nazwa        TEXT NOT NULL,
+        nazwa_pliku  TEXT NOT NULL,
+        sciezka      TEXT NOT NULL,
+        mime         TEXT NOT NULL DEFAULT 'application/pdf',
+        rozmiar      INTEGER,
+        -- 'wzor' - dokument wystawiony przez kancelarie,
+        -- 'podpisany' - egzemplarz odeslany przez klienta z podpisami.
+        rola         TEXT NOT NULL CHECK (rola IN ('wzor','podpisany')),
+        utworzono    TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS psa_ix_spolki_dokumenty_spolka
+        ON psa_spolki_dokumenty (spolka_id, id);
+    `,
+  },
+  {
+    wersja: 35,
+    nazwa: 'status PEP przy osobie, nie tylko na papierze',
+    sql: `
+      -- Eksponowane stanowisko polityczne (PEP) - art. 2 ust. 2 pkt 11 ustawy
+      -- z 1 marca 2018 r. o przeciwdzialaniu praniu pieniedzy oraz finansowaniu
+      -- terroryzmu. Notariusz prowadzacy rejestr akcjonariuszy jest instytucja
+      -- obowiazana (art. 2 ust. 1 pkt 12 tej ustawy) i stosuje wobec
+      -- akcjonariuszy srodki bezpieczenstwa finansowego; wobec PEP - wzmozone.
+      --
+      -- Dotad status PEP istnial WYLACZNIE jako pole do odhaczenia na
+      -- drukowanym oswiadczeniu AML. Papier wraca do akt i nikt go pozniej nie
+      -- przeglada, wiec kancelaria nie miala jak zobaczyc na ekranie, ktory
+      -- akcjonariusz wymaga wzmozonych srodkow. Teraz to dana, nie tylko tresc
+      -- dokumentu - i wchodzi wprost do oswiadczenia, zamiast czekac na
+      -- odhaczenie dlugopisem.
+      --
+      -- 'nie' / 'tak' / 'rodzina' / 'wspolpracownik' - ustawa traktuje te trzy
+      -- ostatnie tak samo co do obowiazkow, ale rozroznia je co do podstawy,
+      -- a kancelaria musi wiedziec, ktora zachodzi.
+      ALTER TABLE psa_osoby ADD COLUMN pep TEXT NOT NULL DEFAULT 'nie'
+        CHECK (pep IN ('nie','tak','rodzina','wspolpracownik'));
+      ALTER TABLE psa_osoby ADD COLUMN pep_opis TEXT;
+
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep TEXT NOT NULL DEFAULT 'nie'
+        CHECK (pep IN ('nie','tak','rodzina','wspolpracownik'));
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_opis TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

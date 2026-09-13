@@ -16,6 +16,9 @@ const PUSTA_OSOBA = {
   // Sesja 8, blok C — przegląd okresowy, beneficjent rzeczywisty, oświadczenie PEP:
   aml_data_przegladu: '', beneficjent_rzeczywisty_id: null,
   pep_oswiadczenie: '', pep_oswiadczenie_data: '',
+  // Etap 14 — status PEP jako DANA (ocena kancelarii, katalog z przepisy.js),
+  // obok `pep_oswiadczenie`, ktore jest oswiadczeniem zlozonym przez osobe.
+  pep: 'nie', pep_opis: '',
 };
 
 const TYPY_DOKUMENTU_AML = [
@@ -168,7 +171,7 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
       stopka={
         <>
           <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-          <button className="btn btn-primary" onClick={zapisz} disabled={zapisywanie}>
+          <button className="btn btn-glowny" onClick={zapisz} disabled={zapisywanie}>
             {zapisywanie ? 'Zapisywanie…' : 'Zapisz'}
           </button>
         </>
@@ -189,28 +192,33 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
             <Pole etykieta="Nazwisko" wymagane><input type="text" {...pole('nazwisko')} /></Pole>
             <Pole etykieta="Imię"><input type="text" {...pole('imie')} /></Pole>
           </div>
-          <label className="chk" style={{ padding: '8px 0' }}>
-            <input
-              type="checkbox"
-              checked={Boolean(Number(dane.bez_pesel))}
-              onChange={(z) =>
-                ustawDane((p) => ({
-                  ...p,
-                  bez_pesel: z.target.checked ? 1 : 0,
-                  pesel: z.target.checked ? '' : p.pesel,
-                }))
-              }
-            />
-            <span className="chk-tresc">
-              Nie ma numeru PESEL (np. cudzoziemiec) — do rejestru wchodzi data urodzenia
-            </span>
-          </label>
           <div className="siatka-2">
-            {!Number(dane.bez_pesel) && (
-              <Pole etykieta="PESEL" podpowiedz="Data urodzenia i płeć uzupełnią się automatycznie po wpisaniu 11 cyfr — można je potem nadpisać.">
-                <input type="text" {...pole('pesel')} maxLength={11} />
-              </Pole>
-            )}
+            <Pole
+              etykieta="PESEL"
+              podpowiedz={
+                !Number(dane.bez_pesel)
+                  ? 'Data urodzenia i płeć uzupełnią się automatycznie po wpisaniu 11 cyfr — można je potem nadpisać.'
+                  : null
+              }
+            >
+              <div className="pole-z-odznaczeniem">
+                {!Number(dane.bez_pesel) && <input type="text" {...pole('pesel')} maxLength={11} />}
+                <label className="chk chk-w-linii">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(Number(dane.bez_pesel))}
+                    onChange={(z) =>
+                      ustawDane((p) => ({
+                        ...p,
+                        bez_pesel: z.target.checked ? 1 : 0,
+                        pesel: z.target.checked ? '' : p.pesel,
+                      }))
+                    }
+                  />
+                  <span className="chk-tresc">Nie posiada</span>
+                </label>
+              </div>
+            </Pole>
             <Pole etykieta="Data urodzenia" wymagane={Boolean(Number(dane.bez_pesel))}>
               <PoleDaty wartosc={dane.data_urodzenia || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))} />
             </Pole>
@@ -357,6 +365,40 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
           <ZnacznikPrzegladuAml wymaga={edycja && osoba.wymaga_przegladu_aml} />
         </div>
       </div>
+      {/* Status PEP jest DANĄ osoby, nie tylko treścią oświadczenia: wobec
+          osoby zajmującej eksponowane stanowisko polityczne kancelaria
+          stosuje wzmożone środki bezpieczeństwa finansowego, więc musi go
+          widzieć na ekranie, a nie odczytywać z papieru w aktach. */}
+      <Przelacznik
+        wlaczony={Boolean(dane.pep) && dane.pep !== 'nie'}
+        przyZmianie={(v) =>
+          ustawDane((p) => ({ ...p, pep: v ? 'tak' : 'nie', pep_opis: v ? p.pep_opis : '' }))
+        }
+        etykieta="Eksponowane stanowisko polityczne (PEP)"
+        opis="Osoba pełniąca znaczącą funkcję publiczną, członek jej rodziny albo bliski współpracownik — ustawa o przeciwdziałaniu praniu pieniędzy. Wobec takiej osoby stosuje się WZMOŻONE środki bezpieczeństwa finansowego."
+        dzieci={
+          <>
+            <Pole etykieta="Na czym polega status" wymagane>
+              <select
+                value={dane.pep && dane.pep !== 'nie' ? dane.pep : 'tak'}
+                onChange={(z) => ustawDane((p) => ({ ...p, pep: z.target.value }))}
+              >
+                <option value="tak">Zajmuje eksponowane stanowisko polityczne</option>
+                <option value="rodzina">Jest członkiem rodziny takiej osoby</option>
+                <option value="wspolpracownik">Jest bliskim współpracownikiem takiej osoby</option>
+              </select>
+            </Pole>
+            <Pole
+              etykieta={dane.pep === 'tak' ? 'Stanowisko lub funkcja' : 'Osoba i charakter relacji'}
+              wymagane
+              podpowiedz="Trafia wprost do oświadczenia AML przygotowanego do podpisu."
+            >
+              <input type="text" {...pole('pep_opis')} />
+            </Pole>
+          </>
+        }
+      />
+
       <Pole etykieta="Notatka AML" podpowiedz="Nigdy nie trafia na wydruki dla klienta.">
         <textarea {...pole('aml_notatka')} style={{ minHeight: 70 }} />
       </Pole>

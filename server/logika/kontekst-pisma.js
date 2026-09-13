@@ -20,6 +20,11 @@
  * dopiero przy A7, bo nie pasował do podziału na automat/spółkę z A3/A5):
  *   04 — żądanie dokonania wpisu (art. 300(34) § 1 i § 4 KSH)
  *
+ * Wzór 01 i 03 mają też WARIANT „projekt” (`umowaOProwadzenieRejestru`
+ * przyjmujący `wniosek`, `uchwalaWyboruProjekt`) — składany klientowi razem
+ * z wnioskiem, przed otwarciem rejestru, gdy spółka i akcje jeszcze nie
+ * istnieją w schemacie rejestrowym. Zob. komentarz przy `uchwalaWyboruProjekt`.
+ *
  * Klucz, którego tu NIE MA (np. `dokument_rodzaj` przy sprawie bez
  * wskazanego dokumentu), po prostu nie trafia do zwracanego obiektu —
  * renderer (`logika/docx.js`) sam dopisze go do listy braków. Ten moduł
@@ -103,7 +108,11 @@ function identyfikatorWewnetrzny(osoba) {
 function sadRejestrowyPelny(spolka) {
   if (!spolka.sad_rejestrowy) return null;
   if (!spolka.wydzial) return spolka.sad_rejestrowy;
-  const wydzial = /rejestru s.dowego/i.test(spolka.wydzial)
+  // Import z KRS zawsze zwraca pelna nazwe ("... Wydzial Gospodarczy
+  // Krajowego Rejestru Sadowego" - server/dane/sady-rejestrowe.json), ale
+  // pole jest edytowalne recznie - ktos moze wpisac skrot "KRS" zamiast
+  // pelnej nazwy. Obie formy licza sie jako "juz obecne".
+  const wydzial = /rejestru s.dowego|\bKRS\b/i.test(spolka.wydzial)
     ? spolka.wydzial
     : `${spolka.wydzial} Krajowego Rejestru Sądowego`;
   return `${spolka.sad_rejestrowy}, ${wydzial}`;
@@ -137,10 +146,27 @@ function kancelariaKlucze() {
  * etykietą („siedziba: Gdańsk”) — dlatego nie ma tu drugiej formy do
  * odmiany i nie ma czego zgadywać przy nazwach nietypowych.
  */
+/**
+ * `{{spolka_firma}}` jest we WSZYSTKICH dziesięciu wzorach wplecione w zdanie,
+ * które od razu dokleja słowa „prosta spółka akcyjna" (art. 305 § 1 KSH
+ * wymaga tego oznaczenia w firmie) — a firma zarejestrowana w KRS ZWYKLE
+ * już to oznaczenie zawiera (np. „YAMA GROUP PROSTA SPÓŁKA AKCYJNA"), co bez
+ * tego przycięcia dawało w piśmie podwójne „prosta spółka akcyjna prosta
+ * spółka akcyjna". Przycinamy więc oznaczenie z KOŃCA firmy — wzór dokleja
+ * je z powrotem, dokładnie raz, niezależnie od tego, czy operator wpisał
+ * firmę z oznaczeniem, czy bez.
+ */
+function firmaBezOznaczeniaFormy(nazwa) {
+  if (!nazwa) return nazwa;
+  return String(nazwa)
+    .replace(/,?\s*(prosta\s+sp[oó]łka\s+akcyjna|P\.?\s*S\.?\s*A\.?)\s*$/i, '')
+    .trim();
+}
+
 function spolkaKlucze(spolka) {
   const organ = spolka.organ_rodzaj ? przepisy.OPISY_ORGANOW[spolka.organ_rodzaj] : null;
   return {
-    spolka_firma: spolka.nazwa || null,
+    spolka_firma: firmaBezOznaczeniaFormy(spolka.nazwa) || null,
     spolka_siedziba_mianownik: spolka.miejscowosc || null,
     spolka_adres_pelny: adresPelny(spolka),
     spolka_sad_rejestrowy: sadRejestrowyPelny(spolka),
@@ -394,6 +420,45 @@ function uchwalaWyboru({ spolka, akcjonariusze, uchwala, dzis }) {
 }
 
 /**
+ * Miejsce do wpisania ręką na WZORZE dokumentu — świadomie puste pole, nie
+ * brak danych. Kropki (zamiast „—" z `ZASLONA_BRAKU`) mówią podpisującemu
+ * „tu wpisz", podczas gdy myślnik znaczy w tej aplikacji „tej danej nie ma".
+ */
+const DO_WPISANIA = '.................';
+
+/**
+ * Wzór 03 w wariancie WZORU DO WYPEŁNIENIA — wydawany klientowi razem
+ * z wnioskiem, jeszcze przed otwarciem rejestru (odróżnia go od
+ * `uchwalaWyboru` wyżej, wystawianej NA ŻĄDANIE dla spółki już
+ * zarejestrowanej, gdzie liczby głosów wynikają z realnego akcjonariatu).
+ *
+ * Tu akcje nie są jeszcze wyemitowane, a głosowanie dopiero się odbędzie —
+ * liczby akcji, głosów, numer i tryb uchwały nie mają skąd się wziąć i nie
+ * wolno ich zmyślić w dokumencie korporacyjnym. Zostają więc miejscem do
+ * wpisania ręką przy podpisywaniu. Realne są dane spółki, kancelarii i
+ * NAZWISKA akcjonariuszy — po to, żeby wzór dało się od razu podpisać, bez
+ * przepisywania listy stron.
+ */
+function uchwalaWyboruProjekt({ wniosek, akcjonariusze, dzis }) {
+  return {
+    ...kancelariaKlucze(),
+    ...spolkaKlucze(wniosek),
+    akcjonariusze: (akcjonariusze || []).map((a) => ({
+      akcjonariusz_nazwa: mianownik(a),
+      akcjonariusz_liczba_akcji: DO_WPISANIA,
+      akcjonariusz_liczba_glosow: DO_WPISANIA,
+    })),
+    uchwala_data: dzis || null,
+    uchwala_numer: DO_WPISANIA,
+    uchwala_tryb_glosowania: DO_WPISANIA,
+    uchwala_glosy_za: DO_WPISANIA,
+    uchwala_glosy_przeciw: DO_WPISANIA,
+    uchwala_glosy_wstrzymujace: DO_WPISANIA,
+    uchwala_procent_glosow: DO_WPISANIA,
+  };
+}
+
+/**
  * Wzór 08 — lista akcjonariuszy do sądu (art. 476 § 1(1) KSH, nowelizacja).
  * Dwa wyzwalacze: wykreślenie spółki z rejestru przedsiębiorców ORAZ
  * odpowiedź na zapytanie sądu (art. 25da ustawy o KRS). `czlonkowieOrganu`
@@ -499,6 +564,7 @@ module.exports = {
   umowaOProwadzenieRejestru,
   informacjaRodo,
   uchwalaWyboru,
+  uchwalaWyboruProjekt,
   listaAkcjonariuszyDoSadu,
   klauzulaZbycia,
   zadanieWpisu,

@@ -2,7 +2,7 @@
    Bez bundlera: pliki ładują się po kolei jako <script type="text/babel">,
    więc to, co ma być widoczne w kolejnych plikach, przypisujemy do `window`. */
 
-const { useState, useEffect, useCallback, useRef, useMemo } = React;
+const { useState, useEffect, useCallback, useRef, useMemo, useId } = React;
 
 /* ─────────────────────────────────────────────────────
    KLIENT API

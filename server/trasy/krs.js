@@ -139,6 +139,11 @@ function zmapuj(odpowiedz, numerKrs) {
         'aeDoreczenia',
       ]) || null,
     kapital_akcyjny_grosze: zlotePlnNaGrosze(kapitalWartosc),
+    // Sposob reprezentacji NIE jest juz polem recznym (notariusz sprawdza je
+    // na podstawie wydruku z KRS przy podpisaniu umowy) - dostaje go wprost
+    // z tego samego pobrania, pod tym samym kluczem kolumny, wiec doklada
+    // sie do formularza tym samym mechanizmem co nazwa/adres/NIP.
+    reprezentant_reprezentacja: zeSciezek(organ, ['sposobReprezentacji']) || null,
     sklad_organu: skladOrganu
       .map((osoba) => ({
         nazwisko: zeSciezek(osoba, ['nazwisko.nazwiskoICzlon', 'nazwisko', 'nazwaLubFirma']) || null,

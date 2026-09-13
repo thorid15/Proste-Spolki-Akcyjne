@@ -342,6 +342,11 @@ const OPISY_ROL_ZADAJACEGO = {
  * pojecie, nie dwa niezaleznie utrzymywane.
  */
 const RODZAJE_DOKUMENTU = {
+  // Podstawa PIERWSZEJ emisji: akcje obejmowane przy zawiazaniu spolki
+  // powstaja z samej umowy spolki (art. 300(3) i art. 300(9) KSH), a nie
+  // z pozniejszej uchwaly o emisji - bez tej pozycji notariusz musialby
+  // wybrac "uchwala" i opisac prawde w polu tekstowym.
+  UMOWA_SPOLKI: 'umowa_spolki',
   UMOWA_ZBYCIA: 'umowa_zbycia',
   UCHWALA: 'uchwala',
   ZGODA: 'zgoda',
@@ -351,6 +356,7 @@ const RODZAJE_DOKUMENTU = {
 };
 
 const OPISY_RODZAJOW_DOKUMENTU = {
+  [RODZAJE_DOKUMENTU.UMOWA_SPOLKI]: 'umowa spółki',
   [RODZAJE_DOKUMENTU.UMOWA_ZBYCIA]: 'umowa zbycia akcji',
   [RODZAJE_DOKUMENTU.UCHWALA]: 'uchwała',
   [RODZAJE_DOKUMENTU.ZGODA]: 'zgoda',
@@ -487,6 +493,36 @@ const OPISY_RODZAJOW_WSPOLWLASNOSCI = {
   [RODZAJE_WSPOLWLASNOSCI.LACZNA]: 'współwłasność łączna',
   [RODZAJE_WSPOLWLASNOSCI.ULAMKOWA]: 'współwłasność w częściach ułamkowych',
 };
+
+/**
+ * Eksponowane stanowisko polityczne — art. 2 ust. 2 pkt 11 ustawy z dnia
+ * 1 marca 2018 r. o przeciwdziałaniu praniu pieniędzy oraz finansowaniu
+ * terroryzmu. Notariusz prowadzący rejestr akcjonariuszy jest instytucją
+ * obowiązaną (art. 2 ust. 1 pkt 12) i wobec PEP stosuje WZMOŻONE środki
+ * bezpieczeństwa finansowego (art. 46).
+ *
+ * Ustawa zrównuje trzy sytuacje co do obowiązków, ale rozróżnia je co do
+ * podstawy — członek rodziny (art. 2 ust. 2 pkt 3) i bliski współpracownik
+ * (art. 2 ust. 2 pkt 12) to osobne przesłanki, nie warianty tej samej.
+ */
+const STATUSY_PEP = {
+  NIE: 'nie',
+  TAK: 'tak',
+  RODZINA: 'rodzina',
+  WSPOLPRACOWNIK: 'wspolpracownik',
+};
+
+const OPISY_STATUSOW_PEP = {
+  [STATUSY_PEP.NIE]: 'nie zajmuje eksponowanego stanowiska politycznego',
+  [STATUSY_PEP.TAK]: 'zajmuje eksponowane stanowisko polityczne',
+  [STATUSY_PEP.RODZINA]: 'jest członkiem rodziny osoby zajmującej eksponowane stanowisko polityczne',
+  [STATUSY_PEP.WSPOLPRACOWNIK]: 'jest bliskim współpracownikiem osoby zajmującej eksponowane stanowisko polityczne',
+};
+
+/** Czy status wymaga wzmożonych środków bezpieczeństwa finansowego (art. 46 ustawy AML). */
+function pepWymagaWzmozonych(status) {
+  return Boolean(status) && status !== STATUSY_PEP.NIE;
+}
 
 const RODZAJE_AKCJI = ['zwykla', 'uprzywilejowana', 'zalozycielska', 'niema'];
 
@@ -713,6 +749,9 @@ module.exports = {
   OPISY_STATUSOW_ZGODY_EMAIL,
   RODZAJE_WSPOLWLASNOSCI,
   OPISY_RODZAJOW_WSPOLWLASNOSCI,
+  STATUSY_PEP,
+  OPISY_STATUSOW_PEP,
+  pepWymagaWzmozonych,
   STANY_POKRYCIA,
   UMOWE_ZAWARL,
   CHARAKTER_WPISU,

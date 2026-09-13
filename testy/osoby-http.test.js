@@ -158,6 +158,39 @@ test('oswiadczenie PEP: katalog zamkniety tak/nie, zapisuje sie z data', async (
   assert.equal(ok.osoba.pep_oswiadczenie_data, '2026-08-16');
 });
 
+/**
+ * Etap 14: `pep` (ustalenie kancelarii, z opisem, na czym polega status)
+ * zyje obok `pep_oswiadczenie` (to, co oswiadczyla osoba). Rozbieznosc jest
+ * dozwolona - i wlasnie dlatego musi byc slyszalna: to ona uruchamia
+ * wzmozone srodki bezpieczenstwa mimo zaprzeczenia klienta.
+ */
+test('status PEP: zapisuje sie z opisem, a sprzecznosc z oswiadczeniem daje ostrzezenie', async () => {
+  const [stZly] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `PepStatusZle${sufiks()}`, pep: 'prezydent',
+  });
+  assert.equal(stZly, 400, 'katalog statusow PEP jest zamkniety');
+
+  const [stOk, ok] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `PepStatus${sufiks()}`, imie: 'Anna',
+    pep: 'rodzina', pep_opis: 'Siostra posła na Sejm RP',
+    pep_oswiadczenie: 'nie', pep_oswiadczenie_data: '2026-08-16',
+  });
+  assert.equal(stOk, 201);
+  assert.equal(ok.osoba.pep, 'rodzina');
+  assert.equal(ok.osoba.pep_opis, 'Siostra posła na Sejm RP');
+  assert.ok(
+    ok.ostrzezenia.some((o) => /rozbieżność|Rozbieżność/.test(o)),
+    'sprzecznosc ustalenia i oswiadczenia musi byc widoczna na ekranie'
+  );
+
+  // Sam status, bez opisu, jest brakiem ustawowym - ale zapisu nie blokuje.
+  const [stBrak, brak] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `PepBezOpisu${sufiks()}`, imie: 'Jan', pep: 'tak',
+  });
+  assert.equal(stBrak, 201);
+  assert.ok(brak.braki_ustawowe.some((b) => /eksponowane stanowisko polityczne/.test(b)));
+});
+
 // ─────────────────────────────────────────────────────────────
 // Etap 3.1: modul AML konfigurowalny per spolka - wylaczony domyslnie.
 // ─────────────────────────────────────────────────────────────

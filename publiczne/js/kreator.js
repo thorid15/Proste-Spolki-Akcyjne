@@ -18,6 +18,22 @@ const KROKI_ZDARZENIA = ['Co się stało', 'Podstawa', 'Co się zmienia', 'Weryf
 
 const NAZWY_GRUP = { akcje: 'Akcje', obciazenia: 'Obciążenia i zajęcia', prawa: 'Prawa i ograniczenia', dane: 'Dane', inne: 'Inne' };
 
+/* Rodzaje dokumentu będącego podstawą wpisu (art. 300(34) § 4 KSH) — jeden
+   katalog dla pola „rodzaj dokumentu” i dla typu załącznika, jak po stronie
+   serwera (server/logika/przepisy.js: RODZAJE_DOKUMENTU). „Umowa spółki” stoi
+   pierwsza, bo to podstawa PIERWSZEJ emisji: akcje obejmowane przy zawiązaniu
+   spółki powstają z samej umowy (art. 300(3) i art. 300(9) KSH), nie
+   z późniejszej uchwały o emisji. */
+const RODZAJE_DOKUMENTU_PODSTAWY = [
+  ['umowa_spolki', 'umowa spółki'],
+  ['umowa_zbycia', 'umowa zbycia akcji'],
+  ['uchwala', 'uchwała'],
+  ['zgoda', 'zgoda'],
+  ['postanowienie', 'postanowienie sądu'],
+  ['pelnomocnictwo', 'pełnomocnictwo'],
+  ['inny', 'inny dokument'],
+];
+
 /** Jedna pozycja: osoba + ilość (+ opcjonalnie ręczny zakres numerów). */
 function PozycjaKreatora({
   pozycja, ustawPozycje, usun, mozna_usunac, etykietaOsoby, kluczOsoby, dostepne, wyklucz,
@@ -1226,9 +1242,18 @@ function TabelaPorownania({ tytul, tabela, odniesienie, wariant }) {
    KROKI 1–2 — nowa sprawa (zakłada sprawę, start licznika 7 dni)
    ───────────────────────────────────────────────────── */
 
-function EkranNowejSprawy({ spolkaId }) {
-  const [krok, ustawKrok] = useState(0);
-  const [typ, ustawTyp] = useState(null);
+/**
+ * `typPoczatkowy` i `emisjaPoczatkowa` obsługują przejście EMISJA → OBJĘCIE
+ * w jednym przebiegu (art. 300(30) § 2 KSH: akcje z emisji trzeba jeszcze
+ * komuś przypisać). Po zapisaniu emisji ekran wyniku prowadzi tutaj
+ * z gotowym typem i wskazaną serią, więc notariusz nie zakłada sprawy
+ * „od zera" i nie szuka emisji, którą przed chwilą wpisał.
+ */
+function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa }) {
+  // Typ podany z zewnątrz jest już wybrany — krok „Co się stało" nie ma
+  // wtedy nic do zapytania, więc zaczynamy od „Podstawy".
+  const [krok, ustawKrok] = useState(typPoczatkowy ? 1 : 0);
+  const [typ, ustawTyp] = useState(typPoczatkowy || null);
   const [zrodlo, ustawZrodlo] = useState('papier');
   const [zadajacyOsobaId, ustawZadajacegoOsobaId] = useState(null);
   const [zadajacyOpis, ustawZadajacegoOpis] = useState('');
@@ -1294,7 +1319,9 @@ function EkranNowejSprawy({ spolkaId }) {
         await API.patch(`/api/psa/sprawy/${sprawaId}`, { akcja: 'weryfikuj' });
       }
 
-      idz(`/sprawy/${sprawaId}`);
+      // Wskazana emisja jedzie dalej w adresie — krok „Co się zmienia"
+      // otworzy się z wybraną serią (sprawy.js: KreatorSprawy).
+      idz(emisjaPoczatkowa ? `/sprawy/${sprawaId}?emisja=${emisjaPoczatkowa}` : `/sprawy/${sprawaId}`);
     } catch (e) {
       ustawBlad(e.message);
       ustawZapisywanie(false);
@@ -1434,12 +1461,9 @@ function EkranNowejSprawy({ spolkaId }) {
               >
                 <select value={dokumentRodzaj} onChange={(z) => ustawDokumentRodzaj(z.target.value)}>
                   <option value="">— brak —</option>
-                  <option value="umowa_zbycia">umowa zbycia akcji</option>
-                  <option value="uchwala">uchwała</option>
-                  <option value="zgoda">zgoda</option>
-                  <option value="postanowienie">postanowienie sądu</option>
-                  <option value="pelnomocnictwo">pełnomocnictwo</option>
-                  <option value="inny">inny dokument</option>
+                  {RODZAJE_DOKUMENTU_PODSTAWY.map(([kod, opis]) => (
+                    <option key={kod} value={kod}>{opis}</option>
+                  ))}
                 </select>
               </Pole>
               <Pole etykieta="Data dokumentu" wymagane={Boolean(dokumentRodzaj)}>
@@ -1454,12 +1478,9 @@ function EkranNowejSprawy({ spolkaId }) {
             <Pole etykieta="Dokumenty (opcjonalnie)">
               <div className="row-g" style={{ flexWrap: 'wrap' }}>
                 <select value={typDokumentu} onChange={(z) => ustawTypDokumentu(z.target.value)} style={{ width: 'auto' }}>
-                  <option value="umowa_zbycia">umowa zbycia</option>
-                  <option value="uchwala">uchwała</option>
-                  <option value="zgoda">zgoda</option>
-                  <option value="postanowienie">postanowienie</option>
-                  <option value="pelnomocnictwo">pełnomocnictwo</option>
-                  <option value="inny">inny</option>
+                  {RODZAJE_DOKUMENTU_PODSTAWY.map(([kod, opis]) => (
+                    <option key={kod} value={kod}>{opis}</option>
+                  ))}
                 </select>
                 <input
                   type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
@@ -1488,11 +1509,11 @@ function EkranNowejSprawy({ spolkaId }) {
           </button>
           <div className="kreator-stopka-prawa">
             {krok < 1 ? (
-              <button className="btn btn-primary" disabled={!mozeDalej} onClick={() => ustawKrok((k) => k + 1)}>
+              <button className="btn btn-glowny" disabled={!mozeDalej} onClick={() => ustawKrok((k) => k + 1)}>
                 Dalej
               </button>
             ) : (
-              <button className="btn btn-primary btn-lg" disabled={!mozeDalej || zapisywanie} onClick={zalozSprawe}>
+              <button className="btn btn-glowny btn-lg" disabled={!mozeDalej || zapisywanie} onClick={zalozSprawe}>
                 {zapisywanie ? 'Zakładanie sprawy…' : 'Załóż sprawę i przejdź dalej'}
               </button>
             )}

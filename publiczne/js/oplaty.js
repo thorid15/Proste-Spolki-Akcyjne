@@ -60,7 +60,7 @@ function ModalNowaOplata({ spolki, stawki, przyZamknieciu, przyZapisie }) {
       stopka={
         <>
           <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-          <button className="btn btn-primary" onClick={zapisz} disabled={zapisywanie || !dane.spolka_id}>
+          <button className="btn btn-glowny" onClick={zapisz} disabled={zapisywanie || !dane.spolka_id}>
             {zapisywanie ? 'Zapisywanie…' : 'Zapisz'}
           </button>
         </>
@@ -123,11 +123,11 @@ function ModalNaliczenieRoczne({ przyZamknieciu, przyNaliczeniu }) {
       szerokosc={480}
       stopka={
         wynik
-          ? <button className="btn btn-primary" onClick={przyZamknieciu}>Zamknij</button>
+          ? <button className="btn btn-glowny" onClick={przyZamknieciu}>Zamknij</button>
           : (
             <>
               <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-              <button className="btn btn-primary" onClick={nalicz} disabled={zapisywanie || !/^\d{4}$/.test(rok)}>
+              <button className="btn btn-glowny" onClick={nalicz} disabled={zapisywanie || !/^\d{4}$/.test(rok)}>
                 {zapisywanie ? 'Naliczanie…' : 'Nalicz'}
               </button>
             </>

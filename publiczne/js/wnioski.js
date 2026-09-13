@@ -94,6 +94,10 @@ const POLA_KOREKTY_AKCJONARIUSZA = [
   ['adres_doreczen', 'Inny adres do doręczeń'], ['adres_edoreczen', 'Adres do e-Doręczeń'],
   ['email', 'E-mail'], ['telefon', 'Telefon'],
   ['wspolwlasciciele', 'Pozostali współwłaściciele'],
+  // Klient wpisuje adresy, jakie ma — KTÓRY z nich trafia do treści rejestru
+  // (art. 300³³ § 1 pkt 3 KSH dopuszcza tylko jeden) wybiera tu kancelaria,
+  // stąd specjalny <select>, patrz render niżej.
+  ['rodzaj_adresu_rejestrowego', 'Adres wpisywany do rejestru'],
 ];
 
 /** Opisy pól ustawowych — te same, co widzi klient w portalu. */
@@ -110,6 +114,15 @@ const OPIS_ZGODY_EMAIL_WNIOSKU = {
 const OPIS_WSPOLWLASNOSCI_WNIOSKU = {
   laczna: 'współwłasność łączna',
   ulamkowa: 'współwłasność ułamkowa',
+};
+// Etap 14 — status PEP jest widoczny juz przy weryfikacji wniosku, a nie
+// dopiero w kartotece: to on decyduje o WZMOZONYCH srodkach bezpieczenstwa
+// finansowego (art. 46 ustawy o przeciwdzialaniu praniu pieniedzy), wiec
+// notariusz musi go zobaczyc, zanim wniosek przyjmie.
+const OPIS_PEP_WNIOSKU = {
+  tak: 'PEP — eksponowane stanowisko polityczne',
+  rodzina: 'PEP — członek rodziny osoby na eksponowanym stanowisku',
+  wspolpracownik: 'PEP — bliski współpracownik osoby na eksponowanym stanowisku',
 };
 
 function PorownanieZKrs({ wniosek, krs }) {
@@ -217,6 +230,12 @@ function PozycjaAkcjonariuszaWeryfikacja({ pozycja, wniosekId, zablokowane, odsw
               {OPIS_ADRESU_REJESTROWEGO_WNIOSKU[pozycja.rodzaj_adresu_rejestrowego] || 'adres niewskazany'}
             </span>
             <span>{OPIS_ZGODY_EMAIL_WNIOSKU[pozycja.zgoda_email_status || 'brak']}</span>
+            {OPIS_PEP_WNIOSKU[pozycja.pep] && (
+              <span className="cecha-pep" title={pozycja.pep_opis || undefined}>
+                {OPIS_PEP_WNIOSKU[pozycja.pep]}
+                {pozycja.pep_opis ? ` — ${pozycja.pep_opis}` : ''}
+              </span>
+            )}
             {pozycja.wspolwlasnosc && pozycja.wspolwlasnosc !== 'brak' && (
               <span>
                 {OPIS_WSPOLWLASNOSCI_WNIOSKU[pozycja.wspolwlasnosc]}
@@ -248,15 +267,28 @@ function PozycjaAkcjonariuszaWeryfikacja({ pozycja, wniosekId, zablokowane, odsw
         </div>
       ) : (
         <div className="siatka-2" style={{ marginTop: 10 }}>
-          {POLA_KOREKTY_AKCJONARIUSZA.map(([klucz, etykieta]) => (
-            <Pole key={klucz} etykieta={etykieta}>
-              <input
-                type="text"
-                value={dane[klucz] || ''}
-                onChange={(z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value }))}
-              />
-            </Pole>
-          ))}
+          {POLA_KOREKTY_AKCJONARIUSZA.map(([klucz, etykieta]) =>
+            klucz === 'rodzaj_adresu_rejestrowego' ? (
+              <Pole key={klucz} etykieta={etykieta}>
+                <select
+                  value={dane[klucz] || 'zamieszkania'}
+                  onChange={(z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value }))}
+                >
+                  <option value="zamieszkania">Adres zamieszkania albo siedziby</option>
+                  <option value="doreczen">Inny adres do doręczeń</option>
+                  <option value="edoreczen">Adres do doręczeń elektronicznych</option>
+                </select>
+              </Pole>
+            ) : (
+              <Pole key={klucz} etykieta={etykieta}>
+                <input
+                  type="text"
+                  value={dane[klucz] || ''}
+                  onChange={(z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value }))}
+                />
+              </Pole>
+            )
+          )}
         </div>
       )}
 

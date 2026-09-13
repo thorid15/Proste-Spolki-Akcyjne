@@ -101,7 +101,7 @@ function EkranMigracji({ spolkaId }) {
           <button className="btn" onClick={() => { ustawKrok(1); ustawDaneEmisja({}); ustawZdarzeniaZapisane([]); }}>
             Dodaj kolejną emisję (np. druga seria)
           </button>
-          <button className="btn btn-primary" onClick={() => idz(`/spolki/${spolkaId}`)}>
+          <button className="btn btn-glowny" onClick={() => idz(`/spolki/${spolkaId}`)}>
             Przejdź do kokpitu spółki
           </button>
         </div>
@@ -146,7 +146,7 @@ function EkranMigracji({ spolkaId }) {
             <button className="btn" onClick={() => ustawKrok(1)} disabled={zapisywanie}>Wstecz</button>
           )}
           <button
-            className="btn btn-primary"
+            className="btn btn-glowny"
             onClick={krok === 1 ? zapiszEmisje : zapiszObjecie}
             disabled={zapisywanie || !dataZdarzenia}
           >

@@ -18,6 +18,7 @@ const typyZdarzen = require('../logika/typy-zdarzen');
 const wzoryDysk = require('../logika/wzory-dysk');
 const docx = require('../logika/docx');
 const kontekstPisma = require('../logika/kontekst-pisma');
+const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
@@ -505,6 +506,59 @@ router.get(
   })
 );
 
+/**
+ * Informacja z rejestru akcjonariuszy (art. 300(35) KSH) jako gotowy
+ * dokument HTML — TEN SAM, ktory dostaje klient w portalu.
+ *
+ * Ekran kancelarii mial wlasny render tego pisma w Reakcie
+ * (`publiczne/js/wydruk.js`), a klient dostawal wersje generowana na
+ * serwerze: dwa kody, jeden dokument ustawowy, wiec kazda poprawka tresci
+ * musiala trafic w oba albo notariusz podpisywal co innego, niz widzial
+ * klient. Zostaje jeden generator; ekran tylko pokazuje jego wynik.
+ *
+ * Nic nie zapisuje i nic nie nalicza — to podglad wewnetrzny na tych samych
+ * danych, co `GET /:id/stan`. Odplatne wydanie dokumentu klientowi idzie
+ * przez portal (`POST /api/psa/portal/informacja`).
+ */
+router.get(
+  '/:id/informacja.html',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const data = zad.query.data ? String(zad.query.data) : czas.dzisIso();
+    if (!czas.poprawnaDataAlboChwila(data)) {
+      throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD albo RRRR-MM-DDTGG:MM.');
+    }
+
+    const rola = String(zad.query.rola || przepisy.ROLE_ODBIORCY.KANCELARIA);
+    if (!Object.values(przepisy.ROLE_ODBIORCY).includes(rola)) {
+      throw bledneZadanie(`Nieznana rola odbiorcy: „${rola}”.`);
+    }
+    const odbiorcaId = zad.query.odbiorca ? Number(zad.query.odbiorca) : null;
+
+    const stan = widoki.widokStanu(db(), id, data, { rola, odbiorcaOsobaId: odbiorcaId });
+    if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
+
+    // Przy roli „akcjonariusz” i „organ” dokument nazywa KONKRETNEGO
+    // odbiorce: „akcjonariusz” bez nazwiska nie mowi, komu wydano pismo,
+    // a przy organie liczy sie, czy pyta sad, czy komornik.
+    const wybrany = odbiorcaId
+      ? stan.akcjonariusze.find((a) => String(a.osoba_id) === String(odbiorcaId))
+      : null;
+    const opis = rola === przepisy.ROLE_ODBIORCY.AKCJONARIUSZ && wybrany && wybrany.osoba
+      ? wybrany.osoba.oznaczenie
+      : (rola === przepisy.ROLE_ODBIORCY.ORGAN && zad.query.organ ? String(zad.query.organ) : null);
+
+    odp.type('text/html').send(informacjaDokument.informacjaZRejestru({
+      kancelaria: konfiguracja.KANCELARIA,
+      spolka: stan.spolka,
+      data,
+      stan,
+      odbiorca: { rola, opis },
+      sporzadzono: czas.terazIso(),
+    }));
+  })
+);
+
 /** Pelna historia zdarzen. */
 router.get(
   '/:id/zdarzenia',
@@ -819,6 +873,56 @@ router.post(
       brakujace: wynik.brakujace,
       bledy: wynik.bledy,
     });
+  })
+);
+
+/**
+ * Dokumenty założycielskie spółki — komplet przeniesiony z wniosku przy jego
+ * przyjęciu (`server/trasy/wnioski.js`). Dla każdego dokumentu dwa
+ * egzemplarze: wystawiony wzór i odesłany przez klienta podpisany skan.
+ */
+router.get(
+  '/:id/dokumenty-zalozycielskie',
+  asy((zad, odp) => {
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const dokumenty = db()
+      .prepare(
+        `SELECT id, wniosek_id, typ, nazwa, nazwa_pliku, rozmiar, rola, utworzono
+           FROM psa_spolki_dokumenty WHERE spolka_id = ? ORDER BY id`
+      )
+      .all(spolka.id);
+    odp.json({ dokumenty });
+  })
+);
+
+router.get(
+  '/:id/dokumenty-zalozycielskie/:dokId',
+  asy((zad, odp) => {
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const dokument = db()
+      .prepare('SELECT * FROM psa_spolki_dokumenty WHERE id = ? AND spolka_id = ?')
+      .get(Number(zad.params.dokId), spolka.id);
+    if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+
+    const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, dokument.sciezka);
+    if (!pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelna)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik', spolkaId: spolka.id,
+      akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU,
+      opis: `dokument założycielski #${dokument.id} (${dokument.typ}, ${dokument.rola})`,
+    });
+
+    odp.setHeader('Content-Type', dokument.mime || 'application/octet-stream');
+    odp.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(dokument.nazwa_pliku)}`
+    );
+    fs.createReadStream(pelna).pipe(odp);
   })
 );
 

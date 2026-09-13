@@ -31,7 +31,7 @@ function ModalNowyUzytkownik({ przyZamknieciu, przyZapisie }) {
       stopka={
         <>
           <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-          <button className="btn btn-primary" onClick={zapisz} disabled={zapisywanie || !dane.imie.trim() || !dane.email.trim()}>
+          <button className="btn btn-glowny" onClick={zapisz} disabled={zapisywanie || !dane.imie.trim() || !dane.email.trim()}>
             {zapisywanie ? 'Zapisywanie…' : 'Utwórz konto'}
           </button>
         </>
@@ -63,7 +63,7 @@ function ModalNowyUzytkownik({ przyZamknieciu, przyZapisie }) {
 function ModalHasloTymczasowe({ email, haslo, przyZamknieciu }) {
   return (
     <Modal tytul="Hasło tymczasowe" przyZamknieciu={przyZamknieciu} szerokosc={460}
-      stopka={<button className="btn btn-primary" onClick={przyZamknieciu}>Zamknij</button>}>
+      stopka={<button className="btn btn-glowny" onClick={przyZamknieciu}>Zamknij</button>}>
       <Komunikat
         odmiana="uwaga"
         tresc={`Przekaż to hasło osobie na adres ${email} bezpiecznym kanałem — nie zostanie ponownie pokazane.`}
@@ -111,7 +111,7 @@ function EkranUzytkownikow() {
           <div className="tytul-strony">Użytkownicy</div>
           <div className="podtytul-strony">Konta pracowników kancelarii — logowanie e-mailem i hasłem.</div>
         </div>
-        <button className="btn btn-primary" onClick={() => ustawModalNowy(true)}>+ Nowy pracownik</button>
+        <button className="btn btn-glowny" onClick={() => ustawModalNowy(true)}>+ Nowy pracownik</button>
       </div>
 
       <Komunikat odmiana="blad" tresc={blad} />

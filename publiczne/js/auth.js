@@ -41,7 +41,6 @@ const PUNKTY_KANCELARII = [
 function EkranLogowania({ przyZalogowaniu }) {
   const { dane: daneKancelarii } = useDane('/api/wspolne/kancelaria');
   const kancelaria = daneKancelarii && daneKancelarii.kancelaria;
-  const www = (kancelaria && kancelaria.www) || KANCELARIA_ZAPASOWA.www;
   const [email, ustawEmail] = useState('');
   const [haslo, ustawHaslo] = useState('');
   const [wysylanie, ustawWysylanie] = useState(false);
@@ -65,14 +64,7 @@ function EkranLogowania({ przyZalogowaniu }) {
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
       <div className="marka-pasek bez-druku">
-        <div className="marka-pasek-nazwa">
-          {kancelaria ? kancelaria.nazwa : KANCELARIA_ZAPASOWA.nazwa}
-        </div>
-        {www && (
-          <a className="marka-pasek-link" href={www} target="_blank" rel="noopener noreferrer">
-            {www.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-          </a>
-        )}
+        <div className="marka-pasek-nazwa">{(kancelaria || KANCELARIA_ZAPASOWA).nazwa}</div>
       </div>
 
       <div className="brama">
@@ -130,7 +122,7 @@ function EkranLogowania({ przyZalogowaniu }) {
         </form>
       </div>
 
-      <StopkaKancelarii kancelaria={kancelaria} />
+      <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
     </div>
   );
 }

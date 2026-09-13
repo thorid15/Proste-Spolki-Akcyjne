@@ -922,9 +922,14 @@ function akcjonariatNaDzien(stan, data) {
         // (regula domenowa 4a: "procent zaokraglany WYLACZNIE przy wyswietlaniu").
         czesci_ulamkowe: [],
         data_najstarszego_nabycia: p.data_od,
+        // art. 300(33) § 1 pkt 9 KSH - wzmianka o pokryciu. Pozycja skleja
+        // kilka przedzialow, a te moga byc pokryte roznie, wiec zbieramy
+        // WSZYSTKIE napotkane wartosci i skladamy z nich jedna nizej.
+        pokrycia: new Set(),
       });
     }
     const g = grupy.get(klucz);
+    g.pokrycia.add(p.pokryta || null);
     g.zakresy.push({ nr_od: p.nr_od, nr_do: p.nr_do });
     if ((p.czesc_licznik ?? 1) !== (p.czesc_mianownik ?? 1)) {
       g.czesci_ulamkowe.push({
@@ -937,8 +942,18 @@ function akcjonariatNaDzien(stan, data) {
     if (p.data_od < g.data_najstarszego_nabycia) g.data_najstarszego_nabycia = p.data_od;
   }
 
-  const pozycje = [...grupy.values()].map((g) => {
+  const pozycje = [...grupy.values()].map(({ pokrycia, ...g }) => {
     const zakresy = n.normalizuj(g.zakresy);
+    // Jedna wartosc dla calej pozycji tylko wtedy, gdy wszystkie przedzialy
+    // sa zgodne. `null` znaczy NIEUSTALONE, a nie „niepokryte": brak uchwaly
+    // zarzadu z art. 300(9) § 2 KSH to nie to samo, co stwierdzenie, ze
+    // wkladu nie wniesiono. Dlatego mieszanka Z niewiadoma zostaje
+    // niewiadoma - „czesciowo" wolno powiedziec dopiero wtedy, gdy o KAZDEJ
+    // akcji cos wiadomo i wiadomosci sie roznia.
+    const zbior = [...pokrycia];
+    let pokryta = null;
+    if (zbior.length === 1) [pokryta] = zbior;
+    else if (!zbior.includes(null)) pokryta = 'czesciowo';
     const moje = obciazenia
       .filter((o) => o.emisja_klucz === g.emisja_klucz && n.nakladaja(o.zakresy, zakresy))
       .map((o) => ({
@@ -958,6 +973,7 @@ function akcjonariatNaDzien(stan, data) {
       // na podstawie ulamkow to zadanie warstwy prezentacji (sprint 6).
       ilosc: n.ilosc(zakresy),
       wspolwlasnosc: g.czesci_ulamkowe.length > 0,
+      pokryta,
       obciazenia: moje,
     };
   });
@@ -996,8 +1012,11 @@ function bilansNaDzien(stan, data) {
       umorzone_zakresy: umorzone,
       uniewaznione: n.ilosc(uniewaznione),
       uniewaznione_zakresy: uniewaznione,
-      // Poza obrotem sa i umorzone, i uniewaznione - roznica miedzy nimi jest
-      // prawna (uchwala spolki vs orzeczenie sadu), nie bilansowa.
+      // Akcje emisji, ktore NADAL ISTNIEJA. Kodeks nie zna pojecia „akcje
+      // w obrocie" — to reszta bilansowa: wyemitowane minus te, ktore byt
+      // prawny utracily. Umorzone i uniewaznione odejmuje sie tak samo,
+      // bo roznica miedzy nimi jest w PODSTAWIE (uchwala spolki wobec
+      // orzeczenia sadu), a nie w skutku dla liczby akcji.
       w_obrocie: e.ilosc - n.ilosc(umorzone) - n.ilosc(uniewaznione),
     };
   });

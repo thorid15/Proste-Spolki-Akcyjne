@@ -112,49 +112,8 @@ function Szyna({ sciezka, uzytkownik, kancelaria, podgladSystemu, liczniki }) {
 /* Pasek marki — pierwsza rzecz widoczna na każdym ekranie. Rejestr prowadzi
    KANCELARIA (art. 300(31) § 1 KSH), więc jej nazwa stoi nad nazwą modułu,
    a nie obok niej. Nie drukuje się: pisma mają własny nagłówek. */
-function PasekMarki({ kancelaria }) {
-  const k = kancelaria || KANCELARIA_ZAPASOWA;
-  return (
-    <div className="marka-pasek bez-druku">
-      <div className="marka-pasek-nazwa">{k.nazwa}</div>
-      {k.www && (
-        <a className="marka-pasek-link" href={k.www} target="_blank" rel="noopener noreferrer">
-          {k.www.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-        </a>
-      )}
-    </div>
-  );
-}
 
-/** Stopka — dane kancelarii i odesłanie do zakładki „Proste Spółki Akcyjne". */
-function StopkaKancelarii({ kancelaria }) {
-  const k = kancelaria || KANCELARIA_ZAPASOWA;
-  const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
-  const kontakt = [k.telefon, k.email].filter(Boolean).join(' · ');
-  return (
-    <footer className="stopka bez-druku">
-      <div className="stopka-kolumna">
-        <div className="stopka-nazwa">{k.nazwa}</div>
-        {adres && <div>{adres}</div>}
-        {kontakt && <div>{kontakt}</div>}
-      </div>
-      <div className="stopka-kolumna stopka-kolumna-prawa">
-        <div>
-          Rejestr prowadzony na podstawie art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych.
-        </div>
-        {(k.www_psa || k.www) && (
-          <div>
-            Informacje o prowadzeniu rejestru — zakładka „Proste Spółki Akcyjne":{' '}
-            <a href={k.www_psa || k.www} target="_blank" rel="noopener noreferrer">
-              {(k.www_psa || k.www).replace(/^https?:\/\//, '').replace(/\/$/, '')}
-            </a>
-          </div>
-        )}
-      </div>
-    </footer>
-  );
-}
-
+/** Adres bez protokołu i bez końcowego ukośnika — tak, jak się go czyta na wizytówce. */
 /** Pigułka konta w topbarze — inicjały, imię, menu z wylogowaniem. */
 function Konto({ uzytkownik, przyWylogowaniu }) {
   const [otwarte, ustawOtwarte] = useState(false);
@@ -292,12 +251,25 @@ function Aplikacja() {
       const id = Number(segmenty[1]);
       if (!Number.isInteger(id)) return <NieZnaleziono />;
       if (segmenty.length === 2) return <EkranKokpitu spolkaId={id} />;
-      if (segmenty[2] === 'zdarzenie') return <EkranNowejSprawy spolkaId={id} />;
+      if (segmenty[2] === 'zdarzenie') {
+        // Przejście EMISJA → OBJĘCIE: typ i seria przychodzą z ekranu wyniku
+        // wpisu emisji, żeby nie zakładać sprawy „od zera" (sprawy.js).
+        return (
+          <EkranNowejSprawy
+            spolkaId={id}
+            typPoczatkowy={zapytanie.get('typ') || undefined}
+            emisjaPoczatkowa={zapytanie.get('emisja') || undefined}
+          />
+        );
+      }
       if (segmenty[2] === 'migracja') return <EkranMigracji spolkaId={id} />;
       if (segmenty[2] === 'wydruk') {
+        // Aplikacja wystawia JEDEN dokument ze stanu rejestru — informację
+        // z art. 300(35) § 3 KSH (etap 12). Stary adres `/wydruk/raport`
+        // prowadzi do niej samej: linki mogły trafić do czyichś zakładek,
+        // a nie ma dokąd indziej ich skierować.
         const data = zapytanie.get('data') || undefined;
-        if (segmenty[3] === 'raport') return <EkranRaportu spolkaId={id} dataPoczatkowa={data} />;
-        if (segmenty[3] === 'informacja') return <EkranInformacji spolkaId={id} dataPoczatkowa={data} />;
+        return <EkranInformacji spolkaId={id} dataPoczatkowa={data} />;
       }
       return <NieZnaleziono />;
     }
@@ -309,7 +281,7 @@ function Aplikacja() {
       }
       const id = Number(segmenty[1]);
       if (!Number.isInteger(id)) return <NieZnaleziono />;
-      return <EkranSprawy sprawaId={id} />;
+      return <EkranSprawy sprawaId={id} emisjaPoczatkowa={zapytanie.get('emisja') || undefined} />;
     }
 
     if (segmenty[0] === 'osoby') return <EkranOsob />;
@@ -349,7 +321,9 @@ function Aplikacja() {
 
   return (
     <div className="powloka">
-      <PasekMarki kancelaria={kancelaria} />
+      <div className="marka-pasek bez-druku">
+        <div className="marka-pasek-nazwa">{(kancelaria || KANCELARIA_ZAPASOWA).nazwa}</div>
+      </div>
       <Szyna
         sciezka={sciezka}
         uzytkownik={sesja.uzytkownik}
@@ -367,7 +341,7 @@ function Aplikacja() {
           liczbaSpraw={liczbaSpraw}
         />
         <main className="tresc">{ekran()}</main>
-        <StopkaKancelarii kancelaria={kancelaria} />
+        <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
       </div>
       {paleta.otwarta && <PaletaPolecen przyZamknieciu={paleta.zamknij} />}
     </div>

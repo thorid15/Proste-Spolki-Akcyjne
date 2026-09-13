@@ -3,11 +3,15 @@
 /**
  * Komplet dokumentów powstający przy złożeniu wniosku o prowadzenie rejestru.
  *
- * Umowa o prowadzenie rejestru jest osobno (wzór 01, `.docx`) — to dokument
- * NEGOCJOWANY, którego wzór notariusz edytuje w Wordzie. Tutaj składają się
- * OŚWIADCZENIA o ustalonej treści, po jednym na akcjonariusza, oraz wspólne
- * żądanie pierwszego wpisu. Ich treści się nie negocjuje, więc idą w PDF —
- * patrz komentarz na górze `logika/pdf.js`.
+ * Cztery OŚWIADCZENIA o ustalonej treści (po jednym na akcjonariusza) oraz
+ * wspólne żądanie pierwszego wpisu składają się tutaj wprost jako PDF —
+ * patrz komentarz na górze `logika/pdf.js`. Uchwałę o wyborze podmiotu
+ * prowadzącego rejestr (`uchwalaProjekt`) silnik składa inaczej: to wzór
+ * `.docx` (notariusz edytuje jego treść w Wordzie), wypełniony danymi
+ * i skonwertowany do PDF (`logika/docx-pdf.js`) — tak samo jak umowa
+ * o prowadzenie rejestru (wzór 01, `server/trasy/portal.js`). Efekt końcowy
+ * jest ten sam: klient dostaje gotowy, NIEEDYTOWALNY dokument do podpisu,
+ * niezależnie którą z dwóch dróg powstał.
  *
  * Wszystkie dane osobowe trafiają na papier w MIANOWNIKU, opisane etykietą
  * („PESEL: …”, „Działający jako: …”), nigdy odmienione przez przypadki.
@@ -16,12 +20,17 @@
 const pdf = require('./pdf');
 const przepisy = require('./przepisy');
 const konfiguracja = require('../konfiguracja');
+const wzoryDysk = require('./wzory-dysk');
+const docxPdf = require('./docx-pdf');
+const kontekstPisma = require('./kontekst-pisma');
 
 const PODSTAWA_AML = 'ustawa z dnia 1 marca 2018 r. o przeciwdziałaniu praniu pieniędzy '
   + 'oraz finansowaniu terroryzmu';
 
 /** Katalog dokumentów pakietu — `kod` jest identyfikatorem typu w bazie. */
 const TYPY = {
+  UMOWA_REJESTRU: 'umowa_rejestru',
+  UCHWALA_WYBORU: 'uchwala_wyboru_projekt',
   ZGODA_EMAIL: 'zgoda_email',
   OSWIADCZENIE_RODO: 'oswiadczenie_rodo',
   OSWIADCZENIE_AML: 'oswiadczenie_aml',
@@ -29,10 +38,28 @@ const TYPY = {
 };
 
 const NAZWY = {
+  [TYPY.UMOWA_REJESTRU]: 'Umowa o prowadzenie rejestru',
+  [TYPY.UCHWALA_WYBORU]: 'Uchwała o wyborze podmiotu prowadzącego rejestr',
   [TYPY.ZGODA_EMAIL]: 'Zgoda na komunikację elektroniczną',
   [TYPY.OSWIADCZENIE_RODO]: 'Oświadczenie o zapoznaniu się z informacją o przetwarzaniu danych',
   [TYPY.OSWIADCZENIE_AML]: 'Oświadczenie o beneficjencie rzeczywistym i statusie PEP',
   [TYPY.ZADANIE_PIERWSZEGO_WPISU]: 'Żądanie dokonania pierwszego wpisu wraz ze zgodą',
+};
+
+/**
+ * Kolejność na liście do podpisu. Wprost, a nie „jak wyszło z pętli":
+ * najpierw dwa dokumenty założycielskie podpisywane raz w imieniu spółki
+ * i przez ogół akcjonariuszy, potem oświadczenia indywidualne, na końcu
+ * wspólne żądanie wpisu. Ta sama kolejność ma obowiązywać także wtedy,
+ * gdy komplet powstaje po raz drugi (wniosek wrócił do uzupełnienia).
+ */
+const KOLEJNOSC = {
+  [TYPY.UMOWA_REJESTRU]: 10,
+  [TYPY.UCHWALA_WYBORU]: 20,
+  [TYPY.ZGODA_EMAIL]: 30,
+  [TYPY.OSWIADCZENIE_RODO]: 31,
+  [TYPY.OSWIADCZENIE_AML]: 32,
+  [TYPY.ZADANIE_PIERWSZEGO_WPISU]: 40,
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -124,6 +151,24 @@ function polaAkcjonariusza(a) {
     adresRejestrowy(a),
   ]);
   return pary;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Dokument 0 — projekt uchwały o wyborze podmiotu prowadzącego rejestr
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Wzór `.docx` (03) wypełniony danymi wniosku i skonwertowany do PDF —
+ * patrz komentarz na górze pliku i przy `kontekstPisma.uchwalaWyboruProjekt`.
+ */
+async function uchwalaProjekt({ wniosek, akcjonariusze, dzis }) {
+  const dane = kontekstPisma.uchwalaWyboruProjekt({ wniosek, akcjonariusze, dzis });
+  const wynik = wzoryDysk.wypelnij('03', dane);
+  const plik = await docxPdf.zPdf(wynik.plik, {
+    autor: konfiguracja.KANCELARIA.nazwa,
+    tytul: NAZWY[TYPY.UCHWALA_WYBORU],
+  });
+  return { typ: TYPY.UCHWALA_WYBORU, akcjonariuszId: null, plik };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -264,13 +309,26 @@ function oswiadczenieAml({ wniosek, akcjonariusz, dzis }) {
         + 'wskazanych wyżej. Dotyczy to także członków rodziny takiej osoby oraz osób znanych '
         + 'jako jej bliscy współpracownicy.'
       );
-      p.opcja('Nie jestem osobą zajmującą eksponowane stanowisko polityczne, '
-        + 'członkiem rodziny takiej osoby ani jej bliskim współpracownikiem.');
-      p.opcja('Jestem osobą zajmującą eksponowane stanowisko polityczne.');
-      p.opcja('Jestem członkiem rodziny osoby zajmującej eksponowane stanowisko polityczne.');
-      p.opcja('Jestem bliskim współpracownikiem osoby zajmującej eksponowane stanowisko polityczne.');
+      // Status podany w formularzu zaznaczamy z góry — podpisujący go
+      // potwierdza podpisem, zamiast wypełniać drugi raz to samo.
+      const pep = akcjonariusz.pep || przepisy.STATUSY_PEP.NIE;
+      p.opcja(
+        'Nie jestem osobą zajmującą eksponowane stanowisko polityczne, '
+        + 'członkiem rodziny takiej osoby ani jej bliskim współpracownikiem.',
+        pep === przepisy.STATUSY_PEP.NIE
+      );
+      p.opcja('Jestem osobą zajmującą eksponowane stanowisko polityczne.',
+        pep === przepisy.STATUSY_PEP.TAK);
+      p.opcja('Jestem członkiem rodziny osoby zajmującej eksponowane stanowisko polityczne.',
+        pep === przepisy.STATUSY_PEP.RODZINA);
+      p.opcja('Jestem bliskim współpracownikiem osoby zajmującej eksponowane stanowisko polityczne.',
+        pep === przepisy.STATUSY_PEP.WSPOLPRACOWNIK);
       p.odstep(0.4);
-      p.polaDoWypelnienia(['Stanowisko lub funkcja', 'Osoba, z którą łączy mnie relacja']);
+      if (przepisy.pepWymagaWzmozonych(pep) && !pusty(akcjonariusz.pep_opis)) {
+        p.pola([['Stanowisko, funkcja albo relacja', akcjonariusz.pep_opis]]);
+      } else {
+        p.polaDoWypelnienia(['Stanowisko lub funkcja', 'Osoba, z którą łączy mnie relacja']);
+      }
 
       p.sekcja('III. Źródło pochodzenia środków');
       p.polaDoWypelnienia(['Źródło majątku i środków przeznaczonych na pokrycie akcji']);
@@ -348,14 +406,20 @@ function nazwaPliku({ typ, wniosek, akcjonariusz }) {
 }
 
 /**
- * Składa cały komplet: po trzy oświadczenia na akcjonariusza plus jedno
- * wspólne żądanie wpisu.
+ * Składa cały komplet: projekt uchwały, po trzy oświadczenia na
+ * akcjonariusza, plus jedno wspólne żądanie wpisu.
  *
  * @returns {Promise<{typ: string, nazwa: string, nazwaPliku: string,
  *   akcjonariuszId: number|null, plik: Buffer}[]>}
  */
 async function zlozPakiet({ wniosek, akcjonariusze, dzis }) {
   const dokumenty = [];
+
+  // Uchwała jest pierwsza na liście — obok umowy to drugi dokument
+  // "założycielski" pakietu, przed indywidualnymi oświadczeniami akcjonariuszy.
+  if (akcjonariusze.length > 0) {
+    dokumenty.push(await uchwalaProjekt({ wniosek, akcjonariusze, dzis }));
+  }
 
   for (const a of akcjonariusze) {
     // Zgodę na komunikację elektroniczną wystawiamy tylko tym, którym ma
@@ -387,16 +451,25 @@ async function zlozPakiet({ wniosek, akcjonariusze, dzis }) {
     });
   }
 
-  return dokumenty.map((d) => {
-    const akcjonariusz = d.akcjonariuszId
-      ? akcjonariusze.find((a) => a.id === d.akcjonariuszId)
-      : null;
-    return {
-      ...d,
-      nazwa: NAZWY[d.typ],
-      nazwaPliku: nazwaPliku({ typ: d.typ, wniosek, akcjonariusz }),
-    };
-  });
+  return dokumenty.map((d) => opisz(d, { wniosek, akcjonariusze }));
 }
 
-module.exports = { TYPY, NAZWY, zlozPakiet, nazwaPliku, oznaczenie };
+/**
+ * Dokłada do surowej pozycji pakietu to, co widzi klient: nazwę dokumentu,
+ * nazwę pliku i miejsce na liście. Wspólne dla dokumentów składanych tutaj
+ * i dla umowy, która powstaje w trasie portalu (`server/trasy/portal.js`) —
+ * na liście do podpisu mają wyglądać tak samo.
+ */
+function opisz(d, { wniosek, akcjonariusze = [] }) {
+  const akcjonariusz = d.akcjonariuszId
+    ? akcjonariusze.find((a) => a.id === d.akcjonariuszId)
+    : null;
+  return {
+    ...d,
+    nazwa: NAZWY[d.typ],
+    nazwaPliku: nazwaPliku({ typ: d.typ, wniosek, akcjonariusz }),
+    kolejnosc: KOLEJNOSC[d.typ] ?? 100,
+  };
+}
+
+module.exports = { TYPY, NAZWY, KOLEJNOSC, zlozPakiet, opisz, nazwaPliku, oznaczenie };

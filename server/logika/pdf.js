@@ -139,13 +139,25 @@ function pomocniki(d) {
      * Kratka do odhaczenia. Rysowana kwadratem, nie znakiem „☐” — krój
      * dokumentu nie ma tego znaku i w PDF-ie zostałaby po nim dziura.
      */
-    opcja(tekst) {
+    /**
+     * Pozycja do zaznaczenia. `zaznaczona` wypełnia kratkę krzyżykiem —
+     * używamy tego, gdy odpowiedź jest już znana z formularza i nie ma
+     * powodu prosić podpisującego, żeby zaznaczał ją drugi raz długopisem.
+     */
+    opcja(tekst, zaznaczona = false) {
       const bok = 9;
       const wciecie = 22;
       const y = d.y;
       d.rect(MARGINES + 2, y + 1.5, bok, bok).lineWidth(0.7).stroke();
-      d.font('zwykla').fontSize(ROZMIAR_TEKSTU)
+      if (zaznaczona) {
+        d.save().lineWidth(1.2)
+          .moveTo(MARGINES + 4, y + 3.5).lineTo(MARGINES + 9, y + 8.5)
+          .moveTo(MARGINES + 9, y + 3.5).lineTo(MARGINES + 4, y + 8.5)
+          .stroke().restore();
+      }
+      d.font(zaznaczona ? 'pogrubiona' : 'zwykla').fontSize(ROZMIAR_TEKSTU)
         .text(tekst, MARGINES + wciecie, y, { width: szerokosc - wciecie, align: 'left' });
+      d.font('zwykla');
       d.moveDown(0.35);
       d.x = MARGINES;
     },

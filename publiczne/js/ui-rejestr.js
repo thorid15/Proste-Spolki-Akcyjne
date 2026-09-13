@@ -431,16 +431,32 @@ function Iskra({ punkty, podpisy }) {
    Etykieta ZAWSZE nad polem, nigdy jako placeholder.
    ═════════════════════════════════════════════════════ */
 
-function Pole({ etykieta, podpowiedz, blad, echo, wymagane, children }) {
+function Pole({ etykieta, podpowiedz, blad, echo, wymagane, opcjonalne, children }) {
+  // Etykieta musi WSKAZYWAĆ pole, inaczej czytnik ekranu jej nie przeczyta,
+  // a kliknięcie w nią nie ustawia kursora. Identyfikator dostaje wyłącznie
+  // pojedyncze pole formularza — układy złożone (pole plus odznaczenie obok)
+  // zostają bez powiązania, bo nie wiadomo, które z nich etykieta opisuje.
+  const id = useId();
+  const dziecko = React.isValidElement(children)
+    && ['input', 'select', 'textarea'].includes(children.type)
+    && !children.props.id
+    ? React.cloneElement(children, { id })
+    : children;
+  const powiazane = dziecko !== children;
+
   return (
     <div className="pole">
       {etykieta && (
-        <label className="pole-etykieta">
+        <label className="pole-etykieta" htmlFor={powiazane ? id : undefined}>
           {etykieta}
           {wymagane && <span className="pole-wymagane"> *</span>}
+          {/* „(opcjonalnie)" przy etykiecie, a nie w podpowiedzi pod polem:
+              o tym, czy pole trzeba wypełnić, decyduje się PATRZĄC na nie,
+              zanim się w nie kliknie. */}
+          {opcjonalne && <span className="pole-opcjonalne"> (opcjonalnie)</span>}
         </label>
       )}
-      {children}
+      {dziecko}
       {blad && <div className="pole-blad">{blad}</div>}
       {!blad && echo && <div className="pole-echo">{echo}</div>}
       {podpowiedz && <div className="pole-podpowiedz">{podpowiedz}</div>}
@@ -1088,6 +1104,208 @@ function StanZapisu({ stan }) {
 
 window.Stronicowanie = Stronicowanie;
 window.Iskra = Iskra;
+/* ─────────────────────────────────────────────────
+   KREATOR: NAGŁÓWEK KROKU, LISTA PODMIOTÓW, NAWIGACJA
+
+   Formularz nie tłumaczy sam siebie. Nagłówek kroku mówi, co się teraz
+   wypełnia — i to jest jedyne zdanie wyjaśnienia na ekranie. Pola dalej
+   niosą własne etykiety i nie potrzebują śródtytułów w rodzaju „Adres”:
+   każdy wie, czym jest adres.
+
+   Dane wielu osób zbiera się listą, nie stosem rozwiniętych formularzy —
+   widać całość, a szczegóły otwiera się po jednym.
+   ───────────────────────────────────────────────── */
+
+/** Tytuł kroku kreatora i jedno zdanie o tym, po co ten krok jest. */
+function KrokNaglowek({ tytul, opis }) {
+  return (
+    <header className="krok-naglowek">
+      <h2 className="krok-naglowek-tytul">{tytul}</h2>
+      {opis && <p className="krok-naglowek-opis">{opis}</p>}
+    </header>
+  );
+}
+
+/**
+ * Wiersz listy podmiotów — jedna osoba, jeden akcjonariusz, jedna rola.
+ * Klika się CAŁY wiersz, nie strzałkę na jego końcu: cel wielkości palca,
+ * nie cel wielkości ikony.
+ */
+function WierszPodmiotu({ ikona = 'osoby', tytul, opis, znacznik, przyKliknieciu, wylaczony = false }) {
+  return (
+    <button type="button" className="wiersz-podmiotu" onClick={przyKliknieciu} disabled={wylaczony}>
+      <span className="wiersz-podmiotu-ikona"><Ikona nazwa={ikona} rozmiar={20} /></span>
+      <span className="wiersz-podmiotu-tresc">
+        <span className="wiersz-podmiotu-tytul">
+          {tytul}
+          {znacznik && <span className="wiersz-podmiotu-znacznik">{znacznik}</span>}
+        </span>
+        {opis && <span className="wiersz-podmiotu-opis">{opis}</span>}
+      </span>
+      <span className="wiersz-podmiotu-strzalka" aria-hidden="true">
+        <Ikona nazwa="strzalkaPrawo" rozmiar={18} />
+      </span>
+    </button>
+  );
+}
+
+/** Dopisanie kolejnej pozycji do listy — szerokość wiersza, nie guzika. */
+function WierszDodania({ etykieta, przyKliknieciu, wylaczony = false }) {
+  return (
+    <button type="button" className="wiersz-dodaj" onClick={przyKliknieciu} disabled={wylaczony}>
+      <Ikona nazwa="plus" rozmiar={18} />
+      {etykieta}
+    </button>
+  );
+}
+
+/**
+ * Para przycisków zamykająca krok. Są duże, bo to jedyne rzeczy do
+ * kliknięcia na dole ekranu — i bo „dalej” po długim formularzu ma być
+ * zaproszeniem, a nie drobnym odnośnikiem do wypatrzenia.
+ */
+function NawigacjaKreatora({ wstecz, dalej }) {
+  return (
+    <div className="nawigacja-kreatora">
+      {wstecz
+        ? (
+          <button type="button" className="btn btn-nawigacja" onClick={wstecz.przy} disabled={wstecz.wylaczony}>
+            {wstecz.etykieta}
+          </button>
+        )
+        : <span />}
+      {dalej
+        ? (
+          <button
+            type="button"
+            className="btn btn-glowny btn-nawigacja"
+            onClick={dalej.przy}
+            disabled={dalej.wylaczony}
+          >
+            {dalej.etykieta}
+          </button>
+        )
+        : <span />}
+    </div>
+  );
+}
+
+/**
+ * Zwijana grupa pól — dla danych, których większość osób nie ma. Domyślnie
+ * zamknięta, ale otwiera się sama, gdy cokolwiek w środku jest wypełnione:
+ * ukryta wartość, o której nikt nie wie, jest gorsza niż dłuższy formularz.
+ */
+function ZwijanaSekcja({ tytul, opcjonalna = true, wypelniona = false, children }) {
+  const [otwarta, ustawOtwarta] = useState(wypelniona);
+  useEffect(() => { if (wypelniona) ustawOtwarta(true); }, [wypelniona]);
+
+  return (
+    <div className={`zwijana ${otwarta ? 'zwijana-otwarta' : ''}`}>
+      <button
+        type="button"
+        className="zwijana-naglowek"
+        aria-expanded={otwarta}
+        onClick={() => ustawOtwarta((p) => !p)}
+      >
+        <span className="zwijana-tytul">
+          {tytul}
+          {opcjonalna && <span className="zwijana-opcjonalna"> (opcjonalnie)</span>}
+        </span>
+        <span className="zwijana-strzalka" aria-hidden="true">
+          <Ikona nazwa="strzalkaDol" rozmiar={18} />
+        </span>
+      </button>
+      {otwarta && <div className="zwijana-tresc">{children}</div>}
+    </div>
+  );
+}
+
+/**
+ * Przełącznik do oświadczeń „tak/nie". Etykieta i wyjaśnienie są klikalne
+ * razem z samym przełącznikiem — przy oświadczeniu o skutkach prawnych
+ * trafienie w 40-pikselowy prostokąt nie może być warunkiem złożenia go.
+ */
+function Przelacznik({ wlaczony, przyZmianie, etykieta, opis, wylaczony = false, dzieci }) {
+  return (
+    <div className={`przelacznik-blok ${wlaczony ? 'przelacznik-blok-wlaczony' : ''}`}>
+      <label className="przelacznik-glowna">
+        <input
+          type="checkbox"
+          className="przelacznik-pole"
+          checked={Boolean(wlaczony)}
+          disabled={wylaczony}
+          onChange={(z) => przyZmianie(z.target.checked)}
+        />
+        <span className="przelacznik-tor" aria-hidden="true"><span className="przelacznik-suwak" /></span>
+        <span className="przelacznik-tekst">
+          <span className="przelacznik-etykieta">{etykieta}</span>
+          {opis && <span className="przelacznik-opis">{opis}</span>}
+        </span>
+      </label>
+      {wlaczony && dzieci && <div className="przelacznik-rozwiniecie">{dzieci}</div>}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────
+   STOPKA
+
+   Kto prowadzi rejestr, gdzie i jak się z nim skontaktować — jeden blok,
+   jeden poziom. Wcześniejsza wersja rozbijała to na dwa piętra: dane
+   adresowe nad cienką linią, rok i adres strony pod nią. Strona
+   internetowa stoi teraz przy pozostałych danych kancelarii, bo jest
+   jednym z jej adresów, a nie osobną informacją.
+
+   Podstawy prawnej tu nie ma — jej miejsce jest na dokumencie z rejestru,
+   gdzie coś znaczy, a nie pod każdym ekranem aplikacji.
+   ───────────────────────────────────────────────── */
+
+const ZNAK_NOTARIATU = '/obrazy/notariat.png';
+
+function skrocAdresWww(url) {
+  return String(url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
+function StopkaKancelarii({ kancelaria }) {
+  const [znakNieudany, ustawZnakNieudany] = useState(false);
+  const k = kancelaria || {};
+  const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
+  const link = k.www_psa || k.www;
+
+  return (
+    <footer className="stopka bez-druku">
+      <div className="stopka-srodek">
+        {!znakNieudany && (
+          <img
+            className="stopka-znak"
+            src={ZNAK_NOTARIATU}
+            alt="Notariat Rzeczypospolitej Polskiej"
+            onError={() => ustawZnakNieudany(true)}
+          />
+        )}
+        <div className="stopka-dane">
+          <div className="stopka-nazwa">{k.nazwa}</div>
+          <div className="stopka-linia">
+            {adres && <span>{adres}</span>}
+            {k.email && <a href={`mailto:${k.email}`}>{k.email}</a>}
+            {link && (
+              <a href={link} target="_blank" rel="noopener noreferrer">{skrocAdresWww(link)}</a>
+            )}
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+window.StopkaKancelarii = StopkaKancelarii;
+window.skrocAdresWww = skrocAdresWww;
+window.KrokNaglowek = KrokNaglowek;
+window.WierszPodmiotu = WierszPodmiotu;
+window.WierszDodania = WierszDodania;
+window.NawigacjaKreatora = NawigacjaKreatora;
+window.ZwijanaSekcja = ZwijanaSekcja;
+window.Przelacznik = Przelacznik;
 window.Spinner = Spinner;
 window.Karta = Karta;
 window.Pigulka = Pigulka;

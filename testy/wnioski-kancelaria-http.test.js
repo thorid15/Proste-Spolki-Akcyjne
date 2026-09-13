@@ -25,6 +25,7 @@ process.env.PORTAL_WLACZONY = 'true';
 const app = require('../serwer');
 const { db } = require('../server/baza');
 const hasla = require('../server/logika/hasla');
+const { KATALOG_DOKUMENTOW } = require('../server/konfiguracja');
 
 let serwer;
 let baza;
@@ -205,11 +206,78 @@ test('POST /api/psa/wnioski/:id/przyjmij: zaklada spolke i osobe, dowiazuje wnio
   const osoba = db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(akcjonariuszPo.osoba_id);
   assert.equal(osoba.nazwisko, 'Nowak');
 
+  // Komplet dokumentow przechodzi z wniosku do AKT SPOLKI: wniosek sie
+  // zamyka, dokumenty zalozycielskie zyja dalej.
+  const [, akta] = await zapytaj(
+    'GET', `/api/psa/spolki/${wynik.spolka_id}/dokumenty-zalozycielskie`, undefined, ciastkoPracownik
+  );
+  assert.ok(akta.dokumenty.length > 0, 'akta spolki nie sa puste');
+  assert.ok(
+    akta.dokumenty.some((d) => d.typ === 'umowa_rejestru' && d.rola === 'wzor'),
+    'wystawiona umowa jest w aktach spolki'
+  );
+  // Podpisana umowa wrocila w `wnioskGotowyDoWeryfikacji`, wiec oba
+  // egzemplarze maja tu byc: bez wzoru nie wiadomo, pod czym podpisano.
+  assert.ok(
+    akta.dokumenty.some((d) => d.typ === 'umowa_rejestru' && d.rola === 'podpisany'),
+    'odeslany skan umowy jest w aktach spolki'
+  );
+  // Sciezki na dysku sa wewnetrzne — trasa ich nie zwraca, wiec do
+  // sprawdzenia, czy kopie faktycznie powstaly, siegamy do bazy.
+  const kopie = db()
+    .prepare('SELECT sciezka FROM psa_spolki_dokumenty WHERE spolka_id = ?')
+    .all(wynik.spolka_id)
+    .map((d) => path.join(KATALOG_DOKUMENTOW, d.sciezka));
+  assert.equal(kopie.length, akta.dokumenty.length);
+  assert.ok(kopie.every((s) => fs.existsSync(s)), 'kazdy wiersz akt ma swoj plik na dysku');
+
   const [stPonownie] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, undefined, ciastkoPracownik);
   assert.equal(stPonownie, 400, 'wniosek przyjety jest juz zamkniety');
 
   const [stKorektaPoZamknieciu] = await zapytaj('PUT', `/api/psa/wnioski/${wniosekId}`, { miejscowosc: 'X' }, ciastkoPracownik);
   assert.equal(stKorektaPoZamknieciu, 400, 'zamknietego wniosku nie mozna juz korygowac');
+});
+
+test('POST /api/psa/wnioski/:id/przyjmij: przepina konto wnioskodawcy na role spolki — i tylko na JEGO spolke', async () => {
+  const { wniosekId, ciastkoKlienta } = await wnioskGotowyDoWeryfikacji('przepiecie-konta@example.pl');
+  const [, dane] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
+  await zapytaj(
+    'POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${dane.akcjonariusze[0].id}/zweryfikuj`,
+    { zweryfikowano: true }, ciastkoPracownik
+  );
+
+  // Przed przyjeciem: konto nie ma spolki, a "Moje spolki" pokazuje wniosek.
+  const [, mojePrzed] = await zapytaj('GET', '/api/psa/portal/moje', undefined, ciastkoKlienta);
+  assert.equal(mojePrzed.rola, 'wnioskodawca');
+  assert.deepEqual(mojePrzed.spolki, []);
+  assert.equal(mojePrzed.wniosek.status, 'umowa_podpisana', 'ekran klienta mowi, na czym stoi sprawa');
+
+  const [status, wynik] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, undefined, ciastkoPracownik);
+  assert.equal(status, 200);
+  assert.equal(wynik.konto_przepiete, true);
+
+  const konto = db().prepare('SELECT * FROM psa_konta WHERE email = ?').get('przepiecie-konta@example.pl');
+  assert.equal(konto.rola, 'spolka');
+  assert.equal(konto.spolka_id, wynik.spolka_id);
+
+  // Po przyjeciu konto widzi SWOJA spolke...
+  const [, mojePo] = await zapytaj('GET', '/api/psa/portal/moje', undefined, ciastkoKlienta);
+  assert.equal(mojePo.rola, 'spolka');
+  assert.equal(mojePo.spolki.length, 1);
+  assert.equal(mojePo.spolki[0].id, wynik.spolka_id);
+
+  // ...i WYLACZNIE swoja: rejestr cudzej spolki zostaje zamkniety.
+  const obca = await wnioskGotowyDoWeryfikacji('przepiecie-konta-obca@example.pl');
+  const [, daneObcej] = await zapytaj('GET', `/api/psa/wnioski/${obca.wniosekId}`, undefined, ciastkoPracownik);
+  await zapytaj(
+    'POST', `/api/psa/wnioski/${obca.wniosekId}/akcjonariusze/${daneObcej.akcjonariusze[0].id}/zweryfikuj`,
+    { zweryfikowano: true }, ciastkoPracownik
+  );
+  const [, wynikObcej] = await zapytaj('POST', `/api/psa/wnioski/${obca.wniosekId}/przyjmij`, undefined, ciastkoPracownik);
+  // 404, nie 403 — portal celowo nie potwierdza nawet ISTNIENIA cudzej
+  // spolki (`wymagajDostepuDoSpolki` w server/trasy/portal.js).
+  const [stObca] = await zapytaj('GET', `/api/psa/portal/rejestr/${wynikObcej.spolka_id}`, undefined, ciastkoKlienta);
+  assert.equal(stObca, 404, 'konto spolki nie siega do rejestru innej spolki');
 });
 
 test('POST /api/psa/wnioski/:id/przyjmij: dopasowuje istniejaca osobe przy zweryfikuj z osoba_id, nie duplikuje kartoteki', async () => {

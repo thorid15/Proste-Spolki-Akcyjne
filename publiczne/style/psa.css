@@ -243,6 +243,16 @@ tr.usuwany td { background: var(--burgundy-bg); text-decoration: line-through; }
   z-index: 100;
   background: var(--surf);
   border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+/* Na telefonie nawigacja portalu nie mieści się obok nazwy aplikacji —
+   w jednym rzędzie rozpychała stronę na 434 px przy oknie 390 px, przez co
+   pasek górny i stopka przestawały sięgać jej krawędzi. Nazwa zostaje
+   u góry, przyciski schodzą pod nią i mogą się zawijać. */
+@media (max-width: 640px) {
+  .portal-topbar { gap: 12px; }
+  .portal-topbar > * { flex: 1 1 100%; min-width: 0; }
+  .portal-topbar .row-g { flex-wrap: wrap; }
 }
 
 /* Kolejka spraw (faza 3.1): starzenie jako wąski pasek przy lewej krawędzi

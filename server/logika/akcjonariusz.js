@@ -18,12 +18,15 @@
 const przepisy = require('./przepisy');
 
 const { RODZAJE_ADRESU_REJESTROWEGO: ADRES, STATUSY_ZGODY_EMAIL: ZGODA,
-  RODZAJE_WSPOLWLASNOSCI: WSPOL } = przepisy;
+  RODZAJE_WSPOLWLASNOSCI: WSPOL, STATUSY_PEP: PEP } = przepisy;
 
 /** Pola wspólne dla kartoteki i wniosku — jedna lista, żeby się nie rozjechały. */
 const POLA_USTAWOWE = [
   'bez_pesel', 'rodzaj_adresu_rejestrowego', 'zgoda_email_status',
   'wspolwlasnosc', 'wspolwlasciciele', 'udzial_licznik', 'udzial_mianownik',
+  // Nie z KSH, tylko z ustawy AML — ale zbierane w tym samym formularzu
+  // i o tej samej osobie, więc mieszka razem z resztą jej danych.
+  'pep', 'pep_opis',
 ];
 
 function pusty(v) {
@@ -54,6 +57,7 @@ function znormalizuj(dane) {
   if ('wspolwlasnosc' in wynik && pusty(wynik.wspolwlasnosc)) {
     wynik.wspolwlasnosc = WSPOL.BRAK;
   }
+  if ('pep' in wynik && pusty(wynik.pep)) wynik.pep = PEP.NIE;
   if ('rodzaj_adresu_rejestrowego' in wynik && pusty(wynik.rodzaj_adresu_rejestrowego)) {
     wynik.rodzaj_adresu_rejestrowego = null;
   }
@@ -78,6 +82,9 @@ function bledy(dane) {
   }
   if (dane.wspolwlasnosc != null && !Object.values(WSPOL).includes(dane.wspolwlasnosc)) {
     lista.push(`Nieznany rodzaj współwłasności: „${dane.wspolwlasnosc}”.`);
+  }
+  if (dane.pep != null && !Object.values(PEP).includes(dane.pep)) {
+    lista.push(`Nieznany status PEP: „${dane.pep}”.`);
   }
 
   // Deklaracja „nie ma PESEL-u” i podany PESEL wykluczają się nawzajem.
@@ -127,24 +134,40 @@ function ostrzezenia(a) {
     }
   }
 
-  // pkt 3 — jeden ze wskazanych adresów, wybrany świadomie i wypełniony.
+  // pkt 3 — jeden ze wskazanych adresów trafia do treści rejestru. Klient
+  // (wniosek) wpisuje tyle adresów, ile akcjonariusz posiada, bez wyboru —
+  // KTÓRY z nich jest tym z ustawy, wskazuje kancelaria przy weryfikacji.
+  // Brakiem jest więc wyłącznie brak jakiegokolwiek adresu; niezgodność
+  // wskazanego rodzaju z wypełnionym polem to osobny, bardziej konkretny
+  // sygnał dla kancelarii (np. domyślne "zamieszkania" zostało puste, bo
+  // klient podał tylko adres do e-Doręczeń).
   const adresy = {
     [ADRES.ZAMIESZKANIA]: [a.kod_pocztowy, a.miejscowosc, a.ulica].some((v) => !pusty(v)),
     [ADRES.DORECZEN]: !pusty(a.adres_doreczen),
     [ADRES.EDORECZEN]: !pusty(a.adres_edoreczen),
   };
-  if (pusty(a.rodzaj_adresu_rejestrowego)) {
-    lista.push(`${oznaczenie}: wskaż, który adres ma zostać wpisany do rejestru.`);
-  } else if (!adresy[a.rodzaj_adresu_rejestrowego]) {
+  if (!Object.values(adresy).some(Boolean)) {
+    lista.push(`${oznaczenie}: brak jakiegokolwiek adresu.`);
+  } else if (!pusty(a.rodzaj_adresu_rejestrowego) && !adresy[a.rodzaj_adresu_rejestrowego]) {
     lista.push(
-      `${oznaczenie}: wskazano „${przepisy.OPISY_RODZAJOW_ADRESU_REJESTROWEGO[a.rodzaj_adresu_rejestrowego]}”, `
-      + 'ale pole tego adresu jest puste.'
+      `${oznaczenie}: jako adres do rejestru wskazano „${przepisy.OPISY_RODZAJOW_ADRESU_REJESTROWEGO[a.rodzaj_adresu_rejestrowego]}”, `
+      + 'ale to pole jest puste — sprawdź, który adres ma zostać wpisany.'
     );
   }
 
   // pkt 4 — zgoda bez adresu e-mail nie ma czego dotyczyć.
   if (a.zgoda_email_status && a.zgoda_email_status !== ZGODA.BRAK && pusty(a.email)) {
     lista.push(`${oznaczenie}: zaznaczono zgodę na komunikację elektroniczną, ale nie podano adresu e-mail.`);
+  }
+
+  // Ustawa AML: przy PEP kancelaria stosuje WZMOŻONE środki bezpieczeństwa
+  // finansowego, a te wymagają wiedzy, na czym status polega — samo „tak"
+  // nie wystarcza do udokumentowania czynności.
+  if (przepisy.pepWymagaWzmozonych(a.pep) && pusty(a.pep_opis)) {
+    lista.push(
+      `${oznaczenie}: zaznaczono eksponowane stanowisko polityczne, ale nie opisano, `
+      + 'jakiej funkcji albo relacji dotyczy.'
+    );
   }
 
   // pkt 5 — przy współwłasności pozostali współwłaściciele, przy ułamkowej udział.

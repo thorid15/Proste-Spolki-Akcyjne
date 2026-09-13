@@ -221,12 +221,9 @@ function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
         )}
         <div className="row-g">
           <select value={typDokumentu} onChange={(z) => ustawTypDokumentu(z.target.value)} style={{ width: 'auto' }}>
-            <option value="umowa_zbycia">umowa zbycia</option>
-            <option value="uchwala">uchwała</option>
-            <option value="zgoda">zgoda</option>
-            <option value="postanowienie">postanowienie</option>
-            <option value="pelnomocnictwo">pełnomocnictwo</option>
-            <option value="inny">inny</option>
+            {RODZAJE_DOKUMENTU_PODSTAWY.map(([kod, opis]) => (
+              <option key={kod} value={kod}>{opis}</option>
+            ))}
           </select>
           <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" disabled={wysylanie} onChange={wgraj} />
           {wysylanie && <span className="przyciemnione">Wysyłanie…</span>}
@@ -248,7 +245,7 @@ function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie }) {
       stopka={
         <>
           <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-          <button className="btn btn-primary" disabled={!powod.trim()} onClick={() => przyZapisie(powod.trim())}>
+          <button className="btn btn-glowny" disabled={!powod.trim()} onClick={() => przyZapisie(powod.trim())}>
             Potwierdź
           </button>
         </>
@@ -275,7 +272,7 @@ function ModalWstrzymania({ przyZamknieciu, przyZapisie }) {
         <>
           <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
           <button
-            className="btn btn-primary"
+            className="btn btn-glowny"
             disabled={!powod.trim()}
             onClick={() => przyZapisie({
               powod: powod.trim(),
@@ -322,7 +319,7 @@ function ModalOdmowy({ przyZamknieciu, przyZapisie }) {
         <>
           <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
           <button
-            className="btn btn-primary"
+            className="btn btn-glowny"
             disabled={!kod || (wymagaOpisu && !opis.trim())}
             onClick={() => przyZapisie({ powod_odmowy_kod: kod, powod_odmowy: opis.trim() })}
           >
@@ -374,7 +371,7 @@ function AkcjeSprawy({ sprawa, odswiez }) {
         <button className="btn btn-sm" onClick={() => ustawModal('wstrzymaj')}>Wstrzymaj</button>
       )}
       {sprawa.stan === 'wstrzymana' && (
-        <button className="btn btn-sm btn-primary" onClick={() => wykonaj('wznow')}>Wznów</button>
+        <button className="btn btn-sm btn-glowny" onClick={() => wykonaj('wznow')}>Wznów</button>
       )}
       {['weryfikacja', 'wstrzymana'].includes(sprawa.stan) && (
         <button className="btn btn-sm btn-danger" onClick={() => ustawModal('odmow')}>Odmów wpisu</button>
@@ -489,12 +486,17 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
 /* ─────────────────────────────────────────────────────
    KROKI 3–4 OSADZONE — wspólne dla nowej i wznawianej sprawy
    ───────────────────────────────────────────────────── */
-function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano }) {
+function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano, emisjaPoczatkowa }) {
   const draft = sprawa.dane_wejsciowe_json ? JSON.parse(sprawa.dane_wejsciowe_json) : null;
 
   const [krok, ustawKrok] = useState(2);
   const [dataZdarzenia, ustawDateZdarzenia] = useState((draft && draft.data_zdarzenia) || sprawa.data_wplywu.slice(0, 10));
-  const [dane, ustawDane] = useState((draft && draft.dane) || {});
+  // `emisjaPoczatkowa` przychodzi z przejścia EMISJA → OBJĘCIE (kreator.js) —
+  // seria jest już wskazana, notariusz uzupełnia tylko, kto ją obejmuje.
+  // Zapisany draft ma pierwszeństwo: to stan, do którego ktoś wrócił.
+  const [dane, ustawDane] = useState(
+    (draft && draft.dane) || (emisjaPoczatkowa ? { emisja_zdarzenie_id: emisjaPoczatkowa } : {})
+  );
   const [odhaczone, ustawOdhaczone] = useState({});
   const [notatkaWatpliwosci, ustawNotatkeWatpliwosci] = useState('');
   const [podglad, ustawPodglad] = useState(null);
@@ -598,8 +600,32 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
               })}
             />
           )}
+          {/* Emisja tworzy tylko PULĘ akcji — dopóki nikt ich nie obejmie,
+              rejestr nie ma akcjonariusza. To osobne zdarzenie (i osobna
+              opłata), ale nie osobna wizyta w kreatorze: prowadzimy wprost
+              do objęcia, z wskazaną serią. */}
+          {sprawa.typ_zdarzenia === 'emisja' && (
+            <Komunikat
+              odmiana="uwaga"
+              tytul="Akcje czekają na objęcie"
+              tresc="Wyemitowane akcje nie mają jeszcze akcjonariusza. Wpisz teraz, kto je obejmuje — to kolejne zdarzenie w rejestrze, ale nie trzeba zakładać sprawy od nowa."
+            />
+          )}
           <div className="kreator-stopka">
-            <button className="btn btn-primary" onClick={() => idz(`/spolki/${sprawa.spolka_id}`)}>
+            {sprawa.typ_zdarzenia === 'emisja' && (
+              <button
+                className="btn btn-glowny"
+                onClick={() => idz(
+                  `/spolki/${sprawa.spolka_id}/zdarzenie?typ=objecie&emisja=${wynik.zdarzenie.id}`
+                )}
+              >
+                Wpisz, kto objął akcje
+              </button>
+            )}
+            <button
+              className={sprawa.typ_zdarzenia === 'emisja' ? 'btn' : 'btn btn-glowny'}
+              onClick={() => idz(`/spolki/${sprawa.spolka_id}`)}
+            >
               Wróć do kokpitu spółki
             </button>
           </div>
@@ -698,7 +724,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
         </button>
         <div className="kreator-stopka-prawa">
           {krok === 2 ? (
-            <button className="btn btn-primary" onClick={() => idzDoKroku(3)}>Dalej</button>
+            <button className="btn btn-glowny" onClick={() => idzDoKroku(3)}>Dalej</button>
           ) : sawatpliwosci ? (
             <button className="btn btn-danger btn-lg" disabled={!notatkaWatpliwosci.trim() || zapisywanie} onClick={wstrzymajZWatpliwosci}>
               {zapisywanie ? 'Wstrzymywanie…' : 'Wstrzymaj sprawę (wątpliwości)'}
@@ -706,7 +732,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
           ) : (
             <>
               <button className="btn" onClick={wczytajPodglad} disabled={ladowaniePodgladu}>Przelicz podgląd</button>
-              <button className="btn btn-primary btn-lg" disabled={!mozeWpisac || zapisywanie} onClick={dokonajWpisu}>
+              <button className="btn btn-glowny btn-lg" disabled={!mozeWpisac || zapisywanie} onClick={dokonajWpisu}>
                 {zapisywanie ? 'Zapisywanie…' : 'Dokonaj wpisu'}
               </button>
             </>
@@ -721,7 +747,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
 /* ─────────────────────────────────────────────────────
    EKRAN SPRAWY
    ───────────────────────────────────────────────────── */
-function EkranSprawy({ sprawaId }) {
+function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
   const { dane, ladowanie, blad, odswiez } = useDane(`/api/psa/sprawy/${sprawaId}`);
   const meta = useDane('/api/psa/meta');
   // Ustawiane od razu po udanym wpisie (patrz KreatorSprawy) - ukrywa akcje
@@ -835,6 +861,7 @@ function EkranSprawy({ sprawaId }) {
             definicjaTypu={definicjaTypu}
             odswiezSprawe={odswiez}
             naWpisano={() => ustawWlasnieWpisano(true)}
+            emisjaPoczatkowa={emisjaPoczatkowa}
           />
       )}
       {sprawa.stan === 'wstrzymana' && (
