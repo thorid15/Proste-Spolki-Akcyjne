@@ -295,6 +295,24 @@ router.put(
 );
 
 /**
+ * Potwierdzenie, ze odeslany skan jest kompletny i prawidlowo podpisany.
+ * `{ potwierdzono: false }` cofa potwierdzenie.
+ */
+router.post(
+  '/:id/dokumenty/:dokId/podpis-potwierdz',
+  asy((zad, odp) => {
+    const wniosek = wczytajOtwartyWniosek(Number(zad.params.id));
+    const potwierdzono = (zad.body || {}).potwierdzono !== false;
+    const wynik = pakietWniosku.potwierdzPodpis(
+      wniosek.id, Number(zad.params.dokId), potwierdzono, autor(zad)
+    );
+    if (wynik === null) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+    if (wynik === false) throw bledneZadanie('Klient nie odesłał jeszcze skanu tego dokumentu.');
+    odp.json({ dokument: wynik, dokumenty: pakietWniosku.lista(wniosek.id) });
+  })
+);
+
+/**
  * Udostepnienie kompletu klientowi: pozycje pojawiaja sie w portalu, wniosek
  * przechodzi w `umowa_wygenerowana`, a klient dostaje wiadomosc, ze dokumenty
  * czekaja na pobranie. Brak SMTP nie przewraca operacji — kancelaria widzi
@@ -513,11 +531,78 @@ router.post(
 
     db()
       .prepare(
-        `UPDATE psa_wnioski_akcjonariusze SET zweryfikowano = ?, osoba_id = ?, zaktualizowano = ? WHERE id = ?`
+        `UPDATE psa_wnioski_akcjonariusze
+            SET zweryfikowano = ?, osoba_id = ?, uwagi_kancelarii = ?, zaktualizowano = ?
+          WHERE id = ?`
       )
-      .run(zweryfikowano, osobaId, czas.terazIso(), istniejacy.id);
+      // Zweryfikowanie pozycji zamyka uwage: to ona byla pytaniem, a to jest
+      // odpowiedz. Cofniecie weryfikacji uwagi nie przywraca - gdyby byla
+      // dalej aktualna, kancelaria odesle pozycje do poprawy jeszcze raz.
+      .run(zweryfikowano, osobaId, zweryfikowano ? null : istniejacy.uwagi_kancelarii, czas.terazIso(), istniejacy.id);
 
     odp.json({ akcjonariusz: db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(istniejacy.id) });
+  })
+);
+
+/**
+ * Odeslanie JEDNEJ pozycji akcjonariusza do poprawy.
+ *
+ * Notatka na caly wniosek nie wystarcza: przy pieciu akcjonariuszach zdanie
+ * „popraw numer PESEL" nie mowi, przy kim. Uwaga siada wiec przy pozycji,
+ * a wniosek wraca do edycji po stronie klienta - bo bez tego nie mialby jak
+ * jej poprawic.
+ */
+router.post(
+  '/:id/akcjonariusze/:akcId/do-poprawy',
+  asy((zad, odp) => {
+    const wniosek = wczytajOtwartyWniosek(Number(zad.params.id));
+    const istniejacy = wczytajAkcjonariuszaWniosku(wniosek.id, Number(zad.params.akcId));
+    if (!istniejacy) throw nieZnaleziono('Nie odnaleziono pozycji akcjonariusza.');
+
+    const uwagi = String((zad.body || {}).uwagi || '').trim();
+    if (!uwagi) throw bledneZadanie('Podaj, co klient ma poprawić przy tej pozycji.');
+
+    const teraz = czas.terazIso();
+    db()
+      .prepare(
+        `UPDATE psa_wnioski_akcjonariusze
+            SET uwagi_kancelarii = ?, zweryfikowano = 0, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(uwagi, teraz, istniejacy.id);
+
+    // Notatka na wniosku zbiera wszystkie otwarte uwagi — klient widzi ja nad
+    // formularzem i wie, ile pozycji czeka na poprawke.
+    const otwarte = db()
+      .prepare(
+        `SELECT nazwisko, imie, nazwa, typ, uwagi_kancelarii
+           FROM psa_wnioski_akcjonariusze
+          WHERE wniosek_id = ? AND uwagi_kancelarii IS NOT NULL
+          ORDER BY kolejnosc, id`
+      )
+      .all(wniosek.id);
+    const podsumowanie = otwarte
+      .map((a) => {
+        const kto = a.typ === 'prawna'
+          ? (a.nazwa || 'podmiot bez nazwy')
+          : [a.imie, a.nazwisko].filter(Boolean).join(' ') || 'osoba bez nazwiska';
+        return `${kto}: ${a.uwagi_kancelarii}`;
+      })
+      .join('\n');
+
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET status = 'do_uzupelnienia', notatka_weryfikacji = ?,
+                obsluzone_przez = ?, obsluzone_kiedy = ?, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(podsumowanie, autor(zad), teraz, teraz, wniosek.id);
+
+    odp.json({
+      wniosek: wczytajWniosek(wniosek.id),
+      akcjonariusz: db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(istniejacy.id),
+    });
   })
 );
 
@@ -581,6 +666,20 @@ router.post(
     if (niezweryfikowani.length > 0) {
       throw bledneZadanie(
         `${niezweryfikowani.length} z ${akcjonariusze.length} pozycji akcjonariuszy nie jest jeszcze zweryfikowanych.`
+      );
+    }
+
+    // Podpis pod dokumentem musi byc SPRAWDZONY, nie tylko odeslany: sam fakt
+    // wgrania pliku nie mowi, czy skan jest czytelny i czy podpisali go
+    // wszyscy, ktorzy mieli. Przyjecie wniosku otwiera rejestr, wiec to
+    // ostatni moment, w ktorym da sie to zauwazyc.
+    const bezPotwierdzenia = pakietWniosku.bezPotwierdzonegoPodpisu(wniosek.id);
+    if (bezPotwierdzenia.length > 0) {
+      const brakSkanu = bezPotwierdzenia.filter((d) => !d.ma_skan).length;
+      throw bledneZadanie(
+        `${bezPotwierdzenia.length} dokumentów nie ma potwierdzonego podpisu`
+        + (brakSkanu > 0 ? ` (w tym ${brakSkanu} bez odesłanego skanu)` : '')
+        + '. Sprawdź je w zakładce „Dokumenty” i oznacz podpisy jako prawidłowe.'
       );
     }
 

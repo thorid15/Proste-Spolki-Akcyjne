@@ -380,6 +380,17 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
       <KrokNaglowek tytul={nazwany ? nazwaAkcjonariusza(dane) : 'Nowy akcjonariusz'} />
       <Komunikat odmiana="blad" tresc={blad} />
 
+      {/* Uwaga kancelarii siedzi PRZY POZYCJI, której dotyczy — notatka na
+          całym wniosku przy pięciu akcjonariuszach nie mówi, przy kim
+          poprawić. */}
+      {pozycja.uwagi_kancelarii && (
+        <Komunikat
+          odmiana="uwaga"
+          tytul="Kancelaria prosi o poprawienie tych danych"
+          tresc={pozycja.uwagi_kancelarii}
+        />
+      )}
+
       <Pole etykieta="Rodzaj podmiotu">
         <select
           value={dane.typ}
@@ -590,6 +601,13 @@ function EkranWniosku() {
         ustawDane(w.wniosek);
         ustawAkcjonariusze(a.akcjonariusze);
         ustawDokumenty(d.dokumenty || []);
+        // Złożony wniosek nie przyjmuje już zmian, więc trzy pierwsze kroki
+        // nie mają czego od klienta chcieć — a przeklikiwanie ich po raz
+        // drugi tylko odsuwa go od tego, po co wrócił: dokumentów do
+        // podpisu. Kreator otwiera się wtedy od razu na podsumowaniu.
+        if (!['w_przygotowaniu', 'do_uzupelnienia'].includes(w.wniosek.status)) {
+          ustawKrok(KROKI_WNIOSKU.length - 1);
+        }
       })
       .catch((e) => ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się wczytać wniosku.'))
       .finally(() => ustawLadowanie(false));
@@ -931,7 +949,9 @@ function EkranWniosku() {
                         key={a.id}
                         ikona={a.typ === 'prawna' ? 'spolki' : 'osoby'}
                         tytul={nazwaAkcjonariusza(a)}
-                        znacznik={braki > 0 ? 'do uzupełnienia' : null}
+                        znacznik={a.uwagi_kancelarii
+                          ? 'do poprawy'
+                          : braki > 0 ? 'do uzupełnienia' : null}
                         opis={[identyfikatorAkcjonariusza(a), opisAdresowAkcjonariusza(a)].join(' · ')}
                         przyKliknieciu={() => ustawOtwartyAkcjonariusz(a.id)}
                       />

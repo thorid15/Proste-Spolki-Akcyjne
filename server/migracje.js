@@ -1613,6 +1613,34 @@ const MIGRACJE = [
       UPDATE psa_wnioski_dokumenty SET udostepniono = utworzono WHERE udostepniono IS NULL;
     `,
   },
+  {
+    wersja: 37,
+    nazwa: 'uwagi-do-pozycji-akcjonariusza-i-potwierdzenie-podpisu',
+    sql: `
+      -- Uwaga kancelarii do KONKRETNEJ pozycji akcjonariusza. Dotad odeslanie
+      -- wniosku do uzupelnienia niosło jedna notatke na caly wniosek, wiec
+      -- przy pieciu akcjonariuszach klient dostawal zdanie "popraw PESEL"
+      -- i sam musial zgadywac, przy kim.
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN uwagi_kancelarii TEXT;
+
+      -- Potwierdzenie, ze odeslany skan jest kompletny i prawidlowo podpisany.
+      -- Sam fakt wgrania pliku tego nie przesadza - ktos musi na niego
+      -- spojrzec, a przyjecie wniosku ma tego wymagac.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_potwierdzono TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_potwierdzil TEXT;
+    `,
+  },
+  {
+    wersja: 38,
+    nazwa: 'sprawdzenie-dokumentu-przed-udostepnieniem',
+    sql: `
+      -- Slad, ze ktos PRZECZYTAL dokument, zanim poszedl do klienta. Rozni sie
+      -- od 'zmodyfikowano': dokument bez ani jednej poprawki tez bywa
+      -- sprawdzony, a wlasnie o to sprawdzenie chodzi przed udostepnieniem.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN sprawdzono TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN sprawdzil TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

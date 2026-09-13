@@ -85,6 +85,10 @@ const SCIEZKI_IKON = {
   znak: 'M12 2.5 20.5 7v10L12 21.5 3.5 17V7zM12 8.5 16 11v5l-4 2.2L8 16v-5z',
   pusto: 'M4 7h16v13H4zM4 7l2-3h12l2 3M12 11v5M9.5 13.5h5',
   popraw: 'M4.5 12a7.5 7.5 0 1 0 2.4-5.5M4.5 4v4.5H9',
+  koperta: 'M3 6h18v12H3zM3 6.5l9 6 9-6',
+  telefon: 'M5 4h4l1 4-2 1.5a10 10 0 0 0 6.5 6.5L16 14l4 1v4h-2A13 13 0 0 1 5 6z',
+  pinezka: 'M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
+  globus: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3.4 9h17.2M3.4 15h17.2M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
 };
 
 /**
@@ -1320,7 +1324,7 @@ function StopkaKancelarii({ kancelaria }) {
   return (
     <footer className="stopka bez-druku">
       <div className="stopka-srodek">
-        <div className="stopka-kolumna stopka-marka">
+        <div className="stopka-marka">
           {!znakNieudany && (
             <img
               className="stopka-znak"
@@ -1331,29 +1335,47 @@ function StopkaKancelarii({ kancelaria }) {
               onError={() => ustawZnakNieudany(true)}
             />
           )}
-          <div className="stopka-nazwa">{k.nazwa}</div>
-          {adres && <div className="stopka-adres">{adres}</div>}
+          <div className="stopka-marka-tekst">
+            <div className="stopka-nazwa">{k.nazwa}</div>
+            {adres && (
+              <div className="stopka-poz">
+                <Ikona nazwa="pinezka" rozmiar={14} />
+                <span>{adres}</span>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="stopka-kolumna">
-          <div className="stopka-naglowek">Kontakt</div>
-          {k.email && <a href={`mailto:${k.email}`}>{k.email}</a>}
-          {k.telefon && <a href={`tel:${String(k.telefon).replace(/\s/g, '')}`}>{k.telefon}</a>}
-          {link && <a href={link} target="_blank" rel="noopener noreferrer">{skrocAdresWww(link)}</a>}
-        </div>
-
-        <div className="stopka-kolumna">
-          <div className="stopka-naglowek">Zasady</div>
-          <a href="#/regulamin">Regulamin portalu</a>
-          <a href="#/polityka-prywatnosci">Polityka prywatności</a>
-          {k.email && <a href={`mailto:${k.email}`}>Zgłoś uwagę</a>}
+        {/* Ikona przy każdym adresie: trzy wiersze jednym krojem i jednym
+            stopniem czytają się jak lista, a nie jak trzy różne informacje —
+            kształt rozróżnia je szybciej niż sama treść. */}
+        <div className="stopka-kontakt">
+          {k.email && (
+            <a className="stopka-poz" href={`mailto:${k.email}`}>
+              <Ikona nazwa="koperta" rozmiar={14} />
+              <span>{k.email}</span>
+            </a>
+          )}
+          {k.telefon && (
+            <a className="stopka-poz" href={`tel:${String(k.telefon).replace(/\s/g, '')}`}>
+              <Ikona nazwa="telefon" rozmiar={14} />
+              <span>{k.telefon}</span>
+            </a>
+          )}
+          {link && (
+            <a className="stopka-poz" href={link} target="_blank" rel="noopener noreferrer">
+              <Ikona nazwa="globus" rozmiar={14} />
+              <span>{skrocAdresWww(link)}</span>
+            </a>
+          )}
         </div>
       </div>
 
       <div className="stopka-dol">
         <span>© {rok} {k.nazwa || 'Kancelaria Notarialna'}. Wszelkie prawa zastrzeżone.</span>
-        <span className="stopka-dol-opis">
-          Rejestr akcjonariuszy prostych spółek akcyjnych
+        <span className="stopka-dol-linki">
+          <a href="#/regulamin">Regulamin portalu</a>
+          <a href="#/polityka-prywatnosci">Polityka prywatności</a>
         </span>
       </div>
     </footer>

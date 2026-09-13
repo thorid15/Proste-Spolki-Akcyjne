@@ -162,6 +162,10 @@ body {
   box-shadow: var(--cien-panel);
   overflow: hidden;
 }
+/* Portal klienta korzysta z tej samej powłoki, ale nie ma szyny nawigacji —
+   cztery ekrany mieszczą się w belce tytułowej. Zostaje jedna kolumna. */
+.powloka-portal { grid-template-columns: minmax(0, 1fr); }
+
 @media (max-width: 900px) {
   .powloka { grid-template-columns: minmax(0, 1fr); margin: 0; border-radius: 0; border: none; }
   .szyna { display: none; }
@@ -1219,10 +1223,13 @@ select {
    ───────────────────────────────────────────────────── */
 /* ─────────────────────────────────────────────────────
    STOPKA
-   Trzy kolumny — kto prowadzi, jak się skontaktować, na jakich zasadach —
-   i pasek z notą o prawach pod cienką linią. Poprzednia wersja mieściła
-   wszystko w jednym rzędzie rozdzielonym kropkami; przy pięciu pozycjach
-   zamieniało się to w jedno zdanie bez hierarchii.
+   Jeden rząd: po lewej kto prowadzi rejestr, po prawej jak się z nim
+   skontaktować. Pod cienką linią nota o prawach i odnośniki do zasad.
+
+   Poprzednia wersja miała trzy kolumny z własnymi nagłówkami i zajmowała
+   dwieście pikseli wysokości — na ekranie, na którym pracuje się z rejestrem,
+   to pas równy jednej trzeciej karty. Nagłówki kolumn zniknęły: przy trzech
+   adresach „KONTAKT” nie mówi nic, czego nie mówi ikona koperty.
    ───────────────────────────────────────────────────── */
 .stopka {
   margin-top: auto;
@@ -1230,74 +1237,63 @@ select {
   background: var(--karta);
   color: var(--atrament-2);
   font-size: var(--st-13);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 /* Treść stopki trzyma się tej samej osi, co treść strony nad nią. */
 .stopka-srodek {
   max-width: var(--tresc);
   margin-inline: auto;
-  padding: var(--od-40) var(--od-40) var(--od-24);
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--od-40);
-  align-items: start;
+  padding: var(--od-24) var(--od-40) var(--od-16);
+  display: flex; flex-wrap: wrap; align-items: flex-start;
+  justify-content: space-between; gap: var(--od-16) var(--od-40);
 }
-.stopka-kolumna { display: flex; flex-direction: column; gap: var(--od-4); min-width: 0; }
-.stopka-marka { gap: var(--od-12); }
+.stopka-marka { display: flex; align-items: center; gap: var(--od-16); min-width: 0; }
+.stopka-marka-tekst { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 
-/* Szerokość, nie wysokość — i dokładnie trzecia część oryginału (498 px),
-   bo całkowity stosunek pomniejszenia rysuje ostre krawędzie. Przy dawnych
-   56 px wysokości znak schodził do 127 px szerokości (3,92 : 1) i drugi
-   wiersz napisu zlewał się w plamę. */
-.stopka-znak { width: 166px; height: auto; flex-shrink: 0; }
+/* Szerokość, nie wysokość — i dokładnie ćwierć oryginału (498 px), bo
+   całkowity stosunek pomniejszenia rysuje ostre krawędzie. Przy skalowaniu
+   wysokością do 56 px znak schodził do 127 px (3,92 : 1) i drugi wiersz
+   napisu zlewał się w plamę. */
+.stopka-znak { width: 124px; height: auto; flex-shrink: 0; }
 
 .stopka-nazwa {
   font-family: var(--font-display);
   font-size: var(--st-20);
-  line-height: 1.25;
+  line-height: 1.2;
   color: var(--atrament);
 }
-.stopka-adres { color: var(--atrament-2); }
 
-/* Nagłówek kolumny — wielkością podpisu, nie tytułu: ma porządkować, a nie
-   konkurować z nazwą kancelarii obok. */
-.stopka-naglowek {
-  font-size: var(--st-11);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--atrament-3);
-  margin-bottom: var(--od-4);
-}
-.stopka-kolumna a {
-  color: inherit;
-  text-decoration: none;
-  width: fit-content;
+/* Jedna pozycja z ikoną: adres, e-mail, telefon, strona. */
+.stopka-poz {
+  display: flex; align-items: center; gap: var(--od-8);
+  color: inherit; text-decoration: none;
   overflow-wrap: anywhere;
 }
-.stopka-kolumna a:hover { color: var(--rejestr); text-decoration: underline; }
+.stopka-poz svg { flex-shrink: 0; color: var(--atrament-3); }
+a.stopka-poz:hover { color: var(--rejestr); }
+a.stopka-poz:hover svg { color: var(--rejestr); }
+a.stopka-poz:hover span { text-decoration: underline; }
 
-/* Pasek dolny: nota o prawach i jedno zdanie o tym, czym jest aplikacja.
-   Najcichszy stopień pisma w całej stopce — to przypis, nie treść. */
+.stopka-kontakt { display: flex; flex-direction: column; gap: var(--od-4); min-width: 0; }
+
+/* Pasek dolny: nota o prawach i zasady. Najcichszy stopień pisma w całej
+   stopce — to przypis, nie treść. */
 .stopka-dol {
   max-width: var(--tresc);
   margin-inline: auto;
-  padding: var(--od-16) var(--od-40);
+  padding: var(--od-8) var(--od-40) var(--od-16);
   border-top: 1px solid var(--linia-2);
-  display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--od-8) var(--od-24);
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--od-4) var(--od-24);
   font-size: var(--st-11);
   color: var(--atrament-3);
 }
-.stopka-dol-opis { text-align: right; }
+.stopka-dol-linki { display: flex; flex-wrap: wrap; gap: var(--od-16); }
+.stopka-dol-linki a { color: inherit; text-decoration: none; }
+.stopka-dol-linki a:hover { color: var(--rejestr); text-decoration: underline; }
 
-@media (max-width: 900px) {
-  .stopka-srodek { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--od-24); }
-  .stopka-marka { grid-column: 1 / -1; }
-}
 @media (max-width: 700px) {
-  .stopka-srodek { grid-template-columns: minmax(0, 1fr); padding: var(--od-24); }
-  .stopka-dol { padding: var(--od-16) var(--od-24); }
-  .stopka-dol-opis { text-align: left; }
+  .stopka-srodek { padding: var(--od-24) var(--od-24) var(--od-16); }
+  .stopka-dol { padding: var(--od-8) var(--od-24) var(--od-16); }
 }
 
 /* ─────────────────────────────────────────────────────
@@ -1903,3 +1899,109 @@ select {
   overflow: hidden;
   white-space: nowrap;
 }
+
+/* Dwie decyzje zamykające przegląd pozycji akcjonariusza: powrót po lewej,
+   „do poprawy" i „zweryfikowano" po prawej. Te same proporcje, co
+   `.nawigacja-kreatora` — to ten sam moment w pracy, tylko z trzema
+   wyjściami zamiast dwóch. */
+.decyzja-pozycji {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--od-12);
+  margin-top: var(--od-24);
+  padding-top: var(--od-24);
+  border-top: 1px solid var(--linia-2);
+}
+.decyzja-pozycji-akcje { display: flex; gap: var(--od-8); flex-wrap: wrap; }
+
+/* ─────────────────────────────────────────────────────
+   DOKUMENT W OKNIE KANCELARII
+   Klasy `dok-*` opisują DOKUMENT, nie interfejs: kartka w jednej kolumnie,
+   tytuł na środku, akapity wyjustowane, miejsca na podpis przy prawej
+   krawędzi — możliwie blisko tego, co wyjdzie na papier. Poprawianie dzieje
+   się w tym samym oknie: kliknięcie w blok zamienia go w pole do pisania.
+   ───────────────────────────────────────────────────── */
+.dok-wskazowka {
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  margin-bottom: var(--od-12);
+}
+.dok-strona {
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  padding: var(--od-40);
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--atrament);
+}
+@media (max-width: 700px) { .dok-strona { padding: var(--od-24) var(--od-16); } }
+
+.dok-blok { border-radius: var(--r-sm); padding: 2px var(--od-8); margin-inline: calc(-1 * var(--od-8)); }
+.dok-strona-edytowalna .dok-blok { cursor: text; }
+.dok-strona-edytowalna .dok-blok:hover { background: var(--rejestr-tlo); }
+.dok-blok-otwarty,
+.dok-strona-edytowalna .dok-blok-otwarty:hover {
+  background: var(--papier-2);
+  border: 1px solid var(--rejestr);
+  padding: var(--od-12);
+  cursor: default;
+  font-family: var(--font-ui);
+}
+.dok-blok-pasek {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--od-8);
+  margin-bottom: var(--od-8);
+}
+.dok-blok-rodzaj {
+  font-size: var(--st-11); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--atrament-3);
+  font-family: var(--font-ui);
+}
+.dok-blok-otwarty .pole:last-child { margin-bottom: 0; }
+
+.dok-naglowek { text-align: right; margin-bottom: var(--od-16); }
+.dok-tytul-blok { text-align: center; margin: var(--od-24) 0 var(--od-16); }
+.dok-tytul { font-size: var(--st-20); font-weight: 600; line-height: 1.3; }
+.dok-podtytul { font-size: var(--st-13); color: var(--atrament-2); margin-top: var(--od-4); }
+.dok-sekcja { font-weight: 600; margin: var(--od-16) 0 var(--od-8); }
+.dok-akapit { text-align: justify; margin-bottom: var(--od-12); }
+
+/* Etykieta i wartość w dwóch kolumnach — tak samo jak w składanym PDF-ie. */
+.dok-pola {
+  display: grid; grid-template-columns: 190px minmax(0, 1fr);
+  gap: 2px var(--od-16);
+  margin: var(--od-8) 0 var(--od-16);
+}
+.dok-pola dt { color: var(--atrament-2); }
+.dok-pola dd { margin: 0; overflow-wrap: anywhere; }
+
+.dok-punkt { display: flex; gap: var(--od-8); margin-bottom: var(--od-8); text-align: justify; }
+.dok-punkt-znacznik { flex-shrink: 0; min-width: 22px; }
+
+.dok-opcja { display: flex; gap: var(--od-12); align-items: flex-start; margin-bottom: var(--od-8); }
+.dok-kratka {
+  flex-shrink: 0; width: 11px; height: 11px; margin-top: 5px;
+  border: 1px solid var(--atrament-2);
+}
+/* Krzyżyk rysowany gradientem, nie znakiem: krój dokumentu nie ma „☒”,
+   a podstawianie innego kroju dla jednego znaku rozstraja wiersz. */
+.dok-kratka-zaznaczona {
+  background:
+    linear-gradient(to bottom right, transparent 44%, var(--atrament) 44%, var(--atrament) 56%, transparent 56%),
+    linear-gradient(to bottom left, transparent 44%, var(--atrament) 44%, var(--atrament) 56%, transparent 56%);
+}
+
+.dok-wypelnij { margin: var(--od-8) 0 var(--od-16); }
+.dok-wypelnij-wiersz { display: flex; align-items: baseline; gap: var(--od-12); margin-bottom: var(--od-8); }
+.dok-wypelnij-wiersz > span:first-child { color: var(--atrament-2); white-space: nowrap; }
+.dok-linia { flex: 1; border-bottom: 1px solid var(--linia); height: 1px; }
+
+.dok-podpis {
+  margin: var(--od-40) 0 var(--od-16) auto;
+  width: min(240px, 100%);
+  text-align: center;
+}
+.dok-podpis-linia { display: block; border-top: 1px solid var(--atrament-2); margin-bottom: var(--od-4); }
+.dok-podpis-opis { font-size: var(--st-11); color: var(--atrament-2); }

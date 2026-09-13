@@ -74,7 +74,10 @@ test.after(() => {
 });
 
 /** Zaklada aktywne konto "wnioskodawca" WPROST w bazie i wypelnia wniosek do stanu "umowa_podpisana". */
-async function wnioskGotowyDoWeryfikacji(email, { zAkcjonariuszem = true, dodatkowePola = {} } = {}) {
+async function wnioskGotowyDoWeryfikacji(
+  email,
+  { zAkcjonariuszem = true, dodatkowePola = {}, bezPotwierdzenPodpisow = false, bezSkanow = false } = {}
+) {
   const hash = await hasla.hashuj('HasloWnioskodawcy123');
   db()
     .prepare(
@@ -104,14 +107,26 @@ async function wnioskGotowyDoWeryfikacji(email, { zAkcjonariuszem = true, dodatk
   const zlozony = db().prepare(`SELECT * FROM psa_wnioski WHERE konto_id = (SELECT id FROM psa_konta WHERE email = ?)`).get(email);
 
   // Komplet do podpisu wystawia i udostepnia KANCELARIA — zlozenie wniosku
-  // samo w sobie nie daje klientowi czego podpisac.
+  // samo w sobie nie daje klientowi czego podpisac. Potem klient odsyla skany,
+  // a kancelaria potwierdza kazdy podpis: bez tego wniosku nie da sie przyjac.
   if (zAkcjonariuszem) {
     await zapytaj('POST', `/api/psa/wnioski/${zlozony.id}/dokumenty/wystaw`, {}, ciastkoPracownik);
-    await zapytaj('POST', `/api/psa/wnioski/${zlozony.id}/dokumenty/udostepnij`, {}, ciastkoPracownik);
+    const [, udostepnione] = await zapytaj(
+      'POST', `/api/psa/wnioski/${zlozony.id}/dokumenty/udostepnij`, {}, ciastkoPracownik
+    );
 
-    const formularz = new FormData();
-    formularz.append('plik', new Blob(['podpisana tresc'], { type: 'application/pdf' }), 'podpisana-umowa.pdf');
-    await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, { method: 'POST', headers: { Cookie: ciastko }, body: formularz });
+    for (const d of bezSkanow ? [] : udostepnione.dokumenty) {
+      const formularz = new FormData();
+      formularz.append('plik', new Blob(['podpisana tresc'], { type: 'application/pdf' }), `podpisany-${d.typ}.pdf`);
+      await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${d.id}/podpis`, {
+        method: 'POST', headers: { Cookie: ciastko }, body: formularz,
+      });
+      if (!bezPotwierdzenPodpisow) {
+        await zapytaj(
+          'POST', `/api/psa/wnioski/${zlozony.id}/dokumenty/${d.id}/podpis-potwierdz`, {}, ciastkoPracownik
+        );
+      }
+    }
   }
 
   const wiersz = db().prepare(`SELECT * FROM psa_wnioski WHERE konto_id = (SELECT id FROM psa_konta WHERE email = ?)`).get(email);
@@ -355,4 +370,112 @@ test('POST /api/psa/wnioski/:id/odrzuc: zamyka wniosek', async () => {
 
   const [stPoOdrzuceniu] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/do-uzupelnienia`, { notatka: 'x' }, ciastkoPracownik);
   assert.equal(stPoOdrzuceniu, 400, 'odrzuconego wniosku nie mozna juz przelaczac');
+});
+
+// ─────────────────────────────────────────────────────────────
+// Sprawdzenie dokumentow i potwierdzanie podpisow
+// ─────────────────────────────────────────────────────────────
+
+test('POST /api/psa/wnioski/:id/przyjmij: odmawia, dopoki podpisy nie sa potwierdzone', async () => {
+  const { wniosekId } = await wnioskGotowyDoWeryfikacji('podpisy-niepotwierdzone@example.pl', {
+    bezPotwierdzenPodpisow: true,
+  });
+  const [, szczegoly] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
+  for (const a of szczegoly.akcjonariusze) {
+    await zapytaj(
+      'POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${a.id}/zweryfikuj`, { zweryfikowano: 1 }, ciastkoPracownik
+    );
+  }
+
+  const [status, wynik] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, {}, ciastkoPracownik);
+  assert.equal(status, 400);
+  assert.match(wynik.blad, /potwierdzonego podpisu/);
+
+  // Potwierdzenie kazdej pozycji otwiera droge do przyjecia.
+  for (const d of szczegoly.dokumenty) {
+    const [stPotw, poPotw] = await zapytaj(
+      'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${d.id}/podpis-potwierdz`, {}, ciastkoPracownik
+    );
+    assert.equal(stPotw, 200);
+    assert.ok(poPotw.dokument.podpis_potwierdzono);
+  }
+  const [stPrzyjmij] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, {}, ciastkoPracownik);
+  assert.equal(stPrzyjmij, 200);
+});
+
+test('POST /api/psa/wnioski/:id/dokumenty/:dokId/podpis-potwierdz: bez skanu odmawia', async () => {
+  const { wniosekId } = await wnioskGotowyDoWeryfikacji('potwierdzenie-bez-skanu@example.pl', { bezSkanow: true });
+  const [, szczegoly] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
+  const dokument = szczegoly.dokumenty[0];
+  assert.ok(dokument, 'komplet jest wystawiony');
+  assert.equal(dokument.podpis_nazwa_pliku, null, 'ale nikt niczego jeszcze nie odesłał');
+
+  const [status, wynik] = await zapytaj(
+    'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/podpis-potwierdz`, {}, ciastkoPracownik
+  );
+  assert.equal(status, 400);
+  assert.match(wynik.blad, /nie odesłał jeszcze skanu/i);
+});
+
+test('PUT /api/psa/wnioski/:id/dokumenty/:dokId/tresc: zapis oznacza sprawdzenie, po podpisaniu odmawia', async () => {
+  const { wniosekId, ciastkoKlienta } = await wnioskGotowyDoWeryfikacji('tresc-po-podpisie@example.pl', {
+    bezSkanow: true,
+  });
+  const [, szczegoly] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
+  const dokument = szczegoly.dokumenty.find((d) => d.typ === 'oswiadczenie_rodo');
+
+  const [, tresc] = await zapytaj(
+    'GET', `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/tresc`, undefined, ciastkoPracownik
+  );
+  // Zapis BEZ zmiany treści też jest sprawdzeniem — ktoś dokument przeczytał.
+  const [stZapis, poZapisie] = await zapytaj(
+    'PUT', `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/tresc`,
+    { bloki: tresc.dokument.bloki }, ciastkoPracownik
+  );
+  assert.equal(stZapis, 200);
+  assert.ok(poZapisie.dokument.sprawdzono, 'zapis zostawia ślad sprawdzenia');
+  assert.equal(poZapisie.dokumenty.find((d) => d.id === dokument.id).zmodyfikowano, null,
+    'brak zmian w treści nie udaje poprawki');
+
+  // Po odesłaniu podpisanego skanu treść jest zamknięta.
+  const formularz = new FormData();
+  formularz.append('plik', new Blob(['skan'], { type: 'application/pdf' }), 'skan.pdf');
+  await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`, {
+    method: 'POST', headers: { Cookie: ciastkoKlienta }, body: formularz,
+  });
+
+  const [stPoPodpisie, wynik] = await zapytaj(
+    'PUT', `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/tresc`,
+    { bloki: tresc.dokument.bloki }, ciastkoPracownik
+  );
+  assert.equal(stPoPodpisie, 400);
+  assert.match(wynik.blad, /podpisany/i);
+});
+
+test('POST /api/psa/wnioski/:id/akcjonariusze/:akcId/do-poprawy: uwaga siada przy pozycji, wniosek wraca do klienta', async () => {
+  const { wniosekId } = await wnioskGotowyDoWeryfikacji('pozycja-do-poprawy@example.pl');
+  const [, szczegoly] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
+  const pozycja = szczegoly.akcjonariusze[0];
+
+  const [stPusta] = await zapytaj(
+    'POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${pozycja.id}/do-poprawy`, { uwagi: '  ' }, ciastkoPracownik
+  );
+  assert.equal(stPusta, 400, 'uwaga bez treści nie mówi klientowi nic');
+
+  const [status, wynik] = await zapytaj(
+    'POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${pozycja.id}/do-poprawy`,
+    { uwagi: 'Numer PESEL nie zgadza się z dowodem.' }, ciastkoPracownik
+  );
+  assert.equal(status, 200);
+  assert.equal(wynik.wniosek.status, 'do_uzupelnienia');
+  assert.equal(wynik.akcjonariusz.uwagi_kancelarii, 'Numer PESEL nie zgadza się z dowodem.');
+  assert.equal(wynik.akcjonariusz.zweryfikowano, 0);
+  assert.match(wynik.wniosek.notatka_weryfikacji, /Numer PESEL/);
+
+  // Zweryfikowanie pozycji zamyka uwagę — była pytaniem, a to jest odpowiedź.
+  const [, poWeryfikacji] = await zapytaj(
+    'POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${pozycja.id}/zweryfikuj`,
+    { zweryfikowano: 1 }, ciastkoPracownik
+  );
+  assert.equal(poWeryfikacji.akcjonariusz.uwagi_kancelarii, null);
 });

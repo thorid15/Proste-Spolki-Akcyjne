@@ -440,21 +440,31 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
 /* ─────────────────────────────────────────────────────
    UKŁAD
    ───────────────────────────────────────────────────── */
-/* Wnioskodawca nie ma jeszcze spółki w rejestrze — jego zakładka „Moje
-   spółki" pokazuje stan wniosku (`StanWniosku`), a sam formularz dostaje
-   własną pozycję. Dopóki wniosku nie złożono, to ON jest głównym ekranem
-   konta, więc stoi PIERWSZY: klient, który właśnie ustawił hasło, ma przed
-   sobą formularz do wypełnienia, a nie listę spółek, których jeszcze nie ma. */
+/**
+ * Nawigacja portalu zależy od tego, na czym stoi konto.
+ *
+ * `wnioskodawca` nie ma jeszcze spółki w rejestrze, więc jego głównym ekranem
+ * jest FORMULARZ — stoi pierwszy: klient, który właśnie ustawił hasło, ma
+ * przed sobą wniosek do wypełnienia, a nie listę spółek, których jeszcze
+ * nie ma.
+ *
+ * `spolka` to konto po przyjęciu wniosku. Zakładka „Wniosek" znika — sprawa
+ * jest zamknięta, a formularz i tak nie przyjmuje już zmian. Zostaje jedna
+ * spółka, więc i nazwa jest w liczbie pojedynczej.
+ *
+ * `akcjonariusz` bywa uprawniony z akcji kilku spółek, więc u niego liczba
+ * mnoga zostaje.
+ */
 function kartyNawigacji(rola) {
   if (rola === 'wnioskodawca') {
     return [
       { sciezka: '/wniosek', nazwa: 'Wniosek' },
-      { sciezka: '/', nazwa: 'Moje spółki' },
+      { sciezka: '/', nazwa: 'Moja spółka' },
       { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
     ];
   }
   return [
-    { sciezka: '/', nazwa: 'Moje spółki' },
+    { sciezka: '/', nazwa: rola === 'spolka' ? 'Moja spółka' : 'Moje spółki' },
     { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
   ];
 }
@@ -479,31 +489,41 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
     }
   }
 
+  // Ta sama powłoka, co w aplikacji kancelaryjnej: zaokrąglony panel odsunięty
+  // od krawędzi okna, z paskiem marki na górze i belką tytułową pod nim.
+  // Portal nie ma szyny nawigacji (ma cztery ekrany, nie dwadzieścia), więc
+  // siatka jest jednokolumnowa — poza tym oba widoki są tym samym oknem tej
+  // samej kancelarii i nie ma powodu, żeby jeden był panelem, a drugi ścianą
+  // ciągnącą się od krawędzi do krawędzi.
   return (
-    <div className="pion" style={{ minHeight: '100vh' }}>
+    <div className="powloka powloka-portal">
       <div className="marka-pasek bez-druku">
         <div className="marka-pasek-nazwa">{kancelaria.nazwa}</div>
       </div>
-      <header className="portal-topbar pasek-gorny bez-druku" style={{ padding: '14px 28px' }}>
-        <div>
-          <div className="tytul-strony" style={{ fontSize: 17 }}>Rejestr akcjonariuszy P.S.A.</div>
-          <div className="podpowiedz">{konto.email} · {ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola}</div>
-        </div>
-        <div className="row-g">
-          {kartyNawigacji(konto.rola).map((k) => (
-            <button
-              key={k.sciezka}
-              className={`btn btn-sm ${sciezka === k.sciezka ? 'btn-glowny' : ''}`}
-              onClick={() => idz(k.sciezka)}
-            >
-              {k.nazwa}
-            </button>
-          ))}
-          <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>Wyloguj się</button>
-        </div>
-      </header>
-      <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
-      <StopkaKancelarii kancelaria={kancelaria} />
+      <div className="obszar">
+        <header className="topbar bez-druku">
+          <div>
+            <div className="topbar-tytul">Rejestr akcjonariuszy P.S.A.</div>
+            <div className="topbar-podtytul">
+              {konto.email} · {ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola}
+            </div>
+          </div>
+          <div className="row-g">
+            {kartyNawigacji(konto.rola).map((k) => (
+              <button
+                key={k.sciezka}
+                className={`btn btn-sm ${sciezka === k.sciezka ? 'btn-glowny' : ''}`}
+                onClick={() => idz(k.sciezka)}
+              >
+                {k.nazwa}
+              </button>
+            ))}
+            <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>Wyloguj się</button>
+          </div>
+        </header>
+        <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
+        <StopkaKancelarii kancelaria={kancelaria} />
+      </div>
     </div>
   );
 }
@@ -643,7 +663,7 @@ function EkranRejestrPortal({ spolkaId }) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
-      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Moje spółki</button>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
 
       {blad && <Komunikat odmiana="blad" tresc={blad.message} />}
       {ladowanie && <Spinner />}
@@ -764,7 +784,7 @@ function EkranZgloszeniePortal({ spolkaId }) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
-      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Moje spółki</button>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
       <Karta tytul="Zgłoś zmianę w rejestrze">
         <Komunikat odmiana="blad" tresc={blad} />
         <Pole etykieta="Czego dotyczy zgłoszenie" wymagane>
@@ -881,7 +901,7 @@ function EkranInformacjaPortal({ spolkaId }) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
-      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Moje spółki</button>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
       <Karta tytul="Informacja z rejestru" >
         <div className="podstawa-prawna" style={{ marginBottom: 14 }}>
           Art. 300(35) Kodeksu spółek handlowych — informacja z rejestru akcjonariuszy na wskazany dzień,
@@ -978,7 +998,12 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
     // „Moje spółki" i „Moje zgłoszenia" zmieniały adres, a ekran zostawał
     // ten sam — przyciski wyglądały na zepsute. Teraz nawigacja działa dla
     // każdej roli, a formularz ma własny adres.
-    if (segmenty[0] === 'wniosek') return <EkranWniosku />;
+    // Formularz wniosku należy WYŁĄCZNIE do konta wnioskodawcy. Po przyjęciu
+    // wniosku konto przechodzi w rolę „spolka" i ekran nie ma już czego
+    // pokazać — pod tym adresem zostawałby martwy kreator z zamkniętą edycją.
+    if (segmenty[0] === 'wniosek') {
+      return sesja.konto.rola === 'wnioskodawca' ? <EkranWniosku /> : <EkranMoje />;
+    }
     if (segmenty.length === 0) return <EkranMoje />;
     if (segmenty[0] === 'sprawy') return <EkranSprawyPortal />;
     if (segmenty[0] === 'rejestr' && segmenty[1]) return <EkranRejestrPortal spolkaId={Number(segmenty[1])} />;
