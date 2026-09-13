@@ -1716,3 +1716,67 @@ select {
   padding-top: var(--od-12);
   border-top: 1px solid var(--linia);
 }
+
+/* ─────────────────────────────────────────────────────
+   WNIOSEK PO STRONIE KANCELARII
+   Ten sam rytm, co w portalu klienta: karta, zakładki, lista podmiotów.
+   Poniżej wyłącznie to, czego portal klienta nie ma — bo kancelaria robi
+   z wnioskiem rzeczy, których klient nie robi: porównuje z odpisem KRS
+   i redaguje treść wystawianych dokumentów.
+   ───────────────────────────────────────────────────── */
+
+/* Śródtytuł nad grupą pól w formularzu korekty. Bez niego dwadzieścia kilka
+   pól spółki i reprezentanta stoi jednym ciągiem, bez żadnego podziału. */
+.grupa-pol-tytul {
+  font-size: var(--st-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--atrament-3);
+  margin: var(--od-16) 0 var(--od-8);
+}
+.grupa-pol-tytul:first-child { margin-top: 0; }
+
+/* Rozbieżność wobec odpisu KRS. Czerwień znaczy w tej aplikacji „odmowa,
+   po terminie, akcja niszcząca" — a rozbieżność to sygnał do sprawdzenia,
+   nie błąd. Stąd mosiądz i znak obok wartości, nie samo zabarwienie. */
+.rozbieznosc-krs { color: var(--mosiadz); font-weight: 600; }
+.rozbieznosc-znak { font-weight: 400; }
+
+/* Nazwa dokumentu otwierająca podgląd — wygląda jak odnośnik, bo nim jest
+   w odbiorze; przyciskiem jest dlatego, że nie prowadzi pod żaden adres. */
+.jak-odnosnik {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--rejestr);
+  text-align: left;
+  cursor: pointer;
+}
+.jak-odnosnik:hover { text-decoration: underline; }
+
+/* ── Edytor treści dokumentu ──
+   Jeden blok = jedna całość dokumentu (akapit, nagłówek, wiersz danych).
+   Ramka i pasek z rodzajem są po to, żeby po dwudziestu blokach nadal było
+   widać, gdzie kończy się jeden, a zaczyna następny. */
+.edytor-blokow { display: flex; flex-direction: column; gap: var(--od-12); }
+.blok-tresci {
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  padding: var(--od-12);
+  background: var(--papier-2);
+}
+.blok-tresci-pasek {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--od-8);
+  margin-bottom: var(--od-8);
+}
+.blok-tresci-rodzaj {
+  font-size: var(--st-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--atrament-3);
+}
+.blok-tresci .pole:last-child { margin-bottom: 0; }
