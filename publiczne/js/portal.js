@@ -906,6 +906,11 @@ function AplikacjaPortal() {
   const trasa = useTrasa();
   const { segmenty, sciezka } = trasa;
 
+  // Regulamin i polityka prywatności — odnośniki do nich stoją w stopce,
+  // którą widać także pod ekranem logowania, więc muszą działać bez sesji.
+  const dokumentPrawny = ekranPrawny(segmenty);
+  if (dokumentPrawny) return <StronaPrawna>{dokumentPrawny}</StronaPrawna>;
+
   // Etap 3A/3B: jedyne trasy publiczne portalu — MUSZĄ wyprzedzić bramkę
   // sesji poniżej, inaczej niezalogowany gość zawsze wyląduje na ekranie
   // logowania (konto z aktywacji NIE MA jeszcze ważnej sesji w tym momencie).

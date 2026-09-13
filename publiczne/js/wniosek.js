@@ -142,14 +142,26 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie }) {
             <span className="dokument-pozycja-czeka">czeka na podpisany skan</span>
             {edytowalne && (
               <>
+                {/* Systemowe „Choose File / No file chosen" jest po angielsku
+                    i wygląda inaczej w każdej przeglądarce — w komplecie
+                    ośmiu dokumentów robiło z listy zbieraninę. Pole zostaje
+                    ukryte, klika się przycisk aplikacji. */}
                 <input
                   ref={wejscie}
                   type="file"
                   accept=".pdf,.jpg,.jpeg,.png"
                   disabled={wysylanie}
                   onChange={(z) => wyslij(z.target.files[0])}
+                  className="pole-pliku-ukryte"
                 />
-                {wysylanie && <span className="podpowiedz">Przesyłanie…</span>}
+                <button
+                  type="button"
+                  className="btn btn-maly"
+                  disabled={wysylanie}
+                  onClick={() => wejscie.current && wejscie.current.click()}
+                >
+                  {wysylanie ? 'Przesyłanie…' : 'Wgraj podpisany skan'}
+                </button>
               </>
             )}
           </>
@@ -952,9 +964,36 @@ function EkranWniosku() {
           <>
             <KrokNaglowek
               tytul="Podsumowanie"
-              opis="Sprawdź dane przed złożeniem wniosku. Po złożeniu przygotujemy komplet dokumentów do podpisu."
+              opis={wniosekEdytowalny
+                ? 'Sprawdź dane przed złożeniem wniosku. Po złożeniu kancelaria przygotuje komplet dokumentów do podpisu.'
+                : 'Tak wygląda złożony wniosek. Dane są do wglądu — poprawić je można dopiero, gdy kancelaria odeśle wniosek do uzupełnienia.'}
             />
             <Komunikat odmiana="blad" tresc={bladSkladania} />
+
+            {/* Stan sprawy stoi PRZED danymi, nie pod przyciskiem nawigacji:
+                po powrocie do wniosku pierwsze pytanie brzmi „co się dzieje",
+                a nie „co wpisałem". */}
+            {dane.status === 'zlozony' && (
+              <Komunikat
+                odmiana="ok"
+                tytul="Wniosek złożony"
+                tresc="Kancelaria sprawdza dane i przygotowuje komplet dokumentów do podpisu. Gdy będą gotowe, napiszemy e-mailem — pobierzesz je wtedy w tym miejscu."
+              />
+            )}
+            {dane.status === 'przyjety' && (
+              <Komunikat
+                odmiana="ok"
+                tytul="Wniosek przyjęty"
+                tresc="Kancelaria zweryfikowała dane i założyła spółkę w systemie. Rejestr akcjonariuszy zostanie otwarty po ustaleniu pierwszej emisji akcji — o dalszych krokach poinformujemy e-mailem."
+              />
+            )}
+            {dane.status === 'odrzucony' && (
+              <Komunikat
+                odmiana="blad"
+                tytul="Wniosek odrzucony"
+                tresc="Kancelaria odrzuciła wniosek. W razie pytań prosimy o kontakt z kancelarią."
+              />
+            )}
 
             <dl className="podsumowanie">
               <dt>Firma (nazwa)</dt>
@@ -974,8 +1013,7 @@ function EkranWniosku() {
               <dd>{dane.reprezentant_email || <span className="brak">nie uzupełniono</span>}</dd>
             </dl>
 
-            <div className="rozdzielacz" />
-            <div className="card-h">{`Akcjonariusze (${akcjonariusze.length})`}</div>
+            <h3 className="podsumowanie-naglowek">{`Akcjonariusze (${akcjonariusze.length})`}</h3>
             {akcjonariusze.length === 0 ? (
               <Pusto
                 ikona="osoby"
@@ -1010,44 +1048,15 @@ function EkranWniosku() {
             )}
 
             {wniosekEdytowalny && (
-              <>
-                <Komunikat
-                  odmiana="info"
-                  tresc="Po złożeniu wniosku kancelaria sprawdzi dane i przygotuje komplet dokumentów do podpisu — powiadomimy Cię e-mailem, gdy będą gotowe do pobrania. Dane spółki i listę akcjonariuszy będzie można poprawić tylko, jeśli kancelaria odeśle wniosek do uzupełnienia."
-                />
-                {(!dane.nazwa || akcjonariusze.length === 0) && (
-                  <div className="podpowiedz">
-                    {!dane.nazwa && 'Uzupełnij nazwę spółki (krok „Spółka”). '}
-                    {akcjonariusze.length === 0 && 'Dodaj przynajmniej jednego akcjonariusza (krok „Akcjonariusze”).'}
-                  </div>
-                )}
-                <NawigacjaKreatora
-                  wstecz={{ etykieta: 'Wstecz', przy: () => ustawKrok((k) => k - 1) }}
-                  dalej={{
-                    etykieta: skladanie ? 'Składanie…' : 'Złóż wniosek',
-                    przy: zlozWniosek,
-                    wylaczony: skladanie || !dane.nazwa || akcjonariusze.length === 0,
-                  }}
-                />
-              </>
-            )}
-
-            {!wniosekEdytowalny && (
-              <NawigacjaKreatora wstecz={{ etykieta: 'Wstecz', przy: () => ustawKrok((k) => k - 1) }} />
-            )}
-
-            {dane.status === 'zlozony' && (
               <Komunikat
-                odmiana="ok"
-                tytul="Wniosek złożony"
-                tresc="Kancelaria sprawdza dane i przygotowuje komplet dokumentów do podpisu. Gdy będą gotowe, napiszemy e-mailem — pobierzesz je wtedy w tym miejscu."
+                odmiana="info"
+                tresc="Po złożeniu wniosku kancelaria sprawdzi dane i przygotuje komplet dokumentów do podpisu — powiadomimy Cię e-mailem, gdy będą gotowe do pobrania. Dane spółki i listę akcjonariuszy będzie można poprawić tylko, jeśli kancelaria odeśle wniosek do uzupełnienia."
               />
             )}
 
             {dokumentyWidoczne && (
               <>
-                <div className="rozdzielacz" />
-                <div className="card-h">Dokumenty do podpisu</div>
+                <h3 className="podsumowanie-naglowek">Dokumenty do podpisu</h3>
                 <Komunikat
                   odmiana="ok"
                   tresc="Kancelaria sprawdziła dane i przygotowała komplet dokumentów. Pobierz wszystkie pozycje z listy poniżej, zbierz podpisy i odeślij skany w tym samym miejscu."
@@ -1108,20 +1117,29 @@ function EkranWniosku() {
               </>
             )}
 
-            {dane.status === 'przyjety' && (
-              <Komunikat
-                odmiana="ok"
-                tytul="Wniosek przyjęty"
-                tresc="Kancelaria zweryfikowała dane i założyła spółkę w systemie. Rejestr akcjonariuszy zostanie otwarty po ustaleniu pierwszej emisji akcji — o dalszych krokach poinformujemy e-mailem."
-              />
-            )}
-
-            {dane.status === 'odrzucony' && (
-              <Komunikat
-                odmiana="blad"
-                tytul="Wniosek odrzucony"
-                tresc="Kancelaria odrzuciła wniosek. W razie pytań prosimy o kontakt z kancelarią."
-              />
+            {/* Nawigacja zamyka krok — stoi pod wszystkim, także pod listą
+                dokumentów do podpisu. Wcześniej wypadała w środku ekranu,
+                między akcjonariuszami a dokumentami, i wyglądała jak koniec
+                strony, choć połowa treści była jeszcze niżej. */}
+            {wniosekEdytowalny ? (
+              <>
+                {(!dane.nazwa || akcjonariusze.length === 0) && (
+                  <div className="podpowiedz">
+                    {!dane.nazwa && 'Uzupełnij nazwę spółki (krok „Spółka”). '}
+                    {akcjonariusze.length === 0 && 'Dodaj przynajmniej jednego akcjonariusza (krok „Akcjonariusze”).'}
+                  </div>
+                )}
+                <NawigacjaKreatora
+                  wstecz={{ etykieta: 'Wstecz', przy: () => ustawKrok((k) => k - 1) }}
+                  dalej={{
+                    etykieta: skladanie ? 'Składanie…' : 'Złóż wniosek',
+                    przy: zlozWniosek,
+                    wylaczony: skladanie || !dane.nazwa || akcjonariusze.length === 0,
+                  }}
+                />
+              </>
+            ) : (
+              <NawigacjaKreatora wstecz={{ etykieta: 'Wstecz', przy: () => ustawKrok((k) => k - 1) }} />
             )}
           </>
         )}

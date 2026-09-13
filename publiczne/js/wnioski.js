@@ -812,7 +812,18 @@ function EdytorDokumentu({ wniosekId, dokumentId, przyZamknieciu, przyZapisie })
   );
 }
 
-function PozycjaDokumentuKancelarii({ wniosekId, dokument, zablokowane, przyPodgladzie, przyEdycji }) {
+/** „1 puste miejsce", „3 puste miejsca", „5 pustych miejsc" — polska odmiana. */
+function opisPustychMiejsc(ile) {
+  const ostatnia = ile % 10;
+  const dwieOstatnie = ile % 100;
+  if (ile === 1) return '1 puste miejsce';
+  if (ostatnia >= 2 && ostatnia <= 4 && !(dwieOstatnie >= 12 && dwieOstatnie <= 14)) {
+    return `${ile} puste miejsca`;
+  }
+  return `${ile} pustych miejsc`;
+}
+
+function PozycjaDokumentuKancelarii({ wniosekId, dokument, dlaKogo, zablokowane, przyPodgladzie, przyEdycji }) {
   const podpisany = Boolean(dokument.podpis_nazwa_pliku);
   return (
     <div className={`dokument-pozycja ${podpisany ? 'dokument-pozycja-gotowa' : ''}`}>
@@ -820,6 +831,10 @@ function PozycjaDokumentuKancelarii({ wniosekId, dokument, zablokowane, przyPodg
         <Ikona nazwa="dokument" rozmiar={17} />
         <button type="button" className="dokument-pozycja-nazwa jak-odnosnik" onClick={przyPodgladzie}>
           {dokument.nazwa}
+          {/* Oświadczenia wystawia się PO JEDNYM NA AKCJONARIUSZA, więc sama
+              nazwa dokumentu powtarza się na liście tyle razy, ilu ich jest.
+              Bez wskazania osoby nie da się rozróżnić, który jest który. */}
+          {dlaKogo && <span className="dokument-pozycja-dla">{dlaKogo}</span>}
         </button>
         <span className="dokument-pozycja-rozmiar">
           {Math.max(1, Math.round((dokument.rozmiar || 0) / 1024))} kB
@@ -832,7 +847,7 @@ function PozycjaDokumentuKancelarii({ wniosekId, dokument, zablokowane, przyPodg
           : <Znacznik odmiana="mosiadz">nieudostępniony</Znacznik>}
         {dokument.zmodyfikowano && <Znacznik odmiana="mosiadz">treść poprawiona</Znacznik>}
         {dokument.brakujace.length > 0 && (
-          <Znacznik odmiana="bordo">{dokument.brakujace.length} pustych miejsc</Znacznik>
+          <Znacznik odmiana="bordo">{opisPustychMiejsc(dokument.brakujace.length)}</Znacznik>
         )}
         {podpisany ? (
           <>
@@ -868,7 +883,7 @@ function PozycjaDokumentuKancelarii({ wniosekId, dokument, zablokowane, przyPodg
   );
 }
 
-function KrokDokumenty({ wniosek, dokumenty, ustawDokumenty, zablokowane, odswiez }) {
+function KrokDokumenty({ wniosek, akcjonariusze, dokumenty, ustawDokumenty, zablokowane, odswiez }) {
   const [praca, ustawPrace] = useState(null); // 'wystaw' | 'udostepnij'
   const [komunikat, ustawKomunikat] = useState(null);
   const [blad, ustawBlad] = useState(null);
@@ -973,6 +988,9 @@ function KrokDokumenty({ wniosek, dokumenty, ustawDokumenty, zablokowane, odswie
                 key={d.id}
                 wniosekId={wniosek.id}
                 dokument={d}
+                dlaKogo={d.akcjonariusz_id
+                  ? nazwaPozycji(akcjonariusze.find((a) => a.id === d.akcjonariusz_id) || {})
+                  : null}
                 zablokowane={zablokowane}
                 przyPodgladzie={() => ustawPodglad(d)}
                 przyEdycji={() => ustawEdycja(d)}
@@ -1213,6 +1231,7 @@ function EkranWniosekSzczegoly({ wniosekId }) {
       {zakladka === 'dokumenty' && (
         <KrokDokumenty
           wniosek={wniosek}
+          akcjonariusze={akcjonariusze}
           dokumenty={lista}
           ustawDokumenty={ustawDokumenty}
           zablokowane={zablokowane}

@@ -305,6 +305,12 @@ function Aplikacja() {
   }
 
   if (sesja.ladowanie) return <Spinner />;
+
+  // Regulamin i polityka prywatności — odnośniki do nich stoją w stopce,
+  // którą widać także pod ekranem logowania, więc muszą działać bez sesji.
+  const dokumentPrawny = ekranPrawny(segmenty);
+  if (dokumentPrawny) return <StronaPrawna>{dokumentPrawny}</StronaPrawna>;
+
   if (!sesja.zalogowany) {
     return <EkranLogowania przyZalogowaniu={() => sesja.odswiez()} />;
   }
