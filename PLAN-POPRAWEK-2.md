@@ -1,15 +1,19 @@
 # Plan poprawek — runda druga
 
 Lista uwag z przeglądu po wdrożeniu przebiegu „dokumenty wystawia kancelaria".
-**Nic z tego nie jest jeszcze zrobione** — to zapis do wykonania w kolejnych
-sesjach. Etapy są ułożone tak, żeby każdy dało się wdrożyć i sprawdzić osobno,
-a te trudniejsze stoją za tymi, od których zależą.
+Etapy są ułożone tak, żeby każdy dało się wdrożyć i sprawdzić osobno, a te
+trudniejsze stoją za tymi, od których zależą.
+
+**Stan: etapy A, B i C wykonane. Zostaje etap D** — przebudowa kokpitu spółki
+na układ rejestru Krajowej Rady Notarialnej. To przepisanie dwóch największych
+plików w projekcie (`kokpit.js` i `kreator.js`, razem ~2700 linii), więc idzie
+osobną sesją.
 
 ---
 
 ## Etap A — drobne poprawki wyglądu
 
-### A1. Stopka: za wysoka, bez ikon
+### A1. Stopka: za wysoka, bez ikon ✔
 Stopka zajmuje dziś ~200 px wysokości. Do zrobienia:
 * zmniejszyć odstępy (`.stopka-srodek` ma `--od-40` z góry) i znak
   (166 px to nadal dużo jak na pasek na dole ekranu),
@@ -17,14 +21,14 @@ Stopka zajmuje dziś ~200 px wysokości. Do zrobienia:
   w `publiczne/js/ui-rejestr.js` nie ma jeszcze koperty ani słuchawki,
   trzeba je dorysować w tej samej siatce 24 × 24 i grubości kreski.
 
-### A2. Portal klienta: pasek górny jak w portalu pracownika
+### A2. Portal klienta: pasek górny jak w portalu pracownika ✔
 Nagłówek „Rejestr akcjonariuszy P.S.A." w portalu klienta idzie przez całą
 szerokość i nie ma zaokrągleń. Ma wyglądać jak powłoka aplikacji kancelaryjnej:
 zaokrąglony panel odsunięty od krawędzi, zgrany z resztą pól.
 Pliki: `publiczne/js/portal.js` (`PortalLayout`), `publiczne/style/rejestr.css`
 (`.powloka`, `.portal-topbar`).
 
-### A3. Po przyjęciu wniosku: jedna zakładka „Moja spółka"
+### A3. Po przyjęciu wniosku: jedna zakładka „Moja spółka" ✔
 Konto przepięte z roli `wnioskodawca` na `spolka` ma przestać widzieć zakładkę
 „Wniosek", a „Moje spółki" zmienia nazwę na „Moja spółka" (spółka jest jedna).
 Plik: `publiczne/js/portal.js` (`kartyNawigacji`).
@@ -33,7 +37,7 @@ Plik: `publiczne/js/portal.js` (`kartyNawigacji`).
 
 ## Etap B — podpisywanie i weryfikacja dokumentów
 
-### B1. Jeden przycisk zamiast „Podgląd" + „Edytuj treść"
+### B1. Jeden przycisk zamiast „Podgląd" + „Edytuj treść" ✔
 Dziś przy każdym dokumencie stoją dwa przyciski. Ma być jeden — **„Otwórz"** —
 który pokazuje dokument tak, jak wygląda, i pozwala poprawiać tekst w miejscu
 (jak w Wordzie), a nie w liście pól obok podglądu. Po zapisie pozycja dostaje
@@ -44,7 +48,7 @@ Uwaga wykonawcza: edytor bloków już istnieje i zapisuje treść
 Zmienia się **postać edytora**, nie mechanizm: zamiast listy pól — jedna kolumna
 złożona jak dokument, z blokiem edytowalnym po kliknięciu w niego.
 
-### B2. Po podpisaniu: tylko podgląd i potwierdzenie
+### B2. Po podpisaniu: tylko podgląd i potwierdzenie ✔
 Gdy klient odeśle podpisany skan, przy tej pozycji znika „Edytuj" (treść
 została już podpisana — nie wolno jej ruszać). Zostaje podgląd obu
 egzemplarzy i przycisk **„Podpis prawidłowy"**, którym pracownik potwierdza,
@@ -53,14 +57,14 @@ wszystkich pozycji.
 Baza: nowa kolumna `podpis_potwierdzono` / `podpis_potwierdzil`
 w `psa_wnioski_dokumenty`.
 
-### B3. Klient nie przeklikuje wniosku po raz drugi
+### B3. Klient nie przeklikuje wniosku po raz drugi ✔
 Po złożeniu wniosek jest zamknięty, więc kreator nie ma po co prowadzić przez
 cztery kroki. Klient wraca na „Moja spółka", widzi, że dokumenty czekają na
 podpis, i jednym kliknięciem trafia **wprost na podsumowanie z listą
 dokumentów** — bez przechodzenia przez Spółkę, Reprezentanta i Akcjonariuszy.
 Plik: `publiczne/js/wniosek.js` — krok początkowy zależny od statusu wniosku.
 
-### B4. Ścieżka „do poprawy" przy akcjonariuszu
+### B4. Ścieżka „do poprawy" przy akcjonariuszu ✔
 W szczegółach akcjonariusza (portal pracownika) zamiast „Zapisz i wróć" mają
 stać **dwie decyzje**: „Zweryfikowano" albo „Odeślij do poprawy" (z notatką,
 co poprawić). Odesłanie ustawia wniosek w `do_uzupelnienia` i wskazuje
@@ -72,43 +76,44 @@ Pliki: `publiczne/js/wnioski.js` (`SzczegolAkcjonariusza`),
 
 ## Etap C — otwarcie rejestru bez przepisywania danych
 
-### C1. Dane z wniosku idą wprost do kartoteki
+### C1. Dane z wniosku idą wprost do kartoteki ✔
 Przy pierwszej emisji znika pole „Opis żądającego / Jeśli żądający nie jest
 wpisany do kartoteki". Zasada: **najpierw osoba jest w kartotece, potem się ją
 wybiera** — a przyjęcie wniosku i tak zakłada już akcjonariuszy w `psa_osoby`
 (`POST /api/psa/wnioski/:id/przyjmij`). Zostaje sam wybór z kartoteki.
 
-### C2. Pierwszy wpis akcji z danych wniosku
+### C2. Pierwszy wpis akcji z danych wniosku ✔
 Wniosek zna datę umowy spółki, kapitał akcyjny i listę akcjonariuszy —
 emisja założycielska ma się z tego **podpowiadać**, a nie być wpisywana od zera.
 
-### C3. Objęcie po emisji bez powtarzania podstawy wpisu
+### C3. Objęcie po emisji bez powtarzania podstawy wpisu ✔
 Po zapisaniu emisji przejście do objęcia ma przenosić podstawę wpisu i serię —
 wskazuje się tylko, kto obejmuje i ile. Dziś trzeba wpisać to samo drugi raz.
 (Częściowo już jest: `EkranNowejSprawy` przyjmuje `typPoczatkowy` i
 `emisjaPoczatkowa`; brakuje przeniesienia podstawy.)
 
-### C4. Emisja bez daty wpisu do KRS — nie do zapisania
-**Zdiagnozowane.** Pole „Data wpisu emisji do KRS" (`publiczne/js/kreator.js`,
-ok. linii 278) wolno zostawić puste, a wtedy objęcie akcji jest zablokowane
-(art. 300³⁰ § 2 KSH — akcje przed wpisem formalnie nie istnieją). Blokada jest
-**celowa i prawidłowa**, zła jest tylko droga wyjścia: podpowiedź mówi
-„datę można uzupełnić później sprostowaniem tego zdarzenia", ale trzeba samemu
-znaleźć sprostowanie.
+### C4. Emisja bez daty wpisu do KRS — nie do zapisania ✔
+Dawniej pole „Data wpisu emisji do KRS" wolno było zostawić puste. Emisja
+zapisywała się, ale objęcie akcji odbijało się o art. 300³⁰ § 2 KSH (przed
+wpisem akcje formalnie nie istnieją) — w rejestrze siedziało zdarzenie, którego
+nie dało się ani użyć, ani poprawić inaczej niż sprostowaniem, o którym trzeba
+było wiedzieć.
 
-Do rozstrzygnięcia — dwie drogi, wybrać jedną:
-1. **nie pozwalać zapisać** emisji bez daty wpisu (tak proponuje uwaga), albo
-2. zostawić zapis, ale przy zablokowanej emisji postawić przycisk
-   „Uzupełnij datę wpisu do KRS", który otwiera sprostowanie tego zdarzenia.
+**Wdrożono wariant „nie da się zapisać bez daty"** (decyzja notariusza): pole
+jest obowiązkowe, a walidacja odrzuca zapis (`logika/walidacje.js`,
+`PER_TYP.emisja`).
 
-Wariant 2 jest bliższy rzeczywistości kancelarii (emisja bywa znana przed
-wpisem), wariant 1 jest prostszy. **Do decyzji notariusza.**
+Bramka przy OBJĘCIU zostaje mimo to. Dziennik zdarzeń jest append-only, więc
+emisje zapisane przed tą zmianą — bez daty — nadal w nim siedzą i nie mogą
+nagle stać się podstawą objęcia; ich drogą wyjścia jest sprostowanie zdarzenia.
+Sprawdza to test na samej walidacji (`testy/sprint5.test.js`), bo przez API
+takiego stanu nie da się już wytworzyć.
 
 ---
 
-## Etap D — przebudowa kokpitu spółki
+## Etap D — przebudowa kokpitu spółki (DO ZROBIENIA)
 
-Największa pozycja. Kokpit ma być ułożony jak rejestr Krajowej Rady
+Największa pozycja, jedyna pozostała. Kokpit ma być ułożony jak rejestr Krajowej Rady
 Notarialnej: podsumowanie u góry i rozwijane sekcje o tych nazwach:
 
 1. **Rejestr akcjonariuszy** (otwarty domyślnie) — przycisk „Dodaj akcjonariusza",

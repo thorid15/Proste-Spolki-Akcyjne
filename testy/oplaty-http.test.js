@@ -118,7 +118,7 @@ test('wpis odplatny przez sprawe nalicza oplate typu wpis', async () => {
 
   const [status, wpisOdp] = await zapytaj(ciastkoAdmina, 'POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {
     data_zdarzenia: '2026-02-01',
-    dane: { seria: 'A', ilosc: 100 },
+    dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-02-05' },
   });
   assert.equal(status, 201);
   assert.equal(wpisOdp.oplata.typ, 'wpis');

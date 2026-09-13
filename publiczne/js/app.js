@@ -259,6 +259,7 @@ function Aplikacja() {
             spolkaId={id}
             typPoczatkowy={zapytanie.get('typ') || undefined}
             emisjaPoczatkowa={zapytanie.get('emisja') || undefined}
+            zPodstawySprawy={zapytanie.get('zpodstawy') || undefined}
           />
         );
       }

@@ -11,6 +11,7 @@ const assert = require('node:assert/strict');
 
 const stanLogika = require('../server/logika/stan');
 const rejestr = require('../server/rejestr');
+const walidacje = require('../server/logika/walidacje');
 const { bazaTestowa, dodajSpolke, dodajOsobe, wpis, zdarzenie } = require('./pomoc');
 
 function emisjaZdarzenie(id, dane = {}) {
@@ -182,37 +183,57 @@ test('migracja: zdarzenia sprzed sprintu 5 (bez pol ulamkowych w dane_json) odtw
 // Blokady (walidacje.js) — przez pelny stos rejestr.dokonajWpisu
 // ─────────────────────────────────────────────────────────────
 
-test('blokada: objecie akcji jest odrzucane, gdy emisja nie ma data_wpisu_krs (art. 300(30) § 2 KSH)', () => {
+test('blokada: emisji bez data_wpisu_krs w ogole sie nie zapisuje (art. 300(30) § 2 KSH)', () => {
   const db = bazaTestowa();
   const spolka = dodajSpolke(db);
-  const osoba = dodajOsobe(db);
-
-  const emisja = rejestr.dokonajWpisu(db, {
-    spolkaId: spolka, typ: 'emisja', data_zdarzenia: '2026-01-01',
-    wejscie: { seria: 'A', ilosc: 10 }, autor: 'Test',
-  });
 
   assert.throws(() => {
     rejestr.dokonajWpisu(db, {
-      spolkaId: spolka, typ: 'objecie', data_zdarzenia: '2026-01-02',
-      wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: osoba, ilosc: 10 }] },
-      autor: 'Test',
+      spolkaId: spolka, typ: 'emisja', data_zdarzenia: '2026-01-01',
+      wejscie: { seria: 'A', ilosc: 10 }, autor: 'Test',
     });
-  }, /nie ma wpisu do KRS/);
+  }, /daty wpisu do KRS/);
 });
 
-test('sprostowanie emisji o data_wpisu_krs odblokowuje objecie', () => {
+/* Emisji bez daty wpisu do KRS nie da sie juz zapisac, ale w bazach zalozonych
+   PRZED ta zmiana takie emisje siedza — dziennik zdarzen jest append-only, wiec
+   nie znikna. Bramka przy objeciu zostaje wlasnie dla nich i sprawdzamy ja tam,
+   gdzie mieszka: na samej walidacji, na recznie zlozonym dzienniku. */
+test('blokada: objecie akcji jest odrzucane, gdy emisja nie ma data_wpisu_krs (wpisy sprzed zmiany)', () => {
+  const dziennik = [emisjaZdarzenie(1)]; // bez `data_wpisu_krs`
+  const wynik = walidacje.sprawdz({
+    zdarzenia: dziennik,
+    spolka: { id: 1, status: 'aktywna' },
+    osoby: new Map([[7, { id: 7, nazwisko: 'Kowalski', imie: 'Jan' }]]),
+    dzisiaj: '2026-02-01',
+    propozycja: {
+      typ: 'objecie',
+      data_zdarzenia: '2026-01-02',
+      dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: 7, zakresy: [{ nr_od: 1, nr_do: 10 }] }] },
+    },
+  });
+
+  assert.equal(wynik.dopuszczalne, false);
+  assert.ok(
+    wynik.bledy.some((b) => /nie ma wpisu do KRS/.test(b)),
+    `oczekiwano blokady wpisu przed KRS, dostano: ${wynik.bledy.join(' | ')}`
+  );
+});
+
+test('sprostowanie emisji poprawia date wpisu do KRS, objecie dziala dalej', () => {
   const db = bazaTestowa();
   const spolka = dodajSpolke(db);
   const osoba = dodajOsobe(db);
 
   const emisja = rejestr.dokonajWpisu(db, {
     spolkaId: spolka, typ: 'emisja', data_zdarzenia: '2026-01-01',
-    wejscie: { seria: 'A', ilosc: 10 }, autor: 'Test',
+    wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-05' }, autor: 'Test',
   });
+  // Zla data wpisu do KRS prostuje sie zdarzeniem, nie edycja — dziennik jest
+  // append-only.
   rejestr.dokonajSprostowania(db, {
     zdarzeniePierwotneId: emisja.zdarzenie.id,
-    uzasadnienie: 'Uzupełnienie daty wpisu do KRS',
+    uzasadnienie: 'Sąd zarejestrował emisję w innej dacie',
     zamiast: { typ: 'emisja', dane: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-01' } },
     autor: 'Test',
   });

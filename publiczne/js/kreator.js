@@ -233,13 +233,53 @@ function WyborObciazenia({ obciazenia, wartosc, przyZmianie, tylkoTyp }) {
    KROK 3 — formularze per typ
    ───────────────────────────────────────────────────── */
 
-function KrokEmisja({ dane, ustawDane }) {
+function KrokEmisja({ dane, ustawDane, spolka }) {
   const pole = (k) => ({
     value: dane[k] ?? '',
     onChange: (z) => ustawDane({ ...dane, [k]: z.target.value }),
   });
+
+  /* Emisja ZAŁOŻYCIELSKA — pierwsza w spółce — nie ma czego pytać o rzeczy,
+     które przyszły już z wniosku i siedzą przy spółce: seria zaczyna się od A,
+     numeracja od 1, podstawą jest umowa spółki z jej dnia. Podpowiadamy to
+     JEDEN RAZ, do pustego formularza: gdyby wartości wracały przy każdym
+     renderze, nie dałoby się ich poprawić. Dalej pyta się o to, czego system
+     nie wie — o liczbę akcji i cenę emisyjną. */
+  const pierwszaEmisja = Boolean(spolka) && (spolka.emisje || []).length === 0;
+  const dataUmowy = spolka && spolka.spolka
+    ? (spolka.spolka.data_zawarcia_umowy_spolki || spolka.spolka.data_umowy || null)
+    : null;
+  const [podpowiedziano, ustawPodpowiedziano] = useState(false);
+
+  useEffect(() => {
+    if (!pierwszaEmisja || podpowiedziano) return;
+    const pusty = !dane.seria && !dane.tytul && !dane.podstawa_prawna && !dane.nr_pierwszy;
+    if (!pusty) { ustawPodpowiedziano(true); return; }
+    ustawDane({
+      ...dane,
+      seria: 'A',
+      nr_pierwszy: 1,
+      rodzaj_akcji: dane.rodzaj_akcji || 'zwykla',
+      tytul: 'Emisja założycielska',
+      ...(dataUmowy
+        ? { data_emisji: dataUmowy, podstawa_prawna: `Umowa spółki z dnia ${fmt.data(dataUmowy)}` }
+        : {}),
+    });
+    ustawPodpowiedziano(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pierwszaEmisja, podpowiedziano]);
+
   return (
     <>
+      {pierwszaEmisja && podpowiedziano && (
+        <Komunikat
+          odmiana="info"
+          tytul="Emisja założycielska"
+          tresc={dataUmowy
+            ? `Seria, numeracja i podstawa wpisane z danych spółki (umowa z dnia ${fmt.data(dataUmowy)}). Uzupełnij liczbę akcji i cenę emisyjną — tego wniosek nie niósł.`
+            : 'Seria i numeracja wpisane domyślnie. Uzupełnij liczbę akcji, cenę emisyjną i podstawę prawną emisji.'}
+        />
+      )}
       <div className="siatka-2">
         <Pole etykieta="Oznaczenie serii" wymagane podpowiedz="Musi być niepowtarzalne w tej spółce.">
           <input type="text" {...pole('seria')} placeholder="A" />
@@ -276,7 +316,8 @@ function KrokEmisja({ dane, ustawDane }) {
         </Pole>
         <Pole
           etykieta="Data wpisu emisji do KRS"
-          podpowiedz="Zostaw puste, jeśli spółka/emisja jeszcze nie ma wpisu do KRS — objęcie akcji będzie zablokowane do czasu uzupełnienia tej daty (art. 300(30) § 2 KSH)."
+          wymagane
+          podpowiedz="Przed wpisem do KRS akcje z emisji formalnie nie istnieją (art. 300(30) § 2 KSH), więc emisji bez tej daty nie da się zapisać. Jeśli sąd jeszcze jej nie zarejestrował — wróć do tego zdarzenia później."
         >
           <PoleDaty wartosc={dane.data_wpisu_krs || ''} przyZmianie={(v) => ustawDane({ ...dane, data_wpisu_krs: v })} />
         </Pole>
@@ -300,7 +341,7 @@ function KrokEmisja({ dane, ustawDane }) {
       {!dane.data_wpisu_krs && (
         <Komunikat
           odmiana="uwaga"
-          tresc="Bez daty wpisu do KRS akcje z tej emisji formalnie nie istnieją — objęcie akcji będzie zablokowane (art. 300(30) § 2 KSH, sankcja art. 592 § 3 KSH). Datę można uzupełnić później sprostowaniem tego zdarzenia."
+          tresc="Uzupełnij datę wpisu emisji do KRS — bez niej akcje formalnie nie istnieją (art. 300(30) § 2 KSH, sankcja art. 592 § 3 KSH) i zapis zostanie odrzucony."
         />
       )}
     </>
@@ -1249,7 +1290,7 @@ function TabelaPorownania({ tytul, tabela, odniesienie, wariant }) {
  * z gotowym typem i wskazaną serią, więc notariusz nie zakłada sprawy
  * „od zera" i nie szuka emisji, którą przed chwilą wpisał.
  */
-function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa }) {
+function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawySprawy }) {
   // Typ podany z zewnątrz jest już wybrany — krok „Co się stało" nie ma
   // wtedy nic do zapytania, więc zaczynamy od „Podstawy".
   const [krok, ustawKrok] = useState(typPoczatkowy ? 1 : 0);
@@ -1269,6 +1310,25 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa }) {
 
   const meta = useDane('/api/psa/meta');
   const spolkaDane = useDane(`/api/psa/spolki/${spolkaId}`);
+  // Objęcie akcji po emisji ma TĘ SAMĄ podstawę: ten sam dokument, ten sam
+  // żądający, ta sama data wpływu. Przepisywanie tego drugi raz było czystą
+  // przepisywaniną, więc podstawa przyjeżdża ze sprawy, z której przyszliśmy.
+  const zrodloweSprawa = useDane(zPodstawySprawy ? `/api/psa/sprawy/${zPodstawySprawy}` : null);
+  const [podstawaPrzeniesiona, ustawPodstawePrzeniesiona] = useState(false);
+
+  useEffect(() => {
+    const s = zrodloweSprawa.dane && zrodloweSprawa.dane.sprawa;
+    if (!s || podstawaPrzeniesiona) return;
+    if (s.zrodlo) ustawZrodlo(s.zrodlo);
+    if (s.zadajacy_osoba_id) ustawZadajacegoOsobaId(s.zadajacy_osoba_id);
+    if (s.zadajacy_rola) ustawZadajacegoRole(s.zadajacy_rola);
+    if (s.zadajacy_opis) ustawZadajacegoOpis(s.zadajacy_opis);
+    if (s.data_wplywu) ustawDateWplywu(String(s.data_wplywu).slice(0, 10));
+    if (s.dokument_rodzaj) ustawDokumentRodzaj(s.dokument_rodzaj);
+    if (s.dokument_data) ustawDokumentData(s.dokument_data);
+    if (s.podstawa_opis) ustawPodstawaOpis(s.podstawa_opis);
+    ustawPodstawePrzeniesiona(true);
+  }, [zrodloweSprawa.dane, podstawaPrzeniesiona]);
 
   const cokolwiekWpisano = Boolean(typ);
   useEscape(() => {
@@ -1336,7 +1396,8 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa }) {
   // wyslaniem formularza, a nie z bledu serwera.
   const zadajacyKompletny =
     zrodlo === 'z_urzedu' ||
-    (Boolean(zadajacyRola) && (zadajacyRola !== 'inna' || Boolean(zadajacyOpis.trim())));
+    (Boolean(zadajacyOsobaId) && Boolean(zadajacyRola)
+      && (zadajacyRola !== 'inna' || Boolean(zadajacyOpis.trim())));
   const mozeDalej =
     krok === 0
       ? Boolean(typ)
@@ -1398,6 +1459,12 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa }) {
         {krok === 1 && (
           <>
             <div className="card-h">Podstawa wpisu</div>
+            {podstawaPrzeniesiona && (
+              <Komunikat
+                odmiana="ok"
+                tresc="Podstawa przeniesiona ze sprawy, z której przyszedłeś — to ten sam dokument i ten sam żądający. Popraw pola, jeśli objęcie ma inną podstawę, albo od razu załóż sprawę."
+              />
+            )}
             <div className="siatka-2">
               <Pole
                 etykieta="Źródło żądania"
@@ -1418,7 +1485,19 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa }) {
 
             {zrodlo !== 'z_urzedu' && (
               <>
-                <Pole etykieta="Żądający wpisu" podpowiedz="Spółka albo inna osoba mająca interes prawny — art. 300(34) § 1 KSH.">
+                {/* Żądający wskazuje się WYŁĄCZNIE z kartoteki. Dotąd obok
+                    stało pole „Opis żądającego — jeśli żądający nie jest
+                    wpisany do kartoteki", którym dawało się założyć sprawę na
+                    osobę, której w rejestrze nie ma: zawiadomienia nie miały
+                    wtedy dokąd pójść, a wpis nie wiedział, kogo dotyczy.
+                    Kolejność jest odwrotna: najpierw osoba w kartotece,
+                    potem sprawa. Akcjonariusze z przyjętego wniosku są tam
+                    od razu (`POST /api/psa/wnioski/:id/przyjmij`). */}
+                <Pole
+                  etykieta="Żądający wpisu"
+                  wymagane
+                  podpowiedz="Spółka albo inna osoba mająca interes prawny — art. 300(34) § 1 KSH. Kogoś spoza kartoteki najpierw się do niej dopisuje."
+                >
                   <WyborOsoby wartosc={zadajacyOsobaId} przyZmianie={ustawZadajacegoOsobaId} />
                 </Pole>
                 <Pole
@@ -1440,17 +1519,17 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa }) {
                     <option value="inna">inna osoba mająca interes prawny</option>
                   </select>
                 </Pole>
-                <Pole
-                  etykieta={zadajacyRola === 'inna' ? 'Interes prawny żądającego' : 'Opis żądającego'}
-                  wymagane={zadajacyRola === 'inna'}
-                  podpowiedz={
-                    zadajacyRola === 'inna'
-                      ? 'Katalog nie jest zamknięty, ale interes prawny trzeba wykazać — art. 300(34) § 1 KSH.'
-                      : 'Jeśli żądający nie jest wpisany do kartoteki.'
-                  }
-                >
-                  <input type="text" value={zadajacyOpis} onChange={(z) => ustawZadajacegoOpis(z.target.value)} />
-                </Pole>
+                {/* Interes prawny wykazuje się tylko przy „innej osobie" —
+                    przy akcjonariuszu, zbywcy czy spółce wynika on z roli. */}
+                {zadajacyRola === 'inna' && (
+                  <Pole
+                    etykieta="Interes prawny żądającego"
+                    wymagane
+                    podpowiedz="Katalog nie jest zamknięty, ale interes prawny trzeba wykazać — art. 300(34) § 1 KSH."
+                  >
+                    <input type="text" value={zadajacyOpis} onChange={(z) => ustawZadajacegoOpis(z.target.value)} />
+                  </Pole>
+                )}
               </>
             )}
 

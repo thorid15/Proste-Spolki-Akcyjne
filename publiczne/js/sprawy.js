@@ -608,7 +608,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
             <Komunikat
               odmiana="uwaga"
               tytul="Akcje czekają na objęcie"
-              tresc="Wyemitowane akcje nie mają jeszcze akcjonariusza. Wpisz teraz, kto je obejmuje — to kolejne zdarzenie w rejestrze, ale nie trzeba zakładać sprawy od nowa."
+              tresc="Wyemitowane akcje nie mają jeszcze akcjonariusza. Wpisz teraz, kto je obejmuje — podstawa wpisu przeniesie się z tej sprawy, zostaje wskazać osoby i liczbę akcji."
             />
           )}
           <div className="kreator-stopka">
@@ -616,7 +616,8 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
               <button
                 className="btn btn-glowny"
                 onClick={() => idz(
-                  `/spolki/${sprawa.spolka_id}/zdarzenie?typ=objecie&emisja=${wynik.zdarzenie.id}`
+                  `/spolki/${sprawa.spolka_id}/zdarzenie?typ=objecie`
+                  + `&emisja=${wynik.zdarzenie.id}&zpodstawy=${sprawa.id}`
                 )}
               >
                 Wpisz, kto objął akcje

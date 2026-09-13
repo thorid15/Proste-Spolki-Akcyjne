@@ -308,6 +308,20 @@ const PER_TYP = {
     if (!Number.isInteger(Number(d.ilosc)) || Number(d.ilosc) < 1) {
       bledy.push('Emisja musi obejmować co najmniej jedną akcję.');
     }
+    // Regula domenowa 12, od strony SAMEJ EMISJI: akcje nie istnieja przed
+    // wpisem spolki albo emisji do KRS (art. 300(30) § 2 KSH). Dotad date
+    // wpisu wolno bylo zostawic pusta - emisja zapisywala sie, a objecie
+    // akcji odbijalo sie o te sama regule sprawdzana nizej. Efekt byl taki,
+    // ze w rejestrze siedziala emisja, ktorej nie dalo sie ani uzyc, ani
+    // poprawic inaczej niz sprostowaniem, o ktorym trzeba bylo wiedziec.
+    // Blokujemy wczesniej: emisji bez wpisu do KRS po prostu sie nie zapisuje.
+    if (!d.data_wpisu_krs) {
+      bledy.push(
+        `Emisja nie ma daty wpisu do KRS — akcje z niej jeszcze nie istnieją ` +
+          `(${przepisy.PODSTAWY.WPIS_WARUNEK_KRS}). Uzupełnij datę wpisu albo wróć do tego ` +
+          `zdarzenia, gdy sąd zarejestruje emisję.`
+      );
+    }
   },
 
   objecie(stanPrzed, propozycja, kontekst, bledy) {
