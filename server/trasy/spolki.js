@@ -21,6 +21,7 @@ const kontekstPisma = require('../logika/kontekst-pisma');
 const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
+const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 const { pobierzZKrs } = require('./krs');
@@ -293,8 +294,7 @@ router.get(
       akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU, opis: `załącznik umowy o prowadzenie rejestru: ${spolka.umowa_zalacznik_nazwa_pliku}`,
     });
 
-    odp.setHeader('Content-Type', spolka.umowa_zalacznik_mime || 'application/octet-stream');
-    odp.setHeader('Content-Disposition', `attachment; filename="${spolka.umowa_zalacznik_nazwa_pliku}"`);
+    pliki.naglowkiPliku(odp, { nazwaPliku: spolka.umowa_zalacznik_nazwa_pliku, wRamce: false });
     fs.createReadStream(pelnaSciezka).pipe(odp);
   })
 );
@@ -900,11 +900,7 @@ router.get(
       opis: `dokument założycielski #${dokument.id} (${dokument.typ}, ${dokument.rola})`,
     });
 
-    odp.setHeader('Content-Type', dokument.mime || 'application/octet-stream');
-    odp.setHeader(
-      'Content-Disposition',
-      `attachment; filename*=UTF-8''${encodeURIComponent(dokument.nazwa_pliku)}`
-    );
+    pliki.naglowkiPliku(odp, { nazwaPliku: dokument.nazwa_pliku, wRamce: false });
     fs.createReadStream(pelna).pipe(odp);
   })
 );

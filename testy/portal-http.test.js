@@ -231,7 +231,7 @@ test('dokumenty: upload do wlasnej sprawy dziala, do cudzej jest odrzucany', asy
 
   const formularz = new FormData();
   formularz.append('typ_dokumentu', 'umowa_zbycia');
-  formularz.append('pliki', new Blob(['tresc testowa'], { type: 'application/pdf' }), 'umowa.pdf');
+  formularz.append('pliki', new Blob(['%PDF-1.4\ntresc testowa'], { type: 'application/pdf' }), 'umowa.pdf');
 
   const wlasny = await fetch(`${baza}/api/psa/portal/zadania/${sprawaId}/dokumenty`, {
     method: 'POST', headers: { Cookie: ciastkoAkcjonariusz }, body: formularz,
@@ -242,7 +242,7 @@ test('dokumenty: upload do wlasnej sprawy dziala, do cudzej jest odrzucany', asy
   // sprawa) nie moze dolaczac dokumentow do cudzego zgloszenia.
   const formularz2 = new FormData();
   formularz2.append('typ_dokumentu', 'inny');
-  formularz2.append('pliki', new Blob(['x'], { type: 'application/pdf' }), 'x.pdf');
+  formularz2.append('pliki', new Blob(['%PDF-1.4\nx'], { type: 'application/pdf' }), 'x.pdf');
   const cudzy = await fetch(`${baza}/api/psa/portal/zadania/${sprawaId}/dokumenty`, {
     method: 'POST', headers: { Cookie: ciastkoInnyAkcjonariusz }, body: formularz2,
   });

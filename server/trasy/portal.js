@@ -42,6 +42,7 @@ const dokumentyTresc = require('../logika/dokumenty-tresc');
 const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
+const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
@@ -154,8 +155,17 @@ router.post(
     // Miekki, ogolny limit zapytan na adres IP - formularz jest publiczny
     // i niezalogowany, wiec to jedyna dostepna ochrona przed zalewem
     // (limiter.js liczy tu KAZDA probe, nie tylko nieudane logowanie).
-    limiter.sprawdz(zad.ip, 'zgloszenie');
-    limiter.zanotujNieudana(zad.ip, 'zgloszenie');
+    //
+    // Prog jest WYZSZY niz przy logowaniu i liczony na adres e-mail, a nie
+    // na samo IP: pieciu klientow z jednej sieci (biuro, wspolne lacze NAT)
+    // wyczerpywalo wspolna pule i szosty dostawal odmowe — na formularzu,
+    // ktorego wyslanie nie jest zadna „proba logowania".
+    limiter.sprawdz(zad.ip, `zgloszenie:${email}`, {
+      limit: 3,
+      komunikat: 'Zgłoszenie z tego adresu e-mail zostało już przyjęte. '
+        + 'Jeśli to pomyłka, spróbuj ponownie za %MIN% min albo napisz do kancelarii.',
+    });
+    limiter.zanotujNieudana(zad.ip, `zgloszenie:${email}`);
 
     const dane = {
       email,
@@ -610,16 +620,12 @@ function wczytajDokumentyWniosku(wniosekId) {
  * zostaje przy KAZDYM pobraniu: sciezka idzie z bazy, ale to nadal jest
  * skladanie sciezki z danych - jedno miejsce, w ktorym to pilnujemy.
  */
-function wyslijPlikDokumentu(odp, sciezkaWzgledna, nazwaPliku, mime) {
+function wyslijPlikDokumentu(odp, sciezkaWzgledna, nazwaPliku) {
   const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, sciezkaWzgledna);
   if (!pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelna)) {
     throw nieZnaleziono('Plik nie jest już dostępny.');
   }
-  odp.setHeader('Content-Type', mime || 'application/octet-stream');
-  odp.setHeader(
-    'Content-Disposition',
-    `attachment; filename*=UTF-8''${encodeURIComponent(nazwaPliku || 'dokument')}`
-  );
+  pliki.naglowkiPliku(odp, { nazwaPliku, wRamce: false });
   fs.createReadStream(pelna).pipe(odp);
 }
 
@@ -644,7 +650,7 @@ router.get(
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
       .get(Number(zad.params.id), wniosek.id);
     if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
-    wyslijPlikDokumentu(odp, dokument.sciezka, dokument.nazwa_pliku, dokument.mime);
+    wyslijPlikDokumentu(odp, dokument.sciezka, dokument.nazwa_pliku);
   })
 );
 
@@ -700,6 +706,29 @@ const uploadPodpisanego = multer({
     wywolaj(null, true);
   },
 });
+
+/**
+ * Przyjecie skanu: multer + kontrola SYGNATURY tresci.
+ *
+ * Rozszerzenie w nazwie pliku jest obietnica klienta, a `plik.mimetype`
+ * przepisanym naglowkiem jego przegladarki — ani jedno, ani drugie nie mowi,
+ * co jest w srodku. Plik „skan.pdf" o tresci HTML wracal do pracownika jako
+ * strona wyswietlana w ramce, czyli ze skryptem dzialajacym w sesji
+ * kancelarii. Sprawdzenie stoi TUTAJ, a nie w trasach, zeby nowa trasa
+ * przyjmujaca skan nie mogla go pominac.
+ */
+function przyjmijSkan(zad, odp, dalej) {
+  uploadPodpisanego.single('plik')(zad, odp, (e) => {
+    if (e) return dalej(bledneZadanie(e.message));
+    if (zad.file && !pliki.trescPasuje(zad.file.path, pliki.typZNazwy(zad.file.originalname))) {
+      fs.rmSync(zad.file.path, { force: true });
+      return dalej(bledneZadanie(
+        'Treść pliku nie odpowiada jego rozszerzeniu. Prześlij skan jako PDF, JPG albo PNG.'
+      ));
+    }
+    return dalej();
+  });
+}
 
 /**
  * Stany, w ktorych klient moze jeszcze odsylac podpisane skany. Po przyjeciu
@@ -765,7 +794,7 @@ router.post(
   '/wniosek/dokumenty/:id/podpis',
   wymagajWnioskodawcy,
   zaladujWlasnyWniosekDoUploadu,
-  (zad, odp, dalej) => uploadPodpisanego.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  przyjmijSkan,
   asy((zad, odp) => {
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
     const dokument = db()
@@ -795,7 +824,7 @@ router.get(
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
       .get(Number(zad.params.id), wniosek.id);
     if (!dokument || !dokument.podpis_sciezka) throw nieZnaleziono('Nie odesłano jeszcze tego dokumentu.');
-    wyslijPlikDokumentu(odp, dokument.podpis_sciezka, dokument.podpis_nazwa_pliku, dokument.podpis_mime);
+    wyslijPlikDokumentu(odp, dokument.podpis_sciezka, dokument.podpis_nazwa_pliku);
   })
 );
 
@@ -858,7 +887,7 @@ router.post(
   '/wniosek/umowa-podpisana',
   wymagajWnioskodawcy,
   zaladujWlasnyWniosekDoUploadu,
-  (zad, odp, dalej) => uploadPodpisanego.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  przyjmijSkan,
   asy((zad, odp) => {
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
     const umowa = db()
@@ -886,8 +915,7 @@ router.get(
       throw nieZnaleziono('Plik nie jest już dostępny.');
     }
 
-    odp.setHeader('Content-Type', wniosek.umowa_podpisana_mime || 'application/octet-stream');
-    odp.setHeader('Content-Disposition', `attachment; filename="${wniosek.umowa_podpisana_nazwa_pliku}"`);
+    pliki.naglowkiPliku(odp, { nazwaPliku: wniosek.umowa_podpisana_nazwa_pliku, wRamce: false });
     fs.createReadStream(pelnaSciezka).pipe(odp);
   })
 );
@@ -1131,14 +1159,22 @@ router.post(
     const konto = zad.konto;
     const typDokumentu = String(zad.body.typ_dokumentu || 'inny');
     if (!TYPY_DOKUMENTU.includes(typDokumentu)) throw bledneZadanie(`Nieznany typ dokumentu: „${typDokumentu}”.`);
-    const pliki = zad.files || [];
-    if (pliki.length === 0) throw bledneZadanie('Nie przesłano żadnego pliku.');
+    const wgrane = zad.files || [];
+    if (wgrane.length === 0) throw bledneZadanie('Nie przesłano żadnego pliku.');
+    // Rozszerzenie to obietnica klienta — sprawdzamy sygnature tresci.
+    for (const plik of wgrane) {
+      if (pliki.trescPasuje(plik.path, pliki.typZNazwy(plik.originalname))) continue;
+      for (const p of wgrane) fs.rmSync(p.path, { force: true });
+      throw bledneZadanie(
+        `Treść pliku „${plik.originalname}" nie odpowiada jego rozszerzeniu. Prześlij PDF, skan albo zdjęcie.`
+      );
+    }
 
     const wstaw = db().prepare(
       `INSERT INTO psa_dokumenty (sprawa_id, nazwa_pliku, sciezka, mime, rozmiar, typ_dokumentu, hash, wgral, utworzono)
        VALUES (@sprawa_id, @nazwa_pliku, @sciezka, @mime, @rozmiar, @typ_dokumentu, @hash, @wgral, @utworzono)`
     );
-    const zapisane = pliki.map((plik) => {
+    const zapisane = wgrane.map((plik) => {
       const hash = crypto.createHash('sha256').update(fs.readFileSync(plik.path)).digest('hex');
       const wynik = wstaw.run({
         sprawa_id: sprawa.id,

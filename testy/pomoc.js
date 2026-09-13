@@ -84,9 +84,22 @@ function wpis(db, spolkaId, typ, data, wejscie, opcje = {}) {
   });
 }
 
+/**
+ * Najkrotszy poprawny plik PDF — do testow wgrywania skanow.
+ *
+ * Serwer sprawdza SYGNATURE tresci, nie samo rozszerzenie nazwy (plik
+ * „skan.pdf" o tresci HTML wracal wczesniej do pracownika jako wykonywalna
+ * strona), wiec atrapa musi zaczynac sie od `%PDF-`.
+ */
+const PDF_TESTOWY =
+  '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n' +
+  '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
+  '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\n' +
+  'trailer<</Root 1 0 R>>\n%%EOF\n';
+
 /** Zdarzenie w formie "surowej" - do testow czystej logiki, bez bazy. */
 function zdarzenie(id, typ, data, dane) {
   return { id, typ, data_zdarzenia: data, dane };
 }
 
-module.exports = { bazaTestowa, dodajSpolke, dodajOsobe, wpis, zdarzenie };
+module.exports = { bazaTestowa, dodajSpolke, dodajOsobe, wpis, zdarzenie, PDF_TESTOWY };

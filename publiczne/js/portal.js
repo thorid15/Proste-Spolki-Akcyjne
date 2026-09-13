@@ -968,6 +968,9 @@ function AplikacjaPortal() {
   return <AplikacjaPortalZSesja segmenty={segmenty} sciezka={sciezka} />;
 }
 
+/** Adresy, pod którymi zalogowane konto ma co zobaczyć (pusty = strona główna). */
+const EKRANY_KONTA = ['', 'wniosek', 'sprawy', 'rejestr', 'zgloszenie', 'informacja'];
+
 function AplikacjaPortalZSesja({ segmenty, sciezka }) {
   const sesja = usePortalSesja();
 
@@ -983,7 +986,18 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
           />
         }
       >
-        <EkranLoginPortal przyZalogowaniu={() => sesja.odswiez()} />
+        {/* Po zalogowaniu adres zostawał taki, jaki był — a ekran logowania
+            pokazuje się pod KAŻDYM adresem, więc klient, który wszedł na
+            `#/logowanie` (naturalny odruch, bywa też w zakładkach), po
+            poprawnym haśle dostawał „Nie ma takiej strony". Wracamy tam,
+            skąd wyrzuciła nas wygasła sesja, a spod nieznanego adresu — na
+            stronę główną. */}
+        <EkranLoginPortal
+          przyZalogowaniu={() => {
+            if (!EKRANY_KONTA.includes(segmenty[0] || '')) idz('/');
+            sesja.odswiez();
+          }}
+        />
       </RamaPubliczna>
     );
   }

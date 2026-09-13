@@ -117,7 +117,7 @@ async function wnioskGotowyDoWeryfikacji(
 
     for (const d of bezSkanow ? [] : udostepnione.dokumenty) {
       const formularz = new FormData();
-      formularz.append('plik', new Blob(['podpisana tresc'], { type: 'application/pdf' }), `podpisany-${d.typ}.pdf`);
+      formularz.append('plik', new Blob(['%PDF-1.4\npodpisana tresc'], { type: 'application/pdf' }), `podpisany-${d.typ}.pdf`);
       await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${d.id}/podpis`, {
         method: 'POST', headers: { Cookie: ciastko }, body: formularz,
       });
@@ -456,7 +456,7 @@ test('PUT /api/psa/wnioski/:id/dokumenty/:dokId/tresc: zapis oznacza sprawdzenie
 
   // Po odesłaniu podpisanego skanu treść jest zamknięta.
   const formularz = new FormData();
-  formularz.append('plik', new Blob(['skan'], { type: 'application/pdf' }), 'skan.pdf');
+  formularz.append('plik', new Blob(['%PDF-1.4\nskan'], { type: 'application/pdf' }), 'skan.pdf');
   await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`, {
     method: 'POST', headers: { Cookie: ciastkoKlienta }, body: formularz,
   });

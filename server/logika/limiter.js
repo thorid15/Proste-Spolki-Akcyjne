@@ -26,8 +26,18 @@ function oczysc(znaczniki, teraz) {
   return znaczniki.filter((t) => teraz - t < OKNO_MS);
 }
 
-/** @throws {BladOgraniczenia} gdy limit prob jest wyczerpany */
-function sprawdz(ip, identyfikator) {
+/**
+ * @param {object} [opcje]
+ * @param {number} [opcje.limit]     ile prob miesci sie w oknie (domyslnie LIMIT)
+ * @param {string} [opcje.komunikat] tekst z `%MIN%` w miejscu liczby minut
+ * @throws {BladOgraniczenia} gdy limit prob jest wyczerpany
+ *
+ * Komunikat jest do podmiany, bo tego samego licznika uzywa formularz
+ * PUBLICZNY, gdzie zdanie o „nieudanych probach logowania" mowi o czyms,
+ * czego uzytkownik w ogole nie robil.
+ */
+function sprawdz(ip, identyfikator, opcje = {}) {
+  const dopuszczalne = opcje.limit || LIMIT;
   const k = klucz(ip, identyfikator);
   const teraz = Date.now();
   const aktywne = oczysc(proby.get(k) || [], teraz);
@@ -36,11 +46,12 @@ function sprawdz(ip, identyfikator) {
   } else {
     proby.set(k, aktywne);
   }
-  if (aktywne.length >= LIMIT) {
+  if (aktywne.length >= dopuszczalne) {
     const pozostaleSekundy = Math.ceil((OKNO_MS - (teraz - aktywne[0])) / 1000);
-    const blad = new Error(
-      `Za dużo nieudanych prób logowania. Spróbuj ponownie za ${Math.ceil(pozostaleSekundy / 60)} min.`
-    );
+    const minuty = Math.ceil(pozostaleSekundy / 60);
+    const wzor = opcje.komunikat
+      || 'Za dużo nieudanych prób logowania. Spróbuj ponownie za %MIN% min.';
+    const blad = new Error(wzor.replace('%MIN%', String(minuty)));
     blad.name = 'BladOgraniczenia';
     throw blad;
   }

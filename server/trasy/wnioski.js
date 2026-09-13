@@ -28,6 +28,7 @@ const express = require('express');
 const { db } = require('../baza');
 const czas = require('../pomocnicze/czas');
 const konfiguracja = require('../konfiguracja');
+const pliki = require('../pomocnicze/pliki');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 const { pobierzZKrs } = require('./krs');
 const portal = require('./portal');
@@ -194,7 +195,6 @@ router.get(
 
     const sciezka = podpisany ? dokument.podpis_sciezka : dokument.sciezka;
     const nazwaPliku = podpisany ? dokument.podpis_nazwa_pliku : dokument.nazwa_pliku;
-    const mime = podpisany ? dokument.podpis_mime : dokument.mime;
 
     const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, sciezka);
     if (!pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelna)) {
@@ -203,12 +203,11 @@ router.get(
     // `?podglad=1` oddaje plik do WYSWIETLENIA w ramce. Kancelaria czyta
     // dokument, zanim go udostepni — pobieranie kazdej pozycji na dysk tylko
     // po to, zeby na nia spojrzec, zamienialoby przeglad w sprzatanie katalogu.
+    // Typ ustala SERWER z rozszerzenia — `mime` w bazie pochodzi z naglowka
+    // przegladarki klienta, wiec plik nazwany „skan.pdf" a wyslany jako
+    // text/html wracal tu do pracownika jako wykonywalna strona.
     const wRamce = zad.query.podglad === '1';
-    odp.setHeader('Content-Type', mime || 'application/octet-stream');
-    odp.setHeader(
-      'Content-Disposition',
-      `${wRamce ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(nazwaPliku || 'dokument')}`
-    );
+    pliki.naglowkiPliku(odp, { nazwaPliku, wRamce });
     fs.createReadStream(pelna).pipe(odp);
   })
 );

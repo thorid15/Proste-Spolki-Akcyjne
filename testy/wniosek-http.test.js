@@ -413,7 +413,7 @@ test('POST /api/psa/portal/wniosek/dokumenty/:id/podpis: skan wraca do KAZDEGO d
 
   async function wyslijSkan(dokumentId, nazwa) {
     const formularz = new FormData();
-    formularz.append('plik', new Blob(['skan'], { type: 'application/pdf' }), nazwa);
+    formularz.append('plik', new Blob(['%PDF-1.4\nskan'], { type: 'application/pdf' }), nazwa);
     const odp = await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${dokumentId}/podpis`, {
       method: 'POST', headers: { Cookie: ciastko }, body: formularz,
     });
@@ -466,7 +466,7 @@ test('POST /api/psa/portal/wniosek/umowa-podpisana: odmawia przed udostepnieniem
   await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
 
   const formularzZaWczesnie = new FormData();
-  formularzZaWczesnie.append('plik', new Blob(['tresc testowa'], { type: 'application/pdf' }), 'umowa.pdf');
+  formularzZaWczesnie.append('plik', new Blob(['%PDF-1.4\ntresc testowa'], { type: 'application/pdf' }), 'umowa.pdf');
   const zaWczesnie = await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, {
     method: 'POST', headers: { Cookie: ciastko }, body: formularzZaWczesnie,
   });
@@ -485,8 +485,22 @@ test('POST /api/psa/portal/wniosek/umowa-podpisana: odmawia przed udostepnieniem
   });
   assert.equal(odpZlaKoncowka.status, 400, 'niedozwolone rozszerzenie pliku');
 
+  // Rozszerzenie w nazwie to obietnica klienta. Plik nazwany „.pdf", ktory
+  // w srodku jest strona HTML, wracal do pracownika jako `text/html` do
+  // wyswietlenia w ramce — czyli skrypt klienta dzialal w sesji kancelarii.
+  const udawanyPdf = new FormData();
+  udawanyPdf.append(
+    'plik',
+    new Blob(['<html><body><script>alert(1)</script></body></html>'], { type: 'text/html' }),
+    'skan-umowy.pdf'
+  );
+  const odpUdawany = await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: udawanyPdf,
+  });
+  assert.equal(odpUdawany.status, 400, 'tresc HTML pod nazwa .pdf jest odrzucana');
+
   const formularz = new FormData();
-  formularz.append('plik', new Blob(['podpisana tresc'], { type: 'application/pdf' }), 'podpisana-umowa.pdf');
+  formularz.append('plik', new Blob(['%PDF-1.4\npodpisana tresc'], { type: 'application/pdf' }), 'podpisana-umowa.pdf');
   const odp = await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, {
     method: 'POST', headers: { Cookie: ciastko }, body: formularz,
   });

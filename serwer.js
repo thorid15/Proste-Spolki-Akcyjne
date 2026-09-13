@@ -24,6 +24,51 @@ aplikacja.disable('x-powered-by');
 // potrzebne do flagi `Secure` na ciasteczkach sesji i do rate limitera.
 aplikacja.set('trust proxy', 1);
 aplikacja.use(express.json({ limit: '1mb' }));
+
+/**
+ * Naglowki bezpieczenstwa — wlasny middleware, bez zaleznosci (sekcja 11).
+ *
+ * Bez nich przegladarka nie ma zadnej instrukcji, jak traktowac odpowiedzi
+ * tej aplikacji: wolno ja osadzic w cudzej ramce (clickjacking na formularzu
+ * podpisywania dokumentow), wolno zgadywac typ pliku wbrew Content-Type
+ * (wgrany „skan" udajacy HTML wykonalby sie w kontekscie rejestru), a adres
+ * strony z numerem sprawy wycieka w Refererze na kazdy klikniety odnosnik.
+ *
+ * CSP ma `unsafe-eval`, bo interfejs kompiluje JSX w przegladarce
+ * (`publiczne/vendor/babel.min.js`). To jedyny powod — po przeniesieniu
+ * kompilacji na start serwera te dyrektywe nalezy usunac.
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+  // fonts.googleapis/gstatic sa tu WYLACZNIE dlatego, ze kroje lece
+  // z CDN Google. To jednoczesnie wyciek adresu IP kazdego klienta do
+  // Google przy kazdym wejsciu — kroje nalezy przeniesc na wlasny serwer
+  // i te dwa wpisy skasowac (patrz AUDYT.md).
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "img-src 'self' data:",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+aplikacja.use((zad, odp, dalej) => {
+  odp.setHeader('X-Content-Type-Options', 'nosniff');
+  odp.setHeader('X-Frame-Options', 'DENY');
+  odp.setHeader('Referrer-Policy', 'same-origin');
+  odp.setHeader('Content-Security-Policy', CSP);
+  odp.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
+  // HSTS tylko po HTTPS — wlaczony na czystym HTTP zablokowalby prace
+  // lokalna, a i tak nic nie chroni (przegladarka go wtedy ignoruje).
+  if (zad.secure) {
+    odp.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  dalej();
+});
+
 aplikacja.use(autoryzacja.wczytajSesje);
 
 // ── Migracje przy starcie - idempotentne ─────────────────────────────────
