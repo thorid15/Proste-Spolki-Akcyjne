@@ -85,7 +85,7 @@ const PUNKTY_LOGOWANIA = [
   {
     ikona: 'dokument',
     tytul: 'Informacja z rejestru',
-    tresc: 'Dokument wystawiany na wskazany dzień — art. 300³⁵ KSH.',
+    tresc: 'Pobierz informację z rejestru na dany dzień.',
   },
 ];
 
@@ -442,14 +442,21 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
    ───────────────────────────────────────────────────── */
 /* Wnioskodawca nie ma jeszcze spółki w rejestrze — jego zakładka „Moje
    spółki" pokazuje stan wniosku (`StanWniosku`), a sam formularz dostaje
-   własną pozycję, bo do przyjęcia wniosku to jego główny ekran. */
+   własną pozycję. Dopóki wniosku nie złożono, to ON jest głównym ekranem
+   konta, więc stoi PIERWSZY: klient, który właśnie ustawił hasło, ma przed
+   sobą formularz do wypełnienia, a nie listę spółek, których jeszcze nie ma. */
 function kartyNawigacji(rola) {
-  const karty = [
+  if (rola === 'wnioskodawca') {
+    return [
+      { sciezka: '/wniosek', nazwa: 'Wniosek' },
+      { sciezka: '/', nazwa: 'Moje spółki' },
+      { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
+    ];
+  }
+  return [
     { sciezka: '/', nazwa: 'Moje spółki' },
     { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
   ];
-  if (rola === 'wnioskodawca') karty.splice(1, 0, { sciezka: '/wniosek', nazwa: 'Wniosek' });
-  return karty;
 }
 
 const ETYKIETA_ROLI_KONTA = {
@@ -523,13 +530,15 @@ const STANY_WNIOSKU_KLIENTA = {
   },
   zlozony: {
     odmiana: 'info',
-    tytul: 'Trwa rejestracja spółki w systemie',
-    tresc: 'Wniosek został złożony. Przygotowujemy komplet dokumentów do podpisu.',
+    tytul: 'Wniosek przyjęty do sprawdzenia',
+    tresc: 'Kancelaria sprawdza podane dane i przygotowuje komplet dokumentów do podpisu. '
+      + 'Gdy będą gotowe, napiszemy e-mailem — pobierzesz je wtedy w tym portalu.',
   },
   umowa_wygenerowana: {
     odmiana: 'uwaga',
-    tytul: 'Czekamy na podpisane dokumenty',
-    tresc: 'Komplet dokumentów jest gotowy do pobrania. Podpisz je i odeślij podpisaną umowę w formularzu wniosku.',
+    tytul: 'Dokumenty czekają na podpis',
+    tresc: 'Kancelaria przygotowała komplet dokumentów. Pobierz je w formularzu wniosku, '
+      + 'zbierz podpisy i odeślij skany w tym samym miejscu.',
     doFormularza: true,
   },
   umowa_podpisana: {
@@ -545,15 +554,16 @@ const STANY_WNIOSKU_KLIENTA = {
 };
 
 function StanWniosku({ wniosek }) {
-  if (!wniosek) {
-    return (
-      <Pusto
-        tytul="Nie rozpoczęto jeszcze wniosku"
-        opis="Aby spółka trafiła do rejestru, wypełnij wniosek o prowadzenie rejestru akcjonariuszy."
-        akcja={<button className="btn btn-glowny" onClick={() => idz('/wniosek')}>Wypełnij wniosek</button>}
-      />
-    );
-  }
+  // Zanim wniosek zostanie złożony, „Moje spółki" nie mają czego pokazać —
+  // jedyną sensowną treścią konta jest formularz. Przerzucamy więc na niego
+  // od razu, zamiast stawiać po drodze ekran z jednym przyciskiem „Wypełnij
+  // wniosek". Po złożeniu wniosku ta zakładka wraca do roli przeglądu stanu.
+  const doWypelnienia = !wniosek || ['w_przygotowaniu', 'do_uzupelnienia'].includes(wniosek.status);
+  useEffect(() => {
+    if (doWypelnienia) idz('/wniosek');
+  }, [doWypelnienia]);
+
+  if (doWypelnienia) return <Spinner />;
 
   const stan = STANY_WNIOSKU_KLIENTA[wniosek.status] || {
     odmiana: 'info',
@@ -942,7 +952,7 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
       <RamaPubliczna
         opis={
           <OpisPortalu
-            tytul="Rejestr akcjonariuszy pod ręką"
+            tytul="Rejestr akcjonariuszy Prostej Spółki Akcyjnej pod ręką"
             lead="Portal daje spółce i akcjonariuszom wgląd w rejestr prowadzony przez kancelarię oraz drogę do zgłaszania zmian — bez wizyty i bez papierowej korespondencji."
             punkty={PUNKTY_LOGOWANIA}
           />

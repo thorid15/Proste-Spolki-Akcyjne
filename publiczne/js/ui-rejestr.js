@@ -330,6 +330,21 @@ function Metryka({ pozycje }) {
   );
 }
 
+/**
+ * Jedna para „etykieta — wartość" wewnątrz listy `<dl className="pary">`.
+ * Komponent był używany (ekran „Stawki i terminy"), ale nigdzie nie
+ * zdefiniowany — przez co cały ekran wywracał się na `ReferenceError`
+ * i pokazywał pustą stronę.
+ */
+function Para({ etykieta, dane = false, children }) {
+  return (
+    <>
+      <dt>{etykieta}</dt>
+      <dd className={dane ? 'kol-dane' : undefined}>{children}</dd>
+    </>
+  );
+}
+
 /** Pole szukania z ikoną w środku — używane w paskach narzędzi list. */
 function Szukajka({ wartosc, przyZmianie, placeholder = 'Szukaj…' }) {
   return (
@@ -1013,6 +1028,7 @@ window.Ikona = Ikona;
 window.Kafel = Kafel;
 window.WierszListy = WierszListy;
 window.Zakladki = Zakladki;
+window.Para = Para;
 window.Metryka = Metryka;
 window.Szukajka = Szukajka;
 window.SzybkieAkcje = SzybkieAkcje;

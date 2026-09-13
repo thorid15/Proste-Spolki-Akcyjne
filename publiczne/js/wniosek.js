@@ -160,21 +160,36 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie }) {
   );
 }
 
+/** Adres zamieszkania albo siedziby złożony z pól formularza — jedną linią. */
+function adresAkcjonariusza(a) {
+  const linia = [
+    [a.kod_pocztowy, a.miejscowosc].filter(Boolean).join(' ').trim(),
+    [a.ulica, a.nr_domu, a.nr_lokalu && `m. ${a.nr_lokalu}`].filter(Boolean).join(' ').trim(),
+  ].filter(Boolean).join(', ');
+  return linia || null;
+}
+
 /**
- * Podsumowanie mówi, JAKIE adresy klient podał — nie który z nich trafi do
- * rejestru. Wyboru wymaganego przez art. 300(33) § 1 pkt 3 KSH dokonuje
- * kancelaria przy weryfikacji (formularz klienta nie ma już tego pola), więc
- * pokazywanie tu „adres niewskazany" znaczyłoby dla klienta coś zupełnie
- * innego, niż znaczy naprawdę.
+ * Podsumowanie pokazuje ADRES, nie nazwę jego rodzaju. Wcześniej stała tu
+ * etykieta „adres zamieszkania / siedziby", przez co wypełniony i pusty
+ * formularz wyglądały na ekranie tak samo — klient widział podpis rubryki
+ * zamiast tego, co w niej wpisał.
+ *
+ * Który z podanych adresów wejdzie do treści rejestru (art. 300(33) § 1
+ * pkt 3 KSH dopuszcza jeden) rozstrzyga kancelaria przy weryfikacji, więc
+ * wymieniamy po prostu wszystkie podane.
  */
 function opisAdresowAkcjonariusza(a) {
   const podane = [];
-  if ([a.kod_pocztowy, a.miejscowosc, a.ulica].some((v) => v && String(v).trim())) {
-    podane.push('adres zamieszkania / siedziby');
+  const adres = adresAkcjonariusza(a);
+  if (adres) podane.push(adres);
+  if (a.adres_doreczen && String(a.adres_doreczen).trim()) {
+    podane.push(`do doręczeń: ${String(a.adres_doreczen).trim()}`);
   }
-  if (a.adres_doreczen && a.adres_doreczen.trim()) podane.push('adres do doręczeń');
-  if (a.adres_edoreczen && a.adres_edoreczen.trim()) podane.push('adres do e-Doręczeń');
-  return podane.length > 0 ? podane.join(', ') : 'brak adresu';
+  if (a.adres_edoreczen && String(a.adres_edoreczen).trim()) {
+    podane.push(`e-Doręczenia: ${String(a.adres_edoreczen).trim()}`);
+  }
+  return podane.length > 0 ? podane.join(' · ') : 'brak adresu';
 }
 
 const OPIS_ZGODY_EMAIL = {
@@ -289,6 +304,12 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
     value: dane[klucz] ?? '',
     onChange: (z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value })),
     disabled: !edytowalne,
+    // Autouzupełnianie przeglądarki podstawiało tu WŁASNE dane właściciela
+    // komputera (w kancelarii: nazwę i adres kancelarii), nadpisując to, co
+    // klient wpisał — i taka nazwa szła potem do umowy. Formularz rejestru
+    // opisuje cudze dane, więc książka adresowa przeglądarki nie ma tu czego
+    // szukać.
+    autoComplete: 'off',
   });
 
   // Autouzupelnienie daty urodzenia i plci z numeru PESEL — jednorazowe,
@@ -366,7 +387,7 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
           </div>
           <div className="siatka-2">
             {!bezPesel && (
-              <Pole etykieta="PESEL" podpowiedz="Datę urodzenia uzupełnimy automatycznie.">
+              <Pole etykieta="PESEL">
                 <input type="text" {...pole('pesel')} maxLength={11} placeholder="11 cyfr" />
               </Pole>
             )}
@@ -429,7 +450,7 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
       </div>
 
       <div className="siatka-2">
-        <Pole etykieta="Adres e-mail" opcjonalne>
+        <Pole etykieta="Adres e-mail">
           <input type="text" {...pole('email')} placeholder="przyklad@example.com" />
         </Pole>
         <Pole etykieta="Numer telefonu" opcjonalne><input type="text" {...pole('telefon')} /></Pole>
@@ -442,7 +463,7 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
           ustawDane((p) => ({ ...p, zgoda_email_status: v ? 'zadeklarowana' : 'brak' }))
         }
         etykieta="Akcjonariusz wyraża zgodę na komunikację elektroniczną"
-        opis="Przygotujemy oświadczenie do podpisu. Dopiero podpisane oświadczenie wprowadza adres e-mail do treści rejestru — art. 300³³ § 1 pkt 4 KSH; zarząd nie może złożyć go za akcjonariusza."
+        opis="Przygotujemy oświadczenie do podpisu. Dopiero podpisane oświadczenie wprowadza adres e-mail do treści rejestru."
       />
       {dane.zgoda_email_status === 'potwierdzona' && (
         <Komunikat odmiana="ok" tresc="Zgoda potwierdzona podpisanym oświadczeniem akcjonariusza." />
@@ -464,7 +485,7 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
           }))
         }
         etykieta="Akcje należą do kilku osób wspólnie"
-        opis="Przy współwłasności rejestr wymienia pozostałych współwłaścicieli, a przy współwłasności ułamkowej także wielkość udziału — art. 300³³ § 1 pkt 5 KSH."
+        opis="Przy współwłasności rejestr wymienia pozostałych współwłaścicieli, a przy współwłasności ułamkowej także wielkość udziału."
         dzieci={
           <>
             <Pole etykieta="Rodzaj współwłasności">
@@ -546,11 +567,6 @@ function EkranWniosku() {
   const [bladSkladania, ustawBladSkladania] = useState(null);
   const [ostrzezeniaZlozenia, ustawOstrzezeniaZlozenia] = useState([]);
   const [dokumenty, ustawDokumenty] = useState([]);
-  // Adres kancelarii — na wypadek pytań o sam przebieg podpisywania.
-  const { dane: daneKancelarii } = useDane('/api/wspolne/kancelaria');
-  const emailKancelarii = daneKancelarii && daneKancelarii.kancelaria
-    ? daneKancelarii.kancelaria.email
-    : null;
 
   useEffect(() => {
     Promise.all([
@@ -624,19 +640,8 @@ function EkranWniosku() {
       await API.put('/api/psa/portal/wniosek', dane);
       const wynik = await API.post('/api/psa/portal/wniosek/zloz', {});
       ustawDane(wynik.wniosek);
-      ustawOstrzezeniaZlozenia(wynik.ostrzezenia || []);
+      ustawOstrzezeniaZlozenia(wynik.braki_akcjonariuszy || []);
       ustawDokumenty(wynik.dokumenty || []);
-      if (wynik.blad_umowy) {
-        ustawBladSkladania(
-          `Wniosek został złożony, ale nie udało się przygotować projektu umowy: ${wynik.blad_umowy}. `
-          + 'Spróbuj złożyć wniosek ponownie za chwilę albo skontaktuj się z kancelarią.'
-        );
-      } else if (wynik.blad_pakietu) {
-        ustawBladSkladania(
-          `Wniosek został złożony, ale nie udało się przygotować kompletu dokumentów do podpisu: ${wynik.blad_pakietu}. `
-          + 'Kancelaria przygotuje je ręcznie.'
-        );
-      }
     } catch (e) {
       ustawBladSkladania(e instanceof BladApi ? e.message : 'Nie udało się złożyć wniosku.');
     } finally {
@@ -648,6 +653,10 @@ function EkranWniosku() {
     value: (dane && dane[klucz]) ?? '',
     onChange: (z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value })),
     disabled: !wniosekEdytowalny,
+    // Patrz komentarz przy tym samym haku w formularzu akcjonariusza:
+    // podpowiedzi przeglądarki podmieniały nazwę i adres spółki na dane
+    // zapamiętane w przeglądarce pracownika kancelarii.
+    autoComplete: 'off',
   });
 
   async function pobierzZKrs() {
@@ -714,6 +723,16 @@ function EkranWniosku() {
     <div className="pion kreator-waski" style={{ gap: 16 }}>
       <Kroki kroki={KROKI_WNIOSKU} biezacy={krok} />
       <Komunikat odmiana="blad" tresc={blad} />
+      {/* Wniosek odesłany do uzupełnienia prowadzi teraz PROSTO do formularza
+          (portal.js), więc uwagi kancelarii muszą być widoczne tutaj — inaczej
+          klient zobaczyłby odblokowany formularz, nie wiedząc dlaczego. */}
+      {dane.status === 'do_uzupelnienia' && dane.notatka_weryfikacji && (
+        <Komunikat
+          odmiana="uwaga"
+          tytul="Kancelaria prosi o uzupełnienie wniosku"
+          tresc={dane.notatka_weryfikacji}
+        />
+      )}
       {!wniosekEdytowalny && krok < ostatniKrok && (
         <Komunikat
           odmiana="uwaga"
@@ -822,7 +841,7 @@ function EkranWniosku() {
           <>
             <KrokNaglowek
               tytul="Reprezentant spółki"
-              opis="Osoba, która w imieniu spółki podpisze umowę o prowadzenie rejestru. Wpisz dane dokładnie tak, jak widnieją w dokumencie tożsamości — umowa użyje ich w tej samej postaci."
+              opis="Osoba, która w imieniu spółki podpisze umowę o prowadzenie rejestru."
             />
 
             <div className="siatka-2">
@@ -994,7 +1013,7 @@ function EkranWniosku() {
               <>
                 <Komunikat
                   odmiana="info"
-                  tresc="Po złożeniu wniosku przygotujemy projekt umowy o prowadzenie rejestru na podstawie powyższych danych. Dane spółki i listę akcjonariuszy będzie można poprawić tylko, jeśli kancelaria odeśle wniosek do uzupełnienia."
+                  tresc="Po złożeniu wniosku kancelaria sprawdzi dane i przygotuje komplet dokumentów do podpisu — powiadomimy Cię e-mailem, gdy będą gotowe do pobrania. Dane spółki i listę akcjonariuszy będzie można poprawić tylko, jeśli kancelaria odeśle wniosek do uzupełnienia."
                 />
                 {(!dane.nazwa || akcjonariusze.length === 0) && (
                   <div className="podpowiedz">
@@ -1018,7 +1037,11 @@ function EkranWniosku() {
             )}
 
             {dane.status === 'zlozony' && (
-              <Komunikat odmiana="info" tresc="Wniosek złożony — trwa przygotowywanie projektu umowy." />
+              <Komunikat
+                odmiana="ok"
+                tytul="Wniosek złożony"
+                tresc="Kancelaria sprawdza dane i przygotowuje komplet dokumentów do podpisu. Gdy będą gotowe, napiszemy e-mailem — pobierzesz je wtedy w tym miejscu."
+              />
             )}
 
             {dokumentyWidoczne && (
@@ -1027,12 +1050,12 @@ function EkranWniosku() {
                 <div className="card-h">Dokumenty do podpisu</div>
                 <Komunikat
                   odmiana="ok"
-                  tresc="Komplet dokumentów jest gotowy. Pobierz wszystkie pozycje z listy poniżej, zbierz podpisy i odeślij je kancelarii."
+                  tresc="Kancelaria sprawdziła dane i przygotowała komplet dokumentów. Pobierz wszystkie pozycje z listy poniżej, zbierz podpisy i odeślij skany w tym samym miejscu."
                 />
                 {ostrzezeniaZlozenia.length > 0 && (
                   <Komunikat
                     odmiana="uwaga"
-                    tresc="Projekt zawiera niepełne dane — kancelaria uzupełni je przy weryfikacji, ale warto sprawdzić dokument przed podpisaniem."
+                    tresc="Sprawdź dokumenty przed podpisaniem — przy złożeniu wniosku część danych była niepełna."
                     lista={ostrzezeniaZlozenia}
                   />
                 )}
@@ -1054,20 +1077,15 @@ function EkranWniosku() {
                   ))}
                 </div>
 
-                <div className="podsumowanie-podpisow">
-                  {podpisanych === dokumenty.length ? (
+                {podpisanych === dokumenty.length && (
+                  <div className="podsumowanie-podpisow">
                     <Komunikat
                       odmiana="ok"
                       tytul="Komplet podpisanych dokumentów wrócił do kancelarii"
                       tresc="Nic więcej nie musisz robić. Kancelaria zweryfikuje dane i otworzy rejestr akcjonariuszy — o wyniku poinformujemy e-mailem."
                     />
-                  ) : (
-                    <Komunikat
-                      odmiana="info"
-                      tresc={`Odesłano ${podpisanych} z ${dokumenty.length} dokumentów. Pozostałe wgraj przy odpowiadających im pozycjach powyżej — wniosek trafi do kancelarii, gdy wróci podpisana umowa.`}
-                    />
-                  )}
-                </div>
+                  </div>
+                )}
 
                 <div className="instrukcja-podpisu">
                   <div className="instrukcja-podpisu-tytul">Jak podpisać dokumenty</div>
@@ -1086,15 +1104,6 @@ function EkranWniosku() {
                       dokument podpisany w ten sposób również przyjmujemy.
                     </li>
                   </ul>
-                  <div className="instrukcja-podpisu-uwaga">
-                    Każda strona dokumentu musi być czytelna, a podpis widoczny w całości.
-                    Podpisany plik wgraj przy tej pozycji, do której należy — dzięki temu
-                    kancelaria od razu widzi, co już wróciło, a czego jeszcze brakuje.
-                    W razie pytań napisz do kancelarii
-                    {emailKancelarii ? (
-                      <> na adres <a href={`mailto:${emailKancelarii}`}>{emailKancelarii}</a></>
-                    ) : ' pocztą elektroniczną'}.
-                  </div>
                 </div>
               </>
             )}

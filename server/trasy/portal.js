@@ -32,6 +32,7 @@ const maskowanie = require('../logika/maskowanie');
 const przepisy = require('../logika/przepisy');
 const akcjonariuszLogika = require('../logika/akcjonariusz');
 const dokumentyWniosku = require('../logika/dokumenty-wniosku');
+const pakietWniosku = require('../logika/pakiet-wniosku');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const terminy = require('../logika/terminy');
 const numery = require('../logika/numery');
@@ -42,10 +43,6 @@ const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
-const wzoryDysk = require('../logika/wzory-dysk');
-const docxPdf = require('../logika/docx-pdf');
-const docx = require('../logika/docx');
-const kontekstPisma = require('../logika/kontekst-pisma');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
 const { pobierzZKrs } = require('./krs');
@@ -545,189 +542,67 @@ router.delete(
 );
 
 // ─────────────────────────────────────────────────────────────
-// Zlozenie wniosku, projekt umowy, odeslanie podpisanej kopii (etap 3E)
+// Zlozenie wniosku, komplet do podpisu, odeslanie podpisanych skanow
 // ─────────────────────────────────────────────────────────────
 
 function katalogWnioskuDokumenty(wniosekId) {
-  return path.join(konfiguracja.KATALOG_DOKUMENTOW, 'wnioski', `wniosek_${wniosekId}`);
+  return pakietWniosku.katalogWniosku(wniosekId);
 }
 
 /**
- * Zlozenie wniosku: klient nie ma tu nic wiecej do zrobienia poza uzupelnieniem
- * danych, wiec jedno klikniecie i zamyka edycje (status -> zlozony), i - zgodnie
- * z opisem przebiegu w promptcie ("system generuje projekt umowy", bez osobnego
- * kroku) - odrazu generuje projekt umowy (status -> umowa_wygenerowana).
+ * Zlozenie wniosku ZAMYKA EDYCJE i na tym koniec (status -> zlozony).
+ *
+ * Dokumentow tu juz NIE MA. Powstawaly dawniej w tej samej chwili, prosto
+ * z danych, ktore klient wlasnie wpisal - wiec literowka w nazwie spolki
+ * albo blad w PESEL-u szly wprost do umowy, a klient dostawal ja do podpisu,
+ * zanim ktokolwiek z kancelarii na nia spojrzal. Komplet wystawia teraz
+ * kancelaria po weryfikacji danych (`server/trasy/wnioski.js`), a klient
+ * dostaje o tym wiadomosc.
+ *
  * Kompletnosc danych NIE jest tu twardo blokowana (regula ogolna nr 3 -
  * miekkie ostrzezenia przy wprowadzaniu, twarde blokady dopiero przy
- * faktycznej operacji rejestrowej, a otwarcie rejestru to etap 3F, nie ten) -
- * poza dwoma minimalnymi warunkami SENSOWNOSCI zlozenia (nazwa i choc jeden
- * akcjonariusz), ktore sa organizacyjne, nie merytoryczno-prawne.
+ * faktycznej operacji rejestrowej) - poza dwoma minimalnymi warunkami
+ * SENSOWNOSCI zlozenia (nazwa i choc jeden akcjonariusz), ktore sa
+ * organizacyjne, nie merytoryczno-prawne.
  */
 router.post(
   '/wniosek/zloz',
   wymagajWnioskodawcy,
   wymagajWniosku,
-  asy(async (zad, odp) => {
+  asy((zad, odp) => {
     const wniosek = zad.psaWniosek;
-    if (!wniosek.nazwa) throw bledneZadanie('Uzupełnij nazwę spółki (krok „Spółka i umowa”), zanim złożysz wniosek.');
-    const liczbaAkcjonariuszy = db()
-      .prepare('SELECT COUNT(*) AS ile FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ?')
-      .get(wniosek.id).ile;
-    if (liczbaAkcjonariuszy === 0) {
+    if (!wniosek.nazwa) throw bledneZadanie('Uzupełnij nazwę spółki (krok „Spółka”), zanim złożysz wniosek.');
+    const akcjonariusze = db()
+      .prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ? ORDER BY kolejnosc, id')
+      .all(wniosek.id);
+    if (akcjonariusze.length === 0) {
       throw bledneZadanie('Dodaj przynajmniej jednego akcjonariusza (krok „Akcjonariusze”), zanim złożysz wniosek.');
     }
 
     const teraz = czas.terazIso();
     db().prepare('UPDATE psa_wnioski SET status = ?, zaktualizowano = ? WHERE id = ?').run('zlozony', teraz, wniosek.id);
 
-    const dane = kontekstPisma.umowaOProwadzenieRejestru({ spolka: wniosek, dzis: czas.dzisIso() });
-    const wynik = wzoryDysk.wypelnij('01', dane);
-    const katalog = katalogWnioskuDokumenty(wniosek.id);
-    fs.mkdirSync(katalog, { recursive: true });
-
-    // Umowa NIE jest negocjowalna po stronie klienta - dostaje ja gotowa,
-    // w PDF, ktorego nie da sie zmienic w edytorze tekstu tak jak .docx
-    // (zob. komentarz na gorze `logika/docx-pdf.js`). Blad konwersji
-    // (np. LibreOffice niedostepne) NIE cofa juz dokonanego zlozenia wniosku -
-    // wniosek zostaje w stanie "zlozony", a projekt umowy da sie wygenerowac
-    // ponownie, gdy kancelaria zauwazy problem.
-    let bladUmowy = null;
-    let umowaDoPakietu = null;
-    try {
-      umowaDoPakietu = {
-        typ: dokumentyWniosku.TYPY.UMOWA_REJESTRU,
-        akcjonariuszId: null,
-        plik: await docxPdf.zPdf(wynik.plik, {
-          autor: konfiguracja.KANCELARIA.nazwa,
-          tytul: dokumentyWniosku.NAZWY[dokumentyWniosku.TYPY.UMOWA_REJESTRU],
-        }),
-      };
-    } catch (e) {
-      bladUmowy = e.message;
-    }
-
     // Braki wobec art. 300(33) § 1 KSH liczymy na KOMPLETNYM wierszu, przy
     // skladaniu - nie przy kazdym zapisie. Nie blokuja zlozenia: kancelaria
     // i tak weryfikuje wniosek, a czesci danych (np. potwierdzonej zgody
     // akcjonariusza na e-mail) z natury nie da sie miec wczesniej.
-    const akcjonariusze = db()
-      .prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ? ORDER BY kolejnosc, id')
-      .all(wniosek.id);
     const brakiAkcjonariuszy = akcjonariusze.flatMap((a) => akcjonariuszLogika.ostrzezenia(a));
 
-    // Komplet dokumentow do podpisu - RAZEM z umowa, jedna lista i jeden
-    // zapis. Skladamy go poza transakcja: to zapis na dysk, ktory nie moze
-    // cofnac juz dokonanej zmiany statusu wniosku. Blad skladania nie
-    // przewraca zlozenia: dokumenty da sie wystawic ponownie, wniosku - nie.
-    let bladPakietu = null;
-    try {
-      const sciezkaUmowy = await zapiszPakietDokumentow(
-        db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
-        akcjonariusze,
-        umowaDoPakietu
-      );
-      // Status i sciezka projektu umowy zostaja na wniosku: to one prowadza
-      // caly przebieg (zlozony -> umowa_wygenerowana -> umowa_podpisana).
-      if (sciezkaUmowy) {
-        db()
-          .prepare(
-            `UPDATE psa_wnioski
-                SET status = 'umowa_wygenerowana', umowa_projekt_sciezka = ?,
-                    umowa_projekt_wygenerowano = ?, zaktualizowano = ?
-              WHERE id = ?`
-          )
-          .run(sciezkaUmowy, teraz, czas.terazIso(), wniosek.id);
-      }
-    } catch (e) {
-      bladPakietu = e.message;
-    }
-    const wniosekPoZlozeniu = db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id);
-
     odp.json({
-      wniosek: wniosekPoZlozeniu,
-      brakujace: wynik.brakujace,
-      ostrzezenia: wynik.ostrzezenia,
+      wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
       braki_akcjonariuszy: brakiAkcjonariuszy,
       dokumenty: wczytajDokumentyWniosku(wniosek.id),
-      blad_umowy: bladUmowy,
-      blad_pakietu: bladPakietu,
     });
   })
 );
 
 /**
- * Sklada CALY komplet dokumentow do podpisu - razem z umowa - i zapisuje go
- * na dysku oraz w `psa_wnioski_dokumenty`. Jedna lista, jeden zapis: klient
- * widzi wszystko w jednym miejscu, a kazda pozycja ma to samo miejsce na
- * odeslanie podpisanego skanu.
- *
- * Wywolywana ponownie NADPISUJE poprzedni komplet - wniosek odeslany do
- * uzupelnienia i zlozony po raz drugi ma miec dokumenty z aktualnych danych,
- * a nie dwa zestawy roznych. Wraz z nimi znikaja wgrane skany: dotyczyly
- * NIEAKTUALNYCH juz tresci, wiec ich zachowanie sugerowaloby, ze podpisano
- * to, co klient ma teraz przed soba.
- *
- * @param {object|null} umowa pozycja `{typ, akcjonariuszId, plik}` z umowa,
- *   albo `null`, gdy konwersja do PDF sie nie powiodla
- * @returns {Promise<string|null>} wzgledna sciezka zapisanej umowy
+ * Komplet widoczny dla KLIENTA to wylacznie pozycje udostepnione przez
+ * kancelarie - dokumenty wystawione, ale jeszcze niesprawdzone, zostaja po
+ * stronie kancelarii (`logika/pakiet-wniosku.js`).
  */
-async function zapiszPakietDokumentow(wniosek, akcjonariusze, umowa = null) {
-  const oswiadczenia = await dokumentyWniosku.zlozPakiet({
-    wniosek,
-    akcjonariusze,
-    dzis: czas.dzisIso(),
-  });
-  const pakiet = [
-    ...(umowa ? [dokumentyWniosku.opisz(umowa, { wniosek, akcjonariusze })] : []),
-    ...oswiadczenia,
-  ];
-
-  const katalog = path.join(katalogWnioskuDokumenty(wniosek.id), 'oswiadczenia');
-  fs.rmSync(katalog, { recursive: true, force: true });
-  fs.mkdirSync(katalog, { recursive: true });
-
-  const teraz = czas.terazIso();
-  db().prepare('DELETE FROM psa_wnioski_dokumenty WHERE wniosek_id = ?').run(wniosek.id);
-
-  let sciezkaUmowy = null;
-  for (const d of pakiet) {
-    // Nazwa NA DYSKU jest techniczna (UUID), zeby nie zalezec od znakow
-    // w nazwisku; nazwa widoczna dla klienta siedzi w kolumnie.
-    const nazwaNaDysku = `${crypto.randomUUID()}.pdf`;
-    fs.writeFileSync(path.join(katalog, nazwaNaDysku), d.plik);
-    const sciezka = path.relative(konfiguracja.KATALOG_DOKUMENTOW, path.join(katalog, nazwaNaDysku));
-    if (d.typ === dokumentyWniosku.TYPY.UMOWA_REJESTRU) sciezkaUmowy = sciezka;
-    db()
-      .prepare(
-        `INSERT INTO psa_wnioski_dokumenty
-           (wniosek_id, akcjonariusz_id, typ, nazwa, nazwa_pliku, sciezka, mime,
-            rozmiar, kolejnosc, utworzono)
-         VALUES (@wniosek_id, @akcjonariusz_id, @typ, @nazwa, @nazwa_pliku, @sciezka,
-                 'application/pdf', @rozmiar, @kolejnosc, @utworzono)`
-      )
-      .run({
-        wniosek_id: wniosek.id,
-        akcjonariusz_id: d.akcjonariuszId,
-        typ: d.typ,
-        nazwa: d.nazwa,
-        nazwa_pliku: d.nazwaPliku,
-        sciezka,
-        rozmiar: d.plik.length,
-        kolejnosc: d.kolejnosc,
-        utworzono: teraz,
-      });
-  }
-  return sciezkaUmowy;
-}
-
 function wczytajDokumentyWniosku(wniosekId) {
-  return db()
-    .prepare(
-      `SELECT id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id,
-              podpis_nazwa_pliku, podpis_rozmiar, podpis_wgrano
-         FROM psa_wnioski_dokumenty WHERE wniosek_id = ? ORDER BY kolejnosc, id`
-    )
-    .all(wniosekId);
+  return pakietWniosku.lista(wniosekId, { tylkoUdostepnione: true });
 }
 
 /**
@@ -766,7 +641,7 @@ router.get(
     const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
     if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
     const dokument = db()
-      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
       .get(Number(zad.params.id), wniosek.id);
     if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
     wyslijPlikDokumentu(odp, dokument.sciezka, dokument.nazwa_pliku, dokument.mime);
@@ -894,7 +769,7 @@ router.post(
   asy((zad, odp) => {
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
     const dokument = db()
-      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
       .get(Number(zad.params.id), zad.psaWniosek.id);
     if (!dokument) {
       fs.rmSync(zad.file.path, { force: true });
@@ -917,7 +792,7 @@ router.get(
     const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
     if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
     const dokument = db()
-      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
       .get(Number(zad.params.id), wniosek.id);
     if (!dokument || !dokument.podpis_sciezka) throw nieZnaleziono('Nie odesłano jeszcze tego dokumentu.');
     wyslijPlikDokumentu(odp, dokument.podpis_sciezka, dokument.podpis_nazwa_pliku, dokument.podpis_mime);
@@ -939,7 +814,7 @@ router.delete(
       throw bledneZadanie(`Wniosek ma status „${wniosek.status}” — nie można już zmieniać przesłanych dokumentów.`);
     }
     const dokument = db()
-      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
       .get(Number(zad.params.id), wniosek.id);
     if (!dokument || !dokument.podpis_sciezka) throw nieZnaleziono('Nie odesłano jeszcze tego dokumentu.');
 
@@ -987,7 +862,7 @@ router.post(
   asy((zad, odp) => {
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
     const umowa = db()
-      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE wniosek_id = ? AND typ = ?')
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE wniosek_id = ? AND typ = ? AND udostepniono IS NOT NULL')
       .get(zad.psaWniosek.id, dokumentyWniosku.TYPY.UMOWA_REJESTRU);
     if (!umowa) throw nieZnaleziono('Projekt umowy nie został jeszcze wygenerowany.');
 

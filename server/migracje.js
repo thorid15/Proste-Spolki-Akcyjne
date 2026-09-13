@@ -1581,6 +1581,38 @@ const MIGRACJE = [
       ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_opis TEXT;
     `,
   },
+  {
+    wersja: 36,
+    nazwa: 'tresc-dokumentow-wniosku-i-udostepnianie',
+    sql: `
+      -- Tresc dokumentu jako LISTA BLOKOW (logika/bloki-dokumentu.js), zapisana
+      -- obok gotowego pliku. Bez niej PDF byl jedynym sladem tresci, a PDF-a
+      -- nie da sie poprawic - notariusz nie mial jak zmienic ani jednego
+      -- zdania w dokumencie, ktory wystawia wlasnym nazwiskiem.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN tresc_bloki TEXT;
+
+      -- Slad po recznej poprawce tresci: kto i kiedy. Dokument wystawiony
+      -- automatycznie i dokument poprawiony przez notariusza to nie to samo,
+      -- a po miesiacach nikt tego z samego pliku nie odtworzy.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN zmodyfikowano TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN zmodyfikowal TEXT;
+
+      -- Klucze wzoru .docx, ktorych wniosek nie wypelnil (zostaly kreska).
+      -- Kancelaria widzi je przy dokumencie, zanim komplet pojdzie do klienta.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN brakujace TEXT;
+
+      -- Moment UDOSTEPNIENIA klientowi. Dotad komplet powstawal sam, w chwili
+      -- zlozenia wniosku - wiec bledne dane klienta dawaly bledna umowe, ktora
+      -- klient od razu dostawal do podpisu. Teraz dokumenty powstaja po
+      -- stronie kancelarii, ktora je sprawdza i dopiero potem udostepnia;
+      -- portal klienta pokazuje WYLACZNIE pozycje z wypelniona ta kolumna.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN udostepniono TEXT;
+
+      -- Komplet wystawiony przed ta zmiana byl juz u klienta - zostaje
+      -- udostepniony, zeby nikomu nie zniknal z portalu w trakcie sprawy.
+      UPDATE psa_wnioski_dokumenty SET udostepniono = utworzono WHERE udostepniono IS NULL;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

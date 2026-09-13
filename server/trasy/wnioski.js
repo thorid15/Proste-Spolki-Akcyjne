@@ -34,6 +34,9 @@ const portal = require('./portal');
 const osobyModul = require('./osoby');
 const spolkiModul = require('./spolki');
 const akcjonariuszLogika = require('../logika/akcjonariusz');
+const pakietWniosku = require('../logika/pakiet-wniosku');
+const blokiDokumentu = require('../logika/bloki-dokumentu');
+const poczta = require('../poczta');
 
 const router = express.Router();
 
@@ -169,14 +172,9 @@ router.get(
     }
 
     // Komplet do podpisu wraz z informacja, co juz wrocilo podpisane -
-    // kancelaria musi to widziec, zanim przyjmie wniosek.
-    const dokumenty = db()
-      .prepare(
-        `SELECT id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id,
-                podpis_nazwa_pliku, podpis_rozmiar, podpis_wgrano
-           FROM psa_wnioski_dokumenty WHERE wniosek_id = ? ORDER BY kolejnosc, id`
-      )
-      .all(wniosek.id);
+    // kancelaria widzi CALY komplet, takze pozycje jeszcze nieudostepnione
+    // klientowi (portal klienta dostaje tylko udostepnione).
+    const dokumenty = pakietWniosku.lista(wniosek.id);
 
     odp.json({ wniosek, akcjonariusze, krs, braki_ustawowe: braki, dokumenty });
   })
@@ -202,14 +200,206 @@ router.get(
     if (!pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelna)) {
       throw nieZnaleziono('Plik nie jest już dostępny.');
     }
+    // `?podglad=1` oddaje plik do WYSWIETLENIA w ramce. Kancelaria czyta
+    // dokument, zanim go udostepni — pobieranie kazdej pozycji na dysk tylko
+    // po to, zeby na nia spojrzec, zamienialoby przeglad w sprzatanie katalogu.
+    const wRamce = zad.query.podglad === '1';
     odp.setHeader('Content-Type', mime || 'application/octet-stream');
     odp.setHeader(
       'Content-Disposition',
-      `attachment; filename*=UTF-8''${encodeURIComponent(nazwaPliku || 'dokument')}`
+      `${wRamce ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(nazwaPliku || 'dokument')}`
     );
     fs.createReadStream(pelna).pipe(odp);
   })
 );
+
+// ─────────────────────────────────────────────────────────────
+// Komplet dokumentow do podpisu — wystawia go KANCELARIA
+//
+// Dawniej komplet powstawal sam, w chwili zlozenia wniosku przez klienta:
+// bledne dane dawaly bledna umowe, ktora klient od razu dostawal do podpisu.
+// Teraz sa trzy osobne, swiadome kroki: wystaw → sprawdz i popraw tresc →
+// udostepnij klientowi. Dopiero ostatni wpuszcza dokumenty do portalu.
+// ─────────────────────────────────────────────────────────────
+
+/** Statusy, w ktorych komplet wolno wystawic albo wystawic ponownie. */
+const STATUSY_WYSTAWIENIA = ['zlozony', 'do_uzupelnienia', 'umowa_wygenerowana', 'umowa_podpisana'];
+
+router.post(
+  '/:id/dokumenty/wystaw',
+  asy(async (zad, odp) => {
+    const wniosek = wczytajOtwartyWniosek(Number(zad.params.id));
+    if (!STATUSY_WYSTAWIENIA.includes(wniosek.status)) {
+      throw bledneZadanie(
+        `Wniosek ma status „${wniosek.status}” — komplet dokumentów wystawia się po jego złożeniu.`
+      );
+    }
+    if (!wniosek.nazwa) throw bledneZadanie('Uzupełnij nazwę spółki, zanim wystawisz dokumenty.');
+    const akcjonariusze = wczytajAkcjonariuszy(wniosek.id);
+    if (akcjonariusze.length === 0) throw bledneZadanie('Wniosek nie ma żadnego akcjonariusza.');
+
+    const { dokumenty } = await pakietWniosku.wystaw(wniosek, akcjonariusze);
+
+    // Nowy komplet to nowa tresc — poprzednie skany dotyczyly czegos innego
+    // i znikly razem z poprzednimi plikami, wiec wniosek wraca do stanu
+    // sprzed udostepnienia. Klient zobaczy dokumenty dopiero po „Udostepnij".
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET status = 'zlozony', umowa_podpisana_sciezka = NULL, umowa_podpisana_nazwa_pliku = NULL,
+                umowa_podpisana_mime = NULL, umowa_podpisana_wgrano = NULL,
+                obsluzone_przez = ?, obsluzone_kiedy = ?, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(autor(zad), czas.terazIso(), czas.terazIso(), wniosek.id);
+
+    odp.json({ wniosek: wczytajWniosek(wniosek.id), dokumenty });
+  })
+);
+
+/** Tresc dokumentu do edytora — bloki, nie gotowy plik. */
+router.get(
+  '/:id/dokumenty/:dokId/tresc',
+  asy((zad, odp) => {
+    const wniosek = wczytajWniosek(Number(zad.params.id));
+    if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
+    const tresc = pakietWniosku.tresc(wniosek.id, Number(zad.params.dokId));
+    if (!tresc) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+    odp.json({ dokument: tresc, rodzaje: blokiDokumentu.NAZWY_RODZAJOW });
+  })
+);
+
+/**
+ * Zapis poprawionej tresci. PDF sklada sie od nowa i podmienia plik
+ * w miejscu — poprawiona wersja obowiazuje wszedzie: w portalu klienta,
+ * w podgladzie kancelarii i w aktach spolki po przyjeciu wniosku.
+ */
+router.put(
+  '/:id/dokumenty/:dokId/tresc',
+  asy(async (zad, odp) => {
+    const wniosek = wczytajOtwartyWniosek(Number(zad.params.id));
+    let zapisany;
+    try {
+      zapisany = await pakietWniosku.zapiszTresc(
+        wniosek.id,
+        Number(zad.params.dokId),
+        (zad.body || {}).bloki,
+        autor(zad)
+      );
+    } catch (e) {
+      throw bledneZadanie(e.message);
+    }
+    if (!zapisany) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+    odp.json({ dokument: zapisany, dokumenty: pakietWniosku.lista(wniosek.id) });
+  })
+);
+
+/**
+ * Udostepnienie kompletu klientowi: pozycje pojawiaja sie w portalu, wniosek
+ * przechodzi w `umowa_wygenerowana`, a klient dostaje wiadomosc, ze dokumenty
+ * czekaja na pobranie. Brak SMTP nie przewraca operacji — kancelaria widzi
+ * powod i moze powiadomic klienta innym kanalem.
+ */
+router.post(
+  '/:id/dokumenty/udostepnij',
+  asy(async (zad, odp) => {
+    const wniosek = wczytajOtwartyWniosek(Number(zad.params.id));
+    const dokumenty = pakietWniosku.lista(wniosek.id);
+    if (dokumenty.length === 0) {
+      throw bledneZadanie('Nie ma czego udostępnić — najpierw wystaw komplet dokumentów.');
+    }
+
+    const poUdostepnieniu = pakietWniosku.udostepnij(wniosek.id);
+    const teraz = czas.terazIso();
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET status = 'umowa_wygenerowana', obsluzone_przez = ?, obsluzone_kiedy = ?, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(autor(zad), teraz, teraz, wniosek.id);
+
+    const proba = await poczta.wyslij({
+      do: wniosek.reprezentant_email || wniosek.konto_email,
+      temat: `Dokumenty do podpisu — ${konfiguracja.KANCELARIA.nazwa}`,
+      html: trescPowiadomieniaODokumentach({
+        nazwaSpolki: wniosek.nazwa,
+        ile: poUdostepnieniu.length,
+        link: konfiguracja.URL_PORTALU,
+        kancelariaNazwa: konfiguracja.KANCELARIA.nazwa,
+      }),
+    });
+
+    odp.json({
+      wniosek: wczytajWniosek(wniosek.id),
+      dokumenty: poUdostepnieniu,
+      email_wyslany: proba.wyslano,
+      powod: proba.powod,
+    });
+  })
+);
+
+/**
+ * Pobranie danych spolki z KRS WPROST DO WNIOSKU. Klient ma ten przycisk
+ * w portalu od poczatku; kancelaria musiala dotad przepisywac dane recznie,
+ * choc to ona odpowiada za ich zgodnosc z rejestrem przedsiebiorcow.
+ *
+ * Nadpisujemy wylacznie pola, ktore KRS faktycznie zwrocil — reszta zostaje
+ * taka, jak podal klient.
+ */
+router.post(
+  '/:id/z-krs',
+  asy(async (zad, odp) => {
+    const wniosek = wczytajOtwartyWniosek(Number(zad.params.id));
+    const numer = String((zad.body || {}).krs || wniosek.krs || '').replace(/\D/g, '');
+    if (numer.length !== 10) {
+      throw bledneZadanie('Numer KRS składa się z dziesięciu cyfr — uzupełnij go w danych spółki.');
+    }
+    const wynik = await pobierzZKrs(numer);
+    if (!wynik.znaleziono) {
+      return odp.json({ znaleziono: false, komunikat: wynik.komunikat, wniosek: wczytajWniosek(wniosek.id) });
+    }
+
+    const { sklad_organu: _sklad, ...reszta } = wynik.dane;
+    const dane = portal.wyczyscWniosek(
+      Object.fromEntries(Object.entries(reszta).filter(([, v]) => v !== null && v !== ''))
+    );
+    portal.sprawdzDaneWniosku(dane);
+    if (Object.keys(dane).length > 0) {
+      db()
+        .prepare(
+          `UPDATE psa_wnioski
+              SET ${Object.keys(dane).map((k) => `${k} = @${k}`).join(', ')}, zaktualizowano = @zaktualizowano
+            WHERE id = @id`
+        )
+        .run({ ...dane, zaktualizowano: czas.terazIso(), id: wniosek.id });
+    }
+
+    odp.json({
+      znaleziono: true,
+      ostrzezenia: wynik.ostrzezenia || [],
+      pobrane: Object.keys(dane),
+      wniosek: wczytajWniosek(wniosek.id),
+    });
+  })
+);
+
+/** Wiadomosc do klienta: komplet czeka w portalu. */
+function trescPowiadomieniaODokumentach({ nazwaSpolki, ile, link, kancelariaNazwa }) {
+  return `
+    <p>Dzień dobry,</p>
+    <p>
+      dokumenty do podpisu w sprawie prowadzenia rejestru akcjonariuszy
+      ${nazwaSpolki ? `spółki <strong>${nazwaSpolki}</strong>` : 'Państwa spółki'}
+      są gotowe. Komplet liczy ${ile} ${ile === 1 ? 'dokument' : 'dokumentów'}.
+    </p>
+    <p>
+      Pobierz je w portalu klienta, zbierz podpisy i odeślij skany w tym samym miejscu:
+      <a href="${link}">${link}</a>
+    </p>
+    <p>${kancelariaNazwa}</p>
+  `;
+}
 
 /** Wymaga wniosku w stanie, ktory jeszcze nie jest zamkniety (przyjety/odrzucony). */
 function wczytajOtwartyWniosek(id) {

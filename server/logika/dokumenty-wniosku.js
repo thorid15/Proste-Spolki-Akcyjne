@@ -1,28 +1,36 @@
 'use strict';
 
 /**
- * Komplet dokumentów powstający przy złożeniu wniosku o prowadzenie rejestru.
+ * Komplet dokumentów, który kancelaria wystawia klientowi do podpisu przy
+ * wniosku o prowadzenie rejestru akcjonariuszy.
  *
- * Cztery OŚWIADCZENIA o ustalonej treści (po jednym na akcjonariusza) oraz
- * wspólne żądanie pierwszego wpisu składają się tutaj wprost jako PDF —
- * patrz komentarz na górze `logika/pdf.js`. Uchwałę o wyborze podmiotu
- * prowadzącego rejestr (`uchwalaProjekt`) silnik składa inaczej: to wzór
- * `.docx` (notariusz edytuje jego treść w Wordzie), wypełniony danymi
- * i skonwertowany do PDF (`logika/docx-pdf.js`) — tak samo jak umowa
- * o prowadzenie rejestru (wzór 01, `server/trasy/portal.js`). Efekt końcowy
- * jest ten sam: klient dostaje gotowy, NIEEDYTOWALNY dokument do podpisu,
- * niezależnie którą z dwóch dróg powstał.
+ * Każdy dokument powstaje tutaj jako LISTA BLOKÓW (`logika/bloki-dokumentu.js`),
+ * nie jako gotowy PDF. Bloki zapisują się razem z plikiem, więc notariusz może
+ * treść przeczytać, poprawić w portalu pracownika i złożyć dokument na nowo —
+ * czego nie da się zrobić z samym PDF-em.
+ *
+ * Dwa dokumenty — umowa o prowadzenie rejestru (wzór 01) i uchwała o wyborze
+ * podmiotu prowadzącego rejestr (wzór 03) — mają treść redagowaną przez
+ * notariusza w Wordzie. Ich wzory `.docx` wypełnia się danymi wniosku
+ * i zamienia na bloki (`bloki.zDocx`). Dawniej szły przez konwersję
+ * LibreOffice; gdy jej zabrakło, umowa CICHO WYPADAŁA z kompletu i klient
+ * dostawał do podpisu wszystko poza dokumentem najważniejszym. Teraz komplet
+ * powstaje bez żadnego programu zewnętrznego.
+ *
+ * Pozostałe pozycje to OŚWIADCZENIA o ustalonej treści, budowane blokami
+ * wprost w tym pliku.
  *
  * Wszystkie dane osobowe trafiają na papier w MIANOWNIKU, opisane etykietą
- * („PESEL: …”, „Działający jako: …”), nigdy odmienione przez przypadki.
+ * („PESEL: …”), nigdy odmienione przez przypadki.
  */
 
-const pdf = require('./pdf');
 const przepisy = require('./przepisy');
 const konfiguracja = require('../konfiguracja');
 const wzoryDysk = require('./wzory-dysk');
-const docxPdf = require('./docx-pdf');
 const kontekstPisma = require('./kontekst-pisma');
+const bloki = require('./bloki-dokumentu');
+
+const b = bloki.blok;
 
 const PODSTAWA_AML = 'ustawa z dnia 1 marca 2018 r. o przeciwdziałaniu praniu pieniędzy '
   + 'oraz finansowaniu terroryzmu';
@@ -117,16 +125,24 @@ function firmaSpolki(w) {
   return [w.nazwa, w.krs ? `KRS ${w.krs}` : null].filter(Boolean).join(', ');
 }
 
-/** Wspólna główka: kto prowadzi rejestr i dla jakiej spółki. */
-function glowka(p, wniosek, dzis) {
+/**
+ * Wspólna główka oświadczeń: kto prowadzi rejestr i dla jakiej spółki.
+ *
+ * Dwa wiersze i nic więcej. Wcześniej stał tu jeszcze adres kancelarii oraz
+ * opis „Kancelaria Notarialna, notariusz: …”, przez co najważniejsza
+ * informacja — czyj to rejestr i czyja spółka — tonęła w metryczce.
+ * Nazwa spółki pochodzi Z WNIOSKU, nie z konfiguracji: to dane klienta,
+ * a nie kancelarii.
+ */
+function glowka(wniosek, dzis) {
   const k = konfiguracja.KANCELARIA;
-  p.miejscowoscData(k.kancelaria_miasto || k.miejscowosc, dataPl(dzis));
-  p.pola([
-    ['Podmiot prowadzący rejestr', `Kancelaria Notarialna, notariusz: ${k.notariusz_mianownik || '—'}`],
-    ['Adres kancelarii', [k.kancelaria_ulica, [k.kancelaria_kod, k.kancelaria_miasto].filter(Boolean).join(' ')]
-      .filter(Boolean).join(', ')],
-    ['Spółka', firmaSpolki(wniosek)],
-  ]);
+  return [
+    b.naglowek(k.kancelaria_miasto || k.miejscowosc, dataPl(dzis)),
+    b.pola([
+      ['Podmiot prowadzący rejestr', k.nazwa],
+      ['Spółka', firmaSpolki(wniosek)],
+    ]),
+  ];
 }
 
 /** Dane akcjonariusza w postaci, w jakiej wchodzą do rejestru. */
@@ -154,21 +170,40 @@ function polaAkcjonariusza(a) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Dokument 0 — projekt uchwały o wyborze podmiotu prowadzącego rejestr
+// Dokumenty ze wzorów .docx — umowa i uchwała
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Wzór `.docx` (03) wypełniony danymi wniosku i skonwertowany do PDF —
- * patrz komentarz na górze pliku i przy `kontekstPisma.uchwalaWyboruProjekt`.
+ * Umowa o prowadzenie rejestru akcjonariuszy (wzór 01).
+ *
+ * Treść redaguje notariusz w Wordzie; tutaj wzór dostaje dane wniosku
+ * i zamienia się na bloki. Dokument jest jedną z pozycji kompletu — tą,
+ * która przenosi stan całego wniosku (patrz `server/trasy/portal.js`).
  */
-async function uchwalaProjekt({ wniosek, akcjonariusze, dzis }) {
+function umowaRejestru({ wniosek, dzis }) {
+  const dane = kontekstPisma.umowaOProwadzenieRejestru({ spolka: wniosek, dzis });
+  const wynik = wzoryDysk.wypelnij('01', dane);
+  return {
+    typ: TYPY.UMOWA_REJESTRU,
+    akcjonariuszId: null,
+    bloki: bloki.zDocx(wynik.plik, { tytulDomyslny: NAZWY[TYPY.UMOWA_REJESTRU] }),
+    // Wzór wypełnia się kluczami z `kontekstPisma`; te, których wniosek nie
+    // niesie, zostają kreską. Kancelaria widzi ich listę przy dokumencie
+    // i wie, co uzupełnić, zanim komplet pójdzie do klienta.
+    brakujace: wynik.brakujace,
+  };
+}
+
+/** Projekt uchwały o wyborze podmiotu prowadzącego rejestr (wzór 03). */
+function uchwalaProjekt({ wniosek, akcjonariusze, dzis }) {
   const dane = kontekstPisma.uchwalaWyboruProjekt({ wniosek, akcjonariusze, dzis });
   const wynik = wzoryDysk.wypelnij('03', dane);
-  const plik = await docxPdf.zPdf(wynik.plik, {
-    autor: konfiguracja.KANCELARIA.nazwa,
-    tytul: NAZWY[TYPY.UCHWALA_WYBORU],
-  });
-  return { typ: TYPY.UCHWALA_WYBORU, akcjonariuszId: null, plik };
+  return {
+    typ: TYPY.UCHWALA_WYBORU,
+    akcjonariuszId: null,
+    bloki: bloki.zDocx(wynik.plik, { tytulDomyslny: NAZWY[TYPY.UCHWALA_WYBORU] }),
+    brakujace: wynik.brakujace,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -176,40 +211,35 @@ async function uchwalaProjekt({ wniosek, akcjonariusze, dzis }) {
 // ─────────────────────────────────────────────────────────────
 
 function zgodaEmail({ wniosek, akcjonariusz, dzis }) {
-  const autor = konfiguracja.KANCELARIA.nazwa;
-  return pdf.zbuduj({
-    tytul: NAZWY[TYPY.ZGODA_EMAIL],
-    autor,
-    tresc(p) {
-      glowka(p, wniosek, dzis);
-      p.tytul(
-        'Zgoda na komunikację przy wykorzystaniu poczty elektronicznej',
-        'art. 300(33) § 1 pkt 4 Kodeksu spółek handlowych'
-      );
+  return [
+    ...glowka(wniosek, dzis),
+    b.tytul(
+      'Zgoda na komunikację przy wykorzystaniu poczty elektronicznej',
+      'art. 300(33) § 1 pkt 4 Kodeksu spółek handlowych'
+    ),
 
-      p.sekcja('Akcjonariusz składający oświadczenie');
-      p.pola(polaAkcjonariusza(akcjonariusz));
+    b.sekcja('Akcjonariusz składający oświadczenie'),
+    b.pola(polaAkcjonariusza(akcjonariusz)),
 
-      p.sekcja('Treść oświadczenia');
-      p.akapit(
-        'Wyrażam zgodę na komunikację przy wykorzystaniu poczty elektronicznej w stosunkach '
-        + 'ze spółką wskazaną wyżej oraz z podmiotem prowadzącym rejestr akcjonariuszy tej spółki. '
-        + 'Wskazuję poniższy adres poczty elektronicznej do wpisania do rejestru akcjonariuszy.'
-      );
-      p.pola([['Adres poczty elektronicznej', akcjonariusz.email]]);
-      p.akapit(
-        'Przyjmuję do wiadomości, że wskazany adres stanowi treść rejestru akcjonariuszy '
-        + 'i jest udostępniany na zasadach określonych w art. 300(35) Kodeksu spółek handlowych. '
-        + 'Zgodę mogę w każdym czasie cofnąć, składając oświadczenie podmiotowi prowadzącemu '
-        + 'rejestr; cofnięcie zgody nie wpływa na czynności dokonane przed jego złożeniem.'
-      );
-      p.akapit(
-        'Bez tej zgody adres poczty elektronicznej NIE zostaje wpisany do rejestru, '
-        + 'a korespondencja jest doręczana na adres wskazany wyżej.'
-      );
-      p.podpis('data oraz podpis akcjonariusza');
-    },
-  });
+    b.sekcja('Treść oświadczenia'),
+    b.akapit(
+      'Wyrażam zgodę na komunikację przy wykorzystaniu poczty elektronicznej w stosunkach '
+      + 'ze spółką wskazaną wyżej oraz z podmiotem prowadzącym rejestr akcjonariuszy tej spółki. '
+      + 'Wskazuję poniższy adres poczty elektronicznej do wpisania do rejestru akcjonariuszy.'
+    ),
+    b.pola([['Adres poczty elektronicznej', akcjonariusz.email]]),
+    b.akapit(
+      'Przyjmuję do wiadomości, że wskazany adres stanowi treść rejestru akcjonariuszy '
+      + 'i jest udostępniany na zasadach określonych w art. 300(35) Kodeksu spółek handlowych. '
+      + 'Zgodę mogę w każdym czasie cofnąć, składając oświadczenie podmiotowi prowadzącemu '
+      + 'rejestr; cofnięcie zgody nie wpływa na czynności dokonane przed jego złożeniem.'
+    ),
+    b.akapit(
+      'Bez tej zgody adres poczty elektronicznej NIE zostaje wpisany do rejestru, '
+      + 'a korespondencja jest doręczana na adres wskazany wyżej.'
+    ),
+    b.podpis('data oraz podpis akcjonariusza'),
+  ];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -217,42 +247,37 @@ function zgodaEmail({ wniosek, akcjonariusz, dzis }) {
 // ─────────────────────────────────────────────────────────────
 
 function oswiadczenieRodo({ wniosek, akcjonariusz, dzis }) {
-  const k = konfiguracja.KANCELARIA;
-  return pdf.zbuduj({
-    tytul: NAZWY[TYPY.OSWIADCZENIE_RODO],
-    autor: k.nazwa,
-    tresc(p) {
-      glowka(p, wniosek, dzis);
-      p.tytul(
-        'Oświadczenie o zapoznaniu się z informacją o przetwarzaniu danych osobowych',
-        'art. 13 rozporządzenia (UE) 2016/679 (RODO)'
-      );
+  return [
+    ...glowka(wniosek, dzis),
+    b.tytul(
+      'Oświadczenie o zapoznaniu się z informacją o przetwarzaniu danych osobowych',
+      'art. 13 rozporządzenia (UE) 2016/679 (RODO)'
+    ),
 
-      p.sekcja('Osoba składająca oświadczenie');
-      p.pola(polaAkcjonariusza(akcjonariusz));
+    b.sekcja('Osoba składająca oświadczenie'),
+    b.pola(polaAkcjonariusza(akcjonariusz)),
 
-      p.sekcja('Treść oświadczenia');
-      p.akapit(
-        'Oświadczam, że zapoznałam/zapoznałem się z informacją o przetwarzaniu danych osobowych '
-        + 'w związku z prowadzeniem rejestru akcjonariuszy prostej spółki akcyjnej, przekazaną mi '
-        + 'przez podmiot prowadzący rejestr wskazany wyżej.'
-      );
-      p.akapit('Informacja obejmuje w szczególności:');
-      p.punkt('1)', 'tożsamość i dane kontaktowe administratora danych;');
-      p.punkt('2)', 'cele i podstawy prawne przetwarzania — zawarcie i wykonanie umowy '
-        + 'o prowadzenie rejestru akcjonariuszy oraz obowiązki wynikające z Kodeksu spółek handlowych;');
-      p.punkt('3)', 'kategorie odbiorców danych;');
-      p.punkt('4)', 'okres przechowywania danych;');
-      p.punkt('5)', 'przysługujące mi prawa, w tym prawo dostępu do danych i ich sprostowania '
-        + 'oraz prawo wniesienia skargi do Prezesa Urzędu Ochrony Danych Osobowych.');
-      p.odstep(0.5);
-      p.akapit(
-        'Przyjmuję do wiadomości, że podanie danych stanowiących treść rejestru akcjonariuszy '
-        + 'wynika z przepisów prawa, a podanie adresu poczty elektronicznej jest dobrowolne.'
-      );
-      p.podpis('data oraz podpis');
-    },
-  });
+    b.sekcja('Treść oświadczenia'),
+    b.akapit(
+      'Oświadczam, że zapoznałam/zapoznałem się z informacją o przetwarzaniu danych osobowych '
+      + 'w związku z prowadzeniem rejestru akcjonariuszy prostej spółki akcyjnej, przekazaną mi '
+      + 'przez podmiot prowadzący rejestr wskazany wyżej.'
+    ),
+    b.akapit('Informacja obejmuje w szczególności:'),
+    b.punkt('1)', 'tożsamość i dane kontaktowe administratora danych;'),
+    b.punkt('2)', 'cele i podstawy prawne przetwarzania — zawarcie i wykonanie umowy '
+      + 'o prowadzenie rejestru akcjonariuszy oraz obowiązki wynikające z Kodeksu spółek handlowych;'),
+    b.punkt('3)', 'kategorie odbiorców danych;'),
+    b.punkt('4)', 'okres przechowywania danych;'),
+    b.punkt('5)', 'przysługujące mi prawa, w tym prawo dostępu do danych i ich sprostowania '
+      + 'oraz prawo wniesienia skargi do Prezesa Urzędu Ochrony Danych Osobowych.'),
+    b.odstep(0.5),
+    b.akapit(
+      'Przyjmuję do wiadomości, że podanie danych stanowiących treść rejestru akcjonariuszy '
+      + 'wynika z przepisów prawa, a podanie adresu poczty elektronicznej jest dobrowolne.'
+    ),
+    b.podpis('data oraz podpis'),
+  ];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -260,82 +285,75 @@ function oswiadczenieRodo({ wniosek, akcjonariusz, dzis }) {
 // ─────────────────────────────────────────────────────────────
 
 function oswiadczenieAml({ wniosek, akcjonariusz, dzis }) {
-  const k = konfiguracja.KANCELARIA;
-  return pdf.zbuduj({
-    tytul: NAZWY[TYPY.OSWIADCZENIE_AML],
-    autor: k.nazwa,
-    tresc(p) {
-      glowka(p, wniosek, dzis);
-      p.tytul(
-        'Oświadczenie o beneficjencie rzeczywistym i statusie osoby zajmującej '
-        + 'eksponowane stanowisko polityczne',
-        PODSTAWA_AML
-      );
+  // Status podany w formularzu zaznaczamy z góry — podpisujący go
+  // potwierdza podpisem, zamiast wypełniać drugi raz to samo.
+  const pep = akcjonariusz.pep || przepisy.STATUSY_PEP.NIE;
+  return [
+    ...glowka(wniosek, dzis),
+    b.tytul(
+      'Oświadczenie o beneficjencie rzeczywistym i statusie osoby zajmującej '
+      + 'eksponowane stanowisko polityczne',
+      PODSTAWA_AML
+    ),
 
-      p.sekcja('Osoba składająca oświadczenie');
-      p.pola(polaAkcjonariusza(akcjonariusz));
+    b.sekcja('Osoba składająca oświadczenie'),
+    b.pola(polaAkcjonariusza(akcjonariusz)),
 
-      p.akapit(
-        'Notariusz prowadzący rejestr akcjonariuszy jest instytucją obowiązaną w rozumieniu '
-        + 'przepisów wskazanych wyżej i stosuje wobec akcjonariuszy środki bezpieczeństwa '
-        + 'finansowego. Oświadczenie składa się pod rygorem odpowiedzialności karnej '
-        + 'za złożenie fałszywego oświadczenia.'
-      );
+    b.akapit(
+      'Notariusz prowadzący rejestr akcjonariuszy jest instytucją obowiązaną w rozumieniu '
+      + 'przepisów wskazanych wyżej i stosuje wobec akcjonariuszy środki bezpieczeństwa '
+      + 'finansowego. Oświadczenie składa się pod rygorem odpowiedzialności karnej '
+      + 'za złożenie fałszywego oświadczenia.'
+    ),
 
-      p.sekcja('I. Beneficjent rzeczywisty');
-      p.akapit(
-        akcjonariusz.typ === 'prawna'
-          ? 'Wskazuję osoby fizyczne będące beneficjentami rzeczywistymi podmiotu wskazanego wyżej '
-            + '— sprawujące nad nim bezpośrednio lub pośrednio kontrolę albo w imieniu których '
-            + 'nawiązywane są stosunki gospodarcze.'
-          : 'Oświadczam, czy akcje obejmuję we własnym imieniu i na własną rzecz, czy też '
-            + 'w imieniu albo na rzecz innej osoby.'
-      );
-      p.opcja('Beneficjentem rzeczywistym jestem ja — osoba wskazana wyżej.');
-      p.opcja('Beneficjentem rzeczywistym jest inna osoba (proszę wypełnić poniżej).');
-      p.odstep(0.4);
-      p.polaDoWypelnienia([
-        'Imię i nazwisko',
-        'PESEL albo data urodzenia',
-        'Obywatelstwo',
-        'Państwo zamieszkania',
-        'Charakter uprawnień',
-      ]);
+    b.sekcja('I. Beneficjent rzeczywisty'),
+    b.akapit(
+      akcjonariusz.typ === 'prawna'
+        ? 'Wskazuję osoby fizyczne będące beneficjentami rzeczywistymi podmiotu wskazanego wyżej '
+          + '— sprawujące nad nim bezpośrednio lub pośrednio kontrolę albo w imieniu których '
+          + 'nawiązywane są stosunki gospodarcze.'
+        : 'Oświadczam, czy akcje obejmuję we własnym imieniu i na własną rzecz, czy też '
+          + 'w imieniu albo na rzecz innej osoby.'
+    ),
+    b.opcja('Beneficjentem rzeczywistym jestem ja — osoba wskazana wyżej.'),
+    b.opcja('Beneficjentem rzeczywistym jest inna osoba (proszę wypełnić poniżej).'),
+    b.odstep(0.4),
+    b.doWypelnienia([
+      'Imię i nazwisko',
+      'PESEL albo data urodzenia',
+      'Obywatelstwo',
+      'Państwo zamieszkania',
+      'Charakter uprawnień',
+    ]),
 
-      p.sekcja('II. Eksponowane stanowisko polityczne (PEP)');
-      p.akapit(
-        'Osoba zajmująca eksponowane stanowisko polityczne to osoba fizyczna zajmująca znaczące '
-        + 'stanowisko publiczne lub pełniąca znaczącą funkcję publiczną, wymieniona w przepisach '
-        + 'wskazanych wyżej. Dotyczy to także członków rodziny takiej osoby oraz osób znanych '
-        + 'jako jej bliscy współpracownicy.'
-      );
-      // Status podany w formularzu zaznaczamy z góry — podpisujący go
-      // potwierdza podpisem, zamiast wypełniać drugi raz to samo.
-      const pep = akcjonariusz.pep || przepisy.STATUSY_PEP.NIE;
-      p.opcja(
-        'Nie jestem osobą zajmującą eksponowane stanowisko polityczne, '
-        + 'członkiem rodziny takiej osoby ani jej bliskim współpracownikiem.',
-        pep === przepisy.STATUSY_PEP.NIE
-      );
-      p.opcja('Jestem osobą zajmującą eksponowane stanowisko polityczne.',
-        pep === przepisy.STATUSY_PEP.TAK);
-      p.opcja('Jestem członkiem rodziny osoby zajmującej eksponowane stanowisko polityczne.',
-        pep === przepisy.STATUSY_PEP.RODZINA);
-      p.opcja('Jestem bliskim współpracownikiem osoby zajmującej eksponowane stanowisko polityczne.',
-        pep === przepisy.STATUSY_PEP.WSPOLPRACOWNIK);
-      p.odstep(0.4);
-      if (przepisy.pepWymagaWzmozonych(pep) && !pusty(akcjonariusz.pep_opis)) {
-        p.pola([['Stanowisko, funkcja albo relacja', akcjonariusz.pep_opis]]);
-      } else {
-        p.polaDoWypelnienia(['Stanowisko lub funkcja', 'Osoba, z którą łączy mnie relacja']);
-      }
+    b.sekcja('II. Eksponowane stanowisko polityczne (PEP)'),
+    b.akapit(
+      'Osoba zajmująca eksponowane stanowisko polityczne to osoba fizyczna zajmująca znaczące '
+      + 'stanowisko publiczne lub pełniąca znaczącą funkcję publiczną, wymieniona w przepisach '
+      + 'wskazanych wyżej. Dotyczy to także członków rodziny takiej osoby oraz osób znanych '
+      + 'jako jej bliscy współpracownicy.'
+    ),
+    b.opcja(
+      'Nie jestem osobą zajmującą eksponowane stanowisko polityczne, '
+      + 'członkiem rodziny takiej osoby ani jej bliskim współpracownikiem.',
+      pep === przepisy.STATUSY_PEP.NIE
+    ),
+    b.opcja('Jestem osobą zajmującą eksponowane stanowisko polityczne.',
+      pep === przepisy.STATUSY_PEP.TAK),
+    b.opcja('Jestem członkiem rodziny osoby zajmującej eksponowane stanowisko polityczne.',
+      pep === przepisy.STATUSY_PEP.RODZINA),
+    b.opcja('Jestem bliskim współpracownikiem osoby zajmującej eksponowane stanowisko polityczne.',
+      pep === przepisy.STATUSY_PEP.WSPOLPRACOWNIK),
+    b.odstep(0.4),
+    przepisy.pepWymagaWzmozonych(pep) && !pusty(akcjonariusz.pep_opis)
+      ? b.pola([['Stanowisko, funkcja albo relacja', akcjonariusz.pep_opis]])
+      : b.doWypelnienia(['Stanowisko lub funkcja', 'Osoba, z którą łączy mnie relacja']),
 
-      p.sekcja('III. Źródło pochodzenia środków');
-      p.polaDoWypelnienia(['Źródło majątku i środków przeznaczonych na pokrycie akcji']);
+    b.sekcja('III. Źródło pochodzenia środków'),
+    b.doWypelnienia(['Źródło majątku i środków przeznaczonych na pokrycie akcji']),
 
-      p.podpis('data oraz podpis');
-    },
-  });
+    b.podpis('data oraz podpis'),
+  ];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -343,52 +361,46 @@ function oswiadczenieAml({ wniosek, akcjonariusz, dzis }) {
 // ─────────────────────────────────────────────────────────────
 
 function zadaniePierwszegoWpisu({ wniosek, akcjonariusze, dzis }) {
-  const k = konfiguracja.KANCELARIA;
-  return pdf.zbuduj({
-    tytul: NAZWY[TYPY.ZADANIE_PIERWSZEGO_WPISU],
-    autor: k.nazwa,
-    tresc(p) {
-      glowka(p, wniosek, dzis);
-      p.tytul(
-        'Żądanie dokonania pierwszego wpisu w rejestrze akcjonariuszy wraz ze zgodą na wpis',
-        'art. 300(34) § 1 i § 3 Kodeksu spółek handlowych'
-      );
+  return [
+    ...glowka(wniosek, dzis),
+    b.tytul(
+      'Żądanie dokonania pierwszego wpisu w rejestrze akcjonariuszy wraz ze zgodą na wpis',
+      'art. 300(34) § 1 i § 3 Kodeksu spółek handlowych'
+    ),
 
-      p.akapit(
-        'Niżej podpisani, jako osoby obejmujące akcje spółki wskazanej wyżej, żądają dokonania '
-        + 'pierwszego wpisu w rejestrze akcjonariuszy obejmującego emisję założycielską '
-        + 'i objęcie akcji, w zakresie wynikającym z umowy spółki i z danych wskazanych niżej.'
-      );
-      p.akapit(
-        'Jednocześnie każdy z podpisanych, jako osoba, której uprawnienia z akcji zostaną przez '
-        + 'ten wpis ustanowione albo zmienione, wyraża zgodę na jego dokonanie. Wobec zgody '
-        + 'wyrażonej w niniejszym dokumencie uprzednie powiadomienie, o którym mowa '
-        + 'w art. 300(34) § 3 Kodeksu spółek handlowych, nie jest wymagane.'
-      );
-      p.akapit(
-        'Do żądania załącza się umowę spółki oraz dokumenty potwierdzające objęcie akcji. '
-        + 'Obowiązek przedłożenia dokumentów uzasadniających wpis spoczywa na osobie żądającej '
-        + 'wpisu (art. 300(34) § 4 Kodeksu spółek handlowych).'
-      );
+    b.akapit(
+      'Niżej podpisani, jako osoby obejmujące akcje spółki wskazanej wyżej, żądają dokonania '
+      + 'pierwszego wpisu w rejestrze akcjonariuszy obejmującego emisję założycielską '
+      + 'i objęcie akcji, w zakresie wynikającym z umowy spółki i z danych wskazanych niżej.'
+    ),
+    b.akapit(
+      'Jednocześnie każdy z podpisanych, jako osoba, której uprawnienia z akcji zostaną przez '
+      + 'ten wpis ustanowione albo zmienione, wyraża zgodę na jego dokonanie. Wobec zgody '
+      + 'wyrażonej w niniejszym dokumencie uprzednie powiadomienie, o którym mowa '
+      + 'w art. 300(34) § 3 Kodeksu spółek handlowych, nie jest wymagane.'
+    ),
+    b.akapit(
+      'Do żądania załącza się umowę spółki oraz dokumenty potwierdzające objęcie akcji. '
+      + 'Obowiązek przedłożenia dokumentów uzasadniających wpis spoczywa na osobie żądającej '
+      + 'wpisu (art. 300(34) § 4 Kodeksu spółek handlowych).'
+    ),
 
-      p.sekcja('Akcjonariusze objęci żądaniem');
-      akcjonariusze.forEach((a, i) => {
-        p.punkt(`${i + 1})`, [oznaczenie(a), identyfikator(a), adresRejestrowy(a)]
-          .filter(Boolean).join(', '));
-      });
+    b.sekcja('Akcjonariusze objęci żądaniem'),
+    ...akcjonariusze.map((a, i) =>
+      b.punkt(`${i + 1})`, [oznaczenie(a), identyfikator(a), adresRejestrowy(a)]
+        .filter(Boolean).join(', '))),
 
-      p.odstep(0.5);
-      p.akapit(
-        'Podmiot prowadzący rejestr bada treść i formę dokumentów uzasadniających dokonanie wpisu. '
-        + 'Nie ma obowiązku badania ich zgodności z prawem ani prawdziwości, w tym prawdziwości '
-        + 'podpisów, chyba że poweźmie w tym względzie uzasadnione wątpliwości '
-        + '(art. 300(34) § 5 Kodeksu spółek handlowych).'
-      );
+    b.odstep(0.5),
+    b.akapit(
+      'Podmiot prowadzący rejestr bada treść i formę dokumentów uzasadniających dokonanie wpisu. '
+      + 'Nie ma obowiązku badania ich zgodności z prawem ani prawdziwości, w tym prawdziwości '
+      + 'podpisów, chyba że poweźmie w tym względzie uzasadnione wątpliwości '
+      + '(art. 300(34) § 5 Kodeksu spółek handlowych).'
+    ),
 
-      p.sekcja('Podpisy');
-      akcjonariusze.forEach((a) => p.podpis(`${oznaczenie(a)} — data i podpis`));
-    },
-  });
+    b.sekcja('Podpisy'),
+    ...akcjonariusze.map((a) => b.podpis(`${oznaczenie(a)} — data i podpis`)),
+  ];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -406,19 +418,22 @@ function nazwaPliku({ typ, wniosek, akcjonariusz }) {
 }
 
 /**
- * Składa cały komplet: projekt uchwały, po trzy oświadczenia na
+ * Składa cały komplet: umowę, projekt uchwały, po trzy oświadczenia na
  * akcjonariusza, plus jedno wspólne żądanie wpisu.
  *
- * @returns {Promise<{typ: string, nazwa: string, nazwaPliku: string,
- *   akcjonariuszId: number|null, plik: Buffer}[]>}
+ * Zwraca TREŚĆ (bloki), nie gotowe pliki — złożeniem PDF-a zajmuje się
+ * `zloz()` przy zapisie, a potem ponownie po każdej poprawce notariusza.
+ *
+ * @returns {{typ: string, nazwa: string, nazwaPliku: string, kolejnosc: number,
+ *   akcjonariuszId: number|null, bloki: object[], brakujace?: string[]}[]}
  */
-async function zlozPakiet({ wniosek, akcjonariusze, dzis }) {
-  const dokumenty = [];
+function zlozPakiet({ wniosek, akcjonariusze, dzis }) {
+  const dokumenty = [umowaRejestru({ wniosek, dzis })];
 
-  // Uchwała jest pierwsza na liście — obok umowy to drugi dokument
-  // "założycielski" pakietu, przed indywidualnymi oświadczeniami akcjonariuszy.
+  // Uchwała jest druga — obok umowy to drugi dokument „założycielski"
+  // pakietu, przed indywidualnymi oświadczeniami akcjonariuszy.
   if (akcjonariusze.length > 0) {
-    dokumenty.push(await uchwalaProjekt({ wniosek, akcjonariusze, dzis }));
+    dokumenty.push(uchwalaProjekt({ wniosek, akcjonariusze, dzis }));
   }
 
   for (const a of akcjonariusze) {
@@ -428,18 +443,18 @@ async function zlozPakiet({ wniosek, akcjonariusze, dzis }) {
       dokumenty.push({
         typ: TYPY.ZGODA_EMAIL,
         akcjonariuszId: a.id,
-        plik: await zgodaEmail({ wniosek, akcjonariusz: a, dzis }),
+        bloki: zgodaEmail({ wniosek, akcjonariusz: a, dzis }),
       });
     }
     dokumenty.push({
       typ: TYPY.OSWIADCZENIE_RODO,
       akcjonariuszId: a.id,
-      plik: await oswiadczenieRodo({ wniosek, akcjonariusz: a, dzis }),
+      bloki: oswiadczenieRodo({ wniosek, akcjonariusz: a, dzis }),
     });
     dokumenty.push({
       typ: TYPY.OSWIADCZENIE_AML,
       akcjonariuszId: a.id,
-      plik: await oswiadczenieAml({ wniosek, akcjonariusz: a, dzis }),
+      bloki: oswiadczenieAml({ wniosek, akcjonariusz: a, dzis }),
     });
   }
 
@@ -447,7 +462,7 @@ async function zlozPakiet({ wniosek, akcjonariusze, dzis }) {
     dokumenty.push({
       typ: TYPY.ZADANIE_PIERWSZEGO_WPISU,
       akcjonariuszId: null,
-      plik: await zadaniePierwszegoWpisu({ wniosek, akcjonariusze, dzis }),
+      bloki: zadaniePierwszegoWpisu({ wniosek, akcjonariusze, dzis }),
     });
   }
 
@@ -456,9 +471,7 @@ async function zlozPakiet({ wniosek, akcjonariusze, dzis }) {
 
 /**
  * Dokłada do surowej pozycji pakietu to, co widzi klient: nazwę dokumentu,
- * nazwę pliku i miejsce na liście. Wspólne dla dokumentów składanych tutaj
- * i dla umowy, która powstaje w trasie portalu (`server/trasy/portal.js`) —
- * na liście do podpisu mają wyglądać tak samo.
+ * nazwę pliku i miejsce na liście.
  */
 function opisz(d, { wniosek, akcjonariusze = [] }) {
   const akcjonariusz = d.akcjonariuszId
@@ -472,4 +485,20 @@ function opisz(d, { wniosek, akcjonariusze = [] }) {
   };
 }
 
-module.exports = { TYPY, NAZWY, KOLEJNOSC, zlozPakiet, opisz, nazwaPliku, oznaczenie };
+/**
+ * Składa PDF z bloków jednego dokumentu. Jedno miejsce dla obu dróg:
+ * pierwszego wystawienia kompletu i ponownego złożenia po poprawce treści
+ * przez notariusza — inaczej te dwa pliki mogłyby się różnić czymś więcej
+ * niż treścią.
+ *
+ * @param {{typ: string, bloki: object[]}} dokument
+ * @returns {Promise<Buffer>}
+ */
+function zloz(dokument) {
+  return bloki.doPdf(dokument.bloki, {
+    tytul: NAZWY[dokument.typ] || 'Dokument',
+    autor: konfiguracja.KANCELARIA.nazwa,
+  });
+}
+
+module.exports = { TYPY, NAZWY, KOLEJNOSC, zlozPakiet, opisz, zloz, nazwaPliku, oznaczenie };
