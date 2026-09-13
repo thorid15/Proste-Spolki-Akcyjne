@@ -828,9 +828,17 @@ select {
   overflow-y: auto; padding: var(--od-24);
 }
 .modal-tytul { font-family: var(--font-display); font-size: var(--st-20); margin-bottom: var(--od-16); }
+/* Przyciski modala zostają w polu widzenia także wtedy, gdy treść jest
+   dłuższa niż okno — edytor treści dokumentu potrafi mieć sto kilkadziesiąt
+   bloków, a „Zapisz" schowane pod nimi wygląda jak brak zapisu. */
 .modal-stopka {
+  position: sticky;
+  bottom: calc(-1 * var(--od-24));
   display: flex; justify-content: flex-end; gap: var(--od-8);
   margin-top: var(--od-24); padding-top: var(--od-16);
+  margin-bottom: calc(-1 * var(--od-24));
+  padding-bottom: var(--od-24);
+  background: var(--karta);
   border-top: 1px solid var(--linia-2);
 }
 

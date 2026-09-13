@@ -104,14 +104,29 @@ function adresPelny(a) {
   return linia || null;
 }
 
+/**
+ * Rodzaj adresu, ktory wchodzi do rejestru (art. 300(33) § 1 pkt 3 KSH).
+ *
+ * Kolumna bywa PUSTA: formularz klienta jej nie ma, bo wyboru dokonuje
+ * kancelaria przy weryfikacji. Dokument do podpisu nie moze jednak nosic
+ * rubryki „Adres (niewskazany)" — podpisujacy zobaczylby wtedy zarzut
+ * zamiast swoich danych. Dopoki wyboru nie ma, bierzemy pierwszy adres,
+ * ktory akcjonariusz faktycznie podal, i opisujemy go zgodnie z prawda.
+ */
+function rodzajAdresu(a) {
+  const R = przepisy.RODZAJE_ADRESU_REJESTROWEGO;
+  if (!pusty(a.rodzaj_adresu_rejestrowego)) return a.rodzaj_adresu_rejestrowego;
+  if (adresPelny(a)) return R.ZAMIESZKANIA;
+  if (!pusty(a.adres_doreczen)) return R.DORECZEN;
+  if (!pusty(a.adres_edoreczen)) return R.EDORECZEN;
+  return R.ZAMIESZKANIA;
+}
+
 /** Adres wskazany jako ten z art. 300(33) § 1 pkt 3 KSH. */
 function adresRejestrowy(a) {
-  if (a.rodzaj_adresu_rejestrowego === przepisy.RODZAJE_ADRESU_REJESTROWEGO.DORECZEN) {
-    return a.adres_doreczen;
-  }
-  if (a.rodzaj_adresu_rejestrowego === przepisy.RODZAJE_ADRESU_REJESTROWEGO.EDORECZEN) {
-    return a.adres_edoreczen;
-  }
+  const rodzaj = rodzajAdresu(a);
+  if (rodzaj === przepisy.RODZAJE_ADRESU_REJESTROWEGO.DORECZEN) return a.adres_doreczen;
+  if (rodzaj === przepisy.RODZAJE_ADRESU_REJESTROWEGO.EDORECZEN) return a.adres_edoreczen;
   return adresPelny(a);
 }
 
@@ -163,7 +178,7 @@ function polaAkcjonariusza(a) {
     }
   }
   pary.push([
-    `Adres (${przepisy.OPISY_RODZAJOW_ADRESU_REJESTROWEGO[a.rodzaj_adresu_rejestrowego] || 'niewskazany'})`,
+    `Adres (${przepisy.OPISY_RODZAJOW_ADRESU_REJESTROWEGO[rodzajAdresu(a)]})`,
     adresRejestrowy(a),
   ]);
   return pary;
