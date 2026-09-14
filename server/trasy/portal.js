@@ -1057,8 +1057,12 @@ router.post(
       throw bledneZadanie(`Typ zdarzenia „${typZdarzenia}” nie jest dostępny do zgłoszenia przez portal.`);
     }
 
+    // Opis przestal byc obowiazkowy: wpisu dokonuje sie NA PODSTAWIE
+    // DOKUMENTU (art. 300(34) § 4 KSH), a nie opisu zadajacego. Klient, ktory
+    // dolaczyl umowe i wskazal typ zdarzenia, powiedzial juz wszystko —
+    // wymuszanie wypracowania obok dokumentu tworzylo drugie zrodlo prawdy,
+    // ktore pracownik i tak musial konfrontowac z plikiem.
     const opis = String(cialo.opis || '').trim();
-    if (!opis) throw bledneZadanie('Opisz, czego dotyczy zgłoszenie.');
 
     const dataWplywu = czas.terazIso();
     const dane = {
@@ -1066,12 +1070,14 @@ router.post(
       typ_zdarzenia: typZdarzenia,
       zrodlo: 'portal',
       zadajacy_osoba_id: konto.osoba_id,
-      zadajacy_opis: konto.rola === 'spolka' ? `${spolka.nazwa} (zgłoszenie przez portal)` : opis,
+      zadajacy_opis: konto.rola === 'spolka'
+        ? `${spolka.nazwa} (zgłoszenie przez portal)`
+        : opis || `${konto.email} (zgłoszenie przez portal)`,
       data_wplywu: dataWplywu,
       stan: 'nowa',
       wymaga_powiadomienia: typ.wymaga_powiadomienia === true ? 1 : 0,
       autor: `Portal — ${konto.email}`,
-      notatka: opis,
+      notatka: opis || null,
       utworzono: czas.terazIso(),
     };
     dane.termin_do = terminy.policzTermin(

@@ -736,35 +736,70 @@ function EkranRejestrPortal({ spolkaId }) {
 /* ─────────────────────────────────────────────────────
    ZGŁOSZENIE ŻĄDANIA (kroki 1—2 kreatora)
    ───────────────────────────────────────────────────── */
+/**
+ * Rodzaje dokumentu, ktore klient dosyla najczesciej. Celowo KROTKA lista:
+ * pracownik i tak otwiera plik i czyta go w calosci, wiec dokladna
+ * kwalifikacja po stronie klienta niczego nie przesadza — ma tylko pomoc
+ * ulozyc akta. Wszystko inne idzie jako „inny dokument".
+ */
+const RODZAJE_ZGLOSZENIA = [
+  ['umowa_zbycia', 'Umowa zbycia akcji (sprzedaż, darowizna)'],
+  ['uchwala', 'Uchwała'],
+  ['postanowienie', 'Postanowienie sądu'],
+  ['inny', 'Inny dokument'],
+];
+
 function EkranZgloszeniePortal({ spolkaId }) {
   const { dane: meta, ladowanie: metaLadowanie } = useDane('/api/psa/meta');
   const [typ, ustawTyp] = useState('');
+  const [rodzajDokumentu, ustawRodzajDokumentu] = useState('umowa_zbycia');
   const [opis, ustawOpis] = useState('');
   const [pliki, ustawPliki] = useState([]);
   const [wysylanie, ustawWysylanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
   const [gotowe, ustawGotowe] = useState(false);
+  const wejscie = useRef(null);
 
   if (metaLadowanie) return <Spinner />;
   if (!meta) return null;
 
   const typyDostepne = meta.typy_zdarzen.filter((t) => meta.typy_w_kreatorze.includes(t.kod) && !t.z_urzedu);
+  // Wpis robi sie NA PODSTAWIE DOKUMENTU (art. 300(34) § 4 KSH), wiec plik
+  // jest tu rzecza najwazniejsza. Zgloszenie bez pliku przyjmujemy, ale
+  // wtedy trzeba napisac, co sie wydarzylo i skad dokument ma sie wziac.
+  const mozeZlozyc = Boolean(typ) && (pliki.length > 0 || opis.trim().length > 0);
+
+  function dodajPliki(nowe) {
+    ustawPliki((p) => [...p, ...nowe].slice(0, 10));
+    if (wejscie.current) wejscie.current.value = '';
+  }
+  function usunPlik(i) {
+    ustawPliki((p) => p.filter((_, idx) => idx !== i));
+  }
 
   async function zglos() {
-    if (!typ || !opis.trim()) return;
+    if (!mozeZlozyc) return;
     ustawWysylanie(true);
     ustawBlad(null);
     try {
-      const wynik = await API.post('/api/psa/portal/zadania', { spolka_id: spolkaId, typ_zdarzenia: typ, opis: opis.trim() });
+      const wynik = await API.post('/api/psa/portal/zadania', {
+        spolka_id: spolkaId, typ_zdarzenia: typ, opis: opis.trim(),
+      });
       if (pliki.length > 0) {
         const formularz = new FormData();
-        formularz.append('typ_dokumentu', 'inny');
+        formularz.append('typ_dokumentu', rodzajDokumentu);
         for (const plik of pliki) formularz.append('pliki', plik);
-        await fetch(`/api/psa/portal/zadania/${wynik.sprawa.id}/dokumenty`, { method: 'POST', body: formularz });
+        const odp = await fetch(`/api/psa/portal/zadania/${wynik.sprawa.id}/dokumenty`, {
+          method: 'POST', body: formularz,
+        });
+        if (!odp.ok) {
+          const tresc = await odp.json().catch(() => ({}));
+          throw new Error(tresc.blad || 'Zgłoszenie przyjęto, ale nie udało się przesłać pliku.');
+        }
       }
       ustawGotowe(true);
     } catch (e) {
-      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się złożyć zgłoszenia.');
+      ustawBlad(e instanceof BladApi ? e.message : e.message || 'Nie udało się złożyć zgłoszenia.');
     } finally {
       ustawWysylanie(false);
     }
@@ -787,6 +822,7 @@ function EkranZgloszeniePortal({ spolkaId }) {
       <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
       <Karta tytul="Zgłoś zmianę w rejestrze">
         <Komunikat odmiana="blad" tresc={blad} />
+
         <Pole etykieta="Czego dotyczy zgłoszenie" wymagane>
           <select value={typ} onChange={(z) => ustawTyp(z.target.value)}>
             <option value="">— wybierz —</option>
@@ -795,15 +831,66 @@ function EkranZgloszeniePortal({ spolkaId }) {
             ))}
           </select>
         </Pole>
-        <Pole etykieta="Opis zgłoszenia" wymagane podpowiedz="Opisz, co się wydarzyło — kancelaria przygotuje wpis na tej podstawie i skontaktuje się w razie pytań.">
-          <textarea rows={4} value={opis} onChange={(z) => ustawOpis(z.target.value)} />
+
+        {/* Dokument, nie opis, jest podstawą wpisu — dlatego stoi wyżej
+            i zajmuje więcej miejsca niż pole na uwagi. */}
+        <Pole
+          etykieta="Dokument, na podstawie którego ma być dokonany wpis"
+          podpowiedz="Skan albo zdjęcie. PDF, JPG, PNG, DOC/DOCX — maks. 20 MB na plik."
+        >
+          <div className="zgloszenie-plik">
+            <select
+              value={rodzajDokumentu}
+              onChange={(z) => ustawRodzajDokumentu(z.target.value)}
+              style={{ width: 'auto' }}
+            >
+              {RODZAJE_ZGLOSZENIA.map(([kod, nazwa]) => (
+                <option key={kod} value={kod}>{nazwa}</option>
+              ))}
+            </select>
+            <input
+              ref={wejscie}
+              type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              className="pole-pliku-ukryte"
+              onChange={(z) => dodajPliki([...z.target.files])}
+            />
+            <button type="button" className="btn" onClick={() => wejscie.current && wejscie.current.click()}>
+              <Ikona nazwa="pobierz" rozmiar={16} /> Wybierz plik
+            </button>
+          </div>
+          {pliki.length > 0 && (
+            <ul className="lista-plikow">
+              {pliki.map((p, i) => (
+                <li key={`${p.name}-${i}`}>
+                  <Ikona nazwa="dokument" rozmiar={15} />
+                  <span className="lista-plikow-nazwa">{p.name}</span>
+                  <span className="wyciszony male">{Math.max(1, Math.round(p.size / 1024))} kB</span>
+                  <button type="button" className="btn-tekstowy" onClick={() => usunPlik(i)}>usuń</button>
+                </li>
+              ))}
+            </ul>
+          )}
         </Pole>
-        <Pole etykieta="Dokumenty" podpowiedz="PDF, JPG, PNG, DOC/DOCX — maks. 20 MB na plik.">
-          <input type="file" multiple onChange={(z) => ustawPliki([...z.target.files])} />
+
+        <Pole
+          etykieta="Uwagi (opcjonalnie)"
+          podpowiedz="Tylko jeśli coś wymaga wyjaśnienia. Wpis i tak powstaje na podstawie dokumentu, nie opisu."
+        >
+          <textarea rows={2} value={opis} onChange={(z) => ustawOpis(z.target.value)} />
         </Pole>
+
+        {pliki.length === 0 && (
+          <Komunikat
+            odmiana="uwaga"
+            tresc="Bez dołączonego dokumentu kancelaria nie dokona wpisu — napisz w uwagach, jak dostarczysz dokument, albo dołącz go tutaj."
+          />
+        )}
+
         <button
           className="btn btn-glowny"
-          disabled={wysylanie || !typ || !opis.trim()}
+          disabled={wysylanie || !mozeZlozyc}
           onClick={zglos}
           style={{ marginTop: 8 }}
         >

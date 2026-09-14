@@ -62,25 +62,25 @@ Gdyby aplikacja zbierała od klienta „kto zbywa, ile akcji", tworzyłaby drugi
 źródło prawdy obok umowy — i pierwszą rzeczą, którą pracownik musiałby robić,
 byłoby sprawdzanie, czy te dwa źródła się zgadzają. Gorzej niż dziś.
 
-**Zamiast tego: lista dokumentów zamiast listy pól.** Klient wybiera typ
-zdarzenia i widzi, **co ma dołączyć** — a to akurat wiedzą domy maklerskie
-i mają to spisane (Navigator § 7 ust. 4):
+**Zamiast tego: dokument zamiast wypracowania.** Podstawą wpisu jest plik,
+więc to on ma być w formularzu rzeczą główną, a nie opis.
 
-| Tytuł prawny | Czego żąda się od nabywcy |
-|---|---|
-| sprzedaż, zamiana | oryginał albo notarialnie poświadczona kopia umowy; dopuszczalny podpis kwalifikowany lub ePUAP |
-| darowizna | akt notarialny (oświadczenie darczyńcy); oświadczenie obdarowanego może być w zwykłej formie pisemnej |
-| orzeczenie sądu, decyzja administracyjna | orzeczenie/decyzja **plus** potwierdzenie prawomocności albo ostateczności |
-| dziedziczenie | prawomocne postanowienie o stwierdzeniu nabycia spadku albo zarejestrowany akt poświadczenia dziedziczenia |
+Decyzja notariusza po pierwszej wersji: **lista rodzajów dokumentu ma być
+krótka** — najczęstsze pozycje plus „inny dokument". Pracownik i tak otwiera
+plik i czyta go w całości, więc dokładna kwalifikacja po stronie klienta
+niczego nie przesądza; ma tylko pomóc ułożyć akta. Cztery pozycje wystarczą:
 
-Klient dostaje tę listę **przed** wysłaniem zgłoszenia, z polami do
-zaznaczenia „załączam". Nie wpisuje żadnych faktów — przynosi papiery.
-Zyskujemy mniej rund „proszę jeszcze o…", a nie tracimy nic na wiarygodności.
+* umowa zbycia akcji (sprzedaż, darowizna),
+* uchwała,
+* postanowienie sądu,
+* inny dokument.
 
-Po stronie pracownika zostaje to, co i tak robi: czyta dokument i wpisuje
-z niego dane. Aplikacja ma mu podpowiedzieć tylko to, co **sama wie**:
-spółkę, żądającego (właściciela konta), datę wpływu, typ zdarzenia i
-załączniki jako podstawę wpisu. Żadnych danych transakcyjnych od klienta.
+**Wykonane.** Formularz „Zgłoś zmianę" wygląda teraz tak: typ zdarzenia →
+**dokument** (rodzaj z czterech pozycji + wybór pliku, z listą dołączonych) →
+uwagi (opcjonalnie, dwa wiersze). Opis przestał być obowiązkowy także po
+stronie serwera: klient, który dołączył umowę i wskazał typ zdarzenia,
+powiedział już wszystko. Gdy nie ma pliku, formularz przypomina, że bez
+dokumentu wpisu nie będzie, i wtedy wymaga choć słowa w uwagach.
 
 ### 1.3. Kroje pisma z serwerów Google — **zrobione**
 
@@ -353,9 +353,9 @@ reprezentanta, czyli etap F. Punkt 5 (pola reprezentanta) przechodzi do F.*
 
 ### Etap F — dokumenty i tożsamość
 
-1. **Lista dokumentów wymaganych** przy zgłoszeniu zmiany, zależna od typu
-   zdarzenia i tytułu prawnego (tabela z 1.2) — zaznaczane przez klienta,
-   widoczne dla pracownika.
+1. ~~Lista dokumentów wymaganych przy zgłoszeniu zmiany~~ ✔ — zrobione
+   w minimalnej postaci (cztery rodzaje + plik jako element główny, opis
+   opcjonalny). Szczegóły w 1.2.
 2. **Identyfikacja reprezentanta przy pracy zdalnej** (patrz 1.4): pola
    dokumentu tożsamości + **obowiązkowy skan** + wskazanie drogi, którą
    ustalono tożsamość (podpis kwalifikowany / przelew weryfikacyjny /

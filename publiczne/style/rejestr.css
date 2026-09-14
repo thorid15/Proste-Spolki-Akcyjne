@@ -2058,6 +2058,40 @@ a.stopka-poz:hover span { text-decoration: underline; }
   margin-top: 1px;
 }
 
+/* Zgłoszenie zmiany: rodzaj dokumentu i wybór pliku w jednym rzędzie, a pod
+   spodem lista tego, co klient już dołączył. Plik jest tu rzeczą główną —
+   wpis powstaje na jego podstawie, nie na podstawie opisu. */
+.zgloszenie-plik {
+  display: flex;
+  align-items: center;
+  gap: var(--od-8);
+  flex-wrap: wrap;
+}
+.lista-plikow {
+  list-style: none;
+  margin: var(--od-8) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lista-plikow li {
+  display: flex;
+  align-items: center;
+  gap: var(--od-8);
+  padding: var(--od-8) var(--od-12);
+  background: var(--papier);
+  border-radius: var(--r-sm);
+  font-size: var(--st-13);
+}
+.lista-plikow-nazwa {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Pole wyboru pliku sterowane własnym przyciskiem. `display: none` wyłączyłoby
    je z nawigacji klawiaturą, więc pole zostaje na stronie — tylko niewidoczne
    i o zerowej powierzchni. */
