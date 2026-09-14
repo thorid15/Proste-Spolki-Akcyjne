@@ -30,6 +30,7 @@ const czas = require('../pomocnicze/czas');
 const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
 const pliki = require('../pomocnicze/pliki');
+const dziennikDostepu = require('../logika/dziennik-dostepu');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 const { pobierzZKrs } = require('./krs');
 const portal = require('./portal');
@@ -179,6 +180,36 @@ router.get(
     const dokumenty = pakietWniosku.lista(wniosek.id);
 
     odp.json({ wniosek, akcjonariusze, krs, braki_ustawowe: braki, dokumenty });
+  })
+);
+
+/**
+ * Skan dokumentu tozsamosci reprezentanta — do wgladu przy weryfikacji.
+ * Zawsze jako zalacznik do pobrania, nigdy do wyswietlenia w ramce: to plik
+ * od klienta, a `pliki.naglowkiPliku` i tak by na to nie pozwolilo, gdyby
+ * nie byl obrazem albo PDF-em.
+ */
+router.get(
+  '/:id/dowod',
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(Number(zad.params.id));
+    if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
+    if (!wniosek.dowod_sciezka) throw nieZnaleziono('Klient nie przesłał dokumentu tożsamości.');
+
+    const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.dowod_sciezka);
+    if (!pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelna)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+
+    // Dokument tozsamosci to dane wrazliwe — kazde otwarcie zostawia slad.
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik', spolkaId: wniosek.spolka_id || null,
+      akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU,
+      opis: `dokument tożsamości reprezentanta, wniosek #${wniosek.id}`,
+    });
+
+    pliki.naglowkiPliku(odp, { nazwaPliku: wniosek.dowod_nazwa_pliku, wRamce: false });
+    fs.createReadStream(pelna).pipe(odp);
   })
 );
 

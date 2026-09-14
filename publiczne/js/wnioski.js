@@ -347,6 +347,33 @@ function KrokDaneSpolki({ wniosek, krs, zablokowane, odswiez }) {
                   </Pole>
                 ))}
               </div>
+              {/* Skan dowodu stoi przy danych reprezentanta, bo tam się go
+                  sprawdza: pisownia nazwiska i PESEL w umowie mają zgadzać
+                  się z dokumentem, który przysłał klient. */}
+              {grupa.tytul === 'Reprezentant podpisujący umowę' && (
+                <Pole etykieta="Skan dokumentu tożsamości">
+                  {wniosek.dowod_nazwa_pliku ? (
+                    <div className="lista-plikow">
+                      <div>
+                        <Ikona nazwa="dokument" rozmiar={15} />
+                        <a
+                          className="lista-plikow-nazwa"
+                          href={`/api/psa/wnioski/${wniosek.id}/dowod`}
+                          target="_blank"
+                          rel="noopener"
+                        >
+                          {wniosek.dowod_nazwa_pliku}
+                        </a>
+                        <span className="wyciszony male">
+                          {Math.max(1, Math.round((wniosek.dowod_rozmiar || 0) / 1024))} kB
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="wyciszony male">klient nie przesłał dokumentu tożsamości</span>
+                  )}
+                </Pole>
+              )}
             </div>
           ))
         )}

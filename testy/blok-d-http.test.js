@@ -132,6 +132,13 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     // Etap 3D: akcjonariusze proponowani we wniosku - dostep przez konto_id
     // z sesji (posrednio, jak `wczytajSpraweDlaKonta`), zaden identyfikator
     // spolki nie wystepuje - spolka jeszcze nie istnieje.
+    // Skan dokumentu tozsamosci reprezentanta: te same zasady co reszta
+    // wniosku — dostep WYLACZNIE po konto_id z sesji, zaden URL nie przyjmuje
+    // cudzego identyfikatora. Plik oddawany jest jako zalacznik (nigdy
+    // inline), a typ ustala serwer z rozszerzenia.
+    'POST /wniosek/dowod',
+    'GET /wniosek/dowod',
+    'DELETE /wniosek/dowod',
     'GET /wniosek/akcjonariusze',
     'POST /wniosek/akcjonariusze',
     'PUT /wniosek/akcjonariusze/:id',

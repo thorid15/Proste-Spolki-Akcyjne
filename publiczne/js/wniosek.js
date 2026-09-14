@@ -574,6 +574,98 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
   );
 }
 
+/**
+ * Skan dokumentu tożsamości osoby, która podpisze umowę.
+ *
+ * Wniosek składa się zdalnie, więc notariusz może nigdy nie zobaczyć tej
+ * osoby. Skan nie zastępuje okazania dokumentu — jest śladem, na czym
+ * oparto identyfikację, i pozwala sprawdzić pisownię nazwiska oraz PESEL
+ * przed wpisaniem ich do umowy.
+ */
+function PoleDowoduReprezentanta({ wniosek, edytowalne, przyZmianie }) {
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const wejscie = useRef(null);
+  const jest = Boolean(wniosek.dowod_nazwa_pliku);
+
+  async function wyslij(plik) {
+    if (!plik) return;
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      const formularz = new FormData();
+      formularz.append('plik', plik);
+      const odp = await fetch('/api/psa/portal/wniosek/dowod', { method: 'POST', body: formularz });
+      const tresc = await odp.json().catch(() => ({}));
+      if (!odp.ok) throw new Error(tresc.blad || `Nie udało się przesłać pliku (błąd ${odp.status}).`);
+      przyZmianie(tresc.wniosek);
+    } catch (e) {
+      ustawBlad(e.message);
+    } finally {
+      ustawWysylanie(false);
+      if (wejscie.current) wejscie.current.value = '';
+    }
+  }
+
+  async function usun() {
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      przyZmianie((await API.delete('/api/psa/portal/wniosek/dowod')).wniosek);
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się usunąć pliku.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  return (
+    <Pole
+      etykieta="Skan dokumentu tożsamości"
+      podpowiedz="Dowód osobisty albo paszport osoby podpisującej umowę — skan lub zdjęcie. PDF, JPG, PNG."
+    >
+      {jest ? (
+        <div className="lista-plikow">
+          <div>
+            <Ikona nazwa="dokument" rozmiar={15} />
+            <a className="lista-plikow-nazwa" href="/api/psa/portal/wniosek/dowod" target="_blank" rel="noopener">
+              {wniosek.dowod_nazwa_pliku}
+            </a>
+            <Znacznik odmiana="zielony">wgrany</Znacznik>
+            {edytowalne && (
+              <button type="button" className="btn-tekstowy" onClick={usun} disabled={wysylanie}>
+                {wysylanie ? 'Usuwanie…' : 'usuń'}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : edytowalne ? (
+        <>
+          <input
+            ref={wejscie}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            className="pole-pliku-ukryte"
+            disabled={wysylanie}
+            onChange={(z) => wyslij(z.target.files[0])}
+          />
+          <button
+            type="button"
+            className="btn"
+            disabled={wysylanie}
+            onClick={() => wejscie.current && wejscie.current.click()}
+          >
+            <Ikona nazwa="pobierz" rozmiar={16} /> {wysylanie ? 'Przesyłanie…' : 'Wybierz plik'}
+          </button>
+        </>
+      ) : (
+        <span className="wyciszony male">nie przesłano</span>
+      )}
+      <Komunikat odmiana="blad" tresc={blad} />
+    </Pole>
+  );
+}
+
 function EkranWniosku() {
   const [krok, ustawKrok] = useState(0);
   // Otwarty akcjonariusz zasłania listę: jeden temat na ekranie naraz.
@@ -902,6 +994,12 @@ function EkranWniosku() {
             >
               <input type="email" {...pole('reprezentant_email')} />
             </Pole>
+
+            <PoleDowoduReprezentanta
+              wniosek={dane}
+              edytowalne={wniosekEdytowalny}
+              przyZmianie={(w) => ustawDane((p) => ({ ...p, ...w }))}
+            />
 
             {nawigacja()}
           </>

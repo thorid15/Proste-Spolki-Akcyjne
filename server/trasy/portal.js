@@ -790,6 +790,96 @@ function zapiszPodpisanySkan(wniosek, dokument, plik) {
   }
 }
 
+/**
+ * Skan dokumentu tozsamosci REPREZENTANTA — osoby, ktora podpisze umowe.
+ *
+ * Wniosek sklada sie zdalnie, wiec notariusz moze nigdy nie zobaczyc tej
+ * osoby na oczy. Sam obraz dokumentu nie dowodzi tozsamosci (mozna go miec
+ * nie bedac wlascicielem), ale jest sladem, na czym oparto identyfikacje,
+ * i materialem do sprawdzenia pisowni nazwiska oraz PESEL-u przed wpisaniem
+ * ich do umowy.
+ *
+ * Wlasna bramka statusow: skan wgrywa sie PODCZAS wypelniania wniosku, a nie
+ * dopiero przy odsylaniu podpisanych dokumentow.
+ */
+const STATUSY_EDYCJI_WNIOSKU = new Set(['w_przygotowaniu', 'do_uzupelnienia']);
+
+function zaladujWniosekDoEdycji(zad, odp, dalej) {
+  const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+  if (!wniosek) return dalej(nieZnaleziono('Najpierw rozpocznij wniosek.'));
+  if (!STATUSY_EDYCJI_WNIOSKU.has(wniosek.status)) {
+    return dalej(bledneZadanie(`Wniosek ma status „${wniosek.status}” — nie można już zmieniać jego danych.`));
+  }
+  zad.psaWniosek = wniosek;
+  dalej();
+}
+
+router.post(
+  '/wniosek/dowod',
+  wymagajWnioskodawcy,
+  zaladujWniosekDoEdycji,
+  przyjmijSkan,
+  asy((zad, odp) => {
+    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    const wniosek = zad.psaWniosek;
+
+    // Poprzedni skan przestaje byc potrzebny — zostalby na dysku jako plik,
+    // do ktorego nic juz nie prowadzi, a to dane dokumentu tozsamosci.
+    if (wniosek.dowod_sciezka) {
+      const stary = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.dowod_sciezka);
+      if (stary.startsWith(konfiguracja.KATALOG_DOKUMENTOW)) fs.rmSync(stary, { force: true });
+    }
+
+    const teraz = czas.terazIso();
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET dowod_sciezka = ?, dowod_nazwa_pliku = ?, dowod_mime = ?,
+                dowod_rozmiar = ?, dowod_wgrano = ?, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(
+        path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path),
+        zad.file.originalname, zad.file.mimetype, zad.file.size, teraz, teraz, wniosek.id
+      );
+
+    odp.status(201).json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id) });
+  })
+);
+
+router.delete(
+  '/wniosek/dowod',
+  wymagajWnioskodawcy,
+  zaladujWniosekDoEdycji,
+  asy((zad, odp) => {
+    const wniosek = zad.psaWniosek;
+    if (wniosek.dowod_sciezka) {
+      const plik = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.dowod_sciezka);
+      if (plik.startsWith(konfiguracja.KATALOG_DOKUMENTOW)) fs.rmSync(plik, { force: true });
+    }
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET dowod_sciezka = NULL, dowod_nazwa_pliku = NULL, dowod_mime = NULL,
+                dowod_rozmiar = NULL, dowod_wgrano = NULL, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(czas.terazIso(), wniosek.id);
+    odp.json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id) });
+  })
+);
+
+/** Wlasny skan do sprawdzenia, co poszlo. */
+router.get(
+  '/wniosek/dowod',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek || !wniosek.dowod_sciezka) throw nieZnaleziono('Nie przesłano jeszcze dokumentu tożsamości.');
+    wyslijPlikDokumentu(odp, wniosek.dowod_sciezka, wniosek.dowod_nazwa_pliku);
+  })
+);
+
 /** Podpisany skan JEDNEGO dokumentu z kompletu. */
 router.post(
   '/wniosek/dokumenty/:id/podpis',

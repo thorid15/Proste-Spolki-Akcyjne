@@ -1665,6 +1665,27 @@ const MIGRACJE = [
       );
     `,
   },
+  {
+    wersja: 40,
+    nazwa: 'skan dokumentu tozsamosci reprezentanta przy wniosku',
+    sql: `
+      -- Wniosek sklada sie ZDALNIE, wiec notariusz moze nigdy nie zobaczyc
+      -- podpisujacego na oczy. Skan dokumentu nie jest dowodem tozsamosci
+      -- (obraz dokumentu mozna miec bez bycia jego wlascicielem), ale jest
+      -- sladem, na czym oparto identyfikacje, i podstawa przy stosowaniu
+      -- srodkow bezpieczenstwa finansowego wobec relacji nawiazywanej bez
+      -- fizycznej obecnosci.
+      --
+      -- Jeden plik na wniosek: dotyczy REPREZENTANTA, ktory podpisuje umowe,
+      -- nie akcjonariuszy (ci maja wlasne pola w kartotece, ze skanem tylko
+      -- przy wlaczonej procedurze AML dla spolki).
+      ALTER TABLE psa_wnioski ADD COLUMN dowod_sciezka TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN dowod_nazwa_pliku TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN dowod_mime TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN dowod_rozmiar INTEGER;
+      ALTER TABLE psa_wnioski ADD COLUMN dowod_wgrano TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
