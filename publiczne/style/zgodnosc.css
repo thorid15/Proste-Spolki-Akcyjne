@@ -169,5 +169,5 @@
   border-top: 1px solid var(--linia);
 }
 
-.row-g { display: flex; align-items: center; gap: var(--od-8); }
+.row-g { display: flex; align-items: center; gap: var(--od-8); flex-wrap: wrap; }
 .row-b { display: flex; align-items: center; justify-content: space-between; gap: var(--od-12); }

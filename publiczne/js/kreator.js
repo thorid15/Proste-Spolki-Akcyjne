@@ -365,7 +365,7 @@ function KrokObjecie({ dane, ustawDane, spolka }) {
 
       {dane.emisja_zdarzenie_id && (
         <>
-          <div className="fl" style={{ marginTop: 22 }}>Kto obejmuje akcje</div>
+          <div className="fl" style={{ marginTop: 24 }}>Kto obejmuje akcje</div>
           {pozycje.map((p, i) => (
             <PozycjaKreatora
               key={i}
@@ -448,7 +448,7 @@ function KrokPrzeniesienie({ dane, ustawDane, spolka }) {
             </select>
           </Pole>
 
-          <div className="fl" style={{ marginTop: 22 }}>Kto nabywa akcje</div>
+          <div className="fl" style={{ marginTop: 24 }}>Kto nabywa akcje</div>
           {pozycje.map((p, i) => (
             <PozycjaKreatora
               key={i}
@@ -524,7 +524,7 @@ function KrokUmorzenie({ dane, ustawDane, spolka }) {
             </select>
           </Pole>
 
-          <div className="fl" style={{ marginTop: 22 }}>Czyje akcje są umarzane</div>
+          <div className="fl" style={{ marginTop: 24 }}>Czyje akcje są umarzane</div>
           {pozycje.map((p, i) => (
             <div className="pozycja" key={i}>
               <Pole etykieta="Akcjonariusz" wymagane>
@@ -632,7 +632,7 @@ function KrokUniewaznienie({ dane, ustawDane, spolka }) {
             />
           </Pole>
 
-          <div className="fl" style={{ marginTop: 22 }}>Czyje akcje są unieważniane</div>
+          <div className="fl" style={{ marginTop: 24 }}>Czyje akcje są unieważniane</div>
           {pozycje.map((p, i) => (
             <div className="pozycja" key={i}>
               <Pole etykieta="Akcjonariusz" wymagane>
@@ -951,7 +951,7 @@ function KrokZmianaDanychAkcjonariusza({ dane, ustawDane }) {
       </Pole>
       {osoba && (
         <>
-          <div className="fl" style={{ marginTop: 22 }}>Nowe dane</div>
+          <div className="fl" style={{ marginTop: 24 }}>Nowe dane</div>
           <div className="siatka-2">
             {POLA.map(([klucz, etykieta]) => (
               <Pole key={klucz} etykieta={etykieta}>
@@ -1434,7 +1434,7 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawy
               );
               if (typyGrupy.length === 0) return null;
               return (
-                <div key={grupa} style={{ marginBottom: 22 }}>
+                <div key={grupa} style={{ marginBottom: 24 }}>
                   <div className="fl">{nazwaGrupy}</div>
                   <div className="kafelki-wyboru">
                     {typyGrupy.map((t) => (

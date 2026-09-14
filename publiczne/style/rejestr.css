@@ -348,11 +348,6 @@ body {
    cztery ekrany mieszczą się w belce tytułowej. Zostaje jedna kolumna. */
 .powloka-portal { grid-template-columns: minmax(0, 1fr); }
 
-@media (max-width: 900px) {
-  .powloka { grid-template-columns: minmax(0, 1fr); margin: 0; border-radius: 0; border: none; }
-  .szyna { display: none; }
-}
-
 .szyna {
   background: var(--karta);
   border-right: 1px solid var(--linia-2);
@@ -363,6 +358,17 @@ body {
   padding: var(--od-24) var(--od-12) var(--od-16);
   display: flex;
   flex-direction: column;
+}
+
+/* Wąski ekran: powłoka siada na krawędziach, a szyna znika na rzecz paska
+   nawigacji w topbarze (niżej, `.topbar-nawigacja`).
+
+   UWAGA NA KOLEJNOŚĆ: ten blok musi stać PO regule `.szyna` powyżej. Miał
+   tę samą specyficzność, a stał wcześniej — więc `display: flex` z reguły
+   bazowej wygrywało i na telefonie cała szyna lądowała nad treścią. */
+@media (max-width: 900px) {
+  .powloka { grid-template-columns: minmax(0, 1fr); margin: 0; border-radius: 0; border: none; }
+  .szyna { display: none; }
 }
 
 /* ── Pasek marki kancelarii: pierwsza linia na kazdym ekranie ──
@@ -482,6 +488,22 @@ body {
 .topbar-podtytul { font-size: var(--st-13); color: var(--atrament-2); margin-top: 2px; }
 .topbar-narzedzia { display: flex; align-items: center; gap: var(--od-8); flex-shrink: 0; }
 
+/* Wąski ekran: belka tytułowa układa się w pion, a przyciski zawijają się
+   zamiast uciekać poza prawą krawędź. Tytuł schodzi o jeden stopień skali —
+   „Rejestr akcjonariuszy P.S.A." krojem display w 28 px łamał się na
+   telefonie na trzy wiersze i spychał nawigację ze strony. */
+@media (max-width: 700px) {
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--od-12);
+    padding: var(--od-16);
+  }
+  .topbar-tytul { font-size: var(--st-20); }
+  .topbar-narzedzia { flex-wrap: wrap; }
+  .topbar .row-g { flex-wrap: wrap; }
+}
+
 .ikonka-btn {
   width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
@@ -537,8 +559,66 @@ body {
 }
 .uzytkownik-menu button:hover { background: var(--papier); color: var(--atrament); }
 
+/* Trzy liczby opisujące rejestr na ekranie startowym klienta. Nie kafle
+   z ramkami — same liczby na wspólnej linii bazowej, oddzielone światłem
+   i cienką kreską. Mniej pudełek, ten sam ładunek informacji. */
+.stan-skrot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--od-24) var(--od-40);
+  padding: var(--od-16) 0;
+  margin-bottom: var(--od-16);
+  border-top: 1px solid var(--linia-2);
+  border-bottom: 1px solid var(--linia-2);
+}
+.stan-skrot-poz { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stan-skrot-liczba {
+  font-family: var(--font-display);
+  font-size: var(--st-28);
+  line-height: 1.1;
+  color: var(--atrament);
+}
+.stan-skrot-opis { font-size: var(--st-11); color: var(--atrament-3); }
+
+/* Odstęp pod pojedynczą linijką danych — zamiast `style={{ marginBottom: 14 }}`
+   rozsypanego po komponentach. */
+.odstep-d { margin-bottom: var(--od-16); }
+
+/* Nawigacja zastępująca szynę na wąskim ekranie. Na szerokim nie istnieje —
+   `display: none` jest stanem domyślnym, a nie wyjątkiem, żeby nie migała
+   przy wczytywaniu strony na desktopie. */
+.topbar-nawigacja { display: none; }
+
+@media (max-width: 900px) {
+  .topbar-nawigacja {
+    display: flex;
+    gap: var(--od-4);
+    padding: var(--od-8) var(--od-16);
+    background: var(--karta);
+    border-bottom: 1px solid var(--linia-2);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .topbar-nawigacja::-webkit-scrollbar { display: none; }
+  .topbar-nawigacja-poz {
+    display: flex; align-items: center; gap: var(--od-8);
+    flex-shrink: 0;
+    padding: var(--od-8) var(--od-12);
+    background: none; border: none; border-radius: var(--r-sm);
+    font: inherit; font-size: var(--st-13); color: var(--atrament-2);
+    cursor: pointer; white-space: nowrap;
+  }
+  .topbar-nawigacja-poz.aktywna { background: var(--rejestr-tlo); color: var(--rejestr); font-weight: 600; }
+  .topbar-nawigacja-poz svg { flex-shrink: 0; }
+}
+
 .tresc { max-width: var(--tresc); margin-inline: auto; width: 100%; padding: var(--od-24) var(--od-40) var(--od-64); }
 .tresc-szeroka { max-width: none; }
+/* Wąska miara dla ekranów, które niosą jeden formularz albo jedną kartę.
+   Klasa była używana w portalu klienta od początku, ale nigdy nie została
+   zdefiniowana — formularz na trzy pola rozciągał się więc na 1240 px,
+   a wiersz tekstu nad nim miał ze sto znaków. */
+.tresc-waska { max-width: 760px; }
 
 /* Nagłówek strony wewnątrz treści (gdy topbar niesie tylko powitanie). */
 .naglowek-strony {
@@ -561,6 +641,9 @@ body {
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--od-8);
   padding: var(--od-8) var(--od-16);
+  /* Palec trafia pewnie dopiero w cel około 44 px wysokości; na myszy ta
+     wysokość niczego nie psuje, bo przycisk i tak ma tyle z padding + tekst. */
+  min-height: 38px;
   font-family: inherit; font-size: var(--st-13); font-weight: 500;
   color: var(--atrament);
   background: var(--karta);
@@ -585,8 +668,9 @@ body {
    zainteresowania), nie błąd ani odmowę. Używany wyłącznie na ekranie
    logowania portalu, obok zielonego „Zaloguj się" — nigdy jako sąsiad
    komunikatu o błędzie, więc znaczenia się nie mieszają. */
-.btn-akcent { background: var(--sygnal); border-color: var(--sygnal); color: var(--karta); box-shadow: var(--cien-s); }
-.btn-akcent:hover:not(:disabled) { background: #8A241D; border-color: #8A241D; }
+/* Przycisk na całą szerokość kolumny — dla dróg pobocznych, które mają być
+   widoczne, ale nie głośniejsze od akcji głównej. */
+.btn-pelny { width: 100%; justify-content: center; }
 .btn-duzy { padding: var(--od-12) var(--od-24); font-size: var(--st-15); border-radius: var(--r); }
 .btn-maly { padding: var(--od-4) var(--od-12); font-size: var(--st-11); }
 .btn-cichy { background: none; border-color: transparent; }
@@ -1190,10 +1274,14 @@ select {
 /* ─────────────────────────────────────────────────────
    UKŁADY POMOCNICZE
    ───────────────────────────────────────────────────── */
-.rzad { display: flex; align-items: center; gap: var(--od-8); }
+.rzad { display: flex; align-items: center; gap: var(--od-8); flex-wrap: wrap; }
 .rzad-rozdzielony { display: flex; align-items: center; justify-content: space-between; gap: var(--od-12); }
 .pion { display: flex; flex-direction: column; }
 .siatka-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--od-16); }
+/* Pole w siatce nie dokłada własnego marginesu do odstępu siatki — inaczej
+   wiersze formularza stały 32 px od siebie, a kolumny 16 px, i rytm pionowy
+   rozjeżdżał się z poziomym. Odstęp robi wyłącznie `gap`. */
+.siatka-2 > .pole { margin-bottom: 0; }
 /* Główna kolumna + prawa szyna (pulpit, kokpit) */
 .siatka-tresc { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--od-16); align-items: start; }
 .siatka-tresc-prawa { position: sticky; top: var(--od-24); display: flex; flex-direction: column; gap: var(--od-16); }
@@ -1403,55 +1491,72 @@ select {
    ───────────────────────────────────────────────────── */
 .stopka {
   margin-top: auto;
+  background: var(--papier-2);
   border-top: 1px solid var(--linia);
-  background: var(--karta);
   color: var(--atrament-2);
   font-size: var(--st-13);
-  line-height: 1.5;
+  line-height: 1.55;
 }
-/* Treść stopki trzyma się tej samej osi, co treść strony nad nią. */
-.stopka-srodek {
+
+/* Trzy kolumny na tej samej osi, co treść nad stopką: kto prowadzi rejestr,
+   jak się z nim skontaktować, na jakiej podstawie to działa. Kolumna marki
+   jest szersza, bo niesie nazwę krojem display i znak notariatu. */
+.stopka-siatka {
   max-width: var(--tresc);
   margin-inline: auto;
-  padding: var(--od-24) var(--od-40) var(--od-16);
-  display: flex; flex-wrap: wrap; align-items: flex-start;
-  justify-content: space-between; gap: var(--od-16) var(--od-40);
+  padding: var(--od-40) var(--od-40) var(--od-24);
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1.2fr;
+  gap: var(--od-40);
+  align-items: start;
 }
-.stopka-marka { display: flex; align-items: center; gap: var(--od-16); min-width: 0; }
-.stopka-marka-tekst { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stopka-kolumna { display: flex; flex-direction: column; gap: var(--od-8); min-width: 0; }
 
-/* Szerokość, nie wysokość — i dokładnie ćwierć oryginału (498 px), bo
-   całkowity stosunek pomniejszenia rysuje ostre krawędzie. Przy skalowaniu
-   wysokością do 56 px znak schodził do 127 px (3,92 : 1) i drugi wiersz
-   napisu zlewał się w plamę. */
-.stopka-znak { width: 124px; height: auto; flex-shrink: 0; }
-
+/* Nagłówek kolumny: najcichszy stopień, wersaliki, światło międzyliterowe —
+   ma dzielić stopkę na trzy, nie konkurować z treścią. */
+.stopka-tytul {
+  font-size: var(--st-11);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--atrament-3);
+  margin-bottom: var(--od-4);
+}
 .stopka-nazwa {
   font-family: var(--font-display);
   font-size: var(--st-20);
   line-height: 1.2;
   color: var(--atrament);
 }
+.stopka-adres { color: var(--atrament-2); }
+.stopka-tresc { color: var(--atrament-2); }
+.stopka-tresc a { color: var(--rejestr); text-decoration: none; }
+.stopka-tresc a:hover { text-decoration: underline; }
 
-/* Jedna pozycja z ikoną: adres, e-mail, telefon, strona. */
+/* Szerokość, nie wysokość — i dokładnie ćwierć oryginału (498 px), bo
+   całkowity stosunek pomniejszenia rysuje ostre krawędzie. */
+.stopka-znak { width: 124px; height: auto; margin-top: var(--od-8); opacity: 0.92; }
+
+/* Jedna pozycja z ikoną: e-mail, telefon, strona. */
 .stopka-poz {
   display: flex; align-items: center; gap: var(--od-8);
   color: inherit; text-decoration: none;
   overflow-wrap: anywhere;
+  /* Cel kliknięcia, nie sam tekst — na telefonie w trzy wiersze po 20 px
+     trudno trafić palcem. */
+  padding-block: 2px;
 }
 .stopka-poz svg { flex-shrink: 0; color: var(--atrament-3); }
 a.stopka-poz:hover { color: var(--rejestr); }
 a.stopka-poz:hover svg { color: var(--rejestr); }
 a.stopka-poz:hover span { text-decoration: underline; }
 
-.stopka-kontakt { display: flex; flex-direction: column; gap: var(--od-4); min-width: 0; }
-
-/* Pasek dolny: nota o prawach i zasady. Najcichszy stopień pisma w całej
-   stopce — to przypis, nie treść. */
+/* Pasek dolny: nota o prawach i zasady. Najcichszy stopień w całej stopce —
+   to przypis, nie treść. */
 .stopka-dol {
   max-width: var(--tresc);
   margin-inline: auto;
-  padding: var(--od-8) var(--od-40) var(--od-16);
+  padding: var(--od-12) var(--od-40) var(--od-24);
   border-top: 1px solid var(--linia-2);
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--od-4) var(--od-24);
   font-size: var(--st-11);
@@ -1461,9 +1566,16 @@ a.stopka-poz:hover span { text-decoration: underline; }
 .stopka-dol-linki a { color: inherit; text-decoration: none; }
 .stopka-dol-linki a:hover { color: var(--rejestr); text-decoration: underline; }
 
-@media (max-width: 700px) {
-  .stopka-srodek { padding: var(--od-24) var(--od-24) var(--od-16); }
-  .stopka-dol { padding: var(--od-8) var(--od-24) var(--od-16); }
+@media (max-width: 900px) {
+  .stopka-siatka { grid-template-columns: 1fr 1fr; gap: var(--od-24); }
+  .stopka-kolumna-marka { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .stopka-siatka {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--od-24) var(--od-16) var(--od-16);
+  }
+  .stopka-dol { padding: var(--od-12) var(--od-16) var(--od-24); }
 }
 
 /* ─────────────────────────────────────────────────────

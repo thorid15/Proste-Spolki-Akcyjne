@@ -187,7 +187,7 @@ function PodgladNaglowka({ pola }) {
       <div style={{ textAlign: 'center', fontWeight: 600 }}>
         {w('nazwa') || brak('(nazwa kancelarii)')}
       </div>
-      <div style={{ textAlign: 'center', marginTop: 6 }}>
+      <div style={{ textAlign: 'center', marginTop: 8 }}>
         {adres || brak('(adres kancelarii)')}
       </div>
       <div style={{ textAlign: 'center', marginTop: 2 }}>

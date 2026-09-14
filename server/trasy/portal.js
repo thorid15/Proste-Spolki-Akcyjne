@@ -1022,7 +1022,32 @@ router.get(
 
     if (konto.rola === 'spolka') {
       const spolka = rejestr.wczytajSpolke(db(), konto.spolka_id);
-      return odp.json({ rola: 'spolka', spolki: spolka ? [{ ...spolka, uwagi: undefined }] : [] });
+      if (!spolka) return odp.json({ rola: 'spolka', spolki: [] });
+
+      // Trzy liczby, po ktore klient i tak wchodzil do podgladu rejestru:
+      // ilu ma akcjonariuszy, ile akcji jest w obrocie i kiedy ostatnio cos
+      // sie zmienilo. Bez nich ekran startowy pokazywal sama nazwe spolki.
+      const stan = db()
+        .prepare(
+          `SELECT COUNT(DISTINCT osoba_id) AS akcjonariuszy, COALESCE(SUM(ilosc), 0) AS akcji
+             FROM psa_stan_akcji
+            WHERE spolka_id = ? AND data_do IS NULL AND kategoria = 'akcjonariusz'`
+        )
+        .get(spolka.id);
+      const ostatnie = db()
+        .prepare('SELECT MAX(data_zdarzenia) AS data FROM psa_zdarzenia WHERE spolka_id = ?')
+        .get(spolka.id);
+
+      return odp.json({
+        rola: 'spolka',
+        spolki: [{
+          ...spolka,
+          uwagi: undefined,
+          akcjonariuszy: stan.akcjonariuszy,
+          razem_akcji: stan.akcji,
+          ostatnie_zdarzenie: ostatnie.data || null,
+        }],
+      });
     }
 
     // Wnioskodawca nie ma jeszcze ani spolki, ani akcji - jego "Moje spolki"

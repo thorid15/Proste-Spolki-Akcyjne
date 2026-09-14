@@ -199,9 +199,9 @@ function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
       <div style={{ padding: '18px 24px' }}>
         <Komunikat odmiana="blad" tresc={blad} />
         {dokumenty.length === 0 ? (
-          <div className="przyciemnione" style={{ marginBottom: 14 }}>Brak wgranych dokumentów.</div>
+          <div className="przyciemnione" style={{ marginBottom: 16 }}>Brak wgranych dokumentów.</div>
         ) : (
-          <table className="tbl" style={{ marginBottom: 14 }}>
+          <table className="tbl" style={{ marginBottom: 16 }}>
             <thead><tr><th>Plik</th><th>Typ</th><th>Wgrał</th><th>Data</th></tr></thead>
             <tbody>
               {dokumenty.map((d) => (
@@ -786,7 +786,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
             {zadajacy ? ` · żądający: ${zadajacy.oznaczenie}` : ''}
             {sprawa.zadajacy_rola ? ` (${OPISY_ROL_ZADAJACEGO[sprawa.zadajacy_rola] || sprawa.zadajacy_rola})` : ''}
           </div>
-          <div className="row-g" style={{ marginTop: 10 }}>
+          <div className="row-g" style={{ marginTop: 8 }}>
             <Znacznik odmiana={ODMIANY_STANU_SPRAWY[sprawa.stan]}>{NAZWY_STANU_SPRAWY[sprawa.stan]}</Znacznik>
             {!zakonczona && !wlasnieWpisano && <ZnacznikTerminu termin={sprawa.termin} />}
           </div>

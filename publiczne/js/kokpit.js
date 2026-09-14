@@ -984,7 +984,7 @@ function EkranKokpitu({ spolkaId }) {
             </div>
           </Sekcja>
 
-          <div className="podstawa-prawna" style={{ marginTop: 18 }}>
+          <div className="podstawa-prawna" style={{ marginTop: 16 }}>
             Rejestru nie da się edytować ani skasować. Pomyłkę prostuje się zdarzeniem
             „sprostowanie”, które wskazuje zdarzenie prostowane — oba pozostają w łańcuchu.
           </div>

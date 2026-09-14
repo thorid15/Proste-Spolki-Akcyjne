@@ -172,11 +172,13 @@ function EkranLoginPortal({ przyZalogowaniu }) {
 
       <div className="brama-stopka">
         Dostęp zakłada kancelaria po weryfikacji tożsamości — nie ma tu samodzielnej rejestracji.
+        {/* Droga poboczna, nie główna: czerwień jest w tym systemie zarezerwowana
+            dla odmowy i rzeczy nieodwracalnych, a ten przycisk krzyczał głośniej
+            niż „Zaloguj się", czyli to, po co ludzie tu przychodzą. */}
         <button
           type="button"
-          className="btn btn-akcent btn-duzy"
+          className="btn btn-pelny"
           onClick={() => idz('/zglos-sie')}
-          style={{ width: '100%' }}
         >
           Nie mam konta — zgłaszam zainteresowanie
         </button>
@@ -384,7 +386,7 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
 
   return (
     <Karta tytul="Informacja o przetwarzaniu danych osobowych">
-      <div className="pion" style={{ gap: 14 }}>
+      <div className="pion" style={{ gap: 16 }}>
         <p>
           Zanim przejdziesz do wypełnienia wniosku o prowadzenie rejestru akcjonariuszy, zapoznaj się
           z poniższą informacją.
@@ -594,7 +596,7 @@ function StanWniosku({ wniosek }) {
   return (
     <div className="pion" style={{ gap: 16 }}>
       <Karta tytul={wniosek.nazwa || 'Wniosek o prowadzenie rejestru'}>
-        {wniosek.krs && <div className="podpowiedz" style={{ marginBottom: 14 }}>KRS {wniosek.krs}</div>}
+        {wniosek.krs && <div className="podpowiedz" style={{ marginBottom: 16 }}>KRS {wniosek.krs}</div>}
         <Komunikat odmiana={stan.odmiana} tytul={stan.tytul} tresc={stan.tresc} />
         {stan.doFormularza && (
           <button className="btn btn-glowny" onClick={() => idz('/wniosek')}>
@@ -630,7 +632,7 @@ function EkranMoje() {
         return (
           <Karta key={spolkaId} tytul={nazwa}>
             {dane.rola === 'akcjonariusz' && (
-              <div className="pion" style={{ gap: 6, marginBottom: 14 }}>
+              <div className="pion" style={{ gap: 8, marginBottom: 16 }}>
                 <div className="podpowiedz">Posiadane akcje — razem {fmt.liczba(s.razem_akcji)}</div>
                 {s.pozycje.map((p, i) => (
                   <div key={i} className="row-b">
@@ -641,9 +643,34 @@ function EkranMoje() {
                 ))}
               </div>
             )}
-            {s.krs && <div className="podpowiedz" style={{ marginBottom: 14 }}>KRS {s.krs}</div>}
+            {s.krs && <div className="podpowiedz odstep-d">KRS {s.krs}</div>}
+
+            {/* Stan rejestru na wejściu — po te trzy liczby klient i tak
+                wchodził do podglądu. Widok domowy, który pokazuje samą nazwę
+                spółki, nie mówi nic o tym, po co się tu przyszło. */}
+            {dane.rola === 'spolka' && (
+              <div className="stan-skrot">
+                <div className="stan-skrot-poz">
+                  <span className="stan-skrot-liczba">{fmt.liczba(s.akcjonariuszy || 0)}</span>
+                  <span className="stan-skrot-opis">
+                    {s.akcjonariuszy === 1 ? 'akcjonariusz' : 'akcjonariuszy'}
+                  </span>
+                </div>
+                <div className="stan-skrot-poz">
+                  <span className="stan-skrot-liczba">{fmt.liczba(s.razem_akcji || 0)}</span>
+                  <span className="stan-skrot-opis">akcji w obrocie</span>
+                </div>
+                <div className="stan-skrot-poz">
+                  <span className="stan-skrot-liczba">
+                    {s.ostatnie_zdarzenie ? fmt.data(s.ostatnie_zdarzenie) : '—'}
+                  </span>
+                  <span className="stan-skrot-opis">ostatnia zmiana</span>
+                </div>
+              </div>
+            )}
+
             <div className="row-g">
-              <button className="btn" onClick={() => idz(`/rejestr/${spolkaId}`)}>Podgląd rejestru</button>
+              <button className="btn btn-glowny" onClick={() => idz(`/rejestr/${spolkaId}`)}>Zobacz rejestr</button>
               <button className="btn" onClick={() => idz(`/zgloszenie/${spolkaId}`)}>Zgłoś zmianę</button>
               <button className="btn" onClick={() => idz(`/informacja/${spolkaId}`)}>Informacja z rejestru</button>
             </div>
@@ -990,7 +1017,7 @@ function EkranInformacjaPortal({ spolkaId }) {
     <div className="pion" style={{ gap: 16 }}>
       <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
       <Karta tytul="Informacja z rejestru" >
-        <div className="podstawa-prawna" style={{ marginBottom: 14 }}>
+        <div className="podstawa-prawna" style={{ marginBottom: 16 }}>
           Art. 300(35) Kodeksu spółek handlowych — informacja z rejestru akcjonariuszy na wskazany dzień,
           w zakresie odpowiadającym roli konta.
         </div>
@@ -1119,7 +1146,9 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
 
   // Te same proporcje treści co w aplikacji kancelaryjnej (faza 3.2/3.3):
   // formularze (zgłoszenie, informacja) węższe niż listy/rejestr.
-  const waski = segmenty[0] === 'zgloszenie' || segmenty[0] === 'informacja';
+  // Wąska miara tam, gdzie ekran niesie jedną kartę albo jeden formularz.
+  // Podgląd rejestru i lista zgłoszeń zostają szerokie — mają tabele.
+  const waski = ['zgloszenie', 'informacja', undefined].includes(segmenty[0]);
 
   return (
     <PortalLayout

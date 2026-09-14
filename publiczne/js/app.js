@@ -58,7 +58,35 @@ const OPIS_LICZNIKA = {
   sprawy: 'spraw w toku',
 };
 
-function Szyna({ sciezka, uzytkownik, kancelaria, podgladSystemu, liczniki }) {
+/**
+ * Nawigacja na wąskim ekranie: szyna się chowa, więc zostaje jeden rząd
+ * ikon pod belką tytułową. Tylko pozycje z grupy „Praca" — konfiguracja
+ * i rozliczenia to robota przy biurku, nie z telefonu.
+ */
+function NawigacjaWaska({ sciezka, liczniki }) {
+  const pozycje = (MENU.find((g) => g.grupa === 'Praca') || { pozycje: [] }).pozycje;
+  const aktywna = (poz) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
+
+  return (
+    <nav className="topbar-nawigacja bez-druku">
+      {pozycje.map((poz) => (
+        <button
+          key={poz.sciezka}
+          className={`topbar-nawigacja-poz ${aktywna(poz) ? 'aktywna' : ''}`}
+          onClick={() => idz(poz.sciezka)}
+        >
+          <Ikona nazwa={poz.ikona} rozmiar={17} />
+          <span>{poz.nazwa}</span>
+          {poz.licznik && liczniki[poz.licznik] > 0 && (
+            <span className="szyna-licznik">{liczniki[poz.licznik]}</span>
+          )}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function Szyna({ sciezka, uzytkownik, podgladSystemu, liczniki }) {
   const aktywna = (poz) =>
     poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka);
 
@@ -99,13 +127,6 @@ function Szyna({ sciezka, uzytkownik, kancelaria, podgladSystemu, liczniki }) {
         </div>
       ))}
 
-      <div className="szyna-pomoc">
-        <div className="szyna-pomoc-tytul">Podstawa prawna</div>
-        <div className="szyna-pomoc-tresc">
-          {kancelaria ? kancelaria.nazwa : 'Kancelaria notarialna'} prowadzi rejestr
-          na podstawie art. 300³¹ § 1 KSH.
-        </div>
-      </div>
     </nav>
   );
 }
@@ -336,7 +357,6 @@ function Aplikacja() {
       <Szyna
         sciezka={sciezka}
         uzytkownik={sesja.uzytkownik}
-        kancelaria={kancelaria}
         podgladSystemu={podgladSystemu}
         liczniki={liczniki}
       />
@@ -349,6 +369,7 @@ function Aplikacja() {
           przyPalecie={paleta.otworz}
           liczbaSpraw={liczbaSpraw}
         />
+        <NawigacjaWaska sciezka={sciezka} liczniki={liczniki} />
         <main className="tresc">{ekran()}</main>
         <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
       </div>

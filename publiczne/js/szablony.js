@@ -15,7 +15,7 @@ function ListaKluczy({ szablon }) {
   return (
     <div className="odstep-g">
       <div className="fl">Klucze użyte w tym wzorze</div>
-      <div className="row-g" style={{ flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+      <div className="row-g" style={{ flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
         {szablon.sekcje.map((k) => (
           <Pigulka key={`s-${k}`} odmiana="mosiadz">{k} (sekcja)</Pigulka>
         ))}
@@ -148,7 +148,7 @@ function DostepneKlucze() {
             Pełny słownik, niezależnie od tego, czego dziś używa który wzór — do sprawdzenia
             PRZED redakcją pisma w Wordzie.
           </div>
-          <div className="row-g" style={{ flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          <div className="row-g" style={{ flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
             {dane.sekcje.map((k) => (
               <Pigulka key={`s-${k}`} odmiana="mosiadz">{k} (sekcja)</Pigulka>
             ))}

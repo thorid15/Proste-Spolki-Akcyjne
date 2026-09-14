@@ -1342,8 +1342,13 @@ function StopkaKancelarii({ kancelaria }) {
 
   return (
     <footer className="stopka bez-druku">
-      <div className="stopka-srodek">
-        <div className="stopka-marka">
+      <div className="stopka-siatka">
+        {/* Kolumna 1 — kto prowadzi rejestr. Znak notariatu jest tu
+            legitymacją, nie logotypem produktu, więc stoi przy nazwie
+            kancelarii, a nie nad całą stopką. */}
+        <div className="stopka-kolumna stopka-kolumna-marka">
+          <div className="stopka-nazwa">{k.nazwa}</div>
+          {adres && <div className="stopka-adres">{adres}</div>}
           {!znakNieudany && (
             <img
               className="stopka-znak"
@@ -1354,21 +1359,11 @@ function StopkaKancelarii({ kancelaria }) {
               onError={() => ustawZnakNieudany(true)}
             />
           )}
-          <div className="stopka-marka-tekst">
-            <div className="stopka-nazwa">{k.nazwa}</div>
-            {adres && (
-              <div className="stopka-poz">
-                <Ikona nazwa="pinezka" rozmiar={14} />
-                <span>{adres}</span>
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Ikona przy każdym adresie: trzy wiersze jednym krojem i jednym
-            stopniem czytają się jak lista, a nie jak trzy różne informacje —
-            kształt rozróżnia je szybciej niż sama treść. */}
-        <div className="stopka-kontakt">
+        {/* Kolumna 2 — jak się skontaktować. */}
+        <div className="stopka-kolumna">
+          <div className="stopka-tytul">Kontakt</div>
           {k.email && (
             <a className="stopka-poz" href={`mailto:${k.email}`}>
               <Ikona nazwa="koperta" rozmiar={14} />
@@ -1387,6 +1382,21 @@ function StopkaKancelarii({ kancelaria }) {
               <span>{skrocAdresWww(link)}</span>
             </a>
           )}
+        </div>
+
+        {/* Kolumna 3 — na jakiej podstawie to działa i czyje to dane.
+            Pierwsze zdanie stało dotąd w szynie aplikacji kancelaryjnej,
+            gdzie klient go nie widział, a to jego dotyczy najbardziej. */}
+        <div className="stopka-kolumna">
+          <div className="stopka-tytul">Rejestr akcjonariuszy</div>
+          <p className="stopka-tresc">
+            Rejestr prowadzi {k.nazwa || 'kancelaria notarialna'} — art. 300³¹ § 1
+            Kodeksu spółek handlowych.
+          </p>
+          <p className="stopka-tresc">
+            Administratorem danych osobowych w rejestrze jest kancelaria —
+            szczegóły w <a href="#/polityka-prywatnosci">polityce prywatności</a>.
+          </p>
         </div>
       </div>
 

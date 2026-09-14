@@ -220,25 +220,14 @@ function EkranPulpitu() {
           <Karta tytul="Szybkie akcje">
             <SzybkieAkcje
               akcje={[
+                /* Tylko to, czego NIE MA w szynie obok. „Przejdź do kolejki
+                   spraw" i „Nalicz opłaty" prowadziły dokładnie tam, gdzie
+                   pozycje nawigacji dwa centymetry w lewo. */
                 { nazwa: 'Dodaj spółkę', ikona: 'spolki', przyKlik: () => idz('/spolki/nowa') },
                 { nazwa: 'Dodaj osobę do kartoteki', ikona: 'osoby', przyKlik: () => idz('/osoby') },
-                { nazwa: 'Przejdź do kolejki spraw', ikona: 'sprawy', przyKlik: () => idz('/sprawy') },
-                { nazwa: 'Nalicz opłaty', ikona: 'oplaty', przyKlik: () => idz('/oplaty') },
               ]}
             />
           </Karta>
-
-          <div className="karta-akcent">
-            <div className="karta-akcent-tytul">Rejestru nie da się cofnąć</div>
-            <div className="karta-akcent-tresc">
-              Każde zdarzenie niesie skrót poprzedniego. Zmiana wpisu wstecz jest
-              niemożliwa bez przepisania całej historii — to realizacja obowiązku
-              zapewnienia integralności z art. 300³¹ § 4 KSH.
-            </div>
-            <button className="btn btn-maly" onClick={() => idz('/spolki')}>
-              Zobacz rejestry
-            </button>
-          </div>
 
           {wToku.length > 0 && (
             <Karta tytul="Terminy">
