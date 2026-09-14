@@ -147,7 +147,7 @@ pracownika, żeby ich użył. Propozycja: w kolejce sekcja **„Bez ruchu od
 X dni"** i przy każdej sprawie dwa przyciski kończące — „Odmów wpisu"
 (z uzasadnieniem, art. 300³⁴ § 5 KSH) i „Anuluj".
 
-### 3.3. Kroje pisma lecą z serwerów Google
+### 3.3. Kroje pisma lecą z serwerów Google — ZROBIONE
 
 `publiczne/index.html` ładuje EB Garamond, Inter Tight i IBM Plex Mono
 z `fonts.googleapis.com`. Przy każdym wejściu do rejestru **adres IP klienta
@@ -156,6 +156,9 @@ to zbędne ryzyko RODO, które audytor zewnętrzny na pewno podniesie (w Niemcze
 zapadły w tej sprawie wyroki cywilne). Kroje mają licencje pozwalające je
 hostować u siebie; po przeniesieniu znikają też dwa wyjątki z CSP, a aplikacja
 zaczyna działać bez internetu.
+
+**Wykonane** (commit `42c6f02`): 18 plików `.woff2` w `publiczne/fonty/`,
+`@font-face` w `rejestr.css`, CSP zwężone do `'self'`.
 
 ### 3.4. Kompilacja JSX w przeglądarce
 
@@ -174,7 +177,7 @@ się tylko moment. Potem CSP schodzi do `script-src 'self'`.
 
 ## 4. Uproszczenia — portal klienta
 
-### 4.1. „Zgłoś zmianę" prosi o wypracowanie, a nie o dane
+### 4.1. „Zgłoś zmianę" prosi o wypracowanie, a nie o dane — PROPOZYCJA WYCOFANA
 
 Dziś: klient wybiera typ zdarzenia z listy, pisze **własnymi słowami**, co się
 stało, i załącza skan. Pracownik czyta, zakłada sprawę i przepisuje do
@@ -193,8 +196,11 @@ Technicznie jest to już przygotowane: `psa_sprawy` ma kolumnę
 (`?typ=...`). Brakuje formularza po stronie portalu i wczytania tych danych
 w kroku „Co się zmienia".
 
-To jest **największa pojedyncza oszczędność czasu pracownika** w całej
-aplikacji i jednocześnie mniej miejsc, w których dane można przepisać źle.
+**Wycofane po przeglądzie notariusza.** Wpisu dokonuje się na podstawie
+dokumentu, nie na podstawie tego, co klient wpisał w formularzu
+(art. 300³⁴ § 4 KSH) — formularz tworzyłby drugie źródło prawdy obok umowy.
+Zamiast tego: lista dokumentów wymaganych dla danego typu zdarzenia, którą
+klient ma dołączyć. Szczegóły w `PLAN-POPRAWEK-3.md`, punkt 1.2.
 
 ### 4.2. Ekran startowy klienta nic nie mówi
 
@@ -377,7 +383,7 @@ Zrobione w tej sesji:
 
 Do zrobienia przed oddaniem:
 
-- [ ] **kroje pisma na własnym serwerze** (RODO — 3.3)
+- [x] **kroje pisma na własnym serwerze** (RODO — 3.3) — zrobione, commit `42c6f02`
 - [ ] **kompilacja JSX przy starcie serwera**, potem CSP bez `unsafe-eval`
       i bez `unsafe-inline` (3.4)
 - [ ] **drugi składnik logowania (TOTP) dla pracowników kancelarii** — konto
