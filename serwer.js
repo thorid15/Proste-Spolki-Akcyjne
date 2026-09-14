@@ -41,13 +41,11 @@ aplikacja.use(express.json({ limit: '1mb' }));
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-  // fonts.googleapis/gstatic sa tu WYLACZNIE dlatego, ze kroje lece
-  // z CDN Google. To jednoczesnie wyciek adresu IP kazdego klienta do
-  // Google przy kazdym wejsciu — kroje nalezy przeniesc na wlasny serwer
-  // i te dwa wpisy skasowac (patrz AUDYT.md).
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
-  "font-src 'self' data: https://fonts.gstatic.com",
+  // Kroje pisma leza w `publiczne/fonty` — zaden cudzy serwer nie jest
+  // potrzebny i zaden adres IP klienta nigdzie nie wycieka.
+  "font-src 'self'",
   "connect-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
