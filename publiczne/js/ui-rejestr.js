@@ -1331,7 +1331,12 @@ function skrocAdresWww(url) {
 function StopkaKancelarii({ kancelaria }) {
   const [znakNieudany, ustawZnakNieudany] = useState(false);
   const k = kancelaria || {};
-  const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
+  // `adres` z ustawień niesie już miejscowość (ulica, kod miasto), a pole
+  // `miejscowosc` istnieje osobno dla pism. Dopisywanie go tutaj dawało
+  // „…80-280 Gdańsk, Gdańsk".
+  const adres = k.adres && k.miejscowosc && k.adres.includes(k.miejscowosc)
+    ? k.adres
+    : [k.adres, k.miejscowosc].filter(Boolean).join(', ');
   const link = k.www_psa || k.www;
   const rok = new Date().getFullYear();
 

@@ -42,6 +42,7 @@ const dokumentyTresc = require('../logika/dokumenty-tresc');
 const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('../logika/ustawienia');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien } = require('../pomocnicze/odpowiedzi');
@@ -1215,7 +1216,7 @@ router.post(
     if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
 
     const trescHtml = informacjaDokument.informacjaZRejestru({
-      kancelaria: konfiguracja.KANCELARIA,
+      kancelaria: ustawienia.kancelaria(db()),
       spolka: stan.spolka,
       data,
       stan,

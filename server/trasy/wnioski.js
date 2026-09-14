@@ -28,6 +28,7 @@ const express = require('express');
 const { db } = require('../baza');
 const czas = require('../pomocnicze/czas');
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('../logika/ustawienia');
 const pliki = require('../pomocnicze/pliki');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 const { pobierzZKrs } = require('./krs');
@@ -338,12 +339,12 @@ router.post(
 
     const proba = await poczta.wyslij({
       do: wniosek.reprezentant_email || wniosek.konto_email,
-      temat: `Dokumenty do podpisu — ${konfiguracja.KANCELARIA.nazwa}`,
+      temat: `Dokumenty do podpisu — ${ustawienia.kancelaria(db()).nazwa}`,
       html: trescPowiadomieniaODokumentach({
         nazwaSpolki: wniosek.nazwa,
         ile: poUdostepnieniu.length,
         link: konfiguracja.URL_PORTALU,
-        kancelariaNazwa: konfiguracja.KANCELARIA.nazwa,
+        kancelariaNazwa: ustawienia.kancelaria(db()).nazwa,
       }),
     });
 

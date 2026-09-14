@@ -40,6 +40,7 @@ const MENU = [
   {
     grupa: 'Konfiguracja',
     pozycje: [
+      { sciezka: '/konfiguracja/kancelaria', nazwa: 'Dane kancelarii', ikona: 'znak' },
       { sciezka: '/konfiguracja/stawki', nazwa: 'Stawki i terminy', ikona: 'stawki' },
       { sciezka: '/konfiguracja/szablony', nazwa: 'Szablony dokumentów', ikona: 'szablony', admin: true },
       { sciezka: '/konfiguracja/uzytkownicy', nazwa: 'Użytkownicy', ikona: 'uzytkownicy', admin: true },
@@ -214,7 +215,7 @@ function opisTrasy(segmenty) {
     zgloszenia: { tytul: 'Zgłoszenia', podtytul: 'Pierwszy kontakt z publicznego formularza portalu — do oceny przed wysłaniem zaproszenia.' },
     wnioski: { tytul: 'Wnioski', podtytul: 'Wnioski o prowadzenie rejestru złożone przez portal klienta — porównanie z KRS i akceptacja.' },
     oplaty: { tytul: 'Opłaty', podtytul: 'Naliczenia za czynności rejestrowe i prowadzenie rejestru.' },
-    konfiguracja: { tytul: 'Konfiguracja', podtytul: 'Stawki, terminy, szablony dokumentów i użytkownicy modułu.' },
+    konfiguracja: { tytul: 'Konfiguracja', podtytul: 'Dane kancelarii, stawki, terminy, szablony dokumentów i użytkownicy modułu.' },
   };
   return wg[segmenty[0]] || { tytul: 'Rejestr akcjonariuszy', podtytul: null };
 }
@@ -294,6 +295,7 @@ function Aplikacja() {
       return <EkranWniosekSzczegoly wniosekId={id} />;
     }
     if (segmenty[0] === 'oplaty') return <EkranOplat />;
+    if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'kancelaria') return <EkranDaneKancelarii />;
     if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'stawki') return <EkranStawek />;
     if (segmenty[0] === 'konfiguracja' && segmenty[1] === 'szablony') {
       return sesja.uzytkownik.rola === 'admin' ? <EkranSzablonow /> : <NieZnaleziono />;

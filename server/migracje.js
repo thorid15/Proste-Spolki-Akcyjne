@@ -1641,6 +1641,30 @@ const MIGRACJE = [
       ALTER TABLE psa_wnioski_dokumenty ADD COLUMN sprawdzil TEXT;
     `,
   },
+  {
+    wersja: 39,
+    nazwa: 'ustawienia kancelarii w bazie (metryka, stawki) zamiast wylacznie .env',
+    sql: `
+      -- ── Ustawienia edytowalne z aplikacji ───────────────────────────────
+      -- Dotad dane kancelarii (NIP, REGON, adres) siedzialy WYLACZNIE w .env,
+      -- wiec zmiana wymagala dostepu do serwera i restartu. W praktyce nikt
+      -- tego nie robil i kazda wystawiona umowa miala w tych miejscach kreski.
+      --
+      -- Tabela trzyma TYLKO to, co ktos swiadomie ustawil. Brak klucza nie
+      -- jest bledem: obowiazuje wtedy wartosc z .env. Dzieki temu nie ma
+      -- momentu "przenoszenia danych" ani ryzyka, ze kopia w bazie rozjedzie
+      -- sie z plikiem konfiguracyjnym.
+      --
+      -- Czego tu NIE MA i nie bedzie: sekretow. Klucze tpay, sekret sesji
+      -- i dane SMTP zostaja w .env, bo baza trafia do kopii zapasowych.
+      CREATE TABLE IF NOT EXISTS psa_ustawienia (
+        klucz           TEXT PRIMARY KEY,
+        wartosc         TEXT,
+        zaktualizowano  TEXT NOT NULL,
+        autor           TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

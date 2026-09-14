@@ -16,6 +16,7 @@ const express = require('express');
 const { db } = require('../baza');
 const poczta = require('../poczta');
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('../logika/ustawienia');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 
@@ -130,8 +131,8 @@ router.post(
     const link = `${konfiguracja.URL_PORTALU}#/aktywuj/${token}`;
     const proba = await poczta.wyslij({
       do: zgloszenie.email,
-      temat: `Zaproszenie do portalu — ${konfiguracja.KANCELARIA.nazwa}`,
-      html: trescZaproszenia({ link, kancelariaNazwa: konfiguracja.KANCELARIA.nazwa }),
+      temat: `Zaproszenie do portalu — ${ustawienia.kancelaria(db()).nazwa}`,
+      html: trescZaproszenia({ link, kancelariaNazwa: ustawienia.kancelaria(db()).nazwa }),
     });
 
     db()

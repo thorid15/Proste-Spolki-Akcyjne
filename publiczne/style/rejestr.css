@@ -1260,6 +1260,13 @@ select {
    emisyjna) uciekała poza kartę. Tabela przewija się w poziomie sama,
    reszta strony nie. */
 .sekcja-tresc { overflow-x: auto; }
+/* Puste miejsce w podglądzie nagłówka umowy — to samo, co w dokumencie
+   wyjdzie kreską, więc ma kłuć w oczy zanim dokument powstanie. */
+.podglad-brak {
+  color: var(--sygnal);
+  font-style: italic;
+}
+
 .dalsze-wpisy {
   display: flex;
   align-items: center;

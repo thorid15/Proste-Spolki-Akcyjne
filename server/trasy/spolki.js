@@ -21,6 +21,7 @@ const kontekstPisma = require('../logika/kontekst-pisma');
 const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('../logika/ustawienia');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
@@ -532,7 +533,7 @@ router.get(
       : (rola === przepisy.ROLE_ODBIORCY.ORGAN && zad.query.organ ? String(zad.query.organ) : null);
 
     odp.type('text/html').send(informacjaDokument.informacjaZRejestru({
-      kancelaria: konfiguracja.KANCELARIA,
+      kancelaria: ustawienia.kancelaria(db()),
       spolka: stan.spolka,
       data,
       stan,

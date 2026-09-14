@@ -28,6 +28,7 @@ const path = require('node:path');
 
 const { db } = require('../baza');
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('./ustawienia');
 const czas = require('../pomocnicze/czas');
 const dokumentyWniosku = require('./dokumenty-wniosku');
 const bloki = require('./bloki-dokumentu');
@@ -227,7 +228,7 @@ async function zapiszTresc(wniosekId, dokumentId, noweBloki, autor) {
   const znormalizowane = bloki.znormalizuj(noweBloki);
   const plik = await bloki.doPdf(znormalizowane, {
     tytul: dokumentyWniosku.NAZWY[wiersz.typ] || wiersz.nazwa,
-    autor: konfiguracja.KANCELARIA.nazwa,
+    autor: ustawienia.kancelaria(db()).nazwa,
   });
 
   const sciezka = zapiszPlik(wniosekId, plik);

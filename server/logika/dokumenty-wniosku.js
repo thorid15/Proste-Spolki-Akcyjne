@@ -26,6 +26,8 @@
 
 const przepisy = require('./przepisy');
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('./ustawienia');
+const { db } = require('../baza');
 const wzoryDysk = require('./wzory-dysk');
 const kontekstPisma = require('./kontekst-pisma');
 const bloki = require('./bloki-dokumentu');
@@ -150,7 +152,7 @@ function firmaSpolki(w) {
  * a nie kancelarii.
  */
 function glowka(wniosek, dzis) {
-  const k = konfiguracja.KANCELARIA;
+  const k = ustawienia.kancelaria(db());
   return [
     b.naglowek(k.kancelaria_miasto || k.miejscowosc, dataPl(dzis)),
     b.pola([
@@ -512,7 +514,7 @@ function opisz(d, { wniosek, akcjonariusze = [] }) {
 function zloz(dokument) {
   return bloki.doPdf(dokument.bloki, {
     tytul: NAZWY[dokument.typ] || 'Dokument',
-    autor: konfiguracja.KANCELARIA.nazwa,
+    autor: ustawienia.kancelaria(db()).nazwa,
   });
 }
 
