@@ -100,32 +100,65 @@ Zrobione w tej sesji (commit `42c6f02`):
 Wygląd bez zmian (sprawdzone zrzutem ekranu), a aplikacja działa teraz bez
 internetu i nie czeka na cudzy serwer przy pierwszym malowaniu.
 
-### 1.4. Dokument tożsamości przy rejestracji — tak, ale węziej niż w DM
+### 1.4. Dokument tożsamości przy rejestracji zdalnej
 
-Oba regulaminy żądają tego samego i **tylko tego**: *„dokumenty tożsamości
-osób uprawnionych do reprezentacji Spółki"* (Navigator § 5 ust. 1 pkt 1,
-ING § 5). Nie skanów dowodów wszystkich akcjonariuszy — od akcjonariuszy
-zbierają **dane** z dokumentu (seria i numer), bo tyle wymaga ustawa AML
-przy stosowaniu środków bezpieczeństwa finansowego.
+Uwaga notariusza po pierwszej wersji tej odpowiedzi: **aplikacja ma działać
+online, więc klienta można nigdy nie zobaczyć.** To zmienia wnioski —
+„tożsamość stwierdzona osobiście" przestaje być drogą podstawową i staje się
+wyjątkiem.
 
-Rekomendacja dla kancelarii:
+**Czy skan dowodu poprawia bezpieczeństwo? Sam z siebie — prawie nie.**
 
-1. **Reprezentant spółki podpisujący umowę — tak.** Seria i numer dokumentu,
-   PESEL, adres. To zresztą domyka lukę z audytu: wzór umowy ma już pola
-   `reprezentant_pesel`, `reprezentant_dowod`, `reprezentant_adres`,
-   `reprezentant_rodzice` — i wszystkie zostają puste, bo nikt o nie nie pyta.
-2. **Skan — opcjonalnie, nie obowiązkowo.** Tu notariusz ma narzędzie,
-   którego dom maklerski nie ma: **może stwierdzić tożsamość osobiście**.
-   Aplikacja powinna dopuszczać obie drogi i zapisywać, którą wybrano:
-   „tożsamość stwierdzona przez notariusza dnia X" **albo** skan w aktach.
-   Mniej danych osobowych w systemie przy tej samej pewności — a przy
-   kontroli widać, na czym oparto identyfikację.
-3. **Akcjonariusze — bez zmian.** Dane z dokumentu zawsze, skan tylko przy
-   włączonej procedurze AML dla tej spółki (tak jest dziś i to jest dobrze
-   ustawione; zbieranie skanów dowodów wszystkich akcjonariuszy „na zapas"
-   to zbędna odpowiedzialność przy RODO).
+Co skan *udowadnia*: że ktoś dysponował obrazem dokumentu. Nie dowodzi, że
+przysyła go osoba, do której dokument należy. Szablony dowodów krążą po
+sieci, wycieki z serwisów pożyczkowych i wynajmu dostarczyły ich dziesiątki
+tysięcy, a dorobienie w edytorze graficznym imienia na czyimś skanie zajmuje
+kwadrans. Jako **uwierzytelnienie** skan jest słaby.
 
----
+Co skan naprawdę daje — i to nie jest nic:
+
+1. **Ślad dowodowy i odpowiedzialność.** Przy sporze albo oszustwie sytuacja
+   przestaje być „nie mamy nic", a staje się „przedłożono nam ten dokument".
+   Posłużenie się podrobionym dokumentem jest przestępstwem (art. 270 i 272
+   KK), więc sam obowiązek przedłożenia odstrasza — nie każdego, ale część.
+2. **Zgodność z AML.** Przy relacji nawiązywanej bez fizycznej obecności
+   ustawa nakazuje **wzmożone** środki bezpieczeństwa finansowego, a kopia
+   dokumentu jest tu standardem rynkowym. Ustawa AML wprost dopuszcza
+   sporządzanie kopii dokumentów tożsamości — podstawa prawna istnieje,
+   inaczej niż przy zwykłym „kopiowaniu dowodów", przed którym ostrzega UODO.
+3. **Jakość danych.** Sprawdzenie, że PESEL i pisownia nazwiska zgadzają się
+   z dokumentem, wyłapuje literówki — a te w rejestrze akcjonariuszy potrafią
+   uniemożliwić późniejsze wykazanie tożsamości akcjonariusza.
+
+Co skan **kosztuje**: zbiór skanów dowodów to materiał wprost pod kradzież
+tożsamości. Wyciek takiego zbioru z kancelarii jest dużo gorszy niż wyciek
+samych danych rejestrowych. To argument nie za rezygnacją, tylko za
+**minimalizacją**: skan reprezentanta — tak; skany wszystkich akcjonariuszy
+„na zapas" — nie.
+
+**Co jest mocniejsze od skanu przy pracy zdalnej** (i co proponuję dołożyć):
+
+| Metoda | Siła | Koszt wdrożenia |
+|---|---|---|
+| **Podpis kwalifikowany** na umowie i oświadczeniach | najwyższa — dostawca podpisu zweryfikował tożsamość, podpis równoważny własnoręcznemu | żaden po naszej stronie; wystarczy przyjmować PDF-y podpisane i **sprawdzać podpis** przy odbiorze |
+| **Przelew weryfikacyjny** (1 zł z rachunku na nazwisko) | wysoka — bank wykonał KYC, nazwisko nadawcy musi się zgadzać | mamy już integrację tpay; zapisujemy nazwę nadawcy i numer rachunku, nie obraz dokumentu |
+| **Profil Zaufany / mObywatel** | wysoka | wymaga osobnej integracji — do rozważenia później |
+| **Skan dowodu** | niska jako weryfikacja, średnia jako dowód | najniższy |
+| **Osobiście u notariusza** | najwyższa | wymaga wizyty — przy pracy zdalnej wyjątek |
+
+**Rekomendacja:** skan **obowiązkowy** dla reprezentanta podpisującego umowę
+(to jest ten obowiązek, o który pytałeś — i tak robią oba domy maklerskie),
+ale traktowany jako *dowód*, nie jako *weryfikacja*. Do tego **jeden mocny
+czynnik**: albo umowa podpisana podpisem kwalifikowanym, albo przelew
+weryfikacyjny. Aplikacja zapisuje, **którą drogą** ustalono tożsamość — przy
+kontroli widać wtedy, na czym oparto identyfikację, zamiast „był skan".
+
+Akcjonariusze bez zmian: dane z dokumentu zawsze, skan tylko przy włączonej
+procedurze AML dla tej spółki.
+
+Jeśli przechowujemy skany, trzeba dołożyć trzy rzeczy, których dziś nie ma:
+termin usunięcia, szyfrowanie plików na dysku i osobne uprawnienie do ich
+oglądania (nie każdy pracownik musi widzieć dowody).
 
 ## 2. Czego jeszcze uczą regulaminy domów maklerskich
 
@@ -183,14 +216,17 @@ rzeczywistego, nie mamy śladu takiego sprawdzenia. Minimum: pozycja
 w checkliście AML „sprawdzono listy sankcyjne, data" — bez automatycznego
 odpytywania, sam zapis, kto i kiedy sprawdził.
 
-### 2.7. Konta dla akcjonariuszy
+### 2.7. Konta dla akcjonariuszy — ODŁOŻONE
 
 Navigator ma w aplikacji **osobne moduły dla spółki i dla akcjonariuszy**,
 ING tak samo. U nas rola `akcjonariusz` **istnieje w bazie i w portalu**
 (trasa `/moje` umie pokazać spółki akcjonariusza), ale **nie ma jak takiego
-konta założyć** — nie ma zaproszenia z kartoteki. Rejestr jest jawny dla
-każdego akcjonariusza (art. 300³⁰ § 2 KSH), więc to jest niedokończona
-funkcja, nie nowy pomysł.
+konta założyć** — nie ma zaproszenia z kartoteki.
+
+**Decyzja notariusza: odkładamy.** Najpierw konto reprezentanta spółki ma
+być dopracowane — funkcjonalnie i wizualnie. Dopiero gotowy, sprawdzony
+wzorzec jednego konta warto powielać na drugą rolę; inaczej poprawialibyśmy
+dwa portale naraz.
 
 ### 2.8. Czego NIE przenosić
 
@@ -299,7 +335,7 @@ podwójne powiadomienie). `TPAY_API_URL` już to umożliwia.
 
 ## 4. Plan prac
 
-### Etap E — konfiguracja kancelarii *(najpierw, bo psuje każdy dokument)*
+### Etap E — konfiguracja kancelarii ✔ WYKONANE
 
 1. Tabela `psa_ustawienia` + migracja przepisująca wartości z `.env`.
 2. `konfiguracja.KANCELARIA` czyta bazę, `.env` jako zapas.
@@ -309,15 +345,21 @@ podwójne powiadomienie). `TPAY_API_URL` już to umożliwia.
 5. Pola reprezentanta w formularzu wniosku (PESEL, dokument, adres) —
    domykają puste miejsca we wzorach.
 
-*Efekt: umowa wychodzi kompletna. Plik `.env` zostaje przy sekretach.*
+*Wykonane (commit `c59cfd4`): tabela `psa_ustawienia`, moduł
+`server/logika/ustawienia.js`, trasy `GET/PUT /api/psa/ustawienia`, ekran
+„Dane kancelarii" z podglądem nagłówka umowy i walidacją NIP-u. Puste
+miejsca we wzorach spadły z 22 do 11 — zostały dane spółki z KRS i
+reprezentanta, czyli etap F. Punkt 5 (pola reprezentanta) przechodzi do F.*
 
 ### Etap F — dokumenty i tożsamość
 
 1. **Lista dokumentów wymaganych** przy zgłoszeniu zmiany, zależna od typu
    zdarzenia i tytułu prawnego (tabela z 1.2) — zaznaczane przez klienta,
    widoczne dla pracownika.
-2. **Identyfikacja reprezentanta**: skan albo „tożsamość stwierdzona przez
-   notariusza dnia X", z zapisem, którą drogą.
+2. **Identyfikacja reprezentanta przy pracy zdalnej** (patrz 1.4): pola
+   dokumentu tożsamości + **obowiązkowy skan** + wskazanie drogi, którą
+   ustalono tożsamość (podpis kwalifikowany / przelew weryfikacyjny /
+   osobiście). Zapis, którą drogą — nie sam fakt, że „był skan".
 3. Uzupełnienie kompletu przy wniosku: wydruk z KRS do akt, oświadczenie
    o uchwałach niezarejestrowanych, oświadczenie o dematerializacji.
 4. Dokument rozwiązania umowy z poprzednim podmiotem przy migracji.
@@ -340,8 +382,9 @@ podwójne powiadomienie). `TPAY_API_URL` już to umożliwia.
 2. **Rejestr skarg** z terminem 30/60 dni i śladem odpowiedzi.
 3. Sekcja „bez ruchu od X dni" w kolejce + zamykanie sprawy odmową
    albo anulowaniem (audyt, pkt 3.2).
-4. **Zaproszenie akcjonariusza do portalu** z kartoteki — dokończenie roli,
-   która już jest w bazie.
+
+*Konta akcjonariuszy — dopiero po dopracowaniu konta reprezentanta spółki
+(patrz 2.7).*
 
 ### Etap I — przed testami zewnętrznymi
 
