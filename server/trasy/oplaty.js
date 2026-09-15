@@ -73,11 +73,28 @@ router.get(
       if (!w.faktura_wystawiono) grupa.bez_faktury_grosze += w.kwota_grosze;
     }
 
+    // Zadania zgloszone przez portal, ktore czekaja na oplate. NIE STOJA
+    // w kolejce spraw (zadne nie zostalo jeszcze skutecznie zlozone), ale
+    // kancelaria musi je widziec — inaczej portal bylby czarna dziura,
+    // w ktorej zgloszenie znika bez sladu dla obu stron.
+    const czekajaceZadania = db()
+      .prepare(
+        `SELECT sp.id, sp.spolka_id, sp.typ_zdarzenia, sp.data_wplywu, s.nazwa AS spolka_nazwa,
+                o.id AS oplata_id, o.kwota_grosze
+           FROM psa_sprawy sp
+           JOIN psa_spolki s ON s.id = sp.spolka_id
+           LEFT JOIN psa_oplaty o ON o.sprawa_id = sp.id AND o.typ = 'wpis' AND o.status != 'anulowana'
+          WHERE sp.oczekuje_na_oplate = 1 AND sp.stan = 'nowa'
+          ORDER BY sp.data_wplywu`
+      )
+      .all();
+
     odp.json({
       spolki: [...wgSpolki.values()],
       // Okresy prowadzenia, ktore zaraz sie koncza — przypomnienie, ze
       // trzeba naliczyc kolejny rok i wystawic fakture.
       do_odnowienia: oplaty.okresyDoOdnowienia(db(), { dni: 45 }),
+      czekajace_zadania: czekajaceZadania,
     });
   })
 );

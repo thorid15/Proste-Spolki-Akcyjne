@@ -1412,7 +1412,13 @@ router.post(
     // zlozonego jeszcze nie ma. Klient, ktory chce zlozyc je natychmiast,
     // ma otwarta droge papierowa i mailowa — wtedy sprawa rusza od razu,
     // a oplate rozlicza faktura (`server/trasy/sprawy.js`).
-    dane.oczekuje_na_oplate = 1;
+    //
+    // WYJATEK: gdy platnosci online sa wylaczone, bramka nie obowiazuje.
+    // Inaczej awaria operatora albo brak konfiguracji zamienialaby portal
+    // w czarna dziure — zadanie zapisane, nikomu niepokazane, a klient
+    // przekonany, ze zlozyl. Wtedy zadanie jest skuteczne od razu, a oplate
+    // rozlicza faktura; to ta sama sciezka, co przy zadaniu papierowym.
+    dane.oczekuje_na_oplate = tpay.skonfigurowany() ? 1 : 0;
 
     const kolumny = Object.keys(dane);
     const wynik = db()
@@ -1491,7 +1497,11 @@ function wczytajSpraweDlaKonta(konto, sprawaId) {
   if (!sprawa || sprawa.zrodlo !== 'portal') return null;
   const wlasciciel =
     konto.rola === 'spolka'
-      ? Number(sprawa.spolka_id) === Number(konto.spolka_id)
+      // Konto moze prowadzic WIECEJ NIZ JEDNA spolke (migracja 41).
+      // Porownanie z `konto.spolka_id` bralo pod uwage tylko pierwsza z nich,
+      // wiec klient z dwiema spolkami nie mogl dolaczyc dokumentu do sprawy
+      // tej drugiej — dostawal „nie odnaleziono sprawy" wlasnej spolki.
+      ? spolkiKonta(konto).includes(Number(sprawa.spolka_id))
       : Number(sprawa.zadajacy_osoba_id) === Number(konto.osoba_id);
   return wlasciciel ? sprawa : null;
 }
@@ -1697,20 +1707,40 @@ router.post(
     const spolka = rejestr.wczytajSpolke(db(), spolkaId);
     if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
 
-    // Oplacona, a jeszcze niepobrana informacja czeka — nie kaz placic dwa
-    // razy. Szukamy WLASNEJ: cudza oplacona informacja nie jest naszym
-    // uprawnieniem do pobrania dokumentu.
+    // Nierozliczone zamowienie tej samej osoby na te sama spolke ZOSTAJE —
+    // nie zakladamy drugiego. Bez tego dwuklik w „Zamow informacje" tworzyl
+    // dwa dlugi po 50 zl za jedna chec obejrzenia rejestru, a klient nie
+    // mial jak tego cofnac.
     const zamawiajacy = konto.rola === 'spolka' ? null : konto.osoba_id;
-    const gotowa = db()
+    const wToku = db()
       .prepare(
         `SELECT * FROM psa_oplaty
-          WHERE spolka_id = ? AND typ = 'informacja' AND status = 'oplacona'
+          WHERE spolka_id = ? AND typ = 'informacja' AND status != 'anulowana'
             AND wydany_dokument_id IS NULL
             AND zamawiajacy_osoba_id IS ?
-          ORDER BY id LIMIT 1`
+          ORDER BY (status = 'oplacona') DESC, id LIMIT 1`
       )
       .get(spolkaId, zamawiajacy);
-    if (gotowa) return odp.json({ oplata_id: gotowa.id, oplacona: true, link: null });
+
+    if (wToku && wToku.status === 'oplacona') {
+      return odp.json({ oplata_id: wToku.id, oplacona: true, link: null });
+    }
+    if (wToku) {
+      // Zamowienie juz jest, tylko jeszcze nieoplacone — oddajemy link do NIEGO.
+      if (!tpay.skonfigurowany()) {
+        return odp.json({ oplata_id: wToku.id, oplacona: false, link: null, platnosci_wlaczone: false });
+      }
+      try {
+        const wznowiona = await platnosci.przygotujZaplate(db(), {
+          oplataId: wToku.id,
+          urlPowiadomienia: adresPowiadomienia(),
+          urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/platnosci`,
+        });
+        return odp.json({ oplata_id: wToku.id, oplacona: false, link: wznowiona.platnosc.link, platnosci_wlaczone: true });
+      } catch (e) {
+        return odp.json({ oplata_id: wToku.id, oplacona: false, link: null, blad_platnosci: e.message });
+      }
+    }
 
     const oplata = oplaty.naliczOplateInformacji(db(), {
       spolkaId,
@@ -1778,12 +1808,20 @@ router.post(
     });
 
     const autorWpisu = `Portal — ${konto.email}`;
+    // `odbiorca_osoba_id` NULL oznacza dokument wydany SPOLCE (pelne dane
+    // wszystkich akcjonariuszy); wypelnione — dokument wydany konkretnej
+    // osobie, w jej zakresie. Po tym polu, a nie po samym dostepie do
+    // spolki, rozstrzyga sie potem, komu wolno go otworzyc.
     const wynikZapisu = db()
       .prepare(
         `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, odbiorca_osoba_id, kanal, tresc_html, wyslano, autor, utworzono)
          VALUES (?, 'informacja_z_rejestru', ?, 'portal', ?, ?, ?, ?)`
       )
-      .run(spolkaId, konto.osoba_id, trescHtml, czas.terazIso(), autorWpisu, czas.terazIso());
+      .run(
+        spolkaId,
+        konto.rola === 'spolka' ? null : konto.osoba_id,
+        trescHtml, czas.terazIso(), autorWpisu, czas.terazIso()
+      );
     const dokumentId = Number(wynikZapisu.lastInsertRowid);
 
     db().prepare('UPDATE psa_oplaty SET wydany_dokument_id = ?, zaktualizowano = ? WHERE id = ?')
@@ -1819,16 +1857,29 @@ router.get(
     const konto = zad.konto;
     const dokument = db()
       .prepare(
-        `SELECT id, spolka_id, tresc_html FROM psa_wydane_dokumenty
+        `SELECT id, spolka_id, odbiorca_osoba_id, tresc_html FROM psa_wydane_dokumenty
           WHERE id = ? AND typ = 'informacja_z_rejestru'`
       )
       .get(Number(zad.params.id));
 
+    // Sam dostep do spolki NIE WYSTARCZA. Informacja wydana SPOLCE niesie
+    // pelne dane wszystkich akcjonariuszy (art. 300(35) § 1 KSH), a wydana
+    // akcjonariuszowi — te same dane w jego, wezszym zakresie (§ 1(1)).
+    // Bramka „czy masz dostep do tej spolki" przepuszczala akcjonariusza do
+    // dokumentu spolki, czyli do adresow pozostalych akcjonariuszy, ktore
+    // w jego wlasnej informacji sa zaslonione. Dokument otwiera wiec TEN,
+    // KOMU GO WYDANO.
+    const wydanySpolce = dokument && dokument.odbiorca_osoba_id == null;
+    const dlaMnie = dokument && konto.osoba_id != null
+      && Number(dokument.odbiorca_osoba_id) === Number(konto.osoba_id);
+    const wolno = Boolean(dokument)
+      && maDostepDoSpolki(konto, dokument.spolka_id)
+      && (konto.rola === 'spolka' ? true : dlaMnie)
+      && (konto.rola === 'spolka' || !wydanySpolce);
+
     // Cudzy dokument to dla portalu dokument NIEISTNIEJACY: 403 potwierdzalby,
     // ze taki numer jest zajety.
-    if (!dokument || !maDostepDoSpolki(konto, dokument.spolka_id)) {
-      throw nieZnaleziono('Nie odnaleziono dokumentu.');
-    }
+    if (!wolno) throw nieZnaleziono('Nie odnaleziono dokumentu.');
 
     odp.type('text/html').send(dokument.tresc_html);
   })

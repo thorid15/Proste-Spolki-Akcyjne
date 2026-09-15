@@ -340,6 +340,20 @@ function EkranOplat() {
         />
       )}
 
+      {/* Zgloszenia, ktore czekaja na oplate, NIE STOJA w kolejce spraw —
+          zadne nie zostalo jeszcze skutecznie zlozone. Kancelaria musi je
+          jednak widziec, zeby portal nie byl czarna dziura. */}
+      {dane.czekajace_zadania && dane.czekajace_zadania.length > 0 && (
+        <Komunikat
+          odmiana="info"
+          tytul={`Zgłoszenia czekające na opłatę: ${dane.czekajace_zadania.length}`}
+          tresc="Nie stoją w kolejce spraw — żądanie wpisu dochodzi do skutku z chwilą zapłaty i dopiero wtedy zaczyna biec termin ustawowy."
+          lista={dane.czekajace_zadania.map((z) =>
+            `${z.spolka_nazwa}: ${z.typ_zdarzenia}, zgłoszono ${fmt.data(z.data_wplywu)}`
+            + (z.kwota_grosze ? ` — ${fmt.zlote(z.kwota_grosze)}` : ''))}
+        />
+      )}
+
       {/* Rok prowadzenia biegnie od rocznicy KAZDEJ SPOLKI z osobna, wiec
           bez tego przypomnienia termin przepada niezauwazony. */}
       {dane.do_odnowienia.length > 0 && (
