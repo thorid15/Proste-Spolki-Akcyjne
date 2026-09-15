@@ -38,6 +38,7 @@ const terminy = require('../logika/terminy');
 const numery = require('../logika/numery');
 const hasla = require('../logika/hasla');
 const limiter = require('../logika/limiter');
+const zapros = require('../logika/zaproszenia');
 const dokumentyTresc = require('../logika/dokumenty-tresc');
 const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
@@ -45,7 +46,7 @@ const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
-const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien } = require('../pomocnicze/odpowiedzi');
+const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien, BladZadania } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
 const { pobierzZKrs } = require('./krs');
 
@@ -71,9 +72,27 @@ function znormalizujEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+/**
+ * Spolki, ktore prowadzi konto roli „spolka". Zrodlem prawdy jest tabela
+ * powiazan — jeden klient pod jednym adresem e-mail miewa kilka spolek,
+ * a kolumna `psa_konta.spolka_id` niesie tylko te pierwsza.
+ */
+function spolkiKonta(konto) {
+  const z = db()
+    .prepare('SELECT spolka_id FROM psa_konta_spolki WHERE konto_id = ? ORDER BY spolka_id')
+    .all(konto.id)
+    .map((w) => w.spolka_id);
+  // `psa_konta.spolka_id` zostaje w sumie zbioru: rola „spolka" wymaga tej
+  // kolumny (CHECK w schemacie), wiec konto przepiete inna droga niz przez
+  // przyjecie wniosku dalej dziala, nawet jesli nie ma wiersza w tabeli
+  // powiazan.
+  if (konto.spolka_id != null && !z.includes(Number(konto.spolka_id))) z.unshift(Number(konto.spolka_id));
+  return z;
+}
+
 /** Czy konto ma dostep do rejestru/spraw wskazanej spolki. */
 function maDostepDoSpolki(konto, spolkaId) {
-  if (konto.rola === 'spolka') return Number(konto.spolka_id) === Number(spolkaId);
+  if (konto.rola === 'spolka') return spolkiKonta(konto).includes(Number(spolkaId));
   const wiersz = db()
     .prepare('SELECT 1 FROM psa_stan_akcji WHERE spolka_id = ? AND osoba_id = ? LIMIT 1')
     .get(Number(spolkaId), konto.osoba_id);
@@ -137,7 +156,7 @@ const WZORZEC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 router.post(
   '/zgloszenia',
-  asy((zad, odp) => {
+  asy(async (zad, odp) => {
     const cialo = zad.body || {};
     const email = znormalizujEmail(cialo.email);
     if (!email || !WZORZEC_EMAIL.test(email)) {
@@ -168,22 +187,92 @@ router.post(
     });
     limiter.zanotujNieudana(zad.ip, `zgloszenie:${email}`);
 
+    // Duplikat rozpoznajemy po NUMERZE KRS, nie po adresie e-mail: jeden
+    // klient pod jednym adresem miewa kilka spolek i zgloszenie drugiej
+    // jest normalna sytuacja, nie pomylka.
+    const juzProwadzona = db().prepare('SELECT id, nazwa FROM psa_spolki WHERE krs = ?').get(krs);
+    if (juzProwadzona) {
+      throw bledneZadanie(
+        `Rejestr dla spółki o numerze KRS ${krs} jest już prowadzony przez kancelarię. `
+        + 'Zaloguj się do portalu albo napisz do nas, jeśli potrzebujesz dostępu.'
+      );
+    }
+    const wToku = db()
+      .prepare(
+        `SELECT id FROM psa_wnioski WHERE krs = ? AND status NOT IN ('przyjety','odrzucony') LIMIT 1`
+      )
+      .get(krs);
+    const zgloszoneWczesniej = db()
+      .prepare(`SELECT id FROM psa_zgloszenia WHERE krs = ? AND status <> 'odrzucone' LIMIT 1`)
+      .get(krs);
+    if (wToku || zgloszoneWczesniej) {
+      throw bledneZadanie(
+        `Zgłoszenie dla spółki o numerze KRS ${krs} jest już w toku. `
+        + 'Sprawdź skrzynkę — zaproszenie do portalu poszło na wskazany wcześniej adres.'
+      );
+    }
+
+    // Rejestru akcjonariuszy nie prowadzi sie dla kazdej spolki — art. 300(30)
+    // § 1 KSH dotyczy PROSTEJ spolki akcyjnej. Sprawdzamy to od razu, zamiast
+    // odsylac klienta po tygodniu: numer albo dotyczy P.S.A., albo nie ma po
+    // co isc dalej.
+    // Awaria lacza albo blad API KRS nie moze zamykac drogi klientowi —
+    // zgloszenie wtedy przechodzi, a forme prawna sprawdzi pracownik przy
+    // weryfikacji wniosku. Odmawiamy WYLACZNIE wtedy, gdy KRS odpowiedzial
+    // i powiedzial „takiej spolki nie ma" albo „to nie jest P.S.A.".
+    let zKrs = null;
+    try {
+      zKrs = await pobierzZKrs(krs);
+    } catch {
+      zKrs = null;
+    }
+    if (zKrs && !zKrs.znaleziono && zKrs.powod === 'nie_znaleziono') {
+      throw bledneZadanie(
+        `W Krajowym Rejestrze Sądowym nie ma spółki o numerze ${krs}. Sprawdź numer.`
+      );
+    }
+    if (zKrs && zKrs.znaleziono && zKrs.dopuszczalna === false) {
+      throw bledneZadanie(
+        `${zKrs.komunikat} Rejestr akcjonariuszy prowadzimy wyłącznie dla prostych spółek akcyjnych.`
+      );
+    }
+    const daneKrs = zKrs && zKrs.znaleziono ? zKrs.dane : null;
+    const formaPrawna = daneKrs ? daneKrs.forma_prawna : null;
+    const nazwaZKrs = daneKrs ? daneKrs.nazwa : null;
+
     const dane = {
       email,
       krs,
       telefon: String(cialo.telefon || '').trim() || null,
-      nazwa_spolki: String(cialo.nazwa_spolki || '').trim() || null,
+      nazwa_spolki: String(cialo.nazwa_spolki || '').trim() || nazwaZKrs,
       opis: String(cialo.opis || '').trim() || null,
       status: 'nowe',
       utworzono: czas.terazIso(),
     };
 
     const kolumny = Object.keys(dane);
-    db()
+    const wynikZgloszenia = db()
       .prepare(`INSERT INTO psa_zgloszenia (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
       .run(dane);
 
-    odp.status(201).json({ ok: true });
+    // Zaproszenie idzie OD RAZU. Na tym etapie kancelaria niczego jeszcze nie
+    // sprawdza — sprawdza dopiero wniosek — a kazdy dzien zwloki miedzy
+    // zgloszeniem a dostepem do formularza to dzien, w ktorym klient czeka
+    // bez powodu. Kolejka „Zgloszenia" zostaje jako slad, nie jako bramka.
+    const zaproszenie = await zapros.wyslij(db(), {
+      zgloszenieId: Number(wynikZgloszenia.lastInsertRowid),
+      email,
+      autor: 'Portal — zgłoszenie',
+    });
+
+    odp.status(201).json({
+      ok: true,
+      forma_prawna: formaPrawna,
+      zaproszenie_wyslane: zaproszenie.email_wyslany,
+      // Gdy poczta nie dziala, link wraca TYLKO przy zgloszeniu skladanym
+      // z tego samego urzadzenia — inaczej klient zostaje bez drogi dalej.
+      link_aktywacyjny: zaproszenie.link_aktywacyjny,
+    });
   })
 );
 
@@ -1021,33 +1110,39 @@ router.get(
     const konto = zad.konto;
 
     if (konto.rola === 'spolka') {
-      const spolka = rejestr.wczytajSpolke(db(), konto.spolka_id);
-      if (!spolka) return odp.json({ rola: 'spolka', spolki: [] });
+      // Trzy liczby przy kazdej spolce, po ktore klient i tak wchodzil do
+      // podgladu rejestru: ilu ma akcjonariuszy, ile akcji jest w obrocie
+      // i kiedy ostatnio cos sie zmienilo.
+      const stanSpolki = db().prepare(
+        `SELECT COUNT(DISTINCT osoba_id) AS akcjonariuszy, COALESCE(SUM(ilosc), 0) AS akcji
+           FROM psa_stan_akcji
+          WHERE spolka_id = ? AND data_do IS NULL AND kategoria = 'akcjonariusz'`
+      );
+      const ostatnieZdarzenie = db().prepare(
+        'SELECT MAX(data_zdarzenia) AS data FROM psa_zdarzenia WHERE spolka_id = ?'
+      );
 
-      // Trzy liczby, po ktore klient i tak wchodzil do podgladu rejestru:
-      // ilu ma akcjonariuszy, ile akcji jest w obrocie i kiedy ostatnio cos
-      // sie zmienilo. Bez nich ekran startowy pokazywal sama nazwe spolki.
-      const stan = db()
-        .prepare(
-          `SELECT COUNT(DISTINCT osoba_id) AS akcjonariuszy, COALESCE(SUM(ilosc), 0) AS akcji
-             FROM psa_stan_akcji
-            WHERE spolka_id = ? AND data_do IS NULL AND kategoria = 'akcjonariusz'`
-        )
-        .get(spolka.id);
-      const ostatnie = db()
-        .prepare('SELECT MAX(data_zdarzenia) AS data FROM psa_zdarzenia WHERE spolka_id = ?')
-        .get(spolka.id);
-
-      return odp.json({
-        rola: 'spolka',
-        spolki: [{
+      const spolki = spolkiKonta(konto)
+        .map((id) => rejestr.wczytajSpolke(db(), id))
+        .filter(Boolean)
+        .map((spolka) => ({
           ...spolka,
           uwagi: undefined,
-          akcjonariuszy: stan.akcjonariuszy,
-          razem_akcji: stan.akcji,
-          ostatnie_zdarzenie: ostatnie.data || null,
-        }],
-      });
+          akcjonariuszy: stanSpolki.get(spolka.id).akcjonariuszy,
+          razem_akcji: stanSpolki.get(spolka.id).akcji,
+          ostatnie_zdarzenie: ostatnieZdarzenie.get(spolka.id).data || null,
+        }));
+
+      // Konto moze prowadzic juz jedna spolke i miec w toku wniosek o druga.
+      const wToku = db()
+        .prepare(
+          `SELECT id, status, nazwa, krs, zaktualizowano FROM psa_wnioski
+            WHERE konto_id = ? AND status NOT IN ('przyjety','odrzucony')
+            ORDER BY id DESC LIMIT 1`
+        )
+        .get(konto.id);
+
+      return odp.json({ rola: 'spolka', spolki, wniosek: wToku || null });
     }
 
     // Wnioskodawca nie ma jeszcze ani spolki, ani akcji - jego "Moje spolki"
@@ -1129,8 +1224,11 @@ router.get(
   '/zadania',
   asy((zad, odp) => {
     const konto = zad.konto;
-    const warunek = konto.rola === 'spolka' ? 'sp.spolka_id = ?' : 'sp.zadajacy_osoba_id = ?';
-    const parametr = konto.rola === 'spolka' ? konto.spolka_id : konto.osoba_id;
+    const spolki = konto.rola === 'spolka' ? spolkiKonta(konto) : [];
+    const warunek = konto.rola === 'spolka'
+      ? `sp.spolka_id IN (${spolki.map(() => '?').join(',') || 'NULL'})`
+      : 'sp.zadajacy_osoba_id = ?';
+    const parametry = konto.rola === 'spolka' ? spolki : [konto.osoba_id];
 
     const wiersze = db()
       .prepare(
@@ -1140,7 +1238,7 @@ router.get(
           WHERE sp.zrodlo = 'portal' AND ${warunek}
           ORDER BY sp.data_wplywu DESC`
       )
-      .all(parametr);
+      .all(...parametry);
 
     const dzis = czas.dzisIso();
     odp.json({ sprawy: wiersze.map((s) => ({ ...widokSprawyPortal(s, dzis), spolka_nazwa: s.spolka_nazwa })) });

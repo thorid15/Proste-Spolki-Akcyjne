@@ -792,6 +792,17 @@ router.post(
         .prepare(`UPDATE psa_konta SET rola = 'spolka', spolka_id = ? WHERE id = ?`)
         .run(spolkaId, kontoWnioskodawcy.id);
     }
+    // Powiazanie konta ze spolka zyje w osobnej tabeli, bo jeden klient pod
+    // jednym adresem e-mail miewa kilka spolek. Konto, ktore JUZ prowadzi
+    // jakas spolke, po prostu dostaje kolejna — bez przepinania roli.
+    if (kontoWnioskodawcy) {
+      db()
+        .prepare(
+          `INSERT OR IGNORE INTO psa_konta_spolki (konto_id, spolka_id, utworzono)
+           VALUES (?, ?, ?)`
+        )
+        .run(kontoWnioskodawcy.id, spolkaId, teraz);
+    }
 
     const przeniesione = przeniesDokumentyDoSpolki(wniosek, spolkaId, teraz);
 

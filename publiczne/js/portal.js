@@ -208,12 +208,12 @@ function EkranZgloszenieWstepne() {
     ustawWysylanie(true);
     ustawBlad(null);
     try {
-      await API.post('/api/psa/portal/zgloszenia', {
+      const wynik = await API.post('/api/psa/portal/zgloszenia', {
         email: email.trim(),
         krs: krsCyfry,
         nazwa_spolki: nazwaSpolki.trim() || undefined,
       });
-      ustawGotowe(true);
+      ustawGotowe(wynik);
     } catch (e) {
       ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się wysłać zgłoszenia.');
     } finally {
@@ -222,12 +222,25 @@ function EkranZgloszenieWstepne() {
   }
 
   if (gotowe) {
+    // Zaproszenie idzie od razu, wiec klient ma isc do skrzynki, a nie czekac
+    // na telefon z kancelarii. Gdy poczta zawiedzie, link wraca w odpowiedzi
+    // — pokazujemy go tutaj, zeby droga dalej nie urwala sie w pol kroku.
     return (
       <Pusto
         ikona="sprawdz"
-        tytul="Dziękujemy za zgłoszenie"
-        opis="Kancelaria skontaktuje się z Tobą, żeby ustalić szczegóły i przesłać zaproszenie do złożenia właściwego wniosku o prowadzenie rejestru akcjonariuszy."
-        akcja={<button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>}
+        tytul="Zaproszenie wysłane"
+        opis={
+          gotowe.zaproszenie_wyslane === false && gotowe.link_aktywacyjny
+            ? 'Nie udało się wysłać wiadomości. Skorzystaj z linku poniżej — jest ważny przez 7 dni.'
+            : `Na adres ${email.trim()} poszedł link do portalu. Jest ważny przez 7 dni — ustawisz tam hasło i wypełnisz wniosek o prowadzenie rejestru.`
+        }
+        akcja={
+          gotowe.link_aktywacyjny ? (
+            <a className="btn btn-glowny" href={gotowe.link_aktywacyjny}>Otwórz portal</a>
+          ) : (
+            <button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>
+          )
+        }
       />
     );
   }

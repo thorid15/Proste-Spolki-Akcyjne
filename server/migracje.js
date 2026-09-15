@@ -1686,6 +1686,119 @@ const MIGRACJE = [
       ALTER TABLE psa_wnioski ADD COLUMN dowod_wgrano TEXT;
     `,
   },
+  {
+    wersja: 41,
+    nazwa: 'jedno konto - wiele spolek: tabela powiazan i wniosek bez UNIQUE na koncie',
+    przebudowaTabeli: true,
+    sql: `
+      -- ── Konto klienta moze prowadzic WIECEJ NIZ JEDNA spolke ────────────
+      -- Dotad konto bylo przypiete do jednej spolki (kolumna spolka_id)
+      -- i do jednego wniosku (UNIQUE na konto_id). W praktyce jeden klient
+      -- pod jednym adresem e-mail ma kilka spolek — i dostawal komunikat,
+      -- ze zaproszenie jest zbedne, bo konto juz istnieje.
+      --
+      -- Zrodlem prawdy o powiazaniach jest odtad ta tabela. Kolumna
+      -- psa_konta.spolka_id zostaje jako „spolka domyslna" (pierwsza), zeby
+      -- nie przepisywac warunku CHECK przy roli, ale dostep sprawdza sie po
+      -- tabeli.
+      CREATE TABLE IF NOT EXISTS psa_konta_spolki (
+        konto_id   INTEGER NOT NULL REFERENCES psa_konta(id),
+        spolka_id  INTEGER NOT NULL REFERENCES psa_spolki(id),
+        utworzono  TEXT NOT NULL,
+        PRIMARY KEY (konto_id, spolka_id)
+      );
+
+      INSERT OR IGNORE INTO psa_konta_spolki (konto_id, spolka_id, utworzono)
+        SELECT id, spolka_id, utworzono FROM psa_konta WHERE spolka_id IS NOT NULL;
+
+      -- ── Wniosek: zdjecie UNIQUE z konto_id ──────────────────────────────
+      -- SQLite nie umie zdjac ograniczenia kolumnowego, wiec tabela idzie
+      -- przez przepisanie (ta sama droga, co przy psa_dokumenty_v33).
+      CREATE TABLE psa_wnioski_v41 (
+        id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+        konto_id                    INTEGER NOT NULL REFERENCES psa_konta(id),
+        status                      TEXT NOT NULL DEFAULT 'w_przygotowaniu'
+                                      CHECK (status IN (
+                                        'w_przygotowaniu','zlozony','do_uzupelnienia',
+                                        'umowa_wygenerowana','umowa_podpisana','przyjety','odrzucony'
+                                      )),
+        krs                         TEXT,
+        nip                         TEXT,
+        regon                       TEXT,
+        nazwa                       TEXT,
+        forma_prawna                TEXT NOT NULL DEFAULT 'PROSTA SPÓŁKA AKCYJNA',
+        kraj                        TEXT DEFAULT 'Polska',
+        kod_pocztowy                TEXT,
+        miejscowosc                 TEXT,
+        siedziba_miejscownik        TEXT,
+        ulica                       TEXT,
+        nr_domu                     TEXT,
+        nr_lokalu                   TEXT,
+        sad_rejestrowy              TEXT,
+        wydzial                     TEXT,
+        telefon                     TEXT,
+        email                       TEXT,
+        www                         TEXT,
+        organ_rodzaj                TEXT,
+        data_utworzenia_spolki      TEXT,
+        data_ostatniego_wpisu_krs   TEXT,
+        adres_edorecze              TEXT,
+        kapital_akcyjny_grosze      INTEGER,
+        data_zawarcia_umowy_spolki  TEXT,
+        reprezentant_imie_nazwisko           TEXT,
+        reprezentant_plec                    TEXT,
+        reprezentant_funkcja                 TEXT,
+        reprezentant_reprezentacja           TEXT,
+        reprezentant_rodzice                 TEXT,
+        reprezentant_dowod                   TEXT,
+        reprezentant_pesel                   TEXT,
+        reprezentant_adres                   TEXT,
+        reprezentant_biernik_recznie         TEXT,
+        reprezentant_funkcja_biernik_recznie TEXT,
+        reprezentant_rodzice_recznie         TEXT,
+        utworzono                   TEXT NOT NULL,
+        zaktualizowano              TEXT,
+        umowa_projekt_sciezka       TEXT,
+        umowa_projekt_wygenerowano  TEXT,
+        umowa_podpisana_sciezka     TEXT,
+        umowa_podpisana_nazwa_pliku TEXT,
+        umowa_podpisana_mime        TEXT,
+        umowa_podpisana_wgrano      TEXT,
+        notatka_weryfikacji         TEXT,
+        spolka_id                   INTEGER REFERENCES psa_spolki(id),
+        obsluzone_przez             TEXT,
+        obsluzone_kiedy             TEXT,
+        reprezentant_email          TEXT,
+        dowod_sciezka               TEXT,
+        dowod_nazwa_pliku           TEXT,
+        dowod_mime                  TEXT,
+        dowod_rozmiar               INTEGER,
+        dowod_wgrano                TEXT
+      );
+
+      INSERT INTO psa_wnioski_v41 SELECT
+        id, konto_id, status, krs, nip, regon, nazwa, forma_prawna, kraj, kod_pocztowy,
+        miejscowosc, siedziba_miejscownik, ulica, nr_domu, nr_lokalu, sad_rejestrowy,
+        wydzial, telefon, email, www, organ_rodzaj, data_utworzenia_spolki,
+        data_ostatniego_wpisu_krs, adres_edorecze, kapital_akcyjny_grosze,
+        data_zawarcia_umowy_spolki, reprezentant_imie_nazwisko, reprezentant_plec,
+        reprezentant_funkcja, reprezentant_reprezentacja, reprezentant_rodzice,
+        reprezentant_dowod, reprezentant_pesel, reprezentant_adres,
+        reprezentant_biernik_recznie, reprezentant_funkcja_biernik_recznie,
+        reprezentant_rodzice_recznie, utworzono, zaktualizowano,
+        umowa_projekt_sciezka, umowa_projekt_wygenerowano, umowa_podpisana_sciezka,
+        umowa_podpisana_nazwa_pliku, umowa_podpisana_mime, umowa_podpisana_wgrano,
+        notatka_weryfikacji, spolka_id, obsluzone_przez, obsluzone_kiedy,
+        reprezentant_email, dowod_sciezka, dowod_nazwa_pliku, dowod_mime,
+        dowod_rozmiar, dowod_wgrano
+      FROM psa_wnioski;
+
+      DROP TABLE psa_wnioski;
+      ALTER TABLE psa_wnioski_v41 RENAME TO psa_wnioski;
+
+      CREATE INDEX IF NOT EXISTS psa_ix_wnioski_konto ON psa_wnioski (konto_id, status);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
@@ -1711,6 +1824,7 @@ function uruchom(db) {
 
   for (const migracja of MIGRACJE) {
     if (wykonane.has(migracja.wersja)) continue;
+
     const transakcja = db.transaction(() => {
       db.exec(migracja.sql);
       db.prepare('INSERT INTO psa_migracje (wersja, nazwa, wykonano) VALUES (?, ?, ?)').run(
@@ -1719,7 +1833,30 @@ function uruchom(db) {
         new Date().toISOString()
       );
     });
-    transakcja();
+
+    // Przepisanie tabeli, do ktorej odwoluja sie inne (zdjecie ograniczenia
+    // kolumnowego), wymaga chwilowego wylaczenia kluczy obcych — inaczej
+    // `DROP TABLE` na rodzicu wywraca sie na dzieciach, ktore za moment i tak
+    // dostana nowego rodzica pod ta sama nazwa. To udokumentowana procedura
+    // SQLite; pragma musi stac POZA transakcja, a po niej sprawdzamy, czy
+    // zadne powiazanie nie zostalo zerwane.
+    if (!migracja.przebudowaTabeli) {
+      transakcja();
+    } else {
+      db.pragma('foreign_keys = OFF');
+      try {
+        transakcja();
+        const osierocone = db.pragma('foreign_key_check');
+        if (osierocone.length > 0) {
+          throw new Error(
+            `Migracja ${migracja.wersja} zerwala powiazania: ${JSON.stringify(osierocone.slice(0, 5))}`
+          );
+        }
+      } finally {
+        db.pragma('foreign_keys = ON');
+      }
+    }
+
     zastosowane.push(migracja.wersja);
   }
 
