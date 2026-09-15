@@ -659,11 +659,12 @@ function katalogWnioskuDokumenty(wniosekId) {
  * kancelaria po weryfikacji danych (`server/trasy/wnioski.js`), a klient
  * dostaje o tym wiadomosc.
  *
- * Kompletnosc danych NIE jest tu twardo blokowana (regula ogolna nr 3 -
- * miekkie ostrzezenia przy wprowadzaniu, twarde blokady dopiero przy
- * faktycznej operacji rejestrowej) - poza dwoma minimalnymi warunkami
- * SENSOWNOSCI zlozenia (nazwa i choc jeden akcjonariusz), ktore sa
- * organizacyjne, nie merytoryczno-prawne.
+ * Kompletnosc danych akcjonariuszy JEST tu twardo blokowana. Miekkie
+ * ostrzezenia zostaja przy KAZDYM ZAPISIE (regula ogolna nr 3 - formularz
+ * wypelnia sie etapami), ale zlozenie wniosku to juz faktyczna operacja:
+ * kancelaria nie ma skad wziac PESEL-u ani adresu akcjonariusza, ktorego
+ * nigdy nie zobaczy. Brakow nie da sie wiec "uzupelnic przy weryfikacji" -
+ * wracaja do klienta, zanim wniosek w ogole zostanie zlozony.
  */
 router.post(
   '/wniosek/zloz',
@@ -679,18 +680,20 @@ router.post(
       throw bledneZadanie('Dodaj przynajmniej jednego akcjonariusza (krok „Akcjonariusze”), zanim złożysz wniosek.');
     }
 
+    // Braki wobec art. 300(33) § 1 KSH liczymy na KOMPLETNYM wierszu, przy
+    // skladaniu - nie przy kazdym zapisie. Blokuja zlozenie: brakujace dane
+    // sa w posiadaniu wylacznie klienta.
+    const brakiAkcjonariuszy = akcjonariusze.flatMap((a) => akcjonariuszLogika.ostrzezenia(a));
+    if (brakiAkcjonariuszy.length > 0) {
+      throw bledneZadanie('Dane niepełne — wymagane uzupełnienie.', brakiAkcjonariuszy);
+    }
+
     const teraz = czas.terazIso();
     db().prepare('UPDATE psa_wnioski SET status = ?, zaktualizowano = ? WHERE id = ?').run('zlozony', teraz, wniosek.id);
 
-    // Braki wobec art. 300(33) § 1 KSH liczymy na KOMPLETNYM wierszu, przy
-    // skladaniu - nie przy kazdym zapisie. Nie blokuja zlozenia: kancelaria
-    // i tak weryfikuje wniosek, a czesci danych (np. potwierdzonej zgody
-    // akcjonariusza na e-mail) z natury nie da sie miec wczesniej.
-    const brakiAkcjonariuszy = akcjonariusze.flatMap((a) => akcjonariuszLogika.ostrzezenia(a));
-
     odp.json({
       wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
-      braki_akcjonariuszy: brakiAkcjonariuszy,
+      braki_akcjonariuszy: [],
       dokumenty: wczytajDokumentyWniosku(wniosek.id),
     });
   })

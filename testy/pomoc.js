@@ -97,9 +97,25 @@ const PDF_TESTOWY =
   '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\n' +
   'trailer<</Root 1 0 R>>\n%%EOF\n';
 
+/**
+ * Akcjonariusz KOMPLETNY wobec art. 300(33) § 1 KSH - nazwisko, PESEL i adres.
+ * Od etapu "dane akcjonariuszy sa wymagane" zlozenie wniosku z brakami konczy
+ * sie odmowa, wiec kazda przymiarka, ktora idzie dalej niz sam formularz,
+ * musi wyjsc od pelnego zestawu. Uzycie: { ...AKCJONARIUSZ_PELNY, nazwisko: 'X' }.
+ */
+const AKCJONARIUSZ_PELNY = {
+  typ: 'fizyczna',
+  imie: 'Anna',
+  nazwisko: 'Nowak',
+  pesel: '85050512345',
+  kod_pocztowy: '80-280',
+  miejscowosc: 'Gdansk',
+  ulica: 'Boleslawa Lesmiana 3/U10',
+};
+
 /** Zdarzenie w formie "surowej" - do testow czystej logiki, bez bazy. */
 function zdarzenie(id, typ, data, dane) {
   return { id, typ, data_zdarzenia: data, dane };
 }
 
-module.exports = { bazaTestowa, dodajSpolke, dodajOsobe, wpis, zdarzenie, PDF_TESTOWY };
+module.exports = { bazaTestowa, dodajSpolke, dodajOsobe, wpis, zdarzenie, PDF_TESTOWY, AKCJONARIUSZ_PELNY };

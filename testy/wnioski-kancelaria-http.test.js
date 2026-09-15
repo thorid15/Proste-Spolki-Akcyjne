@@ -25,6 +25,7 @@ process.env.PORTAL_WLACZONY = 'true';
 const app = require('../serwer');
 const { db } = require('../server/baza');
 const hasla = require('../server/logika/hasla');
+const { AKCJONARIUSZ_PELNY } = require('./pomoc');
 const { KATALOG_DOKUMENTOW } = require('../server/konfiguracja');
 
 let serwer;
@@ -100,7 +101,7 @@ async function wnioskGotowyDoWeryfikacji(
     ...dodatkowePola,
   }, ciastko);
   if (zAkcjonariuszem) {
-    await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { typ: 'fizyczna', nazwisko: 'Nowak', imie: 'Anna' }, ciastko);
+    await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { ...AKCJONARIUSZ_PELNY }, ciastko);
   }
   await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
 
