@@ -153,6 +153,7 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     // Platnosci klienta: lista naleznosci i link do zaplaty. Oplate
     // wczytujemy zawsze RAZEM ze spolkami tego konta (`wczytajOplateKonta`),
     // wiec cudzy numer nie trafia w nic.
+    'GET /cennik',
     'GET /oplaty',
     'POST /oplaty/:id/zaplac',
     'GET /wniosek/umowa-projekt',

@@ -471,18 +471,59 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
  * `akcjonariusz` bywa uprawniony z akcji kilku spółek, więc u niego liczba
  * mnoga zostaje.
  */
+/**
+ * Szyna portalu klienta — ta sama nawigacja, co w portalu kancelarii.
+ *
+ * Dotad ekrany portalu wisialy na przyciskach w pasku gornym. Doszly
+ * platnosci i pasek przestal byc lista miejsc, a zaczal byc rzedem
+ * przyciskow, w ktorym nie widac, gdzie sie jest. Szyna mowi to samo
+ * w pionie, ma miejsce na licznik naleznosci i nie rozjezdza sie przy
+ * piatej pozycji.
+ */
 function kartyNawigacji(rola) {
   if (rola === 'wnioskodawca') {
     return [
-      { sciezka: '/wniosek', nazwa: 'Wniosek' },
-      { sciezka: '/', nazwa: 'Moja spółka' },
-      { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
+      { sciezka: '/wniosek', nazwa: 'Wniosek', ikona: 'dokument' },
+      { sciezka: '/', nazwa: 'Moja spółka', ikona: 'spolki' },
+      { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia', ikona: 'sprawy' },
+      { sciezka: '/platnosci', nazwa: 'Płatności', ikona: 'oplaty', licznik: true },
     ];
   }
   return [
-    { sciezka: '/', nazwa: rola === 'spolka' ? 'Moja spółka' : 'Moje spółki' },
-    { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
+    { sciezka: '/', nazwa: rola === 'spolka' ? 'Moja spółka' : 'Moje spółki', ikona: 'spolki' },
+    { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia', ikona: 'sprawy' },
+    { sciezka: '/platnosci', nazwa: 'Płatności', ikona: 'oplaty', licznik: true },
   ];
+}
+
+function SzynaPortalu({ sciezka, rola, doZaplaty }) {
+  const aktywna = (poz) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
+  return (
+    <nav className="szyna bez-druku">
+      <div className="szyna-marka">
+        <span className="szyna-znak"><Ikona nazwa="znak" rozmiar={19} /></span>
+        <div style={{ minWidth: 0 }}>
+          <div className="szyna-marka-nazwa">Rejestr</div>
+          <div className="szyna-marka-podpis">akcjonariuszy P.S.A.</div>
+        </div>
+      </div>
+      <div className="szyna-grupa">
+        {kartyNawigacji(rola).map((poz) => (
+          <button
+            key={poz.sciezka}
+            className={`szyna-poz ${aktywna(poz) ? 'aktywna' : ''}`}
+            onClick={() => idz(poz.sciezka)}
+          >
+            <Ikona nazwa={poz.ikona} rozmiar={17} />
+            <span className="szyna-poz-etykieta">{poz.nazwa}</span>
+            {poz.licznik && doZaplaty > 0 && (
+              <span className="szyna-licznik" title="należności do zapłaty">{doZaplaty}</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
 }
 
 const ETYKIETA_ROLI_KONTA = {
@@ -495,6 +536,10 @@ const ETYKIETA_ROLI_KONTA = {
 function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
   const [wylogowywanie, ustawWylogowywanie] = useState(false);
   const kancelaria = useKancelaria();
+  // Licznik naleznosci odswieza sie przy kazdej zmianie ekranu — po zaplacie
+  // klient wraca na inna sciezke i znacznik ma zniknac od razu.
+  const { dane: rozliczenia } = useDane('/api/psa/portal/oplaty', [sciezka]);
+  const doZaplaty = rozliczenia ? rozliczenia.oplaty.filter((o) => o.status !== 'oplacona').length : 0;
 
   async function wyloguj() {
     ustawWylogowywanie(true);
@@ -506,44 +551,64 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
   }
 
   // Ta sama powłoka, co w aplikacji kancelaryjnej: zaokrąglony panel odsunięty
-  // od krawędzi okna, z paskiem marki na górze i belką tytułową pod nim.
-  // Portal nie ma szyny nawigacji (ma cztery ekrany, nie dwadzieścia), więc
-  // siatka jest jednokolumnowa — poza tym oba widoki są tym samym oknem tej
-  // samej kancelarii i nie ma powodu, żeby jeden był panelem, a drugi ścianą
-  // ciągnącą się od krawędzi do krawędzi.
+  // od krawędzi okna, pasek marki na górze, szyna nawigacji po lewej. Oba
+  // widoki są tym samym oknem tej samej kancelarii i nie ma powodu, żeby
+  // jeden miał nawigację w pionie, a drugi rząd przycisków w belce.
   return (
-    <div className="powloka powloka-portal">
+    <div className="powloka">
       <div className="marka-pasek bez-druku">
         <div className="marka-pasek-nazwa">{kancelaria.nazwa}</div>
       </div>
+      <SzynaPortalu sciezka={sciezka} rola={konto.rola} doZaplaty={doZaplaty} />
+      <NawigacjaPortaluWaska sciezka={sciezka} rola={konto.rola} doZaplaty={doZaplaty} />
       <div className="obszar">
         <header className="topbar bez-druku">
           <div>
-            <div className="topbar-tytul">Rejestr akcjonariuszy P.S.A.</div>
+            <div className="topbar-tytul">{opisEkranuPortalu(sciezka).tytul}</div>
             <div className="topbar-podtytul">
               {konto.email} · {ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola}
             </div>
           </div>
-          <div className="row-g">
-            {kartyNawigacji(konto.rola).map((k) => (
-              <button
-                key={k.sciezka}
-                className={`btn btn-sm ${sciezka === k.sciezka ? 'btn-glowny' : ''}`}
-                onClick={() => idz(k.sciezka)}
-              >
-                {k.nazwa}
-              </button>
-            ))}
-            <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>Wyloguj się</button>
-          </div>
+          <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>Wyloguj się</button>
         </header>
         <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
-        {/* Wąskie widoki portalu (wniosek, zgłoszenie) mają treść na 760 px —
+        {/* Wąskie widoki portalu (wniosek, zgłoszenie) mają treść na 880 px —
             stopka idzie za nimi, zamiast rozpychać się na pełne 1240 px. */}
-        <StopkaKancelarii kancelaria={kancelaria} szerokosc={waski ? '760px' : undefined} />
+        <StopkaKancelarii kancelaria={kancelaria} szerokosc={waski ? '880px' : undefined} />
       </div>
     </div>
   );
+}
+
+/** Nawigacja na wąskim ekranie — szyna się chowa, zostaje jeden rząd. */
+function NawigacjaPortaluWaska({ sciezka, rola, doZaplaty }) {
+  const aktywna = (poz) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
+  return (
+    <nav className="topbar-nawigacja bez-druku">
+      {kartyNawigacji(rola).map((poz) => (
+        <button
+          key={poz.sciezka}
+          className={`topbar-nawigacja-poz ${aktywna(poz) ? 'aktywna' : ''}`}
+          onClick={() => idz(poz.sciezka)}
+        >
+          <Ikona nazwa={poz.ikona} rozmiar={16} />
+          <span>{poz.nazwa}</span>
+          {poz.licznik && doZaplaty > 0 && <span className="szyna-licznik">{doZaplaty}</span>}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/** Tytuł w belce — mówi, gdzie jesteś, zamiast powtarzać nazwę modułu. */
+function opisEkranuPortalu(sciezka) {
+  if (sciezka.startsWith('/wniosek')) return { tytul: 'Wniosek o prowadzenie rejestru' };
+  if (sciezka.startsWith('/sprawy')) return { tytul: 'Moje zgłoszenia' };
+  if (sciezka.startsWith('/platnosci')) return { tytul: 'Płatności' };
+  if (sciezka.startsWith('/zgloszenie')) return { tytul: 'Zgłoszenie zmiany w rejestrze' };
+  if (sciezka.startsWith('/informacja')) return { tytul: 'Informacja z rejestru' };
+  if (sciezka.startsWith('/rejestr')) return { tytul: 'Rejestr akcjonariuszy' };
+  return { tytul: 'Rejestr akcjonariuszy P.S.A.' };
 }
 
 /* ─────────────────────────────────────────────────────
@@ -799,7 +864,7 @@ function EkranZgloszeniePortal({ spolkaId }) {
   const [pliki, ustawPliki] = useState([]);
   const [wysylanie, ustawWysylanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
-  const [gotowe, ustawGotowe] = useState(false);
+  const [gotowe, ustawGotowe] = useState(null);
   const wejscie = useRef(null);
 
   // Wpis robi sie NA PODSTAWIE DOKUMENTU (art. 300(34) § 4 KSH), wiec plik
@@ -819,6 +884,9 @@ function EkranZgloszeniePortal({ spolkaId }) {
     if (!mozeZlozyc) return;
     ustawWysylanie(true);
     ustawBlad(null);
+    // Nowa karta na formularz płatności otwiera się TERAZ, w obsłudze
+    // kliknięcia — po `await` przeglądarka blokuje ją jak wyskakujące okienko.
+    const okno = window.open('', '_blank');
     try {
       const wynik = await API.post('/api/psa/portal/zadania', {
         spolka_id: spolkaId, typ_zdarzenia: typ, opis: opis.trim(),
@@ -837,8 +905,25 @@ function EkranZgloszeniePortal({ spolkaId }) {
           throw new Error(tresc.blad || 'Zgłoszenie przyjęto, ale nie udało się przesłać pliku.');
         }
       }
-      ustawGotowe(true);
+      // Żądanie wpisu składane przez portal dochodzi do skutku z chwilą
+      // zapłaty — dlatego prowadzimy wprost do formularza płatności,
+      // zamiast zostawiać klienta z „przyjęto" i należnością gdzie indziej.
+      let link = null;
+      if (wynik.oplata_id) {
+        try {
+          const zaplata = await API.post(`/api/psa/portal/oplaty/${wynik.oplata_id}/zaplac`, {});
+          link = zaplata.link;
+        } catch (e) {
+          // Płatności online niedostępne — zgłoszenie i tak jest zapisane,
+          // a należność czeka w zakładce „Płatności".
+          link = null;
+        }
+      }
+      if (link && okno && !okno.closed) okno.location = link;
+      else if (okno && !okno.closed) okno.close();
+      ustawGotowe({ oplata_id: wynik.oplata_id, link });
     } catch (e) {
+      if (okno && !okno.closed) okno.close();
       ustawBlad(e instanceof BladApi ? e.message : e.message || 'Nie udało się złożyć zgłoszenia.');
     } finally {
       ustawWysylanie(false);
@@ -849,9 +934,19 @@ function EkranZgloszeniePortal({ spolkaId }) {
     return (
       <Karta>
         <Pusto
-          tytul="Zgłoszenie przyjęte"
-          opis="Kancelaria rozpatrzy je i skontaktuje się w razie potrzeby uzupełnienia dokumentów. Status widoczny jest w zakładce „Moje zgłoszenia”."
-          akcja={<button className="btn btn-glowny" onClick={() => idz('/sprawy')}>Zobacz moje zgłoszenia</button>}
+          tytul={gotowe.link ? 'Zgłoszenie zapisane — czeka na opłatę' : 'Zgłoszenie zapisane'}
+          opis={gotowe.oplata_id
+            ? 'Wpis w rejestrze jest odpłatny. Żądanie trafia do kancelarii po opłaceniu — do tego czasu '
+              + 'czeka w zakładce „Płatności”. Formularz płatności otworzyliśmy w nowej karcie.'
+            : 'Kancelaria rozpatrzy zgłoszenie i skontaktuje się w razie potrzeby uzupełnienia dokumentów.'}
+          akcja={
+            <div className="row-g">
+              {gotowe.oplata_id && (
+                <button className="btn btn-glowny" onClick={() => idz('/platnosci')}>Przejdź do płatności</button>
+              )}
+              <button className="btn" onClick={() => idz('/sprawy')}>Moje zgłoszenia</button>
+            </div>
+          }
         />
       </Karta>
     );
@@ -996,64 +1091,227 @@ function EkranSprawyPortal() {
 /* ─────────────────────────────────────────────────────
    INFORMACJA Z REJESTRU
    ───────────────────────────────────────────────────── */
+/**
+ * Informacja z rejestru (art. 300(35) KSH) — ODPŁATNA.
+ *
+ * Kolejność jest odwrotna niż dotąd: najpierw zamówienie i zapłata, dopiero
+ * potem dokument. Informacja nie jest ustawowym obowiązkiem z terminem
+ * (tym jest wpis), więc nie ma powodu wydawać jej „na kredyt”.
+ */
 function EkranInformacjaPortal({ spolkaId }) {
   const [data, ustawData] = useState(fmt.dzisIso());
-  const [pobieranie, ustawPobieranie] = useState(false);
+  const [pracuje, ustawPracuje] = useState(false);
   const [blad, ustawBlad] = useState(null);
   const [gotowa, ustawGotowa] = useState(null);
+  const { dane: cennik } = useDane('/api/psa/portal/cennik');
 
-  async function pobierz() {
-    ustawPobieranie(true);
+  async function zamow() {
+    ustawPracuje(true);
     ustawBlad(null);
     ustawGotowa(null);
-    // Nowa karta otwiera się TERAZ, w obsłudze kliknięcia. Otwierana po
-    // `await` nie miała już gestu użytkownika za sobą, więc przeglądarka
-    // blokowała ją jak wyskakujące okienko — a gdy jednak się otwierała,
-    // stała pusta („serwer odrzucił połączenie”), dopóki adres nie był
-    // gotowy. Adres zostaje też na ekranie: dokument ma własny URL, więc
-    // da się go otworzyć ponownie bez powtarzania całej operacji.
+    // Karta otwiera się w obsłudze kliknięcia, nie po `await`.
     const okno = window.open('', '_blank');
     try {
-      const wynik = await API.post('/api/psa/portal/informacja', { spolka_id: spolkaId, data });
-      const adres = `/api/psa/portal/informacja/${wynik.dokument_id}`;
-      ustawGotowa({ adres, data });
-      if (okno && !okno.closed) okno.location = adres;
+      const wynik = await API.post('/api/psa/portal/informacja/zamow', { spolka_id: spolkaId });
+      if (wynik.oplacona) {
+        // Opłacone, a jeszcze niepobrane zamówienie czeka — wydajemy od razu.
+        const dokument = await API.post(`/api/psa/portal/informacja/${wynik.oplata_id}/wydaj`, { data });
+        const adres = `/api/psa/portal/informacja/${dokument.dokument_id}`;
+        ustawGotowa({ rodzaj: 'dokument', adres });
+        if (okno && !okno.closed) okno.location = adres;
+        return;
+      }
+      if (wynik.link) {
+        ustawGotowa({ rodzaj: 'platnosc', adres: wynik.link, oplata_id: wynik.oplata_id });
+        if (okno && !okno.closed) okno.location = wynik.link;
+        return;
+      }
+      if (okno && !okno.closed) okno.close();
+      ustawGotowa({ rodzaj: 'faktura', oplata_id: wynik.oplata_id });
     } catch (e) {
       if (okno && !okno.closed) okno.close();
-      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się przygotować informacji.');
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zamówić informacji.');
     } finally {
-      ustawPobieranie(false);
+      ustawPracuje(false);
     }
   }
+
+  const stawka = cennik && cennik.stawki ? cennik.stawki.informacja : null;
 
   return (
     <div className="pion" style={{ gap: 16 }}>
       <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
-      <Karta tytul="Informacja z rejestru" >
+      <Karta tytul="Informacja z rejestru">
         <div className="podstawa-prawna" style={{ marginBottom: 16 }}>
           Art. 300(35) Kodeksu spółek handlowych — informacja z rejestru akcjonariuszy na wskazany dzień,
           w zakresie odpowiadającym roli konta.
         </div>
         <Komunikat odmiana="blad" tresc={blad} />
+
         <Pole etykieta="Stan na dzień" wymagane>
           <PoleDaty wartosc={data} przyZmianie={(v) => v && ustawData(v)} />
         </Pole>
-        <button className="btn btn-glowny" onClick={pobierz} disabled={pobieranie}>
-          {pobieranie ? 'Przygotowywanie…' : 'Otwórz informację'}
-        </button>
-        {gotowa && (
+
+        {stawka != null && (
           <Komunikat
-            odmiana="ok"
-            tytul={`Informacja na dzień ${fmt.data(gotowa.data)} jest gotowa`}
-            tresc="Otworzyliśmy ją w nowej karcie. Jeśli przeglądarka ją zablokowała — otwórz stąd."
+            odmiana="info"
+            tresc={`Informacja z rejestru jest odpłatna — ${fmt.zlote(stawka)}. Dokument pobierzesz po opłaceniu.`}
           />
         )}
-        {gotowa && (
-          <a className="btn" href={gotowa.adres} target="_blank" rel="noopener">
-            Otwórz w nowej karcie
-          </a>
+
+        <button className="btn btn-glowny" onClick={zamow} disabled={pracuje}>
+          {pracuje ? 'Przygotowywanie…' : 'Zamów informację'}
+        </button>
+
+        {gotowa && gotowa.rodzaj === 'platnosc' && (
+          <>
+            <Komunikat
+              odmiana="ok"
+              tytul="Zamówienie zapisane"
+              tresc="Formularz płatności otworzyliśmy w nowej karcie. Po zapłacie informacja czeka do pobrania w zakładce „Płatności”."
+            />
+            <div className="row-g">
+              <a className="btn btn-glowny" href={gotowa.adres} target="_blank" rel="noopener">Otwórz płatność</a>
+              <button className="btn" onClick={() => idz('/platnosci')}>Przejdź do płatności</button>
+            </div>
+          </>
+        )}
+        {gotowa && gotowa.rodzaj === 'dokument' && (
+          <>
+            <Komunikat odmiana="ok" tytul="Informacja gotowa" tresc="Otworzyliśmy ją w nowej karcie." />
+            <a className="btn btn-glowny" href={gotowa.adres} target="_blank" rel="noopener">Otwórz informację</a>
+          </>
+        )}
+        {gotowa && gotowa.rodzaj === 'faktura' && (
+          <Komunikat
+            odmiana="info"
+            tytul="Zamówienie zapisane"
+            tresc="Płatności online są chwilowo niedostępne — kancelaria rozliczy tę informację fakturą i udostępni dokument."
+          />
         )}
       </Karta>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
+   PŁATNOŚCI
+   ───────────────────────────────────────────────────── */
+
+const OPIS_STATUSU_OPLATY = {
+  naliczona: { odmiana: undefined, tekst: 'do zapłaty' },
+  zafakturowana: { odmiana: 'oliwka', tekst: 'na fakturze' },
+  oplacona: { odmiana: 'zielony', tekst: 'opłacona' },
+};
+
+/**
+ * Należności klienta. Trzy rzeczy, które ten ekran musi powiedzieć:
+ * ile jest do zapłaty, za co, i gdzie kliknąć, żeby zapłacić.
+ */
+function EkranPlatnosciPortal() {
+  const { dane, ladowanie, blad, odswiez } = useDane('/api/psa/portal/oplaty');
+  const [wysylanie, ustawWysylanie] = useState(null);
+  const [bladPlatnosci, ustawBladPlatnosci] = useState(null);
+
+  if (ladowanie) return <Spinner />;
+  if (blad) return <Komunikat odmiana="blad" tresc={blad.message} />;
+
+  const doZaplaty = dane.oplaty.filter((o) => o.status !== 'oplacona');
+  const zaplacone = dane.oplaty.filter((o) => o.status === 'oplacona');
+
+  async function zaplac(oplata) {
+    ustawWysylanie(oplata.id);
+    ustawBladPlatnosci(null);
+    // Nowa karta otwiera się TERAZ, w obsłudze kliknięcia — po `await`
+    // przeglądarka blokuje ją jak wyskakujące okienko.
+    const okno = window.open('', '_blank');
+    try {
+      const wynik = await API.post(`/api/psa/portal/oplaty/${oplata.id}/zaplac`, {});
+      if (okno && !okno.closed) okno.location = wynik.link;
+    } catch (e) {
+      if (okno && !okno.closed) okno.close();
+      ustawBladPlatnosci(e instanceof BladApi ? e.message : 'Nie udało się rozpocząć płatności.');
+    } finally {
+      ustawWysylanie(null);
+    }
+  }
+
+  async function pobierzInformacje(oplata) {
+    ustawWysylanie(oplata.id);
+    ustawBladPlatnosci(null);
+    const okno = window.open('', '_blank');
+    try {
+      const wynik = await API.post(`/api/psa/portal/informacja/${oplata.id}/wydaj`, {});
+      if (okno && !okno.closed) okno.location = `/api/psa/portal/informacja/${wynik.dokument_id}`;
+      odswiez();
+    } catch (e) {
+      if (okno && !okno.closed) okno.close();
+      ustawBladPlatnosci(e instanceof BladApi ? e.message : 'Nie udało się pobrać informacji.');
+    } finally {
+      ustawWysylanie(null);
+    }
+  }
+
+  function wiersz(o) {
+    const status = OPIS_STATUSU_OPLATY[o.status] || { tekst: o.status };
+    return (
+      <div key={o.id} className="pozycja-platnosci">
+        <div style={{ minWidth: 0 }}>
+          <div className="pozycja-platnosci-tytul">{o.opis}</div>
+          <div className="pozycja-platnosci-opis">
+            {o.spolka_nazwa}
+            {o.okres_od && o.okres_do ? ` · ${fmt.data(o.okres_od)} – ${fmt.data(o.okres_do)}` : ''}
+            {` · naliczono ${fmt.data(o.data_naliczenia)}`}
+          </div>
+        </div>
+        <div className="pozycja-platnosci-kwota">{fmt.zlote(o.kwota_grosze)}</div>
+        <Znacznik odmiana={status.odmiana}>{status.tekst}</Znacznik>
+        <div className="pozycja-platnosci-akcja">
+          {o.status !== 'oplacona' && dane.platnosci_wlaczone && (
+            <button className="btn btn-glowny btn-maly" disabled={wysylanie === o.id} onClick={() => zaplac(o)}>
+              {wysylanie === o.id ? 'Otwieram…' : 'Zapłać'}
+            </button>
+          )}
+          {o.do_pobrania && (
+            <button className="btn btn-maly" disabled={wysylanie === o.id} onClick={() => pobierzInformacje(o)}>
+              Pobierz informację
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pion" style={{ gap: 16 }}>
+      <Komunikat odmiana="blad" tresc={bladPlatnosci} />
+
+      {!dane.platnosci_wlaczone && doZaplaty.length > 0 && (
+        <Komunikat
+          odmiana="info"
+          tresc="Płatności online są chwilowo niedostępne — należności rozliczy faktura z kancelarii."
+        />
+      )}
+
+      <Karta tytul="Do zapłaty">
+        {doZaplaty.length === 0 ? (
+          <Pusto ikona="oplaty" tytul="Nic nie czeka na zapłatę" opis="Wszystkie należności są rozliczone." />
+        ) : (
+          <div className="lista-platnosci">
+            <div className="suma-platnosci">
+              <span>Razem</span>
+              <strong>{fmt.zlote(dane.do_zaplaty_grosze)}</strong>
+            </div>
+            {doZaplaty.map(wiersz)}
+          </div>
+        )}
+      </Karta>
+
+      {zaplacone.length > 0 && (
+        <Karta tytul="Opłacone">
+          <div className="lista-platnosci">{zaplacone.map(wiersz)}</div>
+        </Karta>
+      )}
     </div>
   );
 }
@@ -1162,6 +1420,7 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
     if (segmenty[0] === 'rejestr' && segmenty[1]) return <EkranRejestrPortal spolkaId={Number(segmenty[1])} />;
     if (segmenty[0] === 'zgloszenie' && segmenty[1]) return <EkranZgloszeniePortal spolkaId={Number(segmenty[1])} />;
     if (segmenty[0] === 'informacja' && segmenty[1]) return <EkranInformacjaPortal spolkaId={Number(segmenty[1])} />;
+    if (segmenty[0] === 'platnosci') return <EkranPlatnosciPortal />;
     return (
       <Karta>
         <Pusto tytul="Nie ma takiej strony" akcja={<button className="btn btn-glowny" onClick={() => idz('/')}>Wróć</button>} />

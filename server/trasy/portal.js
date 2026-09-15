@@ -1580,6 +1580,24 @@ function widokOplatyKlienta(w) {
   };
 }
 
+/**
+ * Stawki, ktore klient zobaczy PRZED zamowieniem czynnosci. Cena musi byc
+ * znana przed kliknieciem, nie po — inaczej "Zamow" jest zgoda w ciemno.
+ */
+router.get(
+  '/cennik',
+  asy((zad, odp) => {
+    odp.json({
+      stawki: {
+        prowadzenie: ustawienia.stawkaGrosze(db(), 'prowadzenie'),
+        wpis: ustawienia.stawkaGrosze(db(), 'wpis'),
+        informacja: ustawienia.stawkaGrosze(db(), 'informacja'),
+      },
+      platnosci_wlaczone: tpay.skonfigurowany(),
+    });
+  })
+);
+
 /** Wszystkie oplaty spolek tego konta — zaplacone i czekajace. */
 router.get(
   '/oplaty',

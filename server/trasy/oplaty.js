@@ -8,6 +8,7 @@ const express = require('express');
 
 const { db } = require('../baza');
 const oplaty = require('../oplaty');
+const platnosci = require('../platnosci');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
@@ -21,6 +22,146 @@ const STATUSY = ['naliczona', 'zafakturowana', 'oplacona', 'anulowana'];
 function widokWiersza(w) {
   return { ...w, kwota_zl: w.kwota_grosze / 100 };
 }
+
+/**
+ * Rozliczenia SPOLKA PO SPOLCE — tak, jak pracownik o nich mysli:
+ * „co jest do zafakturowania u tej spolki", a nie „wszystkie naleznosci
+ * kancelarii posortowane po dacie".
+ */
+router.get(
+  '/wg-spolek',
+  asy((zad, odp) => {
+    const wiersze = db()
+      .prepare(
+        `SELECT o.*, s.nazwa AS spolka_nazwa, s.krs AS spolka_krs,
+                s.data_otwarcia_rejestru,
+                (SELECT COUNT(*) FROM psa_platnosci p
+                  WHERE p.oplata_id = o.id AND p.status = 'oplacona')  AS online,
+                os.nazwisko AS zamawiajacy_nazwisko, os.imie AS zamawiajacy_imie,
+                os.nazwa AS zamawiajacy_nazwa
+           FROM psa_oplaty o
+           JOIN psa_spolki s ON s.id = o.spolka_id
+           LEFT JOIN psa_osoby os ON os.id = o.zamawiajacy_osoba_id
+          WHERE o.status != 'anulowana'
+          ORDER BY s.nazwa COLLATE NOCASE, o.data_naliczenia DESC, o.id DESC`
+      )
+      .all();
+
+    const wgSpolki = new Map();
+    for (const w of wiersze) {
+      if (!wgSpolki.has(w.spolka_id)) {
+        wgSpolki.set(w.spolka_id, {
+          spolka_id: w.spolka_id,
+          spolka_nazwa: w.spolka_nazwa,
+          spolka_krs: w.spolka_krs,
+          data_otwarcia_rejestru: w.data_otwarcia_rejestru,
+          oplaty: [],
+          do_zaplaty_grosze: 0,
+          bez_faktury_grosze: 0,
+        });
+      }
+      const grupa = wgSpolki.get(w.spolka_id);
+      grupa.oplaty.push({
+        ...widokWiersza(w),
+        oplacona_online: w.online > 0,
+        zamawiajacy: w.zamawiajacy_osoba_id
+          ? (w.zamawiajacy_nazwa || [w.zamawiajacy_nazwisko, w.zamawiajacy_imie].filter(Boolean).join(' '))
+          : null,
+      });
+      if (w.status !== 'oplacona') grupa.do_zaplaty_grosze += w.kwota_grosze;
+      if (!w.faktura_wystawiono) grupa.bez_faktury_grosze += w.kwota_grosze;
+    }
+
+    odp.json({
+      spolki: [...wgSpolki.values()],
+      // Okresy prowadzenia, ktore zaraz sie koncza — przypomnienie, ze
+      // trzeba naliczyc kolejny rok i wystawic fakture.
+      do_odnowienia: oplaty.okresyDoOdnowienia(db(), { dni: 45 }),
+    });
+  })
+);
+
+/**
+ * Odhaczenie faktury. Aplikacja NIE wystawia faktur — robi to program
+ * ksiegowy kancelarii. Tu zostaje slad: numer i data, zeby pracownik
+ * widzial w jednym miejscu, co jeszcze nie poszlo do ksiegowosci.
+ */
+router.patch(
+  '/:id/faktura',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const oplata = oplaty.wczytaj(db(), id);
+    if (!oplata) throw nieZnaleziono('Nie odnaleziono opłaty.');
+
+    const cialo = zad.body || {};
+    const wystawiona = cialo.wystawiona !== false;
+    const numer = cialo.numer ? String(cialo.numer).trim() : null;
+
+    db()
+      .prepare(
+        `UPDATE psa_oplaty
+            SET faktura_wystawiono = ?, faktura_numer = ?, faktura_autor = ?, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(
+        wystawiona ? czas.terazIso() : null,
+        wystawiona ? numer : null,
+        wystawiona ? autor(zad) : null,
+        czas.terazIso(),
+        id
+      );
+
+    // Odhaczenie faktury SAMO przenosi naleznosc z „naliczona" na
+    // „zafakturowana" — to jest dokladnie to, co odhaczenie znaczy, a osobne
+    // klikniecie w liste statusow bylo powtarzaniem tej samej informacji.
+    // Naleznosci juz oplaconej ani anulowanej nie ruszamy.
+    if (oplata.status === 'naliczona' && wystawiona) {
+      oplaty.zmienStatus(db(), { id, status: 'zafakturowana' });
+    } else if (oplata.status === 'zafakturowana' && !wystawiona) {
+      oplaty.zmienStatus(db(), { id, status: 'naliczona' });
+    }
+
+    odp.json({ oplata: widokWiersza(oplaty.wczytaj(db(), id)) });
+  })
+);
+
+/**
+ * Awaryjne odpytanie operatora o stan platnosci — gdy powiadomienie nie
+ * doszlo. Ksieguje dokladnie tak samo jak powiadomienie, wiec skutek jest
+ * identyczny; to nie jest "recznie oznacz jako oplacona".
+ */
+router.post(
+  '/platnosci/:id/sprawdz',
+  asy(async (zad, odp) => {
+    let wynik;
+    try {
+      wynik = await platnosci.sprawdzUOperatora(db(), Number(zad.params.id));
+    } catch (e) {
+      throw bledneZadanie(e.message);
+    }
+    odp.json({ status: wynik.status, zaksiegowano: wynik.zaksiegowano });
+  })
+);
+
+/** Naliczenie kolejnych okresow prowadzenia tym spolkom, ktorym rok sie konczy. */
+router.post(
+  '/odnowienia',
+  wymagajAdmina,
+  asy((zad, odp) => {
+    const dni = (zad.body || {}).dni != null ? Number((zad.body || {}).dni) : 0;
+    if (!Number.isInteger(dni) || dni < 0 || dni > 365) {
+      throw bledneZadanie('Wyprzedzenie musi być liczbą dni od 0 do 365.');
+    }
+    const { naliczone, pominiete } = oplaty.naliczOdnowienia(db(), { dni, autor: autor(zad) });
+    odp.json({
+      naliczone: naliczone.map(widokWiersza),
+      pominiete: pominiete.map(widokWiersza),
+      komunikat: naliczone.length === 0
+        ? 'Żadnej spółce nie kończy się właśnie okres prowadzenia rejestru.'
+        : `Naliczono kolejny rok prowadzenia rejestru dla ${naliczone.length} spółek.`,
+    });
+  })
+);
 
 /** Lista z filtrami + suma w groszach (do nagłówka ekranu). */
 router.get(

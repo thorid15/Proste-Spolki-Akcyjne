@@ -346,7 +346,9 @@ body {
 }
 /* Portal klienta korzysta z tej samej powłoki, ale nie ma szyny nawigacji —
    cztery ekrany mieszczą się w belce tytułowej. Zostaje jedna kolumna. */
-.powloka-portal { grid-template-columns: minmax(0, 1fr); }
+/* Portal klienta ma dzis te sama szyne, co portal kancelarii — klasa
+   zostaje dla zgodnosci, ale nie zmienia juz siatki. */
+.powloka-portal { }
 
 .szyna {
   background: var(--karta);
@@ -618,7 +620,11 @@ body {
    Klasa była używana w portalu klienta od początku, ale nigdy nie została
    zdefiniowana — formularz na trzy pola rozciągał się więc na 1240 px,
    a wiersz tekstu nad nim miał ze sto znaków. */
-.tresc-waska { max-width: 760px; }
+/* Miara "waska" to nie jest kolumna tekstu, tylko formularz: pola stoja
+   parami, a podsumowanie wniosku niesie tabele akcjonariuszy. 760 px bylo
+   za ciasne — para pol schodzila pod siebie i ekran wygladal na telefonowy
+   nawet na monitorze. */
+.tresc-waska { max-width: 880px; }
 
 /* Nagłówek strony wewnątrz treści (gdy topbar niesie tylko powitanie). */
 .naglowek-strony {
@@ -1586,6 +1592,45 @@ a.stopka-poz:hover span { text-decoration: underline; }
 @media (max-width: 560px) {
   .stopka-siatka { padding: var(--od-24) var(--od-16) var(--od-16); }
   .stopka-dol { padding: var(--od-12) var(--od-16) var(--od-24); }
+}
+
+/* ─────────────────────────────────────────────────────
+   PŁATNOŚCI (portal klienta)
+   Jedna pozycja = jedna należność: za co, ile, w jakim stanie, co zrobić.
+   Kwota trzyma prawą krawędź i cyfry o stałej szerokości, żeby dało się
+   porównać wzrokiem, nie czytając.
+   ───────────────────────────────────────────────────── */
+.lista-platnosci { display: flex; flex-direction: column; }
+.suma-platnosci {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: var(--od-12) var(--od-24);
+  border-bottom: 1px solid var(--linia);
+  background: var(--papier-2);
+  font-size: var(--st-13);
+  color: var(--atrament-2);
+}
+.suma-platnosci strong { font-size: var(--st-20); color: var(--atrament); font-variant-numeric: tabular-nums; }
+.pozycja-platnosci {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--od-16);
+  padding: var(--od-16) var(--od-24);
+  border-bottom: 1px solid var(--linia-2);
+}
+.pozycja-platnosci:last-child { border-bottom: none; }
+.pozycja-platnosci-tytul { font-weight: 500; }
+.pozycja-platnosci-opis { font-size: var(--st-13); color: var(--atrament-2); margin-top: 2px; }
+.pozycja-platnosci-kwota {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--st-15);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pozycja-platnosci-akcja { display: flex; gap: var(--od-8); justify-content: flex-end; }
+@media (max-width: 720px) {
+  .pozycja-platnosci { grid-template-columns: minmax(0, 1fr) auto; }
+  .pozycja-platnosci-akcja { grid-column: 1 / -1; justify-content: flex-start; }
 }
 
 /* ─────────────────────────────────────────────────────

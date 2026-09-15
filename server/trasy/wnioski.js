@@ -29,6 +29,7 @@ const { db } = require('../baza');
 const czas = require('../pomocnicze/czas');
 const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
+const oplaty = require('../oplaty');
 const pliki = require('../pomocnicze/pliki');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
@@ -806,12 +807,29 @@ router.post(
 
     const przeniesione = przeniesDokumentyDoSpolki(wniosek, spolkaId, teraz);
 
+    // ── Pierwszy rok prowadzenia rejestru ──────────────────────────────
+    // Przyjecie wniosku to dzien, w ktorym rejestr tej spolki rusza — i od
+    // niego, nie od Nowego Roku, biegnie pierwszy rok prowadzenia
+    // (§ 15b pkt 1 rozporzadzenia: "za kazdy rozpoczety rok").
+    const dzis = czas.dzisIso();
+    const spolkaPoPrzyjeciu = db().prepare('SELECT * FROM psa_spolki WHERE id = ?').get(spolkaId);
+    const dataOtwarcia = spolkaPoPrzyjeciu.data_otwarcia_rejestru || dzis;
+    if (!spolkaPoPrzyjeciu.data_otwarcia_rejestru) {
+      db().prepare('UPDATE psa_spolki SET data_otwarcia_rejestru = ? WHERE id = ?').run(dzis, spolkaId);
+    }
+    const pierwszyRok = oplaty.naliczPierwszyRok(db(), {
+      spolkaId,
+      dataOtwarcia,
+      autor: autor(zad),
+    });
+
     odp.json({
       wniosek: wczytajWniosek(wniosek.id),
       akcjonariusze: wczytajAkcjonariuszy(wniosek.id),
       spolka_id: spolkaId,
       konto_przepiete: przepiete,
       dokumenty_przeniesione: przeniesione,
+      oplata_prowadzenia: pierwszyRok.utworzono ? pierwszyRok.oplata : null,
     });
   })
 );
