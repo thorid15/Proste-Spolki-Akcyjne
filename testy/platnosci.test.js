@@ -329,3 +329,66 @@ test('token operatora odnawia sie po odrzuceniu — jedno ponowienie, nie petla'
   });
   assert.ok(wynik.platnosc.link, 'po wygasnieciu tokenu transakcja i tak powstaje');
 });
+
+/* ─────────────────────────────────────────────────────
+   Trasa ITN — kanal PUBLICZNY, bez sesji
+   ───────────────────────────────────────────────────── */
+
+test('ITN: odpowiada czystym TRUE i nie wycieka szczegolow', async () => {
+  const express = require('express');
+  const app = require('../serwer');
+  const serwer = app.listen(0, '127.0.0.1');
+  await new Promise((g) => serwer.once('listening', g));
+  const baza = `http://127.0.0.1:${serwer.address().port}`;
+  void express;
+
+  const oplata = dodajOplate({ kwotaGrosze: 3300 });
+  const { platnosc } = await platnosci.przygotujZaplate(db(), {
+    oplataId: oplata.id, urlPowiadomienia: `${baza}/api/psa/platnosci/tpay/itn`, urlPowrotu: 'https://x',
+  });
+
+  async function itn(pola) {
+    const odp = await fetch(`${baza}/api/psa/platnosci/tpay/itn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(pola).toString(),
+    });
+    return [odp.status, await odp.text()];
+  }
+
+  // Smiec bez podpisu: potwierdzamy odbior (inaczej operator ponawia
+  // w kolko), ale NIE mowimy, co bylo nie tak — to kanal publiczny.
+  const [stSmieci, trescSmieci] = await itn({ id: '1', tr_id: 'X', tr_amount: '1.00', tr_crc: 'nieznany', md5sum: 'zle' });
+  assert.equal(stSmieci, 200);
+  assert.equal(trescSmieci, 'TRUE', 'czysty TRUE, bez HTML i JSON');
+
+  const [stOk, trescOk] = await itn(powiadomienie(platnosc));
+  assert.equal(stOk, 200);
+  assert.equal(trescOk, 'TRUE');
+  assert.equal(
+    db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status,
+    'oplacona',
+    'poprawne powiadomienie ksieguje zaplate'
+  );
+
+  // Trasa stoi PRZED bramka sesji — inaczej operator dostawalby 401.
+  assert.notEqual(stOk, 401);
+
+  await new Promise((g) => serwer.close(g));
+});
+
+test('ITN nie przyjmuje ciala wiekszego niz kilkanascie pol', async () => {
+  const app = require('../serwer');
+  const serwer = app.listen(0, '127.0.0.1');
+  await new Promise((g) => serwer.once('listening', g));
+  const baza = `http://127.0.0.1:${serwer.address().port}`;
+
+  const odp = await fetch(`${baza}/api/psa/platnosci/tpay/itn`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `id=1&x=${'a'.repeat(64 * 1024)}`,
+  });
+  assert.notEqual(odp.status, 200, 'przerosniete cialo odrzucone, nie przetwarzane');
+
+  await new Promise((g) => serwer.close(g));
+});

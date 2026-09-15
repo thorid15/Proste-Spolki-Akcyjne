@@ -9,6 +9,7 @@ const express = require('express');
 const { db } = require('../baza');
 const oplaty = require('../oplaty');
 const platnosci = require('../platnosci');
+const przypomnienia = require('../logika/przypomnienia');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
@@ -140,6 +141,29 @@ router.post(
       throw bledneZadanie(e.message);
     }
     odp.json({ status: wynik.status, zaksiegowano: wynik.zaksiegowano });
+  })
+);
+
+/**
+ * Przypomnienia o konczacym sie roku prowadzenia rejestru — nalicza kolejny
+ * okres i wysyla wiadomosc z linkiem do zaplaty. Uruchamiane recznie przez
+ * pracownika; docelowo moze je wolac zadanie cykliczne.
+ */
+router.post(
+  '/przypomnienia',
+  asy(async (zad, odp) => {
+    const dni = (zad.body || {}).dni != null ? Number((zad.body || {}).dni) : 30;
+    if (!Number.isInteger(dni) || dni < 0 || dni > 365) {
+      throw bledneZadanie('Wyprzedzenie musi być liczbą dni od 0 do 365.');
+    }
+    const wyniki = await przypomnienia.wyslijPrzypomnienia(db(), { dni, autor: autor(zad) });
+    const wyslane = wyniki.filter((w) => w.wyslano).length;
+    odp.json({
+      wyniki,
+      komunikat: wyniki.length === 0
+        ? 'Żadnej spółce nie kończy się właśnie okres prowadzenia rejestru.'
+        : `Przypomnienia: ${wyslane} z ${wyniki.length} poszło e-mailem.`,
+    });
   })
 );
 

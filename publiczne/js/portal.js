@@ -694,8 +694,14 @@ function StanWniosku({ wniosek }) {
    ───────────────────────────────────────────────────── */
 function EkranMoje() {
   const { dane, ladowanie } = useDane('/api/psa/portal/moje');
+  // Naleznosci na widoku domowym, nie tylko w zakladce: konczacy sie rok
+  // prowadzenia rejestru to rzecz, o ktorej klient ma sie dowiedziec, zanim
+  // sam pojdzie szukac.
+  const { dane: rozliczenia } = useDane('/api/psa/portal/oplaty');
   if (ladowanie) return <Spinner />;
   if (!dane) return null;
+
+  const doZaplaty = rozliczenia ? rozliczenia.oplaty.filter((o) => o.status !== 'oplacona') : [];
 
   // Konto wnioskodawcy: spółki jeszcze nie ma w rejestrze, więc zamiast
   // pustej listy pokazujemy, na czym stoi wniosek i co dzieje się dalej.
@@ -707,6 +713,15 @@ function EkranMoje() {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
+      {doZaplaty.length > 0 && (
+        <Komunikat
+          odmiana="uwaga"
+          tytul={`Do zapłaty: ${fmt.zlote(rozliczenia.do_zaplaty_grosze)}`}
+          tresc={doZaplaty.some((o) => o.typ === 'prowadzenie')
+            ? 'W tym opłata za kolejny rok prowadzenia rejestru. Szczegóły w zakładce „Płatności”.'
+            : 'Zgłoszone wpisy trafiają do kancelarii po opłaceniu — szczegóły w zakładce „Płatności”.'}
+        />
+      )}
       {dane.spolki.map((s) => {
         const spolkaId = dane.rola === 'spolka' ? s.id : s.spolka_id;
         const nazwa = s.nazwa;

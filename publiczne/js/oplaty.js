@@ -273,10 +273,26 @@ function EkranOplat() {
   const [modalOdnowienia, ustawModalOdnowienia] = useState(false);
   const [blad, ustawBlad] = useState(null);
   const [tylkoNierozliczone, ustawTylkoNierozliczone] = useState(true);
+  const [przypomina, ustawPrzypomina] = useState(false);
+  const [wynikPrzypomnien, ustawWynikPrzypomnien] = useState(null);
 
   const { dane, ladowanie, odswiez } = useDane('/api/psa/oplaty/wg-spolek');
   const { dane: spolkiOdp } = useDane('/api/psa/spolki');
   const { dane: meta } = useDane('/api/psa/meta');
+
+  async function przypomnij() {
+    ustawPrzypomina(true);
+    ustawBlad(null);
+    try {
+      const wynik = await API.post('/api/psa/oplaty/przypomnienia', { dni: 30 });
+      ustawWynikPrzypomnien(wynik);
+      odswiez();
+    } catch (e) {
+      ustawBlad(e.message);
+    } finally {
+      ustawPrzypomina(false);
+    }
+  }
 
   if (ladowanie) return <Spinner />;
   if (!dane) return <Komunikat odmiana="blad" tresc="Nie udało się wczytać rozliczeń." />;
@@ -300,6 +316,11 @@ function EkranOplat() {
           </span>
         </div>
         <div className="row-g">
+          {dane.do_odnowienia.length > 0 && (
+            <button className="btn" disabled={przypomina} onClick={przypomnij}>
+              {przypomina ? 'Wysyłanie…' : 'Wyślij przypomnienia'}
+            </button>
+          )}
           {sesja.uzytkownik && sesja.uzytkownik.rola === 'admin' && (
             <button className="btn" onClick={() => ustawModalOdnowienia(true)}>Nalicz kolejny rok</button>
           )}
@@ -309,6 +330,15 @@ function EkranOplat() {
       </div>
 
       <Komunikat odmiana="blad" tresc={blad} />
+      {wynikPrzypomnien && (
+        <Komunikat
+          odmiana="ok"
+          tytul={wynikPrzypomnien.komunikat}
+          lista={wynikPrzypomnien.wyniki
+            .filter((w) => !w.wyslano)
+            .map((w) => `${w.spolka_nazwa || `spółka #${w.spolka_id}`}: ${w.powod}`)}
+        />
+      )}
 
       {/* Rok prowadzenia biegnie od rocznicy KAZDEJ SPOLKI z osobna, wiec
           bez tego przypomnienia termin przepada niezauwazony. */}
