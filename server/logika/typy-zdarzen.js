@@ -90,8 +90,8 @@ const TYPY = [
     tworzy: ['wpis akcjonariusza'],
     checklista: [
       ...BADANIE_DOKUMENTU,
-      poz('umowa_objecia', 'Przedłożono umowę objęcia akcji albo oświadczenie o objęciu'),
-      poz('aml', 'Wobec obejmującego zastosowano środki bezpieczeństwa finansowego (AML)'),
+      poz('umowa_objecia', 'Przedłożono umowę objęcia akcji albo oświadczenie o objęciu — od każdego obejmującego'),
+      poz('aml', 'Wobec KAŻDEGO obejmującego zastosowano środki bezpieczeństwa finansowego (AML)'),
       poz('wklad', 'Ujawniono wniesienie wkładu albo termin jego wniesienia', { wymagana: false }),
     ],
     dokumenty: ['zawiadomienie_wpis'],

@@ -10,17 +10,8 @@
  * Grupowanie po spółce, nie płaska lista spraw: adresatem jest spółka
  * i żądający, więc to spółka jest jednostką decyzji „wysyłam czy czekam".
  */
-/**
- * Polska liczba mnoga: 1 sprawa, 2 sprawy, 5 spraw. Bez tego komunikaty
- * wychodziły w rodzaju „Wystawiono 3 pism do 1 spraw".
- */
-function liczebnik(ile, pojedyncza, malaMnoga, duzaMnoga) {
-  if (ile === 1) return `${ile} ${pojedyncza}`;
-  const dziesiatki = ile % 100;
-  const jednosci = ile % 10;
-  const mala = jednosci >= 2 && jednosci <= 4 && !(dziesiatki >= 12 && dziesiatki <= 14);
-  return `${ile} ${mala ? malaMnoga : duzaMnoga}`;
-}
+/** Skrót na `fmt.odmien`: 1 sprawa, 2 sprawy, 5 spraw. */
+const liczebnik = (ile, a, b, c) => `${ile} ${fmt.odmien(ile, a, b, c)}`;
 
 function EkranZawiadomien() {
   const { dane, ladowanie, blad, odswiez } = useDane('/api/psa/zawiadomienia');

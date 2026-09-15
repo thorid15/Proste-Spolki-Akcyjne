@@ -703,6 +703,8 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
             <>
               <Wyniki bledy={podglad.bledy} ostrzezenia={podglad.ostrzezenia} />
 
+              <PrzydzialDoPotwierdzenia dane={podglad.dane} />
+
               {podglad.dane && podglad.dane.zamiast === undefined && podglad.dopuszczalne && (
                 <Komunikat odmiana="ok" tresc="Treść gotowa do wpisu." />
               )}
@@ -767,6 +769,69 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
       </div>
       </Karta>
     </div>
+  );
+}
+
+/** „1–100, 150” z listy zakresów numerów akcji. */
+function opiszZakresy(zakresy) {
+  return (zakresy || [])
+    .map((z) => (z.nr_od === z.nr_do ? String(z.nr_od) : `${z.nr_od}–${z.nr_do}`))
+    .join(', ');
+}
+
+/**
+ * Co dokładnie trafi do rejestru — WSZYSCY wskazani i WSZYSTKIE akcje,
+ * z numerami przydzielonymi przez aplikację.
+ *
+ * Krok „Co się zmienia" obiecuje: „wyliczony zakres zobaczysz do
+ * potwierdzenia w następnym kroku". Dotąd krok weryfikacji kwitował to
+ * jednym zdaniem „Treść gotowa do wpisu", więc przy objęciu przez kilka
+ * osób pracownik potwierdzał wpis, nie widząc ani kto obejmuje, ani które
+ * numery akcji dostaje.
+ */
+function PrzydzialDoPotwierdzenia({ dane }) {
+  if (!dane) return null;
+  const pozycje = dane.pozycje || [];
+  if (pozycje.length === 0) return null;
+
+  const kto = (p) => p.nabywca_nazwa || p.osoba_nazwa
+    || (p.nabywca_osoba_id || p.osoba_id ? `osoba #${p.nabywca_osoba_id || p.osoba_id}` : '—');
+  const razem = pozycje.reduce((suma, p) => suma + (Number(p.ilosc) || 0), 0);
+
+  return (
+    <>
+      <div className="fl odstep-g">
+        {dane.seria ? `Do wpisu — seria ${dane.seria}` : 'Do wpisu'}
+      </div>
+      {dane.zbywca_nazwa && (
+        <div className="male wyciszony" style={{ marginBottom: 8 }}>
+          Zbywca: {dane.zbywca_nazwa}
+        </div>
+      )}
+      <table className="tbl">
+        <thead>
+          <tr><th>Kto</th><th className="do-prawej">Akcje</th><th>Numery</th></tr>
+        </thead>
+        <tbody>
+          {pozycje.map((p, i) => (
+            <tr key={i}>
+              <td style={{ fontWeight: 500 }}>{kto(p)}</td>
+              <td className="do-prawej mono">{fmt.liczba(p.ilosc)}</td>
+              <td className="mono przyciemnione">{opiszZakresy(p.zakresy)}</td>
+            </tr>
+          ))}
+        </tbody>
+        {pozycje.length > 1 && (
+          <tfoot>
+            <tr>
+              <td>Razem</td>
+              <td className="do-prawej mono">{fmt.liczba(razem)}</td>
+              <td />
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    </>
   );
 }
 
