@@ -361,7 +361,7 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
         <Pole etykieta="Data ostatniego przeglądu AML" podpowiedz="Przegląd okresowy co 12 miesięcy — nie blokuje wpisu, jest tylko przypomnieniem.">
           <PoleDaty wartosc={dane.aml_data_przegladu || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, aml_data_przegladu: v }))} />
         </Pole>
-        <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 8 }}>
           <ZnacznikPrzegladuAml wymaga={edycja && osoba.wymaga_przegladu_aml} />
         </div>
       </div>
@@ -539,7 +539,7 @@ function EkranOsob() {
                   </td>
                   <td className="kol-dane">{o.jawny_identyfikator || '—'}</td>
                   <td>
-                    <div className="row-g" style={{ gap: 6 }}>
+                    <div className="row-g" style={{ gap: 8 }}>
                       <StatusAml status={o.aml_status} />
                       <ZnacznikPrzegladuAml wymaga={o.wymaga_przegladu_aml} />
                     </div>

@@ -347,6 +347,33 @@ function KrokDaneSpolki({ wniosek, krs, zablokowane, odswiez }) {
                   </Pole>
                 ))}
               </div>
+              {/* Skan dowodu stoi przy danych reprezentanta, bo tam się go
+                  sprawdza: pisownia nazwiska i PESEL w umowie mają zgadzać
+                  się z dokumentem, który przysłał klient. */}
+              {grupa.tytul === 'Reprezentant podpisujący umowę' && (
+                <Pole etykieta="Skan dokumentu tożsamości">
+                  {wniosek.dowod_nazwa_pliku ? (
+                    <div className="lista-plikow">
+                      <div>
+                        <Ikona nazwa="dokument" rozmiar={15} />
+                        <a
+                          className="lista-plikow-nazwa"
+                          href={`/api/psa/wnioski/${wniosek.id}/dowod`}
+                          target="_blank"
+                          rel="noopener"
+                        >
+                          {wniosek.dowod_nazwa_pliku}
+                        </a>
+                        <span className="wyciszony male">
+                          {Math.max(1, Math.round((wniosek.dowod_rozmiar || 0) / 1024))} kB
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="wyciszony male">klient nie przesłał dokumentu tożsamości</span>
+                  )}
+                </Pole>
+              )}
             </div>
           ))
         )}
@@ -369,17 +396,59 @@ function KrokDaneSpolki({ wniosek, krs, zablokowane, odswiez }) {
 function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez, przyZamknieciu }) {
   const [dane, ustawDane] = useState(pozycja);
   const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [pokazUwagi, ustawPokazUwagi] = useState(false);
+  const [uwagi, ustawUwagi] = useState('');
   const [blad, ustawBlad] = useState(null);
 
-  async function zapisz() {
-    ustawZapisywanie(true);
-    ustawBlad(null);
+  /** Zapisuje wpisane poprawki; `null` gdy zapis się nie udał. */
+  async function zapiszKorekte() {
     try {
       await API.put(`/api/psa/wnioski/${wniosekId}/akcjonariusze/${pozycja.id}`, dane);
+      return true;
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zapisać korekty.');
+      return false;
+    }
+  }
+
+  /**
+   * Weryfikacja pozycji. Otwarcie danych akcjonariusza kończy się jedną
+   * z dwóch decyzji — „sprawdziłem" albo „niech klient poprawi" — więc sam
+   * zapis nie jest osobną akcją: to, co poprawił pracownik, idzie na serwer
+   * razem z decyzją.
+   */
+  async function zweryfikuj() {
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    if (!(await zapiszKorekte())) { ustawZapisywanie(false); return; }
+    try {
+      await API.post(`/api/psa/wnioski/${wniosekId}/akcjonariusze/${pozycja.id}/zweryfikuj`, {
+        zweryfikowano: 1,
+        osoba_id: pozycja.osoba_id ?? null,
+      });
       odswiez();
       przyZamknieciu();
     } catch (e) {
-      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zapisać korekty.');
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zapisać weryfikacji.');
+      ustawZapisywanie(false);
+    }
+  }
+
+  async function odeslijDoPoprawy() {
+    if (!uwagi.trim()) {
+      ustawBlad('Napisz, co klient ma poprawić przy tej pozycji.');
+      return;
+    }
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    try {
+      await API.post(`/api/psa/wnioski/${wniosekId}/akcjonariusze/${pozycja.id}/do-poprawy`, {
+        uwagi: uwagi.trim(),
+      });
+      odswiez();
+      przyZamknieciu();
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się odesłać pozycji do poprawy.');
       ustawZapisywanie(false);
     }
   }
@@ -419,6 +488,14 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
     <>
       <KrokNaglowek tytul={nazwaPozycji(pozycja)} opis={identyfikatorPozycji(pozycja)} />
       <Komunikat odmiana="blad" tresc={blad} />
+
+      {pozycja.uwagi_kancelarii && (
+        <Komunikat
+          odmiana="uwaga"
+          tytul="Pozycja odesłana do poprawy"
+          tresc={pozycja.uwagi_kancelarii}
+        />
+      )}
 
       {braki && braki.length > 0 && (
         <Komunikat odmiana="uwaga" tytul="Braki wobec art. 300³³ § 1 KSH" lista={braki} />
@@ -485,21 +562,60 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
         </Pole>
       )}
 
-      <NawigacjaKreatora
-        wstecz={{ etykieta: 'Wróć do listy', przy: przyZamknieciu }}
-        dalej={zablokowane
-          ? null
-          : { etykieta: zapisywanie ? 'Zapisywanie…' : 'Zapisz i wróć', przy: zapisz, wylaczony: zapisywanie }}
-      />
+      {/* Dwie decyzje, nie zapis: pracownik otwiera pozycję po to, żeby ją
+          sprawdzić, więc wychodzi z niej albo z „zweryfikowano", albo
+          z uwagą dla klienta. Wpisane poprawki idą na serwer razem z decyzją. */}
+      {!zablokowane && !pokazUwagi && (
+        <div className="decyzja-pozycji">
+          <button className="btn btn-nawigacja" onClick={przyZamknieciu}>Wróć do listy</button>
+          <div className="decyzja-pozycji-akcje">
+            <button
+              className="btn btn-nawigacja"
+              onClick={() => { ustawUwagi(pozycja.uwagi_kancelarii || ''); ustawPokazUwagi(true); }}
+              disabled={zapisywanie}
+            >
+              Odeślij do poprawy
+            </button>
+            <button
+              className="btn btn-glowny btn-nawigacja"
+              onClick={zweryfikuj}
+              disabled={zapisywanie}
+            >
+              {zapisywanie ? 'Zapisywanie…' : 'Zweryfikowano'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!zablokowane && pokazUwagi && (
+        <div className="pion" style={{ gap: 'var(--od-8)', marginTop: 'var(--od-24)' }}>
+          <Pole
+            etykieta="Co klient ma poprawić przy tej pozycji"
+            wymagane
+            podpowiedz="Uwagę zobaczy przy tym akcjonariuszu w swoim formularzu."
+          >
+            <textarea rows={3} value={uwagi} onChange={(z) => ustawUwagi(z.target.value)} autoFocus />
+          </Pole>
+          <div className="row-g">
+            <button className="btn" onClick={() => ustawPokazUwagi(false)} disabled={zapisywanie}>Anuluj</button>
+            <button className="btn btn-glowny" onClick={odeslijDoPoprawy} disabled={zapisywanie}>
+              {zapisywanie ? 'Wysyłanie…' : 'Odeślij wniosek do poprawy'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {zablokowane && (
+        <NawigacjaKreatora wstecz={{ etykieta: 'Wróć do listy', przy: przyZamknieciu }} />
+      )}
 
       {!zablokowane && (
         <div className="akcja-niszczaca">
-          <button
-            className="btn btn-maly"
-            onClick={() => ustawZweryfikowano(pozycja.zweryfikowano ? 0 : 1)}
-          >
-            {pozycja.zweryfikowano ? 'Cofnij weryfikację' : 'Oznacz jako zweryfikowaną'}
-          </button>
+          {Boolean(pozycja.zweryfikowano) && (
+            <button className="btn btn-maly" onClick={() => ustawZweryfikowano(0)}>
+              Cofnij weryfikację
+            </button>
+          )}
           <button className="btn btn-maly btn-sygnal" onClick={usun}>Usuń akcjonariusza</button>
         </div>
       )}
@@ -563,9 +679,11 @@ function KrokAkcjonariusze({ wniosek, akcjonariusze, brakiUstawowe, zablokowane,
                     key={a.id}
                     ikona={a.typ === 'prawna' ? 'spolki' : 'osoby'}
                     tytul={nazwaPozycji(a)}
-                    znacznik={a.zweryfikowano
-                      ? 'zweryfikowana'
-                      : braki > 0 ? `${braki} braków` : 'do weryfikacji'}
+                    znacznik={a.uwagi_kancelarii
+                      ? 'u klienta do poprawy'
+                      : a.zweryfikowano
+                        ? 'zweryfikowana'
+                        : braki > 0 ? `${braki} braków` : 'do weryfikacji'}
                     opis={[
                       identyfikatorPozycji(a),
                       adresPozycji(a),
@@ -596,65 +714,138 @@ function KrokAkcjonariusze({ wniosek, akcjonariusze, brakiUstawowe, zablokowane,
    KROK 3 — DOKUMENTY
    ───────────────────────────────────────────────────── */
 
-function PodgladDokumentu({ wniosekId, dokument, przyZamknieciu }) {
-  return (
-    <Modal tytul={dokument.nazwa} przyZamknieciu={przyZamknieciu} szerokosc={900}>
-      <iframe
-        className="podglad-dokumentu"
-        title={dokument.nazwa}
-        src={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}?podglad=1`}
-      />
-    </Modal>
-  );
+/* ─────────────────────────────────────────────────────
+   KROK 3 — DOKUMENTY
+
+   Dokument otwiera się JEDNYM przyciskiem. To, co się otwiera, wygląda jak
+   dokument — jedna kolumna, tytuł na środku, akapity, miejsca na podpis —
+   a nie jak formularz obok podglądu. Kliknięcie w akapit zamienia go w pole
+   do pisania i z powrotem; nie trzeba przełączać się między „czytam"
+   a „poprawiam", bo przy czytaniu dokumentu właśnie o to chodzi.
+
+   Po odesłaniu podpisanego skanu treść zamyka się na stałe: podpis dotyczy
+   TEGO brzmienia dokumentu, a nie następnego. Zostaje czytanie i jedna
+   decyzja — czy podpis jest prawidłowy.
+   ───────────────────────────────────────────────────── */
+
+/** Data w postaci, w jakiej stoi w dokumencie — bez sekund i strefy. */
+function podpisSprawdzenia(dokument) {
+  if (dokument.podpis_potwierdzono) return 'podpis potwierdzony';
+  if (dokument.sprawdzono) return 'sprawdzony';
+  return null;
 }
 
 /**
- * Edytor treści JEDNEGO bloku. Blok jest najmniejszą całością, jaką dokument
- * daje się opisać: akapit, nagłówek, wiersz danych, punkt listy. Notariusz
- * poprawia TEKST, nie układ — dlatego nie ma tu ani krojów, ani wcięć, ani
- * niczego, czym dałoby się rozstroić dokument o skutkach prawnych.
+ * Jeden blok w postaci, w jakiej wyjdzie na papier. Klasy `dok-*` opisują
+ * dokument, nie interfejs — dlatego nie korzystają z pól aplikacji.
  */
-function BlokTresci({ blok, nazwaRodzaju, przyZmianie, przyUsunieciu, przyPrzesunieciu }) {
+function BlokPodglad({ blok }) {
+  switch (blok.rodzaj) {
+    case 'naglowek':
+      return (
+        <div className="dok-naglowek">
+          {[blok.miejscowosc || '—', blok.data ? `dnia ${blok.data}` : null].filter(Boolean).join(', ')}
+        </div>
+      );
+    case 'tytul':
+      return (
+        <div className="dok-tytul-blok">
+          <div className="dok-tytul">{blok.tekst}</div>
+          {blok.podtytul && <div className="dok-podtytul">{blok.podtytul}</div>}
+        </div>
+      );
+    case 'sekcja':
+      return <div className="dok-sekcja">{blok.tekst}</div>;
+    case 'akapit':
+      return <p className="dok-akapit">{blok.tekst}</p>;
+    case 'pola':
+      return (
+        <dl className="dok-pola">
+          {blok.pary.map(([etykieta, wartosc], i) => (
+            <React.Fragment key={i}>
+              <dt>{etykieta}:</dt>
+              <dd>{String(wartosc || '').trim() || '—'}</dd>
+            </React.Fragment>
+          ))}
+        </dl>
+      );
+    case 'punkt':
+      return (
+        <div className="dok-punkt">
+          <span className="dok-punkt-znacznik">{blok.znacznik}</span>
+          <span>{blok.tekst}</span>
+        </div>
+      );
+    case 'opcja':
+      return (
+        <div className="dok-opcja">
+          <span className={`dok-kratka ${blok.zaznaczona ? 'dok-kratka-zaznaczona' : ''}`} aria-hidden="true" />
+          <span>{blok.tekst}</span>
+        </div>
+      );
+    case 'doWypelnienia':
+      return (
+        <div className="dok-wypelnij">
+          {blok.etykiety.map((etykieta, i) => (
+            <div className="dok-wypelnij-wiersz" key={i}>
+              <span>{etykieta}:</span>
+              <span className="dok-linia" />
+            </div>
+          ))}
+        </div>
+      );
+    case 'podpis':
+      return (
+        <div className="dok-podpis">
+          <span className="dok-podpis-linia" />
+          <span className="dok-podpis-opis">{blok.opis}</span>
+        </div>
+      );
+    case 'odstep':
+      return <div className="dok-odstep" style={{ height: Math.max(1, Number(blok.ile) || 1) * 12 }} />;
+    default:
+      return null;
+  }
+}
+
+/** Ten sam blok otwarty do pisania. Pola zależą od rodzaju. */
+function BlokEdycja({ blok, przyZmianie }) {
   const wiersz = (etykieta, wartosc, zmien, wiele = false) => (
     <Pole etykieta={etykieta}>
       {wiele
-        ? <textarea rows={3} value={wartosc} onChange={(z) => zmien(z.target.value)} />
+        ? <textarea rows={4} value={wartosc} onChange={(z) => zmien(z.target.value)} />
         : <input type="text" value={wartosc} onChange={(z) => zmien(z.target.value)} />}
     </Pole>
   );
 
-  return (
-    <div className="blok-tresci">
-      <div className="blok-tresci-pasek">
-        <span className="blok-tresci-rodzaj">{nazwaRodzaju}</span>
-        <span className="row-g">
-          <button className="btn btn-maly" onClick={() => przyPrzesunieciu(-1)} title="W górę">↑</button>
-          <button className="btn btn-maly" onClick={() => przyPrzesunieciu(1)} title="W dół">↓</button>
-          <button className="btn btn-maly btn-sygnal" onClick={przyUsunieciu}>Usuń</button>
-        </span>
-      </div>
-
-      {blok.rodzaj === 'naglowek' && (
+  switch (blok.rodzaj) {
+    case 'naglowek':
+      return (
         <div className="siatka-2">
           {wiersz('Miejscowość', blok.miejscowosc, (v) => przyZmianie({ ...blok, miejscowosc: v }))}
           {wiersz('Data', blok.data, (v) => przyZmianie({ ...blok, data: v }))}
         </div>
-      )}
-      {blok.rodzaj === 'tytul' && (
+      );
+    case 'tytul':
+      return (
         <>
           {wiersz('Tytuł', blok.tekst, (v) => przyZmianie({ ...blok, tekst: v }))}
           {wiersz('Podtytuł', blok.podtytul, (v) => przyZmianie({ ...blok, podtytul: v }))}
         </>
-      )}
-      {blok.rodzaj === 'sekcja' && wiersz('Nagłówek', blok.tekst, (v) => przyZmianie({ ...blok, tekst: v }))}
-      {blok.rodzaj === 'akapit' && wiersz('Treść', blok.tekst, (v) => przyZmianie({ ...blok, tekst: v }), true)}
-      {blok.rodzaj === 'punkt' && (
+      );
+    case 'sekcja':
+      return wiersz('Nagłówek sekcji', blok.tekst, (v) => przyZmianie({ ...blok, tekst: v }));
+    case 'akapit':
+      return wiersz('Treść akapitu', blok.tekst, (v) => przyZmianie({ ...blok, tekst: v }), true);
+    case 'punkt':
+      return (
         <>
           {wiersz('Znacznik', blok.znacznik, (v) => przyZmianie({ ...blok, znacznik: v }))}
           {wiersz('Treść', blok.tekst, (v) => przyZmianie({ ...blok, tekst: v }), true)}
         </>
-      )}
-      {blok.rodzaj === 'pola' && (
+      );
+    case 'pola':
+      return (
         <Pole etykieta="Dane" podpowiedz="Jeden wiersz = jedna pozycja, w postaci „Etykieta: wartość”.">
           <textarea
             rows={Math.max(2, blok.pary.length)}
@@ -670,8 +861,9 @@ function BlokTresci({ blok, nazwaRodzaju, przyZmianie, przyUsunieciu, przyPrzesu
             })}
           />
         </Pole>
-      )}
-      {blok.rodzaj === 'doWypelnienia' && (
+      );
+    case 'doWypelnienia':
+      return (
         <Pole etykieta="Pola do wypełnienia ręcznie" podpowiedz="Jedna etykieta w wierszu — pod każdą stanie linia na wpis.">
           <textarea
             rows={Math.max(2, blok.etykiety.length)}
@@ -679,8 +871,9 @@ function BlokTresci({ blok, nazwaRodzaju, przyZmianie, przyUsunieciu, przyPrzesu
             onChange={(z) => przyZmianie({ ...blok, etykiety: z.target.value.split('\n') })}
           />
         </Pole>
-      )}
-      {blok.rodzaj === 'opcja' && (
+      );
+    case 'opcja':
+      return (
         <>
           {wiersz('Treść pozycji', blok.tekst, (v) => przyZmianie({ ...blok, tekst: v }), true)}
           <label className="chk">
@@ -692,9 +885,11 @@ function BlokTresci({ blok, nazwaRodzaju, przyZmianie, przyUsunieciu, przyPrzesu
             <span className="chk-tresc">Kratka zaznaczona z góry</span>
           </label>
         </>
-      )}
-      {blok.rodzaj === 'podpis' && wiersz('Podpis pod linią', blok.opis, (v) => przyZmianie({ ...blok, opis: v }))}
-      {blok.rodzaj === 'odstep' && (
+      );
+    case 'podpis':
+      return wiersz('Podpis pod linią', blok.opis, (v) => przyZmianie({ ...blok, opis: v }));
+    case 'odstep':
+      return (
         <Pole etykieta="Wysokość odstępu (w wierszach)">
           <input
             type="number" min="1" step="1"
@@ -702,24 +897,58 @@ function BlokTresci({ blok, nazwaRodzaju, przyZmianie, przyUsunieciu, przyPrzesu
             onChange={(z) => przyZmianie({ ...blok, ile: Number(z.target.value) || 1 })}
           />
         </Pole>
-      )}
-    </div>
+      );
+    default:
+      return null;
+  }
+}
+
+/** Kafel otwierający jeden egzemplarz dokumentu jako PDF w nowej karcie. */
+function EgzemplarzDokumentu({ nazwa, opis, href, glowny }) {
+  return (
+    <a
+      className={`dok-egzemplarz ${glowny ? 'dok-egzemplarz-glowny' : ''}`}
+      href={href}
+      target="_blank"
+      rel="noopener"
+    >
+      <Ikona nazwa="dokument" rozmiar={20} />
+      <span className="dok-egzemplarz-tresc">
+        <span className="dok-egzemplarz-nazwa">{nazwa}</span>
+        <span className="dok-egzemplarz-plik">{opis}</span>
+      </span>
+      <span className="dok-egzemplarz-akcja">Otwórz PDF</span>
+    </a>
   );
 }
 
 /**
- * Edycja treści dokumentu. Po zapisie PDF składa się od nowa i podmienia plik
- * W MIEJSCU — poprawiona wersja obowiązuje wszędzie: w portalu klienta,
- * w podglądzie kancelarii i w aktach spółki po przyjęciu wniosku.
+ * Okno dokumentu: czytanie i — dopóki nikt go nie podpisał — poprawianie
+ * treści w miejscu.
+ *
+ * Po podpisaniu okno NIE pokazuje już treści złożonej z bloków. Podpis
+ * dotyczy pliku, nie zapisu w bazie, więc jedynym wiarygodnym obrazem tego,
+ * co zostało podpisane, jest sam PDF — oba egzemplarze otwiera się w nowej
+ * karcie, a w oknie zostaje sama decyzja o prawidłowości podpisu.
  */
-function EdytorDokumentu({ wniosekId, dokumentId, przyZamknieciu, przyZapisie }) {
+function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZapisie }) {
   const [stan, ustawStan] = useState({ ladowanie: true, dokument: null, rodzaje: {} });
   const [bloki, ustawBloki] = useState([]);
+  const [aktywny, ustawAktywny] = useState(null);
   const [zapisywanie, ustawZapisywanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
 
+  const podpisany = Boolean(dokument.podpis_nazwa_pliku);
+  const doPoprawy = !podpisany && !zablokowane && dokument.edytowalny;
+
   useEffect(() => {
-    API.get(`/api/psa/wnioski/${wniosekId}/dokumenty/${dokumentId}/tresc`)
+    // Podpisanego dokumentu nie ma po co wczytywać — jego treści i tak się
+    // nie pokazuje ani nie zmienia.
+    if (podpisany) {
+      ustawStan({ ladowanie: false, dokument: null, rodzaje: {} });
+      return;
+    }
+    API.get(`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/tresc`)
       .then((d) => {
         ustawStan({ ladowanie: false, dokument: d.dokument, rodzaje: d.rodzaje });
         ustawBloki(d.dokument.bloki);
@@ -728,32 +957,39 @@ function EdytorDokumentu({ wniosekId, dokumentId, przyZamknieciu, przyZapisie })
         ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się wczytać treści dokumentu.');
         ustawStan((p) => ({ ...p, ladowanie: false }));
       });
-  }, [wniosekId, dokumentId]);
+  }, [wniosekId, dokument.id, podpisany]);
 
   function zmienBlok(i, nowy) {
     ustawBloki((p) => p.map((b, idx) => (idx === i ? nowy : b)));
   }
   function usunBlok(i) {
     ustawBloki((p) => p.filter((_, idx) => idx !== i));
+    ustawAktywny(null);
   }
   function przesunBlok(i, kierunek) {
+    const cel = i + kierunek;
     ustawBloki((p) => {
-      const cel = i + kierunek;
       if (cel < 0 || cel >= p.length) return p;
       const kopia = [...p];
       [kopia[i], kopia[cel]] = [kopia[cel], kopia[i]];
       return kopia;
     });
+    if (cel >= 0 && cel < bloki.length) ustawAktywny(cel);
   }
-  function dopiszAkapit() {
-    ustawBloki((p) => [...p, { rodzaj: 'akapit', tekst: '' }]);
+  function dopiszAkapit(po) {
+    ustawBloki((p) => {
+      const kopia = [...p];
+      kopia.splice(po + 1, 0, { rodzaj: 'akapit', tekst: '' });
+      return kopia;
+    });
+    ustawAktywny(po + 1);
   }
 
   async function zapisz() {
     ustawZapisywanie(true);
     ustawBlad(null);
     try {
-      const wynik = await API.put(`/api/psa/wnioski/${wniosekId}/dokumenty/${dokumentId}/tresc`, { bloki });
+      const wynik = await API.put(`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/tresc`, { bloki });
       przyZapisie(wynik.dokumenty);
       przyZamknieciu();
     } catch (e) {
@@ -762,50 +998,122 @@ function EdytorDokumentu({ wniosekId, dokumentId, przyZamknieciu, przyZapisie })
     }
   }
 
-  return (
-    <Modal
-      tytul={stan.dokument ? `Treść: ${stan.dokument.nazwa}` : 'Treść dokumentu'}
-      przyZamknieciu={przyZamknieciu}
-      szerokosc={860}
-      stopka={
-        <>
-          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-          <button className="btn btn-glowny" onClick={zapisz} disabled={zapisywanie || stan.ladowanie}>
-            {zapisywanie ? 'Składanie dokumentu…' : 'Zapisz i złóż od nowa'}
+  async function potwierdzPodpis(potwierdzono) {
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    try {
+      const wynik = await API.post(
+        `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/podpis-potwierdz`,
+        { potwierdzono }
+      );
+      przyZapisie(wynik.dokumenty);
+      przyZamknieciu();
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zapisać potwierdzenia.');
+      ustawZapisywanie(false);
+    }
+  }
+
+  const stopka = podpisany ? (
+    <>
+      <button className="btn" onClick={przyZamknieciu}>Zamknij</button>
+      {!zablokowane && (
+        dokument.podpis_potwierdzono ? (
+          <button className="btn" onClick={() => potwierdzPodpis(false)} disabled={zapisywanie}>
+            Cofnij potwierdzenie
           </button>
-        </>
-      }
-    >
+        ) : (
+          <button className="btn btn-glowny" onClick={() => potwierdzPodpis(true)} disabled={zapisywanie}>
+            {zapisywanie ? 'Zapisywanie…' : 'Podpis prawidłowy'}
+          </button>
+        )
+      )}
+    </>
+  ) : (
+    <>
+      <button className="btn" onClick={przyZamknieciu}>Zamknij bez zapisu</button>
+      {doPoprawy && (
+        <button className="btn btn-glowny" onClick={zapisz} disabled={zapisywanie || stan.ladowanie}>
+          {zapisywanie ? 'Składanie dokumentu…' : 'Zapisz i oznacz jako sprawdzony'}
+        </button>
+      )}
+    </>
+  );
+
+  return (
+    <Modal tytul={dokument.nazwa} przyZamknieciu={przyZamknieciu} szerokosc={880} stopka={stopka}>
       <Komunikat odmiana="blad" tresc={blad} />
-      {stan.ladowanie ? (
+
+      {podpisany && (
+        <>
+          <Komunikat
+            odmiana="uwaga"
+            tytul="Dokument został podpisany"
+            tresc="Treści nie można już zmieniać — podpis dotyczy tego brzmienia dokumentu.
+              Oba egzemplarze otwierają się jako pliki PDF w nowej karcie."
+          />
+          <div className="dok-egzemplarze">
+            <EgzemplarzDokumentu
+              nazwa="Egzemplarz wystawiony"
+              opis={dokument.nazwa_pliku || dokument.nazwa}
+              href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}?podglad=1`}
+            />
+            <EgzemplarzDokumentu
+              nazwa="Skan odesłany przez klienta"
+              opis={dokument.podpis_nazwa_pliku}
+              href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}?egzemplarz=podpisany&podglad=1`}
+              glowny
+            />
+          </div>
+        </>
+      )}
+
+      {!podpisany && stan.dokument && stan.dokument.brakujace.length > 0 && (
+        <Komunikat
+          odmiana="uwaga"
+          tytul="Wzór nie miał czym wypełnić tych miejsc"
+          tresc="W dokumencie stoi w nich kreska. Uzupełnij je tutaj albo popraw dane wniosku i wystaw komplet ponownie."
+          lista={stan.dokument.brakujace}
+        />
+      )}
+
+      {podpisany ? null : stan.ladowanie ? (
         <Spinner />
       ) : (
         <>
-          <Komunikat
-            odmiana="info"
-            tresc="Po zapisaniu dokument zostanie złożony od nowa z tej treści i zastąpi dotychczasowy plik — także ten, który widzi klient."
-          />
-          {stan.dokument && stan.dokument.brakujace.length > 0 && (
-            <Komunikat
-              odmiana="uwaga"
-              tytul="Wzór nie miał czym wypełnić tych miejsc"
-              tresc="W dokumencie stoi w nich kreska. Uzupełnij je tutaj albo popraw dane wniosku i wystaw komplet ponownie."
-              lista={stan.dokument.brakujace}
-            />
+          {doPoprawy && (
+            <div className="dok-wskazowka">
+              Kliknij w dowolny fragment, żeby go poprawić. Zapis składa dokument od nowa
+              i zastępuje plik, który zobaczy klient.
+            </div>
           )}
-          <div className="edytor-blokow">
+          <div className={`dok-strona ${doPoprawy ? 'dok-strona-edytowalna' : ''}`}>
             {bloki.map((blok, i) => (
-              <BlokTresci
+              <div
                 key={i}
-                blok={blok}
-                nazwaRodzaju={stan.rodzaje[blok.rodzaj] || blok.rodzaj}
-                przyZmianie={(nowy) => zmienBlok(i, nowy)}
-                przyUsunieciu={() => usunBlok(i)}
-                przyPrzesunieciu={(kierunek) => przesunBlok(i, kierunek)}
-              />
+                className={`dok-blok ${aktywny === i ? 'dok-blok-otwarty' : ''}`}
+                onClick={doPoprawy && aktywny !== i ? () => ustawAktywny(i) : undefined}
+              >
+                {aktywny === i ? (
+                  <>
+                    <div className="dok-blok-pasek">
+                      <span className="dok-blok-rodzaj">{stan.rodzaje[blok.rodzaj] || blok.rodzaj}</span>
+                      <span className="row-g">
+                        <button className="btn btn-maly" onClick={() => przesunBlok(i, -1)} title="W górę">↑</button>
+                        <button className="btn btn-maly" onClick={() => przesunBlok(i, 1)} title="W dół">↓</button>
+                        <button className="btn btn-maly" onClick={() => dopiszAkapit(i)}>Akapit poniżej</button>
+                        <button className="btn btn-maly btn-sygnal" onClick={() => usunBlok(i)}>Usuń</button>
+                        <button className="btn btn-maly btn-glowny" onClick={() => ustawAktywny(null)}>Gotowe</button>
+                      </span>
+                    </div>
+                    <BlokEdycja blok={blok} przyZmianie={(nowy) => zmienBlok(i, nowy)} />
+                  </>
+                ) : (
+                  <BlokPodglad blok={blok} />
+                )}
+              </div>
             ))}
           </div>
-          <WierszDodania etykieta="Dopisz akapit na końcu" przyKliknieciu={dopiszAkapit} />
         </>
       )}
     </Modal>
@@ -823,13 +1131,14 @@ function opisPustychMiejsc(ile) {
   return `${ile} pustych miejsc`;
 }
 
-function PozycjaDokumentuKancelarii({ wniosekId, dokument, dlaKogo, zablokowane, przyPodgladzie, przyEdycji }) {
+function PozycjaDokumentuKancelarii({ wniosekId, dokument, dlaKogo, przyOtwarciu }) {
   const podpisany = Boolean(dokument.podpis_nazwa_pliku);
+  const stan = podpisSprawdzenia(dokument);
   return (
     <div className={`dokument-pozycja ${podpisany ? 'dokument-pozycja-gotowa' : ''}`}>
       <div className="dokument-pozycja-glowna">
         <Ikona nazwa="dokument" rozmiar={17} />
-        <button type="button" className="dokument-pozycja-nazwa jak-odnosnik" onClick={przyPodgladzie}>
+        <button type="button" className="dokument-pozycja-nazwa jak-odnosnik" onClick={przyOtwarciu}>
           {dokument.nazwa}
           {/* Oświadczenia wystawia się PO JEDNYM NA AKCJONARIUSZA, więc sama
               nazwa dokumentu powtarza się na liście tyle razy, ilu ich jest.
@@ -845,30 +1154,34 @@ function PozycjaDokumentuKancelarii({ wniosekId, dokument, dlaKogo, zablokowane,
         {dokument.udostepniono
           ? <Znacznik odmiana="neutralny">u klienta</Znacznik>
           : <Znacznik odmiana="mosiadz">nieudostępniony</Znacznik>}
+        {/* Jeden znacznik na stan sprawdzenia, nie trzy: „sprawdzony" mówi, że
+            ktoś dokument przeczytał, „podpis potwierdzony" — że sprawdził też
+            odesłany skan. Ślad po poprawce treści zostaje osobno. */}
+        {stan && <Znacznik odmiana="zielony">{stan}</Znacznik>}
         {dokument.zmodyfikowano && <Znacznik odmiana="mosiadz">treść poprawiona</Znacznik>}
         {dokument.brakujace.length > 0 && (
           <Znacznik odmiana="bordo">{opisPustychMiejsc(dokument.brakujace.length)}</Znacznik>
         )}
         {podpisany ? (
-          <>
-            <Znacznik odmiana="zielony">podpisany</Znacznik>
-            <a
-              className="dokument-pozycja-skan"
-              href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}?egzemplarz=podpisany`}
-              target="_blank"
-              rel="noopener"
-            >
-              {dokument.podpis_nazwa_pliku}
-            </a>
-          </>
+          <a
+            className="dokument-pozycja-skan"
+            href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}?egzemplarz=podpisany`}
+            target="_blank"
+            rel="noopener"
+          >
+            {dokument.podpis_nazwa_pliku}
+          </a>
         ) : (
           <span className="dokument-pozycja-czeka">czeka na podpisany skan</span>
         )}
         <span className="row-g" style={{ marginLeft: 'auto' }}>
-          <button className="btn btn-maly" onClick={przyPodgladzie}>Podgląd</button>
-          {dokument.edytowalny && !zablokowane && (
-            <button className="btn btn-maly" onClick={przyEdycji}>Edytuj treść</button>
-          )}
+          {/* Jeden przycisk zamiast „Podgląd" i „Edytuj treść": dokument
+              otwiera się do czytania, a poprawia się go w tym samym oknie,
+              klikając w to, co wymaga poprawy. Po podpisaniu nie ma czego
+              poprawiać — zostaje sprawdzenie obu egzemplarzy w PDF. */}
+          <button className="btn btn-maly btn-glowny" onClick={przyOtwarciu}>
+            {podpisany ? 'Sprawdź podpis' : 'Otwórz'}
+          </button>
           <a
             className="btn btn-maly"
             href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}`}
@@ -887,12 +1200,13 @@ function KrokDokumenty({ wniosek, akcjonariusze, dokumenty, ustawDokumenty, zabl
   const [praca, ustawPrace] = useState(null); // 'wystaw' | 'udostepnij'
   const [komunikat, ustawKomunikat] = useState(null);
   const [blad, ustawBlad] = useState(null);
-  const [podglad, ustawPodglad] = useState(null);
-  const [edycja, ustawEdycja] = useState(null);
+  const [otwarty, ustawOtwarty] = useState(null);
 
   const wystawione = dokumenty.length > 0;
   const doUdostepnienia = dokumenty.filter((d) => !d.udostepniono).length;
   const podpisanych = dokumenty.filter((d) => d.podpis_nazwa_pliku).length;
+  const potwierdzonych = dokumenty.filter((d) => d.podpis_potwierdzono).length;
+  const sprawdzonych = dokumenty.filter((d) => d.sprawdzono).length;
   const pustychMiejsc = dokumenty.reduce((suma, d) => suma + d.brakujace.length, 0);
 
   async function wystaw() {
@@ -968,8 +1282,9 @@ function KrokDokumenty({ wniosek, akcjonariusze, dokumenty, ustawDokumenty, zabl
           <Metryka
             pozycje={[
               { etykieta: 'Dokumentów', wartosc: dokumenty.length, dane: true },
-              { etykieta: 'Do udostępnienia', wartosc: doUdostepnienia, dane: true },
+              { etykieta: 'Sprawdzonych', wartosc: `${sprawdzonych} / ${dokumenty.length}`, dane: true },
               { etykieta: 'Podpisanych', wartosc: `${podpisanych} / ${dokumenty.length}`, dane: true },
+              { etykieta: 'Podpis potwierdzony', wartosc: `${potwierdzonych} / ${dokumenty.length}`, dane: true },
               pustychMiejsc > 0 ? { etykieta: 'Pustych miejsc', wartosc: pustychMiejsc, dane: true } : null,
             ]}
           />
@@ -978,7 +1293,15 @@ function KrokDokumenty({ wniosek, akcjonariusze, dokumenty, ustawDokumenty, zabl
             <Komunikat
               odmiana="uwaga"
               tytul="Klient jeszcze tego nie widzi"
-              tresc={`${doUdostepnienia} z ${dokumenty.length} pozycji czeka na udostępnienie. Przeczytaj je, popraw treść, gdzie trzeba, i dopiero wtedy wpuść komplet do portalu.`}
+              tresc={`${doUdostepnienia} z ${dokumenty.length} pozycji czeka na udostępnienie. Otwórz je, popraw treść, gdzie trzeba, i dopiero wtedy wpuść komplet do portalu.`}
+            />
+          )}
+
+          {doUdostepnienia === 0 && podpisanych > 0 && potwierdzonych < dokumenty.length && (
+            <Komunikat
+              odmiana="uwaga"
+              tytul="Podpisy czekają na sprawdzenie"
+              tresc={`Potwierdzono ${potwierdzonych} z ${dokumenty.length} podpisów. Otwórz każdą pozycję, obejrzyj odesłany skan i oznacz podpis jako prawidłowy — bez tego wniosku nie da się przyjąć.`}
             />
           )}
 
@@ -991,23 +1314,19 @@ function KrokDokumenty({ wniosek, akcjonariusze, dokumenty, ustawDokumenty, zabl
                 dlaKogo={d.akcjonariusz_id
                   ? nazwaPozycji(akcjonariusze.find((a) => a.id === d.akcjonariusz_id) || {})
                   : null}
-                zablokowane={zablokowane}
-                przyPodgladzie={() => ustawPodglad(d)}
-                przyEdycji={() => ustawEdycja(d)}
+                przyOtwarciu={() => ustawOtwarty(d)}
               />
             ))}
           </div>
         </>
       )}
 
-      {podglad && (
-        <PodgladDokumentu wniosekId={wniosek.id} dokument={podglad} przyZamknieciu={() => ustawPodglad(null)} />
-      )}
-      {edycja && (
-        <EdytorDokumentu
+      {otwarty && (
+        <OknoDokumentu
           wniosekId={wniosek.id}
-          dokumentId={edycja.id}
-          przyZamknieciu={() => ustawEdycja(null)}
+          dokument={dokumenty.find((d) => d.id === otwarty.id) || otwarty}
+          zablokowane={zablokowane}
+          przyZamknieciu={() => ustawOtwarty(null)}
           przyZapisie={(lista) => ustawDokumenty(lista)}
         />
       )}
@@ -1019,7 +1338,7 @@ function KrokDokumenty({ wniosek, akcjonariusze, dokumenty, ustawDokumenty, zabl
    KROK 4 — DECYZJA
    ───────────────────────────────────────────────────── */
 
-function KrokDecyzja({ wniosek, akcjonariusze, zablokowane, odswiez }) {
+function KrokDecyzja({ wniosek, akcjonariusze, dokumenty, zablokowane, odswiez }) {
   const [notatka, ustawNotatka] = useState('');
   const [pokazNotatke, ustawPokazNotatke] = useState(null); // 'do_uzupelnienia' | 'odrzuc' | null
   const [przetwarzanie, ustawPrzetwarzanie] = useState(false);
@@ -1027,6 +1346,8 @@ function KrokDecyzja({ wniosek, akcjonariusze, zablokowane, odswiez }) {
 
   const wszystkoZweryfikowane = akcjonariusze.length > 0 && akcjonariusze.every((a) => a.zweryfikowano);
   const niezweryfikowani = akcjonariusze.filter((a) => !a.zweryfikowano).length;
+  const bezPotwierdzenia = dokumenty.filter((d) => !d.podpis_potwierdzono).length;
+  const podpisySprawdzone = dokumenty.length > 0 && bezPotwierdzenia === 0;
 
   async function wyslijNotatke(akcja) {
     if (!notatka.trim()) {
@@ -1076,7 +1397,8 @@ function KrokDecyzja({ wniosek, akcjonariusze, zablokowane, odswiez }) {
     );
   }
 
-  const gotowyDoPrzyjecia = wniosek.status === 'umowa_podpisana' && wszystkoZweryfikowane;
+  const gotowyDoPrzyjecia = wniosek.status === 'umowa_podpisana'
+    && wszystkoZweryfikowane && podpisySprawdzone;
 
   return (
     <Karta tytul="Decyzja kancelarii">
@@ -1093,6 +1415,14 @@ function KrokDecyzja({ wniosek, akcjonariusze, zablokowane, odswiez }) {
               ? `wszystkie ${akcjonariusze.length} pozycji zweryfikowane`
               : `${niezweryfikowani} z ${akcjonariusze.length} czeka na weryfikację`}
         </dd>
+        <dt>Podpisy pod dokumentami</dt>
+        <dd>
+          {dokumenty.length === 0
+            ? <span className="brak">nie wystawiono jeszcze dokumentów</span>
+            : bezPotwierdzenia === 0
+              ? `wszystkie ${dokumenty.length} podpisy potwierdzone`
+              : `${bezPotwierdzenia} z ${dokumenty.length} czeka na sprawdzenie`}
+        </dd>
       </dl>
 
       {!gotowyDoPrzyjecia && (
@@ -1100,7 +1430,9 @@ function KrokDecyzja({ wniosek, akcjonariusze, zablokowane, odswiez }) {
           odmiana="info"
           tresc={wniosek.status !== 'umowa_podpisana'
             ? 'Przyjęcie wniosku wymaga, żeby klient odesłał podpisaną umowę o prowadzenie rejestru.'
-            : 'Zweryfikuj wszystkie pozycje akcjonariuszy (krok „Akcjonariusze”), zanim przyjmiesz wniosek.'}
+            : !wszystkoZweryfikowane
+              ? 'Zweryfikuj wszystkie pozycje akcjonariuszy (krok „Akcjonariusze”), zanim przyjmiesz wniosek.'
+              : 'Otwórz każdy dokument (krok „Dokumenty”), obejrzyj odesłany skan i oznacz podpis jako prawidłowy.'}
         />
       )}
 
@@ -1242,6 +1574,7 @@ function EkranWniosekSzczegoly({ wniosekId }) {
         <KrokDecyzja
           wniosek={wniosek}
           akcjonariusze={akcjonariusze}
+          dokumenty={lista}
           zablokowane={zablokowane}
           odswiez={odswiez}
         />

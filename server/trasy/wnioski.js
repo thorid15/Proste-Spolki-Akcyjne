@@ -28,6 +28,9 @@ const express = require('express');
 const { db } = require('../baza');
 const czas = require('../pomocnicze/czas');
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('../logika/ustawienia');
+const pliki = require('../pomocnicze/pliki');
+const dziennikDostepu = require('../logika/dziennik-dostepu');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 const { pobierzZKrs } = require('./krs');
 const portal = require('./portal');
@@ -180,6 +183,36 @@ router.get(
   })
 );
 
+/**
+ * Skan dokumentu tozsamosci reprezentanta — do wgladu przy weryfikacji.
+ * Zawsze jako zalacznik do pobrania, nigdy do wyswietlenia w ramce: to plik
+ * od klienta, a `pliki.naglowkiPliku` i tak by na to nie pozwolilo, gdyby
+ * nie byl obrazem albo PDF-em.
+ */
+router.get(
+  '/:id/dowod',
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(Number(zad.params.id));
+    if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
+    if (!wniosek.dowod_sciezka) throw nieZnaleziono('Klient nie przesłał dokumentu tożsamości.');
+
+    const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.dowod_sciezka);
+    if (!pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelna)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+
+    // Dokument tozsamosci to dane wrazliwe — kazde otwarcie zostawia slad.
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik', spolkaId: wniosek.spolka_id || null,
+      akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU,
+      opis: `dokument tożsamości reprezentanta, wniosek #${wniosek.id}`,
+    });
+
+    pliki.naglowkiPliku(odp, { nazwaPliku: wniosek.dowod_nazwa_pliku, wRamce: false });
+    fs.createReadStream(pelna).pipe(odp);
+  })
+);
+
 /** Wystawiony wzor albo odeslany skan — `?egzemplarz=podpisany` po ten drugi. */
 router.get(
   '/:id/dokumenty/:dokId',
@@ -194,7 +227,6 @@ router.get(
 
     const sciezka = podpisany ? dokument.podpis_sciezka : dokument.sciezka;
     const nazwaPliku = podpisany ? dokument.podpis_nazwa_pliku : dokument.nazwa_pliku;
-    const mime = podpisany ? dokument.podpis_mime : dokument.mime;
 
     const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, sciezka);
     if (!pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelna)) {
@@ -203,12 +235,11 @@ router.get(
     // `?podglad=1` oddaje plik do WYSWIETLENIA w ramce. Kancelaria czyta
     // dokument, zanim go udostepni — pobieranie kazdej pozycji na dysk tylko
     // po to, zeby na nia spojrzec, zamienialoby przeglad w sprzatanie katalogu.
+    // Typ ustala SERWER z rozszerzenia — `mime` w bazie pochodzi z naglowka
+    // przegladarki klienta, wiec plik nazwany „skan.pdf" a wyslany jako
+    // text/html wracal tu do pracownika jako wykonywalna strona.
     const wRamce = zad.query.podglad === '1';
-    odp.setHeader('Content-Type', mime || 'application/octet-stream');
-    odp.setHeader(
-      'Content-Disposition',
-      `${wRamce ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(nazwaPliku || 'dokument')}`
-    );
+    pliki.naglowkiPliku(odp, { nazwaPliku, wRamce });
     fs.createReadStream(pelna).pipe(odp);
   })
 );
@@ -295,6 +326,24 @@ router.put(
 );
 
 /**
+ * Potwierdzenie, ze odeslany skan jest kompletny i prawidlowo podpisany.
+ * `{ potwierdzono: false }` cofa potwierdzenie.
+ */
+router.post(
+  '/:id/dokumenty/:dokId/podpis-potwierdz',
+  asy((zad, odp) => {
+    const wniosek = wczytajOtwartyWniosek(Number(zad.params.id));
+    const potwierdzono = (zad.body || {}).potwierdzono !== false;
+    const wynik = pakietWniosku.potwierdzPodpis(
+      wniosek.id, Number(zad.params.dokId), potwierdzono, autor(zad)
+    );
+    if (wynik === null) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+    if (wynik === false) throw bledneZadanie('Klient nie odesłał jeszcze skanu tego dokumentu.');
+    odp.json({ dokument: wynik, dokumenty: pakietWniosku.lista(wniosek.id) });
+  })
+);
+
+/**
  * Udostepnienie kompletu klientowi: pozycje pojawiaja sie w portalu, wniosek
  * przechodzi w `umowa_wygenerowana`, a klient dostaje wiadomosc, ze dokumenty
  * czekaja na pobranie. Brak SMTP nie przewraca operacji — kancelaria widzi
@@ -321,12 +370,12 @@ router.post(
 
     const proba = await poczta.wyslij({
       do: wniosek.reprezentant_email || wniosek.konto_email,
-      temat: `Dokumenty do podpisu — ${konfiguracja.KANCELARIA.nazwa}`,
+      temat: `Dokumenty do podpisu — ${ustawienia.kancelaria(db()).nazwa}`,
       html: trescPowiadomieniaODokumentach({
         nazwaSpolki: wniosek.nazwa,
         ile: poUdostepnieniu.length,
         link: konfiguracja.URL_PORTALU,
-        kancelariaNazwa: konfiguracja.KANCELARIA.nazwa,
+        kancelariaNazwa: ustawienia.kancelaria(db()).nazwa,
       }),
     });
 
@@ -513,11 +562,78 @@ router.post(
 
     db()
       .prepare(
-        `UPDATE psa_wnioski_akcjonariusze SET zweryfikowano = ?, osoba_id = ?, zaktualizowano = ? WHERE id = ?`
+        `UPDATE psa_wnioski_akcjonariusze
+            SET zweryfikowano = ?, osoba_id = ?, uwagi_kancelarii = ?, zaktualizowano = ?
+          WHERE id = ?`
       )
-      .run(zweryfikowano, osobaId, czas.terazIso(), istniejacy.id);
+      // Zweryfikowanie pozycji zamyka uwage: to ona byla pytaniem, a to jest
+      // odpowiedz. Cofniecie weryfikacji uwagi nie przywraca - gdyby byla
+      // dalej aktualna, kancelaria odesle pozycje do poprawy jeszcze raz.
+      .run(zweryfikowano, osobaId, zweryfikowano ? null : istniejacy.uwagi_kancelarii, czas.terazIso(), istniejacy.id);
 
     odp.json({ akcjonariusz: db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(istniejacy.id) });
+  })
+);
+
+/**
+ * Odeslanie JEDNEJ pozycji akcjonariusza do poprawy.
+ *
+ * Notatka na caly wniosek nie wystarcza: przy pieciu akcjonariuszach zdanie
+ * „popraw numer PESEL" nie mowi, przy kim. Uwaga siada wiec przy pozycji,
+ * a wniosek wraca do edycji po stronie klienta - bo bez tego nie mialby jak
+ * jej poprawic.
+ */
+router.post(
+  '/:id/akcjonariusze/:akcId/do-poprawy',
+  asy((zad, odp) => {
+    const wniosek = wczytajOtwartyWniosek(Number(zad.params.id));
+    const istniejacy = wczytajAkcjonariuszaWniosku(wniosek.id, Number(zad.params.akcId));
+    if (!istniejacy) throw nieZnaleziono('Nie odnaleziono pozycji akcjonariusza.');
+
+    const uwagi = String((zad.body || {}).uwagi || '').trim();
+    if (!uwagi) throw bledneZadanie('Podaj, co klient ma poprawić przy tej pozycji.');
+
+    const teraz = czas.terazIso();
+    db()
+      .prepare(
+        `UPDATE psa_wnioski_akcjonariusze
+            SET uwagi_kancelarii = ?, zweryfikowano = 0, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(uwagi, teraz, istniejacy.id);
+
+    // Notatka na wniosku zbiera wszystkie otwarte uwagi — klient widzi ja nad
+    // formularzem i wie, ile pozycji czeka na poprawke.
+    const otwarte = db()
+      .prepare(
+        `SELECT nazwisko, imie, nazwa, typ, uwagi_kancelarii
+           FROM psa_wnioski_akcjonariusze
+          WHERE wniosek_id = ? AND uwagi_kancelarii IS NOT NULL
+          ORDER BY kolejnosc, id`
+      )
+      .all(wniosek.id);
+    const podsumowanie = otwarte
+      .map((a) => {
+        const kto = a.typ === 'prawna'
+          ? (a.nazwa || 'podmiot bez nazwy')
+          : [a.imie, a.nazwisko].filter(Boolean).join(' ') || 'osoba bez nazwiska';
+        return `${kto}: ${a.uwagi_kancelarii}`;
+      })
+      .join('\n');
+
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET status = 'do_uzupelnienia', notatka_weryfikacji = ?,
+                obsluzone_przez = ?, obsluzone_kiedy = ?, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(podsumowanie, autor(zad), teraz, teraz, wniosek.id);
+
+    odp.json({
+      wniosek: wczytajWniosek(wniosek.id),
+      akcjonariusz: db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(istniejacy.id),
+    });
   })
 );
 
@@ -581,6 +697,20 @@ router.post(
     if (niezweryfikowani.length > 0) {
       throw bledneZadanie(
         `${niezweryfikowani.length} z ${akcjonariusze.length} pozycji akcjonariuszy nie jest jeszcze zweryfikowanych.`
+      );
+    }
+
+    // Podpis pod dokumentem musi byc SPRAWDZONY, nie tylko odeslany: sam fakt
+    // wgrania pliku nie mowi, czy skan jest czytelny i czy podpisali go
+    // wszyscy, ktorzy mieli. Przyjecie wniosku otwiera rejestr, wiec to
+    // ostatni moment, w ktorym da sie to zauwazyc.
+    const bezPotwierdzenia = pakietWniosku.bezPotwierdzonegoPodpisu(wniosek.id);
+    if (bezPotwierdzenia.length > 0) {
+      const brakSkanu = bezPotwierdzenia.filter((d) => !d.ma_skan).length;
+      throw bledneZadanie(
+        `${bezPotwierdzenia.length} dokumentów nie ma potwierdzonego podpisu`
+        + (brakSkanu > 0 ? ` (w tym ${brakSkanu} bez odesłanego skanu)` : '')
+        + '. Sprawdź je w zakładce „Dokumenty” i oznacz podpisy jako prawidłowe.'
       );
     }
 

@@ -172,11 +172,13 @@ function EkranLoginPortal({ przyZalogowaniu }) {
 
       <div className="brama-stopka">
         Dostęp zakłada kancelaria po weryfikacji tożsamości — nie ma tu samodzielnej rejestracji.
+        {/* Droga poboczna, nie główna: czerwień jest w tym systemie zarezerwowana
+            dla odmowy i rzeczy nieodwracalnych, a ten przycisk krzyczał głośniej
+            niż „Zaloguj się", czyli to, po co ludzie tu przychodzą. */}
         <button
           type="button"
-          className="btn btn-akcent btn-duzy"
+          className="btn btn-pelny"
           onClick={() => idz('/zglos-sie')}
-          style={{ width: '100%' }}
         >
           Nie mam konta — zgłaszam zainteresowanie
         </button>
@@ -384,7 +386,7 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
 
   return (
     <Karta tytul="Informacja o przetwarzaniu danych osobowych">
-      <div className="pion" style={{ gap: 14 }}>
+      <div className="pion" style={{ gap: 16 }}>
         <p>
           Zanim przejdziesz do wypełnienia wniosku o prowadzenie rejestru akcjonariuszy, zapoznaj się
           z poniższą informacją.
@@ -440,21 +442,31 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
 /* ─────────────────────────────────────────────────────
    UKŁAD
    ───────────────────────────────────────────────────── */
-/* Wnioskodawca nie ma jeszcze spółki w rejestrze — jego zakładka „Moje
-   spółki" pokazuje stan wniosku (`StanWniosku`), a sam formularz dostaje
-   własną pozycję. Dopóki wniosku nie złożono, to ON jest głównym ekranem
-   konta, więc stoi PIERWSZY: klient, który właśnie ustawił hasło, ma przed
-   sobą formularz do wypełnienia, a nie listę spółek, których jeszcze nie ma. */
+/**
+ * Nawigacja portalu zależy od tego, na czym stoi konto.
+ *
+ * `wnioskodawca` nie ma jeszcze spółki w rejestrze, więc jego głównym ekranem
+ * jest FORMULARZ — stoi pierwszy: klient, który właśnie ustawił hasło, ma
+ * przed sobą wniosek do wypełnienia, a nie listę spółek, których jeszcze
+ * nie ma.
+ *
+ * `spolka` to konto po przyjęciu wniosku. Zakładka „Wniosek" znika — sprawa
+ * jest zamknięta, a formularz i tak nie przyjmuje już zmian. Zostaje jedna
+ * spółka, więc i nazwa jest w liczbie pojedynczej.
+ *
+ * `akcjonariusz` bywa uprawniony z akcji kilku spółek, więc u niego liczba
+ * mnoga zostaje.
+ */
 function kartyNawigacji(rola) {
   if (rola === 'wnioskodawca') {
     return [
       { sciezka: '/wniosek', nazwa: 'Wniosek' },
-      { sciezka: '/', nazwa: 'Moje spółki' },
+      { sciezka: '/', nazwa: 'Moja spółka' },
       { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
     ];
   }
   return [
-    { sciezka: '/', nazwa: 'Moje spółki' },
+    { sciezka: '/', nazwa: rola === 'spolka' ? 'Moja spółka' : 'Moje spółki' },
     { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia' },
   ];
 }
@@ -479,31 +491,41 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
     }
   }
 
+  // Ta sama powłoka, co w aplikacji kancelaryjnej: zaokrąglony panel odsunięty
+  // od krawędzi okna, z paskiem marki na górze i belką tytułową pod nim.
+  // Portal nie ma szyny nawigacji (ma cztery ekrany, nie dwadzieścia), więc
+  // siatka jest jednokolumnowa — poza tym oba widoki są tym samym oknem tej
+  // samej kancelarii i nie ma powodu, żeby jeden był panelem, a drugi ścianą
+  // ciągnącą się od krawędzi do krawędzi.
   return (
-    <div className="pion" style={{ minHeight: '100vh' }}>
+    <div className="powloka powloka-portal">
       <div className="marka-pasek bez-druku">
         <div className="marka-pasek-nazwa">{kancelaria.nazwa}</div>
       </div>
-      <header className="portal-topbar pasek-gorny bez-druku" style={{ padding: '14px 28px' }}>
-        <div>
-          <div className="tytul-strony" style={{ fontSize: 17 }}>Rejestr akcjonariuszy P.S.A.</div>
-          <div className="podpowiedz">{konto.email} · {ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola}</div>
-        </div>
-        <div className="row-g">
-          {kartyNawigacji(konto.rola).map((k) => (
-            <button
-              key={k.sciezka}
-              className={`btn btn-sm ${sciezka === k.sciezka ? 'btn-glowny' : ''}`}
-              onClick={() => idz(k.sciezka)}
-            >
-              {k.nazwa}
-            </button>
-          ))}
-          <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>Wyloguj się</button>
-        </div>
-      </header>
-      <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
-      <StopkaKancelarii kancelaria={kancelaria} />
+      <div className="obszar">
+        <header className="topbar bez-druku">
+          <div>
+            <div className="topbar-tytul">Rejestr akcjonariuszy P.S.A.</div>
+            <div className="topbar-podtytul">
+              {konto.email} · {ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola}
+            </div>
+          </div>
+          <div className="row-g">
+            {kartyNawigacji(konto.rola).map((k) => (
+              <button
+                key={k.sciezka}
+                className={`btn btn-sm ${sciezka === k.sciezka ? 'btn-glowny' : ''}`}
+                onClick={() => idz(k.sciezka)}
+              >
+                {k.nazwa}
+              </button>
+            ))}
+            <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>Wyloguj się</button>
+          </div>
+        </header>
+        <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
+        <StopkaKancelarii kancelaria={kancelaria} />
+      </div>
     </div>
   );
 }
@@ -574,7 +596,7 @@ function StanWniosku({ wniosek }) {
   return (
     <div className="pion" style={{ gap: 16 }}>
       <Karta tytul={wniosek.nazwa || 'Wniosek o prowadzenie rejestru'}>
-        {wniosek.krs && <div className="podpowiedz" style={{ marginBottom: 14 }}>KRS {wniosek.krs}</div>}
+        {wniosek.krs && <div className="podpowiedz" style={{ marginBottom: 16 }}>KRS {wniosek.krs}</div>}
         <Komunikat odmiana={stan.odmiana} tytul={stan.tytul} tresc={stan.tresc} />
         {stan.doFormularza && (
           <button className="btn btn-glowny" onClick={() => idz('/wniosek')}>
@@ -610,7 +632,7 @@ function EkranMoje() {
         return (
           <Karta key={spolkaId} tytul={nazwa}>
             {dane.rola === 'akcjonariusz' && (
-              <div className="pion" style={{ gap: 6, marginBottom: 14 }}>
+              <div className="pion" style={{ gap: 8, marginBottom: 16 }}>
                 <div className="podpowiedz">Posiadane akcje — razem {fmt.liczba(s.razem_akcji)}</div>
                 {s.pozycje.map((p, i) => (
                   <div key={i} className="row-b">
@@ -621,9 +643,34 @@ function EkranMoje() {
                 ))}
               </div>
             )}
-            {s.krs && <div className="podpowiedz" style={{ marginBottom: 14 }}>KRS {s.krs}</div>}
+            {s.krs && <div className="podpowiedz odstep-d">KRS {s.krs}</div>}
+
+            {/* Stan rejestru na wejściu — po te trzy liczby klient i tak
+                wchodził do podglądu. Widok domowy, który pokazuje samą nazwę
+                spółki, nie mówi nic o tym, po co się tu przyszło. */}
+            {dane.rola === 'spolka' && (
+              <div className="stan-skrot">
+                <div className="stan-skrot-poz">
+                  <span className="stan-skrot-liczba">{fmt.liczba(s.akcjonariuszy || 0)}</span>
+                  <span className="stan-skrot-opis">
+                    {s.akcjonariuszy === 1 ? 'akcjonariusz' : 'akcjonariuszy'}
+                  </span>
+                </div>
+                <div className="stan-skrot-poz">
+                  <span className="stan-skrot-liczba">{fmt.liczba(s.razem_akcji || 0)}</span>
+                  <span className="stan-skrot-opis">akcji w obrocie</span>
+                </div>
+                <div className="stan-skrot-poz">
+                  <span className="stan-skrot-liczba">
+                    {s.ostatnie_zdarzenie ? fmt.data(s.ostatnie_zdarzenie) : '—'}
+                  </span>
+                  <span className="stan-skrot-opis">ostatnia zmiana</span>
+                </div>
+              </div>
+            )}
+
             <div className="row-g">
-              <button className="btn" onClick={() => idz(`/rejestr/${spolkaId}`)}>Podgląd rejestru</button>
+              <button className="btn btn-glowny" onClick={() => idz(`/rejestr/${spolkaId}`)}>Zobacz rejestr</button>
               <button className="btn" onClick={() => idz(`/zgloszenie/${spolkaId}`)}>Zgłoś zmianę</button>
               <button className="btn" onClick={() => idz(`/informacja/${spolkaId}`)}>Informacja z rejestru</button>
             </div>
@@ -643,7 +690,7 @@ function EkranRejestrPortal({ spolkaId }) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
-      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Moje spółki</button>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
 
       {blad && <Komunikat odmiana="blad" tresc={blad.message} />}
       {ladowanie && <Spinner />}
@@ -716,35 +763,70 @@ function EkranRejestrPortal({ spolkaId }) {
 /* ─────────────────────────────────────────────────────
    ZGŁOSZENIE ŻĄDANIA (kroki 1—2 kreatora)
    ───────────────────────────────────────────────────── */
+/**
+ * Rodzaje dokumentu, ktore klient dosyla najczesciej. Celowo KROTKA lista:
+ * pracownik i tak otwiera plik i czyta go w calosci, wiec dokladna
+ * kwalifikacja po stronie klienta niczego nie przesadza — ma tylko pomoc
+ * ulozyc akta. Wszystko inne idzie jako „inny dokument".
+ */
+const RODZAJE_ZGLOSZENIA = [
+  ['umowa_zbycia', 'Umowa zbycia akcji (sprzedaż, darowizna)'],
+  ['uchwala', 'Uchwała'],
+  ['postanowienie', 'Postanowienie sądu'],
+  ['inny', 'Inny dokument'],
+];
+
 function EkranZgloszeniePortal({ spolkaId }) {
   const { dane: meta, ladowanie: metaLadowanie } = useDane('/api/psa/meta');
   const [typ, ustawTyp] = useState('');
+  const [rodzajDokumentu, ustawRodzajDokumentu] = useState('umowa_zbycia');
   const [opis, ustawOpis] = useState('');
   const [pliki, ustawPliki] = useState([]);
   const [wysylanie, ustawWysylanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
   const [gotowe, ustawGotowe] = useState(false);
+  const wejscie = useRef(null);
 
   if (metaLadowanie) return <Spinner />;
   if (!meta) return null;
 
   const typyDostepne = meta.typy_zdarzen.filter((t) => meta.typy_w_kreatorze.includes(t.kod) && !t.z_urzedu);
+  // Wpis robi sie NA PODSTAWIE DOKUMENTU (art. 300(34) § 4 KSH), wiec plik
+  // jest tu rzecza najwazniejsza. Zgloszenie bez pliku przyjmujemy, ale
+  // wtedy trzeba napisac, co sie wydarzylo i skad dokument ma sie wziac.
+  const mozeZlozyc = Boolean(typ) && (pliki.length > 0 || opis.trim().length > 0);
+
+  function dodajPliki(nowe) {
+    ustawPliki((p) => [...p, ...nowe].slice(0, 10));
+    if (wejscie.current) wejscie.current.value = '';
+  }
+  function usunPlik(i) {
+    ustawPliki((p) => p.filter((_, idx) => idx !== i));
+  }
 
   async function zglos() {
-    if (!typ || !opis.trim()) return;
+    if (!mozeZlozyc) return;
     ustawWysylanie(true);
     ustawBlad(null);
     try {
-      const wynik = await API.post('/api/psa/portal/zadania', { spolka_id: spolkaId, typ_zdarzenia: typ, opis: opis.trim() });
+      const wynik = await API.post('/api/psa/portal/zadania', {
+        spolka_id: spolkaId, typ_zdarzenia: typ, opis: opis.trim(),
+      });
       if (pliki.length > 0) {
         const formularz = new FormData();
-        formularz.append('typ_dokumentu', 'inny');
+        formularz.append('typ_dokumentu', rodzajDokumentu);
         for (const plik of pliki) formularz.append('pliki', plik);
-        await fetch(`/api/psa/portal/zadania/${wynik.sprawa.id}/dokumenty`, { method: 'POST', body: formularz });
+        const odp = await fetch(`/api/psa/portal/zadania/${wynik.sprawa.id}/dokumenty`, {
+          method: 'POST', body: formularz,
+        });
+        if (!odp.ok) {
+          const tresc = await odp.json().catch(() => ({}));
+          throw new Error(tresc.blad || 'Zgłoszenie przyjęto, ale nie udało się przesłać pliku.');
+        }
       }
       ustawGotowe(true);
     } catch (e) {
-      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się złożyć zgłoszenia.');
+      ustawBlad(e instanceof BladApi ? e.message : e.message || 'Nie udało się złożyć zgłoszenia.');
     } finally {
       ustawWysylanie(false);
     }
@@ -764,9 +846,10 @@ function EkranZgloszeniePortal({ spolkaId }) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
-      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Moje spółki</button>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
       <Karta tytul="Zgłoś zmianę w rejestrze">
         <Komunikat odmiana="blad" tresc={blad} />
+
         <Pole etykieta="Czego dotyczy zgłoszenie" wymagane>
           <select value={typ} onChange={(z) => ustawTyp(z.target.value)}>
             <option value="">— wybierz —</option>
@@ -775,15 +858,66 @@ function EkranZgloszeniePortal({ spolkaId }) {
             ))}
           </select>
         </Pole>
-        <Pole etykieta="Opis zgłoszenia" wymagane podpowiedz="Opisz, co się wydarzyło — kancelaria przygotuje wpis na tej podstawie i skontaktuje się w razie pytań.">
-          <textarea rows={4} value={opis} onChange={(z) => ustawOpis(z.target.value)} />
+
+        {/* Dokument, nie opis, jest podstawą wpisu — dlatego stoi wyżej
+            i zajmuje więcej miejsca niż pole na uwagi. */}
+        <Pole
+          etykieta="Dokument, na podstawie którego ma być dokonany wpis"
+          podpowiedz="Skan albo zdjęcie. PDF, JPG, PNG, DOC/DOCX — maks. 20 MB na plik."
+        >
+          <div className="zgloszenie-plik">
+            <select
+              value={rodzajDokumentu}
+              onChange={(z) => ustawRodzajDokumentu(z.target.value)}
+              style={{ width: 'auto' }}
+            >
+              {RODZAJE_ZGLOSZENIA.map(([kod, nazwa]) => (
+                <option key={kod} value={kod}>{nazwa}</option>
+              ))}
+            </select>
+            <input
+              ref={wejscie}
+              type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              className="pole-pliku-ukryte"
+              onChange={(z) => dodajPliki([...z.target.files])}
+            />
+            <button type="button" className="btn" onClick={() => wejscie.current && wejscie.current.click()}>
+              <Ikona nazwa="pobierz" rozmiar={16} /> Wybierz plik
+            </button>
+          </div>
+          {pliki.length > 0 && (
+            <ul className="lista-plikow">
+              {pliki.map((p, i) => (
+                <li key={`${p.name}-${i}`}>
+                  <Ikona nazwa="dokument" rozmiar={15} />
+                  <span className="lista-plikow-nazwa">{p.name}</span>
+                  <span className="wyciszony male">{Math.max(1, Math.round(p.size / 1024))} kB</span>
+                  <button type="button" className="btn-tekstowy" onClick={() => usunPlik(i)}>usuń</button>
+                </li>
+              ))}
+            </ul>
+          )}
         </Pole>
-        <Pole etykieta="Dokumenty" podpowiedz="PDF, JPG, PNG, DOC/DOCX — maks. 20 MB na plik.">
-          <input type="file" multiple onChange={(z) => ustawPliki([...z.target.files])} />
+
+        <Pole
+          etykieta="Uwagi (opcjonalnie)"
+          podpowiedz="Tylko jeśli coś wymaga wyjaśnienia. Wpis i tak powstaje na podstawie dokumentu, nie opisu."
+        >
+          <textarea rows={2} value={opis} onChange={(z) => ustawOpis(z.target.value)} />
         </Pole>
+
+        {pliki.length === 0 && (
+          <Komunikat
+            odmiana="uwaga"
+            tresc="Bez dołączonego dokumentu kancelaria nie dokona wpisu — napisz w uwagach, jak dostarczysz dokument, albo dołącz go tutaj."
+          />
+        )}
+
         <button
           className="btn btn-glowny"
-          disabled={wysylanie || !typ || !opis.trim()}
+          disabled={wysylanie || !mozeZlozyc}
           onClick={zglos}
           style={{ marginTop: 8 }}
         >
@@ -881,9 +1015,9 @@ function EkranInformacjaPortal({ spolkaId }) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
-      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Moje spółki</button>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
       <Karta tytul="Informacja z rejestru" >
-        <div className="podstawa-prawna" style={{ marginBottom: 14 }}>
+        <div className="podstawa-prawna" style={{ marginBottom: 16 }}>
           Art. 300(35) Kodeksu spółek handlowych — informacja z rejestru akcjonariuszy na wskazany dzień,
           w zakresie odpowiadającym roli konta.
         </div>
@@ -948,6 +1082,9 @@ function AplikacjaPortal() {
   return <AplikacjaPortalZSesja segmenty={segmenty} sciezka={sciezka} />;
 }
 
+/** Adresy, pod którymi zalogowane konto ma co zobaczyć (pusty = strona główna). */
+const EKRANY_KONTA = ['', 'wniosek', 'sprawy', 'rejestr', 'zgloszenie', 'informacja'];
+
 function AplikacjaPortalZSesja({ segmenty, sciezka }) {
   const sesja = usePortalSesja();
 
@@ -963,7 +1100,18 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
           />
         }
       >
-        <EkranLoginPortal przyZalogowaniu={() => sesja.odswiez()} />
+        {/* Po zalogowaniu adres zostawał taki, jaki był — a ekran logowania
+            pokazuje się pod KAŻDYM adresem, więc klient, który wszedł na
+            `#/logowanie` (naturalny odruch, bywa też w zakładkach), po
+            poprawnym haśle dostawał „Nie ma takiej strony". Wracamy tam,
+            skąd wyrzuciła nas wygasła sesja, a spod nieznanego adresu — na
+            stronę główną. */}
+        <EkranLoginPortal
+          przyZalogowaniu={() => {
+            if (!EKRANY_KONTA.includes(segmenty[0] || '')) idz('/');
+            sesja.odswiez();
+          }}
+        />
       </RamaPubliczna>
     );
   }
@@ -978,7 +1126,12 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
     // „Moje spółki" i „Moje zgłoszenia" zmieniały adres, a ekran zostawał
     // ten sam — przyciski wyglądały na zepsute. Teraz nawigacja działa dla
     // każdej roli, a formularz ma własny adres.
-    if (segmenty[0] === 'wniosek') return <EkranWniosku />;
+    // Formularz wniosku należy WYŁĄCZNIE do konta wnioskodawcy. Po przyjęciu
+    // wniosku konto przechodzi w rolę „spolka" i ekran nie ma już czego
+    // pokazać — pod tym adresem zostawałby martwy kreator z zamkniętą edycją.
+    if (segmenty[0] === 'wniosek') {
+      return sesja.konto.rola === 'wnioskodawca' ? <EkranWniosku /> : <EkranMoje />;
+    }
     if (segmenty.length === 0) return <EkranMoje />;
     if (segmenty[0] === 'sprawy') return <EkranSprawyPortal />;
     if (segmenty[0] === 'rejestr' && segmenty[1]) return <EkranRejestrPortal spolkaId={Number(segmenty[1])} />;
@@ -993,7 +1146,9 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
 
   // Te same proporcje treści co w aplikacji kancelaryjnej (faza 3.2/3.3):
   // formularze (zgłoszenie, informacja) węższe niż listy/rejestr.
-  const waski = segmenty[0] === 'zgloszenie' || segmenty[0] === 'informacja';
+  // Wąska miara tam, gdzie ekran niesie jedną kartę albo jeden formularz.
+  // Podgląd rejestru i lista zgłoszeń zostają szerokie — mają tabele.
+  const waski = ['zgloszenie', 'informacja', undefined].includes(segmenty[0]);
 
   return (
     <PortalLayout

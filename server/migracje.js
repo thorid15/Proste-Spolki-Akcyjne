@@ -1613,6 +1613,79 @@ const MIGRACJE = [
       UPDATE psa_wnioski_dokumenty SET udostepniono = utworzono WHERE udostepniono IS NULL;
     `,
   },
+  {
+    wersja: 37,
+    nazwa: 'uwagi-do-pozycji-akcjonariusza-i-potwierdzenie-podpisu',
+    sql: `
+      -- Uwaga kancelarii do KONKRETNEJ pozycji akcjonariusza. Dotad odeslanie
+      -- wniosku do uzupelnienia niosło jedna notatke na caly wniosek, wiec
+      -- przy pieciu akcjonariuszach klient dostawal zdanie "popraw PESEL"
+      -- i sam musial zgadywac, przy kim.
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN uwagi_kancelarii TEXT;
+
+      -- Potwierdzenie, ze odeslany skan jest kompletny i prawidlowo podpisany.
+      -- Sam fakt wgrania pliku tego nie przesadza - ktos musi na niego
+      -- spojrzec, a przyjecie wniosku ma tego wymagac.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_potwierdzono TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_potwierdzil TEXT;
+    `,
+  },
+  {
+    wersja: 38,
+    nazwa: 'sprawdzenie-dokumentu-przed-udostepnieniem',
+    sql: `
+      -- Slad, ze ktos PRZECZYTAL dokument, zanim poszedl do klienta. Rozni sie
+      -- od 'zmodyfikowano': dokument bez ani jednej poprawki tez bywa
+      -- sprawdzony, a wlasnie o to sprawdzenie chodzi przed udostepnieniem.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN sprawdzono TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN sprawdzil TEXT;
+    `,
+  },
+  {
+    wersja: 39,
+    nazwa: 'ustawienia kancelarii w bazie (metryka, stawki) zamiast wylacznie .env',
+    sql: `
+      -- ── Ustawienia edytowalne z aplikacji ───────────────────────────────
+      -- Dotad dane kancelarii (NIP, REGON, adres) siedzialy WYLACZNIE w .env,
+      -- wiec zmiana wymagala dostepu do serwera i restartu. W praktyce nikt
+      -- tego nie robil i kazda wystawiona umowa miala w tych miejscach kreski.
+      --
+      -- Tabela trzyma TYLKO to, co ktos swiadomie ustawil. Brak klucza nie
+      -- jest bledem: obowiazuje wtedy wartosc z .env. Dzieki temu nie ma
+      -- momentu "przenoszenia danych" ani ryzyka, ze kopia w bazie rozjedzie
+      -- sie z plikiem konfiguracyjnym.
+      --
+      -- Czego tu NIE MA i nie bedzie: sekretow. Klucze tpay, sekret sesji
+      -- i dane SMTP zostaja w .env, bo baza trafia do kopii zapasowych.
+      CREATE TABLE IF NOT EXISTS psa_ustawienia (
+        klucz           TEXT PRIMARY KEY,
+        wartosc         TEXT,
+        zaktualizowano  TEXT NOT NULL,
+        autor           TEXT NOT NULL
+      );
+    `,
+  },
+  {
+    wersja: 40,
+    nazwa: 'skan dokumentu tozsamosci reprezentanta przy wniosku',
+    sql: `
+      -- Wniosek sklada sie ZDALNIE, wiec notariusz moze nigdy nie zobaczyc
+      -- podpisujacego na oczy. Skan dokumentu nie jest dowodem tozsamosci
+      -- (obraz dokumentu mozna miec bez bycia jego wlascicielem), ale jest
+      -- sladem, na czym oparto identyfikacje, i podstawa przy stosowaniu
+      -- srodkow bezpieczenstwa finansowego wobec relacji nawiazywanej bez
+      -- fizycznej obecnosci.
+      --
+      -- Jeden plik na wniosek: dotyczy REPREZENTANTA, ktory podpisuje umowe,
+      -- nie akcjonariuszy (ci maja wlasne pola w kartotece, ze skanem tylko
+      -- przy wlaczonej procedurze AML dla spolki).
+      ALTER TABLE psa_wnioski ADD COLUMN dowod_sciezka TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN dowod_nazwa_pliku TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN dowod_mime TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN dowod_rozmiar INTEGER;
+      ALTER TABLE psa_wnioski ADD COLUMN dowod_wgrano TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

@@ -351,6 +351,13 @@ async function main() {
   }
   info(`zweryfikowano ${szczegoly.akcjonariusze.length} pozycji`);
 
+  // Sam fakt odeslania skanu nie przesadza, ze podpis jest prawidlowy —
+  // ktos musi na niego spojrzec. Bez tego przyjecie wniosku jest zablokowane.
+  for (const d of szczegoly.dokumenty) {
+    await zapytaj(kancelaria, 'POST', `/api/psa/wnioski/${wniosek.id}/dokumenty/${d.id}/podpis-potwierdz`, {});
+  }
+  info(`potwierdzono podpisy pod ${szczegoly.dokumenty.length} dokumentami`);
+
   const przyjecie = await zapytaj(kancelaria, 'POST', `/api/psa/wnioski/${wniosek.id}/przyjmij`, {});
   const spolkaId = przyjecie.spolka_id;
   info(`dokumenty przeniesione do akt spółki: ${przyjecie.dokumenty_przeniesione}`);

@@ -15,6 +15,7 @@ const typyZdarzen = require('../logika/typy-zdarzen');
 const terminy = require('../logika/terminy');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('../logika/ustawienia');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 const { wymagajPracownika } = require('../pomocnicze/autoryzacja');
@@ -23,6 +24,42 @@ const { wymagajPracownika } = require('../pomocnicze/autoryzacja');
 const SPRINT_KREATORA = typyZdarzen.SPRINT_KREATORA;
 
 const router = express.Router();
+
+/**
+ * Ustawienia kancelarii — metryka i stawki. Wartosci pochodza z bazy, a gdy
+ * czegos tam nie ustawiono — z `.env`; pole `z_bazy` mowi, ktore to.
+ */
+router.get(
+  '/ustawienia',
+  wymagajPracownika,
+  asy((zad, odp) => {
+    odp.json(ustawienia.doEkranu(db()));
+  })
+);
+
+router.put(
+  '/ustawienia',
+  wymagajPracownika,
+  asy((zad, odp) => {
+    const zmiany = zad.body || {};
+    const bledy = ustawienia.bledy(zmiany);
+    if (bledy.length > 0) {
+      throw bledneZadanie('Nie zapisano — popraw wskazane pola.', bledy);
+    }
+    const zmienione = ustawienia.zapisz(db(), zmiany, autor(zad));
+
+    // Te dane trafiaja do KAZDEJ wystawianej umowy, wiec zmiana zostawia
+    // slad tak samo jak pobranie pliku z akt.
+    if (zmienione.length > 0) {
+      dziennikDostepu.zapisz(db(), {
+        kto: autor(zad), typKto: 'pracownik', spolkaId: null,
+        akcja: dziennikDostepu.AKCJE.ZMIANA_USTAWIEN,
+        opis: `zmieniono ustawienia: ${zmienione.join(', ')}`,
+      });
+    }
+    odp.json({ ...ustawienia.doEkranu(db()), zmienione });
+  })
+);
 
 /**
  * Katalogi domenowe dla UI. Front NIE powiela slownikow ani stawek -
@@ -232,7 +269,7 @@ router.post(
 
     const stan = widoki.widokStanu(db(), spolkaId, data, { rola: przepisy.ROLE_ODBIORCY.ORGAN });
     const trescHtml = dokumentyTresc.wykazAkcjonariuszy({
-      kancelaria: konfiguracja.KANCELARIA,
+      kancelaria: ustawienia.kancelaria(db()),
       spolka: stan.spolka,
       data,
       stan,
@@ -282,7 +319,7 @@ router.post(
     }
 
     const trescHtml = dokumentyTresc.zawiadomienieSaduORozwiazaniu({
-      kancelaria: konfiguracja.KANCELARIA,
+      kancelaria: ustawienia.kancelaria(db()),
       spolka,
       dataZakonczenia: spolka.data_zakonczenia_umowy,
       tryb: (zad.body || {}).tryb || 'rozwiązaniu',

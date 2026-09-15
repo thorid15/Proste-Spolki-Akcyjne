@@ -19,6 +19,7 @@ const maskowanie = require('../logika/maskowanie');
 const aml = require('../logika/aml');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
+const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 
@@ -446,8 +447,7 @@ router.get(
       akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU, opis: `skan dokumentu AML: ${skan.nazwa_pliku}`,
     });
 
-    odp.setHeader('Content-Type', skan.mime || 'application/octet-stream');
-    odp.setHeader('Content-Disposition', `attachment; filename="${skan.nazwa_pliku}"`);
+    pliki.naglowkiPliku(odp, { nazwaPliku: skan.nazwa_pliku, wRamce: false });
     fs.createReadStream(pelnaSciezka).pipe(odp);
   })
 );

@@ -33,6 +33,7 @@ const terminy = require('./logika/terminy');
 const poczta = require('./poczta');
 const czas = require('./pomocnicze/czas');
 const konfiguracja = require('./konfiguracja');
+const ustawienia = require('./logika/ustawienia');
 
 /** Wzór z `wzory/` odpowiadający każdemu z czterech pism automatu. */
 const WZOR_KOD = {
@@ -175,7 +176,7 @@ async function poWpisie(db, { sprawa, zdarzenie, spolka, osoby, podsumowanie, au
   // to blok A5 (dotyczy dokumentow wystawianych, nie automatu z tej sesji).
   if (stanNaDzien) {
     const wykazHtml = dokTresc.wykazAkcjonariuszy({
-      kancelaria: konfiguracja.KANCELARIA,
+      kancelaria: ustawienia.kancelaria(db),
       spolka: stanNaDzien.spolka,
       data: zdarzenie.data_zdarzenia,
       stan: stanNaDzien,

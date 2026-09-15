@@ -42,6 +42,8 @@ const dokumentyTresc = require('../logika/dokumenty-tresc');
 const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('../logika/ustawienia');
+const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
@@ -154,8 +156,17 @@ router.post(
     // Miekki, ogolny limit zapytan na adres IP - formularz jest publiczny
     // i niezalogowany, wiec to jedyna dostepna ochrona przed zalewem
     // (limiter.js liczy tu KAZDA probe, nie tylko nieudane logowanie).
-    limiter.sprawdz(zad.ip, 'zgloszenie');
-    limiter.zanotujNieudana(zad.ip, 'zgloszenie');
+    //
+    // Prog jest WYZSZY niz przy logowaniu i liczony na adres e-mail, a nie
+    // na samo IP: pieciu klientow z jednej sieci (biuro, wspolne lacze NAT)
+    // wyczerpywalo wspolna pule i szosty dostawal odmowe — na formularzu,
+    // ktorego wyslanie nie jest zadna „proba logowania".
+    limiter.sprawdz(zad.ip, `zgloszenie:${email}`, {
+      limit: 3,
+      komunikat: 'Zgłoszenie z tego adresu e-mail zostało już przyjęte. '
+        + 'Jeśli to pomyłka, spróbuj ponownie za %MIN% min albo napisz do kancelarii.',
+    });
+    limiter.zanotujNieudana(zad.ip, `zgloszenie:${email}`);
 
     const dane = {
       email,
@@ -610,16 +621,12 @@ function wczytajDokumentyWniosku(wniosekId) {
  * zostaje przy KAZDYM pobraniu: sciezka idzie z bazy, ale to nadal jest
  * skladanie sciezki z danych - jedno miejsce, w ktorym to pilnujemy.
  */
-function wyslijPlikDokumentu(odp, sciezkaWzgledna, nazwaPliku, mime) {
+function wyslijPlikDokumentu(odp, sciezkaWzgledna, nazwaPliku) {
   const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, sciezkaWzgledna);
   if (!pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelna)) {
     throw nieZnaleziono('Plik nie jest już dostępny.');
   }
-  odp.setHeader('Content-Type', mime || 'application/octet-stream');
-  odp.setHeader(
-    'Content-Disposition',
-    `attachment; filename*=UTF-8''${encodeURIComponent(nazwaPliku || 'dokument')}`
-  );
+  pliki.naglowkiPliku(odp, { nazwaPliku, wRamce: false });
   fs.createReadStream(pelna).pipe(odp);
 }
 
@@ -644,7 +651,7 @@ router.get(
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
       .get(Number(zad.params.id), wniosek.id);
     if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
-    wyslijPlikDokumentu(odp, dokument.sciezka, dokument.nazwa_pliku, dokument.mime);
+    wyslijPlikDokumentu(odp, dokument.sciezka, dokument.nazwa_pliku);
   })
 );
 
@@ -700,6 +707,29 @@ const uploadPodpisanego = multer({
     wywolaj(null, true);
   },
 });
+
+/**
+ * Przyjecie skanu: multer + kontrola SYGNATURY tresci.
+ *
+ * Rozszerzenie w nazwie pliku jest obietnica klienta, a `plik.mimetype`
+ * przepisanym naglowkiem jego przegladarki — ani jedno, ani drugie nie mowi,
+ * co jest w srodku. Plik „skan.pdf" o tresci HTML wracal do pracownika jako
+ * strona wyswietlana w ramce, czyli ze skryptem dzialajacym w sesji
+ * kancelarii. Sprawdzenie stoi TUTAJ, a nie w trasach, zeby nowa trasa
+ * przyjmujaca skan nie mogla go pominac.
+ */
+function przyjmijSkan(zad, odp, dalej) {
+  uploadPodpisanego.single('plik')(zad, odp, (e) => {
+    if (e) return dalej(bledneZadanie(e.message));
+    if (zad.file && !pliki.trescPasuje(zad.file.path, pliki.typZNazwy(zad.file.originalname))) {
+      fs.rmSync(zad.file.path, { force: true });
+      return dalej(bledneZadanie(
+        'Treść pliku nie odpowiada jego rozszerzeniu. Prześlij skan jako PDF, JPG albo PNG.'
+      ));
+    }
+    return dalej();
+  });
+}
 
 /**
  * Stany, w ktorych klient moze jeszcze odsylac podpisane skany. Po przyjeciu
@@ -760,12 +790,102 @@ function zapiszPodpisanySkan(wniosek, dokument, plik) {
   }
 }
 
+/**
+ * Skan dokumentu tozsamosci REPREZENTANTA — osoby, ktora podpisze umowe.
+ *
+ * Wniosek sklada sie zdalnie, wiec notariusz moze nigdy nie zobaczyc tej
+ * osoby na oczy. Sam obraz dokumentu nie dowodzi tozsamosci (mozna go miec
+ * nie bedac wlascicielem), ale jest sladem, na czym oparto identyfikacje,
+ * i materialem do sprawdzenia pisowni nazwiska oraz PESEL-u przed wpisaniem
+ * ich do umowy.
+ *
+ * Wlasna bramka statusow: skan wgrywa sie PODCZAS wypelniania wniosku, a nie
+ * dopiero przy odsylaniu podpisanych dokumentow.
+ */
+const STATUSY_EDYCJI_WNIOSKU = new Set(['w_przygotowaniu', 'do_uzupelnienia']);
+
+function zaladujWniosekDoEdycji(zad, odp, dalej) {
+  const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+  if (!wniosek) return dalej(nieZnaleziono('Najpierw rozpocznij wniosek.'));
+  if (!STATUSY_EDYCJI_WNIOSKU.has(wniosek.status)) {
+    return dalej(bledneZadanie(`Wniosek ma status „${wniosek.status}” — nie można już zmieniać jego danych.`));
+  }
+  zad.psaWniosek = wniosek;
+  dalej();
+}
+
+router.post(
+  '/wniosek/dowod',
+  wymagajWnioskodawcy,
+  zaladujWniosekDoEdycji,
+  przyjmijSkan,
+  asy((zad, odp) => {
+    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    const wniosek = zad.psaWniosek;
+
+    // Poprzedni skan przestaje byc potrzebny — zostalby na dysku jako plik,
+    // do ktorego nic juz nie prowadzi, a to dane dokumentu tozsamosci.
+    if (wniosek.dowod_sciezka) {
+      const stary = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.dowod_sciezka);
+      if (stary.startsWith(konfiguracja.KATALOG_DOKUMENTOW)) fs.rmSync(stary, { force: true });
+    }
+
+    const teraz = czas.terazIso();
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET dowod_sciezka = ?, dowod_nazwa_pliku = ?, dowod_mime = ?,
+                dowod_rozmiar = ?, dowod_wgrano = ?, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(
+        path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path),
+        zad.file.originalname, zad.file.mimetype, zad.file.size, teraz, teraz, wniosek.id
+      );
+
+    odp.status(201).json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id) });
+  })
+);
+
+router.delete(
+  '/wniosek/dowod',
+  wymagajWnioskodawcy,
+  zaladujWniosekDoEdycji,
+  asy((zad, odp) => {
+    const wniosek = zad.psaWniosek;
+    if (wniosek.dowod_sciezka) {
+      const plik = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.dowod_sciezka);
+      if (plik.startsWith(konfiguracja.KATALOG_DOKUMENTOW)) fs.rmSync(plik, { force: true });
+    }
+    db()
+      .prepare(
+        `UPDATE psa_wnioski
+            SET dowod_sciezka = NULL, dowod_nazwa_pliku = NULL, dowod_mime = NULL,
+                dowod_rozmiar = NULL, dowod_wgrano = NULL, zaktualizowano = ?
+          WHERE id = ?`
+      )
+      .run(czas.terazIso(), wniosek.id);
+    odp.json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id) });
+  })
+);
+
+/** Wlasny skan do sprawdzenia, co poszlo. */
+router.get(
+  '/wniosek/dowod',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek || !wniosek.dowod_sciezka) throw nieZnaleziono('Nie przesłano jeszcze dokumentu tożsamości.');
+    wyslijPlikDokumentu(odp, wniosek.dowod_sciezka, wniosek.dowod_nazwa_pliku);
+  })
+);
+
 /** Podpisany skan JEDNEGO dokumentu z kompletu. */
 router.post(
   '/wniosek/dokumenty/:id/podpis',
   wymagajWnioskodawcy,
   zaladujWlasnyWniosekDoUploadu,
-  (zad, odp, dalej) => uploadPodpisanego.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  przyjmijSkan,
   asy((zad, odp) => {
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
     const dokument = db()
@@ -795,7 +915,7 @@ router.get(
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
       .get(Number(zad.params.id), wniosek.id);
     if (!dokument || !dokument.podpis_sciezka) throw nieZnaleziono('Nie odesłano jeszcze tego dokumentu.');
-    wyslijPlikDokumentu(odp, dokument.podpis_sciezka, dokument.podpis_nazwa_pliku, dokument.podpis_mime);
+    wyslijPlikDokumentu(odp, dokument.podpis_sciezka, dokument.podpis_nazwa_pliku);
   })
 );
 
@@ -858,7 +978,7 @@ router.post(
   '/wniosek/umowa-podpisana',
   wymagajWnioskodawcy,
   zaladujWlasnyWniosekDoUploadu,
-  (zad, odp, dalej) => uploadPodpisanego.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  przyjmijSkan,
   asy((zad, odp) => {
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
     const umowa = db()
@@ -886,8 +1006,7 @@ router.get(
       throw nieZnaleziono('Plik nie jest już dostępny.');
     }
 
-    odp.setHeader('Content-Type', wniosek.umowa_podpisana_mime || 'application/octet-stream');
-    odp.setHeader('Content-Disposition', `attachment; filename="${wniosek.umowa_podpisana_nazwa_pliku}"`);
+    pliki.naglowkiPliku(odp, { nazwaPliku: wniosek.umowa_podpisana_nazwa_pliku, wRamce: false });
     fs.createReadStream(pelnaSciezka).pipe(odp);
   })
 );
@@ -903,7 +1022,32 @@ router.get(
 
     if (konto.rola === 'spolka') {
       const spolka = rejestr.wczytajSpolke(db(), konto.spolka_id);
-      return odp.json({ rola: 'spolka', spolki: spolka ? [{ ...spolka, uwagi: undefined }] : [] });
+      if (!spolka) return odp.json({ rola: 'spolka', spolki: [] });
+
+      // Trzy liczby, po ktore klient i tak wchodzil do podgladu rejestru:
+      // ilu ma akcjonariuszy, ile akcji jest w obrocie i kiedy ostatnio cos
+      // sie zmienilo. Bez nich ekran startowy pokazywal sama nazwe spolki.
+      const stan = db()
+        .prepare(
+          `SELECT COUNT(DISTINCT osoba_id) AS akcjonariuszy, COALESCE(SUM(ilosc), 0) AS akcji
+             FROM psa_stan_akcji
+            WHERE spolka_id = ? AND data_do IS NULL AND kategoria = 'akcjonariusz'`
+        )
+        .get(spolka.id);
+      const ostatnie = db()
+        .prepare('SELECT MAX(data_zdarzenia) AS data FROM psa_zdarzenia WHERE spolka_id = ?')
+        .get(spolka.id);
+
+      return odp.json({
+        rola: 'spolka',
+        spolki: [{
+          ...spolka,
+          uwagi: undefined,
+          akcjonariuszy: stan.akcjonariuszy,
+          razem_akcji: stan.akcji,
+          ostatnie_zdarzenie: ostatnie.data || null,
+        }],
+      });
     }
 
     // Wnioskodawca nie ma jeszcze ani spolki, ani akcji - jego "Moje spolki"
@@ -1028,8 +1172,12 @@ router.post(
       throw bledneZadanie(`Typ zdarzenia „${typZdarzenia}” nie jest dostępny do zgłoszenia przez portal.`);
     }
 
+    // Opis przestal byc obowiazkowy: wpisu dokonuje sie NA PODSTAWIE
+    // DOKUMENTU (art. 300(34) § 4 KSH), a nie opisu zadajacego. Klient, ktory
+    // dolaczyl umowe i wskazal typ zdarzenia, powiedzial juz wszystko —
+    // wymuszanie wypracowania obok dokumentu tworzylo drugie zrodlo prawdy,
+    // ktore pracownik i tak musial konfrontowac z plikiem.
     const opis = String(cialo.opis || '').trim();
-    if (!opis) throw bledneZadanie('Opisz, czego dotyczy zgłoszenie.');
 
     const dataWplywu = czas.terazIso();
     const dane = {
@@ -1037,12 +1185,14 @@ router.post(
       typ_zdarzenia: typZdarzenia,
       zrodlo: 'portal',
       zadajacy_osoba_id: konto.osoba_id,
-      zadajacy_opis: konto.rola === 'spolka' ? `${spolka.nazwa} (zgłoszenie przez portal)` : opis,
+      zadajacy_opis: konto.rola === 'spolka'
+        ? `${spolka.nazwa} (zgłoszenie przez portal)`
+        : opis || `${konto.email} (zgłoszenie przez portal)`,
       data_wplywu: dataWplywu,
       stan: 'nowa',
       wymaga_powiadomienia: typ.wymaga_powiadomienia === true ? 1 : 0,
       autor: `Portal — ${konto.email}`,
-      notatka: opis,
+      notatka: opis || null,
       utworzono: czas.terazIso(),
     };
     dane.termin_do = terminy.policzTermin(
@@ -1131,14 +1281,22 @@ router.post(
     const konto = zad.konto;
     const typDokumentu = String(zad.body.typ_dokumentu || 'inny');
     if (!TYPY_DOKUMENTU.includes(typDokumentu)) throw bledneZadanie(`Nieznany typ dokumentu: „${typDokumentu}”.`);
-    const pliki = zad.files || [];
-    if (pliki.length === 0) throw bledneZadanie('Nie przesłano żadnego pliku.');
+    const wgrane = zad.files || [];
+    if (wgrane.length === 0) throw bledneZadanie('Nie przesłano żadnego pliku.');
+    // Rozszerzenie to obietnica klienta — sprawdzamy sygnature tresci.
+    for (const plik of wgrane) {
+      if (pliki.trescPasuje(plik.path, pliki.typZNazwy(plik.originalname))) continue;
+      for (const p of wgrane) fs.rmSync(p.path, { force: true });
+      throw bledneZadanie(
+        `Treść pliku „${plik.originalname}" nie odpowiada jego rozszerzeniu. Prześlij PDF, skan albo zdjęcie.`
+      );
+    }
 
     const wstaw = db().prepare(
       `INSERT INTO psa_dokumenty (sprawa_id, nazwa_pliku, sciezka, mime, rozmiar, typ_dokumentu, hash, wgral, utworzono)
        VALUES (@sprawa_id, @nazwa_pliku, @sciezka, @mime, @rozmiar, @typ_dokumentu, @hash, @wgral, @utworzono)`
     );
-    const zapisane = pliki.map((plik) => {
+    const zapisane = wgrane.map((plik) => {
       const hash = crypto.createHash('sha256').update(fs.readFileSync(plik.path)).digest('hex');
       const wynik = wstaw.run({
         sprawa_id: sprawa.id,
@@ -1179,7 +1337,7 @@ router.post(
     if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
 
     const trescHtml = informacjaDokument.informacjaZRejestru({
-      kancelaria: konfiguracja.KANCELARIA,
+      kancelaria: ustawienia.kancelaria(db()),
       spolka: stan.spolka,
       data,
       stan,

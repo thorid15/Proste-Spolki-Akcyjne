@@ -213,7 +213,7 @@ test('POST /api/psa/osoby/:id/aml-skany: wymaga spolka_id i wlaczonej procedury 
   const [, spolkaBezAml] = await zapytaj('POST', '/api/psa/spolki', { nazwa: `Bez AML ${sufiks()}` });
 
   const formularzBezSpolki = new FormData();
-  formularzBezSpolki.append('plik', new Blob(['x'], { type: 'application/pdf' }), 'dowod.pdf');
+  formularzBezSpolki.append('plik', new Blob(['%PDF-1.4\nx'], { type: 'application/pdf' }), 'dowod.pdf');
   const odpBrakSpolki = await fetch(`${baza}/api/psa/osoby/${osoba.osoba.id}/aml-skany`, {
     method: 'POST', headers: { Cookie: ciastko }, body: formularzBezSpolki,
   });
@@ -221,7 +221,7 @@ test('POST /api/psa/osoby/:id/aml-skany: wymaga spolka_id i wlaczonej procedury 
 
   const formularzWylaczona = new FormData();
   formularzWylaczona.append('spolka_id', String(spolkaBezAml.spolka.id));
-  formularzWylaczona.append('plik', new Blob(['x'], { type: 'application/pdf' }), 'dowod.pdf');
+  formularzWylaczona.append('plik', new Blob(['%PDF-1.4\nx'], { type: 'application/pdf' }), 'dowod.pdf');
   const odpWylaczona = await fetch(`${baza}/api/psa/osoby/${osoba.osoba.id}/aml-skany`, {
     method: 'POST', headers: { Cookie: ciastko }, body: formularzWylaczona,
   });
@@ -244,7 +244,7 @@ test('POST/GET /api/psa/osoby/:id/aml-skany: upload, lista, pobranie z logiem do
   formularz.append('spolka_id', String(spolka.spolka.id));
   formularz.append('typ_dokumentu', 'dowod_osobisty');
   formularz.append('retencja_do', '2031-01-01');
-  formularz.append('plik', new Blob(['tresc skanu'], { type: 'application/pdf' }), 'dowod-osobisty.pdf');
+  formularz.append('plik', new Blob(['%PDF-1.4\ntresc skanu'], { type: 'application/pdf' }), 'dowod-osobisty.pdf');
   const odpUpload = await fetch(`${baza}/api/psa/osoby/${osoba.osoba.id}/aml-skany`, {
     method: 'POST', headers: { Cookie: ciastko }, body: formularz,
   });

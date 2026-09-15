@@ -199,9 +199,9 @@ function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
       <div style={{ padding: '18px 24px' }}>
         <Komunikat odmiana="blad" tresc={blad} />
         {dokumenty.length === 0 ? (
-          <div className="przyciemnione" style={{ marginBottom: 14 }}>Brak wgranych dokumentów.</div>
+          <div className="przyciemnione" style={{ marginBottom: 16 }}>Brak wgranych dokumentów.</div>
         ) : (
-          <table className="tbl" style={{ marginBottom: 14 }}>
+          <table className="tbl" style={{ marginBottom: 16 }}>
             <thead><tr><th>Plik</th><th>Typ</th><th>Wgrał</th><th>Data</th></tr></thead>
             <tbody>
               {dokumenty.map((d) => (
@@ -608,7 +608,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
             <Komunikat
               odmiana="uwaga"
               tytul="Akcje czekają na objęcie"
-              tresc="Wyemitowane akcje nie mają jeszcze akcjonariusza. Wpisz teraz, kto je obejmuje — to kolejne zdarzenie w rejestrze, ale nie trzeba zakładać sprawy od nowa."
+              tresc="Wyemitowane akcje nie mają jeszcze akcjonariusza. Wpisz teraz, kto je obejmuje — podstawa wpisu przeniesie się z tej sprawy, zostaje wskazać osoby i liczbę akcji."
             />
           )}
           <div className="kreator-stopka">
@@ -616,7 +616,8 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
               <button
                 className="btn btn-glowny"
                 onClick={() => idz(
-                  `/spolki/${sprawa.spolka_id}/zdarzenie?typ=objecie&emisja=${wynik.zdarzenie.id}`
+                  `/spolki/${sprawa.spolka_id}/zdarzenie?typ=objecie`
+                  + `&emisja=${wynik.zdarzenie.id}&zpodstawy=${sprawa.id}`
                 )}
               >
                 Wpisz, kto objął akcje
@@ -785,7 +786,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
             {zadajacy ? ` · żądający: ${zadajacy.oznaczenie}` : ''}
             {sprawa.zadajacy_rola ? ` (${OPISY_ROL_ZADAJACEGO[sprawa.zadajacy_rola] || sprawa.zadajacy_rola})` : ''}
           </div>
-          <div className="row-g" style={{ marginTop: 10 }}>
+          <div className="row-g" style={{ marginTop: 8 }}>
             <Znacznik odmiana={ODMIANY_STANU_SPRAWY[sprawa.stan]}>{NAZWY_STANU_SPRAWY[sprawa.stan]}</Znacznik>
             {!zakonczona && !wlasnieWpisano && <ZnacznikTerminu termin={sprawa.termin} />}
           </div>

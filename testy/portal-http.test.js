@@ -219,6 +219,29 @@ test('zadania: konto spolki widzi zgloszenia o swojej spolce, obcy akcjonariusz 
   assert.equal(dlaAnny.sprawy.length, 0, 'zgłoszenie Jana nie jest widoczne dla innego akcjonariusza');
 });
 
+/**
+ * Wpisu dokonuje sie na podstawie DOKUMENTU (art. 300(34) § 4 KSH), nie opisu
+ * zadajacego — wiec zgloszenie z sama umowa w zalaczniku musi przejsc.
+ * Wczesniej opis byl obowiazkowy i klient musial pisac wypracowanie obok
+ * dokumentu, ktory i tak rozstrzyga.
+ */
+test('zadania: zgloszenie bez opisu przechodzi — podstawa jest dokument', async () => {
+  const odp = await fetch(`${baza}/api/psa/portal/zadania`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
+    body: JSON.stringify({ spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', opis: '' }),
+  });
+  assert.equal(odp.status, 201);
+  const { sprawa } = await odp.json();
+  assert.equal(sprawa.stan, 'nowa');
+
+  // Zadajacy musi byc opisany nawet bez wpisanego opisu — inaczej sprawa
+  // trafia do kolejki bez informacji, od kogo przyszla.
+  const wiersz = db().prepare('SELECT zadajacy_opis, notatka FROM psa_sprawy WHERE id = ?').get(sprawa.id);
+  assert.ok(wiersz.zadajacy_opis, 'zadajacy jest opisany mimo pustego opisu');
+  assert.equal(wiersz.notatka, null, 'pusty opis nie zostaje pustym napisem w notatce');
+});
+
 test('dokumenty: upload do wlasnej sprawy dziala, do cudzej jest odrzucany', async () => {
   const zadanie = await (
     await fetch(`${baza}/api/psa/portal/zadania`, {
@@ -231,7 +254,7 @@ test('dokumenty: upload do wlasnej sprawy dziala, do cudzej jest odrzucany', asy
 
   const formularz = new FormData();
   formularz.append('typ_dokumentu', 'umowa_zbycia');
-  formularz.append('pliki', new Blob(['tresc testowa'], { type: 'application/pdf' }), 'umowa.pdf');
+  formularz.append('pliki', new Blob(['%PDF-1.4\ntresc testowa'], { type: 'application/pdf' }), 'umowa.pdf');
 
   const wlasny = await fetch(`${baza}/api/psa/portal/zadania/${sprawaId}/dokumenty`, {
     method: 'POST', headers: { Cookie: ciastkoAkcjonariusz }, body: formularz,
@@ -242,7 +265,7 @@ test('dokumenty: upload do wlasnej sprawy dziala, do cudzej jest odrzucany', asy
   // sprawa) nie moze dolaczac dokumentow do cudzego zgloszenia.
   const formularz2 = new FormData();
   formularz2.append('typ_dokumentu', 'inny');
-  formularz2.append('pliki', new Blob(['x'], { type: 'application/pdf' }), 'x.pdf');
+  formularz2.append('pliki', new Blob(['%PDF-1.4\nx'], { type: 'application/pdf' }), 'x.pdf');
   const cudzy = await fetch(`${baza}/api/psa/portal/zadania/${sprawaId}/dokumenty`, {
     method: 'POST', headers: { Cookie: ciastkoInnyAkcjonariusz }, body: formularz2,
   });

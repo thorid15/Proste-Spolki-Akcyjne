@@ -13,6 +13,7 @@
  */
 
 const przepisy = require('./logika/przepisy');
+const ustawienia = require('./logika/ustawienia');
 const czas = require('./pomocnicze/czas');
 
 /**
@@ -32,7 +33,7 @@ function naliczOplateWpisu(db, { spolkaId, sprawaId, typZdarzenia, autor }) {
     .run({
       spolka_id: spolkaId,
       sprawa_id: sprawaId,
-      kwota_grosze: przepisy.stawkaGrosze('wpis'),
+      kwota_grosze: ustawienia.stawkaGrosze(db, 'wpis'),
       data_naliczenia: czas.dzisIso(),
       notatka: `Wpis: ${typZdarzenia}`,
       autor,
@@ -54,7 +55,7 @@ function naliczOplateInformacji(db, { spolkaId, odbiorcaOsobaId, autor, notatka 
     )
     .run({
       spolka_id: spolkaId,
-      kwota_grosze: przepisy.stawkaGrosze('informacja'),
+      kwota_grosze: ustawienia.stawkaGrosze(db, 'informacja'),
       data_naliczenia: czas.dzisIso(),
       notatka: notatka || (odbiorcaOsobaId ? `Informacja z rejestru — odbiorca #${odbiorcaOsobaId}` : 'Informacja z rejestru'),
       autor,
@@ -88,7 +89,7 @@ function naliczOplateProwadzenia(db, { spolkaId, rok, autor }) {
     .run({
       spolka_id: spolkaId,
       okres: String(rok),
-      kwota_grosze: przepisy.stawkaGrosze('prowadzenie'),
+      kwota_grosze: ustawienia.stawkaGrosze(db, 'prowadzenie'),
       data_naliczenia: czas.dzisIso(),
       autor,
       utworzono: czas.terazIso(),
@@ -120,7 +121,7 @@ function naliczOplateRoczneWszystkie(db, { rok, autor }) {
 
 /** Reczny wpis oplaty — np. informacja wydana na miejscu, korekta, notatka ksiegowa. */
 function dodajOplateReczna(db, { spolkaId, sprawaId, typ, kwotaGrosze, okres, notatka, autor }) {
-  const kwota = kwotaGrosze != null && kwotaGrosze !== '' ? Number(kwotaGrosze) : przepisy.stawkaGrosze(typ);
+  const kwota = kwotaGrosze != null && kwotaGrosze !== '' ? Number(kwotaGrosze) : ustawienia.stawkaGrosze(db, typ);
   const wynik = db
     .prepare(
       `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, status, data_naliczenia, notatka, autor, utworzono)

@@ -85,6 +85,10 @@ const SCIEZKI_IKON = {
   znak: 'M12 2.5 20.5 7v10L12 21.5 3.5 17V7zM12 8.5 16 11v5l-4 2.2L8 16v-5z',
   pusto: 'M4 7h16v13H4zM4 7l2-3h12l2 3M12 11v5M9.5 13.5h5',
   popraw: 'M4.5 12a7.5 7.5 0 1 0 2.4-5.5M4.5 4v4.5H9',
+  koperta: 'M3 6h18v12H3zM3 6.5l9 6 9-6',
+  telefon: 'M5 4h4l1 4-2 1.5a10 10 0 0 0 6.5 6.5L16 14l4 1v4h-2A13 13 0 0 1 5 6z',
+  pinezka: 'M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
+  globus: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3.4 9h17.2M3.4 15h17.2M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
 };
 
 /**
@@ -205,18 +209,32 @@ function Modal({ tytul, children, stopka, przyZamknieciu, szerokosc }) {
   );
 }
 
+/**
+ * Rozwijana sekcja z własnym przyciskiem akcji w nagłówku.
+ *
+ * Przełącznik jest OSOBNYM przyciskiem obok akcji, a nie przyciskiem, który
+ * je obejmuje: przycisk w przycisku to nieprawidłowy HTML, a odkąd każdy
+ * rejestr w kokpicie ma w nagłówku swój wpis („Nowa emisja", „Zastaw lub
+ * użytkowanie"), zdarzałoby się to na każdej sekcji.
+ */
 function Sekcja({ tytul, licznik, domyslnieOtwarta = false, akcje, children }) {
   const [otwarta, ustawOtwarta] = useState(domyslnieOtwarta);
   return (
     <div className="sekcja">
-      <button className="sekcja-naglowek" onClick={() => ustawOtwarta((o) => !o)}>
-        <span className="sekcja-tytul">
-          <span className={`strzalka ${otwarta ? 'otwarta' : ''}`}><Ikona nazwa="strzalkaPrawo" rozmiar={14} /></span>
-          {tytul}
-          {licznik !== undefined && licznik !== null && <Pigulka>{licznik}</Pigulka>}
-        </span>
-        {akcje && <span className="rzad" onClick={(z) => z.stopPropagation()}>{akcje}</span>}
-      </button>
+      <div className="sekcja-naglowek">
+        <button
+          className="sekcja-przelacznik"
+          aria-expanded={otwarta}
+          onClick={() => ustawOtwarta((o) => !o)}
+        >
+          <span className="sekcja-tytul">
+            <span className={`strzalka ${otwarta ? 'otwarta' : ''}`}><Ikona nazwa="strzalkaPrawo" rozmiar={14} /></span>
+            {tytul}
+            {licznik !== undefined && licznik !== null && <Pigulka>{licznik}</Pigulka>}
+          </span>
+        </button>
+        {akcje && <span className="rzad">{akcje}</span>}
+      </div>
       {otwarta && <div>{children}</div>}
     </div>
   );
@@ -1313,14 +1331,24 @@ function skrocAdresWww(url) {
 function StopkaKancelarii({ kancelaria }) {
   const [znakNieudany, ustawZnakNieudany] = useState(false);
   const k = kancelaria || {};
-  const adres = [k.adres, k.miejscowosc].filter(Boolean).join(', ');
+  // `adres` z ustawień niesie już miejscowość (ulica, kod miasto), a pole
+  // `miejscowosc` istnieje osobno dla pism. Dopisywanie go tutaj dawało
+  // „…80-280 Gdańsk, Gdańsk".
+  const adres = k.adres && k.miejscowosc && k.adres.includes(k.miejscowosc)
+    ? k.adres
+    : [k.adres, k.miejscowosc].filter(Boolean).join(', ');
   const link = k.www_psa || k.www;
   const rok = new Date().getFullYear();
 
   return (
     <footer className="stopka bez-druku">
-      <div className="stopka-srodek">
-        <div className="stopka-kolumna stopka-marka">
+      <div className="stopka-siatka">
+        {/* Kolumna 1 — kto prowadzi rejestr. Znak notariatu jest tu
+            legitymacją, nie logotypem produktu, więc stoi przy nazwie
+            kancelarii, a nie nad całą stopką. */}
+        <div className="stopka-kolumna stopka-kolumna-marka">
+          <div className="stopka-nazwa">{k.nazwa}</div>
+          {adres && <div className="stopka-adres">{adres}</div>}
           {!znakNieudany && (
             <img
               className="stopka-znak"
@@ -1331,29 +1359,52 @@ function StopkaKancelarii({ kancelaria }) {
               onError={() => ustawZnakNieudany(true)}
             />
           )}
-          <div className="stopka-nazwa">{k.nazwa}</div>
-          {adres && <div className="stopka-adres">{adres}</div>}
         </div>
 
+        {/* Kolumna 2 — jak się skontaktować. */}
         <div className="stopka-kolumna">
-          <div className="stopka-naglowek">Kontakt</div>
-          {k.email && <a href={`mailto:${k.email}`}>{k.email}</a>}
-          {k.telefon && <a href={`tel:${String(k.telefon).replace(/\s/g, '')}`}>{k.telefon}</a>}
-          {link && <a href={link} target="_blank" rel="noopener noreferrer">{skrocAdresWww(link)}</a>}
+          <div className="stopka-tytul">Kontakt</div>
+          {k.email && (
+            <a className="stopka-poz" href={`mailto:${k.email}`}>
+              <Ikona nazwa="koperta" rozmiar={14} />
+              <span>{k.email}</span>
+            </a>
+          )}
+          {k.telefon && (
+            <a className="stopka-poz" href={`tel:${String(k.telefon).replace(/\s/g, '')}`}>
+              <Ikona nazwa="telefon" rozmiar={14} />
+              <span>{k.telefon}</span>
+            </a>
+          )}
+          {link && (
+            <a className="stopka-poz" href={link} target="_blank" rel="noopener noreferrer">
+              <Ikona nazwa="globus" rozmiar={14} />
+              <span>{skrocAdresWww(link)}</span>
+            </a>
+          )}
         </div>
 
+        {/* Kolumna 3 — na jakiej podstawie to działa i czyje to dane.
+            Pierwsze zdanie stało dotąd w szynie aplikacji kancelaryjnej,
+            gdzie klient go nie widział, a to jego dotyczy najbardziej. */}
         <div className="stopka-kolumna">
-          <div className="stopka-naglowek">Zasady</div>
-          <a href="#/regulamin">Regulamin portalu</a>
-          <a href="#/polityka-prywatnosci">Polityka prywatności</a>
-          {k.email && <a href={`mailto:${k.email}`}>Zgłoś uwagę</a>}
+          <div className="stopka-tytul">Rejestr akcjonariuszy</div>
+          <p className="stopka-tresc">
+            Rejestr prowadzi {k.nazwa || 'kancelaria notarialna'} — art. 300³¹ § 1
+            Kodeksu spółek handlowych.
+          </p>
+          <p className="stopka-tresc">
+            Administratorem danych osobowych w rejestrze jest kancelaria —
+            szczegóły w <a href="#/polityka-prywatnosci">polityce prywatności</a>.
+          </p>
         </div>
       </div>
 
       <div className="stopka-dol">
         <span>© {rok} {k.nazwa || 'Kancelaria Notarialna'}. Wszelkie prawa zastrzeżone.</span>
-        <span className="stopka-dol-opis">
-          Rejestr akcjonariuszy prostych spółek akcyjnych
+        <span className="stopka-dol-linki">
+          <a href="#/regulamin">Regulamin portalu</a>
+          <a href="#/polityka-prywatnosci">Polityka prywatności</a>
         </span>
       </div>
     </footer>

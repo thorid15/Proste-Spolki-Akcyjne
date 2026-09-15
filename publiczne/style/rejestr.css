@@ -1,3 +1,185 @@
+/* ─────────────────────────────────────────────────────
+   KROJE PISMA — Z WŁASNEGO SERWERA
+
+   Trzy role, trzy kroje: EB Garamond (display), Inter Tight (interfejs),
+   IBM Plex Mono (dane). Wszystkie na licencji SIL Open Font License, więc
+   wolno je hostować u siebie — i tak trzeba.
+
+   Dotąd leciały z `fonts.googleapis.com`. Przy każdym wejściu do rejestru
+   adres IP klienta trafiał wtedy do Google, a rejestr akcjonariuszy
+   prowadzony przez notariusza to nie jest miejsce na zbędne przekazywanie
+   danych osobowych podmiotowi trzeciemu. Przy okazji: aplikacja działa
+   teraz bez internetu, nie czeka na cudzy serwer i nie potrzebuje wyjątków
+   w Content-Security-Policy.
+
+   Pobrane podzbiory: `latin` i `latin-ext` (polskie znaki). Gdyby kiedyś
+   trzeba było odświeżyć pliki, źródłem jest to samo zapytanie do
+   fonts.googleapis.com, z którego powstał ten blok.
+   ───────────────────────────────────────────────────── */
+
+/* latin-ext */
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonty/eb-garamond-400-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonty/eb-garamond-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonty/eb-garamond-500-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonty/eb-garamond-500-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(/fonty/eb-garamond-600-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(/fonty/eb-garamond-600-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonty/ibm-plex-mono-400-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonty/ibm-plex-mono-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonty/ibm-plex-mono-500-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonty/ibm-plex-mono-500-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonty/inter-tight-400-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonty/inter-tight-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonty/inter-tight-500-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonty/inter-tight-500-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(/fonty/inter-tight-600-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(/fonty/inter-tight-600-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(/fonty/inter-tight-700-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(/fonty/inter-tight-700-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* rejestr.css — tożsamość wizualna modułu Rejestr akcjonariuszy P.S.A.
    Sesja SESJA-PSA-6-INTERFEJS.md, faza 1 (wersja 2 — po uwagach do detalu).
 
@@ -162,10 +344,9 @@ body {
   box-shadow: var(--cien-panel);
   overflow: hidden;
 }
-@media (max-width: 900px) {
-  .powloka { grid-template-columns: minmax(0, 1fr); margin: 0; border-radius: 0; border: none; }
-  .szyna { display: none; }
-}
+/* Portal klienta korzysta z tej samej powłoki, ale nie ma szyny nawigacji —
+   cztery ekrany mieszczą się w belce tytułowej. Zostaje jedna kolumna. */
+.powloka-portal { grid-template-columns: minmax(0, 1fr); }
 
 .szyna {
   background: var(--karta);
@@ -177,6 +358,17 @@ body {
   padding: var(--od-24) var(--od-12) var(--od-16);
   display: flex;
   flex-direction: column;
+}
+
+/* Wąski ekran: powłoka siada na krawędziach, a szyna znika na rzecz paska
+   nawigacji w topbarze (niżej, `.topbar-nawigacja`).
+
+   UWAGA NA KOLEJNOŚĆ: ten blok musi stać PO regule `.szyna` powyżej. Miał
+   tę samą specyficzność, a stał wcześniej — więc `display: flex` z reguły
+   bazowej wygrywało i na telefonie cała szyna lądowała nad treścią. */
+@media (max-width: 900px) {
+  .powloka { grid-template-columns: minmax(0, 1fr); margin: 0; border-radius: 0; border: none; }
+  .szyna { display: none; }
 }
 
 /* ── Pasek marki kancelarii: pierwsza linia na kazdym ekranie ──
@@ -296,6 +488,22 @@ body {
 .topbar-podtytul { font-size: var(--st-13); color: var(--atrament-2); margin-top: 2px; }
 .topbar-narzedzia { display: flex; align-items: center; gap: var(--od-8); flex-shrink: 0; }
 
+/* Wąski ekran: belka tytułowa układa się w pion, a przyciski zawijają się
+   zamiast uciekać poza prawą krawędź. Tytuł schodzi o jeden stopień skali —
+   „Rejestr akcjonariuszy P.S.A." krojem display w 28 px łamał się na
+   telefonie na trzy wiersze i spychał nawigację ze strony. */
+@media (max-width: 700px) {
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--od-12);
+    padding: var(--od-16);
+  }
+  .topbar-tytul { font-size: var(--st-20); }
+  .topbar-narzedzia { flex-wrap: wrap; }
+  .topbar .row-g { flex-wrap: wrap; }
+}
+
 .ikonka-btn {
   width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
@@ -351,8 +559,66 @@ body {
 }
 .uzytkownik-menu button:hover { background: var(--papier); color: var(--atrament); }
 
+/* Trzy liczby opisujące rejestr na ekranie startowym klienta. Nie kafle
+   z ramkami — same liczby na wspólnej linii bazowej, oddzielone światłem
+   i cienką kreską. Mniej pudełek, ten sam ładunek informacji. */
+.stan-skrot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--od-24) var(--od-40);
+  padding: var(--od-16) 0;
+  margin-bottom: var(--od-16);
+  border-top: 1px solid var(--linia-2);
+  border-bottom: 1px solid var(--linia-2);
+}
+.stan-skrot-poz { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stan-skrot-liczba {
+  font-family: var(--font-display);
+  font-size: var(--st-28);
+  line-height: 1.1;
+  color: var(--atrament);
+}
+.stan-skrot-opis { font-size: var(--st-11); color: var(--atrament-3); }
+
+/* Odstęp pod pojedynczą linijką danych — zamiast `style={{ marginBottom: 14 }}`
+   rozsypanego po komponentach. */
+.odstep-d { margin-bottom: var(--od-16); }
+
+/* Nawigacja zastępująca szynę na wąskim ekranie. Na szerokim nie istnieje —
+   `display: none` jest stanem domyślnym, a nie wyjątkiem, żeby nie migała
+   przy wczytywaniu strony na desktopie. */
+.topbar-nawigacja { display: none; }
+
+@media (max-width: 900px) {
+  .topbar-nawigacja {
+    display: flex;
+    gap: var(--od-4);
+    padding: var(--od-8) var(--od-16);
+    background: var(--karta);
+    border-bottom: 1px solid var(--linia-2);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .topbar-nawigacja::-webkit-scrollbar { display: none; }
+  .topbar-nawigacja-poz {
+    display: flex; align-items: center; gap: var(--od-8);
+    flex-shrink: 0;
+    padding: var(--od-8) var(--od-12);
+    background: none; border: none; border-radius: var(--r-sm);
+    font: inherit; font-size: var(--st-13); color: var(--atrament-2);
+    cursor: pointer; white-space: nowrap;
+  }
+  .topbar-nawigacja-poz.aktywna { background: var(--rejestr-tlo); color: var(--rejestr); font-weight: 600; }
+  .topbar-nawigacja-poz svg { flex-shrink: 0; }
+}
+
 .tresc { max-width: var(--tresc); margin-inline: auto; width: 100%; padding: var(--od-24) var(--od-40) var(--od-64); }
 .tresc-szeroka { max-width: none; }
+/* Wąska miara dla ekranów, które niosą jeden formularz albo jedną kartę.
+   Klasa była używana w portalu klienta od początku, ale nigdy nie została
+   zdefiniowana — formularz na trzy pola rozciągał się więc na 1240 px,
+   a wiersz tekstu nad nim miał ze sto znaków. */
+.tresc-waska { max-width: 760px; }
 
 /* Nagłówek strony wewnątrz treści (gdy topbar niesie tylko powitanie). */
 .naglowek-strony {
@@ -375,6 +641,9 @@ body {
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--od-8);
   padding: var(--od-8) var(--od-16);
+  /* Palec trafia pewnie dopiero w cel około 44 px wysokości; na myszy ta
+     wysokość niczego nie psuje, bo przycisk i tak ma tyle z padding + tekst. */
+  min-height: 38px;
   font-family: inherit; font-size: var(--st-13); font-weight: 500;
   color: var(--atrament);
   background: var(--karta);
@@ -399,8 +668,9 @@ body {
    zainteresowania), nie błąd ani odmowę. Używany wyłącznie na ekranie
    logowania portalu, obok zielonego „Zaloguj się" — nigdy jako sąsiad
    komunikatu o błędzie, więc znaczenia się nie mieszają. */
-.btn-akcent { background: var(--sygnal); border-color: var(--sygnal); color: var(--karta); box-shadow: var(--cien-s); }
-.btn-akcent:hover:not(:disabled) { background: #8A241D; border-color: #8A241D; }
+/* Przycisk na całą szerokość kolumny — dla dróg pobocznych, które mają być
+   widoczne, ale nie głośniejsze od akcji głównej. */
+.btn-pelny { width: 100%; justify-content: center; }
 .btn-duzy { padding: var(--od-12) var(--od-24); font-size: var(--st-15); border-radius: var(--r); }
 .btn-maly { padding: var(--od-4) var(--od-12); font-size: var(--st-11); }
 .btn-cichy { background: none; border-color: transparent; }
@@ -925,10 +1195,18 @@ select {
 .sekcja-naglowek {
   display: flex; align-items: center; justify-content: space-between; gap: var(--od-12);
   width: 100%; padding: var(--od-16) var(--od-24);
-  background: none; border: none; cursor: pointer;
-  font: inherit; color: var(--atrament); text-align: left;
+  color: var(--atrament);
 }
-.sekcja-naglowek:hover { background: var(--papier); }
+/* Rozwijanie bierze na siebie cała lewa strona nagłówka; przyciski wpisu
+   stoją obok, jako rodzeństwo, nie w środku przycisku. */
+.sekcja-przelacznik {
+  flex: 1; min-width: 0; display: flex; align-items: center;
+  margin: calc(-1 * var(--od-16)) 0 calc(-1 * var(--od-16)) calc(-1 * var(--od-24));
+  padding: var(--od-16) var(--od-12) var(--od-16) var(--od-24);
+  background: none; border: none; cursor: pointer;
+  font: inherit; color: inherit; text-align: left;
+}
+.sekcja-przelacznik:hover { background: var(--papier); }
 .sekcja-tytul { display: flex; align-items: center; gap: var(--od-8); font-weight: 600; font-size: var(--st-13); }
 .strzalka { color: var(--atrament-3); display: inline-flex; transition: transform var(--ruch-wiersz); }
 .strzalka.otwarta { transform: rotate(90deg); }
@@ -984,6 +1262,11 @@ select {
 }
 .kafelek-wyboru:hover { border-color: var(--atrament-3); }
 .kafelek-wyboru.wybrany { border-color: var(--rejestr); box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10); }
+/* Droga, którą stan rejestru wyklucza (np. objęcie, gdy żadna emisja nie
+   czeka), zostaje widoczna razem z powodem — zamiast znikać i zostawiać
+   pytanie „gdzie to było". */
+.kafelek-wyboru:disabled { opacity: 0.55; cursor: not-allowed; }
+.kafelek-wyboru:disabled:hover { border-color: var(--linia); }
 .kafelek-wyboru-tytul { font-weight: 600; font-size: var(--st-15); color: var(--atrament); padding-right: var(--od-64); }
 .kafelek-wyboru-opis { font-size: var(--st-11); color: var(--atrament-2); line-height: 1.5; }
 .kafelek-wyboru-kategoria { position: absolute; top: var(--od-12); right: var(--od-12); }
@@ -991,10 +1274,14 @@ select {
 /* ─────────────────────────────────────────────────────
    UKŁADY POMOCNICZE
    ───────────────────────────────────────────────────── */
-.rzad { display: flex; align-items: center; gap: var(--od-8); }
+.rzad { display: flex; align-items: center; gap: var(--od-8); flex-wrap: wrap; }
 .rzad-rozdzielony { display: flex; align-items: center; justify-content: space-between; gap: var(--od-12); }
 .pion { display: flex; flex-direction: column; }
 .siatka-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--od-16); }
+/* Pole w siatce nie dokłada własnego marginesu do odstępu siatki — inaczej
+   wiersze formularza stały 32 px od siebie, a kolumny 16 px, i rytm pionowy
+   rozjeżdżał się z poziomym. Odstęp robi wyłącznie `gap`. */
+.siatka-2 > .pole { margin-bottom: 0; }
 /* Główna kolumna + prawa szyna (pulpit, kokpit) */
 .siatka-tresc { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--od-16); align-items: start; }
 .siatka-tresc-prawa { position: sticky; top: var(--od-24); display: flex; flex-direction: column; gap: var(--od-16); }
@@ -1036,84 +1323,59 @@ select {
 }
 
 /* ─────────────────────────────────────────────────────
-   OŚ AKCJI (faza 2.1/2.4/2.5) — element sygnaturowy kokpitu.
-   Wykres numer akcji (pionowo) × czas (poziomo), jeden SVG na spółkę,
-   emisje jako sekcje ułożone pionowo ze wspólną osią czasu. Playhead
-   zatrzaskuje się na zdarzeniach — tyle położeń, ile zdarzeń, plus „dziś".
-   Czysty SVG, bez bibliotek wykresów.
-   ───────────────────────────────────────────────────── */
-.os-akcji { margin-bottom: var(--od-16); }
-.os-akcji-svg { width: 100%; height: auto; display: block; }
-.os-akcji-etykieta-seria {
-  font-family: var(--font-dane);
-  font-size: 10.5px;
-  fill: var(--atrament-2);
-}
-.os-akcji-etykieta-seria tspan.przyciemniona { fill: var(--atrament-3); }
-.os-akcji-pasmo {
-  cursor: pointer;
-  transition: opacity var(--ruch-pasma), x var(--ruch-pasma), width var(--ruch-pasma);
-}
-.os-akcji-pasmo:hover { opacity: 0.85; }
-.os-akcji-pasmo.niekliknieta { cursor: default; }
-.os-akcji-oś-czasu-linia { stroke: var(--linia); stroke-width: 1; }
-.os-akcji-znacznik {
-  fill: var(--mosiadz);
-  cursor: pointer;
-}
-.os-akcji-znacznik-obwodka {
-  fill: none;
-  stroke: var(--mosiadz);
-  stroke-width: 1.5;
-}
-.os-akcji-playhead-linia {
-  stroke: var(--mosiadz);
-  stroke-width: 1.5;
-  transition: x1 var(--ruch-pasma), x2 var(--ruch-pasma);
-}
-.os-akcji-playhead-uchwyt {
-  fill: var(--mosiadz);
-  cursor: ew-resize;
-  transition: cx var(--ruch-pasma);
-}
-@media (prefers-reduced-motion: reduce) {
-  .os-akcji-pasmo, .os-akcji-playhead-linia, .os-akcji-playhead-uchwyt { transition: none; }
-}
+   STAN NA DZIEŃ — następca dawnej osi akcji.
 
-/* Sterowanie playheadem pod wykresem — suwak zostaje (2.5), ale ma tyle
-   dyskretnych położeń, ile spółka ma zdarzeń, nie tysiąc pikseli. */
-.os-akcji-sterowanie {
+   Wykres „numer akcji × czas" z playheadem zniknął: jedyne, po co go
+   używano, to obejrzenie rejestru na dzień wsteczny, a do tego wystarczy
+   pole daty w nagłówku (art. 300³⁵ KSH mówi o informacji NA DZIEŃ).
+   ───────────────────────────────────────────────────── */
+.stan-na-dzien {
   display: flex;
   align-items: center;
-  gap: var(--od-12);
-  margin-top: var(--od-8);
-  flex-wrap: wrap;
+  gap: var(--od-8);
 }
-.os-akcji-suwak { flex: 1; min-width: 160px; accent-color: var(--mosiadz); }
-.os-akcji-etykieta-chwili {
-  font-size: var(--st-13);
-  font-weight: 500;
-  white-space: nowrap;
-  min-width: 0;
-}
-.os-akcji-pusto {
-  padding: var(--od-40) var(--od-24);
-  text-align: center;
+.stan-na-dzien-etykieta {
+  font-size: var(--st-11);
   color: var(--atrament-3);
-  font-size: var(--st-13);
+  white-space: nowrap;
 }
 
-/* Lista współwłasności ułamkowej pod wykresem — pozycje niewidoczne
-   w skali (2.4: „pasmo o wysokości jednej akcji") trafiają tu w pełnej
-   precyzji (dokładny ułamek, nie tylko lista współuprawnionych). */
-.os-akcji-wspolwlasnosc {
-  margin-top: var(--od-8);
-  padding-top: var(--od-8);
-  border-top: 1px solid var(--linia-2);
-  font-size: var(--st-13);
-  color: var(--atrament-2);
+/* Zawartość rozwiniętej sekcji rejestru i rząd wpisów rzadszych pod tabelą:
+   przycisk sekcji prowadzi do wpisu najczęstszego, reszta stoi niżej, żeby
+   nagłówek nie zamienił się w pasek dziesięciu przycisków. */
+.sekcja-tresc > .tabela { margin-bottom: 0; }
+/* Rejestr akcji ma dziewięć kolumn — na wąskim ekranie ostatnia (cena
+   emisyjna) uciekała poza kartę. Tabela przewija się w poziomie sama,
+   reszta strony nie. */
+.sekcja-tresc { overflow-x: auto; }
+/* Puste miejsce w podglądzie nagłówka umowy — to samo, co w dokumencie
+   wyjdzie kreską, więc ma kłuć w oczy zanim dokument powstanie. */
+.podglad-brak {
+  color: var(--sygnal);
+  font-style: italic;
 }
-.os-akcji-wspolwlasnosc div + div { margin-top: 3px; }
+
+.dalsze-wpisy {
+  display: flex;
+  align-items: center;
+  gap: var(--od-8);
+  flex-wrap: wrap;
+  padding: var(--od-12) var(--od-24);
+  border-top: 1px solid var(--linia-2);
+}
+.dalsze-wpisy-tytul {
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+}
+.akta-grupa + .akta-grupa { border-top: 1px solid var(--linia-2); }
+.akta-grupa-tytul {
+  padding: var(--od-16) var(--od-24) var(--od-8);
+  font-size: var(--st-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--atrament-3);
+}
 
 /* Pigułka „stan na…” w archiwum, wspólna z trybem archiwalnym (2.5). */
 .pigulka-archiwalna {
@@ -1199,7 +1461,7 @@ select {
    DRUK — szczegóły wydruku w fazie 4
    ───────────────────────────────────────────────────── */
 @media print {
-  .szyna, .topbar, .bez-druku, .btn, .okruszki, .paleta-nakladka, .stronicowanie, .os-akcji { display: none !important; }
+  .szyna, .topbar, .bez-druku, .btn, .okruszki, .paleta-nakladka, .stronicowanie { display: none !important; }
   .powloka { display: block; margin: 0; border: none; border-radius: 0; box-shadow: none; max-width: none; }
   .obszar { background: var(--karta); }
   .tresc { max-width: none; padding: 0; }
@@ -1219,85 +1481,101 @@ select {
    ───────────────────────────────────────────────────── */
 /* ─────────────────────────────────────────────────────
    STOPKA
-   Trzy kolumny — kto prowadzi, jak się skontaktować, na jakich zasadach —
-   i pasek z notą o prawach pod cienką linią. Poprzednia wersja mieściła
-   wszystko w jednym rzędzie rozdzielonym kropkami; przy pięciu pozycjach
-   zamieniało się to w jedno zdanie bez hierarchii.
+   Jeden rząd: po lewej kto prowadzi rejestr, po prawej jak się z nim
+   skontaktować. Pod cienką linią nota o prawach i odnośniki do zasad.
+
+   Poprzednia wersja miała trzy kolumny z własnymi nagłówkami i zajmowała
+   dwieście pikseli wysokości — na ekranie, na którym pracuje się z rejestrem,
+   to pas równy jednej trzeciej karty. Nagłówki kolumn zniknęły: przy trzech
+   adresach „KONTAKT” nie mówi nic, czego nie mówi ikona koperty.
    ───────────────────────────────────────────────────── */
 .stopka {
   margin-top: auto;
+  background: var(--papier-2);
   border-top: 1px solid var(--linia);
-  background: var(--karta);
   color: var(--atrament-2);
   font-size: var(--st-13);
-  line-height: 1.6;
+  line-height: 1.55;
 }
-/* Treść stopki trzyma się tej samej osi, co treść strony nad nią. */
-.stopka-srodek {
+
+/* Trzy kolumny na tej samej osi, co treść nad stopką: kto prowadzi rejestr,
+   jak się z nim skontaktować, na jakiej podstawie to działa. Kolumna marki
+   jest szersza, bo niesie nazwę krojem display i znak notariatu. */
+.stopka-siatka {
   max-width: var(--tresc);
   margin-inline: auto;
   padding: var(--od-40) var(--od-40) var(--od-24);
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 1.4fr 1fr 1.2fr;
   gap: var(--od-40);
   align-items: start;
 }
-.stopka-kolumna { display: flex; flex-direction: column; gap: var(--od-4); min-width: 0; }
-.stopka-marka { gap: var(--od-12); }
+.stopka-kolumna { display: flex; flex-direction: column; gap: var(--od-8); min-width: 0; }
 
-/* Szerokość, nie wysokość — i dokładnie trzecia część oryginału (498 px),
-   bo całkowity stosunek pomniejszenia rysuje ostre krawędzie. Przy dawnych
-   56 px wysokości znak schodził do 127 px szerokości (3,92 : 1) i drugi
-   wiersz napisu zlewał się w plamę. */
-.stopka-znak { width: 166px; height: auto; flex-shrink: 0; }
-
-.stopka-nazwa {
-  font-family: var(--font-display);
-  font-size: var(--st-20);
-  line-height: 1.25;
-  color: var(--atrament);
-}
-.stopka-adres { color: var(--atrament-2); }
-
-/* Nagłówek kolumny — wielkością podpisu, nie tytułu: ma porządkować, a nie
-   konkurować z nazwą kancelarii obok. */
-.stopka-naglowek {
+/* Nagłówek kolumny: najcichszy stopień, wersaliki, światło międzyliterowe —
+   ma dzielić stopkę na trzy, nie konkurować z treścią. */
+.stopka-tytul {
   font-size: var(--st-11);
   font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
   color: var(--atrament-3);
   margin-bottom: var(--od-4);
 }
-.stopka-kolumna a {
-  color: inherit;
-  text-decoration: none;
-  width: fit-content;
-  overflow-wrap: anywhere;
+.stopka-nazwa {
+  font-family: var(--font-display);
+  font-size: var(--st-20);
+  line-height: 1.2;
+  color: var(--atrament);
 }
-.stopka-kolumna a:hover { color: var(--rejestr); text-decoration: underline; }
+.stopka-adres { color: var(--atrament-2); }
+.stopka-tresc { color: var(--atrament-2); }
+.stopka-tresc a { color: var(--rejestr); text-decoration: none; }
+.stopka-tresc a:hover { text-decoration: underline; }
 
-/* Pasek dolny: nota o prawach i jedno zdanie o tym, czym jest aplikacja.
-   Najcichszy stopień pisma w całej stopce — to przypis, nie treść. */
+/* Szerokość, nie wysokość — i dokładnie ćwierć oryginału (498 px), bo
+   całkowity stosunek pomniejszenia rysuje ostre krawędzie. */
+.stopka-znak { width: 124px; height: auto; margin-top: var(--od-8); opacity: 0.92; }
+
+/* Jedna pozycja z ikoną: e-mail, telefon, strona. */
+.stopka-poz {
+  display: flex; align-items: center; gap: var(--od-8);
+  color: inherit; text-decoration: none;
+  overflow-wrap: anywhere;
+  /* Cel kliknięcia, nie sam tekst — na telefonie w trzy wiersze po 20 px
+     trudno trafić palcem. */
+  padding-block: 2px;
+}
+.stopka-poz svg { flex-shrink: 0; color: var(--atrament-3); }
+a.stopka-poz:hover { color: var(--rejestr); }
+a.stopka-poz:hover svg { color: var(--rejestr); }
+a.stopka-poz:hover span { text-decoration: underline; }
+
+/* Pasek dolny: nota o prawach i zasady. Najcichszy stopień w całej stopce —
+   to przypis, nie treść. */
 .stopka-dol {
   max-width: var(--tresc);
   margin-inline: auto;
-  padding: var(--od-16) var(--od-40);
+  padding: var(--od-12) var(--od-40) var(--od-24);
   border-top: 1px solid var(--linia-2);
-  display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--od-8) var(--od-24);
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--od-4) var(--od-24);
   font-size: var(--st-11);
   color: var(--atrament-3);
 }
-.stopka-dol-opis { text-align: right; }
+.stopka-dol-linki { display: flex; flex-wrap: wrap; gap: var(--od-16); }
+.stopka-dol-linki a { color: inherit; text-decoration: none; }
+.stopka-dol-linki a:hover { color: var(--rejestr); text-decoration: underline; }
 
 @media (max-width: 900px) {
-  .stopka-srodek { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--od-24); }
-  .stopka-marka { grid-column: 1 / -1; }
+  .stopka-siatka { grid-template-columns: 1fr 1fr; gap: var(--od-24); }
+  .stopka-kolumna-marka { grid-column: 1 / -1; }
 }
-@media (max-width: 700px) {
-  .stopka-srodek { grid-template-columns: minmax(0, 1fr); padding: var(--od-24); }
-  .stopka-dol { padding: var(--od-16) var(--od-24); }
-  .stopka-dol-opis { text-align: left; }
+@media (max-width: 560px) {
+  .stopka-siatka {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--od-24) var(--od-16) var(--od-16);
+  }
+  .stopka-dol { padding: var(--od-12) var(--od-16) var(--od-24); }
 }
 
 /* ─────────────────────────────────────────────────────
@@ -1892,6 +2170,40 @@ select {
   margin-top: 1px;
 }
 
+/* Zgłoszenie zmiany: rodzaj dokumentu i wybór pliku w jednym rzędzie, a pod
+   spodem lista tego, co klient już dołączył. Plik jest tu rzeczą główną —
+   wpis powstaje na jego podstawie, nie na podstawie opisu. */
+.zgloszenie-plik {
+  display: flex;
+  align-items: center;
+  gap: var(--od-8);
+  flex-wrap: wrap;
+}
+.lista-plikow {
+  list-style: none;
+  margin: var(--od-8) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lista-plikow li {
+  display: flex;
+  align-items: center;
+  gap: var(--od-8);
+  padding: var(--od-8) var(--od-12);
+  background: var(--papier);
+  border-radius: var(--r-sm);
+  font-size: var(--st-13);
+}
+.lista-plikow-nazwa {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Pole wyboru pliku sterowane własnym przyciskiem. `display: none` wyłączyłoby
    je z nawigacji klawiaturą, więc pole zostaje na stronie — tylko niewidoczne
    i o zerowej powierzchni. */
@@ -1903,3 +2215,147 @@ select {
   overflow: hidden;
   white-space: nowrap;
 }
+
+/* Dwie decyzje zamykające przegląd pozycji akcjonariusza: powrót po lewej,
+   „do poprawy" i „zweryfikowano" po prawej. Te same proporcje, co
+   `.nawigacja-kreatora` — to ten sam moment w pracy, tylko z trzema
+   wyjściami zamiast dwóch. */
+.decyzja-pozycji {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--od-12);
+  margin-top: var(--od-24);
+  padding-top: var(--od-24);
+  border-top: 1px solid var(--linia-2);
+}
+.decyzja-pozycji-akcje { display: flex; gap: var(--od-8); flex-wrap: wrap; }
+
+/* ─────────────────────────────────────────────────────
+   DOKUMENT W OKNIE KANCELARII
+   Klasy `dok-*` opisują DOKUMENT, nie interfejs: kartka w jednej kolumnie,
+   tytuł na środku, akapity wyjustowane, miejsca na podpis przy prawej
+   krawędzi — możliwie blisko tego, co wyjdzie na papier. Poprawianie dzieje
+   się w tym samym oknie: kliknięcie w blok zamienia go w pole do pisania.
+   ───────────────────────────────────────────────────── */
+.dok-wskazowka {
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  margin-bottom: var(--od-12);
+}
+/* Po podpisaniu w oknie nie ma już kartki z treścią — są dwa kafle,
+   każdy otwiera swój egzemplarz jako PDF. Podpis dotyczy pliku, więc tylko
+   plik pokazuje, co naprawdę zostało podpisane. */
+.dok-egzemplarze {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--od-12);
+}
+@media (max-width: 700px) { .dok-egzemplarze { grid-template-columns: 1fr; } }
+.dok-egzemplarz {
+  display: flex;
+  align-items: center;
+  gap: var(--od-12);
+  padding: var(--od-16);
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  color: var(--atrament);
+  text-decoration: none;
+}
+.dok-egzemplarz:hover { border-color: var(--rejestr); background: var(--rejestr-tlo); }
+.dok-egzemplarz-glowny { border-left: 3px solid var(--rejestr); }
+.dok-egzemplarz-tresc { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dok-egzemplarz-nazwa { font-size: var(--st-13); font-weight: 600; }
+.dok-egzemplarz-plik {
+  font-size: var(--st-11);
+  color: var(--atrament-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dok-egzemplarz-akcja {
+  margin-left: auto;
+  font-size: var(--st-11);
+  color: var(--rejestr);
+  white-space: nowrap;
+}
+
+.dok-strona {
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: var(--r);
+  padding: var(--od-40);
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--atrament);
+}
+@media (max-width: 700px) { .dok-strona { padding: var(--od-24) var(--od-16); } }
+
+.dok-blok { border-radius: var(--r-sm); padding: 2px var(--od-8); margin-inline: calc(-1 * var(--od-8)); }
+.dok-strona-edytowalna .dok-blok { cursor: text; }
+.dok-strona-edytowalna .dok-blok:hover { background: var(--rejestr-tlo); }
+.dok-blok-otwarty,
+.dok-strona-edytowalna .dok-blok-otwarty:hover {
+  background: var(--papier-2);
+  border: 1px solid var(--rejestr);
+  padding: var(--od-12);
+  cursor: default;
+  font-family: var(--font-ui);
+}
+.dok-blok-pasek {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--od-8);
+  margin-bottom: var(--od-8);
+}
+.dok-blok-rodzaj {
+  font-size: var(--st-11); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--atrament-3);
+  font-family: var(--font-ui);
+}
+.dok-blok-otwarty .pole:last-child { margin-bottom: 0; }
+
+.dok-naglowek { text-align: right; margin-bottom: var(--od-16); }
+.dok-tytul-blok { text-align: center; margin: var(--od-24) 0 var(--od-16); }
+.dok-tytul { font-size: var(--st-20); font-weight: 600; line-height: 1.3; }
+.dok-podtytul { font-size: var(--st-13); color: var(--atrament-2); margin-top: var(--od-4); }
+.dok-sekcja { font-weight: 600; margin: var(--od-16) 0 var(--od-8); }
+.dok-akapit { text-align: justify; margin-bottom: var(--od-12); }
+
+/* Etykieta i wartość w dwóch kolumnach — tak samo jak w składanym PDF-ie. */
+.dok-pola {
+  display: grid; grid-template-columns: 190px minmax(0, 1fr);
+  gap: 2px var(--od-16);
+  margin: var(--od-8) 0 var(--od-16);
+}
+.dok-pola dt { color: var(--atrament-2); }
+.dok-pola dd { margin: 0; overflow-wrap: anywhere; }
+
+.dok-punkt { display: flex; gap: var(--od-8); margin-bottom: var(--od-8); text-align: justify; }
+.dok-punkt-znacznik { flex-shrink: 0; min-width: 22px; }
+
+.dok-opcja { display: flex; gap: var(--od-12); align-items: flex-start; margin-bottom: var(--od-8); }
+.dok-kratka {
+  flex-shrink: 0; width: 11px; height: 11px; margin-top: 5px;
+  border: 1px solid var(--atrament-2);
+}
+/* Krzyżyk rysowany gradientem, nie znakiem: krój dokumentu nie ma „☒”,
+   a podstawianie innego kroju dla jednego znaku rozstraja wiersz. */
+.dok-kratka-zaznaczona {
+  background:
+    linear-gradient(to bottom right, transparent 44%, var(--atrament) 44%, var(--atrament) 56%, transparent 56%),
+    linear-gradient(to bottom left, transparent 44%, var(--atrament) 44%, var(--atrament) 56%, transparent 56%);
+}
+
+.dok-wypelnij { margin: var(--od-8) 0 var(--od-16); }
+.dok-wypelnij-wiersz { display: flex; align-items: baseline; gap: var(--od-12); margin-bottom: var(--od-8); }
+.dok-wypelnij-wiersz > span:first-child { color: var(--atrament-2); white-space: nowrap; }
+.dok-linia { flex: 1; border-bottom: 1px solid var(--linia); height: 1px; }
+
+.dok-podpis {
+  margin: var(--od-40) 0 var(--od-16) auto;
+  width: min(240px, 100%);
+  text-align: center;
+}
+.dok-podpis-linia { display: block; border-top: 1px solid var(--atrament-2); margin-bottom: var(--od-4); }
+.dok-podpis-opis { font-size: var(--st-11); color: var(--atrament-2); }

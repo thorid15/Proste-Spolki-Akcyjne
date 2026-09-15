@@ -169,20 +169,22 @@ function Sekcja({ tytul, licznik, domyslnieOtwarta = false, akcje, children }) {
   const [otwarta, ustawOtwarta] = useState(domyslnieOtwarta);
   return (
     <div className="sekcja">
-      <button className="sekcja-naglowek" onClick={() => ustawOtwarta((o) => !o)}>
-        <span className="sekcja-tytul">
-          <span className={`strzalka ${otwarta ? 'otwarta' : ''}`}>▶</span>
-          {tytul}
-          {licznik !== undefined && licznik !== null && (
-            <Znacznik odmiana="neutralny">{licznik}</Znacznik>
-          )}
-        </span>
-        {akcje && (
-          <span className="row-g" onClick={(z) => z.stopPropagation()}>
-            {akcje}
+      <div className="sekcja-naglowek">
+        <button
+          className="sekcja-przelacznik"
+          aria-expanded={otwarta}
+          onClick={() => ustawOtwarta((o) => !o)}
+        >
+          <span className="sekcja-tytul">
+            <span className={`strzalka ${otwarta ? 'otwarta' : ''}`}>▶</span>
+            {tytul}
+            {licznik !== undefined && licznik !== null && (
+              <Znacznik odmiana="neutralny">{licznik}</Znacznik>
+            )}
           </span>
-        )}
-      </button>
+        </button>
+        {akcje && <span className="row-g">{akcje}</span>}
+      </div>
       {otwarta && <div className="sekcja-tresc bez-marginesu">{children}</div>}
     </div>
   );
@@ -225,7 +227,7 @@ function WyborOsoby({ wartosc, przyZmianie, placeholder = 'Szukaj w kartotece…
 
   if (wybrana && !otwarte) {
     return (
-      <div className="row-b" style={{ gap: 10 }}>
+      <div className="row-b" style={{ gap: 8 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: 13.5 }}>{wybrana.oznaczenie}</div>
           <div className="podpowiedz" style={{ marginTop: 2 }}>
@@ -264,7 +266,7 @@ function WyborOsoby({ wartosc, przyZmianie, placeholder = 'Szukaj w kartotece…
           style={{
             border: '1px solid var(--line)',
             borderRadius: 'var(--r-sm)',
-            marginTop: 6,
+            marginTop: 8,
             maxHeight: 260,
             overflowY: 'auto',
             background: 'var(--surf)',
@@ -294,7 +296,7 @@ function WyborOsoby({ wartosc, przyZmianie, placeholder = 'Szukaj w kartotece…
               Brak osób pasujących do wyszukiwania.
             </div>
           )}
-          <div style={{ padding: 10, borderTop: '1px solid var(--line-2)' }}>
+          <div style={{ padding: 8, borderTop: '1px solid var(--line-2)' }}>
             <button className="btn btn-sm" onClick={() => ustawNowa(true)}>
               + Nowa osoba w kartotece
             </button>

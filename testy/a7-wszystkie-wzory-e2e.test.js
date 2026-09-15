@@ -203,7 +203,7 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
   // Załącznik do sprawy — wchodzi w sekcję `zalaczniki` wzoru 04.
   const formularz = new FormData();
   formularz.append('typ_dokumentu', 'umowa_zbycia');
-  formularz.append('pliki', new Blob(['nie prawdziwa tresc, wystarcza do testu'], { type: 'application/pdf' }), 'umowa-zbycia.pdf');
+  formularz.append('pliki', new Blob(['%PDF-1.4\nnie prawdziwa tresc, wystarcza do testu'], { type: 'application/pdf' }), 'umowa-zbycia.pdf');
   const odpUpload = await fetch(`${baza}/api/psa/sprawy/${sprawaId}/dokumenty`, {
     method: 'POST', headers: { Cookie: ciastko }, body: formularz,
   });

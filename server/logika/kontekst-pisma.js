@@ -33,6 +33,8 @@
 
 const przepisy = require('./przepisy');
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('./ustawienia');
+const { db } = require('../baza');
 const widoki = require('../widoki');
 
 // ─────────────────────────────────────────────────────────────
@@ -124,7 +126,7 @@ function sadRejestrowyPelny(spolka) {
 
 /** `kancelaria_*` / `notariusz_*` / `podpisujacy_*` — jeden do jednego z konfiguracji (blok A2). */
 function kancelariaKlucze() {
-  const k = konfiguracja.KANCELARIA;
+  const k = ustawienia.kancelaria(db());
   return {
     notariusz_mianownik: k.notariusz_mianownik || null,
     podpisujacy_funkcja: k.podpisujacy_funkcja || null,

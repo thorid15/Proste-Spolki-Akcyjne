@@ -11,6 +11,8 @@
 const express = require('express');
 
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('../logika/ustawienia');
+const { db } = require('../baza');
 const { asy } = require('../pomocnicze/odpowiedzi');
 
 const router = express.Router();
@@ -18,7 +20,7 @@ const router = express.Router();
 router.get(
   '/kancelaria',
   asy((zad, odp) => {
-    odp.json({ kancelaria: konfiguracja.KANCELARIA });
+    odp.json({ kancelaria: ustawienia.kancelaria(db()) });
   })
 );
 

@@ -18,6 +18,9 @@ const AKCJE = {
   RAPORT_SAD: 'raport_sad',
   EKSPORT: 'eksport',
   POBRANIE_PLIKU: 'pobranie_pliku',
+  // Dane kancelarii i stawki trafiaja do kazdej wystawianej umowy, wiec ich
+  // zmiana jest zdarzeniem wartym zapisania — tak samo jak wglad w akta.
+  ZMIANA_USTAWIEN: 'zmiana_ustawien',
 };
 
 function zapisz(db, { kto, typKto, spolkaId = null, osobaId = null, akcja, opis = null }) {

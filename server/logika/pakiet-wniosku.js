@@ -28,6 +28,7 @@ const path = require('node:path');
 
 const { db } = require('../baza');
 const konfiguracja = require('../konfiguracja');
+const ustawienia = require('./ustawienia');
 const czas = require('../pomocnicze/czas');
 const dokumentyWniosku = require('./dokumenty-wniosku');
 const bloki = require('./bloki-dokumentu');
@@ -35,7 +36,9 @@ const bloki = require('./bloki-dokumentu');
 /** Kolumny listy dokumentów — bez ścieżek, które nie mają czego szukać w API. */
 const KOLUMNY_WIDOKU = `id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id, kolejnosc,
         utworzono, zmodyfikowano, zmodyfikowal, udostepniono, brakujace,
+        sprawdzono, sprawdzil,
         podpis_nazwa_pliku, podpis_rozmiar, podpis_wgrano,
+        podpis_potwierdzono, podpis_potwierdzil,
         (tresc_bloki IS NOT NULL) AS edytowalny`;
 
 function katalogWniosku(wniosekId) {
@@ -107,6 +110,10 @@ function tresc(wniosekId, dokumentId) {
     nazwa_pliku: wiersz.nazwa_pliku,
     udostepniono: wiersz.udostepniono,
     zmodyfikowano: wiersz.zmodyfikowano,
+    sprawdzono: wiersz.sprawdzono,
+    // Po odesłaniu podpisanego skanu treści nie wolno już ruszać: podpis
+    // dotyczy TEGO brzmienia dokumentu, a nie następnego.
+    podpisany: Boolean(wiersz.podpis_sciezka),
     brakujace: przeliczBrakujace(wiersz.brakujace),
     bloki: lista_blokow,
   };
@@ -214,22 +221,36 @@ async function wystaw(wniosek, akcjonariusze) {
 async function zapiszTresc(wniosekId, dokumentId, noweBloki, autor) {
   const wiersz = dokument(wniosekId, dokumentId);
   if (!wiersz) return null;
+  if (wiersz.podpis_sciezka) {
+    throw new Error('Dokument został już podpisany — jego treści nie można zmieniać.');
+  }
 
   const znormalizowane = bloki.znormalizuj(noweBloki);
   const plik = await bloki.doPdf(znormalizowane, {
     tytul: dokumentyWniosku.NAZWY[wiersz.typ] || wiersz.nazwa,
-    autor: konfiguracja.KANCELARIA.nazwa,
+    autor: ustawienia.kancelaria(db()).nazwa,
   });
 
   const sciezka = zapiszPlik(wniosekId, plik);
   const teraz = czas.terazIso();
+  // Zapis treści JEST sprawdzeniem: pracownik doszedł do przycisku, więc
+  // dokument przeczytał — niezależnie od tego, czy coś w nim poprawił.
+  // Znacznik zmiany zostaje osobno, bo dokument poprawiony ręcznie i dokument
+  // tylko przeczytany to dla akt dwie różne rzeczy.
+  const zmieniono = JSON.stringify(znormalizowane) !== String(wiersz.tresc_bloki || '');
   db()
     .prepare(
       `UPDATE psa_wnioski_dokumenty
-          SET sciezka = ?, rozmiar = ?, tresc_bloki = ?, zmodyfikowano = ?, zmodyfikowal = ?
+          SET sciezka = ?, rozmiar = ?, tresc_bloki = ?,
+              zmodyfikowano = ?, zmodyfikowal = ?, sprawdzono = ?, sprawdzil = ?
         WHERE id = ?`
     )
-    .run(sciezka, plik.length, JSON.stringify(znormalizowane), teraz, autor || null, wiersz.id);
+    .run(
+      sciezka, plik.length, JSON.stringify(znormalizowane),
+      zmieniono ? teraz : wiersz.zmodyfikowano,
+      zmieniono ? (autor || null) : wiersz.zmodyfikowal,
+      teraz, autor || null, wiersz.id
+    );
   usunPlik(wiersz.sciezka);
 
   if (wiersz.typ === dokumentyWniosku.TYPY.UMOWA_REJESTRU) {
@@ -247,6 +268,41 @@ async function zapiszTresc(wniosekId, dokumentId, noweBloki, autor) {
  *
  * @returns {object[]} lista dokumentów po udostępnieniu
  */
+/**
+ * Potwierdzenie, że odesłany skan jest kompletny i prawidłowo podpisany.
+ * Samo wgranie pliku tego nie przesądza — ktoś musi na niego spojrzeć,
+ * a przyjęcie wniosku tego wymaga.
+ *
+ * @returns {object|null} widok dokumentu po zmianie; `null` gdy nie ma takiego
+ *   dokumentu, `false` gdy nie odesłano jeszcze skanu
+ */
+function potwierdzPodpis(wniosekId, dokumentId, potwierdzono, autor) {
+  const wiersz = dokument(wniosekId, dokumentId);
+  if (!wiersz) return null;
+  if (!wiersz.podpis_sciezka) return false;
+
+  db()
+    .prepare('UPDATE psa_wnioski_dokumenty SET podpis_potwierdzono = ?, podpis_potwierdzil = ? WHERE id = ?')
+    .run(potwierdzono ? czas.terazIso() : null, potwierdzono ? autor || null : null, wiersz.id);
+
+  return widokDokumentu(
+    db().prepare(`SELECT ${KOLUMNY_WIDOKU} FROM psa_wnioski_dokumenty WHERE id = ?`).get(wiersz.id)
+  );
+}
+
+/** Pozycje, które jeszcze nie mają potwierdzonego podpisu — blokują przyjęcie. */
+function bezPotwierdzonegoPodpisu(wniosekId) {
+  return db()
+    .prepare(
+      `SELECT nazwa, nazwa_pliku, (podpis_sciezka IS NOT NULL) AS ma_skan
+         FROM psa_wnioski_dokumenty
+        WHERE wniosek_id = ? AND podpis_potwierdzono IS NULL
+        ORDER BY kolejnosc, id`
+    )
+    .all(wniosekId)
+    .map((d) => ({ ...d, ma_skan: Boolean(d.ma_skan) }));
+}
+
 function udostepnij(wniosekId) {
   const teraz = czas.terazIso();
   db()
@@ -263,6 +319,8 @@ module.exports = {
   tresc,
   wystaw,
   zapiszTresc,
+  potwierdzPodpis,
+  bezPotwierdzonegoPodpisu,
   udostepnij,
   widokDokumentu,
 };

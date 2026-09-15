@@ -30,6 +30,7 @@ const typyZdarzen = require('../logika/typy-zdarzen');
 const przepisy = require('../logika/przepisy');
 const maskowanie = require('../logika/maskowanie');
 const konfiguracja = require('../konfiguracja');
+const pliki = require('../pomocnicze/pliki');
 const { nastepnyNumerSprawy } = require('../logika/znak-sprawy');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
@@ -632,14 +633,22 @@ router.post(
     if (!TYPY_DOKUMENTU.includes(typDokumentu)) {
       throw bledneZadanie(`Nieznany typ dokumentu: „${typDokumentu}”.`);
     }
-    const pliki = zad.files || [];
-    if (pliki.length === 0) throw bledneZadanie('Nie przesłano żadnego pliku.');
+    const wgrane = zad.files || [];
+    if (wgrane.length === 0) throw bledneZadanie('Nie przesłano żadnego pliku.');
+    // Rozszerzenie to obietnica klienta — sprawdzamy sygnature tresci.
+    for (const plik of wgrane) {
+      if (pliki.trescPasuje(plik.path, pliki.typZNazwy(plik.originalname))) continue;
+      for (const p of wgrane) fs.rmSync(p.path, { force: true });
+      throw bledneZadanie(
+        `Treść pliku „${plik.originalname}" nie odpowiada jego rozszerzeniu. Prześlij PDF, skan albo zdjęcie.`
+      );
+    }
 
     const wstaw = db().prepare(
       `INSERT INTO psa_dokumenty (sprawa_id, nazwa_pliku, sciezka, mime, rozmiar, typ_dokumentu, hash, wgral, utworzono)
        VALUES (@sprawa_id, @nazwa_pliku, @sciezka, @mime, @rozmiar, @typ_dokumentu, @hash, @wgral, @utworzono)`
     );
-    const zapisane = pliki.map((plik) => {
+    const zapisane = wgrane.map((plik) => {
       const hash = crypto.createHash('sha256').update(fs.readFileSync(plik.path)).digest('hex');
       const wynik = wstaw.run({
         sprawa_id: sprawa.id,
@@ -791,8 +800,7 @@ router.get(
       akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU, opis: `załącznik sprawy #${sprawa.id}: ${dokument.nazwa_pliku}`,
     });
 
-    odp.setHeader('Content-Type', dokument.mime || 'application/octet-stream');
-    odp.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(dokument.nazwa_pliku)}"`);
+    pliki.naglowkiPliku(odp, { nazwaPliku: dokument.nazwa_pliku, wRamce: true });
     odp.sendFile(pelnaSciezka);
   })
 );
