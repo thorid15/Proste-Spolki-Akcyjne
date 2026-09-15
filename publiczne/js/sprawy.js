@@ -836,26 +836,41 @@ function PrzydzialDoPotwierdzenia({ dane }) {
 }
 
 /**
- * Poprawa typu zdarzenia przed wpisem.
+ * Podstawa wpisu przy sprawie już założonej.
  *
- * Portal klienta pyta o TRZY grupy („zbycie albo nabycie akcji", „emisja
- * albo umorzenie", „ustanowienie uprawnienia") — klient nie kwalifikuje
- * czynnosci prawnej, bo wpisu dokonuje sie na podstawie DOKUMENTU, nie
- * opisu zadajacego (art. 300(34) § 4 KSH). Pracownik czyta dokument i
- * ustawia typ, z ktorym idzie do kreatora. Zwiniete do jednego wiersza:
- * przy sprawie zalozonej w kancelarii typ jest juz wlasciwy.
+ * Sprawa zgłoszona przez portal nie przechodzi przez kreator kancelarii,
+ * więc dwie rzeczy zostają w niej nieustalone: TYP zdarzenia (klient wybiera
+ * jedną z trzech grup, nie kwalifikuje czynności prawnej) i RODZAJ dokumentu
+ * (klient załącza plik, nie opisuje go). Jedno i drugie ustala pracownik po
+ * przeczytaniu załącznika — art. 300(34) § 4 KSH wiąże wpis z dokumentem,
+ * nie z opisem żądającego.
+ *
+ * Zwinięte do jednego odnośnika: przy sprawie założonej w kancelarii oba
+ * pola są już wypełnione w kreatorze i nie ma czego poprawiać.
  */
-function PoprawTypZdarzenia({ sprawa, typy, odswiez }) {
+function PodstawaWpisu({ sprawa, typy, odswiez }) {
   const [otwarte, ustawOtwarte] = useState(false);
-  const [wybrany, ustawWybrany] = useState(sprawa.typ_zdarzenia);
+  const [typ, ustawTyp] = useState(sprawa.typ_zdarzenia);
+  const [rodzaj, ustawRodzaj] = useState(sprawa.dokument_rodzaj || '');
+  const [dataDokumentu, ustawDateDokumentu] = useState(sprawa.dokument_data || '');
   const [zapisywanie, ustawZapisywanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
 
+  const niepelna = Boolean(rodzaj) !== Boolean(dataDokumentu);
+
   async function zapisz() {
+    if (niepelna) return;
     ustawZapisywanie(true);
     ustawBlad(null);
     try {
-      await API.patch(`/api/psa/sprawy/${sprawa.id}`, { akcja: 'zmien-typ', typ_zdarzenia: wybrany });
+      if (typ !== sprawa.typ_zdarzenia) {
+        await API.patch(`/api/psa/sprawy/${sprawa.id}`, { akcja: 'zmien-typ', typ_zdarzenia: typ });
+      }
+      await API.patch(`/api/psa/sprawy/${sprawa.id}`, {
+        akcja: 'podstawa',
+        dokument_rodzaj: rodzaj || null,
+        dokument_data: dataDokumentu || null,
+      });
       ustawOtwarte(false);
       odswiez();
     } catch (e) {
@@ -868,25 +883,53 @@ function PoprawTypZdarzenia({ sprawa, typy, odswiez }) {
   if (!otwarte) {
     return (
       <div className="row-g bez-druku">
-        <button className="btn-tekstowy" onClick={() => ustawOtwarte(true)}>Popraw typ zdarzenia</button>
+        <button className="btn-tekstowy" onClick={() => ustawOtwarte(true)}>
+          {sprawa.dokument_rodzaj ? 'Popraw podstawę wpisu' : 'Ustal podstawę wpisu'}
+        </button>
       </div>
     );
   }
 
   return (
-    <Karta tytul="Typ zdarzenia">
+    <Karta tytul="Podstawa wpisu">
       <div className="pion" style={{ padding: '0 24px 20px', gap: 12 }}>
         <Komunikat odmiana="blad" tresc={blad} />
-        <select value={wybrany} onChange={(z) => ustawWybrany(z.target.value)}>
-          {typy.filter((t) => !t.z_urzedu).map((t) => (
-            <option key={t.kod} value={t.kod}>{t.nazwa}</option>
-          ))}
-        </select>
+        <Pole etykieta="Typ zdarzenia" wymagane>
+          <select value={typ} onChange={(z) => ustawTyp(z.target.value)}>
+            {typy.filter((t) => !t.z_urzedu).map((t) => (
+              <option key={t.kod} value={t.kod}>{t.nazwa}</option>
+            ))}
+          </select>
+        </Pole>
+        <div className="siatka-2">
+          <Pole etykieta="Rodzaj dokumentu">
+            <select value={rodzaj} onChange={(z) => ustawRodzaj(z.target.value)}>
+              <option value="">— brak —</option>
+              {RODZAJE_DOKUMENTU_PODSTAWY.map(([kod, opis]) => (
+                <option key={kod} value={kod}>{opis}</option>
+              ))}
+            </select>
+          </Pole>
+          <Pole etykieta="Data dokumentu">
+            <PoleDaty wartosc={dataDokumentu} przyZmianie={(v) => ustawDateDokumentu(v || '')} />
+          </Pole>
+        </div>
+        {niepelna && (
+          <Komunikat odmiana="uwaga" tresc="Rodzaj i datę dokumentu podaje się razem." />
+        )}
         <div className="row-g">
-          <button className="btn btn-glowny btn-maly" disabled={zapisywanie} onClick={zapisz}>
-            {zapisywanie ? 'Zapisywanie…' : 'Zapisz typ'}
+          <button className="btn btn-glowny btn-maly" disabled={zapisywanie || niepelna} onClick={zapisz}>
+            {zapisywanie ? 'Zapisywanie…' : 'Zapisz podstawę'}
           </button>
-          <button className="btn btn-maly" onClick={() => { ustawOtwarte(false); ustawWybrany(sprawa.typ_zdarzenia); }}>
+          <button
+            className="btn btn-maly"
+            onClick={() => {
+              ustawOtwarte(false);
+              ustawTyp(sprawa.typ_zdarzenia);
+              ustawRodzaj(sprawa.dokument_rodzaj || '');
+              ustawDateDokumentu(sprawa.dokument_data || '');
+            }}
+          >
             Anuluj
           </button>
         </div>
@@ -955,7 +998,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
       )}
 
       {!zakonczona && (
-        <PoprawTypZdarzenia sprawa={sprawa} typy={meta.dane.typy_zdarzen} odswiez={odswiez} />
+        <PodstawaWpisu sprawa={sprawa} typy={meta.dane.typy_zdarzen} odswiez={odswiez} />
       )}
 
       {!wlasnieWpisano && <AkcjeSprawy sprawa={sprawa} odswiez={odswiez} />}

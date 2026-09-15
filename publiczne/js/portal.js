@@ -997,17 +997,26 @@ function EkranInformacjaPortal({ spolkaId }) {
   const [data, ustawData] = useState(fmt.dzisIso());
   const [pobieranie, ustawPobieranie] = useState(false);
   const [blad, ustawBlad] = useState(null);
+  const [gotowa, ustawGotowa] = useState(null);
 
   async function pobierz() {
     ustawPobieranie(true);
     ustawBlad(null);
+    ustawGotowa(null);
+    // Nowa karta otwiera się TERAZ, w obsłudze kliknięcia. Otwierana po
+    // `await` nie miała już gestu użytkownika za sobą, więc przeglądarka
+    // blokowała ją jak wyskakujące okienko — a gdy jednak się otwierała,
+    // stała pusta („serwer odrzucił połączenie”), dopóki adres nie był
+    // gotowy. Adres zostaje też na ekranie: dokument ma własny URL, więc
+    // da się go otworzyć ponownie bez powtarzania całej operacji.
+    const okno = window.open('', '_blank');
     try {
-      // Dokument dostaje wlasny adres, wiec da sie go otworzyc ponownie,
-      // wydrukowac z sensowna nazwa pliku i przeslac linkiem. Wczesniej
-      // szedl jako `blob:` sklejony z odpowiedzi — bez adresu i bez nazwy.
       const wynik = await API.post('/api/psa/portal/informacja', { spolka_id: spolkaId, data });
-      window.open(`/api/psa/portal/informacja/${wynik.dokument_id}`, '_blank');
+      const adres = `/api/psa/portal/informacja/${wynik.dokument_id}`;
+      ustawGotowa({ adres, data });
+      if (okno && !okno.closed) okno.location = adres;
     } catch (e) {
+      if (okno && !okno.closed) okno.close();
       ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się przygotować informacji.');
     } finally {
       ustawPobieranie(false);
@@ -1029,6 +1038,18 @@ function EkranInformacjaPortal({ spolkaId }) {
         <button className="btn btn-glowny" onClick={pobierz} disabled={pobieranie}>
           {pobieranie ? 'Przygotowywanie…' : 'Otwórz informację'}
         </button>
+        {gotowa && (
+          <Komunikat
+            odmiana="ok"
+            tytul={`Informacja na dzień ${fmt.data(gotowa.data)} jest gotowa`}
+            tresc="Otworzyliśmy ją w nowej karcie. Jeśli przeglądarka ją zablokowała — otwórz stąd."
+          />
+        )}
+        {gotowa && (
+          <a className="btn" href={gotowa.adres} target="_blank" rel="noopener">
+            Otwórz w nowej karcie
+          </a>
+        )}
       </Karta>
     </div>
   );

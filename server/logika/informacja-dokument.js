@@ -77,10 +77,12 @@ const NAZWY_POKRYCIA = {
   tak: 'w całości',
   nie: 'niepokryte',
   czesciowo: 'częściowo',
-  // `null` znaczy: zarząd nie podjął jeszcze uchwały z art. 300(9) § 2 KSH.
-  // To NIE to samo, co stwierdzenie, że wkładu nie wniesiono — dlatego
-  // osobne słowo, a nie „niepokryte".
-  nieustalone: 'nieustalone',
+  // `null` znaczy: do rejestru nie wpisano jeszcze wzmianki, o której mowa
+  // w art. 300(33) § 1 pkt 9 KSH. To NIE to samo, co stwierdzenie, że wkładu
+  // nie wniesiono — dlatego nie „niepokryte". Nie jest to też „nieustalone":
+  // tamto słowo czytało się jak usterka rejestru, choć opisuje wyłącznie brak
+  // wzmianki, którą wpisuje się na podstawie oświadczenia zarządu.
+  nieustalone: 'brak wzmianki',
 };
 
 const NAZWY_OBCIAZENIA = {

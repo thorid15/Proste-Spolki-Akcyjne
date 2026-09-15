@@ -410,6 +410,37 @@ router.patch(
       return odp.json({ sprawa: widokSprawy(wczytajSprawe(id)) });
     }
 
+    /**
+     * Podstawa wpisu przy sprawie, ktora NIE przeszla przez kreator
+     * kancelarii — czyli przy kazdej zgloszonej przez portal. Klient
+     * dolacza sam dokument i nie oznacza, co to za dokument (art. 300(34)
+     * § 4 KSH wiaze wpis z dokumentem, nie z opisem zadajacego), wiec
+     * kwalifikacje zapisuje pracownik po jego przeczytaniu. Bez tego
+     * sprawy portalowe nie mialy jak dojsc do wzorow 04/05/07, ktore
+     * sekcje `podstawa_dokument` biora wlasnie stad.
+     */
+    if (akcja === 'podstawa') {
+      if (['wpisana', 'odmowa', 'anulowana'].includes(sprawa.stan)) {
+        throw bledneZadanie('Podstawę wpisu ustala się przed dokonaniem wpisu.');
+      }
+      const cialo = zad.body || {};
+      const rodzaj = cialo.dokument_rodzaj ? String(cialo.dokument_rodzaj).trim() : null;
+      const dataDok = cialo.dokument_data ? String(cialo.dokument_data).trim() : null;
+      if (rodzaj && !Object.values(przepisy.RODZAJE_DOKUMENTU).includes(rodzaj)) {
+        throw bledneZadanie(`Nieznany rodzaj dokumentu: „${rodzaj}”.`);
+      }
+      if (dataDok && !czas.poprawnaData(dataDok)) {
+        throw bledneZadanie('Data dokumentu musi mieć format RRRR-MM-DD.');
+      }
+      if ((rodzaj && !dataDok) || (!rodzaj && dataDok)) {
+        throw bledneZadanie('Rodzaj i datę dokumentu podaje się razem.');
+      }
+      db()
+        .prepare('UPDATE psa_sprawy SET dokument_rodzaj = ?, dokument_data = ?, zaktualizowano = ? WHERE id = ?')
+        .run(rodzaj, dataDok, czas.terazIso(), id);
+      return odp.json({ sprawa: widokSprawy(wczytajSprawe(id)) });
+    }
+
     if (akcja === 'wstrzymaj') {
       if (sprawa.stan !== 'weryfikacja') {
         throw bledneZadanie('Wstrzymać można wyłącznie sprawę w stanie „weryfikacja”.');

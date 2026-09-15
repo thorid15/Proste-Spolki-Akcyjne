@@ -1454,23 +1454,23 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawy
                 tresc="Podstawa przeniesiona ze sprawy, z której przyszedłeś — to ten sam dokument i ten sam żądający. Popraw pola, jeśli objęcie ma inną podstawę, albo od razu załóż sprawę."
               />
             )}
-            <div className="siatka-2">
-              <Pole
-                etykieta="Źródło żądania"
-                wymagane
-                podpowiedz={definicjaTypu && definicjaTypu.z_urzedu ? 'To zdarzenie zakłada się wyłącznie z urzędu.' : null}
-              >
-                <select value={zrodlo} onChange={(z) => ustawZrodlo(z.target.value)} disabled={Boolean(definicjaTypu && definicjaTypu.z_urzedu)}>
-                  {!definicjaTypu?.z_urzedu && <option value="papier">papierowo</option>}
-                  {!definicjaTypu?.z_urzedu && <option value="email">e-mail</option>}
-                  {!definicjaTypu?.z_urzedu && <option value="portal">portal klienta</option>}
-                  {definicjaTypu?.z_urzedu && <option value="z_urzedu">z urzędu</option>}
-                </select>
-              </Pole>
-              <Pole etykieta="Data wpływu" wymagane>
-                <PoleDaty wartosc={dataWplywu} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDateWplywu(v)} skroty />
-              </Pole>
-            </div>
+            {/* Źródła żądania (papierowo / e-mail) kreator już NIE pyta.
+                Art. 300(34) KSH nie zna takiego wymogu — podstawą wpisu jest
+                DOKUMENT (§ 4), a nie droga, którą przyszedł — i aplikacja nie
+                robiła z tej odpowiedzi żadnego użytku. Wartość wynika teraz
+                z kontekstu: sprawę zakładaną w kancelarii oznaczamy jako
+                „papier”, czynność z urzędu jako „z_urzedu”, a „portal” ustawia
+                sam portal klienta (server/trasy/portal.js), gdzie jest faktem,
+                nie deklaracją. */}
+            {definicjaTypu && definicjaTypu.z_urzedu && (
+              <Komunikat
+                odmiana="info"
+                tresc="To zdarzenie zakłada się wyłącznie z urzędu — bez żądającego (art. 300(34) § 2 KSH)."
+              />
+            )}
+            <Pole etykieta="Data wpływu" wymagane>
+              <PoleDaty wartosc={dataWplywu} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDateWplywu(v)} skroty />
+            </Pole>
 
             {zrodlo !== 'z_urzedu' && (
               <>
