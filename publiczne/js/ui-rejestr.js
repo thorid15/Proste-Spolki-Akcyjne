@@ -233,7 +233,12 @@ function Sekcja({ tytul, licznik, domyslnieOtwarta = false, akcje, children }) {
             {licznik !== undefined && licznik !== null && <Pigulka>{licznik}</Pigulka>}
           </span>
         </button>
-        {akcje && <span className="rzad">{akcje}</span>}
+        {/* Akcje pokazują się DOPIERO po rozwinięciu. Zwinięty kokpit
+            wystawiał siedem przycisków wpisu naraz — „Nowa emisja",
+            „Wpisz uprawnienie", „Zastaw lub użytkowanie" — czyli listę
+            czynności rejestrowych zamiast spisu treści rejestru. Kto chce
+            czegoś dokonać, najpierw otwiera rejestr, którego to dotyczy. */}
+        {akcje && otwarta && <span className="rzad">{akcje}</span>}
       </div>
       {otwarta && <div>{children}</div>}
     </div>
