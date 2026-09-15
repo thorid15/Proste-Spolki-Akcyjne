@@ -553,14 +553,27 @@ function dokonajWpisuSprawy(db, { sprawaId, data_zdarzenia, wejscie, autor }) {
     // KSH - `typ.odplatne` juz to koduje w katalogu). Sciezka bezposrednia
     // `dokonajWpisu` (migracja "stan otwarcia") celowo NIE przechodzi tedy -
     // wpisywanie historycznego stanu nie jest biezaca czynnoscia odplatna.
+    //
+    // Sprawa zgloszona przez portal MA JUZ naliczona oplate — powstala razem
+    // z zadaniem i to jej zaplata uruchomila sprawe. Drugie naliczenie
+    // kazaloby klientowi zaplacic dwa razy za ten sam wpis.
+    const juzNaliczona = db
+      .prepare(
+        `SELECT id FROM psa_oplaty
+          WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana' LIMIT 1`
+      )
+      .get(sprawaId);
+
     let naliczonaOplata = null;
-    if (wynik.typ.odplatne) {
+    if (wynik.typ.odplatne && !juzNaliczona) {
       naliczonaOplata = oplaty.naliczOplateWpisu(db, {
         spolkaId: sprawa.spolka_id,
         sprawaId,
         typZdarzenia: wynik.typ.nazwa,
         autor,
       });
+    } else if (juzNaliczona) {
+      naliczonaOplata = oplaty.wczytaj(db, juzNaliczona.id);
     }
 
     return {

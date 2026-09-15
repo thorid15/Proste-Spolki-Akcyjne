@@ -81,7 +81,11 @@ router.get(
   asy((zad, odp) => {
     const stanyDomyslne = ['nowa', 'weryfikacja', 'wstrzymana'];
     const stany = zad.query.stan ? String(zad.query.stan).split(',').filter(Boolean) : stanyDomyslne;
-    const warunki = [`stan IN (${stany.map(() => '?').join(',')})`];
+    // Zadanie zgloszone przez portal, a jeszcze nieoplacone, NIE JEST
+    // zadaniem w rozumieniu art. 300(34) § 1 KSH — dochodzi do skutku
+    // z chwila zaplaty. Do tego czasu nie stoi w kolejce i zaden termin
+    // ustawowy nie biegnie. Widac je w zakladce „Platnosci".
+    const warunki = [`stan IN (${stany.map(() => '?').join(',')})`, 'sp.oczekuje_na_oplate = 0'];
     const parametry = [...stany];
     if (zad.query.spolka_id) {
       warunki.push('sp.spolka_id = ?');

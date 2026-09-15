@@ -272,11 +272,41 @@ test('dokumenty: upload do wlasnej sprawy dziala, do cudzej jest odrzucany', asy
   assert.equal(cudzy.status, 404);
 });
 
-test('informacja z rejestru: wydanie zapisuje slad, dokument ma wlasny adres', async () => {
-  const odp = await fetch(`${baza}/api/psa/portal/informacja`, {
+test('informacja z rejestru: odplatna — bez zaplaty nie wychodzi', async () => {
+  const zamow = await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
     body: JSON.stringify({ spolka_id: spolkaId }),
+  });
+  assert.equal(zamow.status, 200);
+  const zamowienie = await zamow.json();
+  assert.ok(Number.isInteger(zamowienie.oplata_id));
+  assert.equal(zamowienie.oplacona, false);
+
+  const przedZaplata = await fetch(`${baza}/api/psa/portal/informacja/${zamowienie.oplata_id}/wydaj`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz }, body: '{}',
+  });
+  assert.equal(przedZaplata.status, 400, 'nieoplacona informacja nie wychodzi');
+  assert.equal(
+    db().prepare(`SELECT COUNT(*) c FROM psa_wydane_dokumenty WHERE typ = 'informacja_z_rejestru'`).get().c,
+    0,
+    'dokument w ogole nie powstaje'
+  );
+});
+
+test('informacja z rejestru: wydanie zapisuje slad, dokument ma wlasny adres', async () => {
+  const zamow = await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
+    body: JSON.stringify({ spolka_id: spolkaId }),
+  });
+  const { oplata_id: oplataId } = await zamow.json();
+  db().prepare("UPDATE psa_oplaty SET status = 'oplacona' WHERE id = ?").run(oplataId);
+
+  const odp = await fetch(`${baza}/api/psa/portal/informacja/${oplataId}/wydaj`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
+    body: '{}',
   });
   assert.equal(odp.status, 200);
   const dane = await odp.json();

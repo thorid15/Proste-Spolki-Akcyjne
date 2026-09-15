@@ -28,6 +28,8 @@ const { db } = require('../baza');
 const rejestr = require('../rejestr');
 const widoki = require('../widoki');
 const oplaty = require('../oplaty');
+const platnosci = require('../platnosci');
+const tpay = require('../logika/tpay');
 const maskowanie = require('../logika/maskowanie');
 const przepisy = require('../logika/przepisy');
 const akcjonariuszLogika = require('../logika/akcjonariusz');
@@ -88,6 +90,36 @@ function spolkiKonta(konto) {
   // powiazan.
   if (konto.spolka_id != null && !z.includes(Number(konto.spolka_id))) z.unshift(Number(konto.spolka_id));
   return z;
+}
+
+/**
+ * Spolki, ktorych rozliczen dotyczy to konto. Rola „spolka" ma swoje spolki
+ * z tabeli powiazan; akcjonariusz — te, w ktorych ma akcje (art. 300(35) § 1
+ * KSH: rejestr jest jawny dla spolki i dla kazdego akcjonariusza).
+ */
+function spolkiRozliczen(konto) {
+  if (konto.rola === 'spolka') return spolkiKonta(konto);
+  if (konto.osoba_id == null) return [];
+  return db()
+    .prepare('SELECT DISTINCT spolka_id FROM psa_stan_akcji WHERE osoba_id = ?')
+    .all(konto.osoba_id)
+    .map((w) => w.spolka_id);
+}
+
+/**
+ * Warunek SQL zawezajacy oplaty do tych, ktore wolno pokazac temu kontu.
+ *
+ * Akcjonariusz widzi WYLACZNIE swoje wlasne zamowienia (informacje, ktore
+ * sam zamowil). Gdyby zakladka Platnosci pokazywala mu wszystkie oplaty
+ * „jego" spolki, zobaczylby cala historie jej rozliczen z kancelaria —
+ * ile placi za prowadzenie i ile wpisow zrobila.
+ */
+function warunekOplatKonta(konto, spolki) {
+  const miejsca = spolki.map(() => '?').join(',');
+  if (konto.rola === 'spolka') {
+    return { sql: `o.spolka_id IN (${miejsca}) AND o.zamawiajacy_osoba_id IS NULL`, parametry: [...spolki] };
+  }
+  return { sql: 'o.zamawiajacy_osoba_id = ?', parametry: [konto.osoba_id] };
 }
 
 /** Czy konto ma dostep do rejestru/spraw wskazanej spolki. */
@@ -1291,7 +1323,28 @@ router.get(
       .all(...parametry);
 
     const dzis = czas.dzisIso();
-    odp.json({ sprawy: wiersze.map((s) => ({ ...widokSprawyPortal(s, dzis), spolka_nazwa: s.spolka_nazwa })) });
+    const oplatyWgSprawy = new Map(
+      db()
+        .prepare(
+          `SELECT sprawa_id, id, status, kwota_grosze FROM psa_oplaty
+            WHERE sprawa_id IS NOT NULL AND typ = 'wpis' AND status != 'anulowana'`
+        )
+        .all()
+        .map((o) => [o.sprawa_id, o])
+    );
+    odp.json({
+      sprawy: wiersze.map((s) => {
+        const oplata = oplatyWgSprawy.get(s.id) || null;
+        return {
+          ...widokSprawyPortal(s, dzis),
+          spolka_nazwa: s.spolka_nazwa,
+          oczekuje_na_oplate: s.oczekuje_na_oplate === 1,
+          oplata_id: oplata ? oplata.id : null,
+          oplata_status: oplata ? oplata.status : null,
+          oplata_grosze: oplata ? oplata.kwota_grosze : null,
+        };
+      }),
+    });
   })
 );
 
@@ -1348,13 +1401,44 @@ router.post(
       czas.dzisIso()
     ).termin_do;
 
+    // ── Zadanie zlozone przez portal jest skuteczne z chwila OPLACENIA ──
+    //
+    // Art. 300(34) § 1 KSH liczy tydzien od OTRZYMANIA zadania. Umowa
+    // o prowadzenie rejestru stanowi, ze zadanie skladane przez portal
+    // dochodzi do skutku z chwila zaplaty — do tego czasu sprawa nie jest
+    // widoczna w kolejce kancelarii i ZADEN termin ustawowy nie biegnie.
+    //
+    // To NIE jest wstrzymywanie czynnosci ustawowej za dlugi: zadania
+    // zlozonego jeszcze nie ma. Klient, ktory chce zlozyc je natychmiast,
+    // ma otwarta droge papierowa i mailowa — wtedy sprawa rusza od razu,
+    // a oplate rozlicza faktura (`server/trasy/sprawy.js`).
+    dane.oczekuje_na_oplate = 1;
+
     const kolumny = Object.keys(dane);
     const wynik = db()
       .prepare(`INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
       .run(dane);
+    const sprawaId = Number(wynik.lastInsertRowid);
 
-    const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(wynik.lastInsertRowid);
-    odp.status(201).json({ sprawa: widokSprawyPortal(sprawa) });
+    // Oplata za wpis powstaje RAZEM ze sprawa i jest z nia zwiazana — to po
+    // niej `server/platnosci.js` wie, ktora sprawe uruchomic po zaplacie.
+    const oplata = typ.odplatne === false
+      ? null
+      : oplaty.naliczOplateWpisu(db(), {
+        spolkaId,
+        sprawaId,
+        typZdarzenia: typZdarzenia,
+        autor: `Portal — ${konto.email}`,
+      });
+
+    // Czynnosc wolna od oplaty (art. 300(34) § 2 KSH — wpis z urzedu) nie ma
+    // na co czekac: zadanie jest skuteczne od razu.
+    if (!oplata) {
+      db().prepare('UPDATE psa_sprawy SET oczekuje_na_oplate = 0 WHERE id = ?').run(sprawaId);
+    }
+
+    const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
+    odp.status(201).json({ sprawa: widokSprawyPortal(sprawa), oplata_id: oplata ? oplata.id : null });
   })
 );
 
@@ -1465,16 +1549,198 @@ router.post(
 );
 
 // ─────────────────────────────────────────────────────────────
-// Informacja z rejestru (art. 300(35) KSH)
+// Platnosci klienta
 // ─────────────────────────────────────────────────────────────
 
-router.post(
-  '/informacja',
+const OPISY_TYPU_OPLATY = {
+  prowadzenie: 'Prowadzenie rejestru akcjonariuszy',
+  wpis: 'Wpis w rejestrze akcjonariuszy',
+  informacja: 'Informacja z rejestru akcjonariuszy',
+};
+
+function widokOplatyKlienta(w) {
+  return {
+    id: w.id,
+    spolka_id: w.spolka_id,
+    spolka_nazwa: w.spolka_nazwa,
+    typ: w.typ,
+    opis: OPISY_TYPU_OPLATY[w.typ] || 'Opłata',
+    okres: w.okres,
+    okres_od: w.okres_od,
+    okres_do: w.okres_do,
+    kwota_grosze: w.kwota_grosze,
+    status: w.status,
+    data_naliczenia: w.data_naliczenia,
+    oplacona_kiedy: w.oplacona_kiedy,
+    notatka: w.notatka,
+    sprawa_id: w.sprawa_id,
+    // Informacja oplacona, ale jeszcze niepobrana — klientowi nalezy sie
+    // dokument, wiec musi to widziec.
+    do_pobrania: w.typ === 'informacja' && w.status === 'oplacona' && w.wydany_dokument_id == null,
+  };
+}
+
+/** Wszystkie oplaty spolek tego konta — zaplacone i czekajace. */
+router.get(
+  '/oplaty',
   asy((zad, odp) => {
+    const konto = zad.konto;
+    const spolki = spolkiRozliczen(konto);
+    if (spolki.length === 0) {
+      return odp.json({ oplaty: [], do_zaplaty_grosze: 0, platnosci_wlaczone: tpay.skonfigurowany() });
+    }
+    const warunek = warunekOplatKonta(konto, spolki);
+
+    const wiersze = db()
+      .prepare(
+        `SELECT o.*, s.nazwa AS spolka_nazwa
+           FROM psa_oplaty o
+           JOIN psa_spolki s ON s.id = o.spolka_id
+          WHERE ${warunek.sql} AND o.status != 'anulowana'
+          ORDER BY (o.status = 'oplacona'), o.data_naliczenia DESC, o.id DESC`
+      )
+      .all(...warunek.parametry);
+
+    const doZaplaty = wiersze
+      .filter((w) => w.status !== 'oplacona')
+      .reduce((suma, w) => suma + w.kwota_grosze, 0);
+
+    odp.json({
+      oplaty: wiersze.map(widokOplatyKlienta),
+      do_zaplaty_grosze: doZaplaty,
+      platnosci_wlaczone: tpay.skonfigurowany(),
+    });
+  })
+);
+
+/** Wczytuje oplate, ktora TO KONTO wolno zobaczyc i oplacic — inaczej null. */
+function wczytajOplateKonta(konto, oplataId) {
+  const spolki = spolkiRozliczen(konto);
+  if (spolki.length === 0) return null;
+  const warunek = warunekOplatKonta(konto, spolki);
+  return db()
+    .prepare(`SELECT o.* FROM psa_oplaty o WHERE o.id = ? AND ${warunek.sql}`)
+    .get(oplataId, ...warunek.parametry) || null;
+}
+
+/**
+ * Link do zaplaty. Kwote bierze Z BAZY, nigdy z zadania — inaczej klient
+ * placilby tyle, ile sam wpisal.
+ */
+router.post(
+  '/oplaty/:id/zaplac',
+  asy(async (zad, odp) => {
+    const oplata = wczytajOplateKonta(zad.konto, Number(zad.params.id));
+    if (!oplata) throw nieZnaleziono('Nie odnaleziono opłaty.');
+
+    let wynik;
+    try {
+      wynik = await platnosci.przygotujZaplate(db(), {
+        oplataId: oplata.id,
+        urlPowiadomienia: adresPowiadomienia(),
+        urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/platnosci`,
+      });
+    } catch (e) {
+      throw bledneZadanie(e.message);
+    }
+
+    odp.json({ link: wynik.platnosc.link, platnosc_id: wynik.platnosc.id, nowa: wynik.nowa });
+  })
+);
+
+/**
+ * Adres, pod ktory operator wysle powiadomienie. Bierzemy go z KONFIGURACJI,
+ * a nie z naglowka Host zadania: naglowek pochodzi od klienta, wiec dalby
+ * sie podmienic na cudzy serwer, ktory przejalby powiadomienia o platnosciach.
+ */
+function adresPowiadomienia() {
+  const podstawa = String(konfiguracja.URL_PORTALU || '').split('/portal')[0].replace(/\/$/, '');
+  return `${podstawa}/api/psa/platnosci/tpay/itn`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Informacja z rejestru (art. 300(35) KSH) — ODPLATNA, po zaplacie
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Zamowienie informacji: nalicza oplate i oddaje link do zaplaty.
+ *
+ * Dokument NIE powstaje w tym momencie. Informacja jest odplatna (§ 15b
+ * rozporzadzenia), a rejestr nie ma powodu wydawac jej "na kredyt" — inaczej
+ * niz wpis, ktory jest ustawowym obowiazkiem z terminem. Nieoplacona
+ * informacja po prostu nie istnieje; nikomu to nie szkodzi.
+ */
+router.post(
+  '/informacja/zamow',
+  asy(async (zad, odp) => {
     // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
     const konto = zad.konto;
     const spolkaId = Number((zad.body || {}).spolka_id);
+    const spolka = rejestr.wczytajSpolke(db(), spolkaId);
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
 
+    // Oplacona, a jeszcze niepobrana informacja czeka — nie kaz placic dwa
+    // razy. Szukamy WLASNEJ: cudza oplacona informacja nie jest naszym
+    // uprawnieniem do pobrania dokumentu.
+    const zamawiajacy = konto.rola === 'spolka' ? null : konto.osoba_id;
+    const gotowa = db()
+      .prepare(
+        `SELECT * FROM psa_oplaty
+          WHERE spolka_id = ? AND typ = 'informacja' AND status = 'oplacona'
+            AND wydany_dokument_id IS NULL
+            AND zamawiajacy_osoba_id IS ?
+          ORDER BY id LIMIT 1`
+      )
+      .get(spolkaId, zamawiajacy);
+    if (gotowa) return odp.json({ oplata_id: gotowa.id, oplacona: true, link: null });
+
+    const oplata = oplaty.naliczOplateInformacji(db(), {
+      spolkaId,
+      odbiorcaOsobaId: konto.osoba_id,
+      // Akcjonariusz placi za SWOJA informacje; spolka za swoja.
+      zamawiajacyOsobaId: konto.rola === 'spolka' ? null : konto.osoba_id,
+      autor: `Portal — ${konto.email}`,
+      notatka: 'Informacja z rejestru — zamówiona w portalu',
+    });
+
+    if (!tpay.skonfigurowany()) {
+      // Platnosci online wylaczone — oplata zostaje naliczona i rozliczy sie
+      // ja faktura. Awaria operatora nie moze zablokowac dostepu do rejestru.
+      return odp.json({ oplata_id: oplata.id, oplacona: false, link: null, platnosci_wlaczone: false });
+    }
+
+    let wynik;
+    try {
+      wynik = await platnosci.przygotujZaplate(db(), {
+        oplataId: oplata.id,
+        urlPowiadomienia: adresPowiadomienia(),
+        urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/platnosci`,
+      });
+    } catch (e) {
+      return odp.json({ oplata_id: oplata.id, oplacona: false, link: null, blad_platnosci: e.message });
+    }
+    odp.json({ oplata_id: oplata.id, oplacona: false, link: wynik.platnosc.link, platnosci_wlaczone: true });
+  })
+);
+
+/**
+ * Pobranie OPLACONEJ informacji. Dopiero tutaj powstaje dokument — i tylko
+ * raz z jednej oplaty (`wydany_dokument_id`).
+ */
+router.post(
+  '/informacja/:oplataId/wydaj',
+  asy((zad, odp) => {
+    const konto = zad.konto;
+    const oplata = wczytajOplateKonta(konto, Number(zad.params.oplataId));
+    if (!oplata || oplata.typ !== 'informacja') throw nieZnaleziono('Nie odnaleziono zamówienia.');
+    if (oplata.status !== 'oplacona') {
+      throw bledneZadanie('Informacja z rejestru jest odpłatna — opłać zamówienie, żeby ją pobrać.');
+    }
+    if (oplata.wydany_dokument_id != null) {
+      return odp.json({ dokument_id: oplata.wydany_dokument_id, ponownie: true });
+    }
+
+    const spolkaId = oplata.spolka_id;
     const data = (zad.body || {}).data ? String((zad.body || {}).data) : czas.dzisIso();
     if (!czas.poprawnaData(data)) throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD.');
 
@@ -1500,6 +1766,10 @@ router.post(
          VALUES (?, 'informacja_z_rejestru', ?, 'portal', ?, ?, ?, ?)`
       )
       .run(spolkaId, konto.osoba_id, trescHtml, czas.terazIso(), autorWpisu, czas.terazIso());
+    const dokumentId = Number(wynikZapisu.lastInsertRowid);
+
+    db().prepare('UPDATE psa_oplaty SET wydany_dokument_id = ?, zaktualizowano = ? WHERE id = ?')
+      .run(dokumentId, czas.terazIso(), oplata.id);
 
     // Wglad w dane calego akcjonariatu spolki - blok D4, zakres WASKI.
     dziennikDostepu.zapisz(db(), {
@@ -1510,17 +1780,7 @@ router.post(
       opis: `stan na ${data}`,
     });
 
-    // Odpłatność za informację z rejestru (sekcja 1 i 8) - samoobsługowe
-    // pobranie przez portal jest tak samo odpłatną czynnością jak żądanie
-    // papierowe/mailowe obsłużone przez pracownika.
-    const oplata = oplaty.naliczOplateInformacji(db(), {
-      spolkaId,
-      odbiorcaOsobaId: konto.osoba_id,
-      autor: autorWpisu,
-      notatka: `Informacja z rejestru — portal, ${data}`,
-    });
-
-    odp.json({ dokument_id: Number(wynikZapisu.lastInsertRowid), oplata });
+    odp.json({ dokument_id: dokumentId, ponownie: false });
   })
 );
 

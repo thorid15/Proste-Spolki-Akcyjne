@@ -83,6 +83,29 @@ const konfiguracja = {
     from: tekst('SMTP_FROM', null),
   },
   /**
+   * Platnosci online (tpay). Sekrety siedza WYLACZNIE w `.env` — nigdy
+   * w bazie: baza jedzie do kopii zapasowej i do eksportu, a klucz
+   * platniczy to klucz do pieniedzy kancelarii.
+   *
+   * `api_url` wskazuje na piaskownice albo na produkcje; w testach
+   * automatycznych podstawiamy pod niego lokalny serwer-atrape, zeby dalo
+   * sie wywolac scenariusze, ktorych w piaskownicy nie wywolasz na zadanie
+   * (zmiana kwoty, podwojne powiadomienie, brak lacznosci).
+   *
+   * `tryb_testowy` decyduje, czy powiadomienie oznaczone jako testowe wolno
+   * zaksiegowac. Na produkcji ma byc `false` — inaczej ktokolwiek, kto zna
+   * nasz adres ITN, ksieguje oplaty powiadomieniem z piaskownicy.
+   */
+  TPAY: {
+    client_id: tekst('TPAY_CLIENT_ID', null),
+    client_secret: tekst('TPAY_CLIENT_SECRET', null),
+    notification_secret: tekst('TPAY_NOTIFICATION_SECRET', null),
+    api_url: tekst('TPAY_API_URL', 'https://api.tpay.com'),
+    tryb_testowy: flaga('TPAY_TRYB_TESTOWY', false),
+    // Adres, z ktorego klient wraca po zaplacie. Musi byc PUBLICZNY.
+    url_powrotu: tekst('TPAY_URL_POWROTU', null),
+  },
+  /**
    * Naglowek dokumentow - odpowiednik `rdzen_kancelaria` z mastera.
    *
    * Pola ponizej `email`/`telefon` sa ATOMOWE (blok A2 sesji 8) - wzory z
