@@ -1501,16 +1501,29 @@ select {
 /* Trzy kolumny na tej samej osi, co treść nad stopką: kto prowadzi rejestr,
    jak się z nim skontaktować, na jakiej podstawie to działa. Kolumna marki
    jest szersza, bo niesie nazwę krojem display i znak notariatu. */
+/* `--stopka-szerokosc` ustawia ekran, ktory stopke niesie (StopkaKancelarii
+   ma prop `szerokosc`): logowanie ma tresc szeroka na 1080 px, waskie widoki
+   portalu klienta na 760 px. Bez tego stopka stala zawsze na 1240 px i byla
+   szersza od tresci nad soba. */
 .stopka-siatka {
-  max-width: var(--tresc);
+  max-width: var(--stopka-szerokosc, var(--tresc));
   margin-inline: auto;
   padding: var(--od-40) var(--od-40) var(--od-24);
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1.2fr;
-  gap: var(--od-40);
+  /* Bloki same ukladaja sie w tyle kolumn, ile miesci szerokosc — ta sama
+     stopka siedzi poprawnie i pod kokpitem, i pod formularzem wniosku. */
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--od-24) var(--od-40);
   align-items: start;
 }
-.stopka-kolumna { display: flex; flex-direction: column; gap: var(--od-8); min-width: 0; }
+/* Kazdy blok zaczyna sie od wlasnej kreski — stopka czyta sie wtedy jako
+   trzy pola, a nie jako trzy akapity obok siebie. */
+.stopka-kolumna {
+  display: flex; flex-direction: column; gap: var(--od-8); min-width: 0;
+  padding-top: var(--od-16);
+  border-top: 2px solid var(--linia);
+}
+.stopka-kolumna-marka { border-top-color: var(--rejestr); }
 
 /* Nagłówek kolumny: najcichszy stopień, wersaliki, światło międzyliterowe —
    ma dzielić stopkę na trzy, nie konkurować z treścią. */
@@ -1535,7 +1548,11 @@ select {
 
 /* Szerokość, nie wysokość — i dokładnie ćwierć oryginału (498 px), bo
    całkowity stosunek pomniejszenia rysuje ostre krawędzie. */
-.stopka-znak { width: 124px; height: auto; margin-top: var(--od-8); opacity: 0.92; }
+/* Szerokosc to DOKLADNIE jedna trzecia pliku zrodlowego (498 px) — przy
+   ulamkowej skali przegladarka rozmywala cienkie kreski napisu pod godlem.
+   Bez przyciemniania: znak samorzadu notarialnego ma byc czytelny, a nie
+   delikatny. */
+.stopka-znak { width: 166px; height: auto; margin-top: var(--od-8); }
 
 /* Jedna pozycja z ikoną: e-mail, telefon, strona. */
 .stopka-poz {
@@ -1554,7 +1571,7 @@ a.stopka-poz:hover span { text-decoration: underline; }
 /* Pasek dolny: nota o prawach i zasady. Najcichszy stopień w całej stopce —
    to przypis, nie treść. */
 .stopka-dol {
-  max-width: var(--tresc);
+  max-width: var(--stopka-szerokosc, var(--tresc));
   margin-inline: auto;
   padding: var(--od-12) var(--od-40) var(--od-24);
   border-top: 1px solid var(--linia-2);
@@ -1566,15 +1583,8 @@ a.stopka-poz:hover span { text-decoration: underline; }
 .stopka-dol-linki a { color: inherit; text-decoration: none; }
 .stopka-dol-linki a:hover { color: var(--rejestr); text-decoration: underline; }
 
-@media (max-width: 900px) {
-  .stopka-siatka { grid-template-columns: 1fr 1fr; gap: var(--od-24); }
-  .stopka-kolumna-marka { grid-column: 1 / -1; }
-}
 @media (max-width: 560px) {
-  .stopka-siatka {
-    grid-template-columns: minmax(0, 1fr);
-    padding: var(--od-24) var(--od-16) var(--od-16);
-  }
+  .stopka-siatka { padding: var(--od-24) var(--od-16) var(--od-16); }
   .stopka-dol { padding: var(--od-12) var(--od-16) var(--od-24); }
 }
 

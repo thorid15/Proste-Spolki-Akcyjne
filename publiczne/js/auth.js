@@ -122,7 +122,8 @@ function EkranLogowania({ przyZalogowaniu }) {
         </form>
       </div>
 
-      <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
+      {/* Ta sama szerokość, co `.brama` nad nią. */}
+      <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} szerokosc="1080px" />
     </div>
   );
 }

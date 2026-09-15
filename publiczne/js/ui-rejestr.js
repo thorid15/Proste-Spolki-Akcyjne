@@ -1333,7 +1333,16 @@ function skrocAdresWww(url) {
  * Podstawy prawnej tu nie ma — jej miejsce jest na dokumencie z rejestru,
  * gdzie coś znaczy, a nie pod każdym ekranem aplikacji.
  */
-function StopkaKancelarii({ kancelaria }) {
+/**
+ * Stopka kancelarii — trzy bloki: kto prowadzi rejestr, jak się z nim
+ * skontaktować, na jakiej podstawie to działa.
+ *
+ * `szerokosc` wyrównuje stopkę do treści NAD nią. Bez tego stopka stała
+ * zawsze na 1240 px, a ekran logowania (1080 px) i wąskie widoki portalu
+ * klienta (760 px) miały ją szerszą od własnej treści — wyglądało to,
+ * jakby należała do innej strony.
+ */
+function StopkaKancelarii({ kancelaria, szerokosc }) {
   const [znakNieudany, ustawZnakNieudany] = useState(false);
   const k = kancelaria || {};
   // `adres` z ustawień niesie już miejscowość (ulica, kod miasto), a pole
@@ -1344,16 +1353,16 @@ function StopkaKancelarii({ kancelaria }) {
     : [k.adres, k.miejscowosc].filter(Boolean).join(', ');
   const link = k.www_psa || k.www;
   const rok = new Date().getFullYear();
+  const styl = szerokosc ? { '--stopka-szerokosc': szerokosc } : undefined;
 
   return (
-    <footer className="stopka bez-druku">
+    <footer className="stopka bez-druku" style={styl}>
       <div className="stopka-siatka">
-        {/* Kolumna 1 — kto prowadzi rejestr. Znak notariatu jest tu
+        {/* Blok 1 — kto prowadzi rejestr. Znak notariatu jest tu
             legitymacją, nie logotypem produktu, więc stoi przy nazwie
             kancelarii, a nie nad całą stopką. */}
         <div className="stopka-kolumna stopka-kolumna-marka">
           <div className="stopka-nazwa">{k.nazwa}</div>
-          {adres && <div className="stopka-adres">{adres}</div>}
           {!znakNieudany && (
             <img
               className="stopka-znak"
@@ -1366,9 +1375,17 @@ function StopkaKancelarii({ kancelaria }) {
           )}
         </div>
 
-        {/* Kolumna 2 — jak się skontaktować. */}
+        {/* Blok 2 — jak się skontaktować. Adres siedziby stoi TUTAJ, a nie
+            pod nazwą: kto szuka kontaktu, szuka wszystkich czterech danych
+            w jednym miejscu. */}
         <div className="stopka-kolumna">
           <div className="stopka-tytul">Kontakt</div>
+          {adres && (
+            <div className="stopka-poz">
+              <Ikona nazwa="pinezka" rozmiar={14} />
+              <span>{adres}</span>
+            </div>
+          )}
           {k.email && (
             <a className="stopka-poz" href={`mailto:${k.email}`}>
               <Ikona nazwa="koperta" rozmiar={14} />
@@ -1389,7 +1406,7 @@ function StopkaKancelarii({ kancelaria }) {
           )}
         </div>
 
-        {/* Kolumna 3 — na jakiej podstawie to działa i czyje to dane.
+        {/* Blok 3 — na jakiej podstawie to działa i czyje to dane.
             Pierwsze zdanie stało dotąd w szynie aplikacji kancelaryjnej,
             gdzie klient go nie widział, a to jego dotyczy najbardziej. */}
         <div className="stopka-kolumna">

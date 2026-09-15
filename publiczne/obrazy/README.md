@@ -2,15 +2,22 @@
 
 ## `notariat.png` — znak „Notariat Rzeczypospolitej Polskiej"
 
-Plik dostarczony przez kancelarię. Względem oryginału przycięty został
-wyłącznie biały margines wokół znaku (594 × 261 → 498 × 220); sam znak jest
-nietknięty. Zapisany bezstratnie w PNG, bo to płaskie plamy koloru, na
-których JPEG zostawia widoczne obwódki.
+Plik dostarczony przez kancelarię. Względem oryginału zmieniły się dwie
+rzeczy, obie dotyczą TŁA, nie znaku: przycięty został biały margines wokół
+znaku (594 × 261 → 498 × 220), a białe tło zostało zamienione na
+przezroczystość. Sam znak jest nietknięty — stoi teraz na tle strony,
+zamiast siedzieć na białym prostokącie, który na kremowym tle stopki
+odcinał się jak naklejka. Kolor brzegów wraca przy tym do wartości sprzed
+zmieszania z bielą (`odwrotność premultiplikacji`), więc na tle innym niż
+białe nie zostaje jasna obwódka.
+
+Zapisany bezstratnie w PNG, bo to płaskie plamy koloru, na których JPEG
+zostawia widoczne obwódki.
 
 Używany w dwóch miejscach:
 
 - `publiczne/js/ui-rejestr.js` — stopka obu aplikacji (`ZNAK_NOTARIATU`),
-- `publiczne/js/wydruk.js` — nagłówek informacji z rejestru (`LOGO_NOTARIAT`).
+- `server/logika/informacja-dokument.js` — główka informacji z rejestru.
 
 Oba miejsca mają zapas na wypadek, gdyby pliku zabrakło: stopka nie pokazuje
 wtedy nic, wydruk wraca do ramki z nazwą znaku. Żadne z nich nie rysuje

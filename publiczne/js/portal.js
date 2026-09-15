@@ -66,7 +66,8 @@ function RamaPubliczna({ opis, children }) {
         {opis}
         <div className="brama-karta">{children}</div>
       </div>
-      <StopkaKancelarii kancelaria={kancelaria} />
+      {/* Ta sama szerokość, co `.brama` nad nią. */}
+      <StopkaKancelarii kancelaria={kancelaria} szerokosc="1080px" />
     </div>
   );
 }
@@ -537,7 +538,9 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
           </div>
         </header>
         <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
-        <StopkaKancelarii kancelaria={kancelaria} />
+        {/* Wąskie widoki portalu (wniosek, zgłoszenie) mają treść na 760 px —
+            stopka idzie za nimi, zamiast rozpychać się na pełne 1240 px. */}
+        <StopkaKancelarii kancelaria={kancelaria} szerokosc={waski ? '760px' : undefined} />
       </div>
     </div>
   );
