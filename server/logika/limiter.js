@@ -16,10 +16,28 @@
 const OKNO_MS = 15 * 60 * 1000; // 15 minut
 const LIMIT = 5;
 
+/**
+ * Drugi licznik, liczony po SAMYM ADRESIE. Klucz `IP + e-mail` broni przed
+ * zgadywaniem hasla do JEDNEGO konta, ale nie przed ROZPYLANIEM: ten sam
+ * atakujacy bierze jedno popularne haslo i przechodzi po stu adresach
+ * e-mail, za kazdym razem z nowym kluczem, wiec pierwszy licznik nigdy nie
+ * dochodzi do piatki. Sprawdzone sonda: 25 kont z jednego adresu przeszlo
+ * bez blokady.
+ *
+ * Limit jest WYRAZNIE WYZSZY niz na jedno konto, bo kancelaria pracuje zza
+ * jednego adresu NAT-owanego i kilka pomylek kilku osob w kwadrans to
+ * normalny dzien, nie atak.
+ */
+const LIMIT_IP = 30;
+
 const proby = new Map(); // klucz -> znaczniki czasu nieudanych prob
 
 function klucz(ip, identyfikator) {
   return `${ip}::${String(identyfikator || '').toLowerCase()}`;
+}
+
+function kluczIp(ip) {
+  return `ip::${ip}`;
 }
 
 function oczysc(znaczniki, teraz) {
@@ -37,8 +55,13 @@ function oczysc(znaczniki, teraz) {
  * czego uzytkownik w ogole nie robil.
  */
 function sprawdz(ip, identyfikator, opcje = {}) {
-  const dopuszczalne = opcje.limit || LIMIT;
-  const k = klucz(ip, identyfikator);
+  // Najpierw licznik adresu — inaczej rozpylanie hasla po wielu kontach
+  // nigdy nie zapelnia zadnego licznika z osobna.
+  if (opcje.bezLicznikaIp !== true) sprawdzLicznik(kluczIp(ip), LIMIT_IP, opcje);
+  sprawdzLicznik(klucz(ip, identyfikator), opcje.limit || LIMIT, opcje);
+}
+
+function sprawdzLicznik(k, dopuszczalne, opcje = {}) {
   const teraz = Date.now();
   const aktywne = oczysc(proby.get(k) || [], teraz);
   if (aktywne.length === 0) {
@@ -57,16 +80,25 @@ function sprawdz(ip, identyfikator, opcje = {}) {
   }
 }
 
-function zanotujNieudana(ip, identyfikator) {
-  const k = klucz(ip, identyfikator);
+function zanotuj(k) {
   const teraz = Date.now();
   const aktywne = oczysc(proby.get(k) || [], teraz);
   aktywne.push(teraz);
   proby.set(k, aktywne);
 }
 
+function zanotujNieudana(ip, identyfikator) {
+  zanotuj(klucz(ip, identyfikator));
+  zanotuj(kluczIp(ip));
+}
+
+/**
+ * Udane logowanie czysci licznik TEGO KONTA, ale NIE licznika adresu:
+ * atakujacy, ktory po dwudziestu probach trafil jedno konto, nie ma dostac
+ * w nagrode czystego licznika na kolejne dwadziescia.
+ */
 function wyczyscPoUdanej(ip, identyfikator) {
   proby.delete(klucz(ip, identyfikator));
 }
 
-module.exports = { sprawdz, zanotujNieudana, wyczyscPoUdanej, OKNO_MS, LIMIT };
+module.exports = { sprawdz, zanotujNieudana, wyczyscPoUdanej, OKNO_MS, LIMIT, LIMIT_IP };
