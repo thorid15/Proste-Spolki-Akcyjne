@@ -119,7 +119,16 @@ router.get(
            (SELECT COUNT(*) FROM psa_zgloszenia WHERE status = 'nowe')            AS zgloszenia,
            (SELECT COUNT(*) FROM psa_wnioski WHERE status = 'umowa_podpisana')    AS wnioski,
            (SELECT COUNT(*) FROM psa_sprawy
-             WHERE stan IN ('nowa','weryfikacja','wstrzymana'))                   AS sprawy`
+             WHERE stan IN ('nowa','weryfikacja','wstrzymana'))                   AS sprawy,
+           -- Wpisy dokonane, o ktorych nikt jeszcze nie zawiadomil zadajacego
+           -- ani spolki (art. 300(34) § 7 KSH). Liczone z psa_wydane_dokumenty,
+           -- zeby nie trzymac drugiego zrodla prawdy — patrz
+           -- server/trasy/zawiadomienia.js.
+           (SELECT COUNT(*) FROM psa_sprawy sp
+             WHERE sp.stan = 'wpisana'
+               AND NOT EXISTS (SELECT 1 FROM psa_wydane_dokumenty w
+                                WHERE w.sprawa_id = sp.id
+                                  AND w.typ = 'zawiadomienie_wpis'))              AS zawiadomienia`
       )
       .get();
     odp.json({ liczniki: wiersz });

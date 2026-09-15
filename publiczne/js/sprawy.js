@@ -618,20 +618,12 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
             tytul={`${definicjaTypu.nazwa} — zdarzenie zapisane w rejestrze`}
             tresc={`Skrót zdarzenia w łańcuchu: ${wynik.zdarzenie.hash_skrocony}…`}
           />
-          <Komunikat odmiana="uwaga" tytul="Do sprawdzenia:" lista={wynik.ostrzezenia} />
-          {wynik.powiadomienia && wynik.powiadomienia.length > 0 && (
-            <Komunikat
-              odmiana="info"
-              tytul="Zawiadomienie o wpisie"
-              lista={wynik.powiadomienia.map((p) => {
-                if (p.blad) return p.blad;
-                const stan = p.wyslano ? 'wysłano e-mailem' : `nie wysłano — ${p.powod}`;
-                const braki = p.brakujace && p.brakujace.length
-                  ? ` (do sprawdzenia — puste pola w piśmie: ${p.brakujace.join(', ')})`
-                  : '';
-                return `${p.odbiorca}: ${stan}${braki}`;
-              })}
-            />
+          {/* Po emisji „nieobjęte akcje" nie są uwagą do sprawdzenia, tylko
+              normalnym stanem rzeczy — mówi o tym komunikat pod spodem,
+              razem z przyciskiem. Powtarzanie tego w rubryce „Do sprawdzenia"
+              wyglądało jak błąd wpisu, którym nie jest. */}
+          {sprawa.typ_zdarzenia !== 'emisja' && (
+            <Komunikat odmiana="uwaga" tytul="Do sprawdzenia:" lista={wynik.ostrzezenia} />
           )}
           {/* Emisja tworzy tylko PULĘ akcji — dopóki nikt ich nie obejmie,
               rejestr nie ma akcjonariusza. To osobne zdarzenie (i osobna
@@ -641,7 +633,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
             <Komunikat
               odmiana="uwaga"
               tytul="Akcje czekają na objęcie"
-              tresc="Wyemitowane akcje nie mają jeszcze akcjonariusza. Wpisz teraz, kto je obejmuje — podstawa wpisu przeniesie się z tej sprawy, zostaje wskazać osoby i liczbę akcji."
+              tresc="Wyemitowane akcje nie mają jeszcze akcjonariusza. Wpisz teraz, kto je obejmuje."
             />
           )}
           <div className="kreator-stopka">

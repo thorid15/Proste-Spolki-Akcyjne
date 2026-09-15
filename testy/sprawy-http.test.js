@@ -175,13 +175,31 @@ test('pelny cykl sprawy: nowa → weryfikacja → wpisana, z zawiadomieniem bez 
   assert.equal(wpisOdp.sprawa.stan, 'wpisana');
   assert.equal(wpisOdp.sprawa.zdarzenie_id, wpisOdp.zdarzenie.id);
 
-  // Zawiadomienia probowaly sie wyslac (SMTP nieskonfigurowany w testach),
-  // ale slad w psa_wydane_dokumenty i tak powstal - do zadajacego, spolki
+  // Sam wpis NIE wysyla juz zawiadomien — sprawa laduje w kolejce zakladki
+  // „Zawiadomienia" i czeka, az pracownik domknie robote przy tej spolce.
+  assert.equal(wpisOdp.powiadomienia, undefined);
+  const [, przedWyslaniem] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
+  assert.equal(przedWyslaniem.wydane_dokumenty.length, 0);
+
+  const [stKolejka, kolejka] = await zapytaj('GET', `/api/psa/zawiadomienia?spolka_id=${spolkaId}`);
+  assert.equal(stKolejka, 200);
+  assert.equal(kolejka.razem, 1);
+  assert.deepEqual(kolejka.spolki[0].sprawy.map((x) => x.id), [sprawaId]);
+
+  // Zawiadomienia probuja sie wyslac (SMTP nieskonfigurowany w testach),
+  // ale slad w psa_wydane_dokumenty i tak powstaje - do zadajacego, spolki
   // (zawiadomienie o wpisie) i spolki (lista akcjonariuszy do KRS, art.
   // 300(34) § 8 KSH — generowana razem z zawiadomieniem, sprint 5).
-  assert.equal(wpisOdp.powiadomienia.length, 3);
-  assert.equal(wpisOdp.powiadomienia.every((p) => p.wyslano === false), true);
-  assert.match(wpisOdp.powiadomienia[0].powod, /SMTP|e-mail/i);
+  const [stWyslij, wyslane] = await zapytaj('POST', '/api/psa/zawiadomienia/wyslij', { sprawa_ids: [sprawaId] });
+  assert.equal(stWyslij, 200);
+  assert.equal(wyslane.wyniki[0].pisma.length, 3);
+  assert.equal(wyslane.wyniki[0].pisma.every((p) => p.wyslano === false), true);
+  assert.match(wyslane.wyniki[0].pisma[0].powod, /SMTP|e-mail/i);
+  assert.equal(wyslane.pozostalo, 0, 'sprawa znika z kolejki po wystawieniu pisma');
+
+  // Powtorne wystawienie odpada — kolejka liczy sie z psa_wydane_dokumenty.
+  const [stPowtorka] = await zapytaj('POST', '/api/psa/zawiadomienia/wyslij', { sprawa_ids: [sprawaId] });
+  assert.equal(stPowtorka, 400);
 
   const [, sprawaSzczegol] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
   assert.equal(sprawaSzczegol.wydane_dokumenty.length, 3);
@@ -283,9 +301,13 @@ test('zajecie (z urzedu) zaklada sprawe od razu w weryfikacji, bez zadajacego', 
   });
   assert.equal(stWpis, 201);
   // Brak zadajacego -> zawiadomienie do spolki + lista akcjonariuszy do KRS
-  // (art. 300(34) § 8 KSH, sprint 5), oba adresowane do spolki.
-  assert.equal(wpisOdp.powiadomienia.length, 2);
-  assert.equal(wpisOdp.powiadomienia.every((p) => p.odbiorca.startsWith('spółka')), true);
+  // (art. 300(34) § 8 KSH, sprint 5), oba adresowane do spolki. Wystawia je
+  // pracownik z zakladki „Zawiadomienia", nie sam wpis.
+  const [, wyslaneZUrzedu] = await zapytaj(
+    'POST', '/api/psa/zawiadomienia/wyslij', { sprawa_ids: [wpisOdp.sprawa.id] }
+  );
+  assert.equal(wyslaneZUrzedu.wyniki[0].pisma.length, 2);
+  assert.equal(wyslaneZUrzedu.wyniki[0].pisma.every((p) => p.odbiorca.startsWith('spółka')), true);
 });
 
 test('nie mozna zalozyc sprawy z_urzedu dla typu, ktory tego nie przewiduje', async () => {

@@ -314,11 +314,7 @@ function KrokEmisja({ dane, ustawDane, spolka }) {
             <option value="niema">niema</option>
           </select>
         </Pole>
-        <Pole
-          etykieta="Data wpisu emisji do KRS"
-          wymagane
-          podpowiedz="Przed wpisem do KRS akcje z emisji formalnie nie istnieją (art. 300(30) § 2 KSH), więc emisji bez tej daty nie da się zapisać. Jeśli sąd jeszcze jej nie zarejestrował — wróć do tego zdarzenia później."
-        >
+        <Pole etykieta="Data wpisu emisji do KRS" wymagane>
           <PoleDaty wartosc={dane.data_wpisu_krs || ''} przyZmianie={(v) => ustawDane({ ...dane, data_wpisu_krs: v })} />
         </Pole>
       </div>
@@ -331,13 +327,6 @@ function KrokEmisja({ dane, ustawDane, spolka }) {
       </Pole>
       <Pole etykieta="Opis"><textarea {...pole('opis')} /></Pole>
 
-      <Komunikat
-        odmiana="info"
-        tresc={
-          'Emisja tworzy pulę akcji nieobjętych. Przypisanie akcji akcjonariuszom to osobne ' +
-          'zdarzenie „Objęcie akcji” — kokpit przypomni o nim od razu po zapisaniu emisji.'
-        }
-      />
       {!dane.data_wpisu_krs && (
         <Komunikat
           odmiana="uwaga"

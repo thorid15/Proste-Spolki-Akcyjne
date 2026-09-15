@@ -245,8 +245,16 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
     dane: { emisja_zdarzenie_id: emisjaOdp.zdarzenie.id, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
   });
   assert.equal(st07, 201, JSON.stringify(wpisOdp));
-  assert.equal(wpisOdp.powiadomienia.length, 3, 'dwa zawiadomienia o wpisie (wzor 07) + lista dla KRS (wzor 08 automat)');
-  for (const p of wpisOdp.powiadomienia) bezBrakow('wzór 07/08 (po wpisie)', p);
+
+  // Wzory 07 i 08 wychodza z zakladki „Zawiadomienia", nie z samego wpisu:
+  // jedna czynnosc to czesto kilka zdarzen i pracownik wysyla je razem.
+  const [st0708, wyslane] = await zapytaj('POST', '/api/psa/zawiadomienia/wyslij', { sprawa_ids: [sprawaId] });
+  assert.equal(st0708, 200, JSON.stringify(wyslane));
+  assert.equal(
+    wyslane.wyniki[0].pisma.length, 3,
+    'dwa zawiadomienia o wpisie (wzor 07) + lista dla KRS (wzor 08)'
+  );
+  for (const p of wyslane.wyniki[0].pisma) bezBrakow('wzór 07/08 (po wpisie)', p);
 
   // ── 7. Sprawa nr 2: odmowa wpisu (wzór 09) ────────────────────────────
   const [, sprawa2Odp] = await zapytaj('POST', '/api/psa/sprawy', {

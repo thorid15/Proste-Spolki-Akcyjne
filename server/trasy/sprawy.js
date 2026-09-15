@@ -330,29 +330,12 @@ router.post(
       autor: kto,
     });
 
-    const spolka = rejestr.wczytajSpolke(db(), sprawa.spolka_id);
-    const osoby = rejestr.wczytajOsoby(db(), sprawa.zadajacy_osoba_id ? [sprawa.zadajacy_osoba_id] : []);
-    const widoki = require('../widoki');
-    const podsumowanie = widoki.podsumujZdarzenie(
-      { ...wynik.zdarzenie, dane: wynik.zdarzenie.dane || JSON.parse(wynik.zdarzenie.dane_json || '{}') },
-      new Map([...osoby, ...rejestr.wczytajOsobySpolki(db(), sprawa.spolka_id)])
-    );
-
-    let powiadomienia = [];
-    try {
-      powiadomienia = await zawiadomienia.poWpisie(db(), {
-        sprawa: { ...sprawa, stan: 'wpisana', zdarzenie_id: wynik.zdarzenie.id },
-        zdarzenie: wynik.zdarzenie,
-        spolka,
-        osoby,
-        podsumowanie,
-        autor: kto,
-      });
-    } catch (e) {
-      // Wpis JEST juz dokonany i prawnie skuteczny - blad wysylki nie moze
-      // zamienic sie w blad 500 calej operacji. Zglaszamy go w odpowiedzi.
-      powiadomienia = [{ blad: `Nie udało się przygotować zawiadomień: ${e.message}` }];
-    }
+    // Zawiadomienie o wpisie (art. 300(34) § 7 KSH) NIE idzie stad automatem.
+    // Jedna czynnosc to czesto kilka zdarzen — emisja, potem objecie tych
+    // samych akcji — a zawiadomienie po kazdym z osobna opisywalo stan
+    // przejsciowy (po samej emisji akcje nie maja jeszcze akcjonariusza).
+    // Pracownik wystawia je z zakladki „Zawiadomienia", gdy komplet wpisow
+    // przy danej spolce jest gotowy: `server/trasy/zawiadomienia.js`.
 
     odp.status(201).json({
       sprawa: widokSprawy(wczytajSprawe(id)),
@@ -364,7 +347,6 @@ router.post(
         hash_skrocony: wynik.zdarzenie.hash.slice(0, 12),
       },
       ostrzezenia: wynik.ostrzezenia,
-      powiadomienia,
       oplata,
     });
   })
