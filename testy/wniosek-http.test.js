@@ -427,7 +427,7 @@ test('PUT /api/psa/wnioski/:id/dokumenty/:dokId/tresc: poprawiona tresc sklada p
   assert.equal(stPusta, 400, 'pusta tresc nie przechodzi');
 });
 
-test('POST /api/psa/portal/wniosek/dokumenty/:id/podpis: skan wraca do KAZDEGO dokumentu, umowa przenosi status', async () => {
+test('POST /api/psa/portal/wniosek/dokumenty/:id/podpis: skan wraca do KAZDEGO dokumentu, status dopiero przy odeslaniu', async () => {
   const { kontoId, ciastko } = await kontoWnioskodawcy('podpisy-per-dokument@example.pl');
   await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
   await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Podpisy P.S.A.' }, ciastko);
@@ -459,13 +459,21 @@ test('POST /api/psa/portal/wniosek/dokumenty/:id/podpis: skan wraca do KAZDEGO d
   assert.equal(poRodo.wniosek.status, 'umowa_wygenerowana');
   assert.equal(poRodo.dokumenty.find((d) => d.id === rodo.id).podpis_nazwa_pliku, 'rodo.pdf');
 
-  // Skan UMOWY przenosi wniosek do stanu gotowego do przyjecia.
+  // Skan UMOWY zapisuje sciezke na wniosku, ale sam TEZ nie rusza statusu —
+  // kancelaria nie dostaje wniosku, do ktorego brakuje jeszcze szesciu
+  // podpisow.
   const [stUmowa, poUmowie] = await wyslijSkan(umowa.id, 'umowa.pdf');
   assert.equal(stUmowa, 201);
-  assert.equal(poUmowie.wniosek.status, 'umowa_podpisana');
+  assert.equal(poUmowie.wniosek.status, 'umowa_wygenerowana');
   assert.ok(poUmowie.wniosek.umowa_podpisana_sciezka, 'sciezka podpisanej umowy zapisana na wniosku');
 
-  // Zdjecie skanu umowy cofa status — bez niej nie ma czego przyjmowac.
+  // Odeslanie niepelnego kompletu odpada — brakujace pozycje wracaja w odpowiedzi.
+  const [stNiepelny, niepelny] = await zapytaj('POST', '/api/psa/portal/wniosek/odeslij', undefined, ciastko);
+  assert.equal(stNiepelny, 400);
+  assert.match(niepelny.blad, /niepełny/);
+  assert.ok(Array.isArray(niepelny.szczegoly) && niepelny.szczegoly.length > 0);
+
+  // Zdjecie skanu umowy czysci jej sciezke, nie ruszajac reszty kompletu.
   const [stUsun, poUsunieciu] = await zapytaj(
     'DELETE', `/api/psa/portal/wniosek/dokumenty/${umowa.id}/podpis`, undefined, ciastko
   );
@@ -476,6 +484,19 @@ test('POST /api/psa/portal/wniosek/dokumenty/:id/podpis: skan wraca do KAZDEGO d
     poUsunieciu.dokumenty.find((d) => d.id === rodo.id).podpis_nazwa_pliku,
     'zdjecie skanu umowy nie rusza pozostalych dokumentow'
   );
+
+  // Komplet w calosci -> odeslanie przestawia status i zamyka wymiane skanow.
+  for (const d of poUsunieciu.dokumenty) {
+    if (!d.podpis_nazwa_pliku) await wyslijSkan(d.id, `skan-${d.typ}.pdf`);
+  }
+  const [stOdeslij, poOdeslaniu] = await zapytaj('POST', '/api/psa/portal/wniosek/odeslij', undefined, ciastko);
+  assert.equal(stOdeslij, 200, JSON.stringify(poOdeslaniu));
+  assert.equal(poOdeslaniu.wniosek.status, 'umowa_podpisana');
+
+  const [stPoOdeslaniu] = await wyslijSkan(rodo.id, 'rodo-poprawiony.pdf');
+  assert.equal(stPoOdeslaniu, 400, 'po odeslaniu kompletu skanow sie juz nie wymienia');
+  const [stPowtorka] = await zapytaj('POST', '/api/psa/portal/wniosek/odeslij', undefined, ciastko);
+  assert.equal(stPowtorka, 400, 'drugi raz nie ma czego odsylac');
 
   // Cudzy numer dokumentu nie trafia w nic — zapytanie zawsze idzie razem
   // z wnioskiem znalezionym po konto_id z sesji.
@@ -538,7 +559,9 @@ test('POST /api/psa/portal/wniosek/umowa-podpisana: odmawia przed udostepnieniem
   });
   assert.equal(odp.status, 201);
   const dane = await odp.json();
-  assert.equal(dane.wniosek.status, 'umowa_podpisana');
+  // Samo wgranie umowy nie stawia wniosku w kolejce kancelarii — robi to
+  // dopiero odeslanie calego kompletu (`POST /wniosek/odeslij`).
+  assert.equal(dane.wniosek.status, 'umowa_wygenerowana');
 
   const wiersz = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(kontoId);
   assert.equal(wiersz.umowa_podpisana_nazwa_pliku, 'podpisana-umowa.pdf');

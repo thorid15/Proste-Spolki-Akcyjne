@@ -828,7 +828,7 @@ function przyjmijSkan(zad, odp, dalej) {
  * albo odrzuceniu wniosku komplet jest zamkniety; przed wygenerowaniem
  * dokumentow nie ma czego odsylac.
  */
-const STATUSY_PRZYJMUJACE_PODPISY = new Set(['umowa_wygenerowana', 'umowa_podpisana']);
+const STATUSY_PRZYJMUJACE_PODPISY = new Set(['umowa_wygenerowana']);
 
 /** Wstrzykuje wniosek do `zad` PRZED multerem - potrzebny do wyznaczenia katalogu docelowego. */
 function zaladujWlasnyWniosekDoUploadu(zad, odp, dalej) {
@@ -844,11 +844,17 @@ function zaladujWlasnyWniosekDoUploadu(zad, odp, dalej) {
 /**
  * Zapisuje podpisany skan przy KONKRETNYM wygenerowanym dokumencie.
  *
- * Umowa jest jednym z tych dokumentow, ale niesie dodatkowo STAN calego
- * wniosku (`umowa_wygenerowana` -> `umowa_podpisana`) - to ona jest umowa
- * o prowadzenie rejestru, bez ktorej nie ma czego przyjmowac. Dlatego przy
- * niej, i tylko przy niej, aktualizujemy tez kolumny `umowa_podpisana_*`
- * i status: reszta trasy portalu i kancelarii czyta stan wlasnie stamtad.
+ * Samo wgranie NIE przenosi statusu wniosku i NIE stawia go w kolejce
+ * kancelarii. Klient zalacza po kolei osiem skanow, sprawdza je i dopiero
+ * wtedy odsyla komplet (`POST /wniosek/odeslij`). Dotad wgranie umowy —
+ * czesto pierwszego z osmiu plikow — samo przestawialo status na
+ * `umowa_podpisana`, czyli wrzucalo do kancelarii wniosek, do ktorego
+ * brakowalo jeszcze siedmiu podpisow, i klient nie mial jak tego cofnac
+ * inaczej niz kasujac skan.
+ *
+ * Umowa niesie dodatkowo kolumny `umowa_podpisana_*` — to ona jest umowa
+ * o prowadzenie rejestru, bez ktorej nie ma czego przyjmowac — wiec przy
+ * niej, i tylko przy niej, wypelniamy takze je.
  */
 function zapiszPodpisanySkan(wniosek, dokument, plik) {
   const teraz = czas.terazIso();
@@ -874,13 +880,55 @@ function zapiszPodpisanySkan(wniosek, dokument, plik) {
     db()
       .prepare(
         `UPDATE psa_wnioski
-            SET status = 'umowa_podpisana', umowa_podpisana_sciezka = ?, umowa_podpisana_nazwa_pliku = ?,
+            SET umowa_podpisana_sciezka = ?, umowa_podpisana_nazwa_pliku = ?,
                 umowa_podpisana_mime = ?, umowa_podpisana_wgrano = ?, zaktualizowano = ?
           WHERE id = ?`
       )
       .run(sciezka, plik.originalname, plik.mimetype, teraz, teraz, wniosek.id);
   }
 }
+
+/**
+ * Odeslanie KOMPLETU podpisanych dokumentow — jeden ruch klienta, ktory
+ * stawia wniosek w kolejce kancelarii (`status = 'umowa_podpisana'`).
+ * Dopiero tutaj, nie przy wgrywaniu kolejnych plikow.
+ */
+router.post(
+  '/wniosek/odeslij',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
+    if (wniosek.status !== 'umowa_wygenerowana') {
+      throw bledneZadanie(`Wniosek ma status „${wniosek.status}” — nie ma w tym momencie czego odsyłać.`);
+    }
+
+    const dokumenty = pakietWniosku.lista(wniosek.id, { tylkoUdostepnione: true });
+    if (dokumenty.length === 0) {
+      throw bledneZadanie('Kancelaria nie udostępniła jeszcze dokumentów do podpisu.');
+    }
+    const bezSkanu = dokumenty.filter((d) => !d.podpis_nazwa_pliku);
+    if (bezSkanu.length > 0) {
+      throw bledneZadanie(
+        'Komplet jest niepełny — brakuje podpisanych skanów.',
+        bezSkanu.map((d) => d.nazwa_pliku)
+      );
+    }
+    if (!wniosek.umowa_podpisana_sciezka) {
+      throw bledneZadanie('Brakuje podpisanej umowy o prowadzenie rejestru.');
+    }
+
+    const teraz = czas.terazIso();
+    db()
+      .prepare("UPDATE psa_wnioski SET status = 'umowa_podpisana', zaktualizowano = ? WHERE id = ?")
+      .run(teraz, wniosek.id);
+
+    odp.json({
+      wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
+      dokumenty: wczytajDokumentyWniosku(wniosek.id),
+    });
+  })
+);
 
 /**
  * Skan dokumentu tozsamosci REPREZENTANTA — osoby, ktora podpisze umowe.
@@ -1012,9 +1060,9 @@ router.get(
 );
 
 /**
- * Zdjecie odeslanego skanu - klient zorientowal sie, ze wgral nie ten plik
- * albo nieczytelny. Przy umowie cofa tez status: bez podpisanej umowy
- * wniosek nie jest gotowy do przyjecia.
+ * Zdjecie zalaczonego skanu - klient zorientowal sie, ze wgral nie ten plik
+ * albo nieczytelny. Mozliwe TYLKO przed odeslaniem kompletu; przy umowie
+ * czysci tez kolumny `umowa_podpisana_*`.
  */
 router.delete(
   '/wniosek/dokumenty/:id/podpis',
@@ -1046,9 +1094,8 @@ router.delete(
       db()
         .prepare(
           `UPDATE psa_wnioski
-              SET status = 'umowa_wygenerowana', umowa_podpisana_sciezka = NULL,
-                  umowa_podpisana_nazwa_pliku = NULL, umowa_podpisana_mime = NULL,
-                  umowa_podpisana_wgrano = NULL, zaktualizowano = ?
+              SET umowa_podpisana_sciezka = NULL, umowa_podpisana_nazwa_pliku = NULL,
+                  umowa_podpisana_mime = NULL, umowa_podpisana_wgrano = NULL, zaktualizowano = ?
             WHERE id = ?`
         )
         .run(czas.terazIso(), wniosek.id);

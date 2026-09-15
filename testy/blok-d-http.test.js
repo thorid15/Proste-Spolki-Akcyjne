@@ -147,6 +147,10 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     // rowniez WYLACZNIE po konto_id z sesji, zaden URL nie przyjmuje cudzego
     // identyfikatora.
     'POST /wniosek/zloz',
+    // Odeslanie KOMPLETU podpisanych skanow — jeden ruch klienta, ktory
+    // stawia wniosek w kolejce kancelarii. Wniosek znajdujemy po konto_id
+    // z sesji, tak jak reszta tras kompletu.
+    'POST /wniosek/odeslij',
     'GET /wniosek/umowa-projekt',
     'POST /wniosek/umowa-podpisana',
     'GET /wniosek/umowa-podpisana',

@@ -128,6 +128,9 @@ async function wnioskGotowyDoWeryfikacji(
         );
       }
     }
+    // Wgranie skanow to jeszcze nie odeslanie — klient zalacza komplet,
+    // sprawdza go i dopiero wtedy stawia wniosek w kolejce kancelarii.
+    if (!bezSkanow) await zapytaj('POST', '/api/psa/portal/wniosek/odeslij', undefined, ciastko);
   }
 
   const wiersz = db().prepare(`SELECT * FROM psa_wnioski WHERE konto_id = (SELECT id FROM psa_konta WHERE email = ?)`).get(email);

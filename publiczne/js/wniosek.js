@@ -719,6 +719,11 @@ function EkranWniosku() {
     && ['umowa_wygenerowana', 'umowa_podpisana'].includes(dane.status)
     && dokumenty.length > 0;
   const podpisanych = dokumenty.filter((d) => d.podpis_nazwa_pliku).length;
+  // Skany zalacza sie po kolei i wymienia do woli; do kancelarii ida dopiero
+  // po kliknieciu „Odeslij komplet". Dotad wgranie samej umowy — zwykle
+  // pierwszego z osmiu plikow — stawialo wniosek w kolejce kancelarii.
+  const kompletZalaczony = dokumenty.length > 0 && podpisanych === dokumenty.length;
+  const kompletOdeslany = Boolean(dane) && dane.status === 'umowa_podpisana';
 
   // Dane spółki zapisują się same. Bez tego dawało się wypełnić formularz,
   // zobaczyć komplet na ekranie i dostać przy składaniu „uzupełnij nazwę
@@ -752,6 +757,23 @@ function EkranWniosku() {
   function poUsunieciuAkcjonariusza(id) {
     ustawAkcjonariusze((p) => p.filter((a) => a.id !== id));
     ustawOtwartyAkcjonariusz(null);
+  }
+
+  async function odeslijKomplet() {
+    ustawSkladanie(true);
+    ustawBladSkladania(null);
+    ustawBrakiZSerwera([]);
+    try {
+      const wynik = await API.post('/api/psa/portal/wniosek/odeslij', {});
+      ustawDane(wynik.wniosek);
+      ustawDokumenty(wynik.dokumenty || []);
+    } catch (e) {
+      ustawBladSkladania(e instanceof BladApi ? e.message : 'Nie udało się odesłać kompletu.');
+      const szczegoly = e instanceof BladApi && e.dane && e.dane.szczegoly;
+      ustawBrakiZSerwera(Array.isArray(szczegoly) ? szczegoly : []);
+    } finally {
+      ustawSkladanie(false);
+    }
   }
 
   async function zlozWniosek() {
@@ -1182,7 +1204,11 @@ function EkranWniosku() {
                 <h3 className="podsumowanie-naglowek">Dokumenty do podpisu</h3>
                 <Komunikat
                   odmiana="ok"
-                  tresc="Kancelaria sprawdziła dane i przygotowała komplet dokumentów. Pobierz wszystkie pozycje z listy poniżej, zbierz podpisy i odeślij skany w tym samym miejscu."
+                  tresc={kompletOdeslany
+                    ? 'Komplet podpisanych dokumentów wrócił do kancelarii.'
+                    : 'Kancelaria sprawdziła dane i przygotowała komplet dokumentów. Pobierz wszystkie pozycje, '
+                      + 'zbierz podpisy i załącz skany. Do kancelarii pójdą dopiero, gdy klikniesz „Odeślij komplet” '
+                      + '— do tego czasu możesz je wymieniać.'}
                 />
                 <Komunikat
                   odmiana="info"
@@ -1193,7 +1219,7 @@ function EkranWniosku() {
                     <PozycjaDokumentu
                       key={d.id}
                       dokument={d}
-                      edytowalne={dokumentyWidoczne}
+                      edytowalne={dokumentyWidoczne && !kompletOdeslany}
                       przyZmianie={(wynik) => {
                         if (wynik.dokumenty) ustawDokumenty(wynik.dokumenty);
                         if (wynik.wniosek) ustawDane(wynik.wniosek);
@@ -1202,15 +1228,32 @@ function EkranWniosku() {
                   ))}
                 </div>
 
-                {podpisanych === dokumenty.length && (
-                  <div className="podsumowanie-podpisow">
+                <div className="podsumowanie-podpisow">
+                  {kompletOdeslany ? (
                     <Komunikat
                       odmiana="ok"
-                      tytul="Komplet podpisanych dokumentów wrócił do kancelarii"
+                      tytul="Komplet wrócił do kancelarii"
                       tresc="Nic więcej nie musisz robić. Kancelaria zweryfikuje dane i otworzy rejestr akcjonariuszy — o wyniku poinformujemy e-mailem."
                     />
-                  </div>
-                )}
+                  ) : (
+                    <>
+                      <Komunikat
+                        odmiana={kompletZalaczony ? 'ok' : 'info'}
+                        tresc={kompletZalaczony
+                          ? 'Wszystkie dokumenty mają załączony skan. Sprawdź je jeszcze raz i odeślij komplet.'
+                          : `Załączono ${podpisanych} z ${dokumenty.length} skanów. Komplet odsyła się w całości, `
+                            + 'jednym kliknięciem — nic nie idzie do kancelarii wcześniej.'}
+                      />
+                      <button
+                        className="btn btn-glowny btn-duzy"
+                        disabled={!kompletZalaczony || skladanie}
+                        onClick={odeslijKomplet}
+                      >
+                        {skladanie ? 'Odsyłanie…' : 'Odeślij komplet do kancelarii'}
+                      </button>
+                    </>
+                  )}
+                </div>
 
                 <div className="instrukcja-podpisu">
                   <div className="instrukcja-podpisu-tytul">Jak podpisać dokumenty</div>
