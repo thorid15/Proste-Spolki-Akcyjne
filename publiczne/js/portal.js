@@ -777,22 +777,21 @@ function EkranRejestrPortal({ spolkaId }) {
    ZGŁOSZENIE ŻĄDANIA (kroki 1—2 kreatora)
    ───────────────────────────────────────────────────── */
 /**
- * Rodzaje dokumentu, ktore klient dosyla najczesciej. Celowo KROTKA lista:
- * pracownik i tak otwiera plik i czyta go w calosci, wiec dokladna
- * kwalifikacja po stronie klienta niczego nie przesadza — ma tylko pomoc
- * ulozyc akta. Wszystko inne idzie jako „inny dokument".
+ * Czego dotyczy zgloszenie — TRZY pozycje, nie trzynascie typow zdarzen
+ * z `meta.typy_zdarzen`. Klient nie kwalifikuje czynnosci prawnej: robi to
+ * pracownik, czytajac dokument (art. 300(34) § 4 KSH — podstawa wpisu to
+ * dokument, nie opis zadajacego). Wybor sluzy wylacznie skierowaniu sprawy
+ * we wlasciwe miejsce kolejki; pracownik poprawia typ, jesli dokument mowi
+ * co innego (patrz `PATCH /api/psa/sprawy/:id` z akcja `zmien-typ`).
  */
-const RODZAJE_ZGLOSZENIA = [
-  ['umowa_zbycia', 'Umowa zbycia akcji (sprzedaż, darowizna)'],
-  ['uchwala', 'Uchwała'],
-  ['postanowienie', 'Postanowienie sądu'],
-  ['inny', 'Inny dokument'],
+const GRUPY_ZGLOSZENIA = [
+  ['przeniesienie', 'Zbycie albo nabycie akcji'],
+  ['emisja', 'Emisja albo umorzenie akcji'],
+  ['uprawnienie', 'Ustanowienie uprawnienia, przywileju albo obowiązku'],
 ];
 
 function EkranZgloszeniePortal({ spolkaId }) {
-  const { dane: meta, ladowanie: metaLadowanie } = useDane('/api/psa/meta');
   const [typ, ustawTyp] = useState('');
-  const [rodzajDokumentu, ustawRodzajDokumentu] = useState('umowa_zbycia');
   const [opis, ustawOpis] = useState('');
   const [pliki, ustawPliki] = useState([]);
   const [wysylanie, ustawWysylanie] = useState(false);
@@ -800,10 +799,6 @@ function EkranZgloszeniePortal({ spolkaId }) {
   const [gotowe, ustawGotowe] = useState(false);
   const wejscie = useRef(null);
 
-  if (metaLadowanie) return <Spinner />;
-  if (!meta) return null;
-
-  const typyDostepne = meta.typy_zdarzen.filter((t) => meta.typy_w_kreatorze.includes(t.kod) && !t.z_urzedu);
   // Wpis robi sie NA PODSTAWIE DOKUMENTU (art. 300(34) § 4 KSH), wiec plik
   // jest tu rzecza najwazniejsza. Zgloszenie bez pliku przyjmujemy, ale
   // wtedy trzeba napisac, co sie wydarzylo i skad dokument ma sie wziac.
@@ -827,7 +822,9 @@ function EkranZgloszeniePortal({ spolkaId }) {
       });
       if (pliki.length > 0) {
         const formularz = new FormData();
-        formularz.append('typ_dokumentu', rodzajDokumentu);
+        // Rodzaju dokumentu klient nie oznacza — pracownik i tak otwiera plik
+        // i czyta go w calosci, a zla kwalifikacja z portalu tylko myli akta.
+        formularz.append('typ_dokumentu', 'inny');
         for (const plik of pliki) formularz.append('pliki', plik);
         const odp = await fetch(`/api/psa/portal/zadania/${wynik.sprawa.id}/dokumenty`, {
           method: 'POST', body: formularz,
@@ -866,8 +863,8 @@ function EkranZgloszeniePortal({ spolkaId }) {
         <Pole etykieta="Czego dotyczy zgłoszenie" wymagane>
           <select value={typ} onChange={(z) => ustawTyp(z.target.value)}>
             <option value="">— wybierz —</option>
-            {typyDostepne.map((t) => (
-              <option key={t.kod} value={t.kod}>{t.nazwa}</option>
+            {GRUPY_ZGLOSZENIA.map(([kod, nazwa]) => (
+              <option key={kod} value={kod}>{nazwa}</option>
             ))}
           </select>
         </Pole>
@@ -879,15 +876,6 @@ function EkranZgloszeniePortal({ spolkaId }) {
           podpowiedz="Skan albo zdjęcie. PDF, JPG, PNG, DOC/DOCX — maks. 20 MB na plik."
         >
           <div className="zgloszenie-plik">
-            <select
-              value={rodzajDokumentu}
-              onChange={(z) => ustawRodzajDokumentu(z.target.value)}
-              style={{ width: 'auto' }}
-            >
-              {RODZAJE_ZGLOSZENIA.map(([kod, nazwa]) => (
-                <option key={kod} value={kod}>{nazwa}</option>
-              ))}
-            </select>
             <input
               ref={wejscie}
               type="file"

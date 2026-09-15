@@ -166,10 +166,18 @@ function EkranKolejkiSpraw({ spolkaId }) {
 /* ─────────────────────────────────────────────────────
    DOKUMENTY
    ───────────────────────────────────────────────────── */
+/**
+ * Dokumenty sprawy. Zalaczniki przychodza z portalu klienta razem ze
+ * zgloszeniem — pracownik dosyla plik tylko WYJATKOWO (papier z poczty,
+ * dokument z innego zrodla), wiec pole na plik siedzi za przyciskiem,
+ * a nie stoi otwarte pod lista i nie pyta, „jaki to dokument", skoro
+ * pracownik i tak go otwiera i czyta.
+ */
 function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
-  const [typDokumentu, ustawTypDokumentu] = useState('inny');
+  const [dosylanie, ustawDosylanie] = useState(false);
   const [wysylanie, ustawWysylanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
+  const wejscie = useRef(null);
 
   async function wgraj(zdarzenie) {
     const pliki = [...zdarzenie.target.files];
@@ -178,13 +186,14 @@ function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
     ustawBlad(null);
     try {
       const formularz = new FormData();
-      formularz.append('typ_dokumentu', typDokumentu);
+      formularz.append('typ_dokumentu', 'inny');
       for (const plik of pliki) formularz.append('pliki', plik);
       const odp = await fetch(`/api/psa/sprawy/${sprawaId}/dokumenty`, { method: 'POST', body: formularz });
       if (!odp.ok) {
         const tresc = await odp.json();
         throw new Error(tresc.blad || `Błąd ${odp.status}`);
       }
+      ustawDosylanie(false);
       odswiez();
     } catch (e) {
       ustawBlad(e.message);
@@ -220,13 +229,29 @@ function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
           </table>
         )}
         <div className="row-g">
-          <select value={typDokumentu} onChange={(z) => ustawTypDokumentu(z.target.value)} style={{ width: 'auto' }}>
-            {RODZAJE_DOKUMENTU_PODSTAWY.map(([kod, opis]) => (
-              <option key={kod} value={kod}>{opis}</option>
-            ))}
-          </select>
-          <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" disabled={wysylanie} onChange={wgraj} />
-          {wysylanie && <span className="przyciemnione">Wysyłanie…</span>}
+          <input
+            ref={wejscie}
+            type="file"
+            multiple
+            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+            className="pole-pliku-ukryte"
+            disabled={wysylanie}
+            onChange={wgraj}
+          />
+          <button
+            type="button"
+            className="btn btn-maly"
+            disabled={wysylanie}
+            onClick={() => {
+              ustawDosylanie(true);
+              if (wejscie.current) wejscie.current.click();
+            }}
+          >
+            {wysylanie ? 'Wysyłanie…' : 'Dołącz dokument'}
+          </button>
+          {dosylanie && !wysylanie && (
+            <span className="przyciemnione male">Plik trafi do akt tej sprawy.</span>
+          )}
         </div>
       </div>
     </Sekcja>
@@ -367,6 +392,14 @@ function AkcjeSprawy({ sprawa, odswiez }) {
   return (
     <div className="row-g bez-druku" style={{ flexWrap: 'wrap' }}>
       <Komunikat odmiana="blad" tresc={bladAkcji} />
+      {/* Sprawa zgloszona przez portal wpada w stan „nowa" i bez tego
+          przycisku nie da sie jej ruszyc: kreator wpisu otwiera sie dopiero
+          w stanie „weryfikacja". Dotad jedyna widoczna akcja bylo anulowanie. */}
+      {sprawa.stan === 'nowa' && (
+        <button className="btn btn-sm btn-glowny" onClick={() => wykonaj('weryfikuj')}>
+          Rozpocznij weryfikację
+        </button>
+      )}
       {sprawa.stan === 'weryfikacja' && (
         <button className="btn btn-sm" onClick={() => ustawModal('wstrzymaj')}>Wstrzymaj</button>
       )}
@@ -745,6 +778,66 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   );
 }
 
+/**
+ * Poprawa typu zdarzenia przed wpisem.
+ *
+ * Portal klienta pyta o TRZY grupy („zbycie albo nabycie akcji", „emisja
+ * albo umorzenie", „ustanowienie uprawnienia") — klient nie kwalifikuje
+ * czynnosci prawnej, bo wpisu dokonuje sie na podstawie DOKUMENTU, nie
+ * opisu zadajacego (art. 300(34) § 4 KSH). Pracownik czyta dokument i
+ * ustawia typ, z ktorym idzie do kreatora. Zwiniete do jednego wiersza:
+ * przy sprawie zalozonej w kancelarii typ jest juz wlasciwy.
+ */
+function PoprawTypZdarzenia({ sprawa, typy, odswiez }) {
+  const [otwarte, ustawOtwarte] = useState(false);
+  const [wybrany, ustawWybrany] = useState(sprawa.typ_zdarzenia);
+  const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+
+  async function zapisz() {
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    try {
+      await API.patch(`/api/psa/sprawy/${sprawa.id}`, { akcja: 'zmien-typ', typ_zdarzenia: wybrany });
+      ustawOtwarte(false);
+      odswiez();
+    } catch (e) {
+      ustawBlad(e.message);
+    } finally {
+      ustawZapisywanie(false);
+    }
+  }
+
+  if (!otwarte) {
+    return (
+      <div className="row-g bez-druku">
+        <button className="btn-tekstowy" onClick={() => ustawOtwarte(true)}>Popraw typ zdarzenia</button>
+      </div>
+    );
+  }
+
+  return (
+    <Karta tytul="Typ zdarzenia">
+      <div className="pion" style={{ padding: '0 24px 20px', gap: 12 }}>
+        <Komunikat odmiana="blad" tresc={blad} />
+        <select value={wybrany} onChange={(z) => ustawWybrany(z.target.value)}>
+          {typy.filter((t) => !t.z_urzedu).map((t) => (
+            <option key={t.kod} value={t.kod}>{t.nazwa}</option>
+          ))}
+        </select>
+        <div className="row-g">
+          <button className="btn btn-glowny btn-maly" disabled={zapisywanie} onClick={zapisz}>
+            {zapisywanie ? 'Zapisywanie…' : 'Zapisz typ'}
+          </button>
+          <button className="btn btn-maly" onClick={() => { ustawOtwarte(false); ustawWybrany(sprawa.typ_zdarzenia); }}>
+            Anuluj
+          </button>
+        </div>
+      </div>
+    </Karta>
+  );
+}
+
 /* ─────────────────────────────────────────────────────
    EKRAN SPRAWY
    ───────────────────────────────────────────────────── */
@@ -802,6 +895,10 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
           tytul={`Przyczyna odmowy — ${OPISY_PRZYCZYN_ODMOWY_WPISU[sprawa.powod_odmowy_kod] || 'nieustalona'}`}
           tresc={sprawa.powod_odmowy}
         />
+      )}
+
+      {!zakonczona && (
+        <PoprawTypZdarzenia sprawa={sprawa} typy={meta.dane.typy_zdarzen} odswiez={odswiez} />
       )}
 
       {!wlasnieWpisano && <AkcjeSprawy sprawa={sprawa} odswiez={odswiez} />}
@@ -872,7 +969,21 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
       )}
       {sprawa.stan === 'nowa' && (
         <Karta>
-          <Pusto tytul="Sprawa czeka na weryfikację" opis="Przenieś sprawę do weryfikacji, żeby przejść do kreatora." />
+          <Pusto
+            tytul="Sprawa czeka na weryfikację"
+            opis="Otwórz dokumenty, sprawdź, czego dotyczą, i rozpocznij weryfikację — kreator wpisu otworzy się poniżej."
+            akcja={
+              <button
+                className="btn btn-glowny"
+                onClick={async () => {
+                  await API.patch(`/api/psa/sprawy/${sprawa.id}`, { akcja: 'weryfikuj' });
+                  odswiez();
+                }}
+              >
+                Rozpocznij weryfikację
+              </button>
+            }
+          />
         </Karta>
       )}
     </>

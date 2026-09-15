@@ -112,6 +112,39 @@ async function przygotujSpolke() {
   return { spolkaId, kowalski: kowalski.osoba, nowak: nowak.osoba, emisjaZdarzenieId: emisja.zdarzenie.id };
 }
 
+test('PATCH /api/psa/sprawy/:id akcja "zmien-typ": poprawia kwalifikacje przed wpisem, odmawia po', async () => {
+  const { spolkaId, kowalski } = await przygotujSpolke();
+
+  // Portal klienta oferuje TRZY grupy, wiec „emisja albo umorzenie" wpada
+  // jako `emisja` — pracownik po przeczytaniu dokumentu przestawia na `umorzenie`.
+  const [stZal, zalozona] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'emisja', zrodlo: 'portal',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'spolka', zadajacy_opis: 'Zgłoszenie przez portal',
+  });
+  assert.equal(stZal, 201, JSON.stringify(zalozona));
+  const sprawaId = zalozona.sprawa.id;
+
+  const [stZly] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, {
+    akcja: 'zmien-typ', typ_zdarzenia: 'nie_ma_takiego',
+  });
+  assert.equal(stZly, 400, 'nieznany typ zdarzenia');
+
+  const [stZmiana, poZmianie] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, {
+    akcja: 'zmien-typ', typ_zdarzenia: 'umorzenie',
+  });
+  assert.equal(stZmiana, 200);
+  assert.equal(poZmianie.sprawa.typ_zdarzenia, 'umorzenie');
+  assert.equal(poZmianie.sprawa.stan, 'nowa', 'poprawka typu nie rusza stanu sprawy');
+  assert.match(poZmianie.sprawa.notatka, /Typ zdarzenia poprawiony/);
+
+  // Po zamknieciu sprawy typ jest juz czescia rejestru — nie edytujemy go.
+  await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'anuluj', powod: 'test' });
+  const [stPo] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, {
+    akcja: 'zmien-typ', typ_zdarzenia: 'emisja',
+  });
+  assert.equal(stPo, 400, 'sprawa zamknieta — typ zdarzenia zostaje');
+});
+
 test('pelny cykl sprawy: nowa → weryfikacja → wpisana, z zawiadomieniem bez SMTP', async () => {
   const { spolkaId, kowalski, nowak, emisjaZdarzenieId } = await przygotujSpolke();
 

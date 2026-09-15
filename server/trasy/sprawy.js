@@ -385,6 +385,37 @@ router.patch(
     const dzis = czas.dzisIso();
     const { akcja, powod, powod_odmowy, powod_odmowy_kod, sposob_usuniecia, termin_usuniecia } = zad.body || {};
 
+    // Portal klienta pyta o TRZY grupy zdarzen, nie o trzynascie typow
+    // (`publiczne/js/portal.js: GRUPY_ZGLOSZENIA`) — klient nie kwalifikuje
+    // czynnosci prawnej. Robi to pracownik, czytajac dokument: art. 300(34)
+    // § 4 KSH wiaze wpis z dokumentem, nie z opisem zadajacego. Poprawka
+    // jest mozliwa TYLKO przed wpisem — potem zdarzenie jest juz w rejestrze,
+    // a ten sie nie edytuje, tylko prostuje osobnym zdarzeniem.
+    if (akcja === 'zmien-typ') {
+      if (!['nowa', 'weryfikacja', 'wstrzymana'].includes(sprawa.stan)) {
+        throw bledneZadanie('Typ zdarzenia można poprawić wyłącznie przed dokonaniem wpisu.');
+      }
+      const nowyTyp = String((zad.body || {}).typ_zdarzenia || '');
+      if (!typyZdarzen.istnieje(nowyTyp)) {
+        throw bledneZadanie(`Nieznany typ zdarzenia: „${nowyTyp}”.`);
+      }
+      if (nowyTyp !== sprawa.typ_zdarzenia) {
+        db()
+          .prepare('UPDATE psa_sprawy SET typ_zdarzenia = ?, wymaga_powiadomienia = ?, notatka = ?, zaktualizowano = ? WHERE id = ?')
+          .run(
+            nowyTyp,
+            typyZdarzen.typ(nowyTyp).wymaga_powiadomienia === true ? 1 : 0,
+            laczNotatke(
+              sprawa.notatka,
+              `Typ zdarzenia poprawiony z „${sprawa.typ_zdarzenia}” na „${nowyTyp}” (${kto}).`
+            ),
+            czas.terazIso(),
+            id
+          );
+      }
+      return odp.json({ sprawa: widokSprawy(wczytajSprawe(id)) });
+    }
+
     if (akcja === 'weryfikuj') {
       if (sprawa.stan !== 'nowa') {
         throw bledneZadanie('Do weryfikacji można przenieść wyłącznie sprawę w stanie „nowa”.');
