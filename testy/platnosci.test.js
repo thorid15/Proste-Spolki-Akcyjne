@@ -34,6 +34,10 @@ let adresAtrapy;
 /** Co atrapa ma zrobic przy nastepnym zalozeniu transakcji. */
 let zachowanieAtrapy = { blad: null, status: 'pending' };
 let licznikTransakcji = 0;
+/** Identyfikatory transakcji, ktore kazalismy operatorowi uniewaznic. */
+let anulowane = [];
+/** Ostatnie cialo wyslane do /transactions — do sprawdzenia pol zadania. */
+let ostatnieZadanie = null;
 
 function uruchomAtrape() {
   return new Promise((gotowe) => {
@@ -46,9 +50,23 @@ function uruchomAtrape() {
           odp.end(JSON.stringify(dane));
         };
         if (zad.url === '/oauth/auth') {
-          return odpowiedz(200, { access_token: 'token-atrapy', expires_in: 3600 });
+          // Operator przyjmuje tu FORMULARZ, nie JSON. Atrapa pilnuje tego
+          // tak samo, inaczej test przepuscilby bledna implementacje.
+          if (!String(zad.headers['content-type'] || '').includes('x-www-form-urlencoded')) {
+            return odpowiedz(400, { error: 'oczekiwano application/x-www-form-urlencoded' });
+          }
+          const pola = new URLSearchParams(cialo);
+          if (!pola.get('client_id') || !pola.get('client_secret')) {
+            return odpowiedz(400, { error: 'brak client_id/client_secret' });
+          }
+          return odpowiedz(200, { access_token: 'token-atrapy', expires_in: 7200 });
+        }
+        if (/^\/transactions\/[^/]+\/cancel$/.test(zad.url) && zad.method === 'POST') {
+          anulowane.push(zad.url.split('/')[2]);
+          return odpowiedz(200, { result: 'success' });
         }
         if (zad.url === '/transactions' && zad.method === 'POST') {
+          try { ostatnieZadanie = JSON.parse(cialo); } catch (e) { ostatnieZadanie = null; }
           if (zachowanieAtrapy.blad) return odpowiedz(500, { message: zachowanieAtrapy.blad });
           licznikTransakcji += 1;
           const id = `TR-${licznikTransakcji}`;
@@ -391,4 +409,136 @@ test('ITN nie przyjmuje ciala wiekszego niz kilkanascie pol', async () => {
   assert.notEqual(odp.status, 200, 'przerosniete cialo odrzucone, nie przetwarzane');
 
   await new Promise((g) => serwer.close(g));
+});
+
+/* ─────────────────────────────────────────────────────
+   Zgodnosc z notatka wdrozeniowa (TPAY-INTEGRACJA.md)
+   ───────────────────────────────────────────────────── */
+
+test('zadanie transakcji niesie walute, opis w limicie i wlasny kanal powiadomien', async () => {
+  const oplata = dodajOplate({ kwotaGrosze: 15000, typ: 'prowadzenie' });
+  await platnosci.przygotujZaplate(db(), {
+    oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
+  });
+
+  assert.equal(ostatnieZadanie.currency, 'PLN');
+  assert.ok(ostatnieZadanie.description.length <= 128, 'opis mieści się w limicie operatora');
+  // Kasa poprzedza opis slowami „Płatność za …" — ma sie to zlozyc w zdanie.
+  assert.match(ostatnieZadanie.description, /^prowadzenie rejestru akcjonariuszy/);
+  assert.equal(ostatnieZadanie.hiddenDescription.startsWith('psa-'), true, 'crc wraca w powiadomieniu');
+  assert.ok(ostatnieZadanie.callbacks.notification.url, 'adres powiadomien');
+  assert.equal(ostatnieZadanie.payer, undefined, 'bez payer — klient podaje swoj adres sam');
+});
+
+/**
+ * `tr_status` przyjmuje `TRUE`, `PAID` albo `CHARGEBACK`. Sprawdzanie samego
+ * `TRUE` przepuszczalo `PAID` jako „oczekuje" — zaplacona naleznosc nigdy
+ * by sie nie zaksiegowala, a pieniadze lezalyby na rachunku kancelarii.
+ */
+test('powiadomienie ze statusem PAID ksieguje tak samo jak TRUE', async () => {
+  const oplata = dodajOplate({ kwotaGrosze: 6600 });
+  const { platnosc } = await platnosci.przygotujZaplate(db(), {
+    oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
+  });
+  const wynik = platnosci.przyjmijPowiadomienie(db(), powiadomienie(platnosc, { status: 'PAID' }));
+  assert.equal(wynik.zaksiegowano, true);
+  assert.equal(db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status, 'oplacona');
+});
+
+/**
+ * Liczy sie `tr_paid` — ile klient FAKTYCZNIE zaplacil — a nie `tr_amount`,
+ * czyli kwota, na ktora transakcje wystawilismy. Przy niedoplacie te dwie
+ * sie roznia i tylko pierwsza mowi prawde o pieniadzach.
+ */
+test('niedoplata widoczna w tr_paid nie ksieguje, mimo poprawnego tr_amount', async () => {
+  const oplata = dodajOplate({ kwotaGrosze: 10000 });
+  const { platnosc } = await platnosci.przygotujZaplate(db(), {
+    oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
+  });
+  // tr_amount zgodne (suma kontrolna liczy sie z niego), tr_paid zanizone.
+  const itn = { ...powiadomienie(platnosc), tr_paid: '30.00' };
+  const wynik = platnosci.przyjmijPowiadomienie(db(), itn);
+  assert.equal(wynik.ok, false);
+  assert.match(wynik.powod, /30\.00 zł zamiast 100\.00 zł/);
+  assert.equal(db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status, 'naliczona');
+});
+
+test('powiadomienie o cudzej transakcji nie ksieguje naszej', async () => {
+  const oplata = dodajOplate({ kwotaGrosze: 5500 });
+  const { platnosc } = await platnosci.przygotujZaplate(db(), {
+    oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
+  });
+  // Poprawny crc, ale tr_id z innej transakcji.
+  const itn = powiadomienie(platnosc);
+  itn.tr_id = 'TR-CUDZE';
+  itn.md5sum = crypto.createHash('md5')
+    .update(`${itn.id}${itn.tr_id}${itn.tr_amount}${itn.tr_crc}${SEKRET_ITN}`).digest('hex');
+  const wynik = platnosci.przyjmijPowiadomienie(db(), itn);
+  assert.equal(wynik.ok, false);
+  assert.match(wynik.powod, /[Nn]umer transakcji/);
+});
+
+/**
+ * Sam wpis w naszej bazie nie gasi linku, ktory klient ma w mailu — bez
+ * wywolania `/cancel` dalo sie zaplacic nieaktualna kwote.
+ */
+test('zmiana kwoty uniewaznia stara transakcje TAKZE u operatora', async () => {
+  anulowane = [];
+  const oplata = dodajOplate({ kwotaGrosze: 8000 });
+  const pierwsza = await platnosci.przygotujZaplate(db(), {
+    oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
+  });
+
+  db().prepare('UPDATE psa_oplaty SET kwota_grosze = ? WHERE id = ?').run(9500, oplata.id);
+  await platnosci.przygotujZaplate(db(), {
+    oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
+  });
+
+  assert.ok(
+    anulowane.includes(pierwsza.platnosc.tpay_id),
+    `operator dostal polecenie uniewaznienia ${pierwsza.platnosc.tpay_id}; anulowane: ${anulowane.join(',')}`
+  );
+});
+
+test('odpytanie zapisuje stan inny niz „oplacona”, zamiast zostawiac „oczekuje” bez konca', async () => {
+  const oplata = dodajOplate({ kwotaGrosze: 3100 });
+  const { platnosc } = await platnosci.przygotujZaplate(db(), {
+    oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
+  });
+  zachowanieAtrapy = { blad: null, status: 'declined' };
+  const wynik = await platnosci.sprawdzUOperatora(db(), platnosc.id);
+  assert.equal(wynik.status, 'nieudana');
+  assert.equal(db().prepare('SELECT status FROM psa_platnosci WHERE id = ?').get(platnosc.id).status, 'nieudana');
+  zachowanieAtrapy = { blad: null, status: 'pending' };
+});
+
+test('adresy operatora rozpoznawane, takze w zapisie IPv4-w-IPv6', () => {
+  assert.equal(tpay.zAdresuOperatora('176.119.38.175'), true);
+  assert.equal(tpay.zAdresuOperatora('::ffff:46.29.19.106'), true);
+  assert.equal(tpay.zAdresuOperatora('1.2.3.4'), false);
+  assert.equal(tpay.zAdresuOperatora(null), false);
+});
+
+/**
+ * „alg: none" i algorytmy symetryczne to klasyczne obejscie podpisu JWS —
+ * nie przyjmujemy niczego, czego sami nie wybralismy.
+ */
+test('podpis JWS: odrzuca zly ksztalt i podstawiony algorytm', async () => {
+  const cialo = Buffer.from('id=1&tr_id=X');
+  assert.equal((await tpay.sprawdzPodpisJws('', cialo)).ok, false);
+  assert.equal((await tpay.sprawdzPodpisJws('tylko.dwie', cialo)).ok, false);
+
+  const naglowekNone = Buffer.from(JSON.stringify({ alg: 'none' })).toString('base64url');
+  const zNone = await tpay.sprawdzPodpisJws(`${naglowekNone}..`, cialo);
+  assert.equal(zNone.ok, false);
+  assert.match(zNone.powod, /algorytm/i);
+
+  const naglowekHs = Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url');
+  assert.equal((await tpay.sprawdzPodpisJws(`${naglowekHs}..x`, cialo)).ok, false);
+
+  // Payload MUSI byc odlaczony — podpis obejmuje surowe cialo zadania.
+  const naglowekRs = Buffer.from(JSON.stringify({ alg: 'RS256' })).toString('base64url');
+  const zPayloadem = await tpay.sprawdzPodpisJws(`${naglowekRs}.cos.x`, cialo);
+  assert.equal(zPayloadem.ok, false);
+  assert.match(zPayloadem.powod, /odłączony/i);
 });

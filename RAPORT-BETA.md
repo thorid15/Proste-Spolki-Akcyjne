@@ -141,17 +141,48 @@ z trzech problemów, w którym awaria jest nieodwracalna.
 | **Filtry opłat (spółka/typ/status/okres)** | usunięte przeze mnie z ekranu rozliczeń | zastąpione grupowaniem po spółkach + przełącznikiem „tylko nierozliczone” | **już usunięte** — jeśli brakuje, wracają w kwadrans. Trasa `/api/psa/oplaty` z filtrami działa dalej (używa jej eksport CSV) |
 | **Lista 4 statusów opłaty** | usunięta przeze mnie | pozwalała cofnąć „opłaconą” na „naliczoną”; powtarzała znacznik stanu obok | **już usunięte**, zostały dwie akcje: „Oznacz opłaconą” (przelew poza portalem) i „Anuluj” |
 
-## 5. Co jeszcze zostaje do zrobienia przy płatnościach
+## 5. Płatności — zgodność z notatką wdrożeniową
+
+Notatka `TPAY-INTEGRACJA.md` trafiła do repozytorium po pierwszej wersji tej
+implementacji. Porównanie punkt po punkcie wykryło **dwa błędy, które
+zatrzymałyby płatności na produkcji**, i cztery braki. Wszystko poprawione,
+każda poprawka ma test.
+
+### Co było złe
+
+| # | Błąd | Skutek na produkcji |
+|---|---|---|
+| 1 | `/oauth/auth` wysyłane jako **JSON** zamiast formularza | **żadna płatność by nie powstała** — autoryzacja odrzucona, komunikat nie mówiący dlaczego |
+| 2 | `tr_status` sprawdzany tylko pod `TRUE`, bez **`PAID`** | **zapłacone należności nie księgowałyby się** — pieniądze na rachunku, opłata dalej „naliczona” |
+| 3 | Kwota porównywana z `tr_amount` zamiast **`tr_paid`** | niedopłata przechodziłaby jako pełna zapłata |
+| 4 | Stara transakcja unieważniana tylko u nas, bez `POST /transactions/{id}/cancel` | link z maila dalej żywy — klient płaci nieaktualną kwotę |
+| 5 | Brak `currency`, `callbacks.notification.email`, limitu 128 znaków na opisie | brak niezależnego kanału powiadomień; opis mógł zostać ucięty przez operatora |
+| 6 | Brak mapy statusów przy odpytywaniu (`correct` i nic więcej) | `paid`, `declined`, `chargeback` czytane jako „oczekuje” bez końca |
+
+### Co doszło
+
+- **Podpis JWS** (`X-JWS-Signature`) — certyfikat z `secure.tpay.com`, payload
+  odłączony, wyłącznie `RS256`. `alg: none` i algorytmy symetryczne odrzucane
+  wprost. Surowe ciało żądania zachowywane przez `verify` w `express.urlencoded`,
+  bo podpis obejmuje dokładnie te bajty, które przyszły.
+- **Lista adresów operatora** jako trzecia warstwa — **wyłącznie sygnał do logu,
+  nigdy odmowa**: adresy się zmieniają i blokada na nich potrafi wyciąć
+  prawdziwe płatności.
+- **Ważność linku po naszej stronie** (14 dni) — operator nie ma pola wygaśnięcia.
+- **Zapas na `payer`** — wysyłamy bez niego (żeby klient dostał potwierdzenie na
+  swój adres), ale gdyby API kiedyś tego wymagało, ponawiamy raz z wartościami
+  zastępczymi zamiast zostawiać klienta bez możliwości zapłaty.
+- **Idempotencja także po `tr_id`** — powiadomienie o cudzej transakcji
+  z podstawionym `tr_crc` nie księguje naszej.
+
+Atrapa operatora w testach **pilnuje tego samego, co prawdziwe API** — odrzuca
+`/oauth/auth` wysłane jako JSON. Gdyby pilnowała mniej, przepuściłaby błąd nr 1.
+
+### Co nadal zostaje
 
 | Rzecz | Stan |
 |---|---|
-| Podpis **JWS** z nagłówka `X-JWS-Signature` | **NIE ZROBIONE.** Zrobiona jest suma MD5 (porównywana w czasie stałym). Plan zakładał obie warstwy; JWS wymaga klucza publicznego operatora i jego dokładnego formatu — nie zgadywałem |
-| Lista adresów IP operatora jako trzecia, luźna warstwa | nie zrobione (celowo — adresy się zmieniają, to warstwa uzupełniająca) |
 | Automat uruchamiający przypomnienia | dziś przycisk w rozliczeniach; brakuje zadania cyklicznego (cron) |
-| Zwrot i korekta płatności | brak — dziś tylko „Anuluj” na należności |
-
-**Uwaga.** Moduł tpay, który wklejałeś we wcześniejszej sesji, **nie jest
-w repozytorium ani na dysku** — sprawdziłem pliki, historię gita i Dysk Google.
-To, co przetrwało, to moja analiza w `PLAN-POPRAWEK-3.md` § 3 i na niej oparłem
-implementację, punkt po punkcie. Jeśli chcesz, żeby kod trzymał się Twojego
-modułu co do nazw pól i wersji API — wklej go jeszcze raz, dopasuję.
+| Zwrot i korekta płatności (`/refunds`) | brak — dziś tylko „Anuluj” na należności |
+| Kod QR do zapłaty (`/qr`) | brak — przydatny dopiero przy wezwaniach papierowych |
+| Pierwszy test na produkcji na własnym, drobnym zamówieniu | **do zrobienia przed uruchomieniem dla klientów** |

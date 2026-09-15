@@ -15,11 +15,23 @@ const crypto = require('node:crypto');
 
 const konfiguracja = require('./konfiguracja');
 const tpay = require('./logika/tpay');
+const ustawienia = require('./logika/ustawienia');
 const terminy = require('./logika/terminy');
 const czas = require('./pomocnicze/czas');
 
 /** Statusy oplaty, ktore da sie jeszcze zaplacic. */
 const DO_ZAPLATY = new Set(['naliczona', 'zafakturowana']);
+
+/**
+ * Jak dlugo wazny jest wygenerowany link. Operator NIE MA pola daty
+ * wygasniecia — waznosc pilnuje sie po swojej stronie. Po tym czasie
+ * proba idzie na „wygasla", a kolejne klikniecie zaklada nowa transakcje.
+ */
+const WAZNOSC_LINKU_MS = 14 * 24 * 60 * 60 * 1000;
+
+function wygasl(platnosc, teraz = Date.now()) {
+  return teraz - new Date(platnosc.utworzono).getTime() > WAZNOSC_LINKU_MS;
+}
 
 function wczytajOplate(db, id) {
   return db.prepare('SELECT * FROM psa_oplaty WHERE id = ?').get(id);
@@ -40,10 +52,15 @@ function aktualnaProba(db, oplata) {
     .get(oplata.id, oplata.kwota_grosze);
 }
 
+/**
+ * Kasa operatora poprzedza opis slowami „Płatność za …", wiec opis zaczyna
+ * sie MALA litera i rzeczownikiem, ktory po tym wstepie czyta sie poprawnie.
+ * Nazwy kancelarii tu nie ma — odbiorca jest pokazany osobno.
+ */
 const OPISY_TYPU = {
-  prowadzenie: 'Prowadzenie rejestru akcjonariuszy',
-  wpis: 'Wpis w rejestrze akcjonariuszy',
-  informacja: 'Informacja z rejestru akcjonariuszy',
+  prowadzenie: 'prowadzenie rejestru akcjonariuszy',
+  wpis: 'wpis w rejestrze akcjonariuszy',
+  informacja: 'informację z rejestru akcjonariuszy',
 };
 
 /** Tytul, ktory klient zobaczy na formularzu tpay i na wyciagu bankowym. */
@@ -67,10 +84,29 @@ async function przygotujZaplate(db, { oplataId, urlPowiadomienia, urlPowrotu }) 
   if (!tpay.skonfigurowany()) throw new Error('Płatności online nie są włączone.');
 
   const istniejaca = aktualnaProba(db, oplata);
-  if (istniejaca) return { platnosc: istniejaca, nowa: false };
+  if (istniejaca && !wygasl(istniejaca)) return { platnosc: istniejaca, nowa: false };
+  if (istniejaca) {
+    db.prepare("UPDATE psa_platnosci SET status = 'wygasla', zakonczono = ? WHERE id = ?")
+      .run(czas.terazIso(), istniejaca.id);
+  }
 
   // Proby na INNA kwote sa juz nieaktualne — link prowadzilby do zaplaty
-  // kwoty, ktorej nikt juz nie jest winien.
+  // kwoty, ktorej nikt juz nie jest winien. Uniewazniamy je TAKZE
+  // U OPERATORA: sam wpis w naszej bazie nie gasi linku, ktory klient ma
+  // w mailu, wiec bez tego dalo sie zaplacic stara kwote.
+  const nieaktualne = db
+    .prepare("SELECT * FROM psa_platnosci WHERE oplata_id = ? AND status = 'oczekuje'")
+    .all(oplata.id);
+  for (const stara of nieaktualne) {
+    if (!stara.tpay_id) continue;
+    try {
+      await tpay.anulujTransakcje(stara.tpay_id);
+    } catch (e) {
+      // Operator nie potrafil anulowac — zapisujemy to, ale nie wstrzymujemy
+      // wystawienia nowego linku: klient ma czym zaplacic wlasciwa kwote.
+      console.error(`[psa] nie udało się unieważnić transakcji ${stara.tpay_id}: ${e.message}`);
+    }
+  }
   db.prepare(
     `UPDATE psa_platnosci SET status = 'anulowana', zakonczono = ?
       WHERE oplata_id = ? AND status = 'oczekuje'`
@@ -92,6 +128,7 @@ async function przygotujZaplate(db, { oplataId, urlPowiadomienia, urlPowrotu }) 
       crc,
       urlPowrotu,
       urlPowiadomienia,
+      emailPowiadomien: ustawienia.kancelaria(db).email || null,
     });
     db.prepare('UPDATE psa_platnosci SET tpay_id = ?, link = ? WHERE id = ?')
       .run(transakcja.tpay_id || null, transakcja.link, platnoscId);
@@ -162,6 +199,12 @@ function przyjmijPowiadomienie(db, pola) {
   const platnosc = db.prepare('SELECT * FROM psa_platnosci WHERE crc = ?').get(String(pola.tr_crc));
   if (!platnosc) return { ok: false, powod: 'Powiadomienie o nieznanej transakcji.', zaksiegowano: false };
 
+  // `tr_crc` wskazuje nasza probe, `tr_id` — transakcje u operatora. Jesli
+  // sie rozjezdzaja, powiadomienie nie dotyczy tej proby.
+  if (platnosc.tpay_id && String(pola.tr_id) !== String(platnosc.tpay_id)) {
+    return { ok: false, powod: 'Numer transakcji nie odpowiada zapisanej próbie.', zaksiegowano: false };
+  }
+
   // Powiadomienie z piaskownicy NIGDY nie ksieguje platnosci produkcyjnej
   // i odwrotnie — inaczej ktokolwiek, kto zna nasz adres ITN, „placi"
   // w piaskownicy za czynnosc na produkcji.
@@ -184,9 +227,13 @@ function przyjmijPowiadomienie(db, pola) {
     return { ok: true, powod: `Status transakcji: ${status}.`, zaksiegowano: false };
   }
 
-  // Kwote porownujemy z NASZA baza. Zaplacono mniej — oplata zostaje otwarta
-  // i trafia do wyjasnienia; nie zamykamy jej „prawie zaplacona".
-  const zaplacono = tpay.kwotaNaGrosze(pola.tr_amount);
+  // Kwote porownujemy z NASZA baza. Liczy sie `tr_paid` — ile klient
+  // FAKTYCZNIE zaplacil — a nie `tr_amount`, czyli kwota, na ktora transakcje
+  // wystawilismy. Przy niedoplacie te dwie rozne sie i tylko pierwsza mowi
+  // prawde o pieniadzach. Gdy `tr_paid` nie przyszlo, bierzemy `tr_amount`.
+  const zaplacono = tpay.kwotaNaGrosze(pola.tr_paid != null && pola.tr_paid !== ''
+    ? pola.tr_paid
+    : pola.tr_amount);
   if (zaplacono == null || zaplacono < platnosc.kwota_grosze) {
     db.prepare('UPDATE psa_platnosci SET odpowiedz_json = ? WHERE id = ?').run(surowe, platnosc.id);
     return {
@@ -212,9 +259,14 @@ async function sprawdzUOperatora(db, platnoscId) {
   if (platnosc.status === 'oplacona') return { status: 'oplacona', zaksiegowano: false };
 
   const { status, surowe } = await tpay.stanTransakcji(platnosc.tpay_id);
-  const nasz = String(status).toLowerCase() === 'correct' ? 'oplacona' : 'oczekuje';
-  if (nasz !== 'oplacona') {
-    return { status: nasz, zaksiegowano: false, surowe };
+  if (status !== 'oplacona') {
+    // Stan inny niz „zaplacone" zapisujemy — inaczej nieudana albo anulowana
+    // transakcja wisialaby u nas jako „oczekuje" bez konca.
+    if (status !== 'oczekuje') {
+      db.prepare('UPDATE psa_platnosci SET status = ?, zakonczono = ? WHERE id = ?')
+        .run(status, czas.terazIso(), platnosc.id);
+    }
+    return { status, zaksiegowano: false, surowe };
   }
   const wynik = db.transaction(() =>
     zaksieguj(db, { platnosc, opisPowiadomienia: JSON.stringify({ zrodlo: 'odpytanie', surowe }) }))();

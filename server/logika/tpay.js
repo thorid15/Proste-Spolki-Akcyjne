@@ -38,14 +38,19 @@ class BladTpay extends Error {
   }
 }
 
-async function zadanie(sciezka, { metoda = 'GET', cialo, zToken = true, ponowione = false } = {}) {
-  const naglowki = { 'Content-Type': 'application/json', Accept: 'application/json' };
+async function zadanie(sciezka, { metoda = 'GET', cialo, zToken = true, ponowione = false, formularz = false } = {}) {
+  const naglowki = {
+    'Content-Type': formularz ? 'application/x-www-form-urlencoded' : 'application/json',
+    Accept: 'application/json',
+  };
   if (zToken) naglowki.Authorization = `Bearer ${await pobierzToken()}`;
 
   const odp = await fetch(`${konfiguracja.TPAY.api_url}${sciezka}`, {
     method: metoda,
     headers: naglowki,
-    body: cialo === undefined ? undefined : JSON.stringify(cialo),
+    body: cialo === undefined
+      ? undefined
+      : (formularz ? new URLSearchParams(cialo).toString() : JSON.stringify(cialo)),
   });
 
   // Token wygasl wczesniej, niz obiecywal — jedno ponowienie, nie petla.
@@ -75,9 +80,12 @@ async function pobierzToken() {
   // Minuta zapasu — zadanie wyslane w ostatniej sekundzie waznosci wraca 401.
   if (token && Date.now() < tokenWazneDo - 60_000) return token;
 
+  // `/oauth/auth` przyjmuje FORMULARZ, nie JSON — wysylka jako JSON konczy sie
+  // bledem autoryzacji, a komunikat nie mowi dlaczego.
   const dane = await zadanie('/oauth/auth', {
     metoda: 'POST',
     zToken: false,
+    formularz: true,
     cialo: {
       client_id: konfiguracja.TPAY.client_id,
       client_secret: konfiguracja.TPAY.client_secret,
@@ -85,7 +93,7 @@ async function pobierzToken() {
   });
   if (!dane || !dane.access_token) throw new BladTpay('tpay nie zwrócił tokenu dostępu.');
   token = dane.access_token;
-  tokenWazneDo = Date.now() + (Number(dane.expires_in || 3600) * 1000);
+  tokenWazneDo = Date.now() + (Number(dane.expires_in || 7200) * 1000);
   return token;
 }
 
@@ -99,20 +107,43 @@ async function pobierzToken() {
  * dostaje potwierdzenie, a my nie przechowujemy jego danych platniczych.
  * Nasz niezalezny kanal to `callbacks.notification.url`.
  */
-async function zalozTransakcje({ kwotaGrosze, opis, crc, urlPowrotu, urlPowiadomienia }) {
-  const dane = await zadanie('/transactions', {
-    metoda: 'POST',
-    cialo: {
-      amount: Number((kwotaGrosze / 100).toFixed(2)),
-      description: opis,
-      hiddenDescription: crc,
-      lang: 'pl',
-      callbacks: {
-        payerUrls: { success: urlPowrotu, error: urlPowrotu },
-        notification: { url: urlPowiadomienia },
-      },
+async function zalozTransakcje({ kwotaGrosze, opis, crc, urlPowrotu, urlPowiadomienia, emailPowiadomien }) {
+  const cialo = {
+    amount: Number((kwotaGrosze / 100).toFixed(2)),
+    currency: 'PLN',
+    // Limit 128 znakow. Kasa poprzedza opis slowami „Płatność za …", wiec
+    // zaczyna sie on rzeczownikiem w dopelniaczu, nie nazwa kancelarii —
+    // odbiorca i tak jest pokazany osobno.
+    description: String(opis).slice(0, 128),
+    hiddenDescription: crc,
+    lang: 'pl',
+    callbacks: {
+      payerUrls: { success: urlPowrotu, error: urlPowrotu },
+      // `notification.email` to NASZ niezalezny kanal: klient dostaje
+      // potwierdzenie na adres, ktory sam poda w kasie, a my swoje — bez
+      // wzgledu na to, co wpisal.
+      notification: emailPowiadomien
+        ? { url: urlPowiadomienia, email: emailPowiadomien }
+        : { url: urlPowiadomienia },
     },
-  });
+  };
+
+  let dane;
+  try {
+    dane = await zadanie('/transactions', { metoda: 'POST', cialo });
+  } catch (e) {
+    // Obiektu `payer` NIE wysylamy swiadomie: podany blokuje pola w kasie,
+    // wiec klient nie moze wpisac wlasnego adresu i potwierdzenie idzie nie
+    // do niego. Biblioteka referencyjna oznacza go jednak jako wymagany —
+    // gdyby API kiedys tego dopilnowalo, ponawiamy RAZ z wartosciami
+    // zastepczymi, zamiast zostawiac klienta bez mozliwosci zaplaty.
+    if (!/payer/i.test(String(e.message))) throw e;
+    dane = await zadanie('/transactions', {
+      metoda: 'POST',
+      cialo: { ...cialo, payer: { email: emailPowiadomien || 'brak@example.invalid', name: 'Płatnik' } },
+    });
+  }
+
   return {
     tpay_id: String(dane.transactionId || ''),
     link: dane.transactionPaymentUrl || null,
@@ -123,7 +154,108 @@ async function zalozTransakcje({ kwotaGrosze, opis, crc, urlPowrotu, urlPowiadom
 /** Awaryjne odpytanie o stan transakcji, gdy powiadomienie nie doszlo. */
 async function stanTransakcji(tpayId) {
   const dane = await zadanie(`/transactions/${encodeURIComponent(tpayId)}`);
-  return { status: String((dane && dane.status) || ''), surowe: dane };
+  return { status: mapujStatus(dane && dane.status), surowy: (dane && dane.status) || '', surowe: dane };
+}
+
+/**
+ * Uniewaznienie transakcji u OPERATORA. Bez tego zmiana kwoty zostawiala
+ * u tpay zywy link na stara kwote — klient, ktory mial go w mailu, mogl
+ * zaplacic nieaktualna nalezność i mielibysmy wplate bez pokrycia.
+ */
+async function anulujTransakcje(tpayId) {
+  await zadanie(`/transactions/${encodeURIComponent(tpayId)}/cancel`, { metoda: 'POST', cialo: {} });
+}
+
+/**
+ * Adresy, z ktorych operator wysyla powiadomienia. Warstwa UZUPELNIAJACA
+ * i swiadomie luzna: adresy sie zmieniaja, wiec brak na liscie nie odrzuca
+ * powiadomienia — zostaje w logu jako sygnal do sprawdzenia. Odrzuca
+ * wylacznie suma kontrolna i podpis.
+ */
+const ADRESY_OPERATORA = [
+  '176.119.38.175', '195.149.229.109', '148.251.96.163',
+  '178.32.201.77', '46.248.167.59', '46.29.19.106',
+];
+
+function zAdresuOperatora(ip) {
+  if (!ip) return false;
+  // Za odwrotnym posrednikiem adres przychodzi czasem jako ::ffff:1.2.3.4.
+  const czysty = String(ip).replace(/^::ffff:/, '');
+  return ADRESY_OPERATORA.includes(czysty);
+}
+
+/**
+ * Certyfikat, ktorym operator podpisuje powiadomienia (JWS). Pobierany raz
+ * i trzymany w pamieci procesu — jak token.
+ */
+let certyfikat = null;
+
+function adresCertyfikatu() {
+  return /sandbox/i.test(konfiguracja.TPAY.api_url || '')
+    ? 'https://secure.sandbox.tpay.com'
+    : 'https://secure.tpay.com';
+}
+
+async function pobierzCertyfikat() {
+  if (certyfikat) return certyfikat;
+  const odp = await fetch(`${adresCertyfikatu()}/x509/notifications-jws.pem`);
+  if (!odp.ok) throw new BladTpay(`Nie udało się pobrać certyfikatu powiadomień (${odp.status}).`);
+  certyfikat = await odp.text();
+  return certyfikat;
+}
+
+function zBase64Url(tekst) {
+  return Buffer.from(String(tekst).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+}
+
+/**
+ * Podpis JWS z naglowka `X-JWS-Signature`. Format: `naglowek..podpis` —
+ * czesc srodkowa jest PUSTA (payload odlaczony), a podpisem objete jest
+ * `naglowek + '.' + base64url(surowe cialo zadania)`.
+ *
+ * Dlatego ta funkcja bierze SUROWE cialo, a nie sparsowane pola: kolejnosc
+ * i kodowanie musza byc dokladnie takie, jakie przyszly. Sparsowanie
+ * i ponowne zlozenie zmienia bajty i podpis przestaje sie zgadzac.
+ *
+ * Zwraca `{ ok, powod }`; nigdy nie rzuca.
+ */
+async function sprawdzPodpisJws(naglowekJws, suroweCialo) {
+  if (!naglowekJws) return { ok: false, powod: 'Brak nagłówka X-JWS-Signature.' };
+  const czesci = String(naglowekJws).split('.');
+  if (czesci.length !== 3) return { ok: false, powod: 'Nagłówek X-JWS-Signature ma nieoczekiwany kształt.' };
+
+  const [naglowek, srodek, podpis] = czesci;
+  if (srodek !== '') return { ok: false, powod: 'Podpis JWS nie jest odłączony od treści.' };
+
+  let algorytm;
+  try {
+    algorytm = JSON.parse(zBase64Url(naglowek).toString('utf8')).alg;
+  } catch (e) {
+    return { ok: false, powod: 'Nagłówek podpisu nie daje się odczytać.' };
+  }
+  // Wylacznie RS256. „alg: none" i algorytmy symetryczne to klasyczne
+  // obejscie podpisu JWS — nie przyjmujemy niczego, czego nie wybralismy.
+  if (algorytm !== 'RS256') return { ok: false, powod: `Nieobsługiwany algorytm podpisu: ${algorytm}.` };
+
+  let pem;
+  try {
+    pem = await pobierzCertyfikat();
+  } catch (e) {
+    return { ok: false, powod: e.message };
+  }
+
+  const doPodpisu = `${naglowek}.${Buffer.from(suroweCialo).toString('base64url')}`;
+  const weryfikator = crypto.createVerify('RSA-SHA256');
+  weryfikator.update(doPodpisu);
+  weryfikator.end();
+
+  let zgadza;
+  try {
+    zgadza = weryfikator.verify(new crypto.X509Certificate(pem).publicKey, zBase64Url(podpis));
+  } catch (e) {
+    return { ok: false, powod: 'Nie udało się zweryfikować podpisu JWS.' };
+  }
+  return zgadza ? { ok: true, powod: null } : { ok: false, powod: 'Podpis JWS się nie zgadza.' };
 }
 
 /**
@@ -167,16 +299,32 @@ function sprawdzPodpisItn(pola) {
 }
 
 /**
- * Status z powiadomienia na nasz. NIEZNANY STATUS TO ZAWSZE „oczekuje",
- * nigdy „oplacona" — pomylka w te strone kosztuje pieniadze kancelarii.
+ * Mapa statusow operatora na nasze. Defensywna z zalozenia: LISTA WARTOSCI
+ * PO STRONIE TPAY BYWA ROZSZERZANA, a pomylka w strone „oplacona" kosztuje
+ * pieniadze kancelarii. Cokolwiek nierozpoznanego to „oczekuje".
+ */
+const MAPA_STATUSOW = {
+  correct: 'oplacona', paid: 'oplacona', true: 'oplacona',
+  declined: 'nieudana', error: 'nieudana', false: 'nieudana',
+  chargeback: 'anulowana', canceled: 'anulowana', cancelled: 'anulowana',
+  pending: 'oczekuje', new: 'oczekuje',
+};
+
+function mapujStatus(surowy) {
+  return MAPA_STATUSOW[String(surowy || '').toLowerCase()] || 'oczekuje';
+}
+
+/**
+ * Status z POWIADOMIENIA. `tr_status` przyjmuje `TRUE`, `PAID` albo
+ * `CHARGEBACK` — sprawdzanie samego `TRUE` przepuszczalo `PAID` jako
+ * „oczekuje", czyli zaplacona naleznosc nigdy by sie nie zaksiegowala.
  */
 function statusZPowiadomienia(trStatus, trError) {
-  const status = String(trStatus || '').toUpperCase();
+  const status = mapujStatus(trStatus);
+  if (status !== 'oplacona') return status;
+  // Kod bledu przy statusie „zaplacone" odbiera mu wiarygodnosc.
   const blad = String(trError || '').toLowerCase();
-  if (status === 'TRUE' && (blad === 'none' || blad === '')) return 'oplacona';
-  if (status === 'CHARGEBACK') return 'anulowana';
-  if (status === 'FALSE') return 'nieudana';
-  return 'oczekuje';
+  return (blad === 'none' || blad === '') ? 'oplacona' : 'nieudana';
 }
 
 /** Kwota z powiadomienia („12.34") na grosze, bez bledu zmiennoprzecinkowego. */
@@ -190,8 +338,13 @@ function kwotaNaGrosze(tekst) {
 module.exports = {
   BladTpay,
   skonfigurowany,
+  sprawdzPodpisJws,
+  zAdresuOperatora,
+  ADRESY_OPERATORA,
   zalozTransakcje,
   stanTransakcji,
+  anulujTransakcje,
+  mapujStatus,
   sprawdzPodpisItn,
   statusZPowiadomienia,
   kwotaNaGrosze,
