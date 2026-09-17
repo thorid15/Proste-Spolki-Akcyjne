@@ -272,11 +272,41 @@ test('dokumenty: upload do wlasnej sprawy dziala, do cudzej jest odrzucany', asy
   assert.equal(cudzy.status, 404);
 });
 
-test('informacja z rejestru: wydanie zapisuje slad, dokument ma wlasny adres', async () => {
-  const odp = await fetch(`${baza}/api/psa/portal/informacja`, {
+test('informacja z rejestru: odplatna — bez zaplaty nie wychodzi', async () => {
+  const zamow = await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
     body: JSON.stringify({ spolka_id: spolkaId }),
+  });
+  assert.equal(zamow.status, 200);
+  const zamowienie = await zamow.json();
+  assert.ok(Number.isInteger(zamowienie.oplata_id));
+  assert.equal(zamowienie.oplacona, false);
+
+  const przedZaplata = await fetch(`${baza}/api/psa/portal/informacja/${zamowienie.oplata_id}/wydaj`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz }, body: '{}',
+  });
+  assert.equal(przedZaplata.status, 400, 'nieoplacona informacja nie wychodzi');
+  assert.equal(
+    db().prepare(`SELECT COUNT(*) c FROM psa_wydane_dokumenty WHERE typ = 'informacja_z_rejestru'`).get().c,
+    0,
+    'dokument w ogole nie powstaje'
+  );
+});
+
+test('informacja z rejestru: wydanie zapisuje slad, dokument ma wlasny adres', async () => {
+  const zamow = await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
+    body: JSON.stringify({ spolka_id: spolkaId }),
+  });
+  const { oplata_id: oplataId } = await zamow.json();
+  db().prepare("UPDATE psa_oplaty SET status = 'oplacona' WHERE id = ?").run(oplataId);
+
+  const odp = await fetch(`${baza}/api/psa/portal/informacja/${oplataId}/wydaj`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
+    body: '{}',
   });
   assert.equal(odp.status, 200);
   const dane = await odp.json();
@@ -339,4 +369,69 @@ test('portal wylaczony flaga: PORTAL_WLACZONY=false zwraca 503 dla wszystkich tr
   fs.rmSync(PLIK_BAZY2, { force: true });
   fs.rmSync(`${PLIK_BAZY2}-wal`, { force: true });
   fs.rmSync(`${PLIK_BAZY2}-shm`, { force: true });
+});
+
+/**
+ * Informacja wydana SPOLCE niesie pelne dane wszystkich akcjonariuszy (art.
+ * 300(35) § 1 KSH); wydana akcjonariuszowi — te same dane w jego, wezszym
+ * zakresie (§ 1(1)). Bramka „czy masz dostep do tej spolki" przepuszczala
+ * akcjonariusza do dokumentu spolki, czyli do adresow pozostalych
+ * akcjonariuszy, ktore w jego wlasnej informacji sa zaslonione.
+ */
+test('akcjonariusz nie otworzy informacji wydanej SPOLCE', async () => {
+  async function wydaj(ciastko) {
+    const zam = await (await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastko },
+      body: JSON.stringify({ spolka_id: spolkaId }),
+    })).json();
+    db().prepare("UPDATE psa_oplaty SET status = 'oplacona' WHERE id = ?").run(zam.oplata_id);
+    return (await (await fetch(`${baza}/api/psa/portal/informacja/${zam.oplata_id}/wydaj`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastko }, body: '{}',
+    })).json()).dokument_id;
+  }
+
+  const dokumentSpolki = await wydaj(ciastkoSpolka);
+  const dokumentKowalskiego = await wydaj(ciastkoAkcjonariusz);
+
+  const cudzy = await fetch(`${baza}/api/psa/portal/informacja/${dokumentSpolki}`, {
+    headers: { Cookie: ciastkoAkcjonariusz },
+  });
+  assert.equal(cudzy.status, 404, 'dokument spółki jest dla akcjonariusza nieistniejący');
+
+  // Cudzy dokument AKCJONARIUSZA tez nie — nawet w tej samej spolce.
+  const cudzyAkcjonariusza = await fetch(`${baza}/api/psa/portal/informacja/${dokumentKowalskiego}`, {
+    headers: { Cookie: ciastkoInnyAkcjonariusz },
+  });
+  assert.equal(cudzyAkcjonariusza.status, 404);
+
+  // Wlasny otwiera sie normalnie, a spolka otwiera swoj.
+  assert.equal(
+    (await fetch(`${baza}/api/psa/portal/informacja/${dokumentKowalskiego}`, { headers: { Cookie: ciastkoAkcjonariusz } })).status,
+    200
+  );
+  assert.equal(
+    (await fetch(`${baza}/api/psa/portal/informacja/${dokumentSpolki}`, { headers: { Cookie: ciastkoSpolka } })).status,
+    200
+  );
+});
+
+test('dwuklik w „Zamow informacje" nie tworzy dwoch dlugow', async () => {
+  const przed = db().prepare(`SELECT COUNT(*) c FROM psa_oplaty WHERE typ = 'informacja'`).get().c;
+
+  async function zamow() {
+    const odp = await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastkoInnyAkcjonariusz },
+      body: JSON.stringify({ spolka_id: spolkaId }),
+    });
+    return (await odp.json()).oplata_id;
+  }
+
+  const pierwsze = await zamow();
+  const drugie = await zamow();
+  assert.equal(drugie, pierwsze, 'to samo nierozliczone zamówienie, nie drugie');
+  assert.equal(
+    db().prepare(`SELECT COUNT(*) c FROM psa_oplaty WHERE typ = 'informacja'`).get().c,
+    przed + 1,
+    'jedna należność na jedną chęć obejrzenia rejestru'
+  );
 });

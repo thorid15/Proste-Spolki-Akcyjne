@@ -173,6 +173,9 @@ async function pobierzZKrs(numerKrs) {
   } catch (e) {
     return {
       znaleziono: false,
+      // Awaria lacza to NIE jest odpowiedz "takiej spolki nie ma" — kto czyta
+      // ten wynik, musi umiec je rozroznic, zanim komus czegos odmowi.
+      powod: 'brak_polaczenia',
       komunikat:
         'Nie udało się połączyć z API KRS. Uzupełnij dane spółki ręcznie — ' +
         'pobranie można powtórzyć później.',
@@ -182,6 +185,7 @@ async function pobierzZKrs(numerKrs) {
   if (odpowiedz.status === 404) {
     return {
       znaleziono: false,
+      powod: 'nie_znaleziono',
       komunikat:
         `W rejestrze przedsiębiorców nie znaleziono podmiotu o numerze KRS ${numerKrs}. ` +
         'Sprawdź numer albo uzupełnij dane ręcznie.',
@@ -190,6 +194,7 @@ async function pobierzZKrs(numerKrs) {
   if (!odpowiedz.ok) {
     return {
       znaleziono: false,
+      powod: 'blad_api',
       komunikat: `API KRS odpowiedziało błędem (${odpowiedz.status}). Uzupełnij dane ręcznie.`,
     };
   }

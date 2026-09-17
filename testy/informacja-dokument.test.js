@@ -253,11 +253,13 @@ test('adres akcjonariusza: kolejnosc z art. 300(33) § 1 pkt 5 KSH', () => {
  * z art. 300(9) § 2 KSH. To NIE jest stwierdzenie, ze wkladu nie wniesiono —
  * dokument nie ma prawa zamienic niewiedzy w zaprzeczenie.
  */
-test('nieustalone pokrycie nie zamienia sie w „niepokryte”', () => {
+test('brak wzmianki o pokryciu nie zamienia sie w „niepokryte”', () => {
   const stan = stanPelny();
   stan.akcjonariusze[0].pokryta = null;
   const html = dokument({ stan });
-  assert.match(html, /nieustalone/);
+  // art. 300(33) § 1 pkt 9 KSH: rejestr niesie WZMIANKE o pokryciu. Jej brak
+  // to brak wzmianki, a nie stwierdzenie, ze wkladu nie wniesiono.
+  assert.match(html, /brak wzmianki/);
   assert.doesNotMatch(html, /niepokryte/);
 });
 

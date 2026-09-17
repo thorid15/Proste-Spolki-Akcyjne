@@ -81,6 +81,11 @@ if (zastosowane.length > 0) {
 // Reszta wymaga zalogowanego pracownika kancelarii (odstepstwo nr 2, sekcja 2).
 aplikacja.use('/api/wspolne', require('./server/trasy/wspolne'));
 aplikacja.use('/api/psa/auth', auth);
+// Powiadomienie od operatora platnosci puka tu SERWEREM, nie przegladarka —
+// nie ma i nie moze miec sesji. Sprawdza sie je suma kontrolna liczona
+// sekretem wspolnym z operatorem (`server/platnosci.js`), wiec musi stac
+// PRZED bramkami sesji.
+aplikacja.use('/api/psa/platnosci', require('./server/trasy/platnosci'));
 if (konfiguracja.PORTAL_WLACZONY) {
   aplikacja.use('/api/psa/portal', require('./server/trasy/portal'));
 } else {
@@ -96,6 +101,7 @@ aplikacja.use('/api/psa/oplaty', autoryzacja.wymagajPracownika, require('./serve
 aplikacja.use('/api/psa/szablony', autoryzacja.wymagajPracownika, require('./server/trasy/szablony'));
 aplikacja.use('/api/psa/zgloszenia', autoryzacja.wymagajPracownika, require('./server/trasy/zgloszenia'));
 aplikacja.use('/api/psa/wnioski', autoryzacja.wymagajPracownika, require('./server/trasy/wnioski'));
+aplikacja.use('/api/psa/zawiadomienia', autoryzacja.wymagajPracownika, require('./server/trasy/zawiadomienia'));
 aplikacja.use('/api/psa', require('./server/trasy/pozostale'));
 
 // ── Statyki ──────────────────────────────────────────────────────────────

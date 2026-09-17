@@ -25,6 +25,7 @@ process.env.PORTAL_WLACZONY = 'true';
 const app = require('../serwer');
 const { db } = require('../server/baza');
 const hasla = require('../server/logika/hasla');
+const { AKCJONARIUSZ_PELNY } = require('./pomoc');
 const { KATALOG_DOKUMENTOW } = require('../server/konfiguracja');
 
 let serwer;
@@ -100,7 +101,7 @@ async function wnioskGotowyDoWeryfikacji(
     ...dodatkowePola,
   }, ciastko);
   if (zAkcjonariuszem) {
-    await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { typ: 'fizyczna', nazwisko: 'Nowak', imie: 'Anna' }, ciastko);
+    await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { ...AKCJONARIUSZ_PELNY }, ciastko);
   }
   await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
 
@@ -127,6 +128,9 @@ async function wnioskGotowyDoWeryfikacji(
         );
       }
     }
+    // Wgranie skanow to jeszcze nie odeslanie — klient zalacza komplet,
+    // sprawdza go i dopiero wtedy stawia wniosek w kolejce kancelarii.
+    if (!bezSkanow) await zapytaj('POST', '/api/psa/portal/wniosek/odeslij', undefined, ciastko);
   }
 
   const wiersz = db().prepare(`SELECT * FROM psa_wnioski WHERE konto_id = (SELECT id FROM psa_konta WHERE email = ?)`).get(email);

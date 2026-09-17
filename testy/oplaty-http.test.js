@@ -220,7 +220,7 @@ test('eksport CSV zwraca text/csv z naglowkiem BOM (Excel PL) i poprawna trescia
   assert.match(tekst, /^id,spolka,typ,okres,kwota_zl,status,data_naliczenia,notatka,autor/);
 });
 
-test('portal: pobranie informacji z rejestru nalicza oplate', async () => {
+test('portal: zamowienie informacji z rejestru nalicza oplate', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
   const emisja = await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
     typ: 'emisja', data_zdarzenia: '2026-01-01', dane: { seria: 'A', ilosc: 20, data_wpisu_krs: '2026-01-01' },
@@ -244,16 +244,19 @@ test('portal: pobranie informacji z rejestru nalicza oplate', async () => {
   });
   const ciastkoPortal = ciasteczkoZOdpowiedzi(loginPortal);
 
-  const odpInf = await fetch(`${baza}/api/psa/portal/informacja`, {
+  // Zamowienie informacji nalicza oplate OD RAZU — dokument wychodzi dopiero
+  // po jej oplaceniu, ale naleznosc istnieje od chwili zamowienia.
+  const odpInf = await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastkoPortal },
     body: JSON.stringify({ spolka_id: spolkaId }),
   });
   assert.equal(odpInf.status, 200);
   const infOdp = await odpInf.json();
-  assert.equal(infOdp.oplata.typ, 'informacja');
+  assert.ok(Number.isInteger(infOdp.oplata_id));
 
   const [, listaOdp] = await zapytaj(ciastkoAdmina, 'GET', `/api/psa/oplaty?spolka_id=${spolkaId}&typ=informacja`);
   assert.equal(listaOdp.oplaty.length, 1);
+  assert.equal(listaOdp.oplaty[0].id, infOdp.oplata_id);
 });
 
 test('stuby sadowe zwracaja 501 przed wejsciem w zycie nowelizacji', async () => {

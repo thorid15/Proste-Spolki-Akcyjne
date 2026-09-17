@@ -81,7 +81,11 @@ router.get(
   asy((zad, odp) => {
     const stanyDomyslne = ['nowa', 'weryfikacja', 'wstrzymana'];
     const stany = zad.query.stan ? String(zad.query.stan).split(',').filter(Boolean) : stanyDomyslne;
-    const warunki = [`stan IN (${stany.map(() => '?').join(',')})`];
+    // Zadanie zgloszone przez portal, a jeszcze nieoplacone, NIE JEST
+    // zadaniem w rozumieniu art. 300(34) § 1 KSH — dochodzi do skutku
+    // z chwila zaplaty. Do tego czasu nie stoi w kolejce i zaden termin
+    // ustawowy nie biegnie. Widac je w zakladce „Platnosci".
+    const warunki = [`stan IN (${stany.map(() => '?').join(',')})`, 'sp.oczekuje_na_oplate = 0'];
     const parametry = [...stany];
     if (zad.query.spolka_id) {
       warunki.push('sp.spolka_id = ?');
@@ -330,29 +334,12 @@ router.post(
       autor: kto,
     });
 
-    const spolka = rejestr.wczytajSpolke(db(), sprawa.spolka_id);
-    const osoby = rejestr.wczytajOsoby(db(), sprawa.zadajacy_osoba_id ? [sprawa.zadajacy_osoba_id] : []);
-    const widoki = require('../widoki');
-    const podsumowanie = widoki.podsumujZdarzenie(
-      { ...wynik.zdarzenie, dane: wynik.zdarzenie.dane || JSON.parse(wynik.zdarzenie.dane_json || '{}') },
-      new Map([...osoby, ...rejestr.wczytajOsobySpolki(db(), sprawa.spolka_id)])
-    );
-
-    let powiadomienia = [];
-    try {
-      powiadomienia = await zawiadomienia.poWpisie(db(), {
-        sprawa: { ...sprawa, stan: 'wpisana', zdarzenie_id: wynik.zdarzenie.id },
-        zdarzenie: wynik.zdarzenie,
-        spolka,
-        osoby,
-        podsumowanie,
-        autor: kto,
-      });
-    } catch (e) {
-      // Wpis JEST juz dokonany i prawnie skuteczny - blad wysylki nie moze
-      // zamienic sie w blad 500 calej operacji. Zglaszamy go w odpowiedzi.
-      powiadomienia = [{ blad: `Nie udało się przygotować zawiadomień: ${e.message}` }];
-    }
+    // Zawiadomienie o wpisie (art. 300(34) § 7 KSH) NIE idzie stad automatem.
+    // Jedna czynnosc to czesto kilka zdarzen — emisja, potem objecie tych
+    // samych akcji — a zawiadomienie po kazdym z osobna opisywalo stan
+    // przejsciowy (po samej emisji akcje nie maja jeszcze akcjonariusza).
+    // Pracownik wystawia je z zakladki „Zawiadomienia", gdy komplet wpisow
+    // przy danej spolce jest gotowy: `server/trasy/zawiadomienia.js`.
 
     odp.status(201).json({
       sprawa: widokSprawy(wczytajSprawe(id)),
@@ -364,7 +351,6 @@ router.post(
         hash_skrocony: wynik.zdarzenie.hash.slice(0, 12),
       },
       ostrzezenia: wynik.ostrzezenia,
-      powiadomienia,
       oplata,
     });
   })
@@ -385,6 +371,37 @@ router.patch(
     const dzis = czas.dzisIso();
     const { akcja, powod, powod_odmowy, powod_odmowy_kod, sposob_usuniecia, termin_usuniecia } = zad.body || {};
 
+    // Portal klienta pyta o TRZY grupy zdarzen, nie o trzynascie typow
+    // (`publiczne/js/portal.js: GRUPY_ZGLOSZENIA`) — klient nie kwalifikuje
+    // czynnosci prawnej. Robi to pracownik, czytajac dokument: art. 300(34)
+    // § 4 KSH wiaze wpis z dokumentem, nie z opisem zadajacego. Poprawka
+    // jest mozliwa TYLKO przed wpisem — potem zdarzenie jest juz w rejestrze,
+    // a ten sie nie edytuje, tylko prostuje osobnym zdarzeniem.
+    if (akcja === 'zmien-typ') {
+      if (!['nowa', 'weryfikacja', 'wstrzymana'].includes(sprawa.stan)) {
+        throw bledneZadanie('Typ zdarzenia można poprawić wyłącznie przed dokonaniem wpisu.');
+      }
+      const nowyTyp = String((zad.body || {}).typ_zdarzenia || '');
+      if (!typyZdarzen.istnieje(nowyTyp)) {
+        throw bledneZadanie(`Nieznany typ zdarzenia: „${nowyTyp}”.`);
+      }
+      if (nowyTyp !== sprawa.typ_zdarzenia) {
+        db()
+          .prepare('UPDATE psa_sprawy SET typ_zdarzenia = ?, wymaga_powiadomienia = ?, notatka = ?, zaktualizowano = ? WHERE id = ?')
+          .run(
+            nowyTyp,
+            typyZdarzen.typ(nowyTyp).wymaga_powiadomienia === true ? 1 : 0,
+            laczNotatke(
+              sprawa.notatka,
+              `Typ zdarzenia poprawiony z „${sprawa.typ_zdarzenia}” na „${nowyTyp}” (${kto}).`
+            ),
+            czas.terazIso(),
+            id
+          );
+      }
+      return odp.json({ sprawa: widokSprawy(wczytajSprawe(id)) });
+    }
+
     if (akcja === 'weryfikuj') {
       if (sprawa.stan !== 'nowa') {
         throw bledneZadanie('Do weryfikacji można przenieść wyłącznie sprawę w stanie „nowa”.');
@@ -394,6 +411,37 @@ router.patch(
         czas.terazIso(),
         id
       );
+      return odp.json({ sprawa: widokSprawy(wczytajSprawe(id)) });
+    }
+
+    /**
+     * Podstawa wpisu przy sprawie, ktora NIE przeszla przez kreator
+     * kancelarii — czyli przy kazdej zgloszonej przez portal. Klient
+     * dolacza sam dokument i nie oznacza, co to za dokument (art. 300(34)
+     * § 4 KSH wiaze wpis z dokumentem, nie z opisem zadajacego), wiec
+     * kwalifikacje zapisuje pracownik po jego przeczytaniu. Bez tego
+     * sprawy portalowe nie mialy jak dojsc do wzorow 04/05/07, ktore
+     * sekcje `podstawa_dokument` biora wlasnie stad.
+     */
+    if (akcja === 'podstawa') {
+      if (['wpisana', 'odmowa', 'anulowana'].includes(sprawa.stan)) {
+        throw bledneZadanie('Podstawę wpisu ustala się przed dokonaniem wpisu.');
+      }
+      const cialo = zad.body || {};
+      const rodzaj = cialo.dokument_rodzaj ? String(cialo.dokument_rodzaj).trim() : null;
+      const dataDok = cialo.dokument_data ? String(cialo.dokument_data).trim() : null;
+      if (rodzaj && !Object.values(przepisy.RODZAJE_DOKUMENTU).includes(rodzaj)) {
+        throw bledneZadanie(`Nieznany rodzaj dokumentu: „${rodzaj}”.`);
+      }
+      if (dataDok && !czas.poprawnaData(dataDok)) {
+        throw bledneZadanie('Data dokumentu musi mieć format RRRR-MM-DD.');
+      }
+      if ((rodzaj && !dataDok) || (!rodzaj && dataDok)) {
+        throw bledneZadanie('Rodzaj i datę dokumentu podaje się razem.');
+      }
+      db()
+        .prepare('UPDATE psa_sprawy SET dokument_rodzaj = ?, dokument_data = ?, zaktualizowano = ? WHERE id = ?')
+        .run(rodzaj, dataDok, czas.terazIso(), id);
       return odp.json({ sprawa: widokSprawy(wczytajSprawe(id)) });
     }
 

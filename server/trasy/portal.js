@@ -28,6 +28,8 @@ const { db } = require('../baza');
 const rejestr = require('../rejestr');
 const widoki = require('../widoki');
 const oplaty = require('../oplaty');
+const platnosci = require('../platnosci');
+const tpay = require('../logika/tpay');
 const maskowanie = require('../logika/maskowanie');
 const przepisy = require('../logika/przepisy');
 const akcjonariuszLogika = require('../logika/akcjonariusz');
@@ -38,6 +40,7 @@ const terminy = require('../logika/terminy');
 const numery = require('../logika/numery');
 const hasla = require('../logika/hasla');
 const limiter = require('../logika/limiter');
+const zapros = require('../logika/zaproszenia');
 const dokumentyTresc = require('../logika/dokumenty-tresc');
 const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
@@ -45,7 +48,7 @@ const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
-const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien } = require('../pomocnicze/odpowiedzi');
+const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien, BladZadania } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
 const { pobierzZKrs } = require('./krs');
 
@@ -71,9 +74,57 @@ function znormalizujEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+/**
+ * Spolki, ktore prowadzi konto roli „spolka". Zrodlem prawdy jest tabela
+ * powiazan — jeden klient pod jednym adresem e-mail miewa kilka spolek,
+ * a kolumna `psa_konta.spolka_id` niesie tylko te pierwsza.
+ */
+function spolkiKonta(konto) {
+  const z = db()
+    .prepare('SELECT spolka_id FROM psa_konta_spolki WHERE konto_id = ? ORDER BY spolka_id')
+    .all(konto.id)
+    .map((w) => w.spolka_id);
+  // `psa_konta.spolka_id` zostaje w sumie zbioru: rola „spolka" wymaga tej
+  // kolumny (CHECK w schemacie), wiec konto przepiete inna droga niz przez
+  // przyjecie wniosku dalej dziala, nawet jesli nie ma wiersza w tabeli
+  // powiazan.
+  if (konto.spolka_id != null && !z.includes(Number(konto.spolka_id))) z.unshift(Number(konto.spolka_id));
+  return z;
+}
+
+/**
+ * Spolki, ktorych rozliczen dotyczy to konto. Rola „spolka" ma swoje spolki
+ * z tabeli powiazan; akcjonariusz — te, w ktorych ma akcje (art. 300(35) § 1
+ * KSH: rejestr jest jawny dla spolki i dla kazdego akcjonariusza).
+ */
+function spolkiRozliczen(konto) {
+  if (konto.rola === 'spolka') return spolkiKonta(konto);
+  if (konto.osoba_id == null) return [];
+  return db()
+    .prepare('SELECT DISTINCT spolka_id FROM psa_stan_akcji WHERE osoba_id = ?')
+    .all(konto.osoba_id)
+    .map((w) => w.spolka_id);
+}
+
+/**
+ * Warunek SQL zawezajacy oplaty do tych, ktore wolno pokazac temu kontu.
+ *
+ * Akcjonariusz widzi WYLACZNIE swoje wlasne zamowienia (informacje, ktore
+ * sam zamowil). Gdyby zakladka Platnosci pokazywala mu wszystkie oplaty
+ * „jego" spolki, zobaczylby cala historie jej rozliczen z kancelaria —
+ * ile placi za prowadzenie i ile wpisow zrobila.
+ */
+function warunekOplatKonta(konto, spolki) {
+  const miejsca = spolki.map(() => '?').join(',');
+  if (konto.rola === 'spolka') {
+    return { sql: `o.spolka_id IN (${miejsca}) AND o.zamawiajacy_osoba_id IS NULL`, parametry: [...spolki] };
+  }
+  return { sql: 'o.zamawiajacy_osoba_id = ?', parametry: [konto.osoba_id] };
+}
+
 /** Czy konto ma dostep do rejestru/spraw wskazanej spolki. */
 function maDostepDoSpolki(konto, spolkaId) {
-  if (konto.rola === 'spolka') return Number(konto.spolka_id) === Number(spolkaId);
+  if (konto.rola === 'spolka') return spolkiKonta(konto).includes(Number(spolkaId));
   const wiersz = db()
     .prepare('SELECT 1 FROM psa_stan_akcji WHERE spolka_id = ? AND osoba_id = ? LIMIT 1')
     .get(Number(spolkaId), konto.osoba_id);
@@ -137,7 +188,7 @@ const WZORZEC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 router.post(
   '/zgloszenia',
-  asy((zad, odp) => {
+  asy(async (zad, odp) => {
     const cialo = zad.body || {};
     const email = znormalizujEmail(cialo.email);
     if (!email || !WZORZEC_EMAIL.test(email)) {
@@ -168,22 +219,92 @@ router.post(
     });
     limiter.zanotujNieudana(zad.ip, `zgloszenie:${email}`);
 
+    // Duplikat rozpoznajemy po NUMERZE KRS, nie po adresie e-mail: jeden
+    // klient pod jednym adresem miewa kilka spolek i zgloszenie drugiej
+    // jest normalna sytuacja, nie pomylka.
+    const juzProwadzona = db().prepare('SELECT id, nazwa FROM psa_spolki WHERE krs = ?').get(krs);
+    if (juzProwadzona) {
+      throw bledneZadanie(
+        `Rejestr dla spółki o numerze KRS ${krs} jest już prowadzony przez kancelarię. `
+        + 'Zaloguj się do portalu albo napisz do nas, jeśli potrzebujesz dostępu.'
+      );
+    }
+    const wToku = db()
+      .prepare(
+        `SELECT id FROM psa_wnioski WHERE krs = ? AND status NOT IN ('przyjety','odrzucony') LIMIT 1`
+      )
+      .get(krs);
+    const zgloszoneWczesniej = db()
+      .prepare(`SELECT id FROM psa_zgloszenia WHERE krs = ? AND status <> 'odrzucone' LIMIT 1`)
+      .get(krs);
+    if (wToku || zgloszoneWczesniej) {
+      throw bledneZadanie(
+        `Zgłoszenie dla spółki o numerze KRS ${krs} jest już w toku. `
+        + 'Sprawdź skrzynkę — zaproszenie do portalu poszło na wskazany wcześniej adres.'
+      );
+    }
+
+    // Rejestru akcjonariuszy nie prowadzi sie dla kazdej spolki — art. 300(30)
+    // § 1 KSH dotyczy PROSTEJ spolki akcyjnej. Sprawdzamy to od razu, zamiast
+    // odsylac klienta po tygodniu: numer albo dotyczy P.S.A., albo nie ma po
+    // co isc dalej.
+    // Awaria lacza albo blad API KRS nie moze zamykac drogi klientowi —
+    // zgloszenie wtedy przechodzi, a forme prawna sprawdzi pracownik przy
+    // weryfikacji wniosku. Odmawiamy WYLACZNIE wtedy, gdy KRS odpowiedzial
+    // i powiedzial „takiej spolki nie ma" albo „to nie jest P.S.A.".
+    let zKrs = null;
+    try {
+      zKrs = await pobierzZKrs(krs);
+    } catch {
+      zKrs = null;
+    }
+    if (zKrs && !zKrs.znaleziono && zKrs.powod === 'nie_znaleziono') {
+      throw bledneZadanie(
+        `W Krajowym Rejestrze Sądowym nie ma spółki o numerze ${krs}. Sprawdź numer.`
+      );
+    }
+    if (zKrs && zKrs.znaleziono && zKrs.dopuszczalna === false) {
+      throw bledneZadanie(
+        `${zKrs.komunikat} Rejestr akcjonariuszy prowadzimy wyłącznie dla prostych spółek akcyjnych.`
+      );
+    }
+    const daneKrs = zKrs && zKrs.znaleziono ? zKrs.dane : null;
+    const formaPrawna = daneKrs ? daneKrs.forma_prawna : null;
+    const nazwaZKrs = daneKrs ? daneKrs.nazwa : null;
+
     const dane = {
       email,
       krs,
       telefon: String(cialo.telefon || '').trim() || null,
-      nazwa_spolki: String(cialo.nazwa_spolki || '').trim() || null,
+      nazwa_spolki: String(cialo.nazwa_spolki || '').trim() || nazwaZKrs,
       opis: String(cialo.opis || '').trim() || null,
       status: 'nowe',
       utworzono: czas.terazIso(),
     };
 
     const kolumny = Object.keys(dane);
-    db()
+    const wynikZgloszenia = db()
       .prepare(`INSERT INTO psa_zgloszenia (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
       .run(dane);
 
-    odp.status(201).json({ ok: true });
+    // Zaproszenie idzie OD RAZU. Na tym etapie kancelaria niczego jeszcze nie
+    // sprawdza — sprawdza dopiero wniosek — a kazdy dzien zwloki miedzy
+    // zgloszeniem a dostepem do formularza to dzien, w ktorym klient czeka
+    // bez powodu. Kolejka „Zgloszenia" zostaje jako slad, nie jako bramka.
+    const zaproszenie = await zapros.wyslij(db(), {
+      zgloszenieId: Number(wynikZgloszenia.lastInsertRowid),
+      email,
+      autor: 'Portal — zgłoszenie',
+    });
+
+    odp.status(201).json({
+      ok: true,
+      forma_prawna: formaPrawna,
+      zaproszenie_wyslane: zaproszenie.email_wyslany,
+      // Gdy poczta nie dziala, link wraca TYLKO przy zgloszeniu skladanym
+      // z tego samego urzadzenia — inaczej klient zostaje bez drogi dalej.
+      link_aktywacyjny: zaproszenie.link_aktywacyjny,
+    });
   })
 );
 
@@ -570,11 +691,12 @@ function katalogWnioskuDokumenty(wniosekId) {
  * kancelaria po weryfikacji danych (`server/trasy/wnioski.js`), a klient
  * dostaje o tym wiadomosc.
  *
- * Kompletnosc danych NIE jest tu twardo blokowana (regula ogolna nr 3 -
- * miekkie ostrzezenia przy wprowadzaniu, twarde blokady dopiero przy
- * faktycznej operacji rejestrowej) - poza dwoma minimalnymi warunkami
- * SENSOWNOSCI zlozenia (nazwa i choc jeden akcjonariusz), ktore sa
- * organizacyjne, nie merytoryczno-prawne.
+ * Kompletnosc danych akcjonariuszy JEST tu twardo blokowana. Miekkie
+ * ostrzezenia zostaja przy KAZDYM ZAPISIE (regula ogolna nr 3 - formularz
+ * wypelnia sie etapami), ale zlozenie wniosku to juz faktyczna operacja:
+ * kancelaria nie ma skad wziac PESEL-u ani adresu akcjonariusza, ktorego
+ * nigdy nie zobaczy. Brakow nie da sie wiec "uzupelnic przy weryfikacji" -
+ * wracaja do klienta, zanim wniosek w ogole zostanie zlozony.
  */
 router.post(
   '/wniosek/zloz',
@@ -590,18 +712,20 @@ router.post(
       throw bledneZadanie('Dodaj przynajmniej jednego akcjonariusza (krok „Akcjonariusze”), zanim złożysz wniosek.');
     }
 
+    // Braki wobec art. 300(33) § 1 KSH liczymy na KOMPLETNYM wierszu, przy
+    // skladaniu - nie przy kazdym zapisie. Blokuja zlozenie: brakujace dane
+    // sa w posiadaniu wylacznie klienta.
+    const brakiAkcjonariuszy = akcjonariusze.flatMap((a) => akcjonariuszLogika.ostrzezenia(a));
+    if (brakiAkcjonariuszy.length > 0) {
+      throw bledneZadanie('Dane niepełne — wymagane uzupełnienie.', brakiAkcjonariuszy);
+    }
+
     const teraz = czas.terazIso();
     db().prepare('UPDATE psa_wnioski SET status = ?, zaktualizowano = ? WHERE id = ?').run('zlozony', teraz, wniosek.id);
 
-    // Braki wobec art. 300(33) § 1 KSH liczymy na KOMPLETNYM wierszu, przy
-    // skladaniu - nie przy kazdym zapisie. Nie blokuja zlozenia: kancelaria
-    // i tak weryfikuje wniosek, a czesci danych (np. potwierdzonej zgody
-    // akcjonariusza na e-mail) z natury nie da sie miec wczesniej.
-    const brakiAkcjonariuszy = akcjonariusze.flatMap((a) => akcjonariuszLogika.ostrzezenia(a));
-
     odp.json({
       wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
-      braki_akcjonariuszy: brakiAkcjonariuszy,
+      braki_akcjonariuszy: [],
       dokumenty: wczytajDokumentyWniosku(wniosek.id),
     });
   })
@@ -736,7 +860,7 @@ function przyjmijSkan(zad, odp, dalej) {
  * albo odrzuceniu wniosku komplet jest zamkniety; przed wygenerowaniem
  * dokumentow nie ma czego odsylac.
  */
-const STATUSY_PRZYJMUJACE_PODPISY = new Set(['umowa_wygenerowana', 'umowa_podpisana']);
+const STATUSY_PRZYJMUJACE_PODPISY = new Set(['umowa_wygenerowana']);
 
 /** Wstrzykuje wniosek do `zad` PRZED multerem - potrzebny do wyznaczenia katalogu docelowego. */
 function zaladujWlasnyWniosekDoUploadu(zad, odp, dalej) {
@@ -752,11 +876,17 @@ function zaladujWlasnyWniosekDoUploadu(zad, odp, dalej) {
 /**
  * Zapisuje podpisany skan przy KONKRETNYM wygenerowanym dokumencie.
  *
- * Umowa jest jednym z tych dokumentow, ale niesie dodatkowo STAN calego
- * wniosku (`umowa_wygenerowana` -> `umowa_podpisana`) - to ona jest umowa
- * o prowadzenie rejestru, bez ktorej nie ma czego przyjmowac. Dlatego przy
- * niej, i tylko przy niej, aktualizujemy tez kolumny `umowa_podpisana_*`
- * i status: reszta trasy portalu i kancelarii czyta stan wlasnie stamtad.
+ * Samo wgranie NIE przenosi statusu wniosku i NIE stawia go w kolejce
+ * kancelarii. Klient zalacza po kolei osiem skanow, sprawdza je i dopiero
+ * wtedy odsyla komplet (`POST /wniosek/odeslij`). Dotad wgranie umowy —
+ * czesto pierwszego z osmiu plikow — samo przestawialo status na
+ * `umowa_podpisana`, czyli wrzucalo do kancelarii wniosek, do ktorego
+ * brakowalo jeszcze siedmiu podpisow, i klient nie mial jak tego cofnac
+ * inaczej niz kasujac skan.
+ *
+ * Umowa niesie dodatkowo kolumny `umowa_podpisana_*` — to ona jest umowa
+ * o prowadzenie rejestru, bez ktorej nie ma czego przyjmowac — wiec przy
+ * niej, i tylko przy niej, wypelniamy takze je.
  */
 function zapiszPodpisanySkan(wniosek, dokument, plik) {
   const teraz = czas.terazIso();
@@ -782,13 +912,55 @@ function zapiszPodpisanySkan(wniosek, dokument, plik) {
     db()
       .prepare(
         `UPDATE psa_wnioski
-            SET status = 'umowa_podpisana', umowa_podpisana_sciezka = ?, umowa_podpisana_nazwa_pliku = ?,
+            SET umowa_podpisana_sciezka = ?, umowa_podpisana_nazwa_pliku = ?,
                 umowa_podpisana_mime = ?, umowa_podpisana_wgrano = ?, zaktualizowano = ?
           WHERE id = ?`
       )
       .run(sciezka, plik.originalname, plik.mimetype, teraz, teraz, wniosek.id);
   }
 }
+
+/**
+ * Odeslanie KOMPLETU podpisanych dokumentow — jeden ruch klienta, ktory
+ * stawia wniosek w kolejce kancelarii (`status = 'umowa_podpisana'`).
+ * Dopiero tutaj, nie przy wgrywaniu kolejnych plikow.
+ */
+router.post(
+  '/wniosek/odeslij',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
+    if (wniosek.status !== 'umowa_wygenerowana') {
+      throw bledneZadanie(`Wniosek ma status „${wniosek.status}” — nie ma w tym momencie czego odsyłać.`);
+    }
+
+    const dokumenty = pakietWniosku.lista(wniosek.id, { tylkoUdostepnione: true });
+    if (dokumenty.length === 0) {
+      throw bledneZadanie('Kancelaria nie udostępniła jeszcze dokumentów do podpisu.');
+    }
+    const bezSkanu = dokumenty.filter((d) => !d.podpis_nazwa_pliku);
+    if (bezSkanu.length > 0) {
+      throw bledneZadanie(
+        'Komplet jest niepełny — brakuje podpisanych skanów.',
+        bezSkanu.map((d) => d.nazwa_pliku)
+      );
+    }
+    if (!wniosek.umowa_podpisana_sciezka) {
+      throw bledneZadanie('Brakuje podpisanej umowy o prowadzenie rejestru.');
+    }
+
+    const teraz = czas.terazIso();
+    db()
+      .prepare("UPDATE psa_wnioski SET status = 'umowa_podpisana', zaktualizowano = ? WHERE id = ?")
+      .run(teraz, wniosek.id);
+
+    odp.json({
+      wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
+      dokumenty: wczytajDokumentyWniosku(wniosek.id),
+    });
+  })
+);
 
 /**
  * Skan dokumentu tozsamosci REPREZENTANTA — osoby, ktora podpisze umowe.
@@ -920,9 +1092,9 @@ router.get(
 );
 
 /**
- * Zdjecie odeslanego skanu - klient zorientowal sie, ze wgral nie ten plik
- * albo nieczytelny. Przy umowie cofa tez status: bez podpisanej umowy
- * wniosek nie jest gotowy do przyjecia.
+ * Zdjecie zalaczonego skanu - klient zorientowal sie, ze wgral nie ten plik
+ * albo nieczytelny. Mozliwe TYLKO przed odeslaniem kompletu; przy umowie
+ * czysci tez kolumny `umowa_podpisana_*`.
  */
 router.delete(
   '/wniosek/dokumenty/:id/podpis',
@@ -954,9 +1126,8 @@ router.delete(
       db()
         .prepare(
           `UPDATE psa_wnioski
-              SET status = 'umowa_wygenerowana', umowa_podpisana_sciezka = NULL,
-                  umowa_podpisana_nazwa_pliku = NULL, umowa_podpisana_mime = NULL,
-                  umowa_podpisana_wgrano = NULL, zaktualizowano = ?
+              SET umowa_podpisana_sciezka = NULL, umowa_podpisana_nazwa_pliku = NULL,
+                  umowa_podpisana_mime = NULL, umowa_podpisana_wgrano = NULL, zaktualizowano = ?
             WHERE id = ?`
         )
         .run(czas.terazIso(), wniosek.id);
@@ -1021,33 +1192,39 @@ router.get(
     const konto = zad.konto;
 
     if (konto.rola === 'spolka') {
-      const spolka = rejestr.wczytajSpolke(db(), konto.spolka_id);
-      if (!spolka) return odp.json({ rola: 'spolka', spolki: [] });
+      // Trzy liczby przy kazdej spolce, po ktore klient i tak wchodzil do
+      // podgladu rejestru: ilu ma akcjonariuszy, ile akcji jest w obrocie
+      // i kiedy ostatnio cos sie zmienilo.
+      const stanSpolki = db().prepare(
+        `SELECT COUNT(DISTINCT osoba_id) AS akcjonariuszy, COALESCE(SUM(ilosc), 0) AS akcji
+           FROM psa_stan_akcji
+          WHERE spolka_id = ? AND data_do IS NULL AND kategoria = 'akcjonariusz'`
+      );
+      const ostatnieZdarzenie = db().prepare(
+        'SELECT MAX(data_zdarzenia) AS data FROM psa_zdarzenia WHERE spolka_id = ?'
+      );
 
-      // Trzy liczby, po ktore klient i tak wchodzil do podgladu rejestru:
-      // ilu ma akcjonariuszy, ile akcji jest w obrocie i kiedy ostatnio cos
-      // sie zmienilo. Bez nich ekran startowy pokazywal sama nazwe spolki.
-      const stan = db()
-        .prepare(
-          `SELECT COUNT(DISTINCT osoba_id) AS akcjonariuszy, COALESCE(SUM(ilosc), 0) AS akcji
-             FROM psa_stan_akcji
-            WHERE spolka_id = ? AND data_do IS NULL AND kategoria = 'akcjonariusz'`
-        )
-        .get(spolka.id);
-      const ostatnie = db()
-        .prepare('SELECT MAX(data_zdarzenia) AS data FROM psa_zdarzenia WHERE spolka_id = ?')
-        .get(spolka.id);
-
-      return odp.json({
-        rola: 'spolka',
-        spolki: [{
+      const spolki = spolkiKonta(konto)
+        .map((id) => rejestr.wczytajSpolke(db(), id))
+        .filter(Boolean)
+        .map((spolka) => ({
           ...spolka,
           uwagi: undefined,
-          akcjonariuszy: stan.akcjonariuszy,
-          razem_akcji: stan.akcji,
-          ostatnie_zdarzenie: ostatnie.data || null,
-        }],
-      });
+          akcjonariuszy: stanSpolki.get(spolka.id).akcjonariuszy,
+          razem_akcji: stanSpolki.get(spolka.id).akcji,
+          ostatnie_zdarzenie: ostatnieZdarzenie.get(spolka.id).data || null,
+        }));
+
+      // Konto moze prowadzic juz jedna spolke i miec w toku wniosek o druga.
+      const wToku = db()
+        .prepare(
+          `SELECT id, status, nazwa, krs, zaktualizowano FROM psa_wnioski
+            WHERE konto_id = ? AND status NOT IN ('przyjety','odrzucony')
+            ORDER BY id DESC LIMIT 1`
+        )
+        .get(konto.id);
+
+      return odp.json({ rola: 'spolka', spolki, wniosek: wToku || null });
     }
 
     // Wnioskodawca nie ma jeszcze ani spolki, ani akcji - jego "Moje spolki"
@@ -1129,8 +1306,11 @@ router.get(
   '/zadania',
   asy((zad, odp) => {
     const konto = zad.konto;
-    const warunek = konto.rola === 'spolka' ? 'sp.spolka_id = ?' : 'sp.zadajacy_osoba_id = ?';
-    const parametr = konto.rola === 'spolka' ? konto.spolka_id : konto.osoba_id;
+    const spolki = konto.rola === 'spolka' ? spolkiKonta(konto) : [];
+    const warunek = konto.rola === 'spolka'
+      ? `sp.spolka_id IN (${spolki.map(() => '?').join(',') || 'NULL'})`
+      : 'sp.zadajacy_osoba_id = ?';
+    const parametry = konto.rola === 'spolka' ? spolki : [konto.osoba_id];
 
     const wiersze = db()
       .prepare(
@@ -1140,10 +1320,31 @@ router.get(
           WHERE sp.zrodlo = 'portal' AND ${warunek}
           ORDER BY sp.data_wplywu DESC`
       )
-      .all(parametr);
+      .all(...parametry);
 
     const dzis = czas.dzisIso();
-    odp.json({ sprawy: wiersze.map((s) => ({ ...widokSprawyPortal(s, dzis), spolka_nazwa: s.spolka_nazwa })) });
+    const oplatyWgSprawy = new Map(
+      db()
+        .prepare(
+          `SELECT sprawa_id, id, status, kwota_grosze FROM psa_oplaty
+            WHERE sprawa_id IS NOT NULL AND typ = 'wpis' AND status != 'anulowana'`
+        )
+        .all()
+        .map((o) => [o.sprawa_id, o])
+    );
+    odp.json({
+      sprawy: wiersze.map((s) => {
+        const oplata = oplatyWgSprawy.get(s.id) || null;
+        return {
+          ...widokSprawyPortal(s, dzis),
+          spolka_nazwa: s.spolka_nazwa,
+          oczekuje_na_oplate: s.oczekuje_na_oplate === 1,
+          oplata_id: oplata ? oplata.id : null,
+          oplata_status: oplata ? oplata.status : null,
+          oplata_grosze: oplata ? oplata.kwota_grosze : null,
+        };
+      }),
+    });
   })
 );
 
@@ -1200,13 +1401,50 @@ router.post(
       czas.dzisIso()
     ).termin_do;
 
+    // ── Zadanie zlozone przez portal jest skuteczne z chwila OPLACENIA ──
+    //
+    // Art. 300(34) § 1 KSH liczy tydzien od OTRZYMANIA zadania. Umowa
+    // o prowadzenie rejestru stanowi, ze zadanie skladane przez portal
+    // dochodzi do skutku z chwila zaplaty — do tego czasu sprawa nie jest
+    // widoczna w kolejce kancelarii i ZADEN termin ustawowy nie biegnie.
+    //
+    // To NIE jest wstrzymywanie czynnosci ustawowej za dlugi: zadania
+    // zlozonego jeszcze nie ma. Klient, ktory chce zlozyc je natychmiast,
+    // ma otwarta droge papierowa i mailowa — wtedy sprawa rusza od razu,
+    // a oplate rozlicza faktura (`server/trasy/sprawy.js`).
+    //
+    // WYJATEK: gdy platnosci online sa wylaczone, bramka nie obowiazuje.
+    // Inaczej awaria operatora albo brak konfiguracji zamienialaby portal
+    // w czarna dziure — zadanie zapisane, nikomu niepokazane, a klient
+    // przekonany, ze zlozyl. Wtedy zadanie jest skuteczne od razu, a oplate
+    // rozlicza faktura; to ta sama sciezka, co przy zadaniu papierowym.
+    dane.oczekuje_na_oplate = tpay.skonfigurowany() ? 1 : 0;
+
     const kolumny = Object.keys(dane);
     const wynik = db()
       .prepare(`INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
       .run(dane);
+    const sprawaId = Number(wynik.lastInsertRowid);
 
-    const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(wynik.lastInsertRowid);
-    odp.status(201).json({ sprawa: widokSprawyPortal(sprawa) });
+    // Oplata za wpis powstaje RAZEM ze sprawa i jest z nia zwiazana — to po
+    // niej `server/platnosci.js` wie, ktora sprawe uruchomic po zaplacie.
+    const oplata = typ.odplatne === false
+      ? null
+      : oplaty.naliczOplateWpisu(db(), {
+        spolkaId,
+        sprawaId,
+        typZdarzenia: typZdarzenia,
+        autor: `Portal — ${konto.email}`,
+      });
+
+    // Czynnosc wolna od oplaty (art. 300(34) § 2 KSH — wpis z urzedu) nie ma
+    // na co czekac: zadanie jest skuteczne od razu.
+    if (!oplata) {
+      db().prepare('UPDATE psa_sprawy SET oczekuje_na_oplate = 0 WHERE id = ?').run(sprawaId);
+    }
+
+    const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
+    odp.status(201).json({ sprawa: widokSprawyPortal(sprawa), oplata_id: oplata ? oplata.id : null });
   })
 );
 
@@ -1259,7 +1497,11 @@ function wczytajSpraweDlaKonta(konto, sprawaId) {
   if (!sprawa || sprawa.zrodlo !== 'portal') return null;
   const wlasciciel =
     konto.rola === 'spolka'
-      ? Number(sprawa.spolka_id) === Number(konto.spolka_id)
+      // Konto moze prowadzic WIECEJ NIZ JEDNA spolke (migracja 41).
+      // Porownanie z `konto.spolka_id` bralo pod uwage tylko pierwsza z nich,
+      // wiec klient z dwiema spolkami nie mogl dolaczyc dokumentu do sprawy
+      // tej drugiej — dostawal „nie odnaleziono sprawy" wlasnej spolki.
+      ? spolkiKonta(konto).includes(Number(sprawa.spolka_id))
       : Number(sprawa.zadajacy_osoba_id) === Number(konto.osoba_id);
   return wlasciciel ? sprawa : null;
 }
@@ -1317,16 +1559,236 @@ router.post(
 );
 
 // ─────────────────────────────────────────────────────────────
-// Informacja z rejestru (art. 300(35) KSH)
+// Platnosci klienta
 // ─────────────────────────────────────────────────────────────
 
-router.post(
-  '/informacja',
+const OPISY_TYPU_OPLATY = {
+  prowadzenie: 'Prowadzenie rejestru akcjonariuszy',
+  wpis: 'Wpis w rejestrze akcjonariuszy',
+  informacja: 'Informacja z rejestru akcjonariuszy',
+};
+
+function widokOplatyKlienta(w) {
+  return {
+    id: w.id,
+    spolka_id: w.spolka_id,
+    spolka_nazwa: w.spolka_nazwa,
+    typ: w.typ,
+    opis: OPISY_TYPU_OPLATY[w.typ] || 'Opłata',
+    okres: w.okres,
+    okres_od: w.okres_od,
+    okres_do: w.okres_do,
+    kwota_grosze: w.kwota_grosze,
+    status: w.status,
+    data_naliczenia: w.data_naliczenia,
+    oplacona_kiedy: w.oplacona_kiedy,
+    notatka: w.notatka,
+    sprawa_id: w.sprawa_id,
+    // Informacja oplacona, ale jeszcze niepobrana — klientowi nalezy sie
+    // dokument, wiec musi to widziec.
+    do_pobrania: w.typ === 'informacja' && w.status === 'oplacona' && w.wydany_dokument_id == null,
+  };
+}
+
+/**
+ * Stawki, ktore klient zobaczy PRZED zamowieniem czynnosci. Cena musi byc
+ * znana przed kliknieciem, nie po — inaczej "Zamow" jest zgoda w ciemno.
+ */
+router.get(
+  '/cennik',
   asy((zad, odp) => {
+    odp.json({
+      stawki: {
+        prowadzenie: ustawienia.stawkaGrosze(db(), 'prowadzenie'),
+        wpis: ustawienia.stawkaGrosze(db(), 'wpis'),
+        informacja: ustawienia.stawkaGrosze(db(), 'informacja'),
+      },
+      platnosci_wlaczone: tpay.skonfigurowany(),
+    });
+  })
+);
+
+/** Wszystkie oplaty spolek tego konta — zaplacone i czekajace. */
+router.get(
+  '/oplaty',
+  asy((zad, odp) => {
+    const konto = zad.konto;
+    const spolki = spolkiRozliczen(konto);
+    if (spolki.length === 0) {
+      return odp.json({ oplaty: [], do_zaplaty_grosze: 0, platnosci_wlaczone: tpay.skonfigurowany() });
+    }
+    const warunek = warunekOplatKonta(konto, spolki);
+
+    const wiersze = db()
+      .prepare(
+        `SELECT o.*, s.nazwa AS spolka_nazwa
+           FROM psa_oplaty o
+           JOIN psa_spolki s ON s.id = o.spolka_id
+          WHERE ${warunek.sql} AND o.status != 'anulowana'
+          ORDER BY (o.status = 'oplacona'), o.data_naliczenia DESC, o.id DESC`
+      )
+      .all(...warunek.parametry);
+
+    const doZaplaty = wiersze
+      .filter((w) => w.status !== 'oplacona')
+      .reduce((suma, w) => suma + w.kwota_grosze, 0);
+
+    odp.json({
+      oplaty: wiersze.map(widokOplatyKlienta),
+      do_zaplaty_grosze: doZaplaty,
+      platnosci_wlaczone: tpay.skonfigurowany(),
+    });
+  })
+);
+
+/** Wczytuje oplate, ktora TO KONTO wolno zobaczyc i oplacic — inaczej null. */
+function wczytajOplateKonta(konto, oplataId) {
+  const spolki = spolkiRozliczen(konto);
+  if (spolki.length === 0) return null;
+  const warunek = warunekOplatKonta(konto, spolki);
+  return db()
+    .prepare(`SELECT o.* FROM psa_oplaty o WHERE o.id = ? AND ${warunek.sql}`)
+    .get(oplataId, ...warunek.parametry) || null;
+}
+
+/**
+ * Link do zaplaty. Kwote bierze Z BAZY, nigdy z zadania — inaczej klient
+ * placilby tyle, ile sam wpisal.
+ */
+router.post(
+  '/oplaty/:id/zaplac',
+  asy(async (zad, odp) => {
+    const oplata = wczytajOplateKonta(zad.konto, Number(zad.params.id));
+    if (!oplata) throw nieZnaleziono('Nie odnaleziono opłaty.');
+
+    let wynik;
+    try {
+      wynik = await platnosci.przygotujZaplate(db(), {
+        oplataId: oplata.id,
+        urlPowiadomienia: adresPowiadomienia(),
+        urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/platnosci`,
+      });
+    } catch (e) {
+      throw bledneZadanie(e.message);
+    }
+
+    odp.json({ link: wynik.platnosc.link, platnosc_id: wynik.platnosc.id, nowa: wynik.nowa });
+  })
+);
+
+/**
+ * Adres, pod ktory operator wysle powiadomienie. Bierzemy go z KONFIGURACJI,
+ * a nie z naglowka Host zadania: naglowek pochodzi od klienta, wiec dalby
+ * sie podmienic na cudzy serwer, ktory przejalby powiadomienia o platnosciach.
+ */
+function adresPowiadomienia() {
+  const podstawa = String(konfiguracja.URL_PORTALU || '').split('/portal')[0].replace(/\/$/, '');
+  return `${podstawa}/api/psa/platnosci/tpay/itn`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Informacja z rejestru (art. 300(35) KSH) — ODPLATNA, po zaplacie
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Zamowienie informacji: nalicza oplate i oddaje link do zaplaty.
+ *
+ * Dokument NIE powstaje w tym momencie. Informacja jest odplatna (§ 15b
+ * rozporzadzenia), a rejestr nie ma powodu wydawac jej "na kredyt" — inaczej
+ * niz wpis, ktory jest ustawowym obowiazkiem z terminem. Nieoplacona
+ * informacja po prostu nie istnieje; nikomu to nie szkodzi.
+ */
+router.post(
+  '/informacja/zamow',
+  asy(async (zad, odp) => {
     // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
     const konto = zad.konto;
     const spolkaId = Number((zad.body || {}).spolka_id);
+    const spolka = rejestr.wczytajSpolke(db(), spolkaId);
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
 
+    // Nierozliczone zamowienie tej samej osoby na te sama spolke ZOSTAJE —
+    // nie zakladamy drugiego. Bez tego dwuklik w „Zamow informacje" tworzyl
+    // dwa dlugi po 50 zl za jedna chec obejrzenia rejestru, a klient nie
+    // mial jak tego cofnac.
+    const zamawiajacy = konto.rola === 'spolka' ? null : konto.osoba_id;
+    const wToku = db()
+      .prepare(
+        `SELECT * FROM psa_oplaty
+          WHERE spolka_id = ? AND typ = 'informacja' AND status != 'anulowana'
+            AND wydany_dokument_id IS NULL
+            AND zamawiajacy_osoba_id IS ?
+          ORDER BY (status = 'oplacona') DESC, id LIMIT 1`
+      )
+      .get(spolkaId, zamawiajacy);
+
+    if (wToku && wToku.status === 'oplacona') {
+      return odp.json({ oplata_id: wToku.id, oplacona: true, link: null });
+    }
+    if (wToku) {
+      // Zamowienie juz jest, tylko jeszcze nieoplacone — oddajemy link do NIEGO.
+      if (!tpay.skonfigurowany()) {
+        return odp.json({ oplata_id: wToku.id, oplacona: false, link: null, platnosci_wlaczone: false });
+      }
+      try {
+        const wznowiona = await platnosci.przygotujZaplate(db(), {
+          oplataId: wToku.id,
+          urlPowiadomienia: adresPowiadomienia(),
+          urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/platnosci`,
+        });
+        return odp.json({ oplata_id: wToku.id, oplacona: false, link: wznowiona.platnosc.link, platnosci_wlaczone: true });
+      } catch (e) {
+        return odp.json({ oplata_id: wToku.id, oplacona: false, link: null, blad_platnosci: e.message });
+      }
+    }
+
+    const oplata = oplaty.naliczOplateInformacji(db(), {
+      spolkaId,
+      odbiorcaOsobaId: konto.osoba_id,
+      // Akcjonariusz placi za SWOJA informacje; spolka za swoja.
+      zamawiajacyOsobaId: konto.rola === 'spolka' ? null : konto.osoba_id,
+      autor: `Portal — ${konto.email}`,
+      notatka: 'Informacja z rejestru — zamówiona w portalu',
+    });
+
+    if (!tpay.skonfigurowany()) {
+      // Platnosci online wylaczone — oplata zostaje naliczona i rozliczy sie
+      // ja faktura. Awaria operatora nie moze zablokowac dostepu do rejestru.
+      return odp.json({ oplata_id: oplata.id, oplacona: false, link: null, platnosci_wlaczone: false });
+    }
+
+    let wynik;
+    try {
+      wynik = await platnosci.przygotujZaplate(db(), {
+        oplataId: oplata.id,
+        urlPowiadomienia: adresPowiadomienia(),
+        urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/platnosci`,
+      });
+    } catch (e) {
+      return odp.json({ oplata_id: oplata.id, oplacona: false, link: null, blad_platnosci: e.message });
+    }
+    odp.json({ oplata_id: oplata.id, oplacona: false, link: wynik.platnosc.link, platnosci_wlaczone: true });
+  })
+);
+
+/**
+ * Pobranie OPLACONEJ informacji. Dopiero tutaj powstaje dokument — i tylko
+ * raz z jednej oplaty (`wydany_dokument_id`).
+ */
+router.post(
+  '/informacja/:oplataId/wydaj',
+  asy((zad, odp) => {
+    const konto = zad.konto;
+    const oplata = wczytajOplateKonta(konto, Number(zad.params.oplataId));
+    if (!oplata || oplata.typ !== 'informacja') throw nieZnaleziono('Nie odnaleziono zamówienia.');
+    if (oplata.status !== 'oplacona') {
+      throw bledneZadanie('Informacja z rejestru jest odpłatna — opłać zamówienie, żeby ją pobrać.');
+    }
+    if (oplata.wydany_dokument_id != null) {
+      return odp.json({ dokument_id: oplata.wydany_dokument_id, ponownie: true });
+    }
+
+    const spolkaId = oplata.spolka_id;
     const data = (zad.body || {}).data ? String((zad.body || {}).data) : czas.dzisIso();
     if (!czas.poprawnaData(data)) throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD.');
 
@@ -1346,12 +1808,24 @@ router.post(
     });
 
     const autorWpisu = `Portal — ${konto.email}`;
+    // `odbiorca_osoba_id` NULL oznacza dokument wydany SPOLCE (pelne dane
+    // wszystkich akcjonariuszy); wypelnione — dokument wydany konkretnej
+    // osobie, w jej zakresie. Po tym polu, a nie po samym dostepie do
+    // spolki, rozstrzyga sie potem, komu wolno go otworzyc.
     const wynikZapisu = db()
       .prepare(
         `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, odbiorca_osoba_id, kanal, tresc_html, wyslano, autor, utworzono)
          VALUES (?, 'informacja_z_rejestru', ?, 'portal', ?, ?, ?, ?)`
       )
-      .run(spolkaId, konto.osoba_id, trescHtml, czas.terazIso(), autorWpisu, czas.terazIso());
+      .run(
+        spolkaId,
+        konto.rola === 'spolka' ? null : konto.osoba_id,
+        trescHtml, czas.terazIso(), autorWpisu, czas.terazIso()
+      );
+    const dokumentId = Number(wynikZapisu.lastInsertRowid);
+
+    db().prepare('UPDATE psa_oplaty SET wydany_dokument_id = ?, zaktualizowano = ? WHERE id = ?')
+      .run(dokumentId, czas.terazIso(), oplata.id);
 
     // Wglad w dane calego akcjonariatu spolki - blok D4, zakres WASKI.
     dziennikDostepu.zapisz(db(), {
@@ -1362,17 +1836,7 @@ router.post(
       opis: `stan na ${data}`,
     });
 
-    // Odpłatność za informację z rejestru (sekcja 1 i 8) - samoobsługowe
-    // pobranie przez portal jest tak samo odpłatną czynnością jak żądanie
-    // papierowe/mailowe obsłużone przez pracownika.
-    const oplata = oplaty.naliczOplateInformacji(db(), {
-      spolkaId,
-      odbiorcaOsobaId: konto.osoba_id,
-      autor: autorWpisu,
-      notatka: `Informacja z rejestru — portal, ${data}`,
-    });
-
-    odp.json({ dokument_id: Number(wynikZapisu.lastInsertRowid), oplata });
+    odp.json({ dokument_id: dokumentId, ponownie: false });
   })
 );
 
@@ -1393,16 +1857,29 @@ router.get(
     const konto = zad.konto;
     const dokument = db()
       .prepare(
-        `SELECT id, spolka_id, tresc_html FROM psa_wydane_dokumenty
+        `SELECT id, spolka_id, odbiorca_osoba_id, tresc_html FROM psa_wydane_dokumenty
           WHERE id = ? AND typ = 'informacja_z_rejestru'`
       )
       .get(Number(zad.params.id));
 
+    // Sam dostep do spolki NIE WYSTARCZA. Informacja wydana SPOLCE niesie
+    // pelne dane wszystkich akcjonariuszy (art. 300(35) § 1 KSH), a wydana
+    // akcjonariuszowi — te same dane w jego, wezszym zakresie (§ 1(1)).
+    // Bramka „czy masz dostep do tej spolki" przepuszczala akcjonariusza do
+    // dokumentu spolki, czyli do adresow pozostalych akcjonariuszy, ktore
+    // w jego wlasnej informacji sa zaslonione. Dokument otwiera wiec TEN,
+    // KOMU GO WYDANO.
+    const wydanySpolce = dokument && dokument.odbiorca_osoba_id == null;
+    const dlaMnie = dokument && konto.osoba_id != null
+      && Number(dokument.odbiorca_osoba_id) === Number(konto.osoba_id);
+    const wolno = Boolean(dokument)
+      && maDostepDoSpolki(konto, dokument.spolka_id)
+      && (konto.rola === 'spolka' ? true : dlaMnie)
+      && (konto.rola === 'spolka' || !wydanySpolce);
+
     // Cudzy dokument to dla portalu dokument NIEISTNIEJACY: 403 potwierdzalby,
     // ze taki numer jest zajety.
-    if (!dokument || !maDostepDoSpolki(konto, dokument.spolka_id)) {
-      throw nieZnaleziono('Nie odnaleziono dokumentu.');
-    }
+    if (!wolno) throw nieZnaleziono('Nie odnaleziono dokumentu.');
 
     odp.type('text/html').send(dokument.tresc_html);
   })

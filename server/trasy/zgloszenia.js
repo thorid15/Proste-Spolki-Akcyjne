@@ -10,13 +10,11 @@
  * spolki - to wylacznie lead do oceny.
  */
 
-const crypto = require('node:crypto');
 const express = require('express');
 
 const { db } = require('../baza');
-const poczta = require('../poczta');
-const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
+const zapros = require('../logika/zaproszenia');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 
@@ -24,36 +22,6 @@ const router = express.Router();
 
 // Link aktywacyjny (etap 3B) - wazny tydzien, jak typowe zaproszenia SaaS;
 // po wygasnieciu kancelaria zaprasza ponownie (nowy token nadpisuje stary).
-const TOKEN_WAZNOSC_MS = 7 * 24 * 60 * 60 * 1000;
-
-/**
- * Tresc maila zaproszenia - wydzielona z handlera, zeby dalo sie ja
- * przetestowac bez zywego SMTP (`poczta.wyslij` i tak degraduje sie
- * miekko bez konfiguracji, ale sama tresc ma byc poprawna niezaleznie od
- * tego). Opisuje caly przebieg wniosku (etapy 3B-3E), nie tylko sam link -
- * klient ma wiedziec, co go czeka, zanim klinie.
- */
-function trescZaproszenia({ link, kancelariaNazwa }) {
-  return `
-    <p>Dzień dobry,</p>
-    <p>W odpowiedzi na zgłoszenie zainteresowania prowadzeniem rejestru akcjonariuszy
-       zapraszamy do złożenia wniosku przez portal klienta ${kancelariaNazwa}.</p>
-    <p><a href="${link}">${link}</a></p>
-    <p>Link jest ważny przez 7 dni. Po jego otwarciu:</p>
-    <ol>
-      <li>ustawisz hasło do portalu i od razu zalogujesz się na konto,</li>
-      <li>zapoznasz się z informacją o przetwarzaniu danych osobowych,</li>
-      <li>wypełnisz dane spółki (można pobrać automatycznie z KRS po numerze),
-          dane reprezentanta oraz dane akcjonariuszy,</li>
-      <li>system przygotuje projekt umowy o prowadzenie rejestru na podstawie
-          wpisanych danych,</li>
-      <li>podpisaną umowę odeślesz przez portal — od tego momentu wniosek
-          czeka na weryfikację kancelarii i otwarcie rejestru.</li>
-    </ol>
-    <p>W razie pytań prosimy o kontakt z kancelarią.</p>
-  `;
-}
-
 router.get(
   '/',
   asy((zad, odp) => {
@@ -109,53 +77,34 @@ router.post(
     const id = Number(zad.params.id);
     const zgloszenie = db().prepare('SELECT * FROM psa_zgloszenia WHERE id = ?').get(id);
     if (!zgloszenie) throw nieZnaleziono('Nie odnaleziono zgłoszenia.');
-    if (zgloszenie.status !== 'nowe') {
-      throw bledneZadanie(`Zgłoszenie ma już status „${zgloszenie.status}” — nie można go ponownie zaprosić.`);
+
+    // Zaproszenie idzie samo przy zgloszeniu (server/logika/zaproszenia.js),
+    // wiec ta trasa sluzy dzis do WYSLANIA PONOWNIE — np. gdy klientowi
+    // przepadl e-mail albo token wygasl. Dlatego nie odmawia przy statusie
+    // „zaproszono".
+    if (zgloszenie.status === 'odrzucone') {
+      throw bledneZadanie('Zgłoszenie zostało odrzucone — nie wysyłamy do niego zaproszenia.');
     }
 
-    const istniejace = db().prepare('SELECT id FROM psa_konta WHERE lower(email) = ?').get(zgloszenie.email.toLowerCase());
-    if (istniejace) {
-      throw bledneZadanie('Konto z tym adresem e-mail już istnieje w portalu — zaproszenie jest zbędne.');
-    }
-
-    const token = crypto.randomBytes(32).toString('base64url');
-    const tokenWygasa = new Date(Date.now() + TOKEN_WAZNOSC_MS).toISOString();
-
-    const wynikKonta = db()
-      .prepare(
-        `INSERT INTO psa_konta (email, rola, aktywne, token_aktywacji, token_wygasa, utworzono)
-         VALUES (?, 'wnioskodawca', 0, ?, ?, ?)`
-      )
-      .run(zgloszenie.email, token, tokenWygasa, czas.terazIso());
-
-    const link = `${konfiguracja.URL_PORTALU}#/aktywuj/${token}`;
-    const proba = await poczta.wyslij({
-      do: zgloszenie.email,
-      temat: `Zaproszenie do portalu — ${ustawienia.kancelaria(db()).nazwa}`,
-      html: trescZaproszenia({ link, kancelariaNazwa: ustawienia.kancelaria(db()).nazwa }),
+    // Blokada po ADRESIE E-MAIL zniknela: jeden klient pod jednym adresem
+    // miewa kilka spolek i drugie zgloszenie jest normalna sytuacja.
+    // Duplikaty odsiewa numer KRS przy skladaniu zgloszenia.
+    const wynik = await zapros.wyslij(db(), {
+      zgloszenieId: id,
+      email: zgloszenie.email,
+      autor: autor(zad),
     });
-
-    db()
-      .prepare(
-        `UPDATE psa_zgloszenia SET status = 'zaproszono', obsluzone_przez = ?, obsluzone_kiedy = ? WHERE id = ?`
-      )
-      .run(autor(zad), czas.terazIso(), id);
 
     odp.json({
       ok: true,
-      konto_id: Number(wynikKonta.lastInsertRowid),
-      email_wyslany: proba.wyslano,
-      powod: proba.powod,
-      // Gdy wysylka sie nie powiodla (brak SMTP, blad serwera poczty), konto
-      // JUZ istnieje, a token siedzi w bazie - bez tego pola zaproszenie
-      // przepadaloby bezpowrotnie. Link wraca WYLACZNIE w tej sytuacji
-      // i wylacznie do zalogowanego pracownika kancelarii, ktory sam go
-      // przed chwila wystawil; kancelaria przekazuje go wtedy klientowi
-      // innym kanalem. Przy udanej wysylce link nie opuszcza serwera.
-      link_aktywacyjny: proba.wyslano ? undefined : link,
+      konto_id: wynik.konto_id,
+      nowe_konto: wynik.nowe_konto,
+      email_wyslany: wynik.email_wyslany,
+      powod: wynik.powod,
+      link_aktywacyjny: wynik.link_aktywacyjny,
     });
   })
 );
 
 module.exports = router;
-module.exports.trescZaproszenia = trescZaproszenia;
+module.exports.trescZaproszenia = zapros.trescZaproszenia;

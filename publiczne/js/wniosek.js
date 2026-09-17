@@ -233,8 +233,8 @@ function identyfikatorAkcjonariusza(a) {
 
 /**
  * Braki wobec art. 300(33) § 1 KSH — lustro `server/logika/akcjonariusz.js`.
- * Serwer i tak sprawdza to u siebie; tutaj chodzi o to, żeby klient zobaczył
- * braki PRZED kliknięciem „Złóż wniosek”, a nie dopiero w odpowiedzi.
+ * Serwer BLOKUJE nimi złożenie wniosku; tutaj chodzi o to, żeby klient
+ * zobaczył je PRZED kliknięciem „Złóż wniosek”, a nie dopiero w odpowiedzi.
  */
 function brakiUstawoweAkcjonariusza(a) {
   const braki = [];
@@ -680,7 +680,10 @@ function EkranWniosku() {
   const [bladAkcjonariuszy, ustawBladAkcjonariuszy] = useState(null);
   const [skladanie, ustawSkladanie] = useState(false);
   const [bladSkladania, ustawBladSkladania] = useState(null);
-  const [ostrzezeniaZlozenia, ustawOstrzezeniaZlozenia] = useState([]);
+  // Braki odesłane przez serwer przy odmowie złożenia — normalnie pusta:
+  // przycisk „Złóż wniosek” jest wtedy nieaktywny. Zostaje na wypadek
+  // rozjazdu reguł po obu stronach.
+  const [brakiZSerwera, ustawBrakiZSerwera] = useState([]);
   const [dokumenty, ustawDokumenty] = useState([]);
 
   useEffect(() => {
@@ -716,6 +719,11 @@ function EkranWniosku() {
     && ['umowa_wygenerowana', 'umowa_podpisana'].includes(dane.status)
     && dokumenty.length > 0;
   const podpisanych = dokumenty.filter((d) => d.podpis_nazwa_pliku).length;
+  // Skany zalacza sie po kolei i wymienia do woli; do kancelarii ida dopiero
+  // po kliknieciu „Odeslij komplet". Dotad wgranie samej umowy — zwykle
+  // pierwszego z osmiu plikow — stawialo wniosek w kolejce kancelarii.
+  const kompletZalaczony = dokumenty.length > 0 && podpisanych === dokumenty.length;
+  const kompletOdeslany = Boolean(dane) && dane.status === 'umowa_podpisana';
 
   // Dane spółki zapisują się same. Bez tego dawało się wypełnić formularz,
   // zobaczyć komplet na ekranie i dostać przy składaniu „uzupełnij nazwę
@@ -751,10 +759,27 @@ function EkranWniosku() {
     ustawOtwartyAkcjonariusz(null);
   }
 
+  async function odeslijKomplet() {
+    ustawSkladanie(true);
+    ustawBladSkladania(null);
+    ustawBrakiZSerwera([]);
+    try {
+      const wynik = await API.post('/api/psa/portal/wniosek/odeslij', {});
+      ustawDane(wynik.wniosek);
+      ustawDokumenty(wynik.dokumenty || []);
+    } catch (e) {
+      ustawBladSkladania(e instanceof BladApi ? e.message : 'Nie udało się odesłać kompletu.');
+      const szczegoly = e instanceof BladApi && e.dane && e.dane.szczegoly;
+      ustawBrakiZSerwera(Array.isArray(szczegoly) ? szczegoly : []);
+    } finally {
+      ustawSkladanie(false);
+    }
+  }
+
   async function zlozWniosek() {
     ustawSkladanie(true);
     ustawBladSkladania(null);
-    ustawOstrzezeniaZlozenia([]);
+    ustawBrakiZSerwera([]);
     try {
       // Autozapis czeka 800 ms od ostatniej zmiany. Gdyby ktoś dopisał
       // nazwę spółki i od razu kliknął „Złóż wniosek”, serwer mógłby jej
@@ -762,10 +787,11 @@ function EkranWniosku() {
       await API.put('/api/psa/portal/wniosek', dane);
       const wynik = await API.post('/api/psa/portal/wniosek/zloz', {});
       ustawDane(wynik.wniosek);
-      ustawOstrzezeniaZlozenia(wynik.braki_akcjonariuszy || []);
       ustawDokumenty(wynik.dokumenty || []);
     } catch (e) {
       ustawBladSkladania(e instanceof BladApi ? e.message : 'Nie udało się złożyć wniosku.');
+      const szczegoly = e instanceof BladApi && e.dane && e.dane.szczegoly;
+      ustawBrakiZSerwera(Array.isArray(szczegoly) ? szczegoly : []);
     } finally {
       ustawSkladanie(false);
     }
@@ -1083,10 +1109,10 @@ function EkranWniosku() {
             <KrokNaglowek
               tytul="Podsumowanie"
               opis={wniosekEdytowalny
-                ? 'Sprawdź dane przed złożeniem wniosku. Po złożeniu kancelaria przygotuje komplet dokumentów do podpisu.'
-                : 'Tak wygląda złożony wniosek. Dane są do wglądu — poprawić je można dopiero, gdy kancelaria odeśle wniosek do uzupełnienia.'}
+                ? 'Sprawdź dane przed złożeniem wniosku.'
+                : null}
             />
-            <Komunikat odmiana="blad" tresc={bladSkladania} />
+            <Komunikat odmiana="blad" tresc={bladSkladania} lista={brakiZSerwera} />
 
             {/* Stan sprawy stoi PRZED danymi, nie pod przyciskiem nawigacji:
                 po powrocie do wniosku pierwsze pytanie brzmi „co się dzieje",
@@ -1158,17 +1184,18 @@ function EkranWniosku() {
 
             {brakiUstawowe.length > 0 && (
               <Komunikat
-                odmiana="uwaga"
-                tytul="Dane niepełne wobec art. 300³³ § 1 KSH"
-                tresc="Wniosek można złożyć mimo tych braków — kancelaria uzupełni je przy weryfikacji. Warto jednak poprawić je teraz."
+                odmiana="blad"
+                tytul="Dane niepełne — wymagane uzupełnienie"
+                tresc="Bez tych danych nie możemy złożyć wniosku — kancelaria nie ma skąd ich uzupełnić. Wróć do kroku „Akcjonariusze” i wpisz brakujące pozycje."
                 lista={brakiUstawowe}
               />
             )}
 
-            {wniosekEdytowalny && (
+            {wniosekEdytowalny && brakiUstawowe.length === 0 && (
               <Komunikat
                 odmiana="info"
-                tresc="Po złożeniu wniosku kancelaria sprawdzi dane i przygotuje komplet dokumentów do podpisu — powiadomimy Cię e-mailem, gdy będą gotowe do pobrania. Dane spółki i listę akcjonariuszy będzie można poprawić tylko, jeśli kancelaria odeśle wniosek do uzupełnienia."
+                tytul="Co dalej po złożeniu wniosku"
+                tresc="Kancelaria zweryfikuje wniosek i przygotuje dokumentację do podpisu. Gdy będzie gotowa, poinformujemy Cię e-mailem o kolejnym kroku."
               />
             )}
 
@@ -1177,15 +1204,12 @@ function EkranWniosku() {
                 <h3 className="podsumowanie-naglowek">Dokumenty do podpisu</h3>
                 <Komunikat
                   odmiana="ok"
-                  tresc="Kancelaria sprawdziła dane i przygotowała komplet dokumentów. Pobierz wszystkie pozycje z listy poniżej, zbierz podpisy i odeślij skany w tym samym miejscu."
+                  tresc={kompletOdeslany
+                    ? 'Komplet podpisanych dokumentów wrócił do kancelarii.'
+                    : 'Kancelaria sprawdziła dane i przygotowała komplet dokumentów. Pobierz wszystkie pozycje, '
+                      + 'zbierz podpisy i załącz skany. Do kancelarii pójdą dopiero, gdy klikniesz „Odeślij komplet” '
+                      + '— do tego czasu możesz je wymieniać.'}
                 />
-                {ostrzezeniaZlozenia.length > 0 && (
-                  <Komunikat
-                    odmiana="uwaga"
-                    tresc="Sprawdź dokumenty przed podpisaniem — przy złożeniu wniosku część danych była niepełna."
-                    lista={ostrzezeniaZlozenia}
-                  />
-                )}
                 <Komunikat
                   odmiana="info"
                   tresc="Umowę podpisuje reprezentant spółki. Uchwałę o wyborze podmiotu prowadzącego rejestr oraz żądanie pierwszego wpisu podpisują wszyscy akcjonariusze wspólnie. Pozostałe oświadczenia każdy akcjonariusz podpisuje osobiście — zarząd nie może złożyć ich za niego."
@@ -1195,7 +1219,7 @@ function EkranWniosku() {
                     <PozycjaDokumentu
                       key={d.id}
                       dokument={d}
-                      edytowalne={dokumentyWidoczne}
+                      edytowalne={dokumentyWidoczne && !kompletOdeslany}
                       przyZmianie={(wynik) => {
                         if (wynik.dokumenty) ustawDokumenty(wynik.dokumenty);
                         if (wynik.wniosek) ustawDane(wynik.wniosek);
@@ -1204,15 +1228,32 @@ function EkranWniosku() {
                   ))}
                 </div>
 
-                {podpisanych === dokumenty.length && (
-                  <div className="podsumowanie-podpisow">
+                <div className="podsumowanie-podpisow">
+                  {kompletOdeslany ? (
                     <Komunikat
                       odmiana="ok"
-                      tytul="Komplet podpisanych dokumentów wrócił do kancelarii"
+                      tytul="Komplet wrócił do kancelarii"
                       tresc="Nic więcej nie musisz robić. Kancelaria zweryfikuje dane i otworzy rejestr akcjonariuszy — o wyniku poinformujemy e-mailem."
                     />
-                  </div>
-                )}
+                  ) : (
+                    <>
+                      <Komunikat
+                        odmiana={kompletZalaczony ? 'ok' : 'info'}
+                        tresc={kompletZalaczony
+                          ? 'Wszystkie dokumenty mają załączony skan. Sprawdź je jeszcze raz i odeślij komplet.'
+                          : `Załączono ${podpisanych} z ${dokumenty.length} skanów. Komplet odsyła się w całości, `
+                            + 'jednym kliknięciem — nic nie idzie do kancelarii wcześniej.'}
+                      />
+                      <button
+                        className="btn btn-glowny btn-duzy"
+                        disabled={!kompletZalaczony || skladanie}
+                        onClick={odeslijKomplet}
+                      >
+                        {skladanie ? 'Odsyłanie…' : 'Odeślij komplet do kancelarii'}
+                      </button>
+                    </>
+                  )}
+                </div>
 
                 <div className="instrukcja-podpisu">
                   <div className="instrukcja-podpisu-tytul">Jak podpisać dokumenty</div>
@@ -1241,10 +1282,12 @@ function EkranWniosku() {
                 strony, choć połowa treści była jeszcze niżej. */}
             {wniosekEdytowalny ? (
               <>
-                {(!dane.nazwa || akcjonariusze.length === 0) && (
+                {(!dane.nazwa || akcjonariusze.length === 0 || brakiUstawowe.length > 0) && (
                   <div className="podpowiedz">
                     {!dane.nazwa && 'Uzupełnij nazwę spółki (krok „Spółka”). '}
                     {akcjonariusze.length === 0 && 'Dodaj przynajmniej jednego akcjonariusza (krok „Akcjonariusze”).'}
+                    {akcjonariusze.length > 0 && brakiUstawowe.length > 0
+                      && 'Uzupełnij dane akcjonariuszy wymienione wyżej (krok „Akcjonariusze”).'}
                   </div>
                 )}
                 <NawigacjaKreatora
@@ -1252,7 +1295,8 @@ function EkranWniosku() {
                   dalej={{
                     etykieta: skladanie ? 'Składanie…' : 'Złóż wniosek',
                     przy: zlozWniosek,
-                    wylaczony: skladanie || !dane.nazwa || akcjonariusze.length === 0,
+                    wylaczony: skladanie || !dane.nazwa || akcjonariusze.length === 0
+                      || brakiUstawowe.length > 0,
                   }}
                 />
               </>

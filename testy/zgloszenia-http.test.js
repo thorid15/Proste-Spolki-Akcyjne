@@ -38,8 +38,10 @@ test('trescZaproszenia: opisuje wszystkie kroki wniosku, nie tylko sam link', ()
   assert.match(html, /przetwarzaniu danych osobowych/);
   assert.match(html, /dane spółki/);
   assert.match(html, /dane akcjonariuszy/);
-  assert.match(html, /projekt umowy/);
-  assert.match(html, /[Pp]odpisaną umowę odeślesz/);
+  // Komplet dokumentow przygotowuje KANCELARIA po sprawdzeniu wniosku —
+  // zaproszenie nie obiecuje juz, ze system wygeneruje projekt umowy.
+  assert.match(html, /kancelaria sprawdzi wniosek/i);
+  assert.match(html, /powiadomimy e-mailem/i);
 });
 
 let serwer;
@@ -136,17 +138,60 @@ test('POST /api/psa/portal/zgloszenia: publiczne, bez sesji, wymaga poprawnego e
   assert.ok(wpis, 'zgloszenie trafilo do kolejki kancelarii');
   assert.equal(wpis.email, 'prospect@example.pl', 'e-mail znormalizowany do malych liter');
   assert.equal(wpis.krs, '0000123456');
-  assert.equal(wpis.status, 'nowe');
+  // Zaproszenie idzie od razu przy zgloszeniu, wiec status jest juz „zaproszono".
+  assert.equal(wpis.status, 'zaproszono');
 });
 
-test('POST /api/psa/portal/zgloszenia: NIE zaklada zadnego konta portalowego ani spolki', async () => {
-  const przedKonta = db().prepare('SELECT COUNT(*) AS n FROM psa_konta').get().n;
+/**
+ * Zaproszenie idzie OD RAZU przy zgloszeniu: na tym etapie kancelaria niczego
+ * jeszcze nie sprawdza (sprawdza dopiero wniosek), wiec czekanie na klikniecie
+ * pracownika tylko odsuwalo klienta od formularza. Zgloszenie zaklada zatem
+ * konto — ale nadal ZADNEJ spolki, bo ta powstaje dopiero z przyjetego wniosku.
+ */
+test('POST /api/psa/portal/zgloszenia: zaklada konto i wysyla zaproszenie, ale zadnej spolki', async () => {
   const przedSpolki = db().prepare('SELECT COUNT(*) AS n FROM psa_spolki').get().n;
 
-  await zapytaj('POST', '/api/psa/portal/zgloszenia', { email: 'lead-bez-konta@example.pl', krs: '0000999888' }, null);
+  const [status, wynik] = await zapytaj(
+    'POST', '/api/psa/portal/zgloszenia', { email: 'lead-bez-konta@example.pl', krs: '0000999888' }, null
+  );
+  assert.equal(status, 201);
+  // SMTP nie jest skonfigurowane w testach — wysylka sie nie udaje, wiec link
+  // wraca w odpowiedzi, zeby zaproszenie nie przepadlo.
+  assert.equal(wynik.zaproszenie_wyslane, false);
+  assert.ok(wynik.link_aktywacyjny, 'link aktywacyjny wraca, gdy poczta nie dziala');
 
-  assert.equal(db().prepare('SELECT COUNT(*) AS n FROM psa_konta').get().n, przedKonta);
+  const konto = db().prepare('SELECT * FROM psa_konta WHERE email = ?').get('lead-bez-konta@example.pl');
+  assert.ok(konto, 'konto wnioskodawcy powstalo od razu');
+  assert.equal(konto.rola, 'wnioskodawca');
+  assert.equal(konto.aktywne, 0);
+  assert.ok(konto.token_aktywacji);
+
   assert.equal(db().prepare('SELECT COUNT(*) AS n FROM psa_spolki').get().n, przedSpolki);
+});
+
+/**
+ * Jeden klient, jeden adres e-mail, KILKA spolek. Duplikat rozpoznajemy po
+ * numerze KRS, nie po adresie — wczesniej drugie zgloszenie tej samej osoby
+ * konczylo sie komunikatem „konto juz istnieje, zaproszenie jest zbedne".
+ */
+test('POST /api/psa/portal/zgloszenia: druga spolka tego samego klienta przechodzi, konto zostaje jedno', async () => {
+  const [st1] = await zapytaj('POST', '/api/psa/portal/zgloszenia', { email: 'dwie-spolki@example.pl', krs: '0000111222' }, null);
+  assert.equal(st1, 201);
+  const [st2] = await zapytaj('POST', '/api/psa/portal/zgloszenia', { email: 'dwie-spolki@example.pl', krs: '0000333444' }, null);
+  assert.equal(st2, 201, 'drugie zgloszenie tego samego klienta o INNA spolke przechodzi');
+
+  const konta = db().prepare('SELECT COUNT(*) AS n FROM psa_konta WHERE email = ?').get('dwie-spolki@example.pl').n;
+  assert.equal(konta, 1, 'jeden adres e-mail to jedno konto');
+
+  const zgloszenia = db().prepare('SELECT COUNT(*) AS n FROM psa_zgloszenia WHERE email = ?').get('dwie-spolki@example.pl').n;
+  assert.equal(zgloszenia, 2, 'oba zgloszenia zostaja w kolejce kancelarii');
+
+  // Ten sam numer KRS drugi raz to juz pomylka albo duplikat.
+  const [stDuplikat, duplikat] = await zapytaj(
+    'POST', '/api/psa/portal/zgloszenia', { email: 'ktos-inny@example.pl', krs: '0000111222' }, null
+  );
+  assert.equal(stDuplikat, 400);
+  assert.match(duplikat.blad, /już w toku|już prowadzony/);
 });
 
 test('GET /api/psa/zgloszenia: wymaga zalogowanego pracownika', async () => {
@@ -191,18 +236,30 @@ test('POST /api/psa/zgloszenia/:id/zapros: zaklada konto "wnioskodawca" nieaktyw
   const [, zgloszeniePo] = await zapytaj('GET', `/api/psa/zgloszenia/${id}`);
   assert.equal(zgloszeniePo.zgloszenie.status, 'zaproszono');
 
+  // Zaproszenie idzie samo przy zgloszeniu, wiec ta trasa sluzy dzis do
+  // WYSLANIA PONOWNIE — np. gdy klientowi przepadl e-mail albo token wygasl.
   const [stPonownie] = await zapytaj('POST', `/api/psa/zgloszenia/${id}/zapros`, {});
-  assert.equal(stPonownie, 400, 'nie mozna zaprosic drugi raz po zmianie statusu');
+  assert.equal(stPonownie, 200, 'zaproszenie mozna wyslac ponownie');
 });
 
-test('POST /api/psa/zgloszenia/:id/zapros: odmawia, gdy konto z tym e-mailem juz istnieje', async () => {
+test('POST /api/psa/zgloszenia/:id/zapros: istniejace konto dostaje nowy token, nie drugie konto', async () => {
   const id1 = wstawZgloszenie('juz-ma-konto@example.pl');
-  await zapytaj('POST', `/api/psa/zgloszenia/${id1}/zapros`, {});
+  const [, pierwsze] = await zapytaj('POST', `/api/psa/zgloszenia/${id1}/zapros`, {});
+  const tokenPierwszy = db().prepare('SELECT token_aktywacji AS t FROM psa_konta WHERE id = ?').get(pierwsze.konto_id).t;
 
   const id2 = wstawZgloszenie('juz-ma-konto@example.pl');
   const [status, wynik] = await zapytaj('POST', `/api/psa/zgloszenia/${id2}/zapros`, {});
-  assert.equal(status, 400);
-  assert.match(wynik.blad, /już istnieje/);
+  assert.equal(status, 200, 'jeden klient moze miec kilka spolek');
+  assert.equal(wynik.konto_id, pierwsze.konto_id, 'to samo konto, nie drugie');
+  assert.equal(wynik.nowe_konto, false);
+
+  const tokenDrugi = db().prepare('SELECT token_aktywacji AS t FROM psa_konta WHERE id = ?').get(pierwsze.konto_id).t;
+  assert.notEqual(tokenDrugi, tokenPierwszy, 'nieaktywne konto dostaje swiezy token');
+
+  assert.equal(
+    db().prepare('SELECT COUNT(*) AS n FROM psa_konta WHERE email = ?').get('juz-ma-konto@example.pl').n,
+    1
+  );
 });
 
 test('GET/POST /api/psa/portal/aktywacja/:token: aktywuje konto, ustawia haslo, zaklada sesje portalowa', async () => {

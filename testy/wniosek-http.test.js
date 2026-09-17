@@ -21,6 +21,7 @@ process.env.PORTAL_WLACZONY = 'true';
 const app = require('../serwer');
 const { db } = require('../server/baza');
 const hasla = require('../server/logika/hasla');
+const { AKCJONARIUSZ_PELNY } = require('./pomoc');
 
 let serwer;
 let baza;
@@ -256,6 +257,37 @@ test('POST /api/psa/portal/wniosek/zloz: odmawia bez nazwy spolki albo bez akcjo
   assert.equal(stBezAkcjonariuszy, 400, 'nazwa jest, ale zero akcjonariuszy');
 });
 
+test('POST /api/psa/portal/wniosek/zloz: odmawia przy niepelnych danych akcjonariusza', async () => {
+  const { ciastko } = await kontoWnioskodawcy('zlozenie-braki@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
+  await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Wniosek z Brakami P.S.A.' }, ciastko);
+  // Samo nazwisko: brak PESEL-u ALBO daty urodzenia i brak jakiegokolwiek adresu.
+  const [, dodany] = await zapytaj(
+    'POST', '/api/psa/portal/wniosek/akcjonariusze', { typ: 'fizyczna', nazwisko: 'Bezdanych' }, ciastko
+  );
+
+  const [stBraki, wynikBraki] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+  assert.equal(stBraki, 400, 'kancelaria nie ma skad wziac PESEL-u — wniosek wraca do klienta');
+  assert.match(wynikBraki.blad, /Dane niepełne/);
+  assert.ok(
+    wynikBraki.szczegoly.some((b) => /PESEL/.test(b)) && wynikBraki.szczegoly.some((b) => /adres/.test(b)),
+    'odpowiedz wymienia konkretne braki'
+  );
+  assert.equal(
+    db().prepare('SELECT status FROM psa_wnioski WHERE id = ?').get(dodany.akcjonariusz.wniosek_id).status,
+    'w_przygotowaniu',
+    'odmowa nie zamyka wniosku do edycji'
+  );
+
+  // Uzupelnienie tych samych pol otwiera droge do zlozenia.
+  await zapytaj(
+    'PUT', `/api/psa/portal/wniosek/akcjonariusze/${dodany.akcjonariusz.id}`,
+    { ...AKCJONARIUSZ_PELNY, nazwisko: 'Bezdanych' }, ciastko
+  );
+  const [stPo] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+  assert.equal(stPo, 200);
+});
+
 /**
  * Od etapu „dokumenty przygotowuje kancelaria" zlozenie wniosku NIE generuje
  * juz zadnych plikow. Komplet wystawia pracownik (`/api/psa/wnioski/...`),
@@ -282,7 +314,7 @@ test('POST /api/psa/portal/wniosek/zloz: zamyka edycje i NIE generuje dokumentow
     reprezentant_imie_nazwisko: 'Jan Kowalski',
     reprezentant_funkcja: 'Prezes Zarządu',
   }, ciastko);
-  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Nowak', imie: 'Anna' }, ciastko);
+  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { ...AKCJONARIUSZ_PELNY }, ciastko);
 
   const [stZloz, wynikZloz] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
   assert.equal(stZloz, 200);
@@ -306,7 +338,7 @@ test('POST /api/psa/wnioski/:id/dokumenty/wystaw: komplet z umowa, niewidoczny d
   const { kontoId, ciastko } = await kontoWnioskodawcy('wystawianie-kompletu@example.pl');
   await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
   await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Komplet P.S.A.', krs: '0000111222' }, ciastko);
-  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Nowak', imie: 'Anna', email: 'anna@example.pl' }, ciastko);
+  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { ...AKCJONARIUSZ_PELNY, email: 'anna@example.pl' }, ciastko);
   await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
   const wniosekId = db().prepare('SELECT id FROM psa_wnioski WHERE konto_id = ?').get(kontoId).id;
 
@@ -359,7 +391,7 @@ test('PUT /api/psa/wnioski/:id/dokumenty/:dokId/tresc: poprawiona tresc sklada p
   const { kontoId, ciastko } = await kontoWnioskodawcy('edycja-tresci@example.pl');
   await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
   await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Edycja P.S.A.' }, ciastko);
-  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Zielinski', imie: 'Piotr' }, ciastko);
+  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { ...AKCJONARIUSZ_PELNY, imie: 'Piotr', nazwisko: 'Zielinski' }, ciastko);
   await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
   const wniosekId = db().prepare('SELECT id FROM psa_wnioski WHERE konto_id = ?').get(kontoId).id;
   const { poWystawieniu } = await wystawIUdostepnij(wniosekId);
@@ -395,11 +427,11 @@ test('PUT /api/psa/wnioski/:id/dokumenty/:dokId/tresc: poprawiona tresc sklada p
   assert.equal(stPusta, 400, 'pusta tresc nie przechodzi');
 });
 
-test('POST /api/psa/portal/wniosek/dokumenty/:id/podpis: skan wraca do KAZDEGO dokumentu, umowa przenosi status', async () => {
+test('POST /api/psa/portal/wniosek/dokumenty/:id/podpis: skan wraca do KAZDEGO dokumentu, status dopiero przy odeslaniu', async () => {
   const { kontoId, ciastko } = await kontoWnioskodawcy('podpisy-per-dokument@example.pl');
   await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
   await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Podpisy P.S.A.' }, ciastko);
-  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Nowak', imie: 'Anna' }, ciastko);
+  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { ...AKCJONARIUSZ_PELNY }, ciastko);
   await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
   const wniosekId = db().prepare('SELECT id FROM psa_wnioski WHERE konto_id = ?').get(kontoId).id;
   const { poUdostepnieniu } = await wystawIUdostepnij(wniosekId);
@@ -427,13 +459,21 @@ test('POST /api/psa/portal/wniosek/dokumenty/:id/podpis: skan wraca do KAZDEGO d
   assert.equal(poRodo.wniosek.status, 'umowa_wygenerowana');
   assert.equal(poRodo.dokumenty.find((d) => d.id === rodo.id).podpis_nazwa_pliku, 'rodo.pdf');
 
-  // Skan UMOWY przenosi wniosek do stanu gotowego do przyjecia.
+  // Skan UMOWY zapisuje sciezke na wniosku, ale sam TEZ nie rusza statusu —
+  // kancelaria nie dostaje wniosku, do ktorego brakuje jeszcze szesciu
+  // podpisow.
   const [stUmowa, poUmowie] = await wyslijSkan(umowa.id, 'umowa.pdf');
   assert.equal(stUmowa, 201);
-  assert.equal(poUmowie.wniosek.status, 'umowa_podpisana');
+  assert.equal(poUmowie.wniosek.status, 'umowa_wygenerowana');
   assert.ok(poUmowie.wniosek.umowa_podpisana_sciezka, 'sciezka podpisanej umowy zapisana na wniosku');
 
-  // Zdjecie skanu umowy cofa status — bez niej nie ma czego przyjmowac.
+  // Odeslanie niepelnego kompletu odpada — brakujace pozycje wracaja w odpowiedzi.
+  const [stNiepelny, niepelny] = await zapytaj('POST', '/api/psa/portal/wniosek/odeslij', undefined, ciastko);
+  assert.equal(stNiepelny, 400);
+  assert.match(niepelny.blad, /niepełny/);
+  assert.ok(Array.isArray(niepelny.szczegoly) && niepelny.szczegoly.length > 0);
+
+  // Zdjecie skanu umowy czysci jej sciezke, nie ruszajac reszty kompletu.
   const [stUsun, poUsunieciu] = await zapytaj(
     'DELETE', `/api/psa/portal/wniosek/dokumenty/${umowa.id}/podpis`, undefined, ciastko
   );
@@ -444,6 +484,19 @@ test('POST /api/psa/portal/wniosek/dokumenty/:id/podpis: skan wraca do KAZDEGO d
     poUsunieciu.dokumenty.find((d) => d.id === rodo.id).podpis_nazwa_pliku,
     'zdjecie skanu umowy nie rusza pozostalych dokumentow'
   );
+
+  // Komplet w calosci -> odeslanie przestawia status i zamyka wymiane skanow.
+  for (const d of poUsunieciu.dokumenty) {
+    if (!d.podpis_nazwa_pliku) await wyslijSkan(d.id, `skan-${d.typ}.pdf`);
+  }
+  const [stOdeslij, poOdeslaniu] = await zapytaj('POST', '/api/psa/portal/wniosek/odeslij', undefined, ciastko);
+  assert.equal(stOdeslij, 200, JSON.stringify(poOdeslaniu));
+  assert.equal(poOdeslaniu.wniosek.status, 'umowa_podpisana');
+
+  const [stPoOdeslaniu] = await wyslijSkan(rodo.id, 'rodo-poprawiony.pdf');
+  assert.equal(stPoOdeslaniu, 400, 'po odeslaniu kompletu skanow sie juz nie wymienia');
+  const [stPowtorka] = await zapytaj('POST', '/api/psa/portal/wniosek/odeslij', undefined, ciastko);
+  assert.equal(stPowtorka, 400, 'drugi raz nie ma czego odsylac');
 
   // Cudzy numer dokumentu nie trafia w nic — zapytanie zawsze idzie razem
   // z wnioskiem znalezionym po konto_id z sesji.
@@ -473,7 +526,7 @@ test('POST /api/psa/portal/wniosek/umowa-podpisana: odmawia przed udostepnieniem
   assert.equal(zaWczesnie.status, 400, 'jeszcze nie ma czego podpisywac');
 
   await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Wniosek Do Podpisu P.S.A.' }, ciastko);
-  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { nazwisko: 'Zielinski' }, ciastko);
+  await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { ...AKCJONARIUSZ_PELNY, imie: null, nazwisko: 'Zielinski' }, ciastko);
   await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
   const wniosekId = db().prepare('SELECT id FROM psa_wnioski WHERE konto_id = ?').get(kontoId).id;
   await wystawIUdostepnij(wniosekId);
@@ -506,7 +559,9 @@ test('POST /api/psa/portal/wniosek/umowa-podpisana: odmawia przed udostepnieniem
   });
   assert.equal(odp.status, 201);
   const dane = await odp.json();
-  assert.equal(dane.wniosek.status, 'umowa_podpisana');
+  // Samo wgranie umowy nie stawia wniosku w kolejce kancelarii — robi to
+  // dopiero odeslanie calego kompletu (`POST /wniosek/odeslij`).
+  assert.equal(dane.wniosek.status, 'umowa_wygenerowana');
 
   const wiersz = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(kontoId);
   assert.equal(wiersz.umowa_podpisana_nazwa_pliku, 'podpisana-umowa.pdf');

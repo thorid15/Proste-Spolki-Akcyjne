@@ -104,7 +104,6 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'GET /rejestr/:spolkaId',
     'GET /whoami',
     'GET /zadania',
-    'POST /informacja',
     'POST /login',
     'POST /logout',
     // Etap 3A: publiczny formularz zgloszenia wstepnego, PRZED bramka
@@ -147,6 +146,16 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     // rowniez WYLACZNIE po konto_id z sesji, zaden URL nie przyjmuje cudzego
     // identyfikatora.
     'POST /wniosek/zloz',
+    // Odeslanie KOMPLETU podpisanych skanow — jeden ruch klienta, ktory
+    // stawia wniosek w kolejce kancelarii. Wniosek znajdujemy po konto_id
+    // z sesji, tak jak reszta tras kompletu.
+    'POST /wniosek/odeslij',
+    // Platnosci klienta: lista naleznosci i link do zaplaty. Oplate
+    // wczytujemy zawsze RAZEM ze spolkami tego konta (`wczytajOplateKonta`),
+    // wiec cudzy numer nie trafia w nic.
+    'GET /cennik',
+    'GET /oplaty',
+    'POST /oplaty/:id/zaplac',
     'GET /wniosek/umowa-projekt',
     'POST /wniosek/umowa-podpisana',
     'GET /wniosek/umowa-podpisana',
@@ -165,6 +174,11 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'DELETE /wniosek/dokumenty/:id/podpis',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
+    // Informacja z rejestru jest ODPLATNA: `zamow` nalicza i oddaje link do
+    // zaplaty, `wydaj` tworzy dokument z JUZ oplaconego zamowienia. Numer
+    // oplaty w URL-u nie wystarcza — zapytanie idzie razem ze spolkami konta.
+    'POST /informacja/zamow',
+    'POST /informacja/:oplataId/wydaj',
   ].sort();
 
   assert.deepEqual(
@@ -232,9 +246,9 @@ test('D3: spolka_id w ciele (POST /zadania) odrzuca cudza spolke — 404, nie 40
   assert.equal(status, 404);
 });
 
-test('D3: spolka_id w ciele (POST /informacja) odrzuca cudza spolke — 404', async () => {
+test('D3: spolka_id w ciele (POST /informacja/zamow) odrzuca cudza spolke — 404', async () => {
   const { spolkaBId, ciastkoA } = await przygotujDwieSpolki();
-  const [status] = await zapytajJako(ciastkoA, 'POST', '/api/psa/portal/informacja', { spolka_id: spolkaBId });
+  const [status] = await zapytajJako(ciastkoA, 'POST', '/api/psa/portal/informacja/zamow', { spolka_id: spolkaBId });
   assert.equal(status, 404);
 });
 
@@ -254,7 +268,17 @@ function ostatniWpisDziennika() {
 
 test('D4: informacja z rejestru (portal) zostawia slad w dzienniku', async () => {
   const { spolkaAId, ciastkoA } = await przygotujDwieSpolki();
-  const [status] = await zapytajJako(ciastkoA, 'POST', '/api/psa/portal/informacja', { spolka_id: spolkaAId });
+  // Informacja jest odplatna: najpierw zamowienie, potem — po oplaceniu —
+  // wydanie. Slad w dzienniku zostawia WYDANIE, bo to ono jest wgladem
+  // w dane akcjonariatu.
+  const [stZamow, zamowienie] = await zapytajJako(
+    ciastkoA, 'POST', '/api/psa/portal/informacja/zamow', { spolka_id: spolkaAId }
+  );
+  assert.equal(stZamow, 200);
+  db().prepare("UPDATE psa_oplaty SET status = 'oplacona' WHERE id = ?").run(zamowienie.oplata_id);
+  const [status] = await zapytajJako(
+    ciastkoA, 'POST', `/api/psa/portal/informacja/${zamowienie.oplata_id}/wydaj`, {}
+  );
   assert.equal(status, 200);
   const wpis = ostatniWpisDziennika();
   assert.equal(wpis.typ_kto, 'portal');

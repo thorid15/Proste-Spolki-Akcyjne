@@ -118,8 +118,20 @@ router.get(
         `SELECT
            (SELECT COUNT(*) FROM psa_zgloszenia WHERE status = 'nowe')            AS zgloszenia,
            (SELECT COUNT(*) FROM psa_wnioski WHERE status = 'umowa_podpisana')    AS wnioski,
+           -- Zadania nieoplacone nie licza sie do kolejki: jeszcze ich nie ma
+           -- (art. 300(34) § 1 KSH liczy termin od otrzymania zadania).
            (SELECT COUNT(*) FROM psa_sprawy
-             WHERE stan IN ('nowa','weryfikacja','wstrzymana'))                   AS sprawy`
+             WHERE stan IN ('nowa','weryfikacja','wstrzymana')
+               AND oczekuje_na_oplate = 0)                                        AS sprawy,
+           -- Wpisy dokonane, o ktorych nikt jeszcze nie zawiadomil zadajacego
+           -- ani spolki (art. 300(34) § 7 KSH). Liczone z psa_wydane_dokumenty,
+           -- zeby nie trzymac drugiego zrodla prawdy — patrz
+           -- server/trasy/zawiadomienia.js.
+           (SELECT COUNT(*) FROM psa_sprawy sp
+             WHERE sp.stan = 'wpisana'
+               AND NOT EXISTS (SELECT 1 FROM psa_wydane_dokumenty w
+                                WHERE w.sprawa_id = sp.id
+                                  AND w.typ = 'zawiadomienie_wpis'))              AS zawiadomienia`
       )
       .get();
     odp.json({ liczniki: wiersz });
@@ -172,7 +184,8 @@ router.get(
         `SELECT sp.*, s.nazwa AS spolka_nazwa
            FROM psa_sprawy sp
            JOIN psa_spolki s ON s.id = sp.spolka_id
-          WHERE sp.stan IN ('nowa','weryfikacja','wstrzymana')`
+          WHERE sp.stan IN ('nowa','weryfikacja','wstrzymana')
+            AND sp.oczekuje_na_oplate = 0`
       )
       .all();
     const sprawy = sprawyWiersze
