@@ -1,0 +1,15 @@
+{
+  "cookies": [
+    {
+      "name": "psa_sesja_portal",
+      "value": "eyJ0eXAiOiJrb250byIsImlkIjozLCJleHAiOjE3ODk3MDQyMTM3ODd9.NAmxCy_jE9hw0Cim8--Lms264c0Xbp7AfWwnhl0K6Uo",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1789704213.788207,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}
