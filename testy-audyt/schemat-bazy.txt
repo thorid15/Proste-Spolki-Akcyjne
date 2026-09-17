@@ -1,0 +1,504 @@
+### psa_dokumenty
+  - id INTEGER PK
+  - sprawa_id INTEGER NOT NULL
+  - nazwa_pliku TEXT NOT NULL
+  - sciezka TEXT NOT NULL
+  - mime TEXT
+  - rozmiar INTEGER
+  - typ_dokumentu TEXT NOT NULL
+  - hash TEXT
+  - wgral TEXT NOT NULL
+  - utworzono TEXT NOT NULL
+### psa_dziennik_dostepu
+  - id INTEGER PK
+  - chwila TEXT NOT NULL
+  - kto TEXT NOT NULL
+  - typ_kto TEXT NOT NULL
+  - spolka_id INTEGER
+  - osoba_id INTEGER
+  - akcja TEXT NOT NULL
+  - opis TEXT
+### psa_emisje
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - zdarzenie_id INTEGER NOT NULL
+  - tytul TEXT
+  - podstawa_prawna TEXT
+  - seria TEXT NOT NULL
+  - nr_pierwszy INTEGER NOT NULL
+  - ilosc INTEGER NOT NULL
+  - cena_emisyjna_grosze INTEGER
+  - waluta TEXT NOT NULL DEFAULT 'PLN'
+  - data_emisji TEXT
+  - status TEXT NOT NULL DEFAULT 'aktywna'
+  - opis TEXT
+  - uwagi TEXT
+  - data_wpisu_krs TEXT
+  - rodzaj_akcji TEXT NOT NULL DEFAULT 'zwykla'
+  - obowiazki_wobec_spolki TEXT
+### psa_konta
+  - id INTEGER PK
+  - email TEXT NOT NULL
+  - hash_hasla TEXT
+  - rola TEXT NOT NULL
+  - spolka_id INTEGER
+  - osoba_id INTEGER
+  - aktywne INTEGER NOT NULL DEFAULT 0
+  - token_aktywacji TEXT
+  - token_wygasa TEXT
+  - ostatnie_logowanie TEXT
+  - utworzono TEXT NOT NULL
+  - rodo_zaakceptowano TEXT
+### psa_konta_spolki
+  - konto_id INTEGER NOT NULL PK
+  - spolka_id INTEGER NOT NULL PK
+  - utworzono TEXT NOT NULL
+### psa_migracje
+  - wersja INTEGER PK
+  - nazwa TEXT NOT NULL
+  - wykonano TEXT NOT NULL
+### psa_obciazenia
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - typ TEXT NOT NULL
+  - emisja_id INTEGER NOT NULL
+  - nr_od INTEGER NOT NULL
+  - nr_do INTEGER NOT NULL
+  - osoba_id INTEGER
+  - akcjonariusz_osoba_id INTEGER
+  - prawo_glosu INTEGER NOT NULL DEFAULT 0
+  - blokuje_rozporzadzanie INTEGER NOT NULL DEFAULT 1
+  - opis TEXT
+  - zdarzenie_ustanowienia_id INTEGER NOT NULL
+  - data_od TEXT NOT NULL
+  - zdarzenie_wykreslenia_id INTEGER
+  - data_do TEXT
+### psa_ograniczenia
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - zakres TEXT NOT NULL
+  - emisja_id INTEGER
+  - nr_od INTEGER
+  - nr_do INTEGER
+  - wymaga_zgody_spolki INTEGER NOT NULL DEFAULT 0
+  - prawo_pierwszenstwa INTEGER NOT NULL DEFAULT 0
+  - opis TEXT
+  - zdarzenie_id INTEGER NOT NULL
+  - status TEXT NOT NULL DEFAULT 'aktywne'
+  - data_wykreslenia TEXT
+  - zgoda_termin_wskazania_dni INTEGER
+  - zgoda_cena_opis TEXT
+  - zgoda_termin_zaplaty_dni INTEGER
+  - tresc_postanowienia TEXT
+### psa_oplaty
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - sprawa_id INTEGER
+  - typ TEXT NOT NULL
+  - okres TEXT
+  - kwota_grosze INTEGER NOT NULL
+  - status TEXT NOT NULL DEFAULT 'naliczona'
+  - data_naliczenia TEXT NOT NULL
+  - notatka TEXT
+  - autor TEXT NOT NULL
+  - utworzono TEXT NOT NULL
+  - zaktualizowano TEXT
+  - faktura_numer TEXT
+  - faktura_wystawiono TEXT
+  - faktura_autor TEXT
+  - oplacona_kiedy TEXT
+  - okres_od TEXT
+  - okres_do TEXT
+  - wydany_dokument_id INTEGER
+  - zamawiajacy_osoba_id INTEGER
+### psa_osoby
+  - id INTEGER PK
+  - typ TEXT NOT NULL
+  - nazwisko TEXT
+  - imie TEXT
+  - nazwa TEXT
+  - pesel TEXT
+  - data_urodzenia TEXT
+  - nip TEXT
+  - regon TEXT
+  - numer_w_rejestrze TEXT
+  - nazwa_rejestru TEXT
+  - kraj TEXT DEFAULT 'Polska'
+  - kod_pocztowy TEXT
+  - miejscowosc TEXT
+  - ulica TEXT
+  - nr_domu TEXT
+  - nr_lokalu TEXT
+  - adres_doreczen TEXT
+  - adres_edoreczen TEXT
+  - email TEXT
+  - telefon TEXT
+  - zgoda_email INTEGER NOT NULL DEFAULT 0
+  - aml_status TEXT NOT NULL DEFAULT 'brak'
+  - aml_data TEXT
+  - aml_notatka TEXT
+  - uwagi TEXT
+  - utworzono TEXT NOT NULL
+  - zaktualizowano TEXT
+  - plec TEXT
+  - aml_data_przegladu TEXT
+  - beneficjent_rzeczywisty_id INTEGER
+  - pep_oswiadczenie TEXT
+  - pep_oswiadczenie_data TEXT
+  - bez_pesel INTEGER NOT NULL DEFAULT 0
+  - rodzaj_adresu_rejestrowego TEXT
+  - zgoda_email_status TEXT NOT NULL DEFAULT 'brak'
+  - wspolwlasnosc TEXT NOT NULL DEFAULT 'brak'
+  - wspolwlasciciele TEXT
+  - udzial_licznik INTEGER
+  - udzial_mianownik INTEGER
+  - pep TEXT NOT NULL DEFAULT 'nie'
+  - pep_opis TEXT
+### psa_osoby_skany_aml
+  - id INTEGER PK
+  - osoba_id INTEGER NOT NULL
+  - spolka_id INTEGER NOT NULL
+  - typ_dokumentu TEXT NOT NULL DEFAULT 'inny'
+  - nazwa_pliku TEXT NOT NULL
+  - sciezka TEXT NOT NULL
+  - mime TEXT
+  - rozmiar INTEGER
+  - hash TEXT
+  - retencja_do TEXT
+  - wgral TEXT NOT NULL
+  - utworzono TEXT NOT NULL
+### psa_platnosci
+  - id INTEGER PK
+  - oplata_id INTEGER NOT NULL
+  - dostawca TEXT NOT NULL DEFAULT 'tpay'
+  - tpay_id TEXT
+  - crc TEXT NOT NULL
+  - kwota_grosze INTEGER NOT NULL
+  - link TEXT
+  - status TEXT NOT NULL DEFAULT 'oczekuje'
+  - tryb_testowy INTEGER NOT NULL DEFAULT 0
+  - utworzono TEXT NOT NULL
+  - zakonczono TEXT
+  - odpowiedz_json TEXT
+### psa_spolki
+  - id INTEGER PK
+  - krs TEXT
+  - nip TEXT
+  - regon TEXT
+  - nazwa TEXT NOT NULL
+  - forma_prawna TEXT NOT NULL DEFAULT 'PROSTA SPÓŁKA AKCYJNA'
+  - kraj TEXT DEFAULT 'Polska'
+  - kod_pocztowy TEXT
+  - miejscowosc TEXT
+  - ulica TEXT
+  - nr_domu TEXT
+  - nr_lokalu TEXT
+  - sad_rejestrowy TEXT
+  - wydzial TEXT
+  - telefon TEXT
+  - email TEXT
+  - www TEXT
+  - status TEXT NOT NULL DEFAULT 'aktywna'
+  - komentarz_statusu TEXT
+  - data_utworzenia_spolki TEXT
+  - data_uchwaly_wyboru TEXT
+  - data_umowy TEXT
+  - data_otwarcia_rejestru TEXT
+  - data_zakonczenia_umowy TEXT
+  - opis TEXT
+  - uwagi TEXT
+  - utworzono TEXT NOT NULL
+  - zaktualizowano TEXT
+  - dodatkowe_informacje_umowa_spolki TEXT
+  - umowe_zawarl TEXT
+  - umowe_zawarl_imie_nazwisko TEXT
+  - data_ostatniego_wpisu_krs TEXT
+  - kapital_akcyjny_grosze INTEGER
+  - adres_edorecze TEXT
+  - sklad_organu_json TEXT
+  - zakaz_glosu_zastawnika_umowa TEXT
+  - ograniczenie_dziedziczenia_umowa TEXT
+  - siedziba_miejscownik TEXT
+  - reprezentant_plec TEXT
+  - reprezentant_rodzice TEXT
+  - reprezentant_dowod TEXT
+  - reprezentant_pesel TEXT
+  - reprezentant_adres TEXT
+  - reprezentant_reprezentacja TEXT
+  - organ_rodzaj TEXT
+  - umowa_sposob_zawarcia TEXT
+  - umowa_zalacznik_sciezka TEXT
+  - umowa_zalacznik_nazwa_pliku TEXT
+  - umowa_zalacznik_mime TEXT
+  - reprezentant_imie_nazwisko TEXT
+  - reprezentant_funkcja TEXT
+  - reprezentant_biernik_recznie TEXT
+  - reprezentant_funkcja_biernik_recznie TEXT
+  - reprezentant_rodzice_recznie TEXT
+  - data_zawarcia_umowy_spolki TEXT
+  - stosuje_procedure_aml INTEGER NOT NULL DEFAULT 0
+  - reprezentant_email TEXT
+### psa_spolki_dokumenty
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - wniosek_id INTEGER
+  - typ TEXT NOT NULL
+  - nazwa TEXT NOT NULL
+  - nazwa_pliku TEXT NOT NULL
+  - sciezka TEXT NOT NULL
+  - mime TEXT NOT NULL DEFAULT 'application/pdf'
+  - rozmiar INTEGER
+  - rola TEXT NOT NULL
+  - utworzono TEXT NOT NULL
+### psa_sprawy
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - typ_zdarzenia TEXT NOT NULL
+  - zrodlo TEXT NOT NULL
+  - zadajacy_osoba_id INTEGER
+  - zadajacy_opis TEXT
+  - data_wplywu TEXT NOT NULL
+  - stan TEXT NOT NULL DEFAULT 'nowa'
+  - termin_do TEXT
+  - wstrzymana_od TEXT
+  - wznowiona_od TEXT
+  - dni_wstrzymania INTEGER NOT NULL DEFAULT 0
+  - wymaga_powiadomienia INTEGER NOT NULL DEFAULT 0
+  - zgoda_forma TEXT
+  - zgoda_data TEXT
+  - powiadomienie_wyslano TEXT
+  - zdarzenie_id INTEGER
+  - powod_odmowy TEXT
+  - autor TEXT NOT NULL
+  - notatka TEXT
+  - dane_wejsciowe_json TEXT
+  - utworzono TEXT NOT NULL
+  - zaktualizowano TEXT
+  - charakter_wpisu TEXT
+  - zadajacy_rola TEXT
+  - numer TEXT
+  - dokument_data TEXT
+  - powod_odmowy_kod TEXT
+  - sposob_usuniecia TEXT
+  - termin_usuniecia TEXT
+  - dokument_rodzaj TEXT
+  - oczekuje_na_oplate INTEGER NOT NULL DEFAULT 0
+### psa_stan_akcji
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - emisja_id INTEGER NOT NULL
+  - kategoria TEXT NOT NULL
+  - osoba_id INTEGER
+  - nr_od INTEGER NOT NULL
+  - nr_do INTEGER NOT NULL
+  - ilosc INTEGER NOT NULL
+  - tytul_nabycia TEXT
+  - zdarzenie_od_id INTEGER NOT NULL
+  - data_od TEXT NOT NULL
+  - zdarzenie_do_id INTEGER
+  - data_do TEXT
+  - czesc_mianownik INTEGER NOT NULL DEFAULT 1
+  - czesc_licznik INTEGER NOT NULL DEFAULT 1
+  - przedstawiciel_osoba_id INTEGER
+  - pokryta TEXT
+### psa_szablony
+  - id INTEGER PK
+  - kod TEXT NOT NULL
+  - wersja INTEGER NOT NULL
+  - tytul TEXT NOT NULL
+  - tresc TEXT NOT NULL
+  - opis TEXT
+  - podstawa_prawna TEXT
+  - aktywna INTEGER NOT NULL DEFAULT 0
+  - wbudowany INTEGER NOT NULL DEFAULT 0
+  - autor TEXT NOT NULL
+  - utworzono TEXT NOT NULL
+### psa_uprawnienia
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - rodzaj TEXT NOT NULL
+  - zakres TEXT NOT NULL
+  - emisja_id INTEGER
+  - osoba_id INTEGER
+  - tytul TEXT
+  - tresc TEXT
+  - data_ustanowienia TEXT NOT NULL
+  - zdarzenie_id INTEGER NOT NULL
+  - status TEXT NOT NULL DEFAULT 'aktywne'
+  - data_wykreslenia TEXT
+### psa_ustawienia
+  - klucz TEXT PK
+  - wartosc TEXT
+  - zaktualizowano TEXT NOT NULL
+  - autor TEXT NOT NULL
+### psa_uzytkownicy
+  - id INTEGER PK
+  - imie TEXT NOT NULL
+  - email TEXT NOT NULL
+  - hash_hasla TEXT NOT NULL
+  - rola TEXT NOT NULL DEFAULT 'pracownik'
+  - aktywny INTEGER NOT NULL DEFAULT 1
+  - ostatnie_logowanie TEXT
+  - utworzono TEXT NOT NULL
+### psa_wnioski
+  - id INTEGER PK
+  - konto_id INTEGER NOT NULL
+  - status TEXT NOT NULL DEFAULT 'w_przygotowaniu'
+  - krs TEXT
+  - nip TEXT
+  - regon TEXT
+  - nazwa TEXT
+  - forma_prawna TEXT NOT NULL DEFAULT 'PROSTA SPÓŁKA AKCYJNA'
+  - kraj TEXT DEFAULT 'Polska'
+  - kod_pocztowy TEXT
+  - miejscowosc TEXT
+  - siedziba_miejscownik TEXT
+  - ulica TEXT
+  - nr_domu TEXT
+  - nr_lokalu TEXT
+  - sad_rejestrowy TEXT
+  - wydzial TEXT
+  - telefon TEXT
+  - email TEXT
+  - www TEXT
+  - organ_rodzaj TEXT
+  - data_utworzenia_spolki TEXT
+  - data_ostatniego_wpisu_krs TEXT
+  - adres_edorecze TEXT
+  - kapital_akcyjny_grosze INTEGER
+  - data_zawarcia_umowy_spolki TEXT
+  - reprezentant_imie_nazwisko TEXT
+  - reprezentant_plec TEXT
+  - reprezentant_funkcja TEXT
+  - reprezentant_reprezentacja TEXT
+  - reprezentant_rodzice TEXT
+  - reprezentant_dowod TEXT
+  - reprezentant_pesel TEXT
+  - reprezentant_adres TEXT
+  - reprezentant_biernik_recznie TEXT
+  - reprezentant_funkcja_biernik_recznie TEXT
+  - reprezentant_rodzice_recznie TEXT
+  - utworzono TEXT NOT NULL
+  - zaktualizowano TEXT
+  - umowa_projekt_sciezka TEXT
+  - umowa_projekt_wygenerowano TEXT
+  - umowa_podpisana_sciezka TEXT
+  - umowa_podpisana_nazwa_pliku TEXT
+  - umowa_podpisana_mime TEXT
+  - umowa_podpisana_wgrano TEXT
+  - notatka_weryfikacji TEXT
+  - spolka_id INTEGER
+  - obsluzone_przez TEXT
+  - obsluzone_kiedy TEXT
+  - reprezentant_email TEXT
+  - dowod_sciezka TEXT
+  - dowod_nazwa_pliku TEXT
+  - dowod_mime TEXT
+  - dowod_rozmiar INTEGER
+  - dowod_wgrano TEXT
+### psa_wnioski_akcjonariusze
+  - id INTEGER PK
+  - wniosek_id INTEGER NOT NULL
+  - kolejnosc INTEGER NOT NULL DEFAULT 0
+  - typ TEXT NOT NULL DEFAULT 'fizyczna'
+  - nazwisko TEXT
+  - imie TEXT
+  - nazwa TEXT
+  - pesel TEXT
+  - data_urodzenia TEXT
+  - plec TEXT
+  - nip TEXT
+  - regon TEXT
+  - numer_w_rejestrze TEXT
+  - nazwa_rejestru TEXT
+  - kod_pocztowy TEXT
+  - miejscowosc TEXT
+  - ulica TEXT
+  - nr_domu TEXT
+  - nr_lokalu TEXT
+  - adres_doreczen TEXT
+  - adres_edoreczen TEXT
+  - email TEXT
+  - telefon TEXT
+  - zgoda_email INTEGER NOT NULL DEFAULT 0
+  - utworzono TEXT NOT NULL
+  - zaktualizowano TEXT
+  - zweryfikowano INTEGER NOT NULL DEFAULT 0
+  - osoba_id INTEGER
+  - bez_pesel INTEGER NOT NULL DEFAULT 0
+  - rodzaj_adresu_rejestrowego TEXT
+  - zgoda_email_status TEXT NOT NULL DEFAULT 'brak'
+  - wspolwlasnosc TEXT NOT NULL DEFAULT 'brak'
+  - wspolwlasciciele TEXT
+  - udzial_licznik INTEGER
+  - udzial_mianownik INTEGER
+  - pep TEXT NOT NULL DEFAULT 'nie'
+  - pep_opis TEXT
+  - uwagi_kancelarii TEXT
+### psa_wnioski_dokumenty
+  - id INTEGER PK
+  - wniosek_id INTEGER NOT NULL
+  - akcjonariusz_id INTEGER
+  - typ TEXT NOT NULL
+  - nazwa TEXT NOT NULL
+  - nazwa_pliku TEXT NOT NULL
+  - sciezka TEXT NOT NULL
+  - mime TEXT NOT NULL DEFAULT 'application/pdf'
+  - rozmiar INTEGER
+  - utworzono TEXT NOT NULL
+  - podpis_sciezka TEXT
+  - podpis_nazwa_pliku TEXT
+  - podpis_mime TEXT
+  - podpis_rozmiar INTEGER
+  - podpis_wgrano TEXT
+  - kolejnosc INTEGER NOT NULL DEFAULT 100
+  - tresc_bloki TEXT
+  - zmodyfikowano TEXT
+  - zmodyfikowal TEXT
+  - brakujace TEXT
+  - udostepniono TEXT
+  - podpis_potwierdzono TEXT
+  - podpis_potwierdzil TEXT
+  - sprawdzono TEXT
+  - sprawdzil TEXT
+### psa_wydane_dokumenty
+  - id INTEGER PK
+  - sprawa_id INTEGER
+  - spolka_id INTEGER NOT NULL
+  - typ TEXT NOT NULL
+  - odbiorca_osoba_id INTEGER
+  - kanal TEXT NOT NULL
+  - sciezka_pdf TEXT
+  - tresc_html TEXT
+  - sciezka_plik TEXT
+  - szablon_kod TEXT
+  - szablon_wersja INTEGER
+  - szablon_hash TEXT
+  - wyslano TEXT
+  - autor TEXT NOT NULL
+  - utworzono TEXT NOT NULL
+### psa_zdarzenia
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - typ TEXT NOT NULL
+  - data_zdarzenia TEXT NOT NULL
+  - data_wpisu TEXT NOT NULL
+  - autor TEXT NOT NULL
+  - sprawa_id INTEGER
+  - dane_json TEXT NOT NULL
+  - zdarzenie_prostowane_id INTEGER
+  - uzasadnienie TEXT
+  - hash_poprzedni TEXT NOT NULL
+  - hash TEXT NOT NULL
+### psa_zgloszenia
+  - id INTEGER PK
+  - email TEXT NOT NULL
+  - telefon TEXT
+  - nazwa_spolki TEXT
+  - opis TEXT
+  - status TEXT NOT NULL DEFAULT 'nowe'
+  - notatka_wewnetrzna TEXT
+  - obsluzone_przez TEXT
+  - obsluzone_kiedy TEXT
+  - utworzono TEXT NOT NULL
+  - krs TEXT
