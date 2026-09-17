@@ -387,3 +387,493 @@ akcji — te dwie ustawowe treści rejestru są widoczne wyłącznie na wydrukow
 - **Waga:** POWAŻNY — dane są poprawnie zbierane i poprawnie drukowane, ale niedostępne na
   pierwszym, najczęściej używanym ekranie roboczym, co zwiększa ryzyko przeoczenia (np. właśnie
   błędu z Z-054) i utrudnia codzienną pracę zgodną z ustawą bez dodatkowego kroku (wydruku).
+
+---
+
+# FAZA 1 — scenariusz podstawowy S1 (Z-003 do Z-019)
+
+> Ścieżka: zgłoszenie publiczne → aktywacja konta → wniosek (spółka, reprezentant, 2 akcjonariuszy:
+> Anna Kowalska, osoba fizyczna; Inwestor Sp. z o.o., osoba prawna) → wystawienie i podpisanie
+> kompletu dokumentów → przyjęcie wniosku → otwarcie rejestru (seria AZ, 1–100, cena 0,01 zł/akcję,
+> pokryte w całości: Anna 95, Inwestor 5) → próba pobrania informacji z rejestru przez akcjonariusza
+> mniejszościowego. Zrzuty: `testy-audyt/zrzuty/faza1-s1/`. Skrypty pomocnicze (Playwright + żądania
+> bezpośrednie z pominięciem formularza): `testy-audyt/skrypty/`.
+
+## Z-003 [POWAŻNY] — zgłoszenie publiczne wysyła zaproszenie do portalu OD RAZU, bez oceny kancelarii,
+mimo że kod tego samego modułu opisuje to jako proces oceny i decyzji
+
+- **Co zrobiłem:** wypełniłem i wysłałem formularz publiczny „Zgłoś zainteresowanie" (bez konta) —
+  e-mail + numer KRS — w przeglądarce (zrzuty `08`–`09`, `24`–`25`), oraz przeczytałem
+  `server/trasy/zgloszenia.js` (komentarz nagłówkowy pliku) i `server/trasy/portal.js:189-307` w
+  celu potwierdzenia zaobserwowanego zachowania.
+- **Co się stało:** natychmiast po wysłaniu formularza (bez żadnej interwencji pracownika) klient
+  dostał ekran „Zaproszenie wysłane" z aktywnym linkiem aktywacyjnym do portalu — `psa_zgloszenia`
+  dostaje status `zaproszono` w tej samej operacji. Komentarz nagłówkowy `zgloszenia.js` mówi:
+  „kancelaria przegląda listę i decyduje: zaprosić (...) albo odrzucić" — ale komentarz przy
+  właściwym kodzie w `portal.js:290-293` mówi wprost przeciwnie: „Zaproszenie idzie OD RAZU. Na tym
+  etapie kancelaria niczego jeszcze nie sprawdza (...). Kolejka «Zgłoszenia» zostaje jako ślad, nie
+  jako bramka." Endpoint `POST /api/psa/zgloszenia/:id/zapros` istnieje nadal, ale służy dziś
+  wyłącznie do PONOWNEGO wysłania zaproszenia (np. gdy e-mail przepadł), nie do pierwszego
+  zatwierdzenia — a mimo to `POST /:id/odrzuc` nadal istnieje i sugeruje, że coś można jeszcze
+  odrzucić na tym etapie, choć konto i tak już zostało założone i aktywowane niezależnie od tej
+  decyzji.
+- **Co powinno się stać:** SESJA-PSA-AUDYT.md opisuje krok 2 S1 jako „Przegląd i zatwierdzenie
+  zgłoszenia przez pracownika kancelarii" — co odpowiadało PIERWOTNEMU zamysłowi udokumentowanemu w
+  nagłówku `zgloszenia.js`. Obecne zachowanie jest świadomą, udokumentowaną zmianą decyzji
+  biznesowej (szybsza konwersja leadu), ale dwa komentarze w kodzie tego samego modułu się ze sobą
+  kłócą, a przycisk „Odrzuć" w kolejce zgłoszeń dla zgłoszenia o statusie `zaproszono` nie cofa
+  faktycznie nadanego dostępu (aktywne konto portalowe zostaje).
+- **Podstawa:** zasada techniczna (spójność dokumentacji w kodzie z rzeczywistym zachowaniem;
+  UX „odrzuć" bez realnego skutku). Brak bezpośredniego przepisu — publiczny formularz zgłoszeniowy
+  nie jest czynnością ustawową, to etap przedkontraktowy kancelarii.
+- **Waga:** POWAŻNY (mylące dla nowego pracownika czytającego kod i dla UI kolejki zgłoszeń;
+  operacyjnie oznacza też, że KAŻDY, kto poda cudzy/przypadkowy, ale poprawny 10-cyfrowy numer KRS
+  wraz z dowolnym e-mailem, dostaje aktywny dostęp do wypełniania wniosku bez żadnej ludzkiej
+  weryfikacji — pytanie, czy to świadomie akceptowane ryzyko, patrz `PYTANIA-DO-LUKASZA.md`).
+
+## Z-004 [POWAŻNY] — wyścig (race condition) przy równoczesnym zgłoszeniu: dwa identyczne żądania
+tworzą DWA zgłoszenia w kolejce kancelarii i po cichu unieważniają pierwszy link aktywacyjny
+
+- **Co zrobiłem:** wysłałem DWA jednoczesne (Promise.all, bez oczekiwania na odpowiedź pierwszego)
+  żądania `POST /api/psa/portal/zgloszenia` z IDENTYCZNYM adresem e-mail i numerem KRS —
+  bezpośrednio przez `fetch`, z pominięciem formularza (symulacja podwójnego kliknięcia/podwójnego
+  żądania sieciowego szybszego niż blokada przycisku w UI).
+- **Co się stało:** OBA żądania zwróciły `201` z odrębnymi linkami aktywacyjnymi. W kolejce
+  „Zgłoszenia" powstały DWA rekordy `psa_zgloszenia` (id różne, identyczne `krs` i `email`, oba
+  „zaproszono") — sprawdzone wprost przez `GET /api/psa/zgloszenia` z sesji pracownika. Konto
+  portalowe (`psa_konta`, unikalne po e-mailu) pozostało jedno, ale token aktywacyjny został
+  nadpisany przez DRUGIE żądanie: link z PIERWSZEJ odpowiedzi, otwarty później, zwraca `{"blad":
+  "Link aktywacyjny jest nieprawidłowy albo wygasł."}`, mimo że został wydany kilka sekund wcześniej
+  i w ogóle nie był jeszcze użyty. Przyczyna: sprawdzenie duplikatu w `portal.js:237-245`
+  (`SELECT ... WHERE krs = ?`) jest odczytem-przed-zapisem bez transakcji ani ograniczenia `UNIQUE`
+  na `krs` w `psa_zgloszenia` — dwa równoległe żądania nie widzą nawzajem swoich jeszcze
+  niezapisanych wierszy.
+- **Co powinno się stać:** drugie (późniejsze) żądanie dla tego samego numeru KRS powinno zostać
+  odrzucone komunikatem „zgłoszenie już w toku" (dokładnie tak, jak dzieje się to przy żądaniach
+  NIE nakładających się w czasie — mechanizm istnieje, ale nie jest odporny na współbieżność).
+  Rozwiązanie: ograniczenie `UNIQUE` na `(krs)` dla zgłoszeń niezakończonych (albo transakcja z
+  blokadą) — ten sam wzorzec ryzyka może dotyczyć innych miejsc z kontrolą duplikatów typu
+  „sprawdź, potem wstaw" w kodzie (np. „jedna aktywna umowa" w Z-009, „seria nie koliduje z
+  istniejącą" przy emisji) — wymaga przeglądu, nie tylko punktowej poprawki.
+- **Podstawa:** zasada techniczna (integralność danych, jawnie wymagana w checkliście sesji:
+  „Czy podwójne kliknięcie... tworzy dwa zgłoszenia"). Konsekwencja: klient, który raz dostał ekran
+  potwierdzenia i zapisał/otworzył ten pierwszy link później, trafia na fałszywy komunikat
+  „nieprawidłowy albo wygasł" mimo poprawnego zgłoszenia — realny scenariusz przy niestabilnym
+  łączu (automatyczna retransmisja POST-a) lub przy kliknięciu dwa razy zanim front-end zdąży
+  zablokować przycisk.
+- **Waga:** POWAŻNY (duplikat rekordu roboczego + realna, myląca awaria linku dla klienta; brak
+  wycieku danych ani utraty integralności rejestru głównego).
+
+## Z-005 [KRYTYCZNY] — jedyna widoczna ścieżka otwarcia rejestru dla spółki z portalu klienta
+(„Migracja — stan otwarcia") pomija w całości 10-punktową checklistę otwarcia i nigdy nie zbiera
+daty umowy/uchwały ani wzmianki o pokryciu/cenie per akcjonariusz
+
+- **Co zrobiłem:** przeszedłem CAŁĄ ścieżkę S1 do końca (zgłoszenie → aktywacja → wniosek z dwoma
+  akcjonariuszami → wystawienie i podpisanie 9 dokumentów → przyjęcie wniosku), a następnie
+  otworzyłem kokpit nowo powstałej spółki (zrzut `60`). Porównałem to z drugą, osobną ścieżką w tej
+  samej aplikacji: `Spółki → Nowa spółka` (`/spolki/nowa`, komponent `EkranNowejSpolki`,
+  `publiczne/js/spolki.js`), używaną gdy pracownik zakłada spółkę ręcznie od zera.
+- **Co się stało:** dla spółki utworzonej przez przyjęcie wniosku klienta jedynym widocznym,
+  wyeksponowanym w nagłówku kokpitu przyciskiem do wprowadzenia pierwszej emisji i objęcia akcji
+  jest **„Migracja — stan otwarcia"** (widoczny tylko dopóki `liczba_zdarzen === 0` — po dodaniu
+  JAKIEGOKOLWIEK zdarzenia, nawet pomyłkowego, znika bezpowrotnie z tego miejsca; potwierdzone
+  empirycznie: po dodaniu przeze mnie testowej emisji przycisk zniknął, zrzut `62`). Ekran ten (
+  `publiczne/js/migracja.js`) ma własny nagłówek: „Ręczne wprowadzenie stanu akcjonariatu
+  przeniesionego z INNEGO REJESTRU (np. Rejestrów Notarialnych), z datami historycznymi (...) NIE
+  zakłada sprawy ani opłaty za wpis — to odtworzenie już zaszłego stanu, nie bieżąca czynność." — a
+  mimo to jest jedyną wyeksponowaną drogą do otwarcia rejestru RÓWNIEŻ dla spółki, która nigdy nie
+  była nigdzie indziej prowadzona (świeżo zawiązana P.S.A. ze scenariusza S1). Krok „objęcie" tego
+  kreatora (`KrokObjecie`/`PozycjaKreatora` w `publiczne/js/kreator.js:340-378`) **nie ma pól
+  „wzmianka o pokryciu" ani „cena emisyjna"** — w przeciwieństwie do analogicznego kroku w
+  `EkranNowejSpolki` (`PozycjaZalozycielska`, `spolki.js:80-162`), który te pola ma. Sam kreator
+  Migracji nie pokazuje też ŻADNEJ z 10 pozycji `CHECKLISTA_OTWARCIA` zdefiniowanej w `spolki.js:
+  67-78` (m.in. „Uchwała akcjonariuszy o wyborze podmiotu prowadzącego rejestr, skan wgrany",
+  „Umowa o prowadzenie rejestru podpisana (...), wskazany podpisujący", „Spółka nie ma innej
+  aktywnej umowy o prowadzenie rejestru", „Bilans akcji zgadza się z liczbą wyemitowanych") — ta
+  checklista istnieje WYŁĄCZNIE w kreatorze `/spolki/nowa`, nieosiągalnym dla spółki, która już
+  istnieje w bazie (jak każda spółka z wniosku portalowego). Co więcej, pola `data_uchwaly_wyboru`,
+  `data_umowy`, `umowe_zawarl`, `umowe_zawarl_imie_nazwisko` na kokpicie spółki (`kokpit.js:
+  258-266`) są WYŁĄCZNIE do odczytu (`MetrykaPoz`) — jedyny formularz, który je kiedykolwiek
+  ustawia, to krok 1/2 `EkranNowejSpolki`. Dla spółki z portalu te pola pozostają trwale puste
+  („–") bez JAKIEJKOLWIEK ścieżki UI, by je uzupełnić (potwierdzone na zrzucie `60`: „Data uchwały
+  o wyborze: –", „Data umowy: –", „Zawarł: —") — dopiero moja bezpośrednia interwencja przez API
+  (Z-008/Z-009 niżej) je uzupełniła.
+  Dodatkowo istnieje TRZECIA droga — przycisk „Nowa emisja" wewnątrz zwiniętej sekcji „Rejestr
+  akcji" na kokpicie (zawsze dostępny, niezależnie od `liczba_zdarzen`) — ale prowadzi do PEŁNEGO
+  kreatora sprawy (`Nowa sprawa → Emisja akcji`, 4 kroki, z obowiązkowym polem „Żądający wpisu"
+  wyszukiwanym w kartotece osób), architektonicznie CIĘŻSZEGO i niesygnowanego dla przypadku
+  „zakładam rejestr tej nowej spółce po raz pierwszy" — w praktyce łatwo przeoczalny, bo schowany
+  w zwiniętym akordeonie, podczas gdy „Migracja" stoi wyeksponowana w nagłówku strony.
+- **Co powinno się stać:** dla spółki pochodzącej z wniosku portalowego kokpit powinien prowadzić
+  pracownika do ścieżki „otwarcia rejestru" analogicznej do `EkranNowejSpolki` — z tą samą
+  checklistą (uchwała, umowa, jedna aktywna umowa, bilans, dane z umowy spółki, zakres AML) oraz z
+  polami pokrycia i ceny emisyjnej per akcjonariusz, i powinna zostać zebrana `data_uchwaly_wyboru`
+  / `data_umowy` / `umowe_zawarl*`. „Migracja — stan otwarcia" — sądząc z własnej dokumentacji w
+  kodzie — powinna być zarezerwowana wyłącznie dla faktycznych migracji z innych rejestrów.
+- **Podstawa:** art. 300³¹ § 5 KSH (uchwała o wyborze podmiotu — musi istnieć data), art. 300³² § 1
+  KSH (umowa o prowadzenie rejestru), art. 300³³ § 1 pkt 9 KSH (wzmianka o pokryciu jako TREŚĆ
+  rejestru — obligatoryjna, nie opcjonalna), `CLAUDE-PSA.md` reguła domenowa 4c („pokrycie akcji
+  (...) jest ustawowym elementem rejestru") oraz sekcja 15 pkt 3 („Kto dokonuje wpisu... Na start:
+  każdy zalogowany pracownik" — zakłada, że w ogóle istnieje jedna spójna, kontrolowana ścieżka
+  wpisu założycielskiego, nie dwie/trzy rozjeżdżające się).
+- **Waga:** KRYTYCZNY — to jest NAJCZĘSTSZY stan faktyczny wskazany w treści zadania („to jest
+  najczęstszy stan faktyczny i musi działać bez zarzutu"): każda spółka onboardowana przez portal
+  klienta (czyli deklarowany model biznesowy całej aplikacji, patrz `CLAUDE-PSA.md` sekcja 1) trafia
+  na tę właśnie, niedopracowaną ścieżkę otwarcia rejestru, bez żadnego zabezpieczenia przypominanego
+  w specyfikacji jako krytyczne (checklista otwarcia, pokrycie akcji, data uchwały/umowy).
+
+## Z-006 [KRYTYCZNY] — brak jakiejkolwiek ścieżki (UI lub API) tworzenia konta portalowego dla
+akcjonariusza innego niż osoba, która złożyła pierwotne zgłoszenie — blokuje krok 6 scenariusza S1
+w całości
+
+- **Co zrobiłem:** po otwarciu rejestru (Anna Kowalska — 95 akcji, „Inwestor 410411 Sp. z o.o." —
+  5 akcji, akcjonariusz mniejszościowy) spróbowałem zalogować się do portalu jako akcjonariusz
+  mniejszościowy (`POST /api/psa/portal/login` z adresem e-mail podanym dla „Inwestor..." we
+  wniosku) oraz przejrzałem: `publiczne/js/osoby.js` (ekran „Kartoteka osób" i szczegóły osoby —
+  brak jakiegokolwiek przycisku/akcji związanej z kontem/portalem), `server/trasy/osoby.js` (zero
+  endpointów dotyczących kont/portalu), całe drzewo `server/` pod kątem `INSERT INTO psa_konta`.
+- **Co się stało:** logowanie zwróciło `{"blad":"Nieprawidłowy e-mail lub hasło."}` — konto nie
+  istnieje. `grep -rn "INSERT INTO psa_konta"` w całym `server/` zwraca DOKŁADNIE JEDNO miejsce:
+  `server/logika/zaproszenia.js:93`, wywoływane WYŁĄCZNIE z dwóch tras: publicznego formularza
+  zgłoszeniowego (`portal.js POST /zgloszenia`) i ponownego zaproszenia z kolejki zgłoszeń
+  (`zgloszenia.js POST /:id/zapros`) — obie zawsze tworzą konto z rolą na sztywno `'wnioskodawca'`.
+  Jedyne dalsze przejście roli konta to `wnioski.js:793`: `UPDATE psa_konta SET rola = 'spolka' (...)`
+  — WYŁĄCZNIE dla konta powiązanego z przyjmowanym wnioskiem (czyli konta pierwotnego zgłaszającego).
+  Migracja bazy (`server/migracje.js:1106`) ma `CHECK ((rola = 'akcjonariusz') = (osoba_id IS NOT
+  NULL))` — model danych PRZEWIDUJE rolę `akcjonariusz` powiązaną z konkretną `osoba_id` — ale ŻADEN
+  fragment kodu aplikacji nigdy nie wykonuje takiego `INSERT`/`UPDATE`. `portal.js:1262` zwraca
+  `rola: 'akcjonariusz'` w odpowiedzi `whoami`, ale to martwa gałąź bez sposobu jej osiągnięcia.
+  Skutek: akcjonariusz, który NIE był osobą wypełniającą wniosek (typowy przypadek: inwestor
+  mniejszościowy, drugi wspólnik, osoba prawna reprezentowana przez kogoś innego niż wnioskodawca)
+  nigdy, w żaden sposób, nie dostaje własnego dostępu do portalu — mimo że `CLAUDE-PSA.md` opisuje
+  „Portal klienta (spółka i **akcjonariusze**)" jako gotową funkcję (sekcja 1) i mimo że jest to
+  ustawowe prawo każdego akcjonariusza (nie tylko zgłaszającego).
+- **Co powinno się stać:** kancelaria (albo sama spółka z poziomu konta „spolka") powinna mieć
+  sposób zaproszenia KAŻDEGO wpisanego akcjonariusza do portalu z osobnym kontem `rola='akcjonariusz'`
+  powiązanym z jego `osoba_id` — struktura bazy na to czeka, brakuje wyłącznie trasy/ekranu.
+- **Podstawa:** art. 300³⁵ § 1 KSH („Rejestr akcjonariuszy jest jawny dla spółki i **każdego
+  akcjonariusza**"), art. 300³⁵ § 2 KSH (prawo dostępu „za pośrednictwem podmiotu prowadzącego
+  rejestr"), art. 300³⁵ § 3 KSH (prawo żądania wydania informacji z rejestru, „w postaci papierowej
+  lub elektronicznej" — postać elektroniczna zakłada jakiś kanał dostępu, którym tu jest portal).
+  `CLAUDE-PSA.md` sekcja 1 („Portal klienta (spółka i akcjonariusze)") i model `psa_konta` (`rola`
+  `spolka`/`akcjonariusz`).
+- **Waga:** KRYTYCZNY — uniemożliwia wprost zrealizowanie ustawowego prawa dostępu akcjonariusza do
+  rejestru drogą elektroniczną dla KAŻDEGO akcjonariusza poza pierwotnym wnioskodawcą; w S1
+  dosłownie uniemożliwia wykonanie kroku 6 scenariusza tak, jak został zlecony („żądanie informacji
+  z rejestru przez portal przez akcjonariusza mniejszościowego"). Obejście istnieje wyłącznie po
+  stronie kancelarii (patrz Z-014 niżej — generowanie „papierowej" informacji z rejestru przez
+  pracownika), ale to nie jest samoobsługa portalowa, którą model biznesowy (`CLAUDE-PSA.md`
+  sekcja 1: „nasza przewaga: (...) pełna samoobsługa online") wprost obiecuje.
+
+## Z-007 [POWAŻNY] — pole „sposób reprezentacji" reprezentanta spółki nie ma żadnego formularza do
+ręcznego wypełnienia; w umowie o prowadzenie rejestru i uchwale wychodzi jako pusty myślnik, gdy
+import z KRS jest niedostępny
+
+- **Co zrobiłem:** wypełniłem krok „Reprezentant" wniosku (imię i nazwisko, funkcja, PESEL, dowód,
+  adres, e-mail — wszystkie pola dostępne w formularzu), bez importu z KRS (środowisko audytu nie
+  ma dostępu do zewnętrznego API KRS — `curl` do `api-krs.ms.gov.pl` kończy się resetem połączenia).
+  Po wystawieniu kompletu dokumentów pobrałem treść umowy o prowadzenie rejestru przez
+  `GET /api/psa/wnioski/:id/dokumenty/1/tresc` (sesja pracownika, ten sam widok co „Podgląd" w UI).
+- **Co się stało:** akapit przedstawiający reprezentanta w treści umowy brzmi dosłownie: „(...)
+  działający jako: Prezes Zarządu (zarząd jednoosobowy), **sposób reprezentacji: —**,". Komentarz
+  w `publiczne/js/wniosek.js:1003-1006` potwierdza, że to celowe: „Sposób reprezentacji NIE jest
+  polem do wypełnienia — kancelaria sprawdza go na wydruku z KRS przy podpisaniu umowy, a przy
+  pobraniu danych przyciskiem «Pobierz z KRS» wartość dochodzi razem z resztą i trafia do umowy bez
+  udziału tego formularza." Innymi słowy: jeżeli import z KRS się nie powiedzie (a `spolki.js`/
+  `krs.js` explicite zakłada, że to się zdarza i NIE blokuje dalszej pracy — „awaria API nie
+  blokuje rejestracji"), pole to nie ma ŻADNEGO zapasowego sposobu wypełnienia w całej aplikacji —
+  ani w kroku wniosku klienta, ani później w kokpicie kancelarii. Dodatkowo lista `brakujace` (pola
+  wykryte jako niewypełnione, widoczne pracownikowi przy wystawianiu dokumentów jako „X pustych
+  miejsc") NIE wychwytuje tego konkretnego pola — dla dokumentu „Umowa o prowadzenie rejestru"
+  `brakujace` zwróciło `["spolka_nip","spolka_regon","reprezentant_reprezentacja"` -- ależ owszem,
+  jest wychwycone (poprawka: przy PIERWSZYM sprawdzeniu, zaraz po wystawieniu dokumentów, lista
+  brzmiała `["spolka_nip","spolka_regon","reprezentant_reprezentacja","kancelaria_email"]` — a więc
+  pole JEST wykrywane jako brakujące i pokazywane pracownikowi jako "pustych miejsc: 4" na etapie
+  wystawiania — ale mimo wykrycia braku, nie ma z tego miejsca ŻADNEGO sposobu, by ten brak
+  uzupełnić inaczej niż wpisując ręcznie treść całego dokumentu przez edycję treści (`PUT
+  /:id/dokumenty/:dokId/tresc`, funkcja techniczna, nieopisana w żadnej instrukcji dla pracownika).
+- **Co powinno się stać:** formularz wniosku (albo ekran kancelarii przy weryfikacji) powinien mieć
+  zapasowe pole tekstowe „sposób reprezentacji" na wypadek niedostępności/nieaktualności importu z
+  KRS — dokument prawny (umowa) nie powinien nigdy zawierać pustego myślnika w miejscu opisującym
+  umocowanie osoby podpisującej w imieniu spółki.
+- **Podstawa:** zasada techniczna — kompletność dokumentu wskazana wprost w checkliście sesji
+  („czy wygenerowane dokumenty mają wypełnione wszystkie pola"); brak przepisu regulującego samą
+  treść umowy o prowadzenie rejestru (umowa cywilnoprawna), ale sposób reprezentacji jest
+  materialnie istotny dla ważności umowy zawartej w imieniu spółki (art. 39 k.c. przez analogię —
+  do potwierdzenia, czy to argument prawny czy tylko należytej staranności, patrz pytania).
+- **Waga:** POWAŻNY (dokument o charakterze prawnym z luką w treści dotyczącą umocowania strony —
+  wykrywalne dopiero po fakcie, przy realnym braku dostępu do KRS, co — jak pokazuje ten audyt — nie
+  jest sytuacją brzegową, tylko normalną w tym środowisku).
+
+## Z-008 [KRYTYCZNY] — data uchwały o wyborze podmiotu prowadzącego rejestr może być zapisana jako
+PÓŹNIEJSZA niż data umowy o prowadzenie rejestru — brak jakiejkolwiek walidacji kolejności
+
+- **Co zrobiłem:** bezpośrednim żądaniem `PUT /api/psa/spolki/:id` (sesja pracownika, z pominięciem
+  jakiegokolwiek formularza) ustawiłem na spółce z S1: `data_umowy = 2026-09-17` (dziś) oraz
+  `data_uchwaly_wyboru = 2026-09-22` (+5 dni, czyli PO dacie umowy) — sytuacja logicznie odwrócona
+  względem art. 300³² § 1 w zw. z art. 300³¹ § 5 KSH (umowę zawiera się z podmiotem JUŻ wybranym
+  uchwałą, więc uchwała musi poprzedzać albo co najwyżej zbiegać się z umową, nigdy jej następować).
+- **Co się stało:** żądanie zwróciło `200 OK`, zapis przyjęty bez ostrzeżenia ani błędu.
+  `grep` po `data_umowy`/`data_uchwaly_wyboru` w `server/logika/walidacje.js` i
+  `server/trasy/spolki.js` nie znajduje żadnego porównania tych dwóch pól ze sobą — jedyna
+  walidacja przy `PUT /spolki/:id` to sprawdzenie, że `umowe_zawarl` należy do dozwolonego słownika
+  (`spolki.js:111-112`).
+- **Co powinno się stać:** zapis z `data_uchwaly_wyboru > data_umowy` powinien zostać odrzucony
+  (albo przynajmniej zwrócić czytelne ostrzeżenie wymagające świadomego potwierdzenia) — zgodnie z
+  konstrukcją przepisu, w której uchwała jest logicznie warunkiem wstępnym zawarcia umowy.
+- **Podstawa:** art. 300³² § 1 KSH w zw. z art. 300³¹ § 5 KSH („Spółka jest obowiązana do
+  niezwłocznego zawarcia umowy (...) z podmiotem wybranym zgodnie z art. 300³¹ § 5"; „Wybór podmiotu
+  prowadzącego rejestr wymaga uchwały akcjonariuszy. Przy zawiązaniu spółki wyboru dokonują
+  akcjonariusze.") — checklista sesji wprost o to prosi.
+- **Waga:** KRYTYCZNY w sensie zgodności z modelem prawnym reprezentowanym przez rejestr (rejestr
+  może udokumentować sekwencję zdarzeń sprzeczną z logiką ustawy bez żadnego ostrzeżenia), choć
+  praktyczna szkoda zależy od tego, czy ktokolwiek kiedykolwiek wpisze rzeczywiście błędne daty —
+  do ostatecznej kwalifikacji wagi polecam decyzję Łukasza (czy to ma być twarda blokada, czy
+  tylko miękkie ostrzeżenie — patrz `PYTANIA-DO-LUKASZA.md`).
+
+## Z-009 [POWAŻNY] — brak jakiejkolwiek ochrony przed nadpisaniem umowy o prowadzenie rejestru
+(symulacja „drugiej umowy" dla tej samej spółki) — zero walidacji, zero śladu zmiany
+
+- **Co zrobiłem:** po ustawieniu pierwszej umowy (`data_umowy`, `umowe_zawarl='notariusz'`,
+  `umowe_zawarl_imie_nazwisko='Łukasz Kozon'`) wysłałem DRUGIE bezpośrednie żądanie
+  `PUT /api/psa/spolki/:id` z inną datą umowy (+10 dni) i innym podpisującym
+  (`umowe_zawarl='zastepca'`, `umowe_zawarl_imie_nazwisko='Ktoś Inny'`) — symulacja zawarcia drugiej
+  umowy o prowadzenie rejestru dla tej samej, już prowadzonej spółki.
+- **Co się stało:** `200 OK`, dane nadpisane bez ostrzeżenia. Ponieważ `data_umowy`/`umowe_zawarl*`
+  to zwykłe kolumny na `psa_spolki` (nie osobna, dopisywana tabela `psa_umowy` — potwierdzone w
+  `FAZA-0-INWENTARYZACJA.md`, lista 26 tabel `psa_*` nie zawiera takiej tabeli), nadpisanie jest
+  bezpowrotne: NIE istnieje żaden ślad, że poprzednia umowa (z innym podmiotem/inną datą) w ogóle
+  kiedyś obowiązywała — w przeciwieństwie do `psa_zdarzenia`, które jest jawnie i celowo
+  append-only. `CHECKLISTA_OTWARCIA` w `spolki.js:72` ma pozycję „Spółka nie ma innej aktywnej
+  umowy o prowadzenie rejestru" — ale to WYŁĄCZNIE ludzki checkbox w kreatorze `/spolki/nowa` (patrz
+  Z-005), niewspierany żadną rzeczywistą kontrolą przy zapisie.
+- **Co powinno się stać:** zgodnie z `WYTYCZNE-MERYTORYCZNE-PSA.md` sekcja 5 („Jeden rejestr = jeden
+  podmiot prowadzący (...) Stąd walidacja: spółka może mieć w systemie dokładnie jedną aktywną
+  umowę o prowadzenie rejestru") zmiana umowy powinna być odrębnym, świadomym zdarzeniem (najlepiej
+  odzwierciedlonym w `psa_zdarzenia` jak każda inna zmiana danych spółki — `zmiana_danych_spolki`
+  już istnieje jako typ zdarzenia i jest używany przy `PUT /spolki/:id` dla INNYCH pól, więc
+  infrastruktura już istnieje), a nie ciche nadpisanie kolumn bez śladu.
+- **Podstawa:** art. 300³² § 2 KSH („Rozwiązanie przez spółkę umowy jest dopuszczalne jedynie pod
+  warunkiem zawarcia nowej umowy (...)"); `WYTYCZNE-MERYTORYCZNE-PSA.md` sekcja 5 (cytat wyżej).
+- **Waga:** POWAŻNY (brak audytowalności zmiany kluczowego faktu prawnego — kto i od kiedy prowadzi
+  rejestr tej spółki — mimo że cała reszta modułu jest zbudowana wokół zasady „nic się nie kasuje,
+  nic się nie nadpisuje bez śladu").
+
+## Z-010 [POZYTYWNE] — blokada przyjęcia spółki, która nie jest P.S.A., działa poprawnie również
+przy bezpośrednim żądaniu do API, z pominięciem formularza
+
+- **Co zrobiłem:** bezpośrednie żądanie `POST /api/psa/spolki` (sesja pracownika, z pominięciem
+  formularza — pole `forma_prawna` nie jest w ogóle edytowalne w UI kreatora „Nowa spółka", które ma
+  je zaszyte na sztywno jako „PROSTA SPÓŁKA AKCYJNA") z `forma_prawna: "SPÓŁKA Z OGRANICZONĄ
+  ODPOWIEDZIALNOŚCIĄ"` i resztą wymaganych pól.
+- **Co się stało:** `400 Bad Request`, komunikat: „Forma prawna «SPÓŁKA Z OGRANICZONĄ
+  ODPOWIEDZIALNOŚCIĄ» nie jest prostą spółką akcyjną. Rejestr prowadzimy wyłącznie dla P.S.A.
+  (art. 300(31) § 1 KSH)." — spółka NIE została utworzona.
+- **Co powinno się stać:** dokładnie to, co się stało.
+- **Podstawa:** art. 300³¹ § 1 KSH; `CLAUDE-PSA.md` reguła domenowa 11 („Nie prowadzimy rejestru dla
+  S.A./S.K.A. — walidacja przy dodawaniu spółki").
+- **Waga:** POZYTYWNE (zapisane zgodnie z zasadą 3 sesji — reguła zweryfikowana bezpośrednim
+  żądaniem, nie tylko obserwacją UI, i działa poprawnie).
+
+## Z-011 [POZYTYWNE] — twarda blokada wpisu akcji bez daty wpisu emisji do KRS działa na obu
+warstwach (podgląd na sucho i faktyczny zapis), również przy pominięciu formularza
+
+- **Co zrobiłem:** dwa bezpośrednie żądania z pominięciem formularza kreatora: (1)
+  `POST /api/psa/spolki/:id/zdarzenia/podglad` z `typ:"emisja"` i `data_wpisu_krs: null`; (2) —
+  kluczowe — `POST /api/psa/spolki/:id/zdarzenia` (zapis właściwy, z pominięciem etapu podglądu w
+  ogóle) z tymi samymi danymi.
+- **Co się stało:** podgląd zwrócił `200` z `"dopuszczalne": false` i komunikatem cytującym
+  art. 300³⁰ § 2 KSH. Właściwy zapis — wywołany BEZPOŚREDNIO, z pominięciem etapu podglądu —
+  zwrócił `422` z tym samym komunikatem i żadne zdarzenie nie zostało utrwalone w
+  `psa_zdarzenia` (sprawdzone: licznik zdarzeń spółki się nie zmienił).
+- **Co powinno się stać:** dokładnie to, co się stało — to jest dokładnie scenariusz z checklisty
+  sesji („to musi być twarda blokada, spróbuj to złamać bezpośrednim żądaniem POST z pominięciem
+  tego pola").
+- **Podstawa:** art. 300³⁰ § 2 KSH, sankcja art. 592 § 3 KSH; `CLAUDE-PSA.md` reguła domenowa 12.
+- **Waga:** POZYTYWNE (blokada jest rzeczywiście po stronie serwera, nie tylko UI — zweryfikowane
+  z pominięciem formularza i z pominięciem etapu „podglądu").
+
+## Z-012 [KRYTYCZNY] — emisja z datą wpisu do KRS WCZEŚNIEJSZĄ niż data rejestracji samej spółki w
+KRS jest przyjmowana bez zastrzeżeń — „twarda blokada" z Z-011 sprawdza tylko OBECNOŚĆ daty, nie
+jej wiarygodność
+
+- **Co zrobiłem:** bezpośrednie żądanie `POST /api/psa/spolki/:id/zdarzenia` dla spółki
+  zarejestrowanej w KRS `2026-09-17` (data dzisiejsza w tym środowisku), z nową emisją mającą
+  `data_wpisu_krs: "2000-01-01"` — data sprzed ćwierć wieku, jednoznacznie wcześniejsza niż istnienie
+  samej spółki.
+- **Co się stało:** `201 Created` — zdarzenie zostało zapisane bez żadnego ostrzeżenia dotyczącego
+  niespójności dat. System sprawdza WYŁĄCZNIE, czy pole `data_wpisu_krs` jest niepuste
+  (`walidacje.js`, reguła cytowana w Z-011), nigdy nie porównuje go z `data_utworzenia_spolki` tej
+  samej spółki ani nie sprawdza, czy data nie jest z odległej przeszłości/nieprawdopodobna.
+- **Co powinno się stać:** `data_wpisu_krs` emisji nie powinna móc być wcześniejsza niż
+  `data_utworzenia_spolki` (dla emisji założycielskiej — a dla kolejnych emisji, niż data
+  rzeczywistego istnienia spółki w ogóle) — w przeciwnym razie sama sankcja karna z art. 592 § 3
+  staje się fikcją: technicznie „pole jest wypełnione", ale materialnie stwierdza fakt, który nie
+  mógł zajść.
+- **Podstawa:** art. 300³⁰ § 2 KSH („wpis do rejestru akcjonariuszy następuje po wpisie SPÓŁKI do
+  rejestru albo wpisie do rejestru nowej emisji akcji") — logicznie zakłada, że data wpisu emisji
+  nie poprzedza wpisu spółki; sankcja art. 592 § 3 KSH pkt 1) („dopuszcza do zarejestrowania akcji
+  (...) przed zarejestrowaniem prostej spółki akcyjnej"). `CLAUDE-PSA.md` reguła domenowa 12: „to
+  MUSI być twarda blokada, nie ostrzeżenie".
+- **Waga:** KRYTYCZNY — to jest DOKŁADNIE ta sama rodzina ryzyka (sankcja karna dla członka
+  zarządu), a obecna kontrola tylko POZORNIE ją realizuje: sprawdza kształt danych, nie ich
+  wiarygodność względem reszty rejestru tej samej spółki.
+
+## Z-013 [POZYTYWNE] — bilans akcji jest kontrolowany na żywo, blokuje nadmiarowe objęcie i działa
+transakcyjnie (bez częściowego zapisu przy błędzie), zweryfikowane bezpośrednim żądaniem
+
+- **Co zrobiłem:** dla emisji AZ (100 akcji, 1–100) wysłałem bezpośrednie żądanie `POST
+  /api/psa/spolki/:id/zdarzenia` `typ:"objecie"` z pozycjami: Anna Kowalska — 96 akcji, Inwestor —
+  5 akcji (razem 101 > 100 wyemitowanych) — celowa niezgodność bilansu z checklisty sesji.
+- **Co się stało:** `422`, komunikat: „Brak pokrycia: żądano 5 akcji, a pula akcji nieobjętych serii
+  AZ obejmuje 4 akcji wolnych." Sprawdziłem stan spółki zaraz potem przez `GET /api/psa/spolki/:id`
+  (bez odświeżania przeglądarki, więc bez ryzyka złapania nieaktualnego widoku SPA) — `akcjonariusze:
+  []`, `Akcje w obrocie: 0` — czyli operacja NIE zapisała częściowo pierwszej pozycji (96 dla Anny)
+  przed odrzuceniem drugiej. Po tym teście wysłałem POPRAWNE żądanie (95 + 5 = 100) — przyjęte
+  (`201`), zgodne z serią AZ 1–95 / 96–100, `Razem 100 (100%)` — zweryfikowane na zrzucie `68`.
+- **Co powinno się stać:** dokładnie to, co się stało.
+- **Podstawa:** art. 300³¹ § 2 KSH („zapewnienie zgodności liczby akcji zarejestrowanych w rejestrze
+  z liczbą wyemitowanych akcji"); `CLAUDE-PSA.md` reguła domenowa 3 („Naruszenie = odmowa zapisu,
+  nie ostrzeżenie").
+- **Waga:** POZYTYWNE (kontrola na żywo, blokująca, transakcyjna — zgodnie ze specyfikacją).
+
+## Z-014 [POZYTYWNE] — maskowanie PESEL-u, daty urodzenia i adresu zamieszkania innego akcjonariusza
+w informacji z rejestru działa poprawnie, zweryfikowane wprost w treści HTML dokumentu
+
+- **Co zrobiłem:** ponieważ akcjonariusz mniejszościowy nie ma własnego konta portalowego (Z-006),
+  zweryfikowałem maskowanie przez ten sam mechanizm serwerowy z poziomu kancelarii — ekran
+  „Informacja z rejestru" (`/spolki/:id/wydruk/informacja`, komponent `EkranInformacji`) pozwala
+  pracownikowi wybrać „Odbiorca: akcjonariusz" i wskazać KONKRETNEGO akcjonariusza z listy; wynikowy
+  adres (`GET /api/psa/spolki/:id/informacja.html?rola=akcjonariusz&odbiorca=<id_inwestora>`)
+  pobrałem bezpośrednim żądaniem i porównałem z tym samym dokumentem dla `rola=spolka`.
+- **Co się stało:** dla `rola=akcjonariusz` (widok „oczami" Inwestora, akcjonariusza
+  mniejszościowego) wiersz Anny Kowalskiej (akcjonariusza większościowego) pokazuje jej imię i
+  nazwisko w pełni jawnie, ale w miejscu adresu zamieszkania widnieje `••• •••, ••• •••` — dokument
+  zawiera też explicite dopisaną klauzulę: „Numeru PESEL, daty urodzenia ani adresu zamieszkania
+  pozostałych akcjonariuszy nie udostępnia się akcjonariuszowi (...)". Dla porównania, ten sam
+  wiersz w wersji `rola=spolka` (widok kancelarii/spółki) pokazuje pełny, jawny adres „Testowa 1,
+  80-280 Gdańsk". Własny wiersz odbiorcy (Inwestor, o SWOICH danych) w wersji `rola=akcjonariusz`
+  pozostaje w pełni jawny (adres siedziby widoczny) — maskowanie dotyczy wyłącznie danych CUDZYCH,
+  zgodnie z przepisem. PESEL i data urodzenia nie pojawiają się w treści dokumentu w OGÓLE, w
+  żadnej z ról — zgodne z `PRZEPISY-PSA.md` sekcja 12 pkt 2 („PESEL, data urodzenia (...) nie są
+  obowiązkową treścią rejestru P.S.A.").
+- **Co powinno się stać:** dokładnie to, co się stało.
+- **Podstawa:** art. 300³⁵ § 1¹ KSH; `CLAUDE-PSA.md` reguła domenowa 9.
+- **Waga:** POZYTYWNE — ale patrz Z-006: mechanizm maskowania działa poprawnie, PROBLEM leży w tym,
+  że akcjonariusz mniejszościowy nie ma samodzielnego sposobu dotrzeć do tego dokumentu przez
+  portal (musi go dla niego wygenerować pracownik kancelarii, co jest dopuszczalną „postacią
+  papierową" z art. 300³⁵ § 3 KSH, ale nie jest samoobsługą, którą aplikacja ma docelowo zapewniać).
+
+## Z-015 [POZYTYWNE] — podwójne złożenie wniosku (odświeżenie po POST, powtórne bezpośrednie
+żądanie) jest poprawnie blokowane, bez duplikatu wniosku ani spółki
+
+- **Co zrobiłem:** zaraz po tym, jak klient złożył wniosek przez UI (`POST
+  /api/psa/portal/wniosek/zloz`), wysłałem DRUGIE, bezpośrednie żądanie do tego samego endpointu (z
+  tej samej sesji, z pominięciem formularza) — symulacja podwójnego kliknięcia/ponownego żądania
+  sieciowego. Dodatkowo odświeżyłem (`F5`, pełny `page.reload()`) stronę wniosku klienta zaraz po
+  złożeniu.
+- **Co się stało:** drugie żądanie zwróciło `400`: „Wniosek ma już status «zlozony» — nie można go
+  edytować." — żaden duplikat nie powstał. Po `F5` strona poprawnie pokazała ten sam, jeden wniosek
+  ze statusem „Wniosek złożony" (zrzut `50`) — bez utraty danych i bez ponownego przejścia przez
+  kreator. W kolejce kancelarii (`GET /api/psa/wnioski`) widnieje dokładnie jeden wpis dla tego
+  klienta przez CAŁY dalszy przebieg S1.
+- **Co powinno się stać:** dokładnie to, co się stało.
+- **Podstawa:** zasada techniczna z checklisty sesji („czy podwójne kliknięcie... tworzy dwa
+  zgłoszenia... sprawdź też odświeżenie strony po wysłaniu formularza").
+- **Waga:** POZYTYWNE. (Kontrastuje z Z-004, gdzie analogiczna ochrona na WCZEŚNIEJSZYM etapie —
+  zgłoszenie wstępne — nie jest odporna na współbieżność; tutaj, na etapie „złożenia wniosku",
+  ochrona po prostu sprawdza AKTUALNY status rekordu, co wystarcza, bo do tego momentu istnieje już
+  tylko jeden wiersz `psa_wnioski` na konto.)
+
+## Z-016 [POZYTYWNE] — kolejność podpisów (spółka jako pierwsza, potwierdzenie przez kancelarię/
+notariusza jako ostatnie) jest wymuszona przez backend, nie tylko opisana instrukcją w UI
+
+- **Co zrobiłem:** DWIE próby „podpisania jako notariusz przed spółką" bezpośrednim żądaniem
+  `POST /api/psa/wnioski/:id/dokumenty/:dokId/podpis-potwierdz` (funkcja, którą pracownik kancelarii
+  wykonuje jako ostatni krok, potwierdzając otrzymany podpisany skan) — z pominięciem etapu, w
+  którym klient (spółka) w ogóle przesyła podpisany skan: (1) zaraz po założeniu sprawy, zanim
+  jakikolwiek dokument został w ogóle wystawiony (nieistniejące `dokId`); (2) zaraz po wystawieniu
+  kompletu dokumentów przez kancelarię, ale PRZED odesłaniem przez klienta jakiegokolwiek podpisu.
+- **Co się stało:** próba (1) → `404 Nie odnaleziono dokumentu.`. Próba (2) → `400 Klient nie
+  odesłał jeszcze skanu tego dokumentu.` — w obu przypadkach kancelaria/notariusz NIE mógł
+  „podpisać"/potwierdzić przed spółką, mimo wywołania wprost tego samego endpointu API, który
+  wywołuje przycisk w UI. Dopiero po tym, jak klient faktycznie odesłał podpisany skan (`POST
+  /api/psa/portal/wniosek/dokumenty/:id/podpis`), identyczne żądanie potwierdzenia zwróciło `200`.
+- **Co powinno się stać:** dokładnie to, co się stało — kolejność wymuszona po stronie serwera.
+- **Podstawa:** zasada techniczna z checklisty sesji („czy kolejność podpisów jest wymuszona przez
+  aplikację, spróbuj podpisać jako notariusz przed spółką").
+- **Waga:** POZYTYWNE.
+
+## Z-017 [DROBNY] — autozapis danych wniosku (debounce 800 ms) może po cichu utracić OSTATNIĄ
+zmienioną wartość pola przy szybkiej nawigacji/odświeżeniu, bez żadnego ostrzeżenia
+
+- **Co zrobiłem:** wpisałem wartość w pole „Firma (nazwa) spółki" i natychmiast odświeżyłem stronę
+  (`F5`) po odczekaniu (a) 300 ms i (b) 1200 ms — zmierzone wprost przez odczyt `input.value` po
+  ponownym załadowaniu strony (nie przez `innerText`, który nie odczytuje wartości pól formularza —
+  pierwsza próba z `innerText` dała fałszywie ujemny wynik nawet dla przypadku (b), gdzie dane
+  faktycznie przetrwały; poprawiłem metodę pomiaru przed wyciągnięciem wniosków).
+- **Co się stało:** w wariancie (a) — 300 ms, poniżej progu debounce — wartość pola po odświeżeniu
+  wróciła PUSTA (dane utracone, zapis nigdy nie zdążył wystartować). W wariancie (b) — 1200 ms,
+  powyżej progu — wartość przetrwała poprawnie. Mechanizm autozapisu (`useAutozapis`,
+  `publiczne/js/ui-rejestr.js:1077-1126`, `OPOZNIENIE_AUTOZAPISU_MS = 800`) nie ma obsługi zdarzenia
+  `beforeunload` (bez ostrzeżenia o niezapisanych zmianach) ani mechanizmu „wymuś zapis przed
+  nawigacją" — jedynym sygnałem dla użytkownika jest dyskretny, niewielki napis „Zapisywanie…" /
+  „Zapisano” (`StanZapisu`), łatwy do przeoczenia przy szybkim działaniu.
+- **Co powinno się stać:** albo skrócenie okna ryzyka (natychmiastowy zapis na `onBlur` pola, nie
+  tylko debounce po każdej zmianie), albo `beforeunload` ostrzegający o niezapisanych zmianach, albo
+  wymuszenie zapisu przy każdej nawigacji między krokami kreatora (obecnie „Dalej" w krokach 0/1 NIE
+  wywołuje żadnego zapisu — poleganie wyłącznie na tle działającym debounce, patrz
+  `publiczne/js/wniosek.js:859-867`).
+- **Podstawa:** zasada techniczna z checklisty sesji („czy da się przerwać w połowie i wrócić (...)
+  bez utraty danych").
+- **Waga:** DROBNY (okno ryzyka jest krótkie — 800 ms — i dotyczy tylko OSTATNIEGO edytowanego pola
+  bezpośrednio przed nawigacją, nie całego formularza; wskaźnik „Zapisywanie…" istnieje, choć jest
+  dyskretny).
+
+## Z-018 [DROBNY] — formularze aplikacji w dwóch miejscach nie wiążą programowo etykiety pola z
+samym polem (`label` bez `for`/`htmlFor`) — luka dostępności (WCAG), niezależnie odkryta podczas
+automatyzacji przeglądarki tą samą metodą, którą posłużyłby się czytnik ekranu
+
+- **Co zrobiłem:** podczas budowania automatyzacji Playwright dla całej ścieżki S1 standardowa
+  metoda Playwrightu `getByLabel()` (oparta o DOKŁADNIE ten sam mechanizm co czytniki ekranu —
+  drzewo dostępności/`aria`) systematycznie zawodziła dla pól formularzy PO STRONIE KANCELARII
+  (`kreator.js`, `spolki.js`, `osoby.js`) i częściowo dla pól ZŁOŻONYCH po stronie portalu klienta.
+  Prześledziłem przyczynę do dwóch definicji komponentu `Pole`.
+- **Co się stało:** (1) `publiczne/js/ui.js:45-58` (używana po stronie kancelarii — kreator zdarzeń,
+  „Nowa spółka", kartoteka osób) renderuje `<label className="fl">` jako zwykłe RODZEŃSTWO pola, BEZ
+  `htmlFor` W OGÓLE — żadne pole formularza pracownika kancelarii nie jest programowo powiązane ze
+  swoją etykietą. (2) `publiczne/js/ui-rejestr.js:472-503` (używana po stronie portalu klienta) ma
+  rozwiązanie świadome i lepsze — `htmlFor` jest ustawiany, gdy dziecko `Pole` jest POJEDYNCZYM,
+  prostym `<input>`/`<select>`/`<textarea>` (komentarz w kodzie: „układy złożone (...) zostają bez
+  powiązania, bo nie wiadomo, które z nich etykieta opisuje" — świadoma decyzja, nie przeoczenie) —
+  ale w praktyni pozostawia bez powiązania WSZYSTKIE pola zbudowane z własnych komponentów: datę
+  (`PoleDaty` — 3 osobne pola, choć te akurat mają własne `aria-label` per segment, więc częściowo
+  to rekompensują), kwotę (`PoleKwoty` — BEZ własnego `aria-label`, więc pole „Kapitał akcyjny" jest
+  całkowicie nieopisane dla czytnika ekranu), pole KRS z przyciskiem, wybór z kartoteki.
+- **Co powinno się stać:** strona kancelarii (ui.js) powinna dostać analogiczne, świadome
+  rozwiązanie jak strona portalu (ui-rejestr.js); komponent `PoleKwoty` powinien mieć własny
+  `aria-label` (analogicznie do segmentów `PoleDaty`) tak, by przynajmniej pola „proste w środku
+  złożonego opakowania" były opisane.
+- **Podstawa:** zasada techniczna (dostępność, WCAG 2.1 kryterium 1.3.1/4.1.2 — poza zakresem
+  `PRZEPISY-PSA.md`, ale istotne dla portalu udostępnianego publicznie).
+- **Waga:** DROBNY (nie blokuje funkcjonalności dla przeciętnego użytkownika myszy/klawiatury, ale
+  jest realną barierą dla osób korzystających z czytnika ekranu — a portal jest z założenia
+  publiczny i ma obsługiwać akcjonariuszy, niekoniecznie tylko pracowników).
+
+## Z-019 [DROBNY] — pole „data otwarcia rejestru" jest ustawiane automatycznie na dzień przyjęcia
+wniosku, ZANIM jakiekolwiek zdarzenie (emisja/objęcie) zostało w ogóle wpisane do rejestru
+
+- **Co zrobiłem:** obejrzałem kokpit spółki bezpośrednio po `POST /api/psa/wnioski/:id/przyjmij`, a
+  jeszcze PRZED wprowadzeniem jakiejkolwiek emisji/objęcia akcji (zrzut `60`).
+- **Co się stało:** panel „Umowa o prowadzenie rejestru" pokazywał już „Data otwarcia rejestru:
+  17.09.2026" (dzień przyjęcia wniosku), mimo że w tym samym momencie licznik zdarzeń spółki wynosił
+  `0`, tabela akcjonariatu pokazywała „Brak akcjonariuszy na wskazany dzień", a łańcuch zdarzeń był
+  pusty. Nazwa pola sugeruje fakt dokonany („rejestr został otwarty tego dnia"), podczas gdy
+  rzeczywiście nic jeszcze nie zostało do niego wpisane.
+- **Co powinno się stać:** albo pole powinno pozostać puste do chwili pierwszego realnego wpisu
+  (emisji założycielskiej), albo jego etykieta/opis powinny jasno rozróżniać „data przyjęcia spółki
+  do obsługi" od „data faktycznego otwarcia rejestru (pierwszy wpis)".
+- **Podstawa:** zasada techniczna — spójność etykiet z rzeczywistym stanem danych; pośrednio art.
+  300³⁴ § 1 KSH (kolejność zdarzeń w czasie ma znaczenie prawne dla samego rejestru).
+- **Waga:** DROBNY (kosmetyczna niespójność nazewnictwa/momentu ustawienia pola, bez wpływu na
+  poprawność samego rejestru zdarzeń, który w tym momencie poprawnie pokazuje zero wpisów).

@@ -40,3 +40,75 @@ zależy to wyłącznie od treści umowy spółki (której dziś system nie ewide
   postanowienia UMOWY SPÓŁKI (analogicznie do `zakaz_glosu_zastawnika_umowa` już istniejącego w
   schemacie)? Jeśli to drugie — system potrzebowałby nowego pola przy emisji/serii (np.
   `pozbawiona_glosu_umowa`), a nie tylko poprawki w liczniku głosów.
+
+## P-003 — Czy „zgłoszenie" ma nadal iść przez ocenę kancelarii przed zaproszeniem, czy obecne
+automatyczne zaproszenie „od razu" jest ostateczną, świadomą decyzją biznesową?
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-003. `SESJA-PSA-AUDYT.md` (i pierwotny komentarz
+  nagłówkowy `server/trasy/zgloszenia.js`) opisują krok „przegląd i zatwierdzenie zgłoszenia przez
+  pracownika kancelarii" jako osobny etap decyzyjny. Rzeczywisty kod (`server/trasy/portal.js:290-293`)
+  wysyła zaproszenie do portalu natychmiast po złożeniu zgłoszenia, z jawnym komentarzem, że to
+  świadoma zmiana („kancelaria niczego jeszcze nie sprawdza (...) kolejka zostaje jako ślad, nie
+  jako bramka").
+- **Dlaczego nie rozstrzygnąłem sam:** to decyzja biznesowa (szybkość onboardingu vs. kontrola
+  wstępna), nie kwestia zgodności z przepisem — `PRZEPISY-PSA.md` w ogóle nie reguluje etapu
+  przedkontraktowego zgłoszenia zainteresowania.
+- **Pytanie:** czy to ma tak zostać (każdy z poprawnym numerem KRS i dowolnym e-mailem dostaje od
+  razu aktywne konto portalowe i może zacząć wypełniać wniosek), czy przycisk „Odrzuć" w kolejce
+  zgłoszeń powinien realnie cofać już nadany dostęp (dziś tego nie robi — konto zostaje aktywne)?
+
+## P-004 — Jaki ma być docelowy sposób nadawania akcjonariuszom innym niż wnioskodawca dostępu do
+portalu?
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-006 — KRYTYCZNE. Model danych (`psa_konta.rola`
+  `spolka`/`akcjonariusz`, `CHECK` w migracji wiążący rolę `akcjonariusz` z `osoba_id`) zakłada
+  istnienie kont akcjonariuszy, ale w całym kodzie nie ma ŻADNEJ trasy ani przycisku, który taki
+  wiersz kiedykolwiek tworzy. W praktyce: akcjonariusz, który nie był osobą wypełniającą wniosek
+  (typowo: drugi/kolejny wspólnik, inwestor mniejszościowy, wspólnik-osoba prawna reprezentowana
+  przez kogoś innego) nigdy, żadną drogą, nie dostaje własnego logowania do portalu.
+- **Dlaczego nie rozstrzygnąłem sam:** to brakująca funkcja, nie błąd logiki — wymaga decyzji
+  produktowej (kto inicjuje zaproszenie: kancelaria ręcznie z kartoteki osób? spółka sama z
+  poziomu swojego konta? automatycznie przy wpisaniu objęcia akcji na nową osobę?) i decyzji
+  bezpieczeństwa (jak weryfikować, że dana osoba prawna faktycznie kontroluje podany adres e-mail,
+  zanim dostanie wgląd we własne dane w rejestrze).
+- **Pytanie:** który z powyższych mechanizmów zaproszenia ma powstać, i czy to jest praca do
+  sprintu 7 („Aktywacja kont portalowych e-mailem" jest tam wymieniona ogólnie) — jeśli tak, warto
+  to sprecyzować w `CLAUDE-PSA.md`, bo dziś zapis sprintu 7 nie rozróżnia „aktywacji" (co już
+  działa dla wnioskodawcy) od „zaproszenia KOGOŚ INNEGO NIŻ wnioskodawca" (co nie istnieje wcale).
+
+## P-005 — Czy niezgodność dat „uchwała później niż umowa" i nadpisanie umowy o prowadzenie
+rejestru bez śladu mają być twardą blokadą, czy tylko ostrzeżeniem?
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-008 i Z-009. Bezpośrednim żądaniem `PUT
+  /api/psa/spolki/:id` dało się zapisać `data_uchwaly_wyboru` PÓŹNIEJSZĄ niż `data_umowy` (logicznie
+  odwrócona kolejność względem art. 300³² § 1 w zw. z art. 300³¹ § 5 KSH), a także nadpisać całą
+  umowę (datę, kto ją zawarł) drugi raz, bez żadnego ostrzeżenia i bez śladu poprzedniej wersji —
+  mimo że reszta modułu jest zbudowana wokół zasady „nic się nie nadpisuje bez śladu"
+  (`psa_zdarzenia` append-only).
+- **Dlaczego nie rozstrzygnąłem sam:** `CLAUDE-PSA.md` reguła 1 mówi o append-only wyłącznie dla
+  `psa_zdarzenia` — `psa_spolki` (gdzie żyją te pola) nie ma analogicznego zastrzeżenia wprost, więc
+  nie jest jasne, czy zamierzeniem było też uczynienie zmiany umowy zdarzeniem w łańcuchu (typ
+  `zmiana_danych_spolki` już istnieje i jest używany dla INNYCH pól tej samej tabeli).
+- **Pytanie:** (a) czy zapis z `data_uchwaly_wyboru > data_umowy` ma być odrzucany, czy tylko
+  oznaczany ostrzeżeniem wymagającym świadomego potwierdzenia; (b) czy zmiana `data_umowy`/
+  `umowe_zawarl*` na już prowadzonej spółce powinna iść przez `psa_zdarzenia` (jak inne zmiany
+  danych spółki) zamiast przez ciche `UPDATE` kolumn.
+
+## P-006 — Czy `data_wpisu_krs` emisji powinna być walidowana względem `data_utworzenia_spolki`
+(i ewentualnie względem `dzisiaj`), czy sama obecność pola wystarcza?
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-012 — KRYTYCZNE. Bezpośrednim żądaniem dało się
+  zapisać emisję z `data_wpisu_krs = "2000-01-01"` dla spółki zarejestrowanej w KRS dopiero dzisiaj
+  — system sprawdza wyłącznie, że pole NIE JEST puste, nigdy że jest wiarygodne względem reszty
+  danych tej samej spółki.
+- **Dlaczego nie rozstrzygnąłem sam:** to nie brak reguły w `PRZEPISY-PSA.md` (art. 300³⁰ § 2 KSH
+  jest tam jasno opisany i podstawa jest jednoznaczna), tylko pytanie o ZAKRES dodatkowej walidacji
+  krzyżowej, której konkretny kształt (np. czy dopuszczać `data_wpisu_krs` RÓWNĄ dacie rejestracji
+  spółki dla emisji założycielskiej, czy wymagać być późniejsza) wymaga decyzji, żeby nie zablokować
+  prawidłowego przypadku (emisja założycielska ma zwykle TĘ SAMĄ datę co wpis spółki, bo rejestrują
+  się razem — `spolki.js:329` tak właśnie to dziś ustawia: „mirroruje datę rejestracji w KRS").
+- **Pytanie:** czy reguła ma brzmieć „data_wpisu_krs emisji ≥ data_utworzenia_spolki" (z
+  dopuszczeniem równości dla emisji założycielskiej), czy coś innego — i czy analogiczna kontrola
+  krzyżowa (data nie z przyszłości, data nie sprzed rejestracji spółki) powinna też objąć inne pola
+  dat w całym module (np. `data_zdarzenia` zdarzeń późniejszych niż emisja, o czym wspomina już
+  istniejąca reguła „walidacje.js" dla dat wcześniejszych niż ostatnie zdarzenie na tych akcjach)?
