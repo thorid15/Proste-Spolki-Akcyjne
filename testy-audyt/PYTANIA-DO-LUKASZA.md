@@ -112,3 +112,55 @@ rejestru bez śladu mają być twardą blokadą, czy tylko ostrzeżeniem?
   krzyżowa (data nie z przyszłości, data nie sprzed rejestracji spółki) powinna też objąć inne pola
   dat w całym module (np. `data_zdarzenia` zdarzeń późniejszych niż emisja, o czym wspomina już
   istniejąca reguła „walidacje.js" dla dat wcześniejszych niż ostatnie zdarzenie na tych akcjach)?
+
+## P-007 — Czy wprowadzenie stanu otwarcia rejestru (emisja, objęcie, uprawnienia, ograniczenia) to
+wpisy na żądanie w rozumieniu art. 300³⁴ § 1 KSH (każdy odpłatny 100 zł), czy czynność objęta
+wyłącznie opłatą za prowadzenie rejestru? (pytanie postawione wprost przez checklistę FAZA 2 —
+zgłaszam zachowanie aplikacji, nie rozstrzygam)
+
+- **Kontekst:** zbadałem OBIE ścieżki, którymi w aplikacji powstaje stan otwarcia rejestru, i
+  zachowują się RÓŻNIE co do liczby opłat:
+  1. **Wniosek portalowy → `POST /api/psa/wnioski/:id/przyjmij`** (`server/trasy/wnioski.js:820`):
+     nalicza dokładnie JEDNĄ opłatę — `prowadzenie` (1200 zł, pierwszy rok) — i ZERO opłat `wpis`,
+     niezależnie od tego, ile zdarzeń założycielskich powstanie później w kreatorze. Sam moment
+     „przyjęcia wniosku" jeszcze nie zapisuje żadnej emisji/objęcia do `psa_zdarzenia`.
+  2. **Kreator wewnętrzny → `POST /api/psa/spolki/:id/otworz-rejestr`** (patrz
+     `testy-audyt/ZNALEZISKA.md` Z-108): zapisuje KOMPLET zdarzeń założycielskich (przetestowałem:
+     emisja + objęcie, dwa zdarzenia w jednej transakcji) i nalicza ZERO opłat — ani `wpis`, ani
+     `prowadzenie`. Komentarz w kodzie (`server/rejestr.js`, przy `dokonajWpisuSprawy`) mówi wprost:
+     „Sciezka bezposrednia `dokonajWpisu` (migracja «stan otwarcia») celowo NIE przechodzi tedy —
+     wpisywanie historycznego stanu nie jest biezaca czynnoscia odplatna."
+- **Dlaczego nie rozstrzygnąłem sam:** to dokładnie pytanie, które checklista sesji każe ZGŁOSIĆ, a
+  nie rozstrzygać samodzielnie („PYTANIE DO ŁUKASZA: czy wprowadzenie stanu otwarcia to wpisy na
+  żądanie (...), czy czynność objęta opłatą za prowadzenie rejestru"). Dodatkowo odkryłem, że samo
+  pytanie ma DWIE osobne odpowiedzi w kodzie, zależnie od ścieżki zakładania spółki — więc nawet
+  przy uznaniu, że „stan otwarcia = tylko opłata za prowadzenie", to i tak ścieżka 2 (kreator
+  wewnętrzny) nigdy tej opłaty automatycznie nie nalicza (Z-108) — to osobny problem, ale powiązany.
+- **Pytanie:** (a) czy stan otwarcia rejestru (niezależnie od ścieżki, którą powstała spółka) ma być
+  objęty WYŁĄCZNIE opłatą za prowadzenie rejestru (obecne zachowanie ścieżki 1), czy każde zdarzenie
+  założycielskie osobno powinno być traktowane jak zwykły odpłatny wpis; (b) jeśli odpowiedź na (a)
+  to „tylko prowadzenie" — czy ścieżka 2 (kreator wewnętrzny) powinna zostać poprawiona tak, żeby
+  RÓWNIEŻ automatycznie naliczała pierwszy rok prowadzenia przy `otworz-rejestr` (patrz Z-108), żeby
+  obie ścieżki zachowywały się identycznie.
+
+## P-008 — Czy endpoint `POST /api/psa/oplaty/naliczenie-roczne` (kalendarzowy, martwy w UI) ma
+zostać wyłączony/usunięty teraz, gdy istnieje mechanizm rocznicowy (`/odnowienia`), czy ma zostać
+jako świadomie utrzymywana alternatywa?
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-100 — KRYTYCZNE, potwierdzone empirycznie:
+  wywołanie tego endpointu naliczyło DODATKOWĄ opłatę `prowadzenie` (1200 zł) dla WSZYSTKICH 9
+  aktywnych spółek testowych naraz, mimo że część z nich miała już aktywną, pokrywającą się w
+  czasie opłatę `prowadzenie` naliczoną przez mechanizm rocznicowy — bo oba mechanizmy sprawdzają
+  idempotencję po INNEJ kolumnie (`okres` tekst vs `okres_od` data) i nie widzą się nawzajem.
+  Komentarz w kodzie przy `naliczOdnowienia` mówi, że mechanizm rocznicowy „Zastepuje wsadowe
+  «naliczenie roczne» po kalendarzu" — sugeruje to, że kalendarzowy miał zostać zarzucony, ale kod i
+  endpoint API nadal istnieją i działają (wymagają tylko roli `admin`, żadnego dodatkowego
+  potwierdzenia).
+- **Dlaczego nie rozstrzygnąłem sam:** to decyzja o utrzymaniu/usunięciu działającego kodu
+  produkcyjnego (endpoint API), nie kwestia interpretacji przepisu — a audyt jest read-only i nie
+  naprawia kodu.
+- **Pytanie:** czy endpoint `/naliczenie-roczne` i funkcje `naliczOplateProwadzenia`/
+  `naliczOplateRoczneWszystkie` mają zostać całkowicie usunięte z kodu (bo są martwe z punktu
+  widzenia UI i niebezpieczne przy przypadkowym wywołaniu), czy zabezpieczone (np. idempotencja po
+  sprawdzeniu WSZYSTKICH aktywnych opłat `prowadzenie` danej spółki niezależnie od formatu `okres`,
+  nie tylko dosłownego dopasowania tekstu), czy mają pozostać bez zmian do czasu dalszej decyzji.
