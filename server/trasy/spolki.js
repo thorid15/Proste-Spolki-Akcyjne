@@ -258,6 +258,13 @@ router.post(
     const spolka = db().prepare('SELECT id FROM psa_spolki WHERE id = ?').get(id);
     if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    // Naprawa Z-253: rozszerzenie to obietnica klienta — sprawdzamy tresc
+    // pliku po sygnaturze (audyt: HTML ze <script> nazwany „.pdf" byl
+    // przyjmowany jako zalacznik umowy spolki na tej trasie).
+    if (!pliki.trescPasuje(zad.file.path, pliki.typZNazwy(zad.file.originalname))) {
+      fs.rmSync(zad.file.path, { force: true });
+      throw bledneZadanie(`Treść pliku „${zad.file.originalname}" nie odpowiada jego rozszerzeniu. Prześlij plik PDF.`);
+    }
 
     db()
       .prepare(

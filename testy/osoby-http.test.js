@@ -267,3 +267,22 @@ test('POST/GET /api/psa/osoby/:id/aml-skany: upload, lista, pobranie z logiem do
   const liczbaWpisowDziennikaPo = db().prepare('SELECT COUNT(*) AS ile FROM psa_dziennik_dostepu').get().ile;
   assert.equal(liczbaWpisowDziennikaPo, liczbaWpisowDziennikaPrzed + 1, 'pobranie skanu zostawia slad w dzienniku dostepu');
 });
+
+test('Z-253: POST /api/psa/osoby/:id/aml-skany odrzuca plik, ktorego tresc nie odpowiada rozszerzeniu', async () => {
+  // Rozszerzenie „.pdf" przechodzilo przez fileFilter (sprawdza tylko
+  // rozszerzenie), a skan tozsamosci trafial na dysk mimo ze w srodku jest
+  // HTML ze <script> — najbardziej wrazliwa kategoria uploadu w calej
+  // aplikacji nie miala kontroli sygnatury tresci.
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `SkanFalszywy${sufiks()}` });
+  const [, spolka] = await zapytaj('POST', '/api/psa/spolki', { nazwa: `AML Falsz ${sufiks()}`, stosuje_procedure_aml: true });
+
+  const podrobiony = new FormData();
+  podrobiony.append('spolka_id', String(spolka.spolka.id));
+  podrobiony.append('plik', new Blob(['<html><script>alert(1)</script></html>'], { type: 'application/pdf' }), 'dowod.pdf');
+  const odp = await fetch(`${baza}/api/psa/osoby/${osoba.osoba.id}/aml-skany`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: podrobiony,
+  });
+  assert.equal(odp.status, 400);
+  const [, lista] = await zapytaj('GET', `/api/psa/osoby/${osoba.osoba.id}/aml-skany`);
+  assert.equal(lista.skany.length, 0, 'odrzucony plik nie zostaje zapisany w kartotece');
+});

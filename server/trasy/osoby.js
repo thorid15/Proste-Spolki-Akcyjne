@@ -397,6 +397,14 @@ router.post(
     const id = Number(zad.params.id);
     if (!db().prepare('SELECT id FROM psa_osoby WHERE id = ?').get(id)) throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    // Naprawa Z-253: rozszerzenie to obietnica klienta — sprawdzamy tresc
+    // pliku po sygnaturze (te sama kontrola co przy dokumentach sprawy
+    // i wniosku; wczesniej ta trasa jej nie miala, mimo ze zbiera skany
+    // dokumentow tozsamosci — najbardziej wrazliwa kategoria uploadu).
+    if (!pliki.trescPasuje(zad.file.path, pliki.typZNazwy(zad.file.originalname))) {
+      fs.rmSync(zad.file.path, { force: true });
+      throw bledneZadanie(`Treść pliku „${zad.file.originalname}" nie odpowiada jego rozszerzeniu. Prześlij PDF albo zdjęcie.`);
+    }
     const typDokumentu = String((zad.body || {}).typ_dokumentu || 'inny');
     if (!TYPY_DOKUMENTU_AML.includes(typDokumentu)) throw bledneZadanie(`Nieznany typ dokumentu: „${typDokumentu}”.`);
     const retencjaDo = (zad.body || {}).retencja_do || null;
