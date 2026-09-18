@@ -2241,6 +2241,27 @@ poza kancelarię; wyciek jest w surowym JSON-ie, nie w żadnym wydruku
   potrzebne w tej odpowiedzi NIKOMU — trafiają do niej wyłącznie dlatego, że `zamaskujOsobe()` w
   gałęzi pełnego dostępu zwraca dosłownie cały wiersz `psa_osoby`, a nie wybrane pola (naruszenie
   zasady minimalizacji danych, niezależnie od problemu autoryzacji).
+  **Doprecyzowanie po dalszym teście — dokładnie ten scenariusz, o który prosiła checklista sesji
+  („zaloguj się jako akcjonariusz A i odpytaj endpoint zwracający dane rejestru… czy odpowiedź JSON
+  zawiera PESEL, datę urodzenia i adres akcjonariusza B"):** dla `rola=akcjonariusz&odbiorca=1`
+  (Ala ogląda Bogdana, `id=2`) `pesel`/`data_urodzenia`/`kod_pocztowy`/`miejscowosc`/`ulica`/
+  `nr_domu` Bogdana są POPRAWNIE zamaskowane (`•••`), a `aml_status`/`aml_data`/`aml_notatka`/
+  `uwagi` POPRAWNIE usunięte z odpowiedzi — ale `pep`, `pep_opis`, `pep_oswiadczenie`,
+  `pep_oswiadczenie_data`, `beneficjent_rzeczywisty_id` i `aml_data_przegladu` Bogdana **zostają w
+  odpowiedzi, w pełni jawne, nawet w tej gałęzi**. Sprawdzone bezpośrednio: `curl … ?rola=
+  akcjonariusz&odbiorca=1` → klucz `pep` obecny w rekordzie osoby #2 (`"pep":"nie"`), klucze
+  `aml_status`/`uwagi` nieobecne (poprawnie usunięte). Przyczyna: `server/logika/maskowanie.js:40-43`
+  usuwa DOSŁOWNIE cztery pola (`aml_status`, `aml_data`, `aml_notatka`, `uwagi`) i ANI JEDNEGO z
+  pól PEP/beneficjenta rzeczywistego — mimo że są to dane tej samej kategorii (AML, nigdy
+  niewychodzące poza kancelarię wg własnego komentarza modułu) i mieszkają w tej samej sekcji
+  formularza kartoteki co `pep_oswiadczenie`, opisanej w UI jako „Oświadczenie SKŁADANE PRZEZ
+  OSOBĘ (art. 46 ustawy AML)". Znaczy to, że NAWET GDY Z-006 zostanie kiedyś naprawione i powstaną
+  prawdziwe konta portalowe roli „akcjonariusz", jeden akcjonariusz już dziś (przy identycznym
+  kodzie) zobaczyłby w surowej odpowiedzi JSON, czy inny akcjonariusz tej samej spółki jest osobą
+  politycznie eksponowaną (i jej opis relacji/funkcji) oraz kto jest jego beneficjentem
+  rzeczywistym — czyli scenariusz o jeden stopień gorszy niż wyciek do „spółki”/„organu”, bo
+  dotyczy wprost PEER-a, a nie podmiotu z ustawowo uzasadnionym pełnym dostępem do żadnej kategorii
+  danych tej osoby.
 - **Co powinno się stać:** wyciek dotyczy pola z definicji poufnego (notatka AML to w istocie
   ocena ryzyka finansowo-politycznego konkretnej osoby, blisko kategorii szczególnie chronionych
   przy PEP) i trafia dziś — realnym kanałem produkcyjnym (`portal/rejestr/:spolkaId`) — do KAŻDEJ
@@ -2493,4 +2514,337 @@ w przeciwieństwie do surowego API (Z-150), dokument końcowy jest bezpieczny
   WYŁĄCZNIE surowego API stanu rejestru, nie propaguje się do żadnego z generowanych dokumentów
   (ekran vs. wydruk pozostają spójne w zakresie AML tak samo, jak w zakresie PESEL/adresu — Z-014).
 - **Podstawa:** `CLAUDE-PSA.md` sekcja 10.
+- **Waga:** POZYTYWNE.
+
+---
+
+# FAZA 7 — klasyczne błędy aplikacji generowanych automatycznie
+
+> Zakres Z-350–Z-379. Testowane bezpośrednim żądaniem HTTP (z pominięciem formularza, zgodnie
+> z zasadą 3 sesji) na spółkach testowych utworzonych do tego celu (spółka #9 „Testowa Kancelaria
+> Audytowa Spolka Faza7...”/300 znaków, spółka #11 „Faza7 Pusta Spolka Testowa P.S.A.” — bez
+> żadnych zdarzeń), plus przeglądem Playwright kilku ekranów kancelarii. Skrypty pomocnicze w
+> `testy-audyt/skrypty/faza7-*.js`, zrzuty w `testy-audyt/zrzuty/faza7/`. Znaleziska Z-004 i Z-017
+> (FAZA 1, wyścig przy zgłoszeniu wstępnym i autozapis wniosku) NIE są tu powtarzane — poniżej
+> rozszerzenie tej samej klasy błędów na INNE zapisy (kartoteka osób, założenie sprawy, wpis do
+> rejestru).
+
+## Z-350 [POWAŻNY] — kartoteka osób nie ma ŻADNEJ ochrony przed duplikatem: podwójne żądanie
+tworzy dwa identyczne rekordy, a dwie RÓŻNE osoby mogą mieć TEN SAM numer PESEL bez ostrzeżenia
+
+- **Co zrobiłem:** (1) wysłałem DWA kolejne (nie równoczesne — zwykłe, sekwencyjne) żądania
+  `POST /api/psa/osoby` z identycznym ciałem (`{"typ":"fizyczna","nazwisko":"Duplikat
+  Testowy","imie":"Jan"}`), bezpośrednio przez `curl`, z pominięciem przycisku „Zapisz” kartoteki.
+  (2) osobno wysłałem DWA żądania `POST /api/psa/osoby` z RÓŻNYMI nazwiskami („PeselTest1 Anna” /
+  „PeselTest2-INNA-OSOBA Ewa”), ale identycznym numerem PESEL `90010112349`.
+- **Co się stało:** (1) powstały DWA osobne rekordy `psa_osoby` (id 26 i 27), oba „Duplikat Testowy
+  Jan”, potwierdzone przez `GET /api/psa/osoby?q=Duplikat%20Testowy` (dwa wiersze) i widoczne wprost
+  na liście kartoteki (zrzut `testy-audyt/zrzuty/faza7/martwe-osoby.png` — pozycja „Duplikat Testowy
+  Jan” występuje dwukrotnie). (2) obie osoby o różnych nazwiskach zapisały się z tym samym PESEL-em
+  (id 28 i 29), HTTP 201 bez żadnego błędu ani ostrzeżenia — `sprawdzOsobe`
+  (`server/trasy/osoby.js`) sprawdza WYŁĄCZNIE sumę kontrolną PESEL-u danej osoby z osobna
+  (miękkie ostrzeżenie, `ostrzezeniaOsoby`), nigdy kolizję z INNYM już istniejącym rekordem; schemat
+  `psa_osoby` (`server/migracje.js:54-84`) nie ma ograniczenia `UNIQUE` na `pesel` ani `nip`. Nagłówek
+  ekranu kartoteki brzmi wprost: „Wspólna dla wszystkich prowadzonych rejestrów — jeden inwestor
+  wpisywany raz” (widoczne na tym samym zrzucie) — zachowanie aplikacji jest sprzeczne z własną
+  deklaracją wyświetlaną użytkownikowi.
+- **Co powinno się stać:** przy zapisie osoby z numerem PESEL/NIP już obecnym w kartotece pod INNYM
+  `id` aplikacja powinna co najmniej ostrzec pracownika (a docelowo zaproponować połączenie z
+  istniejącym rekordem) — dokładnie to, co „regula domenowa nr 10” (jeden inwestor wpisywany raz)
+  ma zapewniać. Podwójne kliknięcie/podwójne żądanie zapisu NOWEJ osoby bez żadnych danych
+  identyfikujących (samo imię i nazwisko) powinno być co najmniej utrudnione (np. przez krótkie,
+  serwerowe okno „ten sam autor, te same dane, ostatnie N sekund”), skoro UI i tak tylko blokuje
+  przycisk lokalnie (`ustawZapisywanie`/`disabled` w `publiczne/js/osoby.js:151-164`) — ochrona
+  wyłącznie po stronie przeglądarki nie jest ochroną (dwie karty, odświeżenie, retransmisja po
+  zerwanym połączeniu — patrz Z-353).
+- **Podstawa:** `CLAUDE-PSA.md` „Regula domenowa nr 10: jeden inwestor w wielu spółkach wpisywany
+  RAZ” (cytowana wprost w nagłówku `server/trasy/osoby.js`); zasada techniczna z checklisty sesji
+  („brak idempotencji — powtórz to samo żądanie zapisu dwa razy”, rozszerzona tu z formularza
+  zgłoszenia (Z-004) na kartotekę osób).
+- **Waga:** POWAŻNY (nie KRYTYCZNY — nie psuje samego rejestru zdarzeń ani bilansu akcji, ale
+  bezpośrednio podważa zasadę „jeden inwestor wpisywany raz”, którą aplikacja sama deklaruje, i
+  tworzy realne ryzyko rozjazdu danych AML/kontaktowych między dwoma „tożsamymi” wpisami tej samej
+  osoby).
+
+## Z-351 [POWAŻNY] — założenie sprawy (`POST /api/psa/sprawy`) nie ma żadnej ochrony przed
+duplikatem: podwójne żądanie tworzy DWIE niezależne sprawy, każda z WŁASNYM biegnącym terminem
+ustawowym 7 dni dla tego samego zdarzenia
+
+- **Co zrobiłem:** wysłałem DWA kolejne, identyczne żądania `POST /api/psa/sprawy` (spółka #9, typ
+  `zdarzenie_inne`, źródło „papier”, ten sam opis żądającego), bezpośrednio przez `curl`.
+- **Co się stało:** powstały DWIE osobne sprawy — `RA/2026/0006` (id 8) i `RA/2026/0007` (id 9) —
+  każda z własnym `numer`, własnym `data_wplywu` i (kluczowe) własnym, niezależnie liczonym
+  `termin_do` na podstawie art. 300³⁴ § 1 KSH. Obie widoczne równolegle w „Kolejce spraw” (zrzut
+  `testy-audyt/zrzuty/faza7/martwe-sprawy.png`, obie oznaczone „nowa”/„w weryfikacji”, „6 dz.”/
+  „7 dz.”). Przyczyna: `POST /` w `server/trasy/sprawy.js:125-237` nie sprawdza w ogóle, czy dla tej
+  samej spółki i tego samego typu zdarzenia nie istnieje już sprawa w toku — w przeciwieństwie do
+  zgłoszenia wstępnego (`portal.js`), które (poza wadą współbieżności z Z-004) odsiewa duplikat po
+  numerze KRS.
+- **Co powinno się stać:** przynajmniej ostrzeżenie przy zakładaniu sprawy tego samego typu dla tej
+  samej spółki, gdy inna sprawa tego typu jest już w toku (nie „wpisana”/„odmówiona”); w praktyce
+  kancelaryjnej duplikat oznacza, że pracownik może przez pomyłkę wykonać wpis DWA razy dla tego
+  samego zdarzenia (dwa niezależne zdarzenia w łańcuchu rejestru) albo nabić dwie opłaty za wpis za
+  jedną czynność (patrz też FAZA 2, zestaw Z-100+, w zakresie samych kwot).
+- **Podstawa:** zasada techniczna z checklisty sesji („brak idempotencji”); pośrednio art. 300³⁴ § 1
+  KSH — dwa równoległe, „ustawowe” terminy 7-dniowe dla jednego rzeczywistego zdarzenia nie mają
+  sensu i utrudniają nadzór nad tym, która sprawa jest tą „prawdziwą”.
+- **Waga:** POWAŻNY (organizacyjne ryzyko podwójnego wpisu/podwójnej opłaty za tę samą czynność;
+  nie narusza samo w sobie integralności już dokonanego wpisu, bo `dokonajWpisuSprawy` — patrz
+  Z-352 — i tak dopuszcza wpis tylko raz PER sprawa).
+
+## Z-352 [POZYTYWNE] — dokonanie wpisu (`POST /api/psa/sprawy/:id/wpisz`) JEST odporne na
+dwa równoczesne żądania — w przeciwieństwie do Z-350/Z-351/Z-004
+
+- **Co zrobiłem:** przygotowałem sprawę (#7, „przeniesienie” 10 akcji od Adama do Beaty, spółka
+  #9) i przeprowadziłem ją do stanu „weryfikacja”, po czym wysłałem DWA ROWNOCZESNE (Promise.all)
+  żądania `POST /api/psa/sprawy/7/wpisz` z identycznym ciałem
+  (`testy-audyt/skrypty/faza7-race-wpisz.js`).
+- **Co się stało:** pierwsze żądanie zwróciło `201` (zdarzenie #34 zapisane, sprawa → „wpisana”,
+  naliczona dokładnie JEDNA opłata 100,00 zł za wpis, id 21). Drugie, wykonane RÓWNOCZEŚNIE, zwróciło
+  `422`: „Wpisu można dokonać wyłącznie ze stanu „weryfikacja” (sprawa jest w stanie „wpisana”).” —
+  żadnego drugiego zdarzenia ani drugiej opłaty. Przyczyna (potwierdzona czytaniem
+  `server/rejestr.js:522-560`): `dokonajWpisuSprawy` odczytuje AKTUALNY stan sprawy i całą logikę
+  wpisu wykonuje w JEDNEJ synchronicznej transakcji `better-sqlite3` — a że `better-sqlite3` działa
+  synchronicznie w jednowątkowej pętli zdarzeń Node, drugie żądanie fizycznie nie może „wcisnąć się”
+  w środek transakcji pierwszego, tylko czeka na jej zakończenie i widzi już zaktualizowany stan.
+- **Co powinno się stać:** dokładnie to, co się stało.
+- **Podstawa:** zasada techniczna z checklisty sesji („brak idempotencji — powtórz to samo żądanie
+  zapisu dwa razy”, tu: dwa RÓWNOCZESNE).
+- **Waga:** POZYTYWNE. Zestawione z Z-350/Z-351 (żadnej ochrony) i Z-004 z FAZA 1 (ochrona
+  niekompletna — podatna na współbieżność) pokazuje, że aplikacja ma TRZY różne poziomy odporności
+  na duplikat zapisu w trzech różnych miejscach — wzorzec z tego endpointu (przeczytaj-i-sprawdź-
+  -stan-WEWNĄTRZ-tej-samej-transakcji) powinien być powielony tam, gdzie go dziś brakuje.
+
+## Z-353 [POWAŻNY] — zerwanie połączenia klienta W TRAKCIE zapisu nie przerywa zapisu po stronie
+serwera — klient nie ma żadnego potwierdzenia, czy dane trafiły do bazy, mimo widocznego błędu
+
+- **Co zrobiłem:** otworzyłem surowe połączenie TCP do serwera, wysłałem kompletne żądanie
+  `POST /api/psa/osoby` (nagłówki + ciało JSON) i NATYCHMIAST po wysłaniu ostatniego bajtu
+  zniszczyłem gniazdo (`socket.destroy()`) — PRZED odebraniem jakiejkolwiek odpowiedzi
+  (`testy-audyt/skrypty/faza7-abort-socket.js`); osobno sprawdziłem też wariant z `AbortController`
+  na `fetch` (`faza7-abort-polaczenia.js`), który jednak przerywa żądanie PRZED wysłaniem go do
+  serwera i niczego nie dowodzi o zachowaniu backendu.
+- **Co się stało:** mimo zerwania połączenia bez odebrania odpowiedzi, osoba „AbortSocket-<znacznik
+  czasu>” TRAFIŁA do bazy — potwierdzone kolejnym żądaniem `GET /api/psa/osoby?q=AbortSocket...` po
+  800 ms (rekord istnieje, widoczny też na zrzucie kartoteki jako „AbortSocket-1789678016880 X”).
+  Klient w tym scenariuszu (np. użytkownik z niestabilnym łączem albo przeglądarka, która pokazuje
+  błąd sieciowy i nic więcej) nie ma ŻADNEGO sposobu dowiedzieć się z samej odpowiedzi, że zapis się
+  jednak powiódł — jedyna droga to ręczne odświeżenie i przeszukanie kartoteki.
+- **Co powinno się stać:** to poprawne zachowanie z punktu widzenia integralności danych (żaden
+  zapis nie jest przerywany w połowie — `better-sqlite3` kończy rozpoczętą, synchroniczną transakcję
+  niezależnie od stanu gniazda klienta) — problemem NIE jest sam ten fakt, tylko jego ZESTAWIENIE z
+  Z-350/Z-351: typowa reakcja użytkownika na „błąd sieci” („nie wiem czy wysłało, kliknę/wyślę
+  jeszcze raz”) przy braku jakiejkolwiek deduplikacji po stronie serwera tworzy duplikat dokładnie
+  tam, gdzie żadna ochrona (Z-350, Z-351) nie istnieje.
+- **Podstawa:** zasada techniczna z checklisty sesji („optymistyczny interfejs — zerwij połączenie
+  w trakcie zapisu i sprawdź, co pokazuje aplikacja i co jest w bazie”).
+- **Waga:** POWAŻNY jako ZESTAWIENIE z Z-350/Z-351 (samo zjawisko w izolacji byłoby co najwyżej
+  DROBNE — zapis jest poprawny i atomowy, brakuje tylko potwierdzenia dla klienta).
+
+## Z-354 [POWAŻNY] — brak jakiegokolwiek limitu długości pola „nazwa” spółki (front-end, API,
+baza) — nazwa 300-znakowa psuje układ pulpitu, listy spółek i kolejki spraw
+
+- **Co zrobiłem:** utworzyłem spółkę testową #9 przez `POST /api/psa/spolki` z polem `nazwa`
+  o długości dokładnie 300 znaków (powtórzony fragment tekstu), bez żadnego innego naruszenia
+  walidacji (`sprawdzDaneSpolki`, `server/trasy/spolki.js:89-134`, nie sprawdza długości `nazwa` w
+  ogóle), po czym obejrzałem wynik w przeglądarce (Playwright,
+  `testy-audyt/skrypty/faza7-martwe-funkcje.js`).
+- **Co się stało:** żądanie przeszło (`201`), kolumna `nazwa` w SQLite (`TEXT`, bez `CHECK`/
+  ograniczenia długości) przyjęła całość. W UI nazwa łamie się na dosłownie KAŻDYM słowie (brak
+  `text-overflow: ellipsis`/skracania) i zajmuje kilkanaście linii tam, gdzie inne wiersze zajmują
+  jedną — potwierdzone trzema zrzutami: `testy-audyt/zrzuty/faza7/martwe-pulpit.png` (karta „Sprawy
+  w toku” — jedna pozycja zajmuje tyle miejsca, co reszta listy razem wzięta, i psuje w ten sposób
+  całą hierarchię wizualną pulpitu), `martwe-spolki.png` (wiersz tabeli spółek rozciągnięty na 8
+  linii, sąsiednie kolumny — akcjonariusze/akcje/data — wizualnie oderwane od etykiety), oraz
+  `martwe-sprawy.png` (kolejka spraw — dwie pozycje „Inne zdarzenie” z tą nazwą zajmują 4 linie
+  każda).
+- **Co powinno się stać:** limit długości pola `nazwa` (i prawdopodobnie analogicznych pól
+  tekstowych — `ulica`, `miejscowosc`, `opis` itd., nie testowanych osobno) ustawiony na rozsądną
+  wartość praktyczną (rzeczywiste firmy spółek prawa handlowego rzadko przekraczają 200 znaków) na
+  poziomie walidacji API — a niezależnie od tego, komponent listy/tabeli powinien skracać zbyt długi
+  tekst (`text-overflow: ellipsis`, `white-space: nowrap` + tytuł/tooltip z pełną nazwą), żeby
+  pojedynczy rekord nie potrafił rozłożyć układu całego ekranu roboczego pracownika kancelarii.
+- **Podstawa:** zasada techniczna z checklisty sesji („puste stany i przypadki brzegowe — nazwa
+  spółki o długości 300 znaków”).
+- **Waga:** POWAŻNY (nie psuje danych ani obliczeń — czysto wizualne — ale na ekranach ROBOCZYCH
+  pracownika kancelarii, którymi są właśnie pulpit i kolejka spraw, praktycznie uniemożliwia szybkie
+  zorientowanie się w kolejce przy jednej takiej spółce w bazie).
+
+## Z-355 [POZYTYWNE] — puste stany (spółka bez żadnych zdarzeń/akcjonariuszy) są obsłużone
+poprawnie na poziomie API i wygenerowanych dokumentów, bez błędów 500 ani placeholderów
+
+- **Co zrobiłem:** utworzyłem spółkę #11 („Faza7 Pusta Spolka Testowa P.S.A.”) i, PRZED wpisaniem
+  do niej jakiegokolwiek zdarzenia, sprawdziłem: (1) `GET /api/psa/spolki/11` (kokpit), (2)
+  `POST /api/psa/spolki/11/dokumenty/08/podglad` (dokument „Lista akcjonariuszy do sądu”, wzór
+  wprost wymieniający akcjonariuszy).
+- **Co się stało:** (1) `200`, `liczba_zdarzen: 0`, `akcjonariusze: []`, `bilans: []` — żadnego
+  wyjątku. Na liście spółek (zrzut `martwe-spolki.png`) wiersz tej spółki poprawnie pokazuje same
+  zera i myślnik zamiast daty ostatniego zdarzenia. (2) dokument wygenerował się poprawnie: tabela
+  akcjonariuszy jest pusta, a treść wprost stwierdza „Łączna liczba akcji: 0.” — bez śladu `{{`,
+  `undefined`, `null`, `NaN` ani `Invalid Date`; pola niedostępne dla tej spółki (adres, NIP) są
+  poprawnie zgłoszone w osobnej liście `brakujace`, zgodnie ze wzorcem opisanym pozytywnie w FAZA 1
+  (Z-007 dotyczy TYLKO pola „sposób reprezentacji”, reszta mechanizmu działa poprawnie).
+- **Podstawa:** zasada techniczna z checklisty sesji („puste stany i przypadki brzegowe — spółka
+  bez akcjonariuszy”; „wygenerowane dokumenty mają wypełnione wszystkie pola — poszukaj `{{`,
+  `undefined`, `null`, `NaN`, `Invalid Date`”).
+- **Waga:** POZYTYWNE.
+
+## Z-356 [POZYTYWNE] — niepowodzenie wysyłki e-mail nigdy nie ginie po cichu: sprawdzone
+systematycznie we WSZYSTKICH miejscach wywołania, wynik zawsze trafia do pracownika
+
+- **Co zrobiłem:** przejrzałem WSZYSTKIE miejsca w kodzie serwera wywołujące `poczta.wyslij()`
+  (`server/poczta.js` — środowisko audytu nie ma skonfigurowanego SMTP, więc każda próba realnie
+  zwraca `wyslano:false` z powodem, zgodnie z ustaleniem FAZA 1) i dla każdego sprawdziłem, czy
+  odpowiedź API niesie ten wynik dalej, oraz czy front-end go wyświetla: zgłoszenia portalowe
+  (`server/logika/zaproszenia.js`, `publiczne/js/zgloszenia.js:35`), dokumenty wniosku
+  (`server/trasy/wnioski.js:372`, `publiczne/js/wnioski.js:1242-1243`), zawiadomienia o wpisie i
+  powiadomienia przed wpisem (`server/zawiadomienia.js`, `publiczne/js/sprawy.js:453,484-485,1040`),
+  przypomnienia o odnowieniu (`server/logika/przypomnienia.js`, `publiczne/js/oplaty.js:283-341`) —
+  potwierdziłem też empirycznie krok „wstrzymaj sprawę” (wysyła próbę powiadomienia), gdzie
+  odpowiedź API niosła `wysylka: {wyslano:false, powod:"Odbiorca nie ma adresu e-mail w
+  kartotece..."}`.
+- **Co się stało:** w KAŻDYM sprawdzonym miejscu funkcja `poczta.wyslij` zwraca `{wyslano, powod}`
+  (nigdy nie rzuca wyjątku przy braku SMTP — `server/poczta.js:41-64`), backend przekazuje ten wynik
+  w odpowiedzi API pod jawnym kluczem, a front-end w każdym z wymienionych miejsc renderuje go
+  pracownikowi jako `Komunikat` (ostrzeżenie/informację), nie tylko loguje po stronie serwera. Nie
+  znalazłem ANI JEDNEGO miejsca, w którym wynik wysyłki byłby odczytany i odrzucony bez wyświetlenia.
+- **Co powinno się stać:** dokładnie to, co się stało.
+- **Podstawa:** zasada techniczna z checklisty sesji („czy niepowodzenie wysyłki jest widoczne dla
+  pracownika, czy ginie po cichu”).
+- **Waga:** POZYTYWNE.
+
+## Z-357 [DROBNY] — przypomnienia o kończącym się roku prowadzenia rejestru nie mają żadnego
+automatycznego wyzwalacza (cron/zadanie cykliczne) — działają wyłącznie po ręcznym kliknięciu
+
+- **Co zrobiłem:** przeszukałem kod serwera (`serwer.js`, `server/logika/przypomnienia.js`) pod
+  kątem `setInterval`/harmonogramu/`node-cron` wywołującego `wyslijPrzypomnienia`, oraz sprawdziłem
+  jedyne miejsce jej wywołania: `server/trasy/oplaty.js:169-185` (`POST
+  /api/psa/oplaty/przypomnienia`), z frontendowym przyciskiem „Wyślij przypomnienia”
+  (`publiczne/js/oplaty.js:320-322`, widoczny na `martwe-oplaty.png` tylko gdy `do_odnowienia.length
+  > 0`).
+- **Co się stało:** funkcja jest kompletna i poprawnie zaimplementowana (idempotentna po
+  `psa_oplaty`, jak głosi jej własny komentarz), ale istnieje WYŁĄCZNIE jako akcja ręczna — sam kod
+  to przyznaje wprost: „Uruchamiane ręcznie przez pracownika; docelowo może je wołać zadanie
+  cykliczne” (`server/trasy/oplaty.js:166-167`). Żaden mechanizm w repozytorium (skrypt `cron`,
+  `setInterval`, zewnętrzny harmonogram) faktycznie tego nie robi. Jeśli żaden pracownik nie
+  otworzy zakładki „Opłaty” i nie kliknie przycisku w oknie 30 dni przed końcem okresu, przypomnienie
+  po prostu nigdy nie pójdzie, mimo że UI sugeruje istnienie „procesu” przypomnień (sekcja „Kończy
+  się rok prowadzenia rejestru” na tym samym ekranie i tak pokazuje ostrzeżenie — ale tylko komuś,
+  kto akurat wszedł w zakładkę „Opłaty”).
+- **Co powinno się stać:** albo faktyczne zadanie cykliczne (poza zakresem tego audytu — zmiana
+  kodu), albo przynajmniej wystawienie tego samego ostrzeżenia w widoczniejszym miejscu (pulpit
+  główny), skoro dziś zależy ono od tego, czy ktoś akurat otworzy zakładkę rozliczeń.
+- **Podstawa:** zasada techniczna z checklisty sesji („terminy — czy da się to pominąć niezauważone”
+  w duchu; nie jest to termin ustawowy z `PRZEPISY-PSA.md`, tylko wewnętrzny proces biznesowy
+  kancelarii, stąd waga DROBNY, nie POWAŻNY).
+- **Waga:** DROBNY.
+
+## Z-358 [POZYTYWNE, potwierdzone zachowaniem API, nie tylko czytaniem kodu] — termin ustawowy
+7 dni liczony jest w dniach KALENDARZOWYCH, a wznowienie po usunięciu przeszkody uruchamia PEŁNY,
+NOWY bieg 7 dni od dnia wznowienia — zgodnie dosłownie z art. 300³⁴ § 1 zd. 2
+
+- **Co zrobiłem:** założyłem sprawę (#8, spółka #9), przeprowadziłem `PATCH .../8 {akcja:
+  "weryfikuj"}`, potem `{akcja: "wstrzymaj"}`, odczekałem (upływ czasu rzeczywistego pomiędzy
+  wywołaniami — sesja przerwana i wznowiona następnego dnia kalendarzowego), po czym wykonałem
+  `{akcja: "wznow"}` i porównałem `termin_do` przed wstrzymaniem i po wznowieniu.
+- **Co się stało:** przed wstrzymaniem `termin_do = 2026-09-24` (7 dni kalendarzowych od
+  `data_wplywu` 17.09). Po wstrzymaniu: `termin_do: null`, `zamrozony: true` (zegar zatrzymany, nie
+  tylko wizualnie — `policzTermin` w ogóle nie liczy dni w tym stanie,
+  `server/logika/terminy.js:78-90`). Po wznowieniu NASTĘPNEGO DNIA KALENDARZOWEGO (18.09):
+  `wznowiona_od: "2026-09-18"`, nowy `termin_do: "2026-09-25"` — czyli PEŁNE, NOWE 7 dni liczone OD
+  DNIA WZNOWIENIA, nie kontynuacja pozostałych dni sprzed wstrzymania. Moduł liczy dni kalendarzowo
+  (`dodajDni` operuje na `Date.UTC` czystych dat, bez składnika czasu/strefy — brak podatności na
+  zmianę czasu letni/zimowy, bo obliczenia nigdy nie schodzą do rozdzielczości godzinowej).
+- **Co powinno się stać:** dokładnie to, co się stało — interpretacja jest zgodna z dosłownym
+  brzmieniem `PRZEPISY-PSA.md` art. 300³⁴ § 1 zd. 2 („Jeżeli dokonanie wpisu wymaga usunięcia
+  przeszkody, wpis powinien być dokonany w terminie siedmiu dni **od dnia jej usunięcia**” — nie:
+  „w pozostałym z pierwotnych siedmiu dni terminie”). Komentarz w kodzie
+  (`server/logika/terminy.js:6-11`) świadomie odrzuca alternatywną interpretację „zaliczenia części
+  terminu” i uzasadnia to tym samym cytatem.
+- **Podstawa:** `PRZEPISY-PSA.md` art. 300³⁴ § 1 zd. 2 (oznaczenie 🟢 — jednostka niesporna).
+- **Waga:** POZYTYWNE.
+
+## Z-359 [DROBNY/do potwierdzenia — patrz PYTANIE P-015] — brak jakiegokolwiek mechanizmu
+oznaczania rekordów jako dane testowe/demonstracyjne w CAŁEJ bazie (poza wąskim wyjątkiem
+niezwiązanym z tym celem)
+
+- **Co zrobiłem:** przeszukałem `server/migracje.js` (cały schemat) pod kątem kolumn typu
+  `jest_testowy`/`is_demo`/`tryb_testowy`/`srodowisko` na tabelach `psa_spolki`, `psa_osoby`,
+  `psa_zdarzenia`, `psa_wnioski`, `psa_oplaty`, `psa_zgloszenia`.
+- **Co się stało:** jedyne trafienie to `psa_platnosci.tryb_testowy` (migracja 42) — kolumna
+  dotyczy WYŁĄCZNIE odróżnienia powiadomienia z PIASKOWNICY operatora płatności Tpay od prawdziwej
+  transakcji (komentarz wprost: „Powiadomienie z piaskownicy NIGDY nie księguje płatności
+  produkcyjnej”) — nie ma nic wspólnego z oznaczaniem SPÓŁEK, OSÓB czy ZDARZEŃ jako demo/testowych.
+  Poza tym wyjątkiem baza nie ma ŻADNEGO pola pozwalającego odróżnić rekord założony „na serio” od
+  rekordu założonego w toku demonstracji, szkolenia pracownika albo — jak w niniejszej sesji audytu —
+  testów samej aplikacji. Potwierdza to również FAZA 0 (brak automatycznego seedowania) — łącznie
+  oznacza to, że KAŻDY rekord w bazie produkcyjnej (spółka, osoba, zdarzenie, opłata) wygląda
+  identycznie niezależnie od tego, czy powstał z prawdziwej sprawy klienta, czy z testu/demonstracji
+  pracownika kancelarii na koncie produkcyjnym.
+- **Co powinno się stać:** to nie jest błąd logiki, tylko brak funkcji — zależy od decyzji, czy
+  kancelaria w ogóle planuje testować/demonstrować aplikację NA KONCIE PRODUKCYJNYM (jeśli
+  testowanie zawsze odbywa się na osobnej instancji/bazie, jak w tej sesji audytu, brak takiego
+  mechanizmu nie jest problemem). Zapisane jako pytanie do Łukasza — P-015 w
+  `testy-audyt/PYTANIA-DO-LUKASZA.md`.
+- **Podstawa:** zasada techniczna z checklisty sesji („dane demonstracyjne — czy w bazie zostały
+  rekordy testowe i czy da się je łatwo odróżnić od prawdziwych”).
+- **Waga:** DROBNY (ryzyko organizacyjne, nie naruszenie przepisu — staje się POWAŻNE wyłącznie
+  jeśli kancelaria faktycznie zamierza testować na koncie/bazie produkcyjnej; patrz pytanie).
+
+## Z-360 — `npm audit` w głównym repozytorium: 1 podatność KRYTYCZNA, 3 WYSOKIE, 3 ŚREDNIE w
+zależnościach produkcyjnych; wszystkie zależności zadeklarowane zakresowo (`^`), żadna nie
+przypięta do dokładnej wersji
+
+- **Co zrobiłem:** `cd /home/user/Proste-Spolki-Akcyjne && npm audit` (bez `--fix`, zgodnie z
+  zasadami sesji — tylko odczyt), oraz przegląd `package.json` (sekcja `dependencies`).
+- **Co się stało:** `npm audit` zgłasza **7 podatności** w zależnościach produkcyjnych (192 pakiety
+  w drzewie `prod`): **1 KRYTYCZNA** (`tar` — pociągnięta tranzytywnie przez `@mapbox/node-pre-gyp` ←
+  `bcrypt`; m.in. „Decompression/parse DoS via unlimited input”, plus kilkanaście innych wpisów
+  ścieżki przejścia przez symlinki/hardlinki), **3 WYSOKIE** (`bcrypt` 5.0.1–5.1.1 przez
+  `@mapbox/node-pre-gyp`; `@mapbox/node-pre-gyp` samo; `nodemailer` — m.in. „Quadratic time complexity
+  w addressparser” i „Message-level raw option bypasses disableFileAccess/disableUrlAccess,
+  enabling arbitrary file read and full-response SSRF”), **3 ŚREDNIE** (`express`/`body-parser` przez
+  `qs`; `qs` samo — DoS przez `Attacker Controlled isBuffer`). Poprawka dostępna dla wszystkich poza
+  wymagającą podniesienia wersji głównej (`bcrypt` → 6.0.0, zmiana niezgodna wstecznie —
+  `isSemVerMajor: true`). Wszystkie zależności w `package.json` są zadeklarowane z `^` (zakres, np.
+  `"express": "^4.21.2"`) — żadna nie jest przypięta do dokładnej wersji ani przez `package.json`,
+  ani przez politykę `package-lock.json` (lockfile istnieje i przypina faktycznie zainstalowane
+  wersje na tę chwilę, ale nic nie stoi na przeszkodzie, by kolejny `npm install` bez modyfikacji
+  `package.json` podniósł wersję w ramach tego samego zakresu `^`, wraz z nowymi podatnościami albo
+  ich brakiem — zależy od momentu instalacji, nie jest to odtwarzalne).
+- **Co powinno się stać:** nie proponuję poprawki (zero zmian w `package.json`/`package-lock.json`
+  zgodnie z zasadami sesji) — odnotowuję stan i przekazuję Łukaszowi/zespołowi wdrożeniowemu decyzję
+  o aktualizacji `bcrypt` do wersji głównej 6 (wymaga testu regresji uwierzytelniania) oraz
+  pozostałych, mniejszych aktualizacji.
+- **Podstawa:** zasada techniczna z checklisty sesji („zależności — `npm audit`, wersje przypięte
+  czy zakresowe”).
+- **Waga:** POWAŻNY jako pozycja do decyzji (podatność KRYTYCZNA i WYSOKIE dotyczą pakietów
+  faktycznie używanych w ścieżce krytycznej — hashowanie haseł `bcrypt`, wysyłka e-mail
+  `nodemailer` — nie są to podatności dev-only; nie stwierdzam samodzielnie, czy są PRAKTYCZNIE
+  wykorzystywalne w kontekście tej aplikacji, np. `tar`/`node-pre-gyp` działają wyłącznie przy
+  budowaniu natywnego modułu `bcrypt`, nie w runtime serwera — stąd waga „do decyzji”, nie
+  automatyczne KRYTYCZNY).
+
+## Z-361 [POZYTYWNE] — walidacja przypadków brzegowych liczby akcji/ceny emisyjnej/dat działa
+poprawnie NA SERWERZE, niezależnie od front-endu, we wszystkich sprawdzonych wariantach
+
+- **Co zrobiłem:** bezpośrednimi żądaniami `POST /api/psa/spolki/9/zdarzenia/podglad` (z pominięciem
+  formularza kreatora) sprawdziłem: liczbę akcji emisji ujemną (`-5`), tekstową (`"dziesiec"`) i
+  zerową (`0`); cenę emisyjną ujemną (`-100`), tekstową (`"tania"`) i niecałkowitą (`10.5` grosza);
+  datę zdarzenia z przyszłości (`2099-01-01`); emisję bez pola `seria`. Osobno: numer KRS o złej
+  długości/formacie przy zakładaniu spółki (litery, 9 i 11 cyfr) oraz nieznany status spółki.
+  Osobno: nazwisko z apostrofem i polskimi znakami diakrytycznymi („O'Konieczny-Żółć Łukasz”),
+  zweryfikowane też w wygenerowanym dokumencie „Lista akcjonariuszy” (rozdział Z-355) — wyrenderowane
+  poprawnie, bez uszkodzenia kodowania czy struktury dokumentu.
+- **Co się stało:** WSZYSTKIE warianty liczbowe/datowe zostały poprawnie odrzucone z czytelnym
+  komunikatem po polsku (`dopuszczalne: false`, konkretny `bledy[]`) — żaden nie przeszedł mimo że
+  są to dokładnie te wartości, które typowy formularz HTML (`type="number"`, `min="1"`,
+  `type="date"`) i tak by odrzucił PO STRONIE PRZEGLĄDARKI; tu potwierdzone, że identyczna blokada
+  istnieje NIEZALEŻNIE na serwerze (`server/logika/walidacje.js`, `server/logika/kreator.js`).
+  Zły numer KRS/status spółki: odrzucone (400) z cytowanym formatem oczekiwanym. Apostrof/znaki
+  polskie: brak jakiegokolwiek problemu z kodowaniem na żadnym z przetestowanych etapów (zapis,
+  odczyt z kartoteki, treść wygenerowanego dokumentu).
+- **Co powinno się stać:** dokładnie to, co się stało.
+- **Podstawa:** zasada techniczna z checklisty sesji („walidacja wyłącznie po stronie przeglądarki —
+  wyślij do API dane odrzucane przez formularz”).
 - **Waga:** POZYTYWNE.

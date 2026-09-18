@@ -19,9 +19,25 @@ tylko w surowej odpowiedzi JSON zasilającej ekran — dokładnie schemat „mas
 warstwie widoku", przed którym ostrzegała ta faza audytu, tylko dotyczy innego zestawu pól niż
 PESEL/adres (te są zamaskowane poprawnie — Z-155). Zdarzenie nie jest logowane w dzienniku dostępu
 (Z-152), więc dotychczasowa skala wycieku jest niemożliwa do ustalenia post factum.
-Szczegóły, dowód (żądania `curl`, dokładne linie kodu) i rekomendacja napraw: **Z-150** w
-`ZNALEZISKA.md`. Powiązane: Z-152 (brak śladu w dzienniku), Z-156 (dowód, że wydruki są bezpieczne
-— problem jest ograniczony do API).
+
+**Dociągnięcie po dokładniejszym teście: usterka jest jeszcze szersza, niż pierwotnie opisano.**
+`pep`, `pep_opis`, `pep_oswiadczenie`, `pep_oswiadczenie_data` i `beneficjent_rzeczywisty_id` NIE
+są usuwane nawet w gałęzi kodu odpowiedzialnej za maskowanie danych dla roli „akcjonariusz" —
+funkcja `zamaskujOsobe()` usuwa dosłownie tylko cztery pola (`aml_status`, `aml_data`,
+`aml_notatka`, `uwagi`), nigdy pól PEP. Oznacza to, że DOKŁADNIE scenariusz z checklisty tej fazy
+(„zaloguj się jako akcjonariusz A, sprawdź, czy widzi dane wrażliwe akcjonariusza B") pokazuje: A
+NIE zobaczy PESEL-u/daty urodzenia/adresu B (to poprawnie zamaskowane), ale ZOBACZY, czy B jest
+osobą politycznie eksponowaną, jaka jest treść jej oświadczenia PEP i kto jest jej beneficjentem
+rzeczywistym — mimo że dziś nie da się tego wykonać PRAWDZIWYM logowaniem portalowym (Z-006), ten
+sam kod zadziała identycznie, gdy tylko konta akcjonariuszy zaczną powstawać.
+Szczegóły, dowód (żądania `curl`, zrzuty ekranu, dokładne linie kodu) i rekomendacja napraw:
+**Z-150** w `ZNALEZISKA.md` (zaktualizowane o to dociągnięcie). Zrzuty:
+`testy-audyt/zrzuty/faza3/01-json-rola-spolka-aml-widoczne.png` (rola „spółka” — pełny PESEL,
+data urodzenia i pola AML/PEP jawne) oraz
+`testy-audyt/zrzuty/faza3/02-json-rola-akcjonariusz-maskowanie-pesel.png` (rola „akcjonariusz” —
+PESEL/adres akcjonariusza B poprawnie zamaskowane `•••`, ale pole `pep` obok wciąż jawne).
+Powiązane: Z-152 (brak śladu w dzienniku), Z-156 (dowód, że wydruki są bezpieczne — problem jest
+ograniczony do API).
 
 ---
 
@@ -95,7 +111,7 @@ inną niż KSH).
 | Dane AML — oddzielone od rejestrowych? | NIE — ta sama tabela `psa_osoby`, i (błędnie) te same widoki JSON dla ról spoza kancelarii | **Z-150 (KRYTYCZNY)** |
 | Status PEP — oświadczenie osoby czy pole pracownika? | Zaprojektowane poprawnie (dwa pola, jasno opisane), ale w głównym kanale onboardingu (wniosek portalowy) wartość z formularza trafia do NIEWŁAŚCIWEGO z dwóch pól, a pole „prawdziwego" oświadczenia zostaje puste | Z-151 |
 | Maskowanie w API, nie tylko w UI — PESEL/adres | Zweryfikowane systematycznie, poprawne, dla wszystkich 4 ról, w surowym JSON-ie | Z-155 |
-| Maskowanie w API — dane AML/PEP/uwagi | Niepoprawne dla ról „spółka"/„organ" — wyciek | **Z-150 (KRYTYCZNY)** |
+| Maskowanie w API — dane AML/PEP/uwagi | Niepoprawne: `aml_status`/`aml_data`/`aml_notatka`/`uwagi` wyciekają w pełni do ról „spółka"/„organ"; pola PEP i beneficjenta rzeczywistego wyciekają NAWET do roli „akcjonariusz" (peer), bo w ogóle nie ma ich na liście pól usuwanych przy maskowaniu | **Z-150 (KRYTYCZNY)** |
 | Wydruki spójne z ekranem? | Tak dla PESEL/adresu (już Z-014 w FAZIE 1), i dodatkowo potwierdzone, że wydruki NIE dziedziczą wycieku AML/PEP z Z-150 | Z-156 |
 | Klauzula informacyjna dla akcjonariuszy — istnieje? Kiedy doręczana? | Istnieje, ale WYŁĄCZNIE jako dokument do podpisu w jednorazowym pakiecie przy zakładaniu spółki przez wniosek portalowy; akcjonariusze dochodzący do rejestru później (zwykły kreator zdarzenia) nigdy jej nie dostają z systemu | Z-153 |
 | Dziennik dostępu — odczyty czy tylko zapisy? | Ani jedno, ani drugie wprost — rejestruje wyłącznie „wyniesienie" danych (informacja z rejestru, eksport, pobranie pliku), świadomie pomijając zwykłe odczyty ekranu/API, w tym odczyty portalowe | Z-152 |

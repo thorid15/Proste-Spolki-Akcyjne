@@ -228,3 +228,95 @@ zamiast polegać na zmiennej środowiskowej `TZ`?
   uproszczone zachowanie (samo „stan na dzień")? (b) czy wdrożenie produkcyjne ma programowo
   wymuszać `TZ=Europe/Warsaw` niezależnie od tego, co ustawi platforma hostingowa, czy wystarczy to
   udokumentować jako wymóg konfiguracyjny w `.env` (obecny stan)?
+
+---
+
+# FAZA 4 — pytania (P-012 … P-014)
+
+## P-012 — Czy zdalna identyfikacja akcjonariusza wyłącznie na podstawie danych przekazanych przez
+spółkę i skanu dokumentu spełnia wymogi środków bezpieczeństwa finansowego (pytanie wskazane wprost
+w treści zadania FAZA 4)
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-210 dla pełnego, faktycznego opisu, na czym
+  dziś opiera się identyfikacja akcjonariusza (bez oceny wystarczalności — to właśnie jest to
+  pytanie). W skrócie: (1) dane opisowe wpisane przez spółkę/wnioskodawcę w formularzu wniosku,
+  zweryfikowane przez kancelarię wyłącznie pod kątem spójności z KRS i kartoteką (nie tożsamości);
+  (2) skan dokumentu tożsamości reprezentanta — zbierany bezwarunkowo, ale komentarz w samym kodzie
+  (`server/trasy/portal.js:969-971`) przyznaje: „Sam obraz dokumentu nie dowodzi tożsamości (można
+  go mieć nie będąc właścicielem)"; (3) opcjonalny, domyślnie WYŁĄCZONY (`stosuje_procedure_aml`)
+  skan dokumentu AML wgrywany przez pracownika kancelarii, nigdy nie przez samego akcjonariusza; (4)
+  samoidentyfikacja w podpisanym oświadczeniu AML/PEP; (5) ostateczna decyzja `aml_status =
+  wykonane` to swobodny osąd pracownika, bez wymogu uzasadnienia.
+- **Dlaczego nie rozstrzygnąłem sam:** to dokładnie pytanie merytoryczne wskazane w
+  `SESJA-PSA-AUDYT.md` na końcu sekcji FAZA 4, wymagające potwierdzenia przy tekście ustawy AML —
+  cała podstawa (PRZEPISY-PSA.md § 9) jest oznaczona ⚠️.
+- **Pytanie:** czy opisany wyżej zestaw (dane + nieobowiązkowy skan wgrywany przez pracownika, nie
+  przez samego akcjonariusza + samoidentyfikacja + swobodny osąd) wystarcza jako środek
+  bezpieczeństwa finansowego, czy ustawa wymaga metody dającej wyższy poziom pewności (podpis
+  kwalifikowany samego akcjonariusza jako WARUNEK, nie tylko dopuszczalna forma umowy; weryfikacja
+  wideo; przelew referencyjny; osobiste stawiennictwo)? Powiązane pytanie techniczne: czy skan
+  dokumentu tożsamości powinien móc wgrywać SAM akcjonariusz (dziś może to zrobić wyłącznie
+  pracownik kancelarii, `POST /api/psa/osoby/:id/aml-skany` jest za `wymagajPracownika`)?
+
+## P-013 — Czy status AML `brak` (weryfikacja jeszcze niewykonana) powinien blokować wpis
+transakcyjny tak samo jak `niemozliwe`, czy obecne zachowanie (ostrzeżenie, nie blokada) jest
+zamierzone
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-200 (KRYTYCZNY) i Z-201/Z-202/Z-204. Bramka AML
+  (`server/logika/walidacje.js: sprawdzAml`) blokuje wpis (`bledy`, wpis odrzucony) WYŁĄCZNIE dla
+  jawnie ustawionego `aml_status: 'niemozliwe'`. Dla stanu domyślnego `brak` — czyli KAŻDEJ nowej
+  osoby w kartotece, dopóki pracownik ręcznie nie zmieni statusu — generowane jest wyłącznie
+  ostrzeżenie (`ostrzezenia`), które NIE blokuje zapisu. Potwierdzone bezpośrednim żądaniem: emisja
+  założycielska i przeniesienie akcji na rzecz osoby bez jakiejkolwiek weryfikacji AML przechodzą
+  ze statusem `201 Created`. Zachowanie jest identyczne na wszystkich trzech drogach zapisu
+  zdarzenia (`POST .../zdarzenia`, `POST .../wpisz` przez sprawę, `POST .../otworz-rejestr`) — to
+  nie jest błąd pojedynczego endpointu, tylko cecha wspólnej funkcji walidującej.
+- **Dlaczego nie rozstrzygnąłem sam:** komentarz w `server/logika/przepisy.js` przy `AML_STATUSY`
+  cytuje zasadę „brak możliwości zastosowania środków bezpieczeństwa finansowego = przeszkoda
+  wpisu, przy nieusunięciu — odmowa wpisu" jako uzasadnienie ISTNIEJĄCEGO kodu, ale sam kod
+  realizuje tę zasadę tylko dla `niemozliwe`, nie dla „jeszcze nie zweryfikowano" — to rozbieżność
+  między komentarzem/uzasadnieniem a implementacją, którą PRZEPISY-PSA.md § 9 (⚠️ niezweryfikowana)
+  nie rozstrzyga jednoznacznie samodzielnie.
+- **Pytanie:** czy `aml_status: 'brak'` w chwili wpisu transakcyjnego (objęcie, przeniesienie,
+  obciążenie na rzecz nowego uprawnionego) powinien BLOKOWAĆ wpis (tak jak `niemozliwe`, tyle że
+  z innym komunikatem — „nie wykonano jeszcze weryfikacji" zamiast „weryfikacja niemożliwa"), czy
+  obecne zachowanie (ostrzeżenie, decyzja zostaje przy pracowniku, który może je zignorować) jest
+  świadomym, zaakceptowanym kompromisem operacyjnym?
+
+## P-014 — Czy dezaktualizacja AML (upływ terminu przeglądu) i brak zidentyfikowanego beneficjenta
+rzeczywistego dla nabywcy-osoby prawnej powinny mieć skutek blokujący wpis
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-202 (przegląd okresowy — dziś czysto kosmetyczny
+  znacznik w kartotece, `aml.wymagaPrzegladu()`, nigdy nieużywany przez `sprawdzAml`) i Z-203
+  (bramka nie rozróżnia osoby fizycznej/prawnej i nigdy nie sprawdza statusu beneficjenta
+  rzeczywistego, nawet gdy jest wskazany w kartotece).
+- **Dlaczego nie rozstrzygnąłem sam:** oba elementy (termin przeglądu 12 miesięcy, rozgraniczenie
+  fizyczna/prawna przy beneficjencie) są — zgodnie z komentarzem wprost w
+  `server/logika/przepisy.js` — „świadomą nadwyżką" wobec treści PRZEPISY-PSA.md § 9, pochodzącą
+  z wcześniejszych decyzji roboczych, nie z brzmienia ustawy zweryfikowanego w tym pliku.
+- **Pytanie:** (a) czy osoba z przeterminowanym `aml_status: 'wykonane'` (upłynęło ponad 12
+  miesięcy od `aml_data`/`aml_data_przegladu`) powinna być przy nowej transakcji traktowana jak
+  `brak` (ostrzeżenie/blokada — zależnie od odpowiedzi na P-013), czy termin przeglądu ma
+  pozostać wyłącznie sygnałem informacyjnym dla pracownika; (b) czy dla nabywcy-osoby prawnej
+  bramka AML powinna wymagać wskazania i zweryfikowania AML beneficjenta rzeczywistego jako
+  ODRĘBNEGO warunku, czy wystarczy `aml_status` ustawiony na samym podmiocie prawnym.
+
+## P-015 — Czy aplikacja ma docelowo obsługiwać oznaczanie danych jako testowe/demonstracyjne
+na koncie produkcyjnym, czy testowanie zawsze odbywa się na osobnej instancji/bazie
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-350 (kartoteka osób bez ochrony przed
+  duplikatem — dwie różne osoby mogą mieć ten sam PESEL) i Z-359 (brak w całym schemacie bazy
+  jakiegokolwiek pola oznaczającego rekord spółki/osoby/zdarzenia jako testowy — jedyny wyjątek,
+  `psa_platnosci.tryb_testowy`, dotyczy wyłącznie piaskownicy operatora płatności Tpay, nie danych
+  merytorycznych rejestru). W toku samego tego audytu utworzyłem przez API kilkanaście spółek i
+  osób testowych w bazie `./dane/audyt-test.db` — w bazie PRODUKCYJNEJ, bez takiego mechanizmu,
+  identyczne rekordy (np. założone przez pracownika w celu przeszkolenia się z aplikacją) byłyby
+  nieodróżnialne od prawdziwych spraw klientów kancelarii.
+- **Dlaczego nie rozstrzygnąłem sam:** to pytanie o docelowy sposób pracy z aplikacją (czy
+  kancelaria będzie mieć osobne środowisko szkoleniowo-testowe, czy pracownicy mogą/będą czasem
+  „klikać na produkcji"), nie o błąd w kodzie — `PRZEPISY-PSA.md`/`CLAUDE-PSA.md` się do tego nie
+  odnoszą.
+- **Pytanie:** czy potrzebny jest mechanizm oznaczania spółki/sprawy jako „testowa” (np. widoczna
+  plakietka na każdym ekranie jej dotyczącym, wykluczenie z zestawień i eksportów), czy
+  wystarczające jest organizacyjne zobowiązanie, że wszelkie testy/demonstracje odbywają się
+  wyłącznie na osobnej instalacji, nigdy na koncie z prawdziwymi sprawami klientów?
