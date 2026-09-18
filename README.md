@@ -698,6 +698,40 @@ kwalifikowanym.
 
 ---
 
+## Dokumentacja
+
+Trzy pliki opisują stan modułu ponad ten `README.md` (który zatrzymuje się na sprincie 6):
+
+- **`ARCHITEKTURA-PSA.md`** — opis stanu faktycznego: mapa plików, podsystemy, przepływy danych,
+  niezmienniki i mechanizm ich egzekwowania, integracje zewnętrzne, lista migracji, pokrycie reguł
+  domenowych z `CLAUDE-PSA.md` §4, rozbieżności wobec specyfikacji.
+- **`DECYZJE.md`** — append-only dziennik decyzji projektowych (`D-0xx`) i sekcja „Decyzje otwarte”
+  dla pytań bez odpowiedzi.
+- **`testy-audyt/`** — artefakty audytu funkcjonalnego (znaleziska, pytania do Łukasza, raport
+  końcowy) i wygenerowana dokumentacja techniczna (`schemat-bazy.txt`, `endpointy-api.md`).
+
+**Obowiązek na koniec każdej sesji, która dotyka kod:**
+
+1. Zaktualizować `ARCHITEKTURA-PSA.md` w zakresie, którego sesja dotknęła (nowy podsystem, zmieniony
+   przepływ, nowy niezmiennik, migracja zmieniająca zachowanie).
+2. Dopisać do `DECYZJE.md` każdą decyzję podjętą w sesji jako nowy wpis `D-0xx` — nigdy nie
+   nadpisywać ani nie usuwać istniejących wpisów.
+3. Odświeżyć `testy-audyt/schemat-bazy.txt` i `testy-audyt/endpointy-api.md`:
+   ```bash
+   npm run dokumentacja
+   ```
+   Skrypt (`narzedzia/dokumentacja-baza.js` + `narzedzia/dokumentacja-endpointy.js`) generuje oba
+   pliki przez introspekcję REALNEGO schematu bazy i REALNYCH routerów Express (nie z lektury kodu),
+   na tymczasowej bazie w `/tmp` — nigdy nie dotyka `dane/kancelaria.db`. Wersja `endpointy-api.md`
+   z tego skryptu jest mechanicznym szkieletem (ścieżka, metoda, middleware w kolejności rejestracji)
+   — nie odtwarza narracji „po co" dana trasa istnieje; do tego służy `ARCHITEKTURA-PSA.md` sekcja 2.
+
+Jeżeli Łukasz odpowie na pytania z `testy-audyt/PYTANIA-DO-LUKASZA.md`, odpowiedzi trafiają do
+`DECYZJE.md` jako nowe wpisy `D-0xx` (przenoszone z sekcji „Decyzje otwarte”) w najbliższej kolejnej
+sesji dokumentacyjnej — nie od razu, automatycznie.
+
+---
+
 ## Do decyzji
 
 Nie blokują tego, co powstało, ale blokują kolejne kroki:
