@@ -186,6 +186,56 @@ const POLA_WRAZLIWE = [
 const POLA_KONTAKTOWE = ['email', 'telefon', 'adres_doreczen', 'adres_edoreczen'];
 
 /**
+ * Tozsamosc i tresc rejestru dostepna KAZDEJ roli, ktora w ogole ma prawo
+ * widziec osobe (wlacznie z zamaskowanym akcjonariuszem-peer) - nigdy
+ * PESEL/adres/kontakt (POLA_WRAZLIWE/POLA_KONTAKTOWE, osobno dopuszczane
+ * per rola nizej) i nigdy dane kancelaryjne (POLA_KANCELARYJNE).
+ */
+const POLA_TOZSAMOSCI = [
+  'id',
+  'typ',
+  'nazwisko',
+  'imie',
+  'nazwa',
+  'nip',
+  'regon',
+  'numer_w_rejestrze',
+  'nazwa_rejestru',
+  'kraj',
+  'plec',
+  'rodzaj_adresu_rejestrowego',
+  'bez_pesel',
+  'zgoda_email',
+  'zgoda_email_status',
+];
+
+/**
+ * Dane AML/PEP i ocena ryzyka kancelarii - naprawa Z-150. NIGDY nie wychodza
+ * poza kancelarie, niezaleznie od roli odbiorcy: to nie jest tresc rejestru
+ * w rozumieniu art. 300(33) KSH (sekcja 10 CLAUDE-PSA.md - "czego NIE
+ * umieszczac na wydrukach"), tylko wewnetrzna dokumentacja obowiazku AML
+ * notariusza. `wspolwlasnosc`/`udzial_*` opisuja strukture wlascicielska
+ * SAMEGO podmiotu (kto jest wlascicielem tej osoby prawnej) - to ten sam
+ * rodzaj informacji co beneficjent rzeczywisty, nie tresc rejestru akcji.
+ */
+const POLA_KANCELARYJNE = [
+  'aml_status',
+  'aml_data',
+  'aml_notatka',
+  'aml_data_przegladu',
+  'beneficjent_rzeczywisty_id',
+  'pep',
+  'pep_opis',
+  'pep_oswiadczenie',
+  'pep_oswiadczenie_data',
+  'uwagi',
+  'wspolwlasnosc',
+  'wspolwlasciciele',
+  'udzial_licznik',
+  'udzial_mianownik',
+];
+
+/**
  * Role odbiorcy informacji z rejestru. Decyduja o zakresie maskowania.
  * PRZEPISY-PSA.md art. 300(35) § 1, § 1(1), § 4.
  */
@@ -209,6 +259,30 @@ const ROLE_PELNY_DOSTEP = [
   ROLE_ODBIORCY.WLASCICIEL_DANYCH,
   ROLE_ODBIORCY.ORGAN,
 ];
+
+/**
+ * Biala lista pol widocznych per rola (naprawa Z-150). Poprzednia wersja
+ * budowala odpowiedz przez USUWANIE pol z pelnego obiektu - kazde nowe pole
+ * dodane do `psa_osoby` (np. AML/PEP w kolejnym sprincie) bylo domyslnie
+ * WIDOCZNE, dopoki ktos rowniez nie dopisal go do listy usuwanych. Tak
+ * wyciekly `aml_status`/`aml_notatka`/`pep`/`beneficjent_rzeczywisty_id` do
+ * roli `spolka`/`organ` (maja "pelny dostep" do TRESCI REJESTRU, ale to nie
+ * jest tresc rejestru), a pola PEP/beneficjenta - nawet do roli
+ * `akcjonariusz` (bo lista usuwanych obejmowala tylko 4 z ~14 pol
+ * kancelaryjnych). Teraz: kazda rola dostaje WYLACZNIE to, co jest na jej
+ * liscie - nowe pole w schemacie jest domyslnie NIEWIDOCZNE wszedzie poza
+ * kancelaria, dopoki ktos świadomie nie doda go do wlasciwej listy.
+ *
+ * `null` = pelny dostep (wszystkie pola, wlacznie z kancelaryjnymi) -
+ * wylacznie kancelaria i sama osoba (jej wlasne dane).
+ */
+const BIALE_LISTY = {
+  [ROLE_ODBIORCY.KANCELARIA]: null,
+  [ROLE_ODBIORCY.WLASCICIEL_DANYCH]: null,
+  [ROLE_ODBIORCY.SPOLKA]: [...POLA_TOZSAMOSCI, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
+  [ROLE_ODBIORCY.ORGAN]: [...POLA_TOZSAMOSCI, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
+  [ROLE_ODBIORCY.AKCJONARIUSZ]: POLA_TOZSAMOSCI,
+};
 
 /** Katalog organow z art. 300(35) § 4 KSH - do wyboru na wydruku informacji. */
 const ORGANY_UPRAWNIONE = [
@@ -720,8 +794,11 @@ module.exports = {
   FORMY_PRAWNE_ZABRONIONE,
   POLA_WRAZLIWE,
   POLA_KONTAKTOWE,
+  POLA_TOZSAMOSCI,
+  POLA_KANCELARYJNE,
   ROLE_ODBIORCY,
   ROLE_PELNY_DOSTEP,
+  BIALE_LISTY,
   ORGANY_UPRAWNIONE,
   AML_STATUSY,
   AML_STATUS_WYMAGANY,

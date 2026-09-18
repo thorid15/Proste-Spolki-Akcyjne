@@ -20,27 +20,43 @@ const ZASLONA = '•••';
  * @param {object} osoba      rekord `psa_osoby`
  * @param {string} rola       jedna z `przepisy.ROLE_ODBIORCY`
  * @param {number} [odbiorcaOsobaId] id osoby ogladajacej - wlasne dane widzi w calosci
+ *
+ * Naprawa Z-150: buduje odpowiedz z BIALEJ LISTY pol dozwolonych dla danej
+ * roli (`przepisy.BIALE_LISTY`), nie przez usuwanie pol z pelnego obiektu.
+ * Kazde pole spoza listy jest pomijane - w tym kazde NOWE pole dopisane
+ * kiedykolwiek do `psa_osoby`, o ktorym ta funkcja jeszcze nie wie, jest
+ * wiec z definicji NIEWIDOCZNE, a nie domyslnie wyciekajace. Rola nieznana
+ * (literowka, brak w slowniku) dostaje najwezszy zakres (tozsamosc), fail
+ * closed, nie fail open.
  */
 function zamaskujOsobe(osoba, rola, odbiorcaOsobaId = null) {
   if (!osoba) return null;
 
   const wlasneDane = odbiorcaOsobaId != null && Number(odbiorcaOsobaId) === Number(osoba.id);
-  const pelnyDostep = przepisy.ROLE_PELNY_DOSTEP.includes(rola) || wlasneDane;
-  if (pelnyDostep) return { ...osoba, zamaskowane: false };
-
-  const wynik = { ...osoba, zamaskowane: true, zamaskowane_pola: [] };
-  for (const pole of [...przepisy.POLA_WRAZLIWE, ...przepisy.POLA_KONTAKTOWE]) {
-    if (wynik[pole] != null && wynik[pole] !== '') {
-      wynik[pole] = ZASLONA;
-      wynik.zamaskowane_pola.push(pole);
-    }
+  if (wlasneDane || przepisy.BIALE_LISTY[rola] === null) {
+    return { ...osoba, zamaskowane: false };
   }
-  // Notatki i statusy AML nie sa czescia rejestru - nie wychodza poza kancelarie
-  // w zadnym wariancie (sekcja 10: czego NIE umieszczac na wydrukach).
-  delete wynik.aml_status;
-  delete wynik.aml_data;
-  delete wynik.aml_notatka;
-  delete wynik.uwagi;
+
+  const bialaLista = przepisy.BIALE_LISTY[rola] || przepisy.POLA_TOZSAMOSCI;
+  // Pola wrazliwe/kontaktowe pomijane przez biala liste dostaja WIDOCZNY
+  // placeholder (UI pokazuje "to pole istnieje, jest ukryte"); wszystko inne
+  // pomijane (AML/PEP/kancelaryjne, kazde inne, nieznane dzis pole) znika z
+  // odpowiedzi w calosci - nie ma powodu sygnalizowac peer-akcjonariuszowi
+  // czy spolce, ze w ogole istnieje np. notatka AML.
+  const POLA_Z_PLACEHOLDEREM = [...przepisy.POLA_WRAZLIWE, ...przepisy.POLA_KONTAKTOWE];
+  const wynik = {};
+  const zamaskowane_pola = [];
+  for (const [klucz, wartosc] of Object.entries(osoba)) {
+    if (bialaLista.includes(klucz)) {
+      wynik[klucz] = wartosc;
+      continue;
+    }
+    if (wartosc == null || wartosc === '') continue;
+    zamaskowane_pola.push(klucz);
+    if (POLA_Z_PLACEHOLDEREM.includes(klucz)) wynik[klucz] = ZASLONA;
+  }
+  wynik.zamaskowane = true;
+  wynik.zamaskowane_pola = zamaskowane_pola;
   return wynik;
 }
 

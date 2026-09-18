@@ -168,12 +168,20 @@ test('rejestr: akcjonariusz widzi wlasne dane w pelni, dane wspolakcjonariusza z
   assert.notEqual(anna.osoba.pesel, '85050512345');
 });
 
-test('rejestr: konto spolki widzi wszystkie dane bez maskowania', async () => {
+test('rejestr: konto spolki widzi tresc rejestru (PESEL/adres) w calosci, ale NIE dane AML/PEP kancelarii (Z-150)', async () => {
+  // Naprawa Z-150: rola "spolka" ma pelny wglad do TRESCI REJESTRU
+  // (art. 300(35) § 1 KSH — PESEL, adres), ale AML/PEP/notatka to nie tresc
+  // rejestru, tylko wewnetrzna dokumentacja obowiazku AML kancelarii — nie
+  // wychodzi poza kancelarie NIGDY, niezaleznie od roli odbiorcy.
   const odp = await fetch(`${baza}/api/psa/portal/rejestr/${spolkaId}`, { headers: { Cookie: ciastkoSpolka } });
   const dane = await odp.json();
   const anna = dane.akcjonariusze.find((a) => a.osoba_id === nowakId);
-  assert.equal(anna.osoba.zamaskowane, false);
-  assert.equal(anna.osoba.pesel, '85050512345');
+  assert.equal(anna.osoba.pesel, '85050512345', 'tresc rejestru (PESEL) musi zostac widoczna dla spolki');
+  assert.equal(anna.osoba.aml_status, undefined, 'status AML nie moze wyjsc poza kancelarie do roli spolka');
+  assert.ok(
+    anna.osoba.zamaskowane_pola.includes('aml_status'),
+    'pole aml_status ma byc jawnie oznaczone jako pominiete dla roli spolka'
+  );
 });
 
 test('rejestr: dostep do cudzej spolki jest odrzucany (404, nie wyciek istnienia)', async () => {

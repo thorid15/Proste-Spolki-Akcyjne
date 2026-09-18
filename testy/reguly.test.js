@@ -31,6 +31,9 @@ const OSOBA = {
   aml_status: 'wykonane',
   aml_notatka: 'weryfikacja na podstawie dowodu osobistego',
   uwagi: 'notatka wewnętrzna',
+  pep: 'tak',
+  pep_opis: 'radny gminy',
+  beneficjent_rzeczywisty_id: 42,
 };
 
 test('REGUŁA 9: inny akcjonariusz nie widzi PESEL, daty urodzenia ani adresu', () => {
@@ -47,8 +50,38 @@ test('REGUŁA 9: inny akcjonariusz nie widzi PESEL, daty urodzenia ani adresu', 
   assert.equal(wynik.aml_notatka, undefined);
   assert.equal(wynik.aml_status, undefined);
   assert.equal(wynik.uwagi, undefined);
+  // Naprawa Z-150 (dociągnięcie audytu): status PEP i beneficjent rzeczywisty
+  // to też dane kancelaryjne, nie treść rejestru — poprzednia wersja usuwała
+  // tylko 4 z ~14 pól wrażliwych, PEP/beneficjent wyciekały nawet do peera.
+  assert.equal(wynik.pep, undefined);
+  assert.equal(wynik.pep_opis, undefined);
+  assert.equal(wynik.beneficjent_rzeczywisty_id, undefined);
   // Nazwisko pozostaje - rejestr jest jawny dla akcjonariuszy co do składu.
   assert.equal(wynik.nazwisko, 'Kowalski');
+});
+
+test('Z-150: rola „spółka”/„organ” ma pełny wgląd do treści rejestru (PESEL), ale AML/PEP nie wychodzi poza kancelarię', () => {
+  for (const rola of [przepisy.ROLE_ODBIORCY.SPOLKA, przepisy.ROLE_ODBIORCY.ORGAN]) {
+    const wynik = maskowanie.zamaskujOsobe(OSOBA, rola);
+    assert.equal(wynik.pesel, OSOBA.pesel, `rola ${rola} musi widzieć PESEL (treść rejestru)`);
+    assert.equal(wynik.aml_status, undefined, `rola ${rola} nie może widzieć aml_status`);
+    assert.equal(wynik.aml_notatka, undefined, `rola ${rola} nie może widzieć aml_notatka`);
+    assert.equal(wynik.pep, undefined, `rola ${rola} nie może widzieć pep`);
+    assert.equal(wynik.beneficjent_rzeczywisty_id, undefined, `rola ${rola} nie może widzieć beneficjenta rzeczywistego`);
+    assert.equal(wynik.uwagi, undefined, `rola ${rola} nie może widzieć uwagi`);
+  }
+});
+
+test('Z-150: nowe, nieznane pole w psa_osoby jest domyślnie NIEWIDOCZNE dla ról ograniczonych, nie wyciekające', () => {
+  // Biala lista: kazde pole spoza katalogu (POLA_TOZSAMOSCI/POLA_WRAZLIWE/
+  // POLA_KONTAKTOWE) jest z definicji pomijane, wiec dodanie kolumny do
+  // schematu w przyszlosci nie wymaga "pamietania" o dopisaniu jej do listy
+  // usuwanych (jak przy starym, czarnolistowym podejsciu).
+  const zNowymPolem = { ...OSOBA, zupelnie_nowe_pole_z_przyszlosci: 'coś wrażliwego' };
+  const dlaAkcjonariusza = maskowanie.zamaskujOsobe(zNowymPolem, przepisy.ROLE_ODBIORCY.AKCJONARIUSZ, 99);
+  const dlaSpolki = maskowanie.zamaskujOsobe(zNowymPolem, przepisy.ROLE_ODBIORCY.SPOLKA);
+  assert.equal(dlaAkcjonariusza.zupelnie_nowe_pole_z_przyszlosci, undefined);
+  assert.equal(dlaSpolki.zupelnie_nowe_pole_z_przyszlosci, undefined);
 });
 
 test('REGUŁA 9: spółka, organ, kancelaria i sama osoba widzą pełne dane', () => {
