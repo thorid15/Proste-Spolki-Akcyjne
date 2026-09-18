@@ -1343,7 +1343,7 @@ router.get(
     const oplatyWgSprawy = new Map(
       db()
         .prepare(
-          `SELECT sprawa_id, id, status, kwota_grosze FROM psa_oplaty
+          `SELECT sprawa_id, id, status, kwota_grosze, stawka_vat_procent FROM psa_oplaty
             WHERE sprawa_id IS NOT NULL AND typ = 'wpis' AND status != 'anulowana'`
         )
         .all()
@@ -1358,7 +1358,8 @@ router.get(
           oczekuje_na_oplate: s.oczekuje_na_oplate === 1,
           oplata_id: oplata ? oplata.id : null,
           oplata_status: oplata ? oplata.status : null,
-          oplata_grosze: oplata ? oplata.kwota_grosze : null,
+          // Klient widzi BRUTTO (sekcja 2.1) - to kwota, ktora placi.
+          oplata_grosze: oplata ? przepisy.obliczBrutto(oplata.kwota_grosze, oplata.stawka_vat_procent) : null,
         };
       }),
     });
@@ -1585,6 +1586,7 @@ const OPISY_TYPU_OPLATY = {
   informacja: 'Informacja z rejestru akcjonariuszy',
 };
 
+/** Klient widzi wylacznie BRUTTO (sekcja 2.1) - to jest kwota, ktora placi. */
 function widokOplatyKlienta(w) {
   return {
     id: w.id,
@@ -1595,7 +1597,7 @@ function widokOplatyKlienta(w) {
     okres: w.okres,
     okres_od: w.okres_od,
     okres_do: w.okres_do,
-    kwota_grosze: w.kwota_grosze,
+    kwota_grosze: przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent),
     status: w.status,
     data_naliczenia: w.data_naliczenia,
     oplacona_kiedy: w.oplacona_kiedy,
@@ -1610,15 +1612,20 @@ function widokOplatyKlienta(w) {
 /**
  * Stawki, ktore klient zobaczy PRZED zamowieniem czynnosci. Cena musi byc
  * znana przed kliknieciem, nie po — inaczej "Zamow" jest zgoda w ciemno.
+ *
+ * BRUTTO (sekcja 2.1 promptu naprawczego) — to jest kwota, ktora klient
+ * faktycznie zaplaci, z VAT. Stawka bierzemy z przepisy.js NA CHWILE
+ * odpowiedzi, tak jak zrobi to naliczenie w chwili zamowienia.
  */
 router.get(
   '/cennik',
   asy((zad, odp) => {
+    const brutto = (typ) => przepisy.obliczBrutto(ustawienia.stawkaGrosze(db(), typ), przepisy.STAWKA_VAT_PROCENT);
     odp.json({
       stawki: {
-        prowadzenie: ustawienia.stawkaGrosze(db(), 'prowadzenie'),
-        wpis: ustawienia.stawkaGrosze(db(), 'wpis'),
-        informacja: ustawienia.stawkaGrosze(db(), 'informacja'),
+        prowadzenie: brutto('prowadzenie'),
+        wpis: brutto('wpis'),
+        informacja: brutto('informacja'),
       },
       platnosci_wlaczone: tpay.skonfigurowany(),
     });
@@ -1648,7 +1655,7 @@ router.get(
 
     const doZaplaty = wiersze
       .filter((w) => w.status !== 'oplacona')
-      .reduce((suma, w) => suma + w.kwota_grosze, 0);
+      .reduce((suma, w) => suma + przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent), 0);
 
     odp.json({
       oplaty: wiersze.map(widokOplatyKlienta),

@@ -113,10 +113,11 @@ const PDF = '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%
     await prac('POST', `/api/psa/wnioski/${w.id}/dokumenty/${d.id}/podpis-potwierdz`, {});
   }
   const [stPrzyjmij, przyjmij] = await prac('POST', `/api/psa/wnioski/${w.id}/przyjmij`, {});
-  krok('wniosek przyjety, rejestr otwarty', stPrzyjmij === 200, `spolka #${przyjmij.spolka_id}`);
-  krok('pierwszy rok prowadzenia naliczony automatycznie',
-    Boolean(przyjmij.oplata_prowadzenia),
-    przyjmij.oplata_prowadzenia ? `${przyjmij.oplata_prowadzenia.okres} (${przyjmij.oplata_prowadzenia.okres_od} – ${przyjmij.oplata_prowadzenia.okres_do})` : 'BRAK');
+  krok('wniosek przyjety, spolka zalozona', stPrzyjmij === 200, `spolka #${przyjmij.spolka_id}`);
+  // Naprawa Z-108/P-007: prowadzenie + wpis nalicza sie TERAZ dopiero przy
+  // `POST /spolki/:id/otworz-rejestr` (jedna sciezka dla obu onboardingow) -
+  // ten skrypt konczy sie na `/przyjmij` i nie zaklada akcji, wiec tu nie ma
+  // jeszcze czego sprawdzac; patrz `otworz-rejestr-http.test.js`/`oplaty-http.test.js`.
 
   const spolkaId = przyjmij.spolka_id;
 

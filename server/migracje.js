@@ -1946,6 +1946,23 @@ const MIGRACJE = [
       ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_hash TEXT;
     `,
   },
+
+  {
+    wersja: 47,
+    nazwa: 'VAT na oplatach — kolumna stawki, kwoty zostaja netto (naprawa sekcji 2.1)',
+    sql: `
+      -- Kwoty z rozporzadzenia sa NETTO; do kazdej dolicza sie VAT. Stawka na
+      -- POZYCJI, nie globalnie w kodzie - pozycja historyczna zachowuje swoja
+      -- stawke, gdy przepis kiedys sie zmieni (przyszla zmiana ustawi inna
+      -- wartosc TYLKO w nowych naliczeniach, w server/oplaty.js).
+      --
+      -- Zalozenie startowe: 23%, tak dla nowych pozycji jak i dla historii -
+      -- kwoty netto istniejacych pozycji sa poprawne i zostaja bez zmian,
+      -- DEFAULT wypelnia kolumne u wszystkich naraz. Brutto NIGDY nie jest
+      -- przechowywane, wylacznie wyliczane (logika/przepisy.js: obliczBrutto).
+      ALTER TABLE psa_oplaty ADD COLUMN stawka_vat_procent INTEGER NOT NULL DEFAULT 23;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

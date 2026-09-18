@@ -28,13 +28,14 @@ function naliczOplateWpisu(db, { spolkaId, sprawaId, typZdarzenia, autor }) {
   const teraz = czas.terazIso();
   const wynik = db
     .prepare(
-      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, status, data_naliczenia, notatka, autor, utworzono)
-       VALUES (@spolka_id, @sprawa_id, 'wpis', NULL, @kwota_grosze, 'naliczona', @data_naliczenia, @notatka, @autor, @utworzono)`
+      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, stawka_vat_procent, status, data_naliczenia, notatka, autor, utworzono)
+       VALUES (@spolka_id, @sprawa_id, 'wpis', NULL, @kwota_grosze, @stawka_vat_procent, 'naliczona', @data_naliczenia, @notatka, @autor, @utworzono)`
     )
     .run({
       spolka_id: spolkaId,
       sprawa_id: sprawaId,
       kwota_grosze: ustawienia.stawkaGrosze(db, 'wpis'),
+      stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
       data_naliczenia: czas.dzisIso(),
       notatka: `Wpis: ${typZdarzenia}`,
       autor,
@@ -51,8 +52,8 @@ function naliczOplateWpisu(db, { spolkaId, sprawaId, typZdarzenia, autor }) {
 function naliczOplateInformacji(db, { spolkaId, odbiorcaOsobaId, zamawiajacyOsobaId, autor, notatka }) {
   const wynik = db
     .prepare(
-      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, status, data_naliczenia, notatka, autor, zamawiajacy_osoba_id, utworzono)
-       VALUES (@spolka_id, NULL, 'informacja', NULL, @kwota_grosze, 'naliczona', @data_naliczenia, @notatka, @autor, @zamawiajacy_osoba_id, @utworzono)`
+      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, stawka_vat_procent, status, data_naliczenia, notatka, autor, zamawiajacy_osoba_id, utworzono)
+       VALUES (@spolka_id, NULL, 'informacja', NULL, @kwota_grosze, @stawka_vat_procent, 'naliczona', @data_naliczenia, @notatka, @autor, @zamawiajacy_osoba_id, @utworzono)`
     )
     .run({
       spolka_id: spolkaId,
@@ -60,6 +61,7 @@ function naliczOplateInformacji(db, { spolkaId, odbiorcaOsobaId, zamawiajacyOsob
       // akcjonariusza, ktorej spolka nie widzi w swoich rozliczeniach.
       zamawiajacy_osoba_id: zamawiajacyOsobaId ?? null,
       kwota_grosze: ustawienia.stawkaGrosze(db, 'informacja'),
+      stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
       data_naliczenia: czas.dzisIso(),
       notatka: notatka || (odbiorcaOsobaId ? `Informacja z rejestru — odbiorca #${odbiorcaOsobaId}` : 'Informacja z rejestru'),
       autor,
@@ -68,68 +70,18 @@ function naliczOplateInformacji(db, { spolkaId, odbiorcaOsobaId, zamawiajacyOsob
   return wczytaj(db, wynik.lastInsertRowid);
 }
 
-/**
- * Opłata za prowadzenie rejestru — raz na spółkę i rok (§ 15b pkt 1: "za
- * każdy rozpoczęty rok"). IDEMPOTENTNE: jeśli za wskazany `okres` istnieje
- * już opłata typu `prowadzenie` w stanie innym niż `anulowana`, nic nie
- * wstawiamy — zwracamy istniejący wiersz z `utworzono: false`, żeby
- * wsadowe naliczenie roczne dało się bezpiecznie odpalić wielokrotnie.
- */
-function naliczOplateProwadzenia(db, { spolkaId, rok, autor }) {
-  const istniejaca = db
-    .prepare(
-      `SELECT * FROM psa_oplaty
-        WHERE spolka_id = ? AND typ = 'prowadzenie' AND okres = ? AND status != 'anulowana'
-        LIMIT 1`
-    )
-    .get(spolkaId, String(rok));
-  if (istniejaca) return { utworzono: false, oplata: istniejaca };
-
-  const wynik = db
-    .prepare(
-      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, status, data_naliczenia, notatka, autor, utworzono)
-       VALUES (@spolka_id, NULL, 'prowadzenie', @okres, @kwota_grosze, 'naliczona', @data_naliczenia, NULL, @autor, @utworzono)`
-    )
-    .run({
-      spolka_id: spolkaId,
-      okres: String(rok),
-      kwota_grosze: ustawienia.stawkaGrosze(db, 'prowadzenie'),
-      data_naliczenia: czas.dzisIso(),
-      autor,
-      utworzono: czas.terazIso(),
-    });
-  return { utworzono: true, oplata: wczytaj(db, wynik.lastInsertRowid) };
-}
-
-/**
- * Naliczenie roczne wsadowe — wszystkie spółki poza `wykreslona` (rejestr
- * zakończony, umowa nie obowiązuje dalej). Transakcja: albo cały rocznik
- * się nalicza, albo żaden — spójne z resztą modułu (regula domenowa
- * "wszystko w transakcji").
- */
-function naliczOplateRoczneWszystkie(db, { rok, autor }) {
-  const transakcja = db.transaction(() => {
-    const spolki = db
-      .prepare(`SELECT id FROM psa_spolki WHERE status != 'wykreslona' ORDER BY id`)
-      .all();
-    const naliczone = [];
-    const pominiete = [];
-    for (const s of spolki) {
-      const { utworzono, oplata } = naliczOplateProwadzenia(db, { spolkaId: s.id, rok, autor });
-      (utworzono ? naliczone : pominiete).push(oplata);
-    }
-    return { naliczone, pominiete };
-  });
-  return transakcja.immediate();
-}
-
 /** Reczny wpis oplaty — np. informacja wydana na miejscu, korekta, notatka ksiegowa. */
 function dodajOplateReczna(db, { spolkaId, sprawaId, typ, kwotaGrosze, okres, notatka, autor }) {
   const kwota = kwotaGrosze != null && kwotaGrosze !== '' ? Number(kwotaGrosze) : ustawienia.stawkaGrosze(db, typ);
+  // Jedna walidacja, wspolna dla automatu (zawsze przechodzi - bierze
+  // stawke wprost z przepisy.js) i tego recznego wpisu (Z-101..Z-104).
+  const walidacja = przepisy.walidujKwoteGrosze(typ, kwota);
+  if (!walidacja.ok) throw new Error(walidacja.powod);
+
   const wynik = db
     .prepare(
-      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, status, data_naliczenia, notatka, autor, utworzono)
-       VALUES (@spolka_id, @sprawa_id, @typ, @okres, @kwota_grosze, 'naliczona', @data_naliczenia, @notatka, @autor, @utworzono)`
+      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, stawka_vat_procent, status, data_naliczenia, notatka, autor, utworzono)
+       VALUES (@spolka_id, @sprawa_id, @typ, @okres, @kwota_grosze, @stawka_vat_procent, 'naliczona', @data_naliczenia, @notatka, @autor, @utworzono)`
     )
     .run({
       spolka_id: spolkaId,
@@ -137,6 +89,7 @@ function dodajOplateReczna(db, { spolkaId, sprawaId, typ, kwotaGrosze, okres, no
       typ,
       okres: okres || null,
       kwota_grosze: kwota,
+      stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
       data_naliczenia: czas.dzisIso(),
       notatka: notatka || null,
       autor,
@@ -205,9 +158,9 @@ function naliczOkresProwadzenia(db, { spolkaId, okres, autor }) {
   const wynik = db
     .prepare(
       `INSERT INTO psa_oplaty
-         (spolka_id, sprawa_id, typ, okres, okres_od, okres_do, kwota_grosze, status,
+         (spolka_id, sprawa_id, typ, okres, okres_od, okres_do, kwota_grosze, stawka_vat_procent, status,
           data_naliczenia, notatka, autor, utworzono)
-       VALUES (@spolka_id, NULL, 'prowadzenie', @okres, @okres_od, @okres_do, @kwota_grosze,
+       VALUES (@spolka_id, NULL, 'prowadzenie', @okres, @okres_od, @okres_do, @kwota_grosze, @stawka_vat_procent,
                'naliczona', @data_naliczenia, NULL, @autor, @utworzono)`
     )
     .run({
@@ -216,6 +169,7 @@ function naliczOkresProwadzenia(db, { spolkaId, okres, autor }) {
       okres_od: okres.od,
       okres_do: okres.do,
       kwota_grosze: ustawienia.stawkaGrosze(db, 'prowadzenie'),
+      stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
       data_naliczenia: czas.dzisIso(),
       autor,
       utworzono: czas.terazIso(),
@@ -230,6 +184,57 @@ function naliczPierwszyRok(db, { spolkaId, dataOtwarcia, autor }) {
     okres: okresProwadzenia(dataOtwarcia, 1),
     autor,
   });
+}
+
+/**
+ * Oplata za PIERWSZY wpis zalozycielski, naliczana w chwili otwarcia
+ * rejestru — odrebna od `naliczOplateWpisu` (ktora idzie przez workflow
+ * sprawy, `sprawa_id` zawsze wypelnione). Otwarcie rejestru nie przechodzi
+ * przez sprawe, wiec idempotencje daje `sprawa_id IS NULL`: ta kombinacja
+ * (typ='wpis', sprawa_id NULL) moze wystapic dla danej spolki tylko raz —
+ * dokladnie tu.
+ */
+function naliczOplateWpisuOtwarcia(db, { spolkaId, autor }) {
+  const istniejaca = db
+    .prepare(
+      `SELECT * FROM psa_oplaty
+        WHERE spolka_id = ? AND typ = 'wpis' AND sprawa_id IS NULL AND status != 'anulowana'
+        LIMIT 1`
+    )
+    .get(spolkaId);
+  if (istniejaca) return { utworzono: false, oplata: istniejaca };
+
+  const wynik = db
+    .prepare(
+      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, stawka_vat_procent, status, data_naliczenia, notatka, autor, utworzono)
+       VALUES (@spolka_id, NULL, 'wpis', NULL, @kwota_grosze, @stawka_vat_procent, 'naliczona', @data_naliczenia, @notatka, @autor, @utworzono)`
+    )
+    .run({
+      spolka_id: spolkaId,
+      kwota_grosze: ustawienia.stawkaGrosze(db, 'wpis'),
+      stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
+      data_naliczenia: czas.dzisIso(),
+      notatka: 'Pierwszy wpis (otwarcie rejestru)',
+      autor,
+      utworzono: czas.terazIso(),
+    });
+  return { utworzono: true, oplata: wczytaj(db, wynik.lastInsertRowid) };
+}
+
+/**
+ * Otwarcie rejestru — naprawa Z-108/P-007: OBIE sciezki (kreator wewnetrzny
+ * `POST /spolki/:id/otworz-rejestr` i przyjecie wniosku z portalu
+ * `POST /wnioski/:id/przyjmij`) maja naliczac IDENTYCZNIE: prowadzenie za
+ * pierwszy rok + pierwszy wpis, netto, w jednym zadaniu, biegiem roku od
+ * dnia otwarcia. Jedna funkcja, jedna transakcja, idempotentna w obie strony
+ * (bezpieczna do wywolania ponownie, np. po przerwanym zadaniu).
+ */
+function naliczOtwarcieRejestru(db, { spolkaId, dataOtwarcia, autor }) {
+  const transakcja = db.transaction(() => ({
+    prowadzenie: naliczPierwszyRok(db, { spolkaId, dataOtwarcia, autor }),
+    wpis: naliczOplateWpisuOtwarcia(db, { spolkaId, autor }),
+  }));
+  return transakcja.immediate();
 }
 
 /**
@@ -322,12 +327,12 @@ module.exports = {
   okresProwadzenia,
   naliczOkresProwadzenia,
   naliczPierwszyRok,
+  naliczOplateWpisuOtwarcia,
+  naliczOtwarcieRejestru,
   okresyDoOdnowienia,
   naliczOdnowienia,
   naliczOplateWpisu,
   naliczOplateInformacji,
-  naliczOplateProwadzenia,
-  naliczOplateRoczneWszystkie,
   dodajOplateReczna,
   zmienStatus,
   wczytaj,

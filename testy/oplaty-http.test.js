@@ -3,9 +3,10 @@
 /**
  * Testy integracyjne rozliczen przez HTTP (sekcja 8): naliczanie przy wpisie
  * odplatnym (sprawa-bound), brak naliczenia przy zajeciu z_urzedu i przy
- * migracji "stan otwarcia" (sciezka bezposrednia), naliczenie roczne
- * (admin, idempotentne), reczny wpis, zmiana statusu, filtry, eksport CSV,
- * oplata za informacje z portalu, stuby sadowe (501 przed nowelizacja).
+ * migracji "stan otwarcia" (sciezka bezposrednia), otwarcie rejestru
+ * (prowadzenie + wpis, jedno zadanie, Z-108/P-007), reczny wpis, zmiana
+ * statusu, filtry, eksport CSV, oplata za informacje z portalu, stuby
+ * sadowe (501 przed nowelizacja).
  */
 
 const test = require('node:test');
@@ -168,19 +169,44 @@ test('migracja "stan otwarcia" (sciezka bezposrednia) NIE nalicza oplaty', async
   void kowalski;
 });
 
-test('naliczenie roczne: tylko admin, idempotentne przez HTTP', async () => {
+test('Z-100/P-008: endpoint kalendarzowy /naliczenie-roczne nie istnieje juz w ogole', async () => {
+  const [status] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/oplaty/naliczenie-roczne', { rok: '2031' });
+  assert.equal(status, 404);
+});
+
+test('Z-108/P-007: otworz-rejestr nalicza 1200 zl (prowadzenie) + 100 zl (wpis) netto, jednym zadaniem, idempotentnie', async () => {
   const { spolkaId } = await przygotujSpolke();
+  const [, osobaOdp] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: 'Otwarcie', imie: 'Zenon', data_urodzenia: '1990-01-01', aml_status: 'wykonane',
+  });
 
-  const [odmowa] = await zapytaj(ciastkoPracownika, 'POST', '/api/psa/oplaty/naliczenie-roczne', { rok: '2031' });
-  assert.equal(odmowa, 403);
+  const cialo = {
+    zdarzenia: [
+      {
+        typ: 'emisja', klucz_tymczasowy: 'emisja-A', data_zdarzenia: '2026-01-10',
+        dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
+      },
+      {
+        typ: 'objecie', data_zdarzenia: '2026-01-10',
+        dane: { emisja_zdarzenie_id: { __odwolanie_do_partii: 'emisja-A' }, pozycje: [{ osoba_id: osobaOdp.osoba.id, ilosc: 100 }] },
+      },
+    ],
+  };
 
-  const [stPierwszy, pierwszy] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/oplaty/naliczenie-roczne', { rok: '2031' });
-  assert.equal(stPierwszy, 200);
-  assert.equal(pierwszy.naliczone.some((o) => o.spolka_id === spolkaId), true);
+  const [status, dane] = await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`, cialo);
+  assert.equal(status, 201);
+  assert.equal(dane.oplata_prowadzenia.kwota_grosze, 120000);
+  assert.equal(dane.oplata_prowadzenia.stawka_vat_procent, 23);
+  assert.equal(dane.oplata_wpisu.kwota_grosze, 10000);
+  assert.equal(dane.oplata_wpisu.sprawa_id, null);
 
-  const [, drugi] = await zapytaj(ciastkoAdmina, 'POST', '/api/psa/oplaty/naliczenie-roczne', { rok: '2031' });
-  assert.equal(drugi.pominiete.some((o) => o.spolka_id === spolkaId), true);
-  assert.equal(drugi.naliczone.some((o) => o.spolka_id === spolkaId), false);
+  const [, listaOdp] = await zapytaj(ciastkoAdmina, 'GET', `/api/psa/oplaty?spolka_id=${spolkaId}`);
+  assert.equal(listaOdp.oplaty.length, 2, 'dokladnie dwie pozycje - prowadzenie i wpis');
+
+  // Bieg roku od dnia otwarcia — dzien zdarzenia moze byc historyczny, ale
+  // rok prowadzenia liczy sie OD DZIS (dzien realnego otwarcia rejestru).
+  const wiersz = db().prepare('SELECT data_otwarcia_rejestru FROM psa_spolki WHERE id = ?').get(spolkaId);
+  assert.ok(wiersz.data_otwarcia_rejestru);
 });
 
 test('reczny wpis oplaty: walidacja typu i okresu, PATCH zmienia status', async () => {
@@ -257,6 +283,21 @@ test('portal: zamowienie informacji z rejestru nalicza oplate', async () => {
   const [, listaOdp] = await zapytaj(ciastkoAdmina, 'GET', `/api/psa/oplaty?spolka_id=${spolkaId}&typ=informacja`);
   assert.equal(listaOdp.oplaty.length, 1);
   assert.equal(listaOdp.oplaty[0].id, infOdp.oplata_id);
+  // Kancelaria widzi netto + VAT + brutto (sekcja 2.1).
+  assert.equal(listaOdp.oplaty[0].kwota_grosze, 5000);
+  assert.equal(listaOdp.oplaty[0].stawka_vat_procent, 23);
+  assert.equal(listaOdp.oplaty[0].kwota_brutto_grosze, 6150);
+
+  // Klient widzi WYLACZNIE brutto — cennik przed zamowieniem i lista platnosci.
+  const odpCennik = await fetch(`${baza}/api/psa/portal/cennik`, { headers: { Cookie: ciastkoPortal } });
+  const cennik = await odpCennik.json();
+  assert.equal(cennik.stawki.informacja, 6150);
+
+  const odpOplatyPortal = await fetch(`${baza}/api/psa/portal/oplaty`, { headers: { Cookie: ciastkoPortal } });
+  const oplatyPortal = await odpOplatyPortal.json();
+  const pozycja = oplatyPortal.oplaty.find((o) => o.id === infOdp.oplata_id);
+  assert.equal(pozycja.kwota_grosze, 6150, 'portal pokazuje brutto, nie netto z bazy');
+  assert.equal(oplatyPortal.do_zaplaty_grosze, 6150);
 });
 
 test('stuby sadowe zwracaja 501 przed wejsciem w zycie nowelizacji', async () => {

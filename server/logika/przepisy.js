@@ -124,6 +124,59 @@ const STAWKI_MAKSYMALNE_GROSZE = {
   INFORMACJA: 5000,
 };
 
+/**
+ * VAT (naprawa Z-100..Z-109 / sekcja 2.1 promptu naprawczego) - kwoty
+ * z rozporzadzenia sa NETTO, do kazdej dolicza sie 23% VAT. To korekta
+ * mylnego twierdzenia RAPORT.md § 5 (audyt pomylil usuniecie migracja 17
+ * pola `platnik_vat` spolki - status podatnika do klauzuli umownej - z
+ * jakoby swiadomym usunieciem VAT z oplat; migracja 17 nigdy nie dotyczyla
+ * oplat), nie zmiana polityki - `psa_spolki.platnik_vat` NIE wraca.
+ *
+ * `psa_oplaty.kwota_grosze` pozostaje NETTO. Brutto NIGDY nie jest
+ * przechowywane, wylacznie wyliczane - tu, w jednym miejscu, uzywanym
+ * wszedzie (kancelaria i portal, `server/platnosci.js`).
+ */
+const STAWKA_VAT_PROCENT = 23;
+
+/** Brutto z netto w groszach - zaokraglenie matematyczne do pelnego grosza, na POZYCJI. */
+function obliczBrutto(nettoGrosze, vatProcent = STAWKA_VAT_PROCENT) {
+  return Math.round((Number(nettoGrosze) * (100 + Number(vatProcent))) / 100);
+}
+
+/** Typ opłaty -> klucz w STAWKI_MAKSYMALNE_GROSZE. */
+const TYP_OPLATY_KLUCZ_MAKSYMALNEJ = {
+  prowadzenie: 'PROWADZENIE_ROCZNIE',
+  wpis: 'WPIS',
+  informacja: 'INFORMACJA',
+};
+
+/**
+ * Waliduje kwote oplaty w groszach (Z-101..Z-104) - JEDNO miejsce, wspolne
+ * dla automatu (ktory zawsze bierze stawke wprost stad, wiec zawsze
+ * przechodzi) i recznego wpisu pracownika (jedyna droga, ktora faktycznie
+ * moze dostac zly numer): liczba calkowita (regula domenowa nr 5 - zadnych
+ * floatow), dodatnia, nie wyzsza niz stawka maksymalna danego typu
+ * z rozporzadzenia.
+ */
+function walidujKwoteGrosze(typ, kwotaGrosze) {
+  const liczba = Number(kwotaGrosze);
+  if (!Number.isFinite(liczba) || !Number.isInteger(liczba)) {
+    return { ok: false, powod: 'Kwota musi być liczbą całkowitą groszy, bez ułamków.' };
+  }
+  if (liczba <= 0) {
+    return { ok: false, powod: 'Kwota musi być dodatnia.' };
+  }
+  const klucz = TYP_OPLATY_KLUCZ_MAKSYMALNEJ[typ];
+  const maksimum = klucz ? STAWKI_MAKSYMALNE_GROSZE[klucz] : null;
+  if (maksimum != null && liczba > maksimum) {
+    return {
+      ok: false,
+      powod: `Kwota nie może przekraczać stawki maksymalnej dla tego typu opłaty (${(maksimum / 100).toFixed(2)} zł netto).`,
+    };
+  }
+  return { ok: true, powod: null };
+}
+
 /** Waluta domyslna rejestru. */
 const WALUTA_DOMYSLNA = 'PLN';
 
@@ -788,6 +841,9 @@ module.exports = {
   STAWKI_GROSZE,
   STAWKI_MAKSYMALNE_GROSZE,
   STAWKI_DO_WERYFIKACJI,
+  STAWKA_VAT_PROCENT,
+  obliczBrutto,
+  walidujKwoteGrosze,
   WALUTA_DOMYSLNA,
   FORMA_PRAWNA_WYMAGANA,
   FORMA_PRAWNA_WARIANTY,

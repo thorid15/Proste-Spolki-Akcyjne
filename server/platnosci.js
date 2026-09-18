@@ -16,6 +16,7 @@ const crypto = require('node:crypto');
 const konfiguracja = require('./konfiguracja');
 const tpay = require('./logika/tpay');
 const ustawienia = require('./logika/ustawienia');
+const przepisy = require('./logika/przepisy');
 const terminy = require('./logika/terminy');
 const czas = require('./pomocnicze/czas');
 
@@ -41,15 +42,20 @@ function wczytajPlatnosc(db, id) {
   return db.prepare('SELECT * FROM psa_platnosci WHERE id = ?').get(id);
 }
 
-/** Najswiezsza wazna proba zaplaty tej oplaty — na TE SAMA kwote. */
-function aktualnaProba(db, oplata) {
+/**
+ * Najswiezsza wazna proba zaplaty tej oplaty — na TE SAMA kwote. Kwota to
+ * BRUTTO (naprawa sekcji 2.1 promptu naprawczego): klient placi kwote
+ * z VAT, `psa_oplaty.kwota_grosze` zostaje netto wylacznie w ksiegowosci
+ * kancelarii.
+ */
+function aktualnaProba(db, oplata, bruttoGrosze) {
   return db
     .prepare(
       `SELECT * FROM psa_platnosci
         WHERE oplata_id = ? AND status = 'oczekuje' AND kwota_grosze = ? AND link IS NOT NULL
         ORDER BY id DESC LIMIT 1`
     )
-    .get(oplata.id, oplata.kwota_grosze);
+    .get(oplata.id, bruttoGrosze);
 }
 
 /**
@@ -83,7 +89,12 @@ async function przygotujZaplate(db, { oplataId, urlPowiadomienia, urlPowrotu }) 
   if (!DO_ZAPLATY.has(oplata.status)) throw new Error(`Opłata ma status „${oplata.status}” — nie można jej opłacić.`);
   if (!tpay.skonfigurowany()) throw new Error('Płatności online nie są włączone.');
 
-  const istniejaca = aktualnaProba(db, oplata);
+  // Klient placi BRUTTO — kwota_grosze w psa_oplaty zostaje netto (patrz
+  // logika/przepisy.js: obliczBrutto). Liczona na tej jednej pozycji, nie
+  // na zadnej sumie.
+  const bruttoGrosze = przepisy.obliczBrutto(oplata.kwota_grosze, oplata.stawka_vat_procent);
+
+  const istniejaca = aktualnaProba(db, oplata, bruttoGrosze);
   if (istniejaca && !wygasl(istniejaca)) return { platnosc: istniejaca, nowa: false };
   if (istniejaca) {
     db.prepare("UPDATE psa_platnosci SET status = 'wygasla', zakonczono = ? WHERE id = ?")
@@ -118,12 +129,12 @@ async function przygotujZaplate(db, { oplataId, urlPowiadomienia, urlPowrotu }) 
       `INSERT INTO psa_platnosci (oplata_id, dostawca, crc, kwota_grosze, status, tryb_testowy, utworzono)
        VALUES (?, 'tpay', ?, ?, 'oczekuje', ?, ?)`
     )
-    .run(oplata.id, crc, oplata.kwota_grosze, konfiguracja.TPAY.tryb_testowy ? 1 : 0, czas.terazIso());
+    .run(oplata.id, crc, bruttoGrosze, konfiguracja.TPAY.tryb_testowy ? 1 : 0, czas.terazIso());
   const platnoscId = Number(wynik.lastInsertRowid);
 
   try {
     const transakcja = await tpay.zalozTransakcje({
-      kwotaGrosze: oplata.kwota_grosze,
+      kwotaGrosze: bruttoGrosze,
       opis: opisPlatnosci(db, oplata),
       crc,
       urlPowrotu,

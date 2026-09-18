@@ -9,6 +9,7 @@ const express = require('express');
 const { db } = require('../baza');
 const oplaty = require('../oplaty');
 const platnosci = require('../platnosci');
+const przepisy = require('../logika/przepisy');
 const przypomnienia = require('../logika/przypomnienia');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const czas = require('../pomocnicze/czas');
@@ -20,8 +21,18 @@ const router = express.Router();
 const TYPY = ['prowadzenie', 'wpis', 'informacja'];
 const STATUSY = ['naliczona', 'zafakturowana', 'oplacona', 'anulowana'];
 
+/** Rok (2026) albo dwa lata rozdzielone ukosnikiem (2026/2027) — Z-109. */
+const WZORZEC_OKRESU = /^\d{4}(\/\d{4})?$/;
+
+/** Kancelaria widzi netto + VAT + brutto (sekcja 2.1 promptu naprawczego). */
 function widokWiersza(w) {
-  return { ...w, kwota_zl: w.kwota_grosze / 100 };
+  const brutto = przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent);
+  return {
+    ...w,
+    kwota_zl: w.kwota_grosze / 100,
+    kwota_brutto_grosze: brutto,
+    kwota_brutto_zl: brutto / 100,
+  };
 }
 
 /**
@@ -314,6 +325,16 @@ router.post(
     if (typ === 'prowadzenie' && !cialo.okres) {
       throw bledneZadanie('Opłata za prowadzenie rejestru wymaga wskazania okresu (roku).');
     }
+    if (cialo.okres && !WZORZEC_OKRESU.test(String(cialo.okres))) {
+      throw bledneZadanie('Okres musi być rokiem (np. 2026) albo dwoma latami rozdzielonymi ukośnikiem (np. 2026/2027).');
+    }
+    // Kwota niepodana = domyslna stawka kancelarii, zawsze poprawna — walidacja
+    // (Z-101..Z-104) dotyczy WYLACZNIE reczne podanej kwoty, nienumeryczna
+    // wartosc ma dac 400, nie 500 z rzuconego Number(NaN) w warstwie serwisu.
+    if (cialo.kwota_grosze !== undefined && cialo.kwota_grosze !== null && cialo.kwota_grosze !== '') {
+      const walidacja = przepisy.walidujKwoteGrosze(typ, cialo.kwota_grosze);
+      if (!walidacja.ok) throw bledneZadanie(walidacja.powod);
+    }
 
     const wpis = oplaty.dodajOplateReczna(db(), {
       spolkaId,
@@ -341,25 +362,6 @@ router.patch(
 
     const wpis = oplaty.zmienStatus(db(), { id, status });
     odp.json({ oplata: widokWiersza(wpis) });
-  })
-);
-
-/** Naliczenie roczne wsadowe - admin, idempotentne per spolka+rok. */
-router.post(
-  '/naliczenie-roczne',
-  wymagajAdmina,
-  asy((zad, odp) => {
-    const kto = autor(zad);
-    const rok = (zad.body || {}).rok ? String((zad.body || {}).rok) : String(new Date(czas.dzisIso()).getFullYear());
-    if (!/^\d{4}$/.test(rok)) throw bledneZadanie('Rok musi być czterocyfrową liczbą.');
-
-    const { naliczone, pominiete } = oplaty.naliczOplateRoczneWszystkie(db(), { rok, autor: kto });
-    odp.json({
-      rok,
-      naliczone: naliczone.map(widokWiersza),
-      pominiete: pominiete.map(widokWiersza),
-      komunikat: `Naliczono opłatę za prowadzenie rejestru dla ${naliczone.length} spółek (${pominiete.length} miało już naliczoną opłatę za ${rok}).`,
-    });
   })
 );
 

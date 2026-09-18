@@ -13,6 +13,7 @@ const multer = require('multer');
 const { db } = require('../baza');
 const rejestr = require('../rejestr');
 const widoki = require('../widoki');
+const oplaty = require('../oplaty');
 const przepisy = require('../logika/przepisy');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const wzoryDysk = require('../logika/wzory-dysk');
@@ -653,12 +654,22 @@ router.post(
  * `rejestr.otworzRejestr`. Spolka musi juz istniec (krok 1-2 zapisuja ja
  * przez `POST /`) - ta trasa dotyczy WYLACZNIE poczatkowego stanu akcji,
  * nie danych samej spolki.
+ *
+ * Naprawa Z-108/P-007: to jest TA sama „chwila otwarcia rejestru" dla obu
+ * sciezek onboardingu (kreator wewnetrzny i przyjecie wniosku z portalu) -
+ * spolka zalozona przez portal tez konczy zakladanie akcji TUTAJ (patrz
+ * naglowek `trasy/wnioski.js`), wiec to jedyne miejsce, w ktorym rejestr
+ * FAKTYCZNIE zaczyna istniec (ma jakiekolwiek akcje). Oplata za pierwszy
+ * rok prowadzenia i za pierwszy wpis naliczana jest wiec WYLACZNIE tu,
+ * jednym zadaniem, identycznie dla kazdej spolki — bez wzgledu na to, ktora
+ * sciezka ja tu doprowadzila.
  */
 router.post(
   '/:id/otworz-rejestr',
   asy((zad, odp) => {
     const id = Number(zad.params.id);
-    if (!rejestr.wczytajSpolke(db(), id)) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const spolka = rejestr.wczytajSpolke(db(), id);
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
     const kto = autor(zad);
     const zdarzenia = Array.isArray(zad.body && zad.body.zdarzenia) ? zad.body.zdarzenia : [];
     if (zdarzenia.length === 0) {
@@ -671,10 +682,24 @@ router.post(
       }
     }
 
+    const dzis = czas.dzisIso();
     const wyniki = rejestr.otworzRejestr(db(), id, {
       zdarzenia,
       autor: kto,
-      dzisiaj: czas.dzisIso(),
+      dzisiaj: dzis,
+    });
+
+    // Rok prowadzenia biegnie od dnia, w ktorym rejestr faktycznie rusza
+    // (§ 15b pkt 1 rozporzadzenia: "za kazdy rozpoczety rok") - tym dniem
+    // jest DZIS, chyba ze pole bylo juz wczesniej recznie wypelnione.
+    const dataOtwarcia = spolka.data_otwarcia_rejestru || dzis;
+    if (!spolka.data_otwarcia_rejestru) {
+      db().prepare('UPDATE psa_spolki SET data_otwarcia_rejestru = ? WHERE id = ?').run(dzis, id);
+    }
+    const { prowadzenie, wpis } = oplaty.naliczOtwarcieRejestru(db(), {
+      spolkaId: id,
+      dataOtwarcia,
+      autor: kto,
     });
 
     odp.status(201).json({
@@ -684,6 +709,8 @@ router.post(
         data_zdarzenia: w.zdarzenie.data_zdarzenia,
         hash_skrocony: w.zdarzenie.hash.slice(0, 12),
       })),
+      oplata_prowadzenia: prowadzenie.utworzono ? prowadzenie.oplata : null,
+      oplata_wpisu: wpis.utworzono ? wpis.oplata : null,
     });
   })
 );

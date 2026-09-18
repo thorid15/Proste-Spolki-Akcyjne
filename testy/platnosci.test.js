@@ -94,6 +94,7 @@ let db;
 let platnosci;
 let oplatyModul;
 let tpay;
+let czas;
 let spolkaId;
 
 test.before(async () => {
@@ -105,6 +106,7 @@ test.before(async () => {
   platnosci = require('../server/platnosci');
   oplatyModul = require('../server/oplaty');
   tpay = require('../server/logika/tpay');
+  czas = require('../server/pomocnicze/czas');
 
   const wynik = db()
     .prepare(`INSERT INTO psa_spolki (nazwa, status, utworzono) VALUES (?, 'aktywna', ?)`)
@@ -174,6 +176,22 @@ test('link do zaplaty powstaje raz — dopoki kwota sie nie zmienila', async () 
   );
 });
 
+test('Z-VAT: klient placi BRUTTO, oplata w bazie zostaje netto (sekcja 2.1)', async () => {
+  const oplata = dodajOplate({ kwotaGrosze: 10000 });
+  assert.equal(oplata.stawka_vat_procent, 23, 'DEFAULT z migracji wypelnia stawke tez przy wstawieniu ominiajacym serwis');
+
+  const { platnosc } = await platnosci.przygotujZaplate(db(), {
+    oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
+  });
+  // 100 zl netto + 23% VAT = 123 zl — to jest kwota, ktora faktycznie idzie do tpay.
+  assert.equal(platnosc.kwota_grosze, 12300);
+
+  const wynik = platnosci.przyjmijPowiadomienie(db(), powiadomienie(platnosc));
+  assert.equal(wynik.zaksiegowano, true);
+  // psa_oplaty.kwota_grosze NIGDY nie zmienia sie na brutto - zostaje netto.
+  assert.equal(db().prepare('SELECT kwota_grosze FROM psa_oplaty WHERE id = ?').get(oplata.id).kwota_grosze, 10000);
+});
+
 test('awaria operatora nie zostawia wiszacej proby bez linku', async () => {
   const oplata = dodajOplate();
   zachowanieAtrapy = { blad: 'operator niedostepny', status: 'pending' };
@@ -208,6 +226,7 @@ test('sfalszowany podpis nie ksieguje niczego', async () => {
 });
 
 test('zaplacono mniej, niz nalezy — oplata zostaje otwarta', async () => {
+  // Klient placi BRUTTO (sekcja 2.1): 100 zl netto + 23% VAT = 123 zl.
   const oplata = dodajOplate({ kwotaGrosze: 10000 });
   const { platnosc } = await platnosci.przygotujZaplate(db(), {
     oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
@@ -215,7 +234,7 @@ test('zaplacono mniej, niz nalezy — oplata zostaje otwarta', async () => {
 
   const wynik = platnosci.przyjmijPowiadomienie(db(), powiadomienie(platnosc, { kwota: '50.00' }));
   assert.equal(wynik.ok, false);
-  assert.match(wynik.powod, /50\.00 zł zamiast 100\.00 zł/);
+  assert.match(wynik.powod, /50\.00 zł zamiast 123\.00 zł/);
   assert.equal(db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status, 'naliczona');
 });
 
@@ -282,9 +301,12 @@ test('zaplata uruchamia zadanie wpisu zlozone przez portal', async () => {
   const po = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
   assert.equal(po.oczekuje_na_oplate, 0, 'sprawa wchodzi do kolejki kancelarii');
   // Art. 300(34) § 1 KSH: tydzien liczy sie od OTRZYMANIA zadania, a zadanie
-  // zlozone przez portal dochodzi do skutku z chwila zaplaty.
-  const dzis = new Date().toISOString().slice(0, 10);
-  assert.equal(po.data_wplywu, dzis, 'dzien zaplaty jest dniem wplywu zadania');
+  // zlozone przez portal dochodzi do skutku z chwila zaplaty. Porownanie
+  // MUSI isc przez ten sam, strefowo swiadomy `czas.dzisIso()`, ktorego
+  // uzywa aplikacja - `.env` ustawia TZ=Europe/Warsaw, wiec surowe UTC
+  // (`new Date().toISOString()`) rozjezdza sie z aplikacja kilka godzin
+  // dziennie, wokol polnocy czasu polskiego.
+  assert.equal(po.data_wplywu, czas.dzisIso(), 'dzien zaplaty jest dniem wplywu zadania');
   assert.notEqual(po.termin_do, '2026-01-08', 'termin przeliczony od nowa');
 });
 
@@ -451,6 +473,7 @@ test('powiadomienie ze statusem PAID ksieguje tak samo jak TRUE', async () => {
  * sie roznia i tylko pierwsza mowi prawde o pieniadzach.
  */
 test('niedoplata widoczna w tr_paid nie ksieguje, mimo poprawnego tr_amount', async () => {
+  // Klient placi BRUTTO (sekcja 2.1): 100 zl netto + 23% VAT = 123 zl.
   const oplata = dodajOplate({ kwotaGrosze: 10000 });
   const { platnosc } = await platnosci.przygotujZaplate(db(), {
     oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
@@ -459,7 +482,7 @@ test('niedoplata widoczna w tr_paid nie ksieguje, mimo poprawnego tr_amount', as
   const itn = { ...powiadomienie(platnosc), tr_paid: '30.00' };
   const wynik = platnosci.przyjmijPowiadomienie(db(), itn);
   assert.equal(wynik.ok, false);
-  assert.match(wynik.powod, /30\.00 zł zamiast 100\.00 zł/);
+  assert.match(wynik.powod, /30\.00 zł zamiast 123\.00 zł/);
   assert.equal(db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status, 'naliczona');
 });
 

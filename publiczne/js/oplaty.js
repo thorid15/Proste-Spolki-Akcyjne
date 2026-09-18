@@ -202,7 +202,12 @@ function WierszOplatyKancelarii({ oplata, przyZmianie }) {
           ? `${fmt.data(oplata.okres_od)} – ${fmt.data(oplata.okres_do)}`
           : (oplata.okres || '—')}
       </td>
-      <td className="prawo" style={{ fontWeight: 600 }}>{fmt.zlote(oplata.kwota_grosze)}</td>
+      <td className="prawo">
+        <div style={{ fontWeight: 600 }}>{fmt.zlote(oplata.kwota_grosze)} netto</div>
+        <div className="male przyciemnione">
+          +{oplata.stawka_vat_procent}% VAT = {fmt.zlote(oplata.kwota_brutto_grosze)} brutto
+        </div>
+      </td>
       <td>
         <Znacznik odmiana={STATUS_ZNACZNIK[oplata.status]}>{STATUS_ETYKIETA[oplata.status]}</Znacznik>
         {oplata.oplacona_online && <div className="male przyciemnione">online</div>}
