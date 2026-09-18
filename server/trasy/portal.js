@@ -1067,6 +1067,12 @@ router.post(
       fs.rmSync(zad.file.path, { force: true });
       throw nieZnaleziono('Nie odnaleziono dokumentu.');
     }
+    if (dokument.podpis_potwierdzono) {
+      fs.rmSync(zad.file.path, { force: true });
+      throw bledneZadanie(
+        'Ten dokument został już potwierdzony przez kancelarię — nie można podmienić przesłanego skanu. Skontaktuj się z kancelarią.'
+      );
+    }
 
     zapiszPodpisanySkan(zad.psaWniosek, dokument, zad.file);
     odp.status(201).json({
@@ -1109,6 +1115,11 @@ router.delete(
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
       .get(Number(zad.params.id), wniosek.id);
     if (!dokument || !dokument.podpis_sciezka) throw nieZnaleziono('Nie odesłano jeszcze tego dokumentu.');
+    if (dokument.podpis_potwierdzono) {
+      throw bledneZadanie(
+        'Ten dokument został już potwierdzony przez kancelarię — nie można usunąć przesłanego skanu. Skontaktuj się z kancelarią.'
+      );
+    }
 
     const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, dokument.podpis_sciezka);
     if (pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW)) fs.rmSync(pelna, { force: true });
@@ -1156,6 +1167,12 @@ router.post(
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE wniosek_id = ? AND typ = ? AND udostepniono IS NOT NULL')
       .get(zad.psaWniosek.id, dokumentyWniosku.TYPY.UMOWA_REJESTRU);
     if (!umowa) throw nieZnaleziono('Projekt umowy nie został jeszcze wygenerowany.');
+    if (umowa.podpis_potwierdzono) {
+      fs.rmSync(zad.file.path, { force: true });
+      throw bledneZadanie(
+        'Ten dokument został już potwierdzony przez kancelarię — nie można podmienić przesłanego skanu. Skontaktuj się z kancelarią.'
+      );
+    }
 
     zapiszPodpisanySkan(zad.psaWniosek, umowa, zad.file);
     odp.status(201).json({

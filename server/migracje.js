@@ -1929,6 +1929,23 @@ const MIGRACJE = [
         ON psa_sesje_uniewaznione (wygasa);
     `,
   },
+
+  {
+    wersja: 46,
+    nazwa: 'skrot tresci podpisanego skanu (naprawa Z-205)',
+    sql: `
+      -- Audyt (Z-205) pokazal, ze klient mogl wgrac skan pod dokumentem, ktory
+      -- kancelaria juz potwierdzila jako odebrany i prawidlowy (podpis_potwierdzono
+      -- wypelnione) — trasa portalu przyjmowala kolejny plik bez zadnego sprawdzenia
+      -- stanu potwierdzenia i po cichu podmieniala tresc na dysku, zostawiajac stara
+      -- date potwierdzenia przy nowej, nigdy nie widzianej przez kancelarie tresci.
+      --
+      -- Skrot SHA-256 liczony w chwili potwierdzenia dokumentuje, jaka DOKLADNIE
+      -- tresc kancelaria zaakceptowala — niezalezne od blokady po stronie trasy,
+      -- ktora od teraz odrzuca kazda probe podmiany po potwierdzeniu.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_hash TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
