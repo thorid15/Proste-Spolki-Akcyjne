@@ -1130,3 +1130,1367 @@ walidowane formatem, w przeciwieństwie do endpointu `/naliczenie-roczne`
   spółki.
 - **Podstawa:** spójność walidacji między dwoma endpointami operującymi na tym samym polu.
 - **Waga:** DROBNY.
+
+## FAZA 5 — bezpieczeństwo i izolacja danych (zakres Z-250…Z-289)
+
+Metodologia: żądania bezpośrednie do API (`curl`/skrypty `node` z `better-sqlite3`), z pominięciem
+interfejsu, jak zaleca checklista sesji. Utworzono własne konta testowe portalu (`faza5.spolkaA@…`,
+`faza5.spolkaB@…`, `faza5.akcjA@…`, `faza5.akcjB@…`, `faza5.akcjA2@…` wpisane bezpośrednio do
+`psa_konta` z zahaszowanym hasłem przez `logika/hasla.js`, bo — patrz Z-006 z FAZA 1 — nie istnieje
+żadna ścieżka API tworząca konto roli `akcjonariusz`) oraz dwóch wnioskodawców przez publiczne
+`POST /portal/zgloszenia` + `POST /portal/aktywacja/:token` (`faza5.wnioskC@…` = wniosek id 6,
+`faza5.wnioskD@…` = wniosek id 7), powiązanych z istniejącymi spółkami współdzielonej bazy testowej
+(spółka 1 = „Audyt S2 Rada Dyrektorów”, spółka 2 = „Audyt S3 Osoba Prawna”, osoby 1/2 akcjonariusze
+spółki 1, osoba 3 akcjonariusz spółki 2). Konto admina kancelarii: `audyt@kancelaria.test`.
+
+## Z-250 [KRYTYCZNY] — wylogowanie z portalu klienta NIE unieważnia wydanego tokenu sesji — stary
+ciasteczko działa dalej aż do naturalnego wygaśnięcia (do 8 godzin)
+
+- **Co zrobiłem:** zalogowałem się do portalu jako konto testowe `faza5.spolkaA@example-test.pl`
+  (rola „spółka”), zapisałem kopię ciasteczka sesji (`psa_sesja_portal`) PRZED wylogowaniem,
+  wywołałem `POST /api/psa/portal/logout` (odpowiedź `{"ok":true}`), a następnie wysłałem
+  `GET /api/psa/portal/moje` z ZACHOWANĄ KOPIĄ starego ciasteczka (nie z nowym, już usuniętym przez
+  serwer).
+- **Co się stało:** żądanie ze starym ciasteczkiem zwróciło HTTP 200 z pełną listą spółek konta
+  (nazwa, KRS, NIP, adres, dane reprezentanta, liczba akcjonariuszy, liczba akcji) — dokładnie tak,
+  jakby wylogowanie nigdy się nie wydarzyło. Przyczyna: sesje w `server/logika/sesja.js` to
+  bezstanowy token podpisany HMAC-SHA256 (`typ + id + exp`, bez żadnego numeru/wersji sesji) —
+  `wylogujKonto`/`wylogujPracownika` (`server/pomocnicze/autoryzacja.js`) WYŁĄCZNIE każe
+  przeglądarce skasować ciasteczko (`Set-Cookie` z przeszłą datą wygaśnięcia); sam token nie jest
+  nigdzie unieważniany (nie ma listy odwołanych tokenów, nie ma numeru sesji w bazie). Token
+  przechwycony wcześniej (np. przez złośliwe rozszerzenie przeglądarki, XSS, dostęp fizyczny do
+  urządzenia przed wylogowaniem, log pośredniczącego proxy) pozostaje w pełni ważny przez cały czas
+  życia TTL — `TTL_PORTAL_MS = 8h` dla kont portalu, `TTL_PRACOWNIK_MS = 12h` dla pracowników
+  kancelarii — niezależnie od tego, ile razy właściciel konta kliknie „Wyloguj”.
+- **Kontrola pozytywna (dla porównania):** to samo stare ciasteczko PRZESTAJE działać natychmiast,
+  gdy konto zostanie DEZAKTYWOWANE w bazie (`aktywne = 0`) — `wczytajSesje` sprawdza stan konta przy
+  KAŻDYM żądaniu, więc ten mechanizm istnieje i działa poprawnie (potwierdzone empirycznie: konto
+  13 dezaktywowane → `GET /whoami` natychmiast zwraca `zalogowany: false`). Oznacza to, że
+  infrastruktura do unieważniania sesji po stronie serwera JUŻ ISTNIEJE (kolumna stanu konta
+  sprawdzana za każdym razem) — po prostu wylogowanie i zmiana hasła (patrz Z-251) nie korzystają z
+  analogicznego mechanizmu (np. znacznika czasu „sesje ważne od”/numeru wersji sesji w
+  `psa_konta`/`psa_uzytkownicy`, porównywanego z `exp`/dodatkowym polem tokenu).
+- **Co powinno się stać:** wylogowanie (i najlepiej też upływ dłuższej bezczynności) powinno
+  unieważniać token po stronie serwera, nie tylko kasować ciasteczko po stronie przeglądarki — np.
+  przez dopisanie kolumny „token ważny od” (znacznik czasu) do `psa_konta`/`psa_uzytkownicy`,
+  ustawianej na `wylogujKonto`/`wylogujPracownika`, i porównywanej przy odczycie tokenu w
+  `wczytajSesje` (token wystawiony PRZED tym znacznikiem jest odrzucany) — analogicznie do już
+  istniejącego sprawdzenia `aktywne`.
+- **Podstawa:** zasada techniczna — podstawowa właściwość funkcjonalna mechanizmu „wyloguj się”,
+  której użytkownik ma prawo oczekiwać (RODO art. 32 ust. 1 lit. b — zdolność do zapewnienia
+  poufności i integralności danych; sesja pozostająca ważna mimo wylogowania jest wprost sprzeczna
+  z tym wymogiem, gdy token wyciekł). Poza formalnym zakresem `PRZEPISY-PSA.md` (KSH), ale
+  bezpośrednio dotyczy poufności PESEL-i, adresów i danych finansowych przechowywanych w module.
+- **Waga:** KRYTYCZNY (dotyczy WSZYSTKICH sesji w systemie — zarówno portalu klienta, jak
+  i pracowników kancelarii, bo `logika/sesja.js` jest wspólny dla obu typów; „Wyloguj” daje
+  fałszywe poczucie bezpieczeństwa, a okno ekspozycji sięga 8-12 godzin).
+
+## Z-251 [KRYTYCZNY] — zmiana hasła NIE unieważnia już wydanych tokenów sesji — przejęta sesja
+przetrwa reakcję na włamanie, którą użytkownik uważa za skuteczną
+
+- **Co zrobiłem:** zalogowałem się jako administrator kancelarii (`audyt@kancelaria.test`),
+  zapisałem kopię aktywnego ciasteczka sesji PRZED zmianą hasła, wywołałem
+  `POST /api/psa/auth/zmiana-hasla` (zmiana z hasła audytowego na nowe, odpowiedź `{"ok":true}`),
+  po czym wysłałem `GET /api/psa/spolki/` z ZACHOWANĄ KOPIĄ starego ciasteczka. Po teście
+  natychmiast przywróciłem oryginalne hasło administratora przez ten sam endpoint, żeby nie
+  zablokować dostępu innym agentom audytu korzystającym z tego samego konta.
+- **Co się stało:** żądanie ze starym ciasteczkiem (wystawionym PRZED zmianą hasła) zwróciło HTTP
+  200 z pełną listą spółek kancelarii — zmiana hasła nie miała żadnego wpływu na ważność już
+  wydanego tokenu. Ten sam rdzeń przyczyny co Z-250: token niesie wyłącznie `{typ, id, exp}` i nie
+  jest w żaden sposób powiązany z aktualnym hashem hasła ani z żadnym licznikiem/znacznikiem wersji
+  sesji odczytywanym przy każdym żądaniu.
+- **Dlaczego to jest gorsze niż samo Z-250:** zmiana hasła jest STANDARDOWĄ, powszechnie zalecaną
+  pierwszą reakcją na podejrzenie przejęcia konta („zmień hasło natychmiast”) — użytkownik i admin
+  słusznie oczekują, że ta czynność odcina napastnika od konta. W tym systemie NIE ODCINA: token
+  skradziony PRZED zmianą hasła pozostaje w pełni użyteczny przez resztę swojego TTL (do 12h dla
+  pracownika, do 8h dla portalu), mimo że hasło już zostało zmienione. Jedyną skuteczną reakcją na
+  podejrzenie przejęcia sesji pracownika jest dziś DEZAKTYWACJA konta przez administratora
+  (`PATCH /api/psa/auth/uzytkownicy/:id`) — sama zmiana/reset hasła (także `POST
+  /uzytkownicy/:id/reset-hasla`) tego nie załatwia.
+- **Co powinno się stać:** zmiana hasła (własna i reset przez admina) powinna unieważniać
+  WSZYSTKIE dotychczasowe tokeny tego konta — ten sam mechanizm co proponowany w Z-250 (znacznik
+  „sesje ważne od”, aktualizowany też przy zmianie/resecie hasła, nie tylko przy wylogowaniu).
+- **Podstawa:** zasada techniczna — standardowa oczekiwana właściwość zarządzania sesją przy
+  zmianie poświadczeń (OWASP Session Management: „zmiana hasła powinna unieważniać wszystkie
+  aktywne sesje”). RODO art. 32 ust. 1 lit. b — jak w Z-250.
+- **Waga:** KRYTYCZNY (ten sam mechanizm co Z-250, ale efekt praktyczny jest poważniejszy: to
+  jedyna reakcja na włamanie, którą typowy pracownik w ogóle zna i wykona samodzielnie, i która
+  okazuje się nieskuteczna).
+
+## Z-252 [potwierdzenie/pogłębienie Z-001] — `GET /api/psa/meta` — ostateczna ocena wagi w
+kontekście całej FAZY 5: DROBNY, nie POWAŻNY
+
+- **Co zrobiłem:** pogłębiłem analizę zawartości `GET /api/psa/meta` (zgłoszone jako Z-001 w
+  FAZA 0) w kontekście całościowego przeglądu bezpieczeństwa: pełny odczyt struktury JSON bez
+  sesji, porównanie z zawartością analogicznego, chronionego logowaniem `GET /api/psa/portal/cennik`
+  oraz z `GET /api/psa/ustawienia` (chronionym, `wymagajPracownika`).
+- **Co się stało:** endpoint ujawnia WYŁĄCZNIE metadane systemowe niezwiązane z żadną konkretną
+  spółką ani osobą: słownik typów zdarzeń wraz z checklistami i podstawami prawnymi, słowniki
+  statusów/stanów, `pola_wrazliwe` (nazwy pól, nie wartości), datę serwera (`dzisiaj`), flagi
+  `portal_wlaczony`/`podglad_systemu` oraz `stawki_grosze`/`stawki_maksymalne_grosze`. Istotny
+  niuans: `stawki_grosze` w `/meta` pochodzi ze STAŁYCH w kodzie (`logika/przepisy.js:
+  STAWKI_GROSZE`), NIE z bieżąco skonfigurowanych w bazie stawek tej konkretnej kancelarii
+  (`ustawienia.stawkaGrosze(db(), …)`, którego używa chroniony logowaniem `GET
+  /portal/cennik` i chroniony `wymagajPracownika` `GET /ustawienia`) — więc nawet gdyby kancelaria
+  ustawiła inne, niestandardowe stawki w `/ustawienia`, `/meta` nadal pokazywałby stare, domyślne
+  wartości ze źródła, nie faktycznie obowiązujące ceny. Nie znaleziono w odpowiedzi żadnych danych
+  osobowych, danych konkretnej spółki, PESEL-i, adresów, ani informacji o klientach kancelarii.
+- **Co powinno się stać:** dla spójności modelu autoryzacji (każdy inny endpoint pod `/api/psa/*`
+  poza tym jednym wymaga sesji) endpoint powinien jednak dostać `wymagajPracownika` jak reszta
+  plików `pozostale.js` — ale praktyczny skutek naprawy jest kosmetyczny/porządkowy, nie
+  bezpieczeństwa danych osobowych: nic wrażliwego dziś nie wycieka.
+- **Podstawa:** zasada techniczna (spójność modelu autoryzacji), nie przepis ustawy.
+- **Waga:** DROBNY (podtrzymuję niższy kraniec widełek z Z-001: brak PII, brak danych rejestru
+  konkretnej spółki, ujawnione stawki to wartości DOMYŚLNE ze źródła, nie faktyczna, aktualna
+  konfiguracja kancelarii). Rekomenduję Łukaszowi PORZĄDKOWĄ, nie pilną, poprawkę.
+
+## Z-253 [POWAŻNY] — brak kontroli sygnatury treści pliku przy dwóch trasach uploadu
+(`osoby.js` — skany AML, `spolki.js` — załącznik umowy) — niespójność względem reszty aplikacji
+
+- **Co zrobiłem:** przejrzałem wszystkie 4 trasy `multer` w aplikacji (`portal.js` ×2, `sprawy.js`,
+  `osoby.js`, `spolki.js`) pod kątem obecności `pliki.trescPasuje()` (kontrola sygnatury bajtów pliku
+  względem deklarowanego rozszerzenia — mechanizm opisany wprost w komentarzu
+  `server/pomocnicze/pliki.js` jako obrona przed „skanem X udającym PDF”). Następnie zalogowany
+  jako admin, wysłałem plik `.pdf` będący w rzeczywistości stroną HTML ze skryptem
+  (`<script>alert(document.cookie)</script>`) na `POST /api/psa/spolki/1/umowa-zalacznik`.
+- **Co się stało:** `portal.js` (dowód tożsamości, skan podpisany) i `sprawy.js` (dokumenty do
+  sprawy) MAJĄ kontrolę sygnatury — potwierdzone wcześniej w tej samej sesji: identyczny plik
+  HTML-jako-PDF wysłany na `POST /api/psa/portal/wniosek/dowod` został odrzucony (`400`, „Treść
+  pliku nie odpowiada jego rozszerzeniu”). `osoby.js` (`POST /:id/aml-skany`) i `spolki.js`
+  (`POST /:id/umowa-zalacznik`) TEJ KONTROLI NIE MAJĄ — upload HTML-jako-PDF na
+  `/api/psa/spolki/1/umowa-zalacznik` zakończył się `201 Created` i plik trafił na dysk
+  (`spolka_1/umowa-rejestru/…-fake.pdf`) bez żadnego ostrzeżenia.
+- **Czynnik łagodzący (sprawdzony empirycznie):** przy POBIERANIU tego pliku z powrotem
+  (`GET /api/psa/spolki/1/umowa-zalacznik`) serwer wymusza `Content-Type: application/pdf` na
+  podstawie ROZSZERZENIA nazwy pliku (`pliki.naglowkiPliku` → `typZNazwy`), niezależnie od
+  rzeczywistej treści, dodaje `X-Content-Type-Options: nosniff` i podaje plik jako `attachment`
+  (nie `inline`) — więc przeglądarka nie wykona go jako HTML/JS w kontekście sesji kancelarii przy
+  zwykłym pobraniu. Ryzyko XSS jest więc w praktyce silnie ograniczone, ale NIE wyeliminowane
+  całkowicie (np. gdyby ktoś ręcznie zmienił rozszerzenie zapisanego pliku przy późniejszym
+  eksporcie/ZIP-ie, albo gdyby inna, przyszła trasa serwowała ten sam plik inaczej).
+- **Co powinno się stać:** dodać `pliki.trescPasuje()` do `uploadSkanuAml` (`osoby.js`) i
+  `uploadUmowy` (`spolki.js`) — dokładnie ten sam trzyliniowy wzorzec, co w `portal.js`/`sprawy.js`
+  — żeby WSZYSTKIE cztery trasy uploadu w aplikacji miały tę samą obronę, a nie trzy z czterech.
+  Ma to dodatkowe znaczenie poza samym bezpieczeństwem: skany AML są dokumentem w rozumieniu
+  procedury AML kancelarii — plik, który w rzeczywistości nie jest tym, za co się podaje, podważa
+  integralność dokumentacji AML.
+- **Podstawa:** zasada techniczna — spójność mechanizmu obrony między trasami tego samego typu w
+  tej samej aplikacji (mechanizm istnieje i jest udokumentowany w kodzie jako celowa obrona, więc
+  jego brak w dwóch miejscach na cztery jest przeoczeniem, nie świadomą decyzją).
+- **Waga:** POWAŻNY (realny brak kontroli integralności pliku na dwóch z czterech tras uploadu w
+  aplikacji obsługującej AML i dokumenty założycielskie spółek; obniżone z KRYTYCZNEGO wyłącznie
+  dzięki potwierdzonym empirycznie zabezpieczeniom po stronie serwowania pliku, które ograniczają —
+  ale nie zerują teoretycznie — praktyczną szkodliwość).
+
+## Z-254 [DROBNY] — komunikaty błędów `multer` (limit rozmiaru/liczby plików) docierają do klienta
+po angielsku, nie po polsku — przygotowane polskie tłumaczenie jest martwym kodem
+
+- **Co zrobiłem:** wysłałem plik 21 MB (limit deklarowany wszędzie to 20 MB) na
+  `POST /api/psa/portal/wniosek/dowod`, zalogowany jako testowe konto wnioskodawcy portalu.
+- **Co się stało:** odpowiedź to `HTTP 400 {"blad":"File too large"}` — surowy, angielski komunikat
+  biblioteki `multer`. Tymczasem `server/pomocnicze/odpowiedzi.js` (`posrednikBledow`) ma
+  przygotowaną, przetłumaczoną obsługę dokładnie tego przypadku: `if (blad.name === 'MulterError')
+  { … komunikaty = { LIMIT_FILE_SIZE: 'Plik jest za duży (limit 20 MB).', LIMIT_FILE_COUNT: … } }`
+  — ale ten fragment kodu NIGDY się nie wykonuje, bo WSZYSTKIE cztery trasy uploadu w aplikacji
+  (sprawdzone przeglądem `portal.js` ×2, `sprawy.js`, `osoby.js`, `spolki.js`) łapią błąd multer
+  RĘCZNIE w callbacku i owijają go w `bledneZadanie(e.message)` — czyli w `BladZadania` z surowym
+  `e.message` — zanim błąd w ogóle dotrze do centralnego `posrednikBledow`, którego test na
+  `blad instanceof BladZadania` (linijka wcześniejsza niż test na `MulterError`) przechwytuje go
+  pierwej i zwraca message bez tłumaczenia.
+- **Co powinno się stać:** albo usunąć martwy kod tłumaczenia z `posrednikBledow` (bo nigdy się nie
+  wykonuje), albo — lepiej — zmienić cztery miejsca wywołania na przekazywanie SUROWEGO błędu
+  multer dalej (`dalej(e)`, nie `dalej(bledneZadanie(e.message))`), żeby faktycznie trafiał do
+  przygotowanej gałęzi tłumaczenia.
+- **Podstawa:** zasada techniczna — i18n/spójność UX (aplikacja jest po polsku wszędzie indziej);
+  nie problem bezpieczeństwa — sam LIMIT rozmiaru pliku jest egzekwowany poprawnie (patrz Z-260),
+  to wyłącznie treść komunikatu o odmowie jest w złym języku.
+- **Waga:** DROBNY.
+
+## Z-255 [DROBNY] — błąd parsowania nieprawidłowego JSON-a w treści żądania zwraca HTTP 500
+(„nieoczekiwany błąd serwera”) zamiast HTTP 400 („błędne żądanie”)
+
+- **Co zrobiłem:** wysłałem żądanie z nagłówkiem `Content-Type: application/json` i celowo
+  uszkodzoną treścią (`{nieprawidlowy json`) na `POST /api/psa/spolki/` z sesją admina.
+- **Co się stało:** `HTTP 500 {"blad":"Wystąpił nieoczekiwany błąd serwera."}`. Log serwera
+  poprawnie zapisał WYŁĄCZNIE metadane techniczne, bez treści żądania: `[psa] POST /api/psa/spolki/
+  — SyntaxError: Expected property name or '}' in JSON at position 1…` — więc TA konkretna część
+  (nie ujawnianie treści/danych osobowych w logu, patrz też Z-261) działa poprawnie. Problemem jest
+  wyłącznie KOD STATUSU: błąd parsowania JSON-a rzucany przez wbudowany `express.json()` to
+  `SyntaxError`, którego `posrednikBledow` nie rozpoznaje jako błąd KLIENTA (nie jest instancją
+  `BladZadania` ani żadnej z rozpoznawanych nazw), więc trafia do gałęzi ogólnej i dostaje 500,
+  mimo że przyczyną jest wyłącznie nieprawidłowe żądanie klienta, nie awaria serwera.
+- **Co powinno się stać:** `posrednikBledow` powinien rozpoznawać `blad instanceof SyntaxError &&
+  blad.status === 400 &&  'body' in blad` (charakterystyczne dla błędu `body-parser`/`express.json`)
+  i zwracać `400` z komunikatem „Nieprawidłowy format danych żądania.” zamiast `500`.
+- **Podstawa:** zasada techniczna — poprawność kodów stanu HTTP (błąd klienta ≠ błąd serwera); nie
+  problem bezpieczeństwa — żadna informacja wrażliwa nie wycieka, to wyłącznie niepoprawna
+  klasyfikacja błędu.
+- **Waga:** DROBNY.
+
+## Z-256 [POZYTYWNE] — izolacja klientów portalu (trzypoziomowy mechanizm w `portal.js`) działa
+poprawnie na WSZYSTKICH przetestowanych trasach — brak IDOR
+
+- **Co zrobiłem:** systematycznie przetestowałem izolację między dwoma niezależnymi kontami
+  „spółka” (spółka 1 / spółka 2), dwoma kontami „akcjonariusz” różnych spółek, dwoma kontami
+  „akcjonariusz” TEJ SAMEJ spółki (osoby 1 i 2, obie akcjonariusze spółki 1) i dwoma kontami
+  „wnioskodawca” (osobne wnioski C i D) — na każdej trasie portalu, która przyjmuje identyfikator
+  spółki (w ścieżce `:spolkaId` albo w ciele `spolka_id`) albo identyfikator zasobu należącego do
+  innego konta: `GET /rejestr/:spolkaId` (obca spółka → `404`), `POST /zadania` (obce `spolka_id`
+  w ciele → `404`), `POST /informacja/zamow` (obce `spolka_id` → `404`), `POST
+  /zadania/:id/dokumenty` (cudza sprawa jako `:id` → `404` przez `wczytajSpraweDlaKonta`), `PUT`/
+  `DELETE /wniosek/akcjonariusze/:id` (cudza pozycja akcjonariusza wniosku, inne konto
+  wnioskodawcy, ten sam mechanizm co poprzednio zgłoszone Z-014 dla PESEL-i → `404`, dane
+  NIE zostały nadpisane ani odczytane), `GET/POST informacja/:oplataId/wydaj` (cudza opłata →
+  `404` przez `wczytajOplateKonta`).
+- **Co się stało:** KAŻDA próba dostępu do cudzego zasobu zwróciła `404 „Nie odnaleziono…”` (nigdy
+  `403`, zgodnie z udokumentowaną w kodzie zasadą nieujawniania istnienia cudzych zasobów), a dane
+  docelowe pozostały nietknięte we wszystkich próbach zapisu/modyfikacji. Nie znalazłem ANI JEDNEJ
+  trasy portalu pomijającej bramki `wymagajKonta`/`router.param('spolkaId')`/
+  `wymagajDostepuDoSpolkiWCiele`/lokalne sprawdzenie własności zasobu opisane w komentarzu
+  `portal.js:363-384` — potwierdza to, dokładnie punkt po punkcie, zapowiedź audytu FAZA 0
+  („portal.js — najbardziej podatne miejsce na błąd »jedna trasa zapomniana«”): NIE znalazłem takiej
+  zapomnianej trasy.
+- **Podstawa:** zasada techniczna — potwierdzenie poprawności izolacji wielopodmiotowej.
+- **Waga:** POZYTYWNE.
+
+## Z-257 [POZYTYWNE] — kontrola dostępu do wydanego dokumentu „informacja z rejestru”
+(`GET /informacja/:id`) poprawnie rozróżnia odbiorcę spółka/akcjonariusz — działa zgodnie z opisem
+
+- **Co zrobiłem:** przetestowałem cztery kombinacje na dwóch faktycznie wydanych dokumentach:
+  (1) dokument wydany SPÓŁCE (odbiorca_osoba_id = NULL) otwarty przez samą spółkę → działa;
+  (2) ten sam dokument otwarty przez INNĄ spółkę (mająca dostęp do innej spółki) → `404`;
+  (3) ten sam dokument (wydany spółce) otwarty przez AKCJONARIUSZA tej samej spółki → `404`
+  (zgodnie z komentarzem w kodzie: dostęp do spółki NIE WYSTARCZA, bo dokument spółki niesie pełne
+  dane WSZYSTKICH akcjonariuszy); (4) dokument wydany KONKRETNEMU akcjonariuszowi (osoba 1) otwarty
+  przez INNEGO akcjonariusza TEJ SAMEJ spółki (osoba 2) → `404`. Dodatkowo: dokument wydany
+  akcjonariuszowi, otwarty przez SPÓŁKĘ tej samej spółki → dozwolone (bo rola „spółka” i tak ma
+  pełny, nie zamaskowany dostęp do danych wszystkich swoich akcjonariuszy poprzez własny rejestr —
+  `logika/maskowanie.js: ROLE_PELNY_DOSTEP` obejmuje `spolka` — więc to NIE jest dodatkowy wyciek).
+- **Co się stało:** wszystkie cztery przypadki zachowały się zgodnie z oczekiwaniem opisanym w
+  komentarzu kodu (`portal.js:1843-1886`) — mechanizm, który wg komentarza był kiedyś naprawiany po
+  wykryciu błędu, dziś działa poprawnie.
+- **Podstawa:** zasada techniczna — potwierdzenie poprawności kontroli dostępu opartej o
+  `odbiorca_osoba_id`, nie tylko o dostęp do spółki.
+- **Waga:** POZYTYWNE.
+
+## Z-258 [POZYTYWNE] — ograniczenie liczby prób logowania działa i zostało potwierdzone
+empirycznie zarówno dla portalu klienta, jak i dla logowania pracowników kancelarii
+
+- **Co zrobiłem:** wysłałem 6 kolejnych żądań `POST /api/psa/auth/login` z nieprawidłowym hasłem
+  (ten sam adres e-mail, ten sam adres IP) oraz analogicznie na `POST /api/psa/portal/login`
+  (opisane wcześniej w tej samej sesji, przed restartem serwera).
+- **Co się stało:** pierwsze 5 prób zwróciło `401 „Nieprawidłowy e-mail lub hasło”`, szósta zwróciła
+  `429 „Za dużo nieudanych prób logowania. Spróbuj ponownie za 15 min.”` — dokładnie zgodnie z
+  `logika/limiter.js` (`LIMIT = 5` prób na klucz IP+e-mail w oknie 15 minut, dodatkowo
+  `LIMIT_IP = 30` na sam adres IP jako obrona przed rozpylaniem haseł po wielu kontach). Limiter
+  działa niezależnie dla obu ścieżek logowania (`auth.js` i `portal.js`, każde wywołuje
+  `limiter.sprawdz` z własnym kluczem).
+- **Zastrzeżenie odnotowane, nie punktowane osobno:** licznik prób trzymany jest WYŁĄCZNIE w
+  pamięci procesu (`const proby = new Map()`, komentarz w kodzie to przyznaje wprost) — restart
+  serwera (co faktycznie nastąpiło w trakcie tej sesji audytu) zeruje wszystkie liczniki, a
+  wdrożenie za load-balancerem z wieloma instancjami dzieliłoby ruch na kilka niezależnych liczników
+  (limit efektywnie mnożony przez liczbę instancji). W obecnym wdrożeniu jednoinstancyjnym to
+  świadomy, udokumentowany kompromis (sekcja 11 specyfikacji: „własna implementacja, licznik w
+  pamięci”), nie błąd — nie kwalifikuję tego jako osobne znalezisko, wyłącznie jako zastrzeżenie do
+  ewentualnej przyszłej skalowalności poziomej.
+- **Podstawa:** zasada techniczna — potwierdzenie działania obrony przed brute-force.
+- **Waga:** POZYTYWNE.
+
+## Z-259 [POZYTYWNE] — path traversal w nazwie wgrywanego pliku zablokowany konsekwentnie na
+wszystkich czterech trasach uploadu
+
+- **Co zrobiłem:** wgrałem plik z `originalname` ustawionym ręcznie na
+  `../../../../etc/cron.d/evil.pdf` na `POST /api/psa/portal/wniosek/dowod`.
+- **Co się stało:** plik wylądował dokładnie tam, gdzie powinien
+  (`dokumenty/wnioski/wniosek_7/podpisane/<uuid>-evil.pdf`) — katalogi ze złośliwej nazwy zostały
+  odcięte. Przyczyna: wszystkie cztery konfiguracje `multer.diskStorage` w aplikacji (`portal.js`
+  ×2 zestawy, `sprawy.js`, `osoby.js`, `spolki.js`) używają identycznego wzorca
+  `path.basename(plik.originalname).replace(/[^\w.\- ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/gu, '_')` poprzedzonego
+  losowym UUID — `path.basename` usuwa każdy komponent ścieżki, więc `../../x` staje się `x`.
+  Dodatkowo każde pobranie pliku z dysku (`wyslijPlikDokumentu` w `portal.js`, analogiczne funkcje
+  w `osoby.js`/`spolki.js`) sprawdza `pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW)` jako drugą
+  linię obrony.
+- **Podstawa:** zasada techniczna — potwierdzenie odporności na path traversal.
+- **Waga:** POZYTYWNE.
+
+## Z-260 [POZYTYWNE] — limit rozmiaru pliku (20 MB) egzekwowany konsekwentnie na wszystkich
+trasach uploadu, żądanie ponadwymiarowe odrzucone bez zapisania pliku na dysk
+
+- **Co zrobiłem:** wysłałem plik 21 MB (`.pdf` z doklejonym losowym balastem) na `POST
+  /api/psa/portal/wniosek/dowod` (limit deklarowany: 20 MB).
+- **Co się stało:** żądanie zostało odrzucone (`HTTP 400`, treść komunikatu patrz Z-254) — `multer`
+  przerywa odbiór strumienia natychmiast po przekroczeniu `limits.fileSize`, więc ponadwymiarowy
+  plik nie jest w całości zapisywany na dysk ani buforowany w pamięci serwera (nie sprawdzałem
+  pełnych 500 MB z checklisty sesji wprost — uznałem to za nadmiarowe wobec kosztu/czasu, bo
+  mechanizm odpowiedzialny za odcięcie strumienia jest tym samym mechanizmem `multer.limits`
+  niezależnie od tego, o ile żądanie przekracza limit; zdecydowałem się przetestować margines tuż
+  nad progiem (21 MB / 20 MB), co jest wystarczające do potwierdzenia, że ograniczenie faktycznie
+  działa, a nie jest tylko deklaracją w kodzie).
+- **Podstawa:** zasada techniczna — obrona przed wyczerpaniem miejsca na dysku/pamięci (DoS przez
+  upload).
+- **Waga:** POZYTYWNE.
+
+## Z-261 [POZYTYWNE] — komunikaty błędów i logi serwera nie ujawniają stack trace, zapytań SQL,
+ścieżek serwera ani danych osobowych/treści dokumentów
+
+- **Co zrobiłem:** wywołałem błąd 500 (malformed JSON, patrz Z-255) i sprawdziłem zarówno
+  odpowiedź HTTP, jak i log procesu serwera (`console.error` w `posrednikBledow`); dodatkowo
+  przejrzałem zawartość tabeli `psa_dziennik_dostepu` (log dostępu do danych wrażliwych) po serii
+  operacji z danymi wrażliwymi (PESEL, wydanie informacji z rejestru, pobranie załącznika umowy).
+- **Co się stało:** odpowiedź HTTP dla błędu 500 to wyłącznie `{"blad":"Wystąpił nieoczekiwany błąd
+  serwera."}` — bez stack trace, bez treści zapytania SQL, bez ścieżki pliku na serwerze. Log
+  procesu zapisuje wyłącznie `[psa] METODA ŚCIEŻKA — NazwaBłędu: komunikat` (metadane techniczne,
+  zgodnie z jawną zasadą w komentarzu `server/pomocnicze/odpowiedzi.js`: „NIE logujemy treści
+  dokumentów ani danych osobowych — wyłącznie metadane techniczne”) — potwierdzone: nie znalazłem
+  ani jednego przypadku treści żądania (PESEL, hasła, zawartości pliku) w logu procesu. Wpisy
+  `psa_dziennik_dostepu` zawierają wyłącznie: kto (e-mail/imię), typ konta, id spółki/osoby, rodzaj
+  akcji, krótki opis metadanowy (np. „stan na 2026-09-17”, „skan dokumentu AML: nazwa_pliku.pdf”) —
+  żadnych wartości PESEL, adresów ani treści dokumentów. Tabela nie jest też udostępniona żadnym
+  endpointem API (sprawdzone: `grep` po `psa_dziennik_dostepu` w całym `server/trasy/` nie
+  znajduje żadnego odczytu) — dziś nie da się jej przeczytać inaczej niż bezpośrednim dostępem do
+  bazy.
+- **Zastrzeżenie drobne, nie punktowane osobno:** hasło tymczasowe administratora przy PIERWSZYM
+  starcie aplikacji (`auth.js: zapewnijAdmina`) trafia jawnym tekstem do stdout serwera — jest to
+  typowa, jednorazowa praktyka „bootstrap hasła” spotykana w wielu systemach (komunikat wprost
+  każe je zmienić po pierwszym logowaniu), a dostęp do logów procesu produkcyjnego i tak zakłada
+  poziom zaufania wyższy niż dostęp do samej aplikacji — nie kwalifikuję tego jako osobne
+  znalezisko bezpieczeństwa, wyłącznie jako obserwację do rozważenia (np. wypisywanie hasła tylko
+  gdy `NODE_ENV !== 'production'`, w produkcji generowanie i wymuszanie zmiany bez wypisywania).
+- **Podstawa:** zasada techniczna — potwierdzenie zgodności z zasadą „logi bez PII” z sekcji 11
+  specyfikacji.
+- **Waga:** POZYTYWNE.
+
+## Z-262 [POZYTYWNE] — katalog dokumentów NIE jest serwowany statycznie — pliki dostępne
+wyłącznie przez kontrolowane trasy API z autoryzacją
+
+- **Co zrobiłem:** po wgraniu pliku przez API (ścieżka względna zwrócona przez API, np.
+  `wnioski/wniosek_6/podpisane/<uuid>-plik.pdf`), spróbowałem pobrać ten sam plik bezpośrednio pod
+  `http://localhost:3005/dokumenty/<ta_sama_sciezka>` — z pominięciem jakiejkolwiek trasy API i bez
+  żadnej sesji.
+- **Co się stało:** żądanie zwróciło `HTTP 200`, ale treścią odpowiedzi był `index.html` aplikacji
+  jednostronicowej (`Content-Type: text/html`, rozmiar pasujący do SPA), NIE zawartość pliku —
+  ponieważ `KATALOG_DOKUMENTOW` (`./dokumenty`) leży POZA katalogiem serwowanym statycznie
+  (`express.static(path.join(__dirname, 'publiczne'), …)`), więc żądanie trafia w
+  `aplikacja.get('*', …)` (fallback SPA), a nie w rzeczywisty plik. Na pierwszy rzut oka `HTTP 200`
+  wygląda niepokojąco (typowy sygnał udanego dostępu), dlatego odnotowuję to wyraźnie jako
+  ZWERYFIKOWANY BRAK problemu, żeby ktoś inny nie musiał tego sprawdzać ponownie po zobaczeniu
+  samego kodu stanu w innym narzędziu.
+- **Podstawa:** zasada techniczna — potwierdzenie izolacji katalogu dokumentów od statycznego
+  serwowania plików.
+- **Waga:** POZYTYWNE.
+
+## Z-263 [POZYTYWNE] — nadpisanie pól spoza formularza (mass assignment) skutecznie
+zablokowane białymi listami pól na trasach portalu klienta
+
+- **Co zrobiłem:** wysłałem żądania z dodatkowymi, nieautoryzowanymi polami w treści JSON,
+  dokładnie wg checklisty sesji: `PUT /wniosek` z dodatkowym `{spolka_id, status: "przyjety",
+  konto_id: 999, id: 999}` (po usunięciu `spolka_id`, które — patrz niżej — wyzwala osobną bramkę);
+  `POST /wniosek/akcjonariusze` z dodatkowym `{aml_status: "pozytywny", zweryfikowano: 1,
+  osoba_id: 999}`.
+- **Co się stało:** żadne z podstawionych pól nie zostało zapisane — `status` wniosku pozostał
+  `w_przygotowaniu` (nie `przyjety`), `konto_id` pozostał `13` (nie `999`), `aml_status` w ogóle nie
+  pojawił się w odpowiedzi (nie ma go w białej liście `POLA_AKCJONARIUSZA_WNIOSKU`), `zweryfikowano`
+  pozostał `0`, `osoba_id` pozostał `null`. Mechanizm: `wyczyscWniosek`/
+  `wyczyscAkcjonariuszaWniosku` (`portal.js`) iterują WYŁĄCZNIE po zamkniętej liście dozwolonych pól
+  (`POLA_WNIOSKU`/`POLA_AKCJONARIUSZA_WNIOSKU`) i ignorują wszystko inne w `zad.body` — klasyczna,
+  poprawnie zaimplementowana biała lista zamiast czarnej listy. Efekt uboczny odnotowany przy
+  okazji (nie błąd, zamierzone zachowanie): pole dosłownie NAZWANE `spolka_id` w treści JAKIEGOKOLWIEK
+  żądania portalu jest przechwytywane przez globalny `wymagajDostepuDoSpolkiWCiele` (`router.use`)
+  NIEZALEŻNIE od tego, czy dana trasa w ogóle używa tego pola semantycznie — próba z `spolka_id: 999`
+  w ciele `PUT /wniosek` (gdzie to pole nic nie znaczy — `POLA_WNIOSKU` go nie zawiera) zwróciła
+  `404 „Nie odnaleziono spółki”` zamiast przejść dalej, co jest zgodne z udokumentowaną w kodzie,
+  celową zasadą „bezpieczne dla nieznanej przyszłej trasy”, ale warte odnotowania jako możliwe
+  źródło mylącego komunikatu błędu, gdyby kiedyś jakieś pole formularza miało nazywać się dosłownie
+  `spolka_id` w innym znaczeniu.
+- **Podstawa:** zasada techniczna — potwierdzenie ochrony przed mass assignment.
+- **Waga:** POZYTYWNE.
+
+## Z-264 [POZYTYWNE] — sesja portalu klienta i sesja pracownika kancelarii są w pełni
+niezależne; sesja portalu nie daje żadnego dostępu do endpointów kancelaryjnych
+
+- **Co zrobiłem:** z aktywną, ważną sesją portalu klienta (ciasteczko `psa_sesja_portal`, brak
+  `psa_sesja`) wywołałem sześć różnych endpointów kancelaryjnych: `GET /api/psa/spolki/`, `GET
+  /api/psa/osoby/`, `GET /api/psa/wnioski/`, `GET /api/psa/auth/uzytkownicy` (admin), `GET
+  /api/psa/pulpit`, `GET /api/psa/ustawienia`.
+- **Co się stało:** wszystkie sześć zwróciło `401 „Ta operacja wymaga zalogowania”` — sesja portalu
+  nie jest w żaden sposób honorowana przez `wymagajPracownika`/`wymagajAdmina` (te sprawdzają
+  wyłącznie `zad.uzytkownik`, wypełniane wyłącznie z ciastka `psa_sesja`, nigdy z
+  `psa_sesja_portal`) — potwierdza to opis w `pomocnicze/autoryzacja.js`, że oba typy sesji „nie
+  mieszają się”, nawet w tej samej przeglądarce.
+- **Podstawa:** zasada techniczna — potwierdzenie braku podniesienia uprawnień między dwoma typami
+  sesji.
+- **Waga:** POZYTYWNE.
+
+---
+
+# FAZA 4 — podpisy i tożsamość (Z-200 … Z-210)
+
+> Testy przez bezpośrednie żądania HTTP (`curl`, sesja pracownika `audyt@kancelaria.test` i osobne
+> konto portalowe klienta założone dla tej fazy) oraz Playwright dla zrzutów potwierdzających.
+> Dane testowe własne, poza bazą współdzieloną z FAZA 1: spółka „Faza4 AML Test 001 P.S.A." (id 7,
+> KRS `0000999001`) i osoby „Zalozyciel Adam" (id 17), „Nabywca Bogdan" (id 18) — do testów bramki
+> AML; wniosek portalowy „Faza4 Podpisy P.S.A." (id 8, KRS `0000998877`, konto portalowe
+> `faza4.klient@example-test.pl`, spółka końcowa id 12) — do testu integralności podpisanych
+> dokumentów.
+
+## Z-200 [KRYTYCZNY] — bramka AML NIE blokuje wpisu w stanie domyślnym `aml_status = 'brak'` —
+blokuje WYŁĄCZNIE jawnie ustawiony status `niemozliwe`; to zachowanie strukturalne, nie luka
+konkretnego endpointu
+
+- **Co zrobiłem:** utworzyłem własną spółkę (id 7) i dwie osoby przez `POST /api/psa/osoby/`
+  (obie z domyślnym, nigdy nietykanym `aml_status: "brak"` — tak wygląda KAŻDA nowo założona osoba
+  w kartotece, dopóki pracownik jej ręcznie nie zmieni). Otworzyłem rejestr (`POST
+  /api/psa/spolki/7/otworz-rejestr`, emisja 100 akcji dla „Zalozyciel Adam"), po czym wykonałem
+  `POST /api/psa/spolki/7/zdarzenia` typu `przeniesienie` 10 akcji na „Nabywca Bogdan"
+  (`aml_status` cały czas `"brak"`), bez żadnego obejścia UI poza pominięciem samego formularza.
+  Kontrola: ten sam scenariusz powtórzony po ręcznym ustawieniu `aml_status = "niemozliwe"` dla
+  „Nabywca Bogdan" (`PUT /api/psa/osoby/18`).
+- **Co się stało:** przeniesienie z `aml_status: "brak"` zostało PRZYJĘTE — `201 Created`,
+  zdarzenie #27 zapisane do łańcucha, jedyny ślad to `"ostrzezenia": ["Wobec nabywcy „Nabywca
+  Bogdan" nie odnotowano wykonania środków bezpieczeństwa finansowego (AML)."]` w treści
+  odpowiedzi (informacja, nie blokada). Kontrola z `aml_status: "niemozliwe"` — poprawnie
+  ODRZUCONA: `400`, `"Wpis nie może zostać dokonany."`. Prześledziłem kod:
+  `server/logika/walidacje.js` (`sprawdzAml`, linie ok. 237–271) traktuje `niemozliwe` jako wpis do
+  tablicy `bledy` (blokuje — `dopuszczalne: bledy.length === 0`, linia 793), a KAŻDY inny status
+  (w tym domyślny `brak`) jako wpis WYŁĄCZNIE do `ostrzezenia` (nigdy nie blokuje). To zachowanie
+  jest wspólne dla WSZYSTKICH dróg wpisu przechodzących przez `_wykonajWpis`/`przygotujPodglad`
+  (`server/rejestr.js`) — zarówno bezpośredniego `POST /api/psa/spolki/:id/zdarzenia`, jak
+  i „oficjalnej" ścieżki `POST /api/psa/sprawy/:id/wpisz` używanej przez UI kancelarii — więc to
+  NIE jest kwestia „ominięcia bramki przez ominięcie UI": nawet operator klikający przez normalny
+  ekran sprawy trafia w tę samą, nieblokującą walidację, jeśli nikt wcześniej ręcznie nie ustawił
+  `aml_status` na `wykonane`.
+- **Co powinno się stać:** zależnie od odpowiedzi na PYTANIE-DO-ŁUKASZA poniżej — jeśli środki
+  bezpieczeństwa finansowego są rzeczywiście obowiązkowe przed wpisem transakcyjnym (co sugeruje
+  PRZEPISY-PSA.md § 9: „brak możliwości zastosowania środków bezpieczeństwa finansowego stanowi
+  przeszkodę wpisu, a przy jej nieusunięciu — odmowę wpisu" — czyli PRZESZKODĄ jest tu chyba nie
+  tylko `niemozliwe`, ale też brak jakiejkolwiek weryfikacji), status `brak` powinien blokować wpis
+  transakcyjny tak samo jak `niemozliwe` (różnica powinna być w KOMUNIKACIE — „nie wykonano jeszcze
+  weryfikacji" vs „weryfikacja niemożliwa" — nie w tym, czy wpis przechodzi).
+- **Podstawa:** PRZEPISY-PSA.md § 9 (⚠️ do potwierdzenia) w zestawieniu z kodem
+  `server/logika/przepisy.js` (komentarz przy `AML_STATUSY`: „Brak możliwości zastosowania środków
+  bezpieczeństwa finansowego = przeszkoda wpisu, przy nieusunięciu — odmowa wpisu" — ale kod
+  realizuje to WYŁĄCZNIE dla `niemozliwe`, nie dla `brak`, czyli dla stanu „jeszcze nie
+  zweryfikowano" nie ma żadnej przeszkody).
+- **Waga:** KRYTYCZNY. Zrzut `testy-audyt/zrzuty/faza4/02-spolka7-kokpit.png` potwierdza akcje
+  „Nabywca Bogdan" widoczne w rejestrze mimo statusu AML nieukończonego w chwili wpisu.
+
+## Z-201 [POWAŻNY] — pozycja checklisty „aml" przy typie zdarzenia `objecie`/`przeniesienie`
+(„Wobec KAŻDEGO obejmującego zastosowano środki bezpieczeństwa finansowego (AML)", `wymagana:
+true`) jest wyłącznie danymi opisowymi do wyświetlenia w UI — nic po stronie serwera nie sprawdza,
+czy pozycja została odhaczona
+
+- **Co zrobiłem:** przejrzałem `server/logika/typy-zdarzen.js` (katalog `checklista` per typ
+  zdarzenia) oraz `grep -rn "checklista" server/trasy/*.js server/rejestr.js
+  server/logika/walidacje.js`.
+- **Co się stało:** poza jednym miejscem w komentarzu (`walidacje.js:234-235`, wyjaśniającym
+  świadomie, że to TYLKO komentarz, nie kod) słowo „checklista" nie pojawia się NIGDZIE w kodzie
+  odpowiedzialnym za zapis zdarzenia — endpointy `POST .../zdarzenia` i `POST .../wpisz` nie
+  przyjmują ani nie sprawdzają żadnego pola typu „odhaczone pozycje checklisty". Katalog
+  `checklista` służy wyłącznie do wyrenderowania listy w kreatorze UI; potwierdza to test
+  Z-200 — wpis przeszedł mimo że pozycja „aml" (oznaczona jako `wymagana: true`, czyli w intencji
+  autorów obowiązkowa) nigdy nie mogła zostać uczciwie odhaczona.
+- **Co powinno się stać:** albo serwer powinien wymagać przesłania odhaczonych pozycji
+  obowiązkowej checklisty przy zapisie zdarzenia (i sam z nich wyprowadzać blokady typu Z-200,
+  zamiast polegać wyłącznie na osobnym polu `aml_status`), albo — jeśli intencja jest taka, że
+  checklista to tylko przypomnienie dla pracownika, a rzeczywistą blokadą ma być pole
+  `aml_status` — dokumentacja/etykieta pozycji nie powinna sugerować, że jest ona sama w sobie
+  wymuszana.
+- **Podstawa:** zasada techniczna (checklisty deklarowane jako `wymagana: true` powinny być
+  wymuszalne, inaczej wprowadzają w błąd co do realnego poziomu ochrony).
+- **Waga:** POWAŻNY — bezpośrednia przyczyna źródłowa Z-200 od strony UX/projektu (checklista daje
+  złudne poczucie bramki, która w kodzie nie istnieje).
+
+## Z-202 [POWAŻNY] — termin przeglądu okresowego AML (`aml_data_przegladu`,
+`TERMIN_PRZEGLADU_AML_MIESIECY = 12`) jest wyliczany WYŁĄCZNIE do wyświetlenia w kartotece
+(`wymaga_przegladu_aml`) i nigdy nie wpływa na to, czy nowa transakcja z udziałem tej osoby zostanie
+dopuszczona — status raz ustawiony na `wykonane` nie „wygasa" funkcjonalnie
+
+- **Co zrobiłem:** przejrzałem `server/logika/aml.js` (`wymagaPrzegladu`) oraz każde miejsce jego
+  wywołania (`grep -rn "wymagaPrzegladu"`).
+- **Co się stało:** jedyne wywołanie jest w `server/trasy/osoby.js:170`
+  (`wymaga_przegladu_aml: aml.wymagaPrzegladu(osoba, czas.dzisIso())`), z komentarzem w kodzie
+  wprost przyznającym: „Sygnal, NIE blokada (blok C1)". `server/logika/walidacje.js` (`sprawdzAml`)
+  nigdy nie importuje ani nie odwołuje się do `logika/aml.js` — sprawdza wyłącznie surowe pole
+  `aml_status`, bez względu na to, jak dawno temu zostało ustawione. Osoba zweryfikowana raz, np.
+  w 2020 r., jest dla bramki transakcyjnej dziś identyczna jak osoba zweryfikowana wczoraj.
+- **Co powinno się stać:** `sprawdzAml` powinno traktować `wykonane`, ale przeterminowane
+  (`wymagaPrzegladu(...) === true`) tak samo jak `brak` (co najmniej ostrzeżenie, a jeśli Łukasz
+  potwierdzi odpowiedź na Z-200 — także blokadę), zamiast wyłącznie jako kosmetyczną plakietkę w
+  kartotece.
+- **Podstawa:** WYTYCZNE-MERYTORYCZNE-PSA.md § 7: „Profil AML jest trwały przy osobie (...), o ile
+  dane nie zdezaktualizowały się" — wyraźnie zakłada, że dezaktualizacja MA znaczenie funkcjonalne,
+  a nie tylko wizualne.
+- **Waga:** POWAŻNY.
+
+## Z-203 [DROBNY/do potwierdzenia wagi] — bramka AML (`sprawdzAml`) nie rozróżnia osoby fizycznej
+i prawnej; dla nabywcy będącego osobą prawną NIGDY nie sprawdza, czy wskazano i zweryfikowano
+beneficjenta rzeczywistego
+
+- **Co zrobiłem:** przejrzałem `server/logika/walidacje.js` (`sprawdzAml`) oraz
+  `server/trasy/osoby.js` (`sprawdzBeneficjenta`, pole `beneficjent_rzeczywisty_id`).
+- **Co się stało:** `sprawdzAml` sprawdza wyłącznie `osoba.aml_status` nabywcy — identycznie dla
+  `typ: 'fizyczna'` i `typ: 'prawna'`. Pole `beneficjent_rzeczywisty_id` istnieje w kartotece,
+  ale: (1) jest całkowicie OPCJONALNE — nic nie wymusza jego wypełnienia dla podmiotu typu
+  `prawna`; (2) nawet gdy wypełnione, `sprawdzAml` NIGDY nie odczytuje ani nie sprawdza statusu AML
+  wskazanego beneficjenta. Spółka (osoba prawna) może więc mieć `aml_status: 'wykonane'` ustawiony
+  na SIEBIE, bez jakiegokolwiek wpisanego beneficjenta rzeczywistego, i przejść bramkę identycznie
+  jak osoba fizyczna.
+- **Co powinno się stać:** do ustalenia z Łukaszem (patrz pytanie w
+  `testy-audyt/PYTANIA-DO-LUKASZA.md`) — czy ustawa AML wymaga identyfikacji beneficjenta
+  rzeczywistego JAKO WARUNKU dopuszczenia wpisu dla nabywcy-osoby prawnej, czy to wyłącznie
+  element treści oświadczenia (dokument `oswiadczenie_aml` już dziś o to pyta — patrz Z-209).
+- **Podstawa:** WYTYCZNE-MERYTORYCZNE-PSA.md § 7 wspomina „beneficjenta rzeczywistego" jako
+  element zawężonej definicji klienta, ale nie rozstrzyga wprost, czy to osobny warunek bramki.
+- **Waga:** DROBNY/POWAŻNY (do potwierdzenia) — nie zgaduję oceny prawnej.
+
+## Z-204 [POWAŻNY] — `POST /api/psa/spolki/:id/otworz-rejestr` (otwarcie rejestru „z marszu", poza
+workflow sprawy) w ogóle NIE zwraca ostrzeżeń walidacji w odpowiedzi — ostrzeżenie AML przy emisji
+założycielskiej ginie po cichu, niewidoczne nawet dla pracownika, który je wywołał wprost
+
+- **Co zrobiłem:** wykonałem `POST /api/psa/spolki/7/otworz-rejestr` z emisją i objęciem akcji
+  przez osobę o `aml_status: "brak"`, po czym porównałem strukturę odpowiedzi z odpowiedzią
+  `POST .../zdarzenia` (Z-200) i `POST /api/psa/sprawy/:id/wpisz`.
+- **Co się stało:** odpowiedź `otworz-rejestr` (`server/trasy/spolki.js`, ok. linii 670–680) zwraca
+  wyłącznie `{ zdarzenia: [...] }` (id/typ/data/hash każdego zdarzenia) — bez pola `ostrzezenia`
+  w ogóle, mimo że pod spodem `_wykonajWpis` te same ostrzeżenia generuje (są po prostu
+  odrzucane przy budowaniu odpowiedzi). Dla porównania, `POST .../zdarzenia` i `POST .../wpisz`
+  zwracają `ostrzezenia` wprost w JSON-ie. Ponieważ ta ścieżka jest — zgodnie z Z-005 z FAZA 1 —
+  JEDYNĄ wyeksponowaną ścieżką otwarcia rejestru dla spółek onboardowanych z portalu klienta
+  (deklarowany główny model biznesowy), to właśnie przy zdarzeniach założycielskich (pierwsze
+  objęcie akcji przez każdego akcjonariusza — dokładnie ten moment, w którym AML MA sens) ostrzeżenie
+  o brakującym AML jest NIEWIDOCZNE dla pracownika kancelarii nawet w treści odpowiedzi API, nie
+  tylko w UI.
+- **Co powinno się stać:** odpowiedź `otworz-rejestr` powinna zwracać zbiorczą listę `ostrzezenia`
+  ze wszystkich zdarzeń partii, analogicznie do pozostałych dwóch endpointów zapisu.
+- **Podstawa:** spójność API — ten sam typ operacji (zapis zdarzenia) nie powinien milczeć na jednej
+  z trzech dróg, którymi można go wywołać.
+- **Waga:** POWAŻNY — pogłębia Z-200 dla akurat tej ścieżki (główny model biznesowy wg Z-005).
+
+## Z-205 [KRYTYCZNY] — TREŚĆ już „potwierdzonego przez kancelarię" podpisanego skanu można
+podmienić po stronie klienta BEZ resetowania znacznika potwierdzenia — potwierdzenie
+(`podpis_potwierdzono`/`podpis_potwierdzil`) zostaje przy NOWYM, nigdy nieobejrzanym pliku, i w tej
+postaci trafia jako egzemplarz wiążący do akt spółki
+
+- **Co zrobiłem:** pełna ścieżka wniosku #8 (portal, konto `faza4.klient@example-test.pl` →
+  kancelaria `audyt@kancelaria.test`): wypełniłem wniosek, dodałem akcjonariusza-reprezentanta,
+  wgrałem dowód tożsamości, kancelaria wystawiła i udostępniła komplet 5 dokumentów (status
+  wniosku: `umowa_wygenerowana`). Dla dokumentu „Umowa o prowadzenie rejestru" (id 10): (1) klient
+  wgrał plik A (`POST /api/psa/portal/wniosek/dokumenty/10/podpis`, plik 81 B, sygnatura
+  `%PDF-1.4 ... test-file-A`); (2) kancelaria PRZED formalnym odesłaniem kompletu przez klienta
+  (wniosek WCIĄŻ w statusie `umowa_wygenerowana`, nie `umowa_podpisana`) potwierdziła podpis
+  (`POST /api/psa/wnioski/8/dokumenty/10/podpis-potwierdz`, `{"potwierdzono":true}`) —
+  możliwe, bo `wczytajOtwartyWniosek` używane przez ten endpoint blokuje tylko statusy zamknięte
+  (`przyjety`/`odrzucony`), nie wymaga konkretnego etapu obiegu; (3) klient, WCIĄŻ w tym samym
+  statusie `umowa_wygenerowana` (upload klienta jest dopuszczony właśnie i wyłącznie w tym
+  statusie — `STATUSY_PRZYJMUJACE_PODPISY`), wgrał INNY plik B na TEN SAM dokument (97 B, sygnatura
+  `%PDF-1.4 ... test-file-B-SWAPPED-CONTENT`).
+- **Co się stało:** `zapiszPodpisanySkan` (`server/trasy/portal.js`) nadpisuje `podpis_sciezka`/
+  `podpis_nazwa_pliku`/`podpis_rozmiar`/`podpis_wgrano`, ale NIE dotyka kolumn
+  `podpis_potwierdzono`/`podpis_potwierdzil`. Po podmianie dokument #10 pokazywał: nazwę pliku
+  `umowa-podpisana-B-SWAPPED.pdf` (nowy plik), ale `podpis_potwierdzono` wciąż ze STAREGO
+  znacznika czasu (potwierdzenia pliku A) i `podpis_potwierdzil: "Administrator"` — czyli
+  wyglądało, jakby kancelaria zatwierdziła plik, którego nigdy nie widziała. Kontynuowałem
+  ścieżkę do końca: uzupełniłem podpisy pozostałych 4 dokumentów, zweryfikowałem akcjonariusza,
+  wywołałem `POST /api/psa/wnioski/8/przyjmij` — wniosek PRZYJĘTY (`status: "przyjety"`, spółka
+  #12 założona), a `psa_wnioski.umowa_podpisana_sciezka` (pole opisane w kodzie jako to, które
+  „prowadzi cały przebieg umowa_wygenerowana → umowa_podpisana") oraz kopia z rolą `podpisany`
+  trwale skopiowana do akt spółki (`przeniesDokumentyDoSpolki`, `server/trasy/wnioski.js`) to
+  DOKŁADNIE plik B — ten, którego treści kancelaria nigdy nie potwierdziła. Stan po restarcie
+  serwera w trakcie sesji audytu — sprawdzony ponownie i NIEZMIENIONY: `GET
+  /api/psa/wnioski/8` nadal zwracał `podpis_nazwa_pliku: "umowa-podpisana-B-SWAPPED.pdf"` razem
+  ze starym `podpis_potwierdzono`/`podpis_potwierdzil`. Potwierdzone też WIZUALNIE w UI kancelarii
+  (zrzut `testy-audyt/zrzuty/faza4/04-wniosek8-dokumenty-swap.png`): wiersz „Umowa o prowadzenie
+  rejestru" pokazuje zieloną plakietkę „podpis potwierdzony" obok linku do pliku
+  `umowa-podpisana-B-SWAPPED.pdf`, bez żadnego ostrzeżenia. Dodatkowo: w przeciwieństwie do
+  `psa_osoby_skany_aml` (które przy każdym uploadzie liczy i zapisuje `sha256`), tabela
+  `psa_wnioski_dokumenty` NIE ma kolumny hash dla `podpis_sciezka` — nawet ręczny audyt po fakcie
+  nie ma jak wykryć podmiany treści, bo nie istnieje żaden zapisany „odcisk" potwierdzonej wersji.
+- **Co powinno się stać:** każdy ponowny upload podpisanego skanu dla dokumentu, który ma już
+  ustawione `podpis_potwierdzono`, powinien BEZWARUNKOWO czyścić `podpis_potwierdzono`/
+  `podpis_potwierdzil` (tak jak `zapiszTresc` bezwarunkowo odmawia zmiany treści dokumentu już
+  podpisanego — patrz Z-206, ten sam plik ma już jeden dobry precedens takiej ochrony). Dodatkowo:
+  `psa_wnioski_dokumenty` powinno przechowywać hash (sha256) potwierdzonego pliku, żeby podmianę
+  dało się wykryć niezależnie od tego, kiedy dokładnie nastąpiła.
+- **Podstawa:** zasada techniczna — integralność „egzemplarza autorytatywnego" (pytanie wprost
+  z checklisty FAZA 4: „Który plik system traktuje jako wiążący po zakończeniu obiegu? Czy jest
+  oznaczony i niemodyfikowalny?" — odpowiedź brzmi: jest oznaczony jako wiążący
+  [`umowa_podpisana_sciezka`, rola `podpisany` w aktach spółki], ale NIE jest niemodyfikowalny po
+  potwierdzeniu, dopóki formalne odesłanie kompletu klienta nie zamknie okna).
+- **Waga:** KRYTYCZNY. Warunkiem wystąpienia jest potwierdzenie podpisu przez kancelarię PRZED
+  formalnym `POST /wniosek/odeslij` klienta (w normalnym biegu UI kancelaria zwykle widzi wniosek
+  w kolejce dopiero po odesłaniu kompletu — status `umowa_podpisana`) — ale nic w kodzie serwera
+  tego nie wymusza ani nie sygnalizuje, więc jedna przedwczesna akcja pracownika (albo pomyłka,
+  albo świadome podejrzenie klienta chcącego „przetestować" reakcję) wystarczy do trwałego
+  podważenia dowodu, na podstawie którego działa cały rejestr założycielski spółki.
+
+## Z-206 [POZYTYWNE] — poza oknem opisanym w Z-205, integralność podpisanych dokumentów jest
+chroniona dobrze: treści dokumentu nie da się zmienić po podpisaniu, a klient nie może podmienić
+skanu PO formalnym odesłaniu kompletu
+
+- **Co zrobiłem:** (1) `pakietWniosku.zapiszTresc` — sprawdziłem kod: rzuca błąd „Dokument został
+  już podpisany — jego treści nie można zmieniać" natychmiast, gdy `wiersz.podpis_sciezka` jest
+  ustawione, więc pracownik nie może po cichu zmienić WZORU dokumentu, do którego klient już
+  odesłał podpis. (2) Po `POST /wniosek/odeslij` (status `umowa_podpisana`) próba ponownego
+  uploadu na ten sam dokument przez klienta jest zablokowana przez `zaladujWlasnyWniosekDoUploadu`
+  (`STATUSY_PRZYJMUJACE_PODPISY = new Set(['umowa_wygenerowana'])` — `umowa_podpisana` nie
+  jest na liście), więc w NORMALNYM biegu (kancelaria potwierdza dopiero PO odesłaniu kompletu,
+  co jest sposobem, w jaki wniosek trafia do jej kolejki) okno z Z-205 się nie otwiera.
+- **Co się stało:** oba mechanizmy działają zgodnie z opisem w kodzie; potwierdzone czytaniem
+  kodu (nie osobnym żądaniem — logika jednoznaczna, powtórzenie testu Z-205 już to pośrednio
+  potwierdziło dla drugiego mechanizmu, bo podmiana zadziałała TYLKO w oknie sprzed `odeslij`).
+- **Co powinno się stać:** nic — to poprawne zabezpieczenia, warte odnotowania jako punkt
+  odniesienia dla naprawy Z-205 (ten sam wzorzec „podpisano → nie wolno ruszać" powinien objąć też
+  znacznik potwierdzenia, nie tylko treść dokumentu).
+- **Podstawa:** zasada techniczna.
+- **Waga:** POZYTYWNE.
+
+## Z-207 [POZYTYWNE] — forma umowy: aplikacja nigdzie nie żąda podpisu kwalifikowanego ani nie
+sugeruje w treści dokumentów, że jest on wymagany; skan podpisu własnoręcznego jest wprost
+przedstawiony jako równoważny, z poprawną podstawą prawną
+
+- **Co zrobiłem:** przejrzałem instrukcję podpisu w kreatorze wniosku klienta
+  (`publiczne/js/wniosek.js`, ok. linii 1258–1275) oraz komentarz historyczny w
+  `server/logika/przepisy.js` (linie 22–26).
+- **Co się stało:** instrukcja dla klienta wprost dopuszcza trzy równoważne metody — podpis
+  własnoręczny + skan/zdjęcie, kwalifikowany podpis elektroniczny („równoważny podpisowi
+  własnoręcznemu, art. 78¹ § 2 Kodeksu cywilnego") oraz podpis zaufany/osobisty — bez sugestii, że
+  którakolwiek jest „lepsza" czy wymagana. Komentarz w `przepisy.js` dokumentuje ŚWIADOME usunięcie
+  w sprincie 5 wcześniejszego katalogu `FORMY_ZGODY` (poświadczony notarialnie/kwalifikowany/
+  zaufany/osobisty) jako niemającego podstawy w art. 300³⁴ § 3 KSH — pozostałość po myleniu
+  przepisów P.S.A. z przepisami spółki akcyjnej (PRZEPISY-PSA.md § 12).
+- **Co powinno się stać:** nic — zgodne z WYTYCZNE-MERYTORYCZNE-PSA.md § 3 (pojęcie dokumentu wg
+  art. 77³ k.c. — skan wystarcza).
+- **Podstawa:** WYTYCZNE-MERYTORYCZNE-PSA.md § 3; art. 78¹ § 2 k.c. cytowany poprawnie w UI.
+- **Waga:** POZYTYWNE.
+
+## Z-208 [do odnotowania — opis stanu, nie usterka sama w sobie] — aplikacja NIE weryfikuje
+kryptograficznie obecności ani ważności podpisu kwalifikowanego w odesłanym pliku; kontrola treści
+ogranicza się do sygnatury bajtowej formatu (PDF/JPG/PNG) — każdy plik przechodzący tę kontrolę
+sygnatury jest przyjmowany identycznie, niezależnie od zadeklarowanej metody podpisania
+
+- **Co zrobiłem:** przejrzałem `przyjmijSkan`/`pliki.trescPasuje`
+  (`server/pomocnicze/pliki.js`, `server/trasy/portal.js` ok. linii 836–856) — jedyna kontrola
+  treści porównuje pierwsze 8 bajtów pliku ze znanymi sygnaturami formatu; potwierdzone też przez
+  to, że pliki testowe A/B w Z-205 (81 i 97 bajtów, żadną miarą nie „prawdziwe" podpisane umowy)
+  zostały przyjęte bez zastrzeżeń, bo miały poprawny nagłówek `%PDF`.
+- **Co się stało:** formularz klienta (Z-207) nie ma nawet pola do zadeklarowania, JAKĄ metodą
+  podpisano dany plik — wszystkie trzy dopuszczone metody (własnoręczny+skan, kwalifikowany,
+  zaufany/osobisty) trafiają tą samą drogą uploadu, bez różnicowania. Jeśli klient zadeklaruje
+  ustnie/mailowo podpis kwalifikowany, a w rzeczywistości wgra zwykły, niepodpisany PDF, system
+  tego nie wykryje — wykrycie zależy wyłącznie od tego, czy pracownik kancelarii OTWORZY plik
+  (przycisk „Sprawdź podpis" w UI, widoczny na zrzucie 04) i oceni go wzrokowo/w czytniku PDF.
+- **Co powinno się stać:** nie zgaduję — real-world weryfikacja podpisu kwalifikowanego (PAdES) to
+  osobny, kosztowny temat techniczny; odnotowuję wyłącznie FAKTYCZNY stan na żądanie checklisty
+  FAZA 4 („Czy aplikacja weryfikuje podpis kwalifikowany w odesłanym pliku, czy przyjmuje każdy
+  PDF" — odpowiedź: przyjmuje każdy plik o poprawnej sygnaturze formatu, bez wglądu w treść).
+- **Podstawa:** obserwacja kodu i testu, bez oceny prawnej.
+- **Waga:** do odnotowania (nie klasyfikuję jako błąd — brak wymogu prawnego weryfikacji
+  kryptograficznej, patrz Z-207; ale to zawęża realnie to, co „potwierdzenie podpisu" przez
+  pracownika w ogóle może stwierdzić — widzi treść, nie podpis).
+
+## Z-209 [POZYTYWNE, z zastrzeżeniem opisanym w P-poniżej] — ścieżka „przyjęcie skanu umowy" jest
+w kodzie i uprawnieniach wyraźnie ODDZIELONA od ścieżki „ustalenie statusu AML"; klient portalowy
+nie ma i nie może mieć wpływu na `aml_status` własnej ani cudzej kartoteki
+
+- **Co zrobiłem:** sprawdziłem montowanie tras w `serwer.js` — `/api/psa/osoby` (jedyne miejsce,
+  gdzie zapisuje się `aml_status`, oraz endpointy `aml-skany`) jest zamontowane WYŁĄCZNIE za
+  `autoryzacja.wymagajPracownika` (linia 97); `/api/psa/portal/*` (klient) nie ma do niego dostępu
+  pod żadną trasą. `grep -rn "aml_status" server/trasy/portal.js server/trasy/wnioski.js` nie
+  zwraca żadnego wyniku — moduł wniosku w ogóle nie dotyka tego pola.
+- **Co się stało:** ustawienie `aml_status` jest wyłącznie ręczną decyzją pracownika kancelarii
+  (`PUT /api/psa/osoby/:id`, wolne pole tekstowe `aml_notatka`); nie jest w żaden sposób
+  automatycznie wywoływane przez sam fakt odesłania/potwierdzenia podpisanej umowy — potwierdzenie
+  Z-016 (FAZA 1) i Z-206 tej fazy dotyczy WYŁĄCZNIE skuteczności umowy, nigdy tożsamości na
+  potrzeby AML. Upload skanu dokumentu tożsamości „na potrzeby AML" (`/api/psa/osoby/:id/aml-skany`)
+  jest osobnym, opcjonalnym mechanizmem — aktywnym wyłącznie, gdy pracownik zaznaczy przełącznik
+  „Stosuje procedurę AML dla tej spółki" per spółka (domyślnie WYŁĄCZONY,
+  `stosuje_procedure_aml = 0` — widoczny odznaczony na zrzucie
+  `testy-audyt/zrzuty/faza4/02-spolka7-kokpit.png`, z opisem w UI: „Wyłączona (domyślnie): kartoteka
+  zbiera wyłącznie dane z dokumentu tożsamości (status, data weryfikacji, notatka) — bez pliku.").
+  Nawet gdy WŁĄCZONY i gdy pracownik faktycznie wgra skan, upload NIGDY automatycznie nie zmienia
+  `aml_status` — to zawsze osobna, świadoma decyzja pracownika.
+- **Co powinno się stać:** nic — to poprawna architektura (rozdzielenie ścieżek, zgodnie
+  z checklistą FAZA 4). Odnotowuję jako POZYTYWNE, z zastrzeżeniem że sama SKUTECZNOŚĆ tego
+  rozdzielenia zależy od jakości bramki opisanej w Z-200 — dobre rozdzielenie dwóch ścieżek nie
+  pomaga, jeśli jedna z nich (AML) i tak nie blokuje niczego w praktyce.
+- **Podstawa:** PRZEPISY-PSA.md § 8 (art. 108b — do prowadzenia rejestru nie stosuje się art. 81–83
+  i 85 Prawa o notariacie, czyli identyfikacja idzie wyłącznie reżimem AML, nie notarialnym — ⚠️ do
+  potwierdzenia) — kod jest z tym zgodny w sensie ARCHITEKTURY (dwie osobne ścieżki), niezależnie
+  od pytania, czy sama ścieżka AML jest wystarczająco silna (Z-200).
+- **Waga:** POZYTYWNE (architektura rozdzielenia), z odesłaniem do Z-200 dla oceny skuteczności.
+
+## Z-210 [opis stanu — do przekazania Łukaszowi jako pytanie, nie znalezisko usterki] — na czym
+faktycznie opiera się identyfikacja akcjonariusza w obecnym prototypie
+
+- **Co zrobiłem:** zebrałem w jednym miejscu wszystkie źródła danych, na których może się opierać
+  „identyfikacja" akcjonariusza w obecnym stanie aplikacji, śledząc cały przepływ danych od
+  formularza wniosku do wpisu w rejestrze.
+- **Co się stało — opis FAKTYCZNEGO stanu, bez oceny wystarczalności:**
+  1. **Dane opisowe** (imię, nazwisko, PESEL, adres, dla podmiotu — numer w rejestrze) — wpisywane
+     w formularzu wniosku PRZEZ SPÓŁKĘ/WNIOSKODAWCĘ (portal), niezależnie zweryfikowane przez
+     pracownika kancelarii wyłącznie o tyle, że musi ręcznie „zweryfikować pozycję" przed
+     przyjęciem wniosku (`POST /:id/akcjonariusze/:akcId/zweryfikuj`) — ale weryfikacja ta
+     sprawdza SPÓJNOŚĆ z odpisem KRS i z resztą kartoteki (unikanie duplikatów — regula domenowa
+     nr 10), NIE tożsamość osoby fizycznej.
+  2. **Skan dokumentu tożsamości REPREZENTANTA** (`psa_wnioski.dowod_sciezka`,
+     `POST /api/psa/portal/wniosek/dowod`) — zbierany bezwarunkowo dla KAŻDEGO wniosku, ale
+     WYŁĄCZNIE dla osoby podpisującej umowę w imieniu wnioskodawcy (reprezentanta), nie dla
+     pozostałych akcjonariuszy. Komentarz w kodzie (`server/trasy/portal.js`, linie 965–972)
+     wprost przyznaje ograniczenie: „Sam obraz dokumentu nie dowodzi tożsamości (można go mieć nie
+     będąc właścicielem), ale jest śladem, na czym oparto identyfikację". Ten skan NIGDY nie jest
+     automatycznie powiązany z żadnym polem `aml_status` w kartotece osób (potwierdzone —
+     `grep` nie znajduje żadnego połączenia).
+  3. **Skan dokumentu AML per osoba** (`psa_osoby_skany_aml`, `POST
+     /api/psa/osoby/:id/aml-skany`) — opcjonalny, wyłączony domyślnie (Z-209), wgrywany WYŁĄCZNIE
+     przez pracownika kancelarii (nie przez portal klienta), typ dokumentu (`dowod_osobisty` /
+     `paszport` / `inny`) deklarowany swobodnie, treść pliku nie jest w żaden sposób
+     zweryfikowana (brak OCR/porównania danych z formularzem) — to czysty ślad na dysku plus hash
+     sha256 (dla integralności PO wgraniu, nie dla weryfikacji tożsamości).
+  4. **Oświadczenie własne** (`oswiadczenie_aml`, `server/logika/dokumenty-wniosku.js`) —
+     dokument podpisywany PRZEZ SAMEGO akcjonariusza, w którym deklaruje on beneficjenta
+     rzeczywistego i status PEP „pod rygorem odpowiedzialności karnej za złożenie fałszywego
+     oświadczenia" — czyli samoidentyfikacja, nie weryfikacja niezależna.
+  5. **Ostateczna decyzja `aml_status = wykonane`** — wyłącznie ręczny osąd pracownika kancelarii
+     (`PUT /api/psa/osoby/:id`), oparty na dowolnej kombinacji powyższego, bez wymogu podania
+     podstawy poza wolnym polem tekstowym `aml_notatka` (nieobowiązkowym).
+
+  **Podsumowanie faktycznego stanu:** identyfikacja akcjonariusza opiera się na (a) danych
+  wpisanych przez spółkę/wnioskodawcę, (b) OPCJONALNYM i domyślnie wyłączonym skanie dokumentu
+  tożsamości wgrywanym przez pracownika kancelarii (nie przez samego akcjonariusza), (c)
+  samoidentyfikacji akcjonariusza w podpisanym oświadczeniu, oraz (d) swobodnym osądzie
+  pracownika bez wymogu uzasadnienia. Nie ma żadnej metody dającej wyższy poziom pewności
+  (weryfikacja wideo, przelew referencyjny, stawiennictwo, podpis kwalifikowany akcjonariusza
+  jako WARUNEK, nie tylko dopuszczalna opcja formy umowy).
+- **Co powinno się stać:** patrz PYTANIE DO ŁUKASZA w `testy-audyt/PYTANIA-DO-LUKASZA.md` — to
+  pytanie o wystarczalność, nie o błąd kodu.
+- **Podstawa:** WYTYCZNE-MERYTORYCZNE-PSA.md § 7 (⚠️ zakres i częstotliwość środków bezpieczeństwa
+  finansowego do potwierdzenia przy tekście ustawy AML).
+- **Waga:** opis stanu (nie klasyfikuję jako usterkę — to pytanie do rozstrzygnięcia przez
+  Łukasza, nie luka kodu).
+
+---
+
+# FAZA 6 — integralność rejestru (Z-300 do Z-308)
+
+> Zakres zarezerwowany: Z-300–Z-329. Metoda: bezpośrednie żądania API (spółka testowa własna,
+> id=8, „Audyt Faza6 Integralnosc…", utworzona przez `POST /api/psa/spolki`) + bezpośrednie SQL
+> przez `better-sqlite3` (żywa baza — WYŁĄCZNIE próby UPDATE/DELETE, które **powinny** i faktycznie
+> **zostały** odrzucone, więc nie zmieniły stanu; brak modyfikacji treści na żywej bazie) + kopie
+> pliku `dane/audyt-test.db` w `/tmp` (checkpoint WAL → `cp` → osobne połączenie
+> `better-sqlite3` → manipulacja → weryfikacja funkcją `server/logika/lancuch.js` bezpośrednio,
+> bez serwera HTTP → sprzątnięcie plików kopii po zakończeniu, potwierdzone).
+
+## Z-300 [POZYTYWNE] — wyzwalacze append-only blokują UPDATE/DELETE także przy pominięciu aplikacji
+(surowe połączenie `better-sqlite3` do żywej bazy)
+
+- **Co zrobiłem:** otworzyłem `./dane/audyt-test.db` bezpośrednio przez `better-sqlite3` (osobny
+  proces Node, całkowicie z pominięciem serwera/API) i spróbowałem `UPDATE psa_zdarzenia SET
+  autor = ? WHERE id = ?` oraz `DELETE FROM psa_zdarzenia WHERE id = ?` na pierwszym zdarzeniu w
+  łańcuchu (id=1, hash zapisany).
+- **Co się stało:** obie próby rzuciły wyjątek `SqliteError` z treścią wyzwalacza: „psa_zdarzenia
+  jest append-only — pomyłkę prostuje się zdarzeniem «sprostowanie»" (UPDATE) i „psa_zdarzenia jest
+  append-only — rekordów zdarzeń nie usuwa się" (DELETE). Liczba zdarzeń w tabeli i treść
+  zaatakowanego rekordu (hash, autor) były identyczne przed i po próbie — zero efektu ubocznego na
+  żywej, współdzielonej bazie.
+- **Co powinno się stać:** dokładnie to — reguła domenowa 1 (`CLAUDE-PSA.md`: „psa_zdarzenia jest
+  append-only. Żadnego UPDATE, żadnego DELETE") ma być egzekwowana na poziomie bazy, nie tylko przez
+  kod aplikacji, tak żeby błąd w aplikacji albo złośliwy dostęp z pominięciem API (np. skrypt
+  administracyjny, bezpośredni dostęp do pliku) nie mógł naruszyć integralności rejestru.
+- **Podstawa:** `CLAUDE-PSA.md` reguła domenowa 1 („Żadnego UPDATE, żadnego DELETE"); potwierdzone
+  wcześniej w FAZA 0 wyłącznie przez odczyt definicji wyzwalaczy (`testy-audyt/FAZA-0-INWENTARYZACJA.md`
+  sekcja 5) — tu potwierdzone PRAKTYCZNIE, próbą ataku.
+- **Waga:** POZYTYWNE — najważniejsza pozycja checklisty FAZA 6 działa dokładnie tak, jak powinna.
+  Dodatkowo sprawdziłem grepem `server/`: żaden fragment kodu aplikacji nigdy nie próbuje
+  `UPDATE`/`DELETE FROM psa_zdarzenia` — wyzwalacz jest więc czystym zabezpieczeniem
+  defense-in-depth, nie protezą na brakującą kontrolę w warstwie aplikacji.
+
+## Z-301 [POZYTYWNE — Z ZASTRZEŻENIEM] — dodatkowa warstwa ochrony: `FOREIGN KEY` blokuje DELETE
+zdarzenia, do którego odwołuje się materializacja — ale tylko dla zdarzeń faktycznie referencjonowanych
+
+- **Co zrobiłem:** na KOPII bazy (`/tmp`, po `PRAGMA wal_checkpoint(TRUNCATE)` na żywej bazie i
+  `cp`) spróbowałem usunąć zdarzenie ze środka łańcucha (typ „emisja", posiadające wiersz
+  `psa_emisje.zdarzenie_id` wskazujący na nie) po uprzednim `DROP TRIGGER psa_zdarzenia_bez_delete`
+  (symulacja atakującego z pełnym dostępem do pliku bazy, zdolnego usunąć definicję wyzwalacza).
+- **Co się stało:** `DELETE` rzucił `SQLITE_CONSTRAINT_FOREIGNKEY` — operacja odrzucona, mimo że
+  wyzwalacz append-only był już usunięty. Sprawdziłem `server/baza.js:30`:
+  `db.pragma('foreign_keys = ON')` jest ustawiane jawnie dla każdego połączenia aplikacji (nie jest
+  to domyślne zachowanie SQLite/better-sqlite3). Po ręcznym `PRAGMA foreign_keys = OFF` (symulacja
+  ataku narzędziem, które domyślnie NIE wymusza kluczy obcych, np. `sqlite3` CLI bez jawnego
+  `PRAGMA foreign_keys=ON`) usunięcie tego samego rekordu powiodło się.
+- **Co powinno się stać:** to jest pozytywne, dodatkowe zabezpieczenie (klucz obcy
+  `psa_emisje.zdarzenie_id → psa_zdarzenia.id` i analogiczne w innych tabelach materializacji) —
+  ale działa **wyłącznie** dla zdarzeń, na które coś się realnie odwołuje (typowo `emisja`,
+  `obciazenie`, `uprawnienie`, `ograniczenie`). Zdarzenie typu np. `przeniesienie` albo
+  `zmiana_danych_akcjonariusza`, do którego żadna tabela materializacji nie trzyma FK wprost po
+  jego ID (materializacja `psa_stan_akcji.zdarzenie_od_id`/`zdarzenie_do_id` — do sprawdzenia, czy
+  ma FK), może nie mieć tej dodatkowej ochrony — nie jest to jednolita druga warstwa dla WSZYSTKICH
+  zdarzeń, tylko przypadkowy efekt uboczny istniejących kluczy obcych zaprojektowanych z innego
+  powodu (spójność referencyjna materializacji, nie ochrona łańcucha).
+- **Podstawa:** zasada techniczna (defense in depth) — nie jest to wymóg z `CLAUDE-PSA.md` wprost,
+  ale wzmacnia regułę domenową 1.
+- **Waga:** POZYTYWNE, z zastrzeżeniem: nie polegać na tym mechanizmie jako na GŁÓWNEJ ochronie —
+  główną i jedyną CELOWO zaprojektowaną ochroną pozostaje wyzwalacz append-only (Z-300) i łańcuch
+  skrótów (Z-302), które obejmują KAŻDE zdarzenie bez wyjątku.
+
+## Z-302 [POZYTYWNE] — weryfikacja integralności realnie przelicza cały łańcuch i wykrywa każdy
+z trzech przetestowanych typów manipulacji (naiwna zmiana treści, „wyrafinowana" zmiana treści +
+przeliczony własny hash, usunięcie rekordu ze środka)
+
+- **Co zrobiłem:** na TRZECH niezależnych kopiach bazy (`/tmp`, checkpoint WAL + `cp` z żywej bazy
+  przed każdą manipulacją, osobne połączenia `better-sqlite3`, sprzątnięte po teście) wykonałem po
+  kolei:
+  1. **Baseline** — `lancuch.zweryfikuj()` na nietkniętej kopii (34 zdarzenia) → `ok:true`.
+  2. **Naiwna manipulacja treści** — `DROP TRIGGER psa_zdarzenia_bez_update`, zmiana `dane_json`
+     środkowego zdarzenia (podmiana `"2026"` → `"2099"`) BEZ przeliczenia `hash`.
+  3. **Manipulacja „wyrafinowana"** — to samo, ale z PRZELICZENIEM `hash` danego rekordu tak, by
+     pasował do nowej treści (symulacja atakującego znającego algorytm `sha256(id|spolka_id|typ|
+     data_zdarzenia|data_wpisu|autor|dane_json|hash_poprzedni)` i potrafiącego go odtworzyć).
+  4. **Usunięcie rekordu ze środka łańcucha** — `PRAGMA foreign_keys=OFF` + `DROP TRIGGER
+     psa_zdarzenia_bez_delete` + `DELETE` środkowego zdarzenia (bez emisji, żeby uniknąć FK
+     z Z-301 i przetestować czystą lukę usunięcia).
+  Każdorazowo wywołałem `lancuch.zweryfikuj()` (dokładnie tę samą funkcję, której używa
+  `GET /api/psa/integralnosc` — `server/rejestr.js:667-669`) na pełnej, świeżo odczytanej liście
+  zdarzeń z manipulowanej kopii, importując moduł logiki bezpośrednio, bez serwera HTTP.
+- **Co się stało:**
+  1. Baseline: `{"ok":true,"sprawdzono":34,"blad":null}`.
+  2. Naiwna manipulacja: wykryta NATYCHMIAST na zaatakowanym rekordzie —
+     `{"ok":false,"sprawdzono":17,"blad":{"id":18,"rodzaj":"zmieniona_tresc", ...}}` — „Treść
+     zdarzenia #18 nie odpowiada zapisanemu skrótowi. Rekord został zmieniony poza aplikacją."
+  3. Manipulacja wyrafinowana: własny hash rekordu #18 (`6df9ca42...`) PASOWAŁ do nowej treści (test
+     `zmieniona_tresc` przeszedłby bez zastrzeżeń dla SAMEGO rekordu #18), ale łańcuch i tak wykrył
+     atak — na KOLEJNYM rekordzie (#19): `{"ok":false,"sprawdzono":18,"blad":{"id":19,
+     "rodzaj":"zerwane_ogniwo", "oczekiwano":"6df9ca42...", "zapisano":"0070d5c4..."}}` — bo
+     `hash_poprzedni` zapisany w #19 (ustalony w chwili ORYGINALNEGO zapisu #18) nie zgadza się z
+     NOWYM hashem #18. Żeby ukryć manipulację #18 do końca, atakujący musiałby przeliczyć i
+     nadpisać `hash`/`hash_poprzedni` KAŻDEGO kolejnego rekordu aż do końca łańcucha (co jest
+     technicznie możliwe przy pełnym dostępie do pliku bazy i znajomości algorytmu — patrz niżej).
+  4. Usunięcie rekordu: wykryte identycznie jak w (3) — `zerwane_ogniwo` na rekordzie NASTĘPUJĄCYM
+     po usuniętym, bo jego `hash_poprzedni` wskazuje na hash rekordu, którego już nie ma.
+- **Co powinno się stać:** dokładnie to. Sprawdziłem też kod źródłowy weryfikacji
+  (`server/logika/lancuch.js:zweryfikuj`, `server/rejestr.js:zweryfikujIntegralnosc`) —
+  `GET /api/psa/integralnosc` (`server/trasy/pozostale.js:227`) odczytuje WSZYSTKIE zdarzenia
+  (`SELECT * FROM psa_zdarzenia ORDER BY id ASC`, bez `LIMIT`) i przelicza każdy hash od zera przy
+  KAŻDYM wywołaniu — to NIE jest wartość cache'owana ani bezwarunkowe „ok".
+- **Granica ochrony (nie błąd, ale ważne dla oceny ryzyka — zgodnie z `CLAUDE-PSA.md` sekcja 11,
+  „świadomie NIE robimy: kwalifikowanych znaczników czasu, drzew Merkle'a, publikacji skrótów"):**
+  łańcuch skrótów SAM W SOBIE chroni przed manipulacją POJEDYNCZEGO rekordu bez przeliczenia całej
+  reszty łańcucha PO nim. Atakujący z PEŁNYM zapisem do pliku bazy i znajomością algorytmu
+  (jawnego, w kodzie open-source tej aplikacji) MÓGŁBY w teorii przeliczyć CAŁY łańcuch od
+  zaatakowanego punktu do końca, co dałoby wewnętrznie spójny, ale sfałszowany łańcuch — weryfikacja
+  wewnętrzna by tego nie wykryła. To jest znana i udokumentowana granica projektu (brak zewnętrznego
+  zakotwiczenia skrótu — świadoma decyzja, nie luka projektowa) — nie testowałem tego scenariusza do
+  końca (nie przeliczałem całego ogona łańcucha), bo cel checklisty sesji („zmodyfikuj jedno
+  zdarzenie, uruchom weryfikację, czy wykrywa") jest spełniony, a atak wymagający przepisania całego
+  ogona łańcucha jest z definicji poza zasięgiem JAKIEGOKOLWIEK schematu opartego wyłącznie o łańcuch
+  skrótów bez zewnętrznego świadka (np. publikacji skrótu poza systemem) — dokładnie to, czego
+  `CLAUDE-PSA.md` świadomie nie realizuje. Odnotowuję to jako **potwierdzenie zakresu ochrony**, nie
+  jako nowe znalezisko: broni przed przypadkową korupcją, błędem operacyjnym, częściowym/nieudolnym
+  atakiem i każdą modyfikacją NIEPOCIĄGAJĄCĄ za sobą przeliczenia całego dalszego łańcucha — nie
+  broni przed w pełni skutecznym, świadomym przepisaniem całej bazy przez kogoś z nieograniczonym
+  dostępem do pliku. To zgodne z tym, co system deklaruje, że robi.
+- **Podstawa:** `CLAUDE-PSA.md` reguła domenowa 1 i sekcja 11 („Integralność: tabela zdarzeń
+  append-only z łańcuchem skrótów + endpoint weryfikacji", „świadomie NIE robimy... drzew Merkle'a,
+  publikacji skrótów"); checklista sesji FAZA 6 („czy weryfikacja faktycznie przelicza łańcuch, czy
+  zwraca „OK" bezwarunkowo").
+- **Waga:** POZYTYWNE — mechanizm działa dokładnie tak, jak zaprojektowano, wykrywa WSZYSTKIE
+  przetestowane realistyczne scenariusze manipulacji (w tym wyrafinowaną, jednorekordową, ze
+  świadomie przeliczonym własnym hashem), a jego udokumentowana granica (pełne przepisanie ogona
+  łańcucha) jest świadomą, opisaną decyzją projektową, nie przeoczeniem.
+
+## Z-303 [POZYTYWNE] — odbudowa materializacji ze zdarzeń (`POST /:id/przelicz`) daje identyczny
+stan jak materializacja bieżąca; architektura czyni rozjazd strukturalnie niemożliwym przez
+normalną ścieżkę zapisu
+
+- **Co zrobiłem:** na własnej spółce testowej (id=8) z rzeczywistą historią zdarzeń (emisja →
+  objęcie 100 akcji → przeniesienie 100 akcji → sprostowanie wzmianki o pokryciu) porównałem
+  zawartość `psa_stan_akcji` (bezpośredni odczyt z żywej bazy, WYŁĄCZNIE `SELECT`, bez zapisu) PRZED
+  i PO wywołaniu `POST /api/psa/spolki/8/przelicz`.
+- **Co się stało:** odpowiedź: `{"ok":true,"niezgodnosci":[],"komunikat":"Stan odbudowany ze
+  zdarzeń. Bilans akcji zgadza się w każdej serii."}`. Wiersze `psa_stan_akcji` przed i po są
+  identyczne co do każdego pola merytorycznego (emisja, kategoria, osoba, zakres numerów, ilość,
+  ułamek, tytuł nabycia, daty, pokrycie) — różni się wyłącznie techniczny klucz autoinkrementowany
+  `id` (oczekiwane: `zmaterializuj()` robi pełny `DELETE` + `INSERT`, więc nowe wiersze dostają nowe
+  ID — nie jest to niezgodność, tylko efekt uboczny strategii odtwarzania).
+- **Dodatkowa obserwacja architektoniczna (wzmacnia, nie tylko potwierdza wynik testu):** przeczytałem
+  `server/rejestr.js` — funkcja `zmaterializuj()` jest wywoływana przez `_wykonajWpis()` PO KAŻDYM
+  pojedynczym zapisie zdarzenia (linia 418, wewnątrz tej samej transakcji `IMMEDIATE` co zapis
+  zdarzenia), a `POST /:id/przelicz` wywołuje DOKŁADNIE TĘ SAMĄ funkcję. Nie ma osobnej,
+  „przyrostowej” ścieżki aktualizacji materializacji, która mogłaby z czasem rozjechać się z pełną
+  odbudową — komentarz w kodzie (`rejestr.js:11-15`) explicite to deklaruje: „Każdy zapis kończy się
+  pełnym przeliczeniem materializacji – nie ma osobnej ścieżki przyrostowej, która mogłaby się
+  rozjechać z odbudową." Test praktyczny to tylko potwierdza; architektura czyni ten konkretny błąd
+  strukturalnie nieosiągalnym przez normalną ścieżkę API (mogłaby wystąpić wyłącznie po ręcznej
+  ingerencji w bazę z pominięciem aplikacji — a to jest już poza zakresem „normalnej” pracy modułu i
+  jest odrębnie testowane w Z-300/Z-302).
+- **Co powinno się stać:** dokładnie to — reguła domenowa 2 (`CLAUDE-PSA.md`: „Test obowiązkowy:
+  odbudowa = stan bieżący").
+- **Podstawa:** `CLAUDE-PSA.md` reguła domenowa 2.
+- **Waga:** POZYTYWNE.
+
+## Z-304 [POZYTYWNE] — wyścig: dwa jednoczesne żądania przeniesienia TYCH SAMYCH akcji do dwóch
+różnych nabywców — poprawnie zserializowane, żadnego podwójnego rozporządzenia
+
+- **Co zrobiłem:** na własnej spółce testowej (id=8, 100 akcji serii F6 w całości u „Anny
+  Testowa6A") wysłałem RÓWNOCZEŚNIE (`Promise.all`, bez oczekiwania na pierwszą odpowiedź) dwa
+  żądania `POST /api/psa/spolki/8/zdarzenia` typu `przeniesienie` — jedno przenoszące WSZYSTKIE 100
+  akcji od Anny do „Bartosza”, drugie przenoszące TE SAME 100 akcji od Anny do „Cezarego”.
+- **Co się stało:** pierwsze żądanie (kolejność wykonania po stronie serwera, nie kolejność w kodzie
+  klienta) zwróciło `201` (wpis przyjęty). Drugie zwróciło `422`: „Brak pokrycia: żądano 100 akcji,
+  a pakiet zbywcy w serii F6 obejmuje 0 akcji wolnych." — odrzucone, bo w chwili jego przetwarzania
+  Anna nie miała już żadnych akcji do zbycia. Stan końcowy (`GET /:id/stan`): dokładnie 100 akcji u
+  JEDNEGO nabywcy (Bartosza), bilans zgadza się z emisją (100/100), `niezgodnosci: []`. Żaden
+  duplikat własności, żadne rozjechanie sumy akcji.
+- **Przyczyna (potwierdzona w kodzie):** `server/rejestr.js` — `zapiszZdarzenie()` wylicza kolejne
+  `id` zdarzenia jako `MAX(id)+1` i wykonuje `INSERT` W TEJ SAMEJ transakcji `db.transaction(...).
+  immediate()`, co `_wykonajWpis()`/`dokonajWpisu()` — tryb `IMMEDIATE` w SQLite nabiera blokady
+  zapisu NATYCHMIAST na starcie transakcji (nie dopiero przy pierwszym zapisie), więc dwie
+  równoległe transakcje zapisu na tej samej bazie są efektywnie SZEREGOWANE przez silnik SQLite —
+  druga czeka, aż pierwsza się zakończy (`COMMIT`), i dopiero wtedy jej walidacja bilansu widzi już
+  zaktualizowany stan po pierwszej.
+- **Co powinno się stać:** dokładnie to — checklista sesji FAZA 6 („Wywołaj dwa jednoczesne wpisy
+  dotyczące tych samych akcji. Czy powstaje stan, w którym suma akcji nie zgadza się z emisją?") —
+  odpowiedź: NIE, nie powstaje.
+- **Podstawa:** `CLAUDE-PSA.md` reguła domenowa 3 (bilans akcji musi się zgadzać zawsze, odmowa
+  zapisu przy naruszeniu) w połączeniu z regułą techniczną transakcji `IMMEDIATE`.
+- **Waga:** POZYTYWNE — kontrastuje pozytywnie z Z-004 (FAZA 1, wyścig na `psa_zgloszenia`, gdzie
+  analogiczna ochrona NIE była odporna na współbieżność, bo sprawdzenie duplikatu robione było
+  `SELECT` przed `INSERT` BEZ transakcji `IMMEDIATE` i bez `UNIQUE`). Rdzeń rejestru (zapis
+  zdarzeń) jest odporny na wyścig; warstwa wcześniejsza (zgłoszenia/wnioski, poza zakresem FAZA 6)
+  nie jest — do rozważenia jako wzorzec do naśladowania w innych miejscach z problemem „sprawdź,
+  potem zapisz” (patrz też rekomendacja z Z-004).
+
+## Z-305 [POWAŻNY] — „stan na" z dokładnością do minuty (wymagany explicite specyfikacją) NIE jest
+dostępny w rzeczywistym UI kokpitu spółki — pracownik nie ma jak w praktyce odróżnić dwóch zdarzeń
+tego samego dnia
+
+- **Co zrobiłem:** przejrzałem `publiczne/js/kokpit.js` (suwak/pole „stan na" w kokpicie spółki) i
+  porównałem z `server/widoki.js`/`server/pomocnicze/czas.js` (warstwa API). Dodatkowo praktycznie
+  sprawdziłem przez API: spółka testowa (id=8) z emisją i objęciem zapisanymi TEGO SAMEGO dnia
+  (`data_zdarzenia: "2026-01-05"` dla obu) — odpytałem `GET /:id/stan?data=2026-01-05` (format
+  data-only, jedyny dostępny w UI).
+- **Co się stało:**
+  1. `kokpit.js:503,580` używa wyłącznie komponentu `PoleDaty` (pole typu data, BEZ godziny) do
+     ustawienia parametru „stan na" wysyłanego do `GET /:id?data=...` — nigdzie w UI kancelaryjnym
+     nie ma pola pozwalającego wybrać godzinę/minutę. Komentarz w kodzie (linia 501-502) wprost
+     mówi: „Dawniej wybierało się go playheadem na osi akcji; oś zniknęła, więc została sama data,
+     czyli to, o co naprawdę chodziło" — sugeruje to ŚWIADOME uproszczenie przy jakiejś wcześniejszej
+     zmianie UI (redukcja z chwili do samej daty), nie przeoczenie pojedynczego pola.
+  2. Backend NADAL W PEŁNI obsługuje precyzję do minuty: `server/pomocnicze/czas.js:poprawnaChwila`
+     akceptuje format `RRRR-MM-DDTGG:MM[:SS]`, a `server/widoki.js:55-76` (`widokStanu`) faktycznie
+     odtwarza stan WYŁĄCZNIE ze zdarzeń, których `data_wpisu` (rzeczywisty czas wpisania, co do
+     sekundy) jest ≤ wskazanej chwili — to dokładnie mechanizm opisany w `CLAUDE-PSA.md` sekcja 9
+     („suwak »stan na«... z dokładnością do minuty, bo wpisy z tego samego dnia mają kolejność").
+     Endpoint istnieje i działa — ale NIC w UI kancelaryjnym go nie wywołuje.
+  3. Test praktyczny potwierdza SKUTEK: `GET /:id/stan?data=2026-01-05` (dzień, w którym zapisano
+     KOLEJNO emisję i objęcie) zwraca stan PO objęciu (Anna ma już 100 akcji) — dokładność
+     data-only nigdy nie pokaże stanu „między” dwoma zdarzeniami tego samego dnia, bo z definicji
+     funkcji `przedzialyNaDzien(stan, dzien)` (`server/logika/stan.js:879-888`) każdy dzień to JEDNA
+     wartość graniczna, nie zbiór chwil.
+- **Co powinno się stać:** zgodnie z `CLAUDE-PSA.md` sekcja 9 (explicite, dosłownie): „suwak »stan
+  na« przełączający cały ekran wstecz — z dokładnością do minuty, bo wpisy z tego samego dnia mają
+  kolejność (podpatrzone u DM BOŚ)" — dziś ten wymóg nie jest spełniony w interfejsie, którego
+  pracownik faktycznie używa. Wynika z tego również, że checklista sesji FAZA 6 („Dwa zdarzenia
+  tego samego dnia muszą dać różne stany w zależności od wskazanego momentu") jest spełniona
+  WYŁĄCZNIE na poziomie API/backendu, NIE w praktyce operacyjnej kancelarii.
+- **Podstawa:** `CLAUDE-PSA.md` sekcja 9 (wymóg „z dokładnością do minuty" — cytat dosłowny);
+  checklista sesji FAZA 6.
+- **Waga:** POWAŻNY — nie jest to utrata integralności rejestru (dane są poprawne, kolejność
+  zdarzeń jest poprawnie zapisana i możliwa do odtworzenia przez API), ale jest to funkcja
+  jednoznacznie wymagana przez specyfikację, która ISTNIEJE w warstwie serwera, a jest NIEOSIĄGALNA
+  dla pracownika kancelarii w codziennej pracy — praktyczna konsekwencja: przy sporze co do
+  kolejności dwóch zdarzeń tego samego dnia (np. które z dwóch przeniesień było pierwsze) pracownik
+  nie ma narzędzia w UI, żeby to sprawdzić, mimo że dane do tego istnieją i są poprawne.
+
+## Z-306 [POWAŻNY/PYTANIE] — mechanizm „stan na chwilę" (godzina) zależy w 100% od zmiennej
+środowiskowej `TZ` procesu serwera, bez żadnej walidacji w czasie działania, a format zapytania
+uniemożliwia przekazanie jednoznacznego offsetu strefy czasowej
+
+- **Co zrobiłem:** przeczytałem `server/widoki.js:59,69-70` (`new Date(surowaData).getTime()`, gdzie
+  `surowaData` to SUROWY parametr `?data=` z zapytania) i `server/pomocnicze/czas.js:poprawnaChwila`
+  (regex `^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$` — BEZ możliwości podania `Z`/offsetu).
+  Sprawdziłem `server/konfiguracja.js:32` (`if (process.env[klucz] === undefined) process.env[klucz]
+  = wartosc;` — zmienna już ustawiona w środowisku procesu MA PIERWSZEŃSTWO nad `.env`) oraz
+  `.env`/`.env.przyklad` (`TZ=Europe/Warsaw`). Zweryfikowałem empirycznie w tym samym środowisku
+  (Node, bez uruchamiania serwera): `TZ=UTC node -e "new Date('2026-01-06T23:30').toISOString()"`
+  → `2026-01-06T23:30:00.000Z`; `TZ=Europe/Warsaw node -e "..."` → `2026-01-06T22:30:00.000Z`
+  (RÓŻNE chwile absolutne, godzina różnicy, dla IDENTYCZNEGO ciągu zapytania). Dodatkowo
+  potwierdziłem, że system operacyjny tego środowiska ma domyślnie `Etc/UTC`
+  (`cat /etc/timezone`), a proces `node serwer.js` uruchomiony wcześniej ma `TZ=Europe/Warsaw` w
+  swoim `environ` WYŁĄCZNIE dlatego, że `.env` zdążył go ustawić, zanim cokolwiek innego użyło
+  obiektu `Date` — nie ma żadnej asercji w kodzie startowym, która by to sprawdziła czy wymusiła.
+- **Co się stało:** parametr `?data=RRRR-MM-DDTGG:MM` wysyłany przez dowolnego klienta API (albo
+  przyszły UI, gdyby ktoś dodał pole godziny zgodnie z Z-305) jest interpretowany jako czas LOKALNY
+  PROCESU SERWERA — bez żadnego jawnego wskazania strefy w samym zapytaniu (regex to wręcz
+  wyklucza). Jeżeli platforma hostingowa/kontener produkcyjny ustawi zmienną środowiskową `TZ` na
+  poziomie systemu/orkiestracji (częsta praktyka — wiele obrazów kontenerowych i platform PaaS
+  domyślnie ustawia `TZ=UTC` albo w ogóle nie definiuje `TZ`, co w Node bez jawnego ustawienia
+  domyślnie oznacza UTC) PRZED odczytaniem `.env` przez aplikację, `.env` NIE nadpisze tej wartości
+  (linia 32 `konfiguracja.js` działa świadomie w tę stronę: zmienna środowiskowa wygrywa) —
+  interpretacja „chwili" cichutko przesunie się o godzinę (czas letni) albo dwie (zimowy, choć akurat
+  dla Warszawy to zawsze ±1h względem UTC), bez ŻADNEGO komunikatu błędu czy ostrzeżenia w logach.
+- **Co powinno się stać:** nierozstrzygnięte wprost bez decyzji Łukasza co do tego, jak bardzo ma to
+  być odporne na błędną konfigurację wdrożenia — techniczne opcje to np. (a) asercja przy starcie
+  serwera, że `process.env.TZ === 'Europe/Warsaw'` (albo z awaryjnym `process.env.TZ =
+  'Europe/Warsaw'` wymuszonym programowo, NIEZALEŻNIE od tego, co już jest w środowisku), (b)
+  wymaganie explicite podanego offsetu w parametrze `?data=` zamiast API zakładającego strefę
+  procesu. `CLAUDE-PSA.md` nie precyzuje tego wprost — to nie jest kwestia zgodności z przepisem,
+  tylko odporności konfiguracyjnej infrastruktury (sekcja 2 tego pliku i tak zostawia „Wariant
+  wdrożenia" i TLS/kopie zapasowe jako otwarte punkty do decyzji przed produkcją).
+- **Podstawa:** checklista sesji FAZA 6 („Sprawdź, czy strefa czasowa nie przesuwa granicy doby");
+  zasada techniczna — brak walidacji krytycznego założenia środowiskowego przy starcie procesu.
+- **Waga:** POWAŻNY w sensie potencjału (przesunięcie granicy „chwili" o 1-2h przy błędnej
+  konfiguracji wdrożenia jest realną, cichą usterką bez żadnego sygnału), ale ryzyko DZIŚ jest
+  ograniczone przez Z-305 (funkcja i tak nieosiągalna z UI, więc efektywnie martwa w praktyce
+  operacyjnej — jeśli i kiedy Z-305 zostanie naprawione, ta usterka staje się aktywna i powinna być
+  naprawiona RAZEM z nim, nie osobno).
+
+## Z-307 [POZYTYWNE] — „stan na dzień" (bez godziny) ma poprawne granice — dzień przed/w
+dniu/po zdarzeniu — i jest w pełni odporny na przesunięcie strefy czasowej (w przeciwieństwie do
+ścieżki „z godziną", Z-306)
+
+- **Co zrobiłem:** dla spółki testowej (id=8) ze zdarzeniem `przeniesienie` datowanym na
+  `2026-01-06` odpytałem `GET /:id/stan?data=` kolejno dla `2026-01-04`, `2026-01-05` (dzień
+  poprzedniego stanu), `2026-01-06` (dzień samego zdarzenia) i `2026-01-07` (dzień po). Przeczytałem
+  też `server/logika/stan.js:przedzialyNaDzien` i `server/pomocnicze/czas.js:poprawnaData` (walidacja
+  formatu jawnie przez `Date.UTC`, bez zależności od strefy procesu).
+- **Co się stało:** `2026-01-04` → brak akcjonariuszy (przed emisją); `2026-01-05` → Anna 100 akcji
+  (dzień objęcia, PRZED przeniesieniem); `2026-01-06` → Bartosz 100 akcji (dzień przeniesienia — stan
+  JUŻ PO zdarzeniu tego dnia, zgodnie z konwencją `data_od <= T AND (data_do IS NULL OR data_do >
+  T)`); `2026-01-07` → Bartosz 100 akcji (bez zmian, poprawnie). Granice poprawne, żadnego
+  przesunięcia o dzień. Materializacja porównuje surowe stringi dat kalendarzowych (`YYYY-MM-DD`),
+  nigdy nie przechodząc przez `new Date(...)` zależny od strefy procesu — ta ścieżka jest z
+  konstrukcji odporna na problem z Z-306.
+- **Co powinno się stać:** dokładnie to.
+- **Podstawa:** checklista sesji FAZA 6 („Stan na dzień — granice. Sprawdź stan na dzień zdarzenia,
+  na dzień przed i po... Sprawdź, czy strefa czasowa nie przesuwa granicy doby").
+- **Waga:** POZYTYWNE.
+
+## Z-308 [POZYTYWNE] — sprostowanie tworzy NOWE zdarzenie i nigdy nie modyfikuje zdarzenia
+prostowanego; korekta stosowana retroaktywnie wyłącznie w warstwie odtworzonego stanu
+
+- **Co zrobiłem:** dla zdarzenia `objecie` (id=29, spółka 8, wzmianka o pokryciu „tak") wysłałem
+  `POST /api/psa/zdarzenia/29/sprostuj` z `zamiast` wskazującym poprawioną wzmiankę „częściowo".
+  Porównałem treść WSZYSTKICH zdarzeń spółki przed i po (bezpośredni odczyt `psa_zdarzenia`,
+  wyłącznie `SELECT`) oraz `GET /:id/stan?data=2026-01-05` (dzień pierwotnego zdarzenia) przed i po
+  sprostowaniu.
+- **Co się stało:** powstało NOWE zdarzenie (id=37, `typ:"sprostowanie"`,
+  `zdarzenie_prostowane_id:29`, treść zamienna w `dane_json.zamiast`). Zdarzenie id=29 pozostało W
+  100% NIETKNIĘTE — identyczna treść `dane_json` przed i po (wzmianka nadal „tak" w ORYGINALNYM
+  rekordzie). Mimo to `GET /:id/stan?data=2026-01-05` PO sprostowaniu pokazuje już poprawioną
+  wartość („częściowo") — korekta jest więc widoczna w odtworzonym stanie DOKŁADNIE od
+  chronologicznej pozycji oryginału, bez naruszenia samego łańcucha zdarzeń. `GET
+  /api/psa/integralnosc` po całej operacji nadal `ok:true` (37 zdarzeń, łańcuch spójny).
+- **Co powinno się stać:** dokładnie to — checklista sesji FAZA 6 („Sprostowanie — czy tworzy nowe
+  zdarzenie, czy modyfikuje poprzednie") i `CLAUDE-PSA.md` reguła domenowa 1 („Pomyłka = zdarzenie
+  »sprostowanie« wskazujące zdarzenie prostowane. W UI nie istnieje przycisk »Edytuj« dla
+  zdarzenia").
+- **Podstawa:** `CLAUDE-PSA.md` reguła domenowa 1; `server/logika/stan.js:694-710` (komentarz
+  projektowy dokładnie opisujący ten mechanizm, potwierdzony tu praktycznie, nie tylko przez odczyt
+  kodu).
+- **Waga:** POZYTYWNE.
+
+---
+
+# FAZA 3 — dane osobowe: czy zbieramy właściwe (Z-150 – Z-179)
+
+## Z-150 [KRYTYCZNY] — endpoint JSON zwracający stan rejestru (`widoki.widokStanu`) wysyła do roli
+„spółka" (i „organ") pełne dane AML/PEP oraz notatkę wewnętrzną każdego akcjonariusza — pola, które
+z definicji modułu (`CLAUDE-PSA.md` sekcja 10, komentarze w `maskowanie.js`) NIGDY nie mają trafiać
+poza kancelarię; wyciek jest w surowym JSON-ie, nie w żadnym wydruku
+
+- **Co zrobiłem:** zalogowany jako pracownik kancelarii, wywołałem bezpośrednio
+  `GET /api/psa/spolki/1/stan` (bez parametru `rola` = domyślnie kancelaria), potem z
+  `?rola=spolka` i z `?rola=organ` — dokładnie ta sama funkcja `widoki.widokStanu()`
+  (`server/widoki.js:55`), z tym samym parametrem `rola`, stoi za: (a) tym testowym endpointem
+  pracowniczym, (b) `GET /api/psa/portal/rejestr/:spolkaId` — czyli REALNYM endpointem, który w
+  produkcji odpytuje ekran „Rejestr" konta portalowego roli `spolka` (`server/trasy/portal.js:1267-1282`,
+  rola wyliczana **po stronie serwera** z sesji, `rolaOdbioru(zad.konto)` — bez możliwości
+  manipulacji przez klienta, więc test przez `?rola=` daje identyczny wynik jak prawdziwe
+  logowanie portalowe roli „spółka"). Dla porównania sprawdziłem też, jakie pola faktycznie
+  wykorzystuje generator wydruku „Informacja z rejestru" (`server/logika/informacja-dokument.js`)
+  oraz frontend kancelarii (`publiczne/js/kokpit.js`) i portalu (`publiczne/js/ui-rejestr.js`).
+- **Co się stało:** dla `rola=spolka` obiekt `osoba` w `akcjonariusze[].osoba` zawiera m.in.
+  `aml_status`, `aml_data`, `aml_notatka` (wolny tekst pisany przez pracownika o konkretnej
+  osobie), `aml_data_przegladu`, `beneficjent_rzeczywisty_id`, `pep`, `pep_opis`,
+  `pep_oswiadczenie`, `pep_oswiadczenie_data` oraz `uwagi` — **identycznie jak dla roli
+  kancelaria**, bez żadnego okrojenia. To samo potwierdzone dla `rola=organ`. Przykład (spółka
+  testowa #1, akcjonariusz „Testowa Ala"):
+  ```
+  rola=spolka: aml_status=brak pep=nie uwagi=None aml_notatka=None beneficjent_rzeczywisty_id=None
+  rola=organ:  aml_status=brak pep=nie uwagi=None aml_notatka=None beneficjent_rzeczywisty_id=None
+  ```
+  (wartości akurat puste na tej testowej osobie — pole istnieje i JEST wysyłane; przy
+  akcjonariuszu z realną notatką AML notatka poleciałaby w całości). Przyczyna w kodzie
+  (`server/logika/maskowanie.js:24-45`): funkcja `zamaskujOsobe()` ma TYLKO dwie gałęzie —
+  `pelnyDostep` (kancelaria/spółka/właściciel danych/organ) zwraca `{ ...osoba, zamaskowane: false }`
+  czyli **cały surowy rekord bez wyjątku**, a usunięcie `aml_status`/`aml_data`/`aml_notatka`/`uwagi`
+  (linie 40-43) wykonuje się WYŁĄCZNIE w gałęzi zamaskowanej (dla roli „akcjonariusz"). Innymi
+  słowy: kod rozróżnia dwie NIEZALEŻNE polityki dostępu — (A) PESEL/data urodzenia/adres, gdzie
+  pełny dostęp mają kancelaria+spółka+właściciel+organ (art. 300³⁵ §1/§4 — poprawnie), i (B)
+  AML/PEP/uwagi wewnętrzne, które WEDŁUG WŁASNEJ dokumentacji modułu powinny zostać wyłącznie w
+  kancelarii (`CLAUDE-PSA.md` sekcja 10: „Czego NIE umieszczać na wydrukach dla klienta: pole
+  `uwagi`... notatki AML"; komentarz przy `uwagi` w schemacie spółki: „wewnętrzne, nigdy na
+  wydruku"; `maskowanie.js` samo w sobie komentuje `aml_notatka` jako „nigdy nie wychodzi poza
+  kancelarię w żadnym wariancie") — ale w kodzie polityka (B) jest POD WARUNKIEM tej samej flagi
+  `pelnyDostep`, co polityka (A), więc spółka i organ (które słusznie mają pełny dostęp do (A))
+  dostają przy okazji też (B), czego reguła nigdy nie zakładała.
+  Dodatkowo sprawdziłem, że frontend kancelarii (`kokpit.js`) w ogóle NIE odczytuje
+  `aml_status`/`aml_notatka`/`uwagi` z odpowiedzi `/stan` — te dane są pokazywane pracownikowi
+  wyłącznie na osobnym ekranie kartoteki (`GET /api/psa/osoby/:id`), a nie w kokpicie spółki. Ten
+  sam wniosek dla portalu (`ui-rejestr.js` też ich nie renderuje). Oznacza to, że pola te nie są
+  potrzebne w tej odpowiedzi NIKOMU — trafiają do niej wyłącznie dlatego, że `zamaskujOsobe()` w
+  gałęzi pełnego dostępu zwraca dosłownie cały wiersz `psa_osoby`, a nie wybrane pola (naruszenie
+  zasady minimalizacji danych, niezależnie od problemu autoryzacji).
+- **Co powinno się stać:** wyciek dotyczy pola z definicji poufnego (notatka AML to w istocie
+  ocena ryzyka finansowo-politycznego konkretnej osoby, blisko kategorii szczególnie chronionych
+  przy PEP) i trafia dziś — realnym kanałem produkcyjnym (`portal/rejestr/:spolkaId`) — do KAŻDEJ
+  spółki obsługiwanej przez moduł, na każde odświeżenie ekranu „Rejestr" w portalu. Usunięcie
+  `aml_status`/`aml_data`/`aml_notatka`/`aml_data_przegladu`/`beneficjent_rzeczywisty_id`/`pep`/
+  `pep_opis`/`pep_oswiadczenie`/`pep_oswiadczenie_data`/`uwagi` powinno następować ZAWSZE poza rolą
+  `kancelaria`, niezależnie od `pelnyDostep` liczonego dla PESEL-u/adresu — to dwie osobne
+  polityki, którym w kodzie odpowiada dziś jedna wspólna flaga.
+- **Podstawa:** `CLAUDE-PSA.md` sekcja 10 (lista pól niedozwolonych na wydrukach dla klienta,
+  którą przez analogię — skoro nie mają trafiać nawet na wydruk — tym bardziej nie powinny trafiać
+  do żywego API); komentarze własne modułu w `maskowanie.js` i `migracje.js` (uzasadnienie
+  wydzielenia `pep_oswiadczenie`/`aml_notatka` jako danych nigdy niewychodzących poza kancelarię);
+  pomocniczo art. 300³⁵ § 1/§ 2 KSH — jawność rejestru dla spółki dotyczy TREŚCI REJESTRU (art.
+  300³³), a dokumentacja AML notariusza jako instytucji obowiązanej to odrębny zbiór danych, nie
+  „treść rejestru akcjonariuszy".
+- **Waga:** KRYTYCZNY — żywy, produkcyjny kanał (portal klienta, rola „spółka", włączony domyślnie
+  w środowisku audytowym: `portal_wlaczony=true`), wyciek danych szczególnie wrażliwych (ocena
+  PEP, notatki AML) do podmiotu, który nie powinien mieć do nich dostępu wcale, przy każdym
+  odczycie ekranu rejestru. Dla roli „organ" ryzyko jest dziś głównie teoretyczne (rola używana
+  wyłącznie przez pracownika kancelarii do podglądu/wydruku — automatyczny dostęp organów z art.
+  300³⁵ § 4 jest 🔵, nieaktywny do 18.02.2027), ale ten sam błąd czeka gotowy do aktywacji razem z
+  nowelizacją.
+
+## Z-151 [POWAŻNY] — dwa pola statusu PEP (`pep` i `pep_oswiadczenie`) mają jasno udokumentowany,
+odmienny sens („ustalenie kancelarii" vs „oświadczenie osoby"), ale ścieżka wniosku portalowego —
+główny, docelowy kanał onboardingu — zasila WYŁĄCZNIE `pep`, więc „prawdziwe" pole oświadczenia
+zostaje puste dla każdego akcjonariusza onboardowanego przez portal
+
+- **Co zrobiłem:** przeczytałem komentarze i logikę w `server/trasy/osoby.js:131-141`
+  (`ostrzezeniaOsoby` — „`pep` to ustalenie kancelarii, `pep_oswiadczenie` - to, co oświadczyła
+  osoba… różnica musi być widoczna, bo to ona uruchamia wzmożone środki bezpieczeństwa mimo
+  zaprzeczenia klienta") i w UI kartoteki `publiczne/js/osoby.js:368-465` (etykieta wprost:
+  „Oświadczenie SKŁADANE PRZEZ OSOBĘ (art. 46 ustawy AML) — nie ocena ani domysł kancelarii" dla
+  `pep_oswiadczenie`, kontra „Status PEP jest DANĄ osoby... kancelaria stosuje" dla `pep`).
+  Porównałem to ze schematem `psa_wnioski_akcjonariusze` (`testy-audyt/schemat-bazy.txt`) i z
+  kodem przejęcia wniosku `server/trasy/wnioski.js:747-764`, oraz z generatorem dokumentu do
+  podpisu `server/logika/dokumenty-wniosku.js:304-324` (`oswiadczenieAml`).
+- **Co się stało:** `psa_wnioski_akcjonariusze` NIE MA kolumny `pep_oswiadczenie` w ogóle —
+  formularz wniosku portalowego (wypełniany przez wnioskodawcę dla siebie i dla POZOSTAŁYCH
+  akcjonariuszy, zanim mają oni jakiekolwiek konto) zbiera wyłącznie pojedyncze pole `pep`/
+  `pep_opis`. To właśnie ta wartość trafia do wydrukowanego „Oświadczenia o beneficjencie
+  rzeczywistym i statusie PEP", które dana osoba fizycznie podpisuje — czyli w praktyce PEŁNI
+  funkcję oświadczenia w rozumieniu art. 46 ustawy AML. Przy przyjęciu wniosku
+  (`wnioski.js:750-751`: `for (const pole of osobyModul.POLA_OSOBY) { if (a[pole] !== undefined...)
+  daneOsoby[pole] = a[pole]; }`) wartość ta trafia do `psa_osoby.pep` (bo `pep` jest na liście
+  `POLA_USTAWOWE` wspólnej dla obu tabel), NIGDY do `psa_osoby.pep_oswiadczenie` (bo tej kolumny
+  źródłowa tabela nie ma — pole zostaje `undefined` i jest pomijane). Efekt: dla KAŻDEGO
+  akcjonariusza onboardowanego przez portal (czyli deklarowany główny model biznesowy modułu),
+  pole `pep_oswiadczenie` w kartotece wspólnej zostaje trwale `NULL` („nie oświadczono"), mimo że
+  fizycznie podpisany dokument oświadczenia w tej sprawie istnieje w aktach (jako skan w
+  `psa_wnioski_dokumenty`) — a pole `pep`, opisane w kodzie jako „ustalenie/ocena kancelarii", w
+  rzeczywistości zawiera nieskorygowaną wartość wpisaną przez KLIENTA (czasem przez wnioskodawcę W
+  IMIENIU innego akcjonariusza), bez żadnego udziału kancelarii w jej ustaleniu. Ostrzeżenie o
+  rozbieżności między oboma polami (`osoby.js:131-141`) w tym torze nigdy się nie uruchomi, bo
+  `pep_oswiadczenie` jest zawsze puste, a warunek sprawdza `=== 'nie'`.
+- **Co powinno się stać:** albo (a) `psa_wnioski_akcjonariusze` powinno mieć własne pole
+  `pep_oswiadczenie`/`pep_oswiadczenie_data`, a przejęcie wniosku powinno mapować wartość z
+  formularza wprost na `pep_oswiadczenie` (skoro to faktycznie oświadczenie podpisywane przez
+  osobę), zostawiając `pep` puste do osobnej, późniejszej oceny kancelarii — albo (b) jeśli
+  zamysłem jest, że przy onboardingu portalowym te dwa pola MAJĄ na starcie być tożsame (bo
+  kancelaria dopiero przy weryfikacji wniosku potwierdza/koryguje `pep` na podstawie tego, co
+  zobaczy), przejęcie wniosku powinno zapisywać wartość do OBU pól jednocześnie, żeby mechanizm
+  wykrywania rozbieżności (`osoby.js:134`) miał w ogóle szansę zadziałać, gdy kancelaria później
+  zmieni `pep` niezależnie.
+- **Podstawa:** rozróżnienie i uzasadnienie obu pól są własnym, jawnym zamysłem projektu
+  (`server/migracje.js:918-928` — komentarz „OŚWIADCZENIE OSOBY (art. 46 ustawy AML), nie ocena
+  kancelarii"), więc to nie jest pytanie o nową regułę prawną — to niespójność między dwoma
+  miejscami tego samego projektu, które miały tę samą zasadę realizować. `PRZEPISY-PSA.md` nie
+  reguluje PEP wprost (to ustawa AML, poza zakresem KSH) — stąd nie klasyfikuję kwestii, CZY
+  status PEP jest wymagany, tylko fakt niespójności mapowania.
+- **Waga:** POWAŻNY — dotyczy zgodności z ustawą AML (art. 46) w GŁÓWNYM kanale onboardingu, a
+  osłabia też mechanizm wykrywania rozbieżności między deklaracją klienta a oceną kancelarii,
+  który sam projekt uznał za istotny na tyle, żeby dodać dwa osobne pola.
+
+## Z-152 [POWAŻNY] — dziennik dostępu do danych osobowych (`psa_dziennik_dostepu`) rejestruje
+wyłącznie „wyniesienie" danych na zewnątrz (informacja z rejestru, eksport, pobranie pliku), NIGDY
+zwykły odczyt stanu rejestru przez API/ekran — w połączeniu z Z-150 oznacza to, że wyciek danych
+AML/PEP do roli „spółka" jest całkowicie niewidoczny w dzienniku
+
+- **Co zrobiłem:** przejrzałem `server/logika/dziennik-dostepu.js` oraz wszystkie 12 miejsc jego
+  wywołania (`grep dziennikDostepu.zapisz` w `server/trasy/*.js`) i porównałem z listą wszystkich
+  endpointów zwracających dane osoby (`widoki.widokStanu`, `GET /:id/stan`,
+  `GET /api/psa/portal/rejestr/:spolkaId`, `GET /api/psa/osoby/:id`).
+- **Co się stało:** katalog rejestrowanych akcji to wyłącznie:
+  `informacja_z_rejestru`, `raport_sad`, `eksport`, `pobranie_pliku`, `zmiana_ustawien` — decyzja
+  jest jawnie udokumentowana i świadoma (`server/migracje.js:934-940`: „WĄSKI zakres… NIE każde
+  wyświetlenie listy/kokpitu — szeroki zakres zasypałby ją szumem"). W efekcie: zwykłe wywołanie
+  `GET /api/psa/spolki/:id/stan` (kokpit pracownika) i `GET /api/psa/portal/rejestr/:spolkaId`
+  (ekran „Rejestr" w portalu klienta — czyli DOKŁADNIE ten sam endpoint, przez który wycieka Z-150)
+  NIE zostawia żadnego śladu w dzienniku dostępu. Dziennik odpowie więc poprawnie na pytanie „komu
+  wydano formalną informację z rejestru", ale nie odpowie na pytanie „kto i kiedy oglądał pełne
+  dane wrażliwe (PESEL, adres, a po Z-150 także AML/PEP) tej spółki przez ekran/API" — a to jest
+  dokładnie pytanie, jakie zada kontrola albo klient przy podejrzeniu wycieku.
+- **Co powinno się stać:** to świadoma decyzja projektowa (nie błąd implementacji) — zapisuję jako
+  znalezisko, bo w połączeniu z Z-150 podnosi jego wagę (wyciek jest nie tylko szeroki, ale i
+  niewykrywalny po fakcie) i bo skala „szumu", jaką autorzy chcieli uniknąć, dotyczyła głównie
+  KANCELARII przeglądającej WŁASNE dane; nie rozważano chyba scenariusza, w którym to KLIENT
+  (rola „spółka") wielokrotnie odpytuje cudze dane wrażliwe przez swoje własne, zaufane konto.
+  Rekomendacja do rozważenia: rejestrować przynajmniej odczyty przez `typ_kto='portal'`
+  (znacznie rzadsze niż odczyty pracownicze), zostawiając kokpit pracownika bez zmian.
+- **Podstawa:** brak wprost w `PRZEPISY-PSA.md` (to nie wymóg ustawowy, tylko dobra praktyka
+  bezpieczeństwa/rozliczalności) — zapisuję też jako **pytanie do Łukasza** (patrz
+  `PYTANIA-DO-LUKASZA.md`), bo zmiana zakresu dziennika to decyzja produktowa, nie poprawka błędu.
+- **Waga:** POWAŻNY (samodzielnie: brak rozliczalności; w połączeniu z Z-150: podnosi wagę Z-150).
+
+## Z-153 [POWAŻNY] — klauzula informacyjna RODO i formalne oświadczenie o statusie PEP są
+generowane WYŁĄCZNIE przy jednorazowym onboardingu spółki przez wniosek portalowy — akcjonariusz,
+który obejmuje lub nabywa akcje PÓŹNIEJ, przez zwykły kreator zdarzenia (`przeniesienie`/`objecie`
+zakładane bezpośrednio przez pracownika, poza wnioskiem), nigdy nie dostaje żadnego z tych dwóch
+dokumentów
+
+- **Co zrobiłem:** sprawdziłem, gdzie w kodzie wywoływane są generatory
+  `oswiadczenieRodo`/`oswiadczenieAml` (`server/logika/dokumenty-wniosku.js`) —
+  `grep -rl` pokazuje wyłącznie `server/trasy/portal.js` (etap wniosku) i
+  `server/logika/pakiet-wniosku.js`. Następnie sprawdziłem listę dokumentów generowanych dla
+  każdego typu zdarzenia w `server/logika/typy-zdarzen.js` (pole `dokumenty:`) — żaden z 20 typów
+  (`przeniesienie`, `objecie`, `emisja`, `obciazenie`…) nie generuje odpowiednika RODO/PEP; jedyna
+  pozycja w każdym z nich to `zawiadomienie_wpis` (albo `[]`).
+- **Co się stało:** klauzula informacyjna o przetwarzaniu danych (obowiązek informacyjny
+  kancelarii, skoro dane akcjonariuszy pozyskiwane są od spółki, nie od nich — dokładnie scenariusz
+  z art. 14 RODO) i formalne, podpisywane oświadczenie o statusie PEP istnieją w systemie TYLKO
+  jako część stałego pakietu 9 dokumentów wystawianych raz, przy zakładaniu NOWEJ spółki w portalu.
+  Każdy kolejny akcjonariusz, który pojawia się w rejestrze tej samej spółki później — typowo przez
+  zwykłą sprawę `przeniesienie` (sprzedaż/darowizna) albo `objecie` (kolejna emisja) zakładaną przez
+  pracownika kancelarii wprost w kreatorze, z pominięciem wniosku portalowego — nie dostaje ani
+  jednego, ani drugiego dokumentu z systemu. Pracownik MOŻE ręcznie ustawić `pep_oswiadczenie` takiej
+  osobie w kartotece (Z-151 pokazuje, że to WŁAŚCIWE pole do tego), ale UI kartoteki
+  (`publiczne/js/osoby.js`) nie generuje żadnego dokumentu do podpisu towarzyszącego tej zmianie —
+  wpis może powstać na podstawie samej rozmowy telefonicznej, bez śladu w postaci podpisanego
+  oświadczenia. To istotne, bo — jak pokazuje Z-005 z FAZY 1 — jedyna wyeksponowana ścieżka
+  otwarcia rejestru dla spółek onboardowanych przez portal w ogóle pomija pełny kreator, a każda
+  spółka prędzej czy później ma zdarzenia POzawnioskowe (to normalny, wieloletni cykl życia
+  rejestru, nie wyjątek).
+- **Co powinno się stać:** albo (a) każdy typ zdarzenia wprowadzający NOWĄ osobę do rejestru danej
+  spółki po raz pierwszy powinien mieć w swojej liście `dokumenty` odpowiednik RODO (i AML/PEP,
+  jeśli spółka ma włączoną `stosuje_procedure_aml`) — analogicznie do tego, jak dziś ma to
+  wniosek — albo (b) jeśli intencją jest, że te dokumenty dotyczą wyłącznie ZAŁOŻENIA spółki (a
+  klauzula informacyjna dla kolejnych akcjonariuszy jest realizowana poza aplikacją, np. papierowo
+  przy podpisywaniu umowy zbycia), warto to jawnie odnotować w `CLAUDE-PSA.md`, żeby nie wyglądało
+  to na przeoczenie przy kolejnym audycie.
+- **Podstawa:** obowiązek informacyjny administratora, gdy dane pozyskiwane są nie od osoby, której
+  dotyczą (art. 14 RODO — poza `PRZEPISY-PSA.md`, który nie reguluje RODO wprost, stąd zapisuję
+  równolegle jako pytanie); ustawa o przeciwdziałaniu praniu pieniędzy art. 46 (oświadczenie PEP)
+  — ta sama podstawa co w Z-151.
+- **Waga:** POWAŻNY — luka strukturalna dotycząca większości realnego cyklu życia rejestru (wszystko
+  poza jednorazowym założeniem spółki), nie tylko brzegowego przypadku.
+
+## Z-154 [POZYTYWNE] — numer PESEL potwierdzony jako pole FAKULTATYWNE (nigdy wymagane twardo) —
+zweryfikowane wprost próbą zapisu osoby bez PESEL-u i bez daty urodzenia
+
+- **Co zrobiłem:** `POST /api/psa/osoby` z danymi osoby fizycznej BEZ pól `pesel` i
+  `data_urodzenia` (tylko nazwisko, imię, adres).
+- **Co się stało:** `201 Created` — rekord zapisany. Odpowiedź zawiera `"braki_ustawowe":
+  ["Faza3 TestBezPesel: podaj PESEL albo — gdy akcjonariusz go nie ma — datę urodzenia."]`, czyli
+  wyłącznie MIĘKKIE ostrzeżenie (pole `braki_ustawowe`, odrębne od blokujących `bledy`/400), a nie
+  odmowę zapisu. Potwierdza to w kodzie `server/logika/akcjonariusz.js`: funkcja `bledy()` (blokuje
+  zapis, zwraca 400) nigdy nie sprawdza obecności PESEL-u; wyłącznie `ostrzezenia()` (nieblokująca)
+  zgłasza brak PESEL-u I daty urodzenia równocześnie jako brakujący element ustawowy z pkt 5.
+  `psa_osoby.pesel` jest też `NULLable` na poziomie schematu (bez `NOT NULL`), zgodnie z
+  `FAZA-0-INWENTARYZACJA.md`.
+- **Co powinno się stać:** dokładnie to, co się stało — art. 300³³ § 1 pkt 5 KSH nie wymienia
+  PESEL-u w katalogu obowiązkowej treści rejestru (patrz `PRZEPISY-PSA.md` sekcja 12 pkt 2);
+  wymóg ustawowy dotyczy nazwiska/imienia (lub firmy) oraz adresu, co aplikacja poprawnie
+  rozróżnia od PESEL-u/daty urodzenia (pola dodatkowe, informacyjne/AML).
+- **Podstawa:** `PRZEPISY-PSA.md` art. 300³³ § 1 pkt 5 i sekcja 12 pkt 2.
+- **Waga:** POZYTYWNE.
+
+## Z-155 [POZYTYWNE] — maskowanie PESEL-u/daty urodzenia/adresu zamieszkania zweryfikowane
+SYSTEMATYCZNIE w surowym JSON-ie API (nie tylko w jednym wydruku HTML jak w Z-014), dla wszystkich
+czterech ról odbiorcy, a rola w kanale portalowym jest wyliczana wyłącznie po stronie serwera
+
+- **Co zrobiłem:** cztery bezpośrednie żądania `GET /api/psa/spolki/1/stan` (spółka testowa z
+  dwoma akcjonariuszami z PESEL-em, datą urodzenia i adresem — „Testowa Ala” id 1, „Wzorcowy
+  Bogdan” id 2): bez parametru `rola` (domyślnie kancelaria), `?rola=spolka`,
+  `?rola=akcjonariusz&odbiorca=1` (widok „oczami” Ali) i `?rola=organ`. Dodatkowo przeczytałem
+  `server/trasy/portal.js:1266-1282` i `:134-136` (`rolaOdbioru`), żeby potwierdzić, że w REALNYM
+  endpoincie portalowym `GET /api/psa/portal/rejestr/:spolkaId` rola nie jest w ogóle parametrem
+  żądania — wynika wyłącznie z `zad.konto.rola` odczytanego z sesji server-side, więc klient
+  portalowy (w tym złośliwy, sam wysyłający żądania z pominięciem UI) nie ma jak podać innej roli
+  niż ta, do której faktycznie jest zalogowany.
+- **Co się stało:** dla `rola=kancelaria` i `rola=spolka` obie osoby w pełni jawne (PESEL, data
+  urodzenia, adres). Dla `rola=organ` — tak samo w pełni jawne (zgodnie z art. 300³⁵ § 4).
+  Dla `rola=akcjonariusz&odbiorca=1` — własny rekord (Ala, id 1) w pełni jawny, `zamaskowane:
+  false`; CUDZY rekord (Bogdan, id 2) ma `zamaskowane: true` i pola `pesel`, `data_urodzenia`,
+  `kod_pocztowy`, `miejscowosc`, `ulica`, `nr_domu` zastąpione `•••`, z listą
+  `zamaskowane_pola` wprost wymieniającą, co zasłonięto. Brak parametru `odbiorca` przy
+  `rola=akcjonariusz` maskuje WSZYSTKICH (sprawdzone osobno) — nie da się „przypadkiem” zobaczyć
+  cudzych danych przez pominięcie tego parametru.
+- **Co powinno się stać:** dokładnie to, co się stało.
+- **Podstawa:** art. 300³⁵ § 1¹ KSH; `CLAUDE-PSA.md` reguła domenowa 9; potwierdza i rozszerza
+  Z-014 z FAZY 1 (tam zweryfikowany wyłącznie sam wydruk HTML dla jednej pary spółka/akcjonariusz).
+- **Waga:** POZYTYWNE.
+
+## Z-157 [POZYTYWNE] — adres e-mail można zapisać jako zwykły kontakt bez zgody, ale jego użycie do
+celów ustawowych (treść rejestru pkt 5, doręczenie zawiadomienia o WZ) jest odrębnie bramkowane
+flagą zgody, która NIE ustawia się automatycznie przez sam fakt podania adresu
+
+- **Co zrobiłem:** `POST /api/psa/osoby` z wypełnionym `email`, bez podawania
+  `zgoda_email_status`. Sprawdziłem też `server/logika/informacja-dokument.js` (funkcja
+  ustalająca adres do doręczeń na wydruku) i `server/logika/akcjonariusz.js:51-55`
+  (`znormalizuj()`).
+- **Co się stało:** zapis się powiódł, ale `zgoda_email` = `0` i `zgoda_email_status` = `"brak"`
+  w odpowiedzi — sam adres e-mail nie uruchamia zgody. W kodzie `zgoda_email` jest WYLICZANE ze
+  `zgoda_email_status` (`wynik.zgoda_email = status === ZGODA.POTWIERDZONA ? 1 : 0`), więc jedyna
+  droga do „aktywnego” adresu e-mail w rejestrze to jawne ustawienie statusu na `potwierdzona`.
+  Generator dokumentu `informacja-dokument.js` dodatkowo sam sprawdza ten sam warunek przed użyciem
+  adresu e-mail do czegokolwiek (`if (osoba.zgoda_email_status !== 'potwierdzona' &&
+  !Number(osoba.zgoda_email)) return null;`).
+- **Co powinno się stać:** dokładnie to, co się stało — art. 300³³ § 1 pkt 5 in fine wymaga zgody
+  akcjonariusza na komunikację elektroniczną jako warunku wpisania adresu e-mail do TREŚCI
+  rejestru (w znaczeniu doręczeniowym z art. 300⁸⁷ § 1); samo posiadanie adresu kontaktowego w
+  kartotece to inna sprawa i aplikacja poprawnie je rozróżnia.
+- **Podstawa:** `PRZEPISY-PSA.md` art. 300³³ § 1 pkt 5 i art. 300⁸⁷ § 1.
+- **Waga:** POZYTYWNE.
+
+## Z-158 [POZYTYWNE] — pozycje „na żądanie” z art. 300³³ § 1 pkt 6–8 (przejście praw
+zastawniczych, prawo głosu zastawnika, wykreślenie obciążenia) są osobnymi typami zdarzeń
+wymagającymi WŁASNEJ sprawy z jawnie wskazanym żądającym — nie da się ich wpisać jako
+automatyczny efekt uboczny innego zdarzenia
+
+- **Co zrobiłem:** przejrzałem definicje typów `obciazenie`, `wykreslenie_obciazenia`,
+  `prawo_glosu_zastawnika` w `server/logika/typy-zdarzen.js:195-233` oraz walidację zakładania
+  sprawy w `server/trasy/sprawy.js:162-183`.
+- **Co się stało:** każda z tych trzech pozycji to odrębny `typ_zdarzenia`, zapisywany jako
+  odrębny wiersz `psa_zdarzenia` w efekcie odrębnej sprawy `psa_sprawy` — nie istnieje ścieżka,
+  w której np. zdarzenie `przeniesienie` przy okazji samo dopisuje wzmiankę o prawie głosu
+  zastawnika. Założenie sprawy dla typu, który nie jest `z_urzedu` (a żaden z tych trzech nim nie
+  jest), wymaga podania `zadajacy_rola` z zamkniętego katalogu `ROLE_ZADAJACEGO` — bez tego pola
+  `POST /api/psa/sprawy` zwraca 400 („Wskaż, w jakim charakterze żądający występuje o wpis”).
+- **Co powinno się stać:** dokładnie to, co się stało — art. 300³³ § 1 pkt 6–8 KSH wymaga
+  odrębnego żądania uprawnionego dla każdej z tych pozycji, a nie wpisu z urzędu przy okazji innej
+  czynności.
+- **Podstawa:** `PRZEPISY-PSA.md` art. 300³³ § 1 pkt 6–8.
+- **Waga:** POZYTYWNE.
+
+## Z-156 [POZYTYWNE] — generator wydruku „Informacja z rejestru” korzysta z wąskiej listy pól
+osoby (whitelist), nigdy nie odwołuje się do pól AML/PEP/uwagi niezależnie od roli odbiorcy —
+w przeciwieństwie do surowego API (Z-150), dokument końcowy jest bezpieczny
+
+- **Co zrobiłem:** `grep` po wszystkich odwołaniach do pola `osoba.*`/`a.osoba` w
+  `server/logika/informacja-dokument.js` oraz w `server/logika/dokumenty-tresc.js` (generator
+  „Wykazu akcjonariuszy” dla sądu, art. 300³⁴ § 8/476 § 1¹).
+- **Co się stało:** oba generatory odwołują się wyłącznie do konkretnych, wymienionych z nazwy pól
+  (`ulica`, `nr_domu`, `nr_lokalu`, `kod_pocztowy`, `miejscowosc`, `adres_doreczen`,
+  `adres_edoreczen`, `email` — warunkowo, gdy jest zgoda — `oznaczenie`, `jawny_identyfikator`,
+  `zamaskowane`) i mają jawny komentarz nagłówkowy wykluczający `uwagi`, checklisty i notatki AML
+  z wydruku. Żadne z pól `aml_*`, `pep*`, `beneficjent_rzeczywisty_id` nie występuje w treści
+  dokumentu w żadnej roli.
+- **Co powinno się stać:** dokładnie to, co się stało — potwierdza, że problem z Z-150 dotyczy
+  WYŁĄCZNIE surowego API stanu rejestru, nie propaguje się do żadnego z generowanych dokumentów
+  (ekran vs. wydruk pozostają spójne w zakresie AML tak samo, jak w zakresie PESEL/adresu — Z-014).
+- **Podstawa:** `CLAUDE-PSA.md` sekcja 10.
+- **Waga:** POZYTYWNE.

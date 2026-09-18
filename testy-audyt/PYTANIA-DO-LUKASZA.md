@@ -164,3 +164,67 @@ jako świadomie utrzymywana alternatywa?
   widzenia UI i niebezpieczne przy przypadkowym wywołaniu), czy zabezpieczone (np. idempotencja po
   sprawdzeniu WSZYSTKICH aktywnych opłat `prowadzenie` danej spółki niezależnie od formatu `okres`,
   nie tylko dosłownego dopasowania tekstu), czy mają pozostać bez zmian do czasu dalszej decyzji.
+
+## P-009 — Czy zakres dziennika dostępu do danych osobowych powinien objąć też odczyty przez konta
+portalowe (rola „spółka"/„akcjonariusz"), nie tylko formalne wydanie informacji/eksport/pobranie pliku?
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-152 i Z-150. Obecny, świadomie WĄSKI zakres
+  dziennika (`server/migracje.js:934-940`) był uzasadniony ryzykiem „szumu" przy każdym
+  wyświetleniu kokpitu/listy — rozumowanie sensowne dla PRACOWNIKA kancelarii przeglądającego
+  własne sprawy wielokrotnie dziennie. Nie obejmuje jednak odczytów przez `typ_kto='portal'`
+  (znacznie rzadszych), a to właśnie one, w połączeniu z Z-150 (wyciek AML/PEP/uwagi do roli
+  „spółka" w surowym JSON-ie), są dziś całkowicie niewidoczne dla kogokolwiek próbującego ustalić
+  po fakcie, kto i kiedy miał wgląd w czyje dane wrażliwe.
+- **Dlaczego nie rozstrzygnąłem sam:** to decyzja produktowa (zakres logowania, koszt/korzyść), nie
+  wymóg wprost z `PRZEPISY-PSA.md` (RODO/rozliczalność nie jest tam regulowane).
+- **Pytanie:** czy rozszerzyć `psa_dziennik_dostepu` o zwykłe odczyty `GET
+  /api/psa/portal/rejestr/:spolkaId` (i ewentualnie `GET /api/psa/portal/moje`) przez konta
+  portalowe, zostawiając odczyty pracownicze bez zmian jak dotąd?
+
+## P-010 — Jak naprawić rozjazd pól statusu PEP (`pep` vs `pep_oswiadczenie`) przy przejęciu
+wniosku portalowego — i czy dokumenty RODO/PEP mają powstawać też dla akcjonariuszy dochodzących do
+spółki PO jej założeniu?
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-151 i Z-153. `psa_wnioski_akcjonariusze` nie ma
+  w ogóle kolumny `pep_oswiadczenie` (tylko `pep`/`pep_opis`), więc przy przejęciu wniosku wartość
+  z formularza (faktycznie: to, co osoba PODPISUJE na oświadczeniu AML) trafia wyłącznie do
+  `psa_osoby.pep` — pola opisanego w kodzie jako „ustalenie kancelarii", nigdy do
+  `pep_oswiadczenie` — pola opisanego jako „oświadczenie osoby". Osobno: dokumenty RODO/PEP
+  (`dokumenty-wniosku.js`) generują się WYŁĄCZNIE przy jednorazowym zakładaniu spółki przez
+  wniosek — żaden typ zdarzenia w zwykłym kreatorze (`przeniesienie`, `objecie` itd.) nie generuje
+  ich dla nowego akcjonariusza dochodzącego do już istniejącej spółki.
+- **Dlaczego nie rozstrzygnąłem sam:** obie kwestie to decyzje o kształcie procesu (które pole ma
+  się czym zasilać, czy dokument ma powstawać przy KAŻDYM wejściu nowej osoby do rejestru czy tylko
+  przy założeniu spółki), nie luki w `PRZEPISY-PSA.md` (PEP/RODO są poza KSH).
+- **Pytanie:** (a) czy przy przejęciu wniosku wartość z formularza ma iść do `pep_oswiadczenie`
+  (bo to faktycznie oświadczenie podpisywane przez osobę), zostawiając `pep` do późniejszej,
+  niezależnej oceny kancelarii — czy odwrotnie/inaczej; (b) czy typy zdarzeń wprowadzające nową
+  osobę do rejestru już istniejącej spółki (`objecie`, `przeniesienie` na rzecz nowego
+  akcjonariusza) powinny doczepiać do checklisty obowiązek wygenerowania i podpisania klauzuli
+  RODO oraz (przy włączonej procedurze AML) oświadczenia PEP, analogicznie do wniosku.
+
+## P-011 — Czy „stan na" z dokładnością do minuty ma wrócić do UI kokpitu (dziś dostępne wyłącznie
+przez API), i czy interpretacja strefy czasowej dla tej funkcji ma być jawnie wymuszona programowo
+zamiast polegać na zmiennej środowiskowej `TZ`?
+
+- **Kontekst:** patrz `testy-audyt/ZNALEZISKA.md` Z-305 i Z-306 (FAZA 6). Backend w pełni obsługuje
+  „stan na chwilę" (`RRRR-MM-DDTGG:MM[:SS]`, filtrowanie po `data_wpisu`) — dokładnie mechanizm
+  opisany w `CLAUDE-PSA.md` sekcja 9 („z dokładnością do minuty, bo wpisy z tego samego dnia mają
+  kolejność"). Ale rzeczywisty kokpit (`publiczne/js/kokpit.js`) używa wyłącznie pola typu data
+  (bez godziny) — komentarz w kodzie sugeruje, że to świadoma redukcja z wcześniejszej wersji UI
+  („oś zniknęła, więc została sama data"). Dodatkowo, tam gdzie mechanizm chwili JEST używany
+  (poziom API), jego poprawność zależy w 100% od zmiennej środowiskowej `TZ` procesu serwera, bez
+  żadnej walidacji przy starcie — potwierdzone empirycznie, że identyczny parametr zapytania daje
+  różne chwile absolutne w zależności od `TZ` (`Z-306`).
+- **Dlaczego nie rozstrzygnąłem sam:** (a) czy usunięcie precyzji do minuty z UI było świadomą
+  decyzją produktową (np. bo funkcja okazała się niepotrzebna/myląca w praktyce) czy przypadkową
+  regresją przy którejś zmianie interfejsu — nie mam dostępu do historii tej decyzji; audyt jest
+  read-only, więc nie przywracam pola samodzielnie. (b) wybór sposobu zabezpieczenia przed
+  błędną konfiguracją `TZ` (asercja przy starcie, wymuszenie programowe, czy zaakceptowanie ryzyka
+  jako część checklisty wdrożeniowej z sekcji 2 `CLAUDE-PSA.md`) to decyzja o priorytecie pracy przy
+  wdrożeniu produkcyjnym, nie kwestia zgodności z przepisem.
+- **Pytanie:** (a) czy pole godziny ma wrócić do kokpitu (zgodnie z dosłownym brzmieniem
+  `CLAUDE-PSA.md` sekcja 9), czy specyfikacja ma zostać zaktualizowana, żeby odzwierciedlić obecne,
+  uproszczone zachowanie (samo „stan na dzień")? (b) czy wdrożenie produkcyjne ma programowo
+  wymuszać `TZ=Europe/Warsaw` niezależnie od tego, co ustawi platforma hostingowa, czy wystarczy to
+  udokumentować jako wymóg konfiguracyjny w `.env` (obecny stan)?
