@@ -36,22 +36,61 @@ function usunCiastkoSesji(zad, odp, nazwa) {
   ciasteczka.usun(odp, nazwa, { wymuszajHttps: polaczenieHttps(zad) });
 }
 
+/** Zapisuje bieżący token danego ciastka na czarnej liście (Z-250) — jeśli jest ważny. */
+function uniewaznijBiezacyToken(zad, nazwaCiastka) {
+  const token = ciasteczka.parsuj(zad.headers.cookie)[nazwaCiastka];
+  if (!token) return;
+  const payload = sesja.odczytaj(token);
+  if (!payload || !payload.jti) return;
+  db()
+    .prepare('INSERT OR IGNORE INTO psa_sesje_uniewaznione (jti, wygasa) VALUES (?, ?)')
+    .run(payload.jti, new Date(payload.exp).toISOString());
+}
+
 function zalogujPracownika(zad, odp, uzytkownikId) {
-  const token = sesja.wystaw({ typ: 'pracownik', id: uzytkownikId }, sesja.TTL_PRACOWNIK_MS);
+  const wiersz = db().prepare('SELECT tokeny_wersja FROM psa_uzytkownicy WHERE id = ?').get(uzytkownikId);
+  const token = sesja.wystaw(
+    { typ: 'pracownik', id: uzytkownikId, wersja: wiersz ? wiersz.tokeny_wersja : 0 },
+    sesja.TTL_PRACOWNIK_MS
+  );
   ustawCiastkoSesji(zad, odp, CIASTKO_PRACOWNIK, token, sesja.TTL_PRACOWNIK_MS);
 }
 
+/** Wylogowanie unieważnia WYŁĄCZNIE token z bieżącego ciastka (Z-250) — inne urządzenia zostają zalogowane. */
 function wylogujPracownika(zad, odp) {
+  uniewaznijBiezacyToken(zad, CIASTKO_PRACOWNIK);
   usunCiastkoSesji(zad, odp, CIASTKO_PRACOWNIK);
 }
 
 function zalogujKonto(zad, odp, kontoId) {
-  const token = sesja.wystaw({ typ: 'konto', id: kontoId }, sesja.TTL_PORTAL_MS);
+  const wiersz = db().prepare('SELECT tokeny_wersja FROM psa_konta WHERE id = ?').get(kontoId);
+  const token = sesja.wystaw(
+    { typ: 'konto', id: kontoId, wersja: wiersz ? wiersz.tokeny_wersja : 0 },
+    sesja.TTL_PORTAL_MS
+  );
   ustawCiastkoSesji(zad, odp, CIASTKO_PORTAL, token, sesja.TTL_PORTAL_MS);
 }
 
 function wylogujKonto(zad, odp) {
+  uniewaznijBiezacyToken(zad, CIASTKO_PORTAL);
   usunCiastkoSesji(zad, odp, CIASTKO_PORTAL);
+}
+
+/** Podbija licznik wersji tokenów — uniewaznia NATYCHMIAST wszystkie dotychczasowe tokeny konta (Z-251). */
+function uniewaznijWszystkieTokeny(typ, id) {
+  const tabela = typ === 'pracownik' ? 'psa_uzytkownicy' : 'psa_konta';
+  db().prepare(`UPDATE ${tabela} SET tokeny_wersja = tokeny_wersja + 1 WHERE id = ?`).run(id);
+}
+
+/** Usuwa przeterminowane wpisy z czarnej listy tokenów — wywoływane raz przy starcie serwera. */
+function wyczyscWygasleUniewaznienia() {
+  db().prepare('DELETE FROM psa_sesje_uniewaznione WHERE wygasa < ?').run(new Date().toISOString());
+}
+
+/** Token unieważniony jawnie (wylogowanie) — sprawdzenie po `jti`, jeśli token go niesie. */
+function tokenUniewazniony(jti) {
+  if (!jti) return false;
+  return Boolean(db().prepare('SELECT 1 FROM psa_sesje_uniewaznione WHERE jti = ?').get(jti));
 }
 
 /** Wypełnia `zad.uzytkownik` i `zad.konto`, jeśli ciasteczka niosą ważną sesję. Nigdy nie blokuje. */
@@ -61,18 +100,21 @@ function wczytajSesje(zad, odp, dalej) {
   const tokenPracownika = ciastka[CIASTKO_PRACOWNIK];
   if (tokenPracownika) {
     const payload = sesja.odczytaj(tokenPracownika);
-    if (payload && payload.typ === 'pracownik') {
+    if (payload && payload.typ === 'pracownik' && !tokenUniewazniony(payload.jti)) {
       const wiersz = db().prepare('SELECT * FROM psa_uzytkownicy WHERE id = ?').get(payload.id);
-      if (wiersz && wiersz.aktywny) zad.uzytkownik = wiersz;
+      // `tokeny_wersja` inna niz w tokenie = haslo zmienione PO wystawieniu
+      // tego tokenu (Z-251) — token przestaje byc wazny natychmiast, nie
+      // dopiero po TTL.
+      if (wiersz && wiersz.aktywny && wiersz.tokeny_wersja === payload.wersja) zad.uzytkownik = wiersz;
     }
   }
 
   const tokenKonta = ciastka[CIASTKO_PORTAL];
   if (tokenKonta) {
     const payload = sesja.odczytaj(tokenKonta);
-    if (payload && payload.typ === 'konto') {
+    if (payload && payload.typ === 'konto' && !tokenUniewazniony(payload.jti)) {
       const wiersz = db().prepare('SELECT * FROM psa_konta WHERE id = ?').get(payload.id);
-      if (wiersz && wiersz.aktywne) zad.konto = wiersz;
+      if (wiersz && wiersz.aktywne && wiersz.tokeny_wersja === payload.wersja) zad.konto = wiersz;
     }
   }
 
@@ -112,4 +154,6 @@ module.exports = {
   wylogujPracownika,
   zalogujKonto,
   wylogujKonto,
+  uniewaznijWszystkieTokeny,
+  wyczyscWygasleUniewaznienia,
 };

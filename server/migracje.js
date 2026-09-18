@@ -1892,6 +1892,43 @@ const MIGRACJE = [
       ALTER TABLE psa_oplaty ADD COLUMN zamawiajacy_osoba_id INTEGER REFERENCES psa_osoby(id);
     `,
   },
+
+  {
+    wersja: 45,
+    nazwa: 'uniewaznianie sesji — wylogowanie i zmiana hasla (naprawa Z-250/Z-251)',
+    sql: `
+      -- Token sesji jest bezstanowy (HMAC, brak listy sesji po stronie
+      -- serwera) — audyt (Z-250, Z-251) pokazal, ze to oznaczalo: wylogowanie
+      -- kasowalo wylacznie ciasteczko w przegladarce, a token pozostawal
+      -- kryptograficznie wazny do konca TTL (do 12h); zmiana hasla nie
+      -- uniewazniala zadnego juz wydanego tokenu.
+      --
+      -- Dwa niezalezne mechanizmy, bo maja rozny zasieg:
+      --  1) tokeny_wersja — licznik przy koncie. Token niesie wersje z
+      --     chwili wystawienia; przy KAZDYM zadaniu porownujemy z biezaca
+      --     wartoscia w bazie. Zmiana hasla podbija licznik -> WSZYSTKIE
+      --     dotychczasowe tokeny tego konta (na kazdym urzadzeniu) przestaja
+      --     byc wazne natychmiast.
+      --  2) psa_sesje_uniewaznione — czarna lista pojedynczych tokenow
+      --     (identyfikator jti, losowy przy kazdym wystawieniu). Wylogowanie
+      --     wpisuje TYLKO token z biezacego ciastka -> inne, rownolegle
+      --     zalogowane urzadzenia zostaja zalogowane, zgodnie z oczekiwanym
+      --     zakresem operacji "wyloguj sie tutaj".
+      -- Wpis na liscie ma wlasna date wygasniecia (= exp tokenu) — po niej
+      -- token i tak przestalby byc wazny z powodu TTL, wiec wpis staje sie
+      -- nieszkodliwym balastem; sprzatanie przy starcie serwera usuwa
+      -- przeterminowane wpisy, zeby tabela nie rosla bez konca.
+      ALTER TABLE psa_uzytkownicy ADD COLUMN tokeny_wersja INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE psa_konta ADD COLUMN tokeny_wersja INTEGER NOT NULL DEFAULT 0;
+
+      CREATE TABLE IF NOT EXISTS psa_sesje_uniewaznione (
+        jti     TEXT PRIMARY KEY,
+        wygasa  TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS psa_ix_sesje_uniewaznione_wygasa
+        ON psa_sesje_uniewaznione (wygasa);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

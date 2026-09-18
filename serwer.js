@@ -74,6 +74,9 @@ const zastosowane = migracje.uruchom(db());
 if (zastosowane.length > 0) {
   console.log(`[psa] wykonano migracje: ${zastosowane.join(', ')}`);
 }
+// Sprzatanie czarnej listy tokenow (Z-250/Z-251) — wpisy przeterminowane
+// razem z tokenem, ktorego dotyczyly, sa juz nieszkodliwym balastem.
+autoryzacja.wyczyscWygasleUniewaznienia();
 
 // ── API ──────────────────────────────────────────────────────────────────
 // `/api/wspolne` i `/api/psa/auth` (logowanie) musza byc dostepne bez sesji.

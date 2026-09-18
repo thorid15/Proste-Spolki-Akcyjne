@@ -42,19 +42,26 @@ function podpis(tresc) {
 }
 
 /**
- * @param {{typ: 'pracownik'|'konto', id: number}} podmiot
+ * @param {{typ: 'pracownik'|'konto', id: number, wersja?: number}} podmiot
  * @param {number} ttlMs
  * @returns {string} token
  */
 function wystaw(podmiot, ttlMs) {
   if (!TYPY.includes(podmiot.typ)) throw new Error(`Nieznany typ podmiotu sesji: „${podmiot.typ}”.`);
-  const tresc = JSON.stringify({ typ: podmiot.typ, id: Number(podmiot.id), exp: Date.now() + ttlMs });
+  const jti = crypto.randomBytes(9).toString('base64url');
+  const tresc = JSON.stringify({
+    typ: podmiot.typ,
+    id: Number(podmiot.id),
+    wer: Number(podmiot.wersja) || 0,
+    jti,
+    exp: Date.now() + ttlMs,
+  });
   const koduTresc = b64uKoduj(tresc);
   const sygnatura = b64uKoduj(podpis(koduTresc));
   return `${koduTresc}.${sygnatura}`;
 }
 
-/** @returns {{typ: string, id: number}|null} */
+/** @returns {{typ: string, id: number, wersja: number, jti: string, exp: number}|null} */
 function odczytaj(token) {
   if (!token || typeof token !== 'string') return null;
   const kropka = token.indexOf('.');
@@ -87,7 +94,16 @@ function odczytaj(token) {
   if (!TYPY.includes(payload.typ) || !Number.isInteger(payload.id)) return null;
   if (!Number.isFinite(payload.exp) || payload.exp < Date.now()) return null;
 
-  return { typ: payload.typ, id: payload.id };
+  // `wer`/`jti` moga brakowac na tokenach wystawionych przed migracja 45 —
+  // traktujemy to jako wersje 0 / brak identyfikatora do uniewaznienia
+  // pojedynczego tokenu (wygasna naturalnie, najdalej za jeden TTL).
+  return {
+    typ: payload.typ,
+    id: payload.id,
+    wersja: Number.isInteger(payload.wer) ? payload.wer : 0,
+    jti: typeof payload.jti === 'string' ? payload.jti : null,
+    exp: payload.exp,
+  };
 }
 
 const TTL_PRACOWNIK_MS = 12 * 60 * 60 * 1000; // 12h

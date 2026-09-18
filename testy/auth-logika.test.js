@@ -40,7 +40,25 @@ test('hasla: losoweHaslo generuje rozne wartosci o rozsadnej dlugosci', () => {
 test('sesja: token wystawiony jest odczytywany z poprawnym typem i id', () => {
   const token = sesja.wystaw({ typ: 'pracownik', id: 42 }, 60_000);
   const payload = sesja.odczytaj(token);
-  assert.deepEqual(payload, { typ: 'pracownik', id: 42 });
+  assert.equal(payload.typ, 'pracownik');
+  assert.equal(payload.id, 42);
+  // Z-250/Z-251: kazdy token niesie tez wersje (do uniewaznienia wszystkich
+  // tokenow konta przy zmianie hasla) i jti (do uniewaznienia TEGO jednego
+  // tokenu przy wylogowaniu) — patrz testy/auth-http.test.js.
+  assert.equal(payload.wersja, 0);
+  assert.equal(typeof payload.jti, 'string');
+  assert.ok(payload.jti.length > 0);
+});
+
+test('sesja: dwa tokeny tego samego podmiotu maja rozne jti (mozna uniewaznic pojedynczo)', () => {
+  const tokenA = sesja.wystaw({ typ: 'pracownik', id: 42 }, 60_000);
+  const tokenB = sesja.wystaw({ typ: 'pracownik', id: 42 }, 60_000);
+  assert.notEqual(sesja.odczytaj(tokenA).jti, sesja.odczytaj(tokenB).jti);
+});
+
+test('sesja: token niesie wersje podana przy wystawieniu, do porownania z biezaca wartoscia w bazie', () => {
+  const token = sesja.wystaw({ typ: 'pracownik', id: 42, wersja: 3 }, 60_000);
+  assert.equal(sesja.odczytaj(token).wersja, 3);
 });
 
 test('sesja: token sfalszowany (zmieniona sygnatura) jest odrzucany', () => {
