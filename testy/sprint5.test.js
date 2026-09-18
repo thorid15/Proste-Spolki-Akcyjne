@@ -291,6 +291,71 @@ test('blokada: zbycie ulamka akcji nie w pelni pokrytej bez zgody spolki jest od
   assert.ok(wpisZgoda.zdarzenie.id);
 });
 
+test('Z-054: blokada zbycia niepokrytych CALYCH akcji dziala przy KAZDYM kolejnym przeniesieniu, nie tylko pierwszym (art. 300(40) § 1 KSH)', () => {
+  const db = bazaTestowa();
+  const spolka = dodajSpolke(db);
+  const a = dodajOsobe(db, { nazwisko: 'Adamski' });
+  const b = dodajOsobe(db, { nazwisko: 'Borowska' });
+  const c = dodajOsobe(db, { nazwisko: 'Cieslak' });
+
+  const emisja = rejestr.dokonajWpisu(db, {
+    spolkaId: spolka, typ: 'emisja', data_zdarzenia: '2026-01-01',
+    wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-01' }, autor: 'Test',
+  });
+  rejestr.dokonajWpisu(db, {
+    spolkaId: spolka, typ: 'objecie', data_zdarzenia: '2026-01-02',
+    wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: a, ilosc: 10, pokryta: 'nie' }] },
+    autor: 'Test',
+  });
+
+  // Pierwsze zbycie niepokrytych akcji bez zgody spolki - odrzucone.
+  assert.throws(() => {
+    rejestr.dokonajWpisu(db, {
+      spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-03',
+      wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: a, pozycje: [{ nabywca_osoba_id: b, ilosc: 10 }] },
+      autor: 'Test',
+    });
+  }, /nie są w pełni pokryte/);
+
+  // Ze zgoda - przechodzi. Wzmianka o pokryciu MUSI przejsc na nabywce B
+  // niezmieniona ('nie'), nie zzerowac sie do null ("nieustalone").
+  rejestr.dokonajWpisu(db, {
+    spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-03',
+    wejscie: {
+      emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: a,
+      pozycje: [{ nabywca_osoba_id: b, ilosc: 10 }], zgoda_spolki_niepelne_pokrycie: true,
+    },
+    autor: 'Test',
+  });
+  const stanPoPierwszym = stanLogika.odtworzStan(rejestr.wczytajZdarzenia(db, spolka));
+  const pozycjaB = stanLogika.otwarte(stanPoPierwszym).find(
+    (p) => p.kategoria === 'akcjonariusz' && Number(p.osoba_id) === b
+  );
+  assert.equal(pozycjaB.pokryta, 'nie', 'pokrycie akcji przechodzi na nabywce, nie zeruje sie');
+
+  // DRUGIE zbycie (B -> C) TYCH SAMYCH, wciaz niepokrytych akcji, bez zgody -
+  // przed naprawa Z-054 przechodziloby bez przeszkod, bo `otworz()` dostawal
+  // `pokryta: undefined` przy pierwszym przeniesieniu i zerowal go do null.
+  assert.throws(() => {
+    rejestr.dokonajWpisu(db, {
+      spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-04',
+      wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: b, pozycje: [{ nabywca_osoba_id: c, ilosc: 10 }] },
+      autor: 'Test',
+    });
+  }, /nie są w pełni pokryte/);
+
+  // Ze zgoda spolki drugie zbycie tez przechodzi.
+  const wpisDrugi = rejestr.dokonajWpisu(db, {
+    spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-04',
+    wejscie: {
+      emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: b,
+      pozycje: [{ nabywca_osoba_id: c, ilosc: 10 }], zgoda_spolki_niepelne_pokrycie: true,
+    },
+    autor: 'Test',
+  });
+  assert.ok(wpisDrugi.zdarzenie.id);
+});
+
 // ─────────────────────────────────────────────────────────────
 // Pelny stos, przez kreator + materializacja do bazy
 // ─────────────────────────────────────────────────────────────

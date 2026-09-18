@@ -236,8 +236,48 @@ function zdejmij(stan, { emisjaKlucz, kategoria, osobaId, zakresy, data, zdarzen
   stan.przedzialy.push(...noweOtwarte);
 }
 
-/** Przeniesienie akcji miedzy pulami - jedyna droga zmiany kategorii/wlasciciela. */
+/**
+ * Grupuje `zakresy` wedlug BIEZACEGO stanu pokrycia posiadacza — pokrycie
+ * (art. 300(33) § 1 pkt 9 KSH) jest atrybutem SAMEJ AKCJI, nie osoby, wiec
+ * przy zwyklym przeniesieniu (calych akcji) musi przejsc na nabywce
+ * niezmienione, tak jak juz dziala `przeniesienie_ulamka`. Rozny odcinek
+ * `zakresy` moze miec rozna wzmianke o pokryciu (np. czesc akcji objeta
+ * gotowka, czesc aportem w innym terminie) - stad grupowanie, nie jedna
+ * wspolna wartosc.
+ */
+function pokrytaWedlugStanu(stan, emisjaKlucz, osobaId, zakresy) {
+  const przedzialy = przedzialyPuli(stan, emisjaKlucz, K.AKCJONARIUSZ, osobaId).filter(
+    (p) => (p.czesc_licznik ?? 1) === (p.czesc_mianownik ?? 1)
+  );
+  const grupy = new Map();
+  for (const p of przedzialy) {
+    const wspolne = n.przeciecie([{ nr_od: p.nr_od, nr_do: p.nr_do }], zakresy);
+    if (wspolne.length === 0) continue;
+    const klucz = p.pokryta ?? '';
+    if (!grupy.has(klucz)) grupy.set(klucz, { pokryta: p.pokryta ?? null, zakresy: [] });
+    grupy.get(klucz).zakresy.push(...wspolne);
+  }
+  return [...grupy.values()].map((g) => ({ pokryta: g.pokryta, zakresy: n.normalizuj(g.zakresy) }));
+}
+
+/**
+ * Przeniesienie akcji miedzy pulami - jedyna droga zmiany kategorii/wlasciciela.
+ *
+ * Naprawa Z-054: gdy wywolujacy NIE narzuca wprost `pokryta` (jak przy
+ * zwyklym `przeniesienie` — `objecie` zawsze ustala ja na nowo z tresci
+ * zdarzenia, wiec nie wchodzi tu), a zbywca traci akcje z wlasnej puli
+ * akcjonariusza, wzmianke o pokryciu bierzemy z BIEZACEGO stanu tych akcji,
+ * zamiast zerowac ja do `null`. Bez tego kazde zwykle przeniesienie kasowalo
+ * `pokryta`, wiec blokada zbycia niepokrytych akcji (art. 300(40) § 1 KSH,
+ * `walidacje.js: sprawdzPokrycie`) dzialala tylko przy PIERWSZYM zbyciu -
+ * kolejne widzialy juz `null` ("nieustalone"), ktore regula celowo przepuszcza.
+ */
 function przenies(stan, opcje) {
+  const grupyPokrycia =
+    opcje.pokryta === undefined && opcje.zKategorii === K.AKCJONARIUSZ
+      ? pokrytaWedlugStanu(stan, opcje.emisjaKlucz, opcje.zOsoby, opcje.zakresy)
+      : null;
+
   zdejmij(stan, {
     emisjaKlucz: opcje.emisjaKlucz,
     kategoria: opcje.zKategorii,
@@ -246,16 +286,33 @@ function przenies(stan, opcje) {
     data: opcje.data,
     zdarzenieId: opcje.zdarzenieId,
   });
-  otworz(stan, {
-    emisjaKlucz: opcje.emisjaKlucz,
-    kategoria: opcje.doKategorii,
-    osobaId: opcje.doOsoby,
-    zakresy: opcje.zakresy,
-    data: opcje.data,
-    zdarzenieId: opcje.zdarzenieId,
-    tytul: opcje.tytul,
-    pokryta: opcje.pokryta,
-  });
+
+  if (!grupyPokrycia) {
+    otworz(stan, {
+      emisjaKlucz: opcje.emisjaKlucz,
+      kategoria: opcje.doKategorii,
+      osobaId: opcje.doOsoby,
+      zakresy: opcje.zakresy,
+      data: opcje.data,
+      zdarzenieId: opcje.zdarzenieId,
+      tytul: opcje.tytul,
+      pokryta: opcje.pokryta,
+    });
+    return;
+  }
+
+  for (const grupa of grupyPokrycia) {
+    otworz(stan, {
+      emisjaKlucz: opcje.emisjaKlucz,
+      kategoria: opcje.doKategorii,
+      osobaId: opcje.doOsoby,
+      zakresy: grupa.zakresy,
+      data: opcje.data,
+      zdarzenieId: opcje.zdarzenieId,
+      tytul: opcje.tytul,
+      pokryta: grupa.pokryta,
+    });
+  }
 }
 
 /**
