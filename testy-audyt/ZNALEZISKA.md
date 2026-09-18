@@ -877,3 +877,256 @@ wniosku, ZANIM jakiekolwiek zdarzenie (emisja/objęcie) zostało w ogóle wpisan
   300³⁴ § 1 KSH (kolejność zdarzeń w czasie ma znaczenie prawne dla samego rejestru).
 - **Waga:** DROBNY (kosmetyczna niespójność nazewnictwa/momentu ustawienia pola, bez wpływu na
   poprawność samego rejestru zdarzeń, który w tym momencie poprawnie pokazuje zero wpisów).
+
+---
+
+## FAZA 2 — opłaty (zakres Z-100…Z-129, zajęte: Z-100…Z-109)
+
+Wszystkie poniższe naliczenia zweryfikowane PRAKTYCZNIE przez bezpośrednie żądania HTTP do
+`localhost:3005` (zalogowany jako `audyt@kancelaria.test`, rola `admin`), nie tylko przez lekturę
+kodu. Spółka testowa własna: id `10` („Audyt Faza2 Otwarcie..."). Spółka współdzielona użyta za
+zgodą instrukcji sesji (miała już wystarczającą liczbę akcjonariuszy/akcji z FAZY 1): id `6`
+(„Audyt S1 410411..."). Wszystkie opłaty założone wyłącznie do testów zostały po zakończeniu testu
+oznaczone `status: anulowana` przez `PATCH /api/psa/oplaty/:id` (nie usunięte — appka nie ma
+kasowania opłat, tylko anulowanie), żeby nie zepsuć zestawień innych równolegle pracujących agentów
+audytu. Zestawienie opłat, które zostały CELOWO pozostawione aktywne (bo są prawidłowym efektem
+mojego testu na mojej własnej spółce), oraz tych anulowanych po teście, jest w
+`testy-audyt/FAZA-2-WYNIK.md`.
+
+## Z-100 [KRYTYCZNY] — dwa niezależne, wzajemnie „nieświadome" mechanizmy naliczania opłaty za
+prowadzenie rejestru współdzielą tabelę `psa_oplaty` i mogą PODWÓJNIE obciążyć tę samą spółkę za
+ten sam rok
+
+- **Co zrobiłem:** w kodzie (`server/oplaty.js`) są DWIE osobne rodziny funkcji dla opłaty typu
+  `prowadzenie`: (A) rocznicowa — `naliczOkresProwadzenia`/`naliczPierwszyRok`/`naliczOdnowienia`,
+  wołana przy przyjęciu wniosku portalowego (`server/trasy/wnioski.js:820`) i przez
+  `POST /api/psa/oplaty/odnowienia` (jedyny przycisk w UI: „Nalicz kolejny rok"), z idempotencją po
+  kolumnie `okres_od` (data); (B) kalendarzowa — `naliczOplateProwadzenia`/`naliczOplateRoczneWszystkie`,
+  wołana WYŁĄCZNIE przez `POST /api/psa/oplaty/naliczenie-roczne` (`wymagajAdmina`, ISTNIEJE w
+  API, ale nie jest podpięta pod ŻADEN przycisk UI — `grep` po `naliczenie-roczne` w `publiczne/`
+  daje zero wyników), z idempotencją po kolumnie `okres` (tekst roku, np. `"2026"`). Wywołałem (B)
+  bezpośrednim żądaniem `POST /api/psa/oplaty/naliczenie-roczne {"rok":"2026"}` na współdzielonej
+  bazie testowej, na której spółka id `6` MIAŁA JUŻ aktywną opłatę `prowadzenie` naliczoną przez (A)
+  z `okres = "2026/2027"`, `okres_od = "2026-09-17"`, `okres_do = "2027-09-16"`.
+- **Co się stało:** (B) nie rozpoznało istniejącej opłaty z (A) — bo szuka wyłącznie po
+  `okres = '2026'` (dosłowny tekst), a opłata z (A) ma `okres = '2026/2027'` (etykieta rocznikowa,
+  bo rok prowadzenia spółki 6 nie pokrywa się z rokiem kalendarzowym). W jednym wywołaniu (B)
+  naliczyło DODATKOWĄ opłatę 1200 zł dla WSZYSTKICH 9 aktywnych spółek w bazie testowej (nie tylko
+  spółki 6) — łącznie 9 nowych, nadmiarowych naliczeń po 1200 zł. Dla spółki `6` oznacza to, że w
+  jednym roku prowadzenia rejestru istniałyby DWIE opłaty za `prowadzenie` (2400 zł zamiast 1200 zł),
+  gdyby nie zostały ręcznie anulowane. Posprzątałem: wszystkie 9 nowo utworzonych opłat (id 8–16)
+  oznaczyłem `anulowana` przez `PATCH /api/psa/oplaty/:id`, żeby nie zafałszować zestawień innych
+  agentów audytu pracujących na tej samej bazie.
+- **Co powinno się stać:** oba mechanizmy powinny albo być jednym mechanizmem (rocznicowy zastępuje
+  kalendarzowy — dokładnie to mówi komentarz w kodzie przy `naliczOdnowienia`: „Zastepuje wsadowe
+  «naliczenie roczne» po kalendarzu"), albo endpoint (B) powinien zostać usunięty/wyłączony teraz,
+  gdy (A) jest jedynym mechanizmem używanym przez UI, albo (B) powinno przed wstawieniem sprawdzać
+  BRAK JAKIEJKOLWIEK aktywnej opłaty `prowadzenie` pokrywającej ten rok u danej spółki (niezależnie
+  od formatu `okres`), nie tylko dosłowne dopasowanie tekstu.
+- **Podstawa:** checklista sesji („Czy naliczenie roczne jest idempotentne — uruchom je dwa razy dla
+  tego samego roku") — w obrębie KAŻDEGO z dwóch mechanizmów z osobna idempotencja działa
+  poprawnie (patrz Z-107), ale mechanizmy nie są idempotentne WZGLĘDEM SIEBIE, a operują na tej
+  samej tabeli i tym samym `typ = 'prowadzenie'`. `PRZEPISY-PSA.md` § 9 (prowadzenie rejestru 1200
+  zł za każdy rozpoczęty rok — RAZ, nie dwa razy za ten sam rok).
+- **Waga:** KRYTYCZNY. Zawyżenie taksy notarialnej — dokładnie ten typ błędu, przed którym ostrzega
+  wstęp do tej fazy audytu („zawyżenie taksy to nie błąd rachunkowy, tylko problem zawodowy”).
+  Endpoint (B) jest wprawdzie martwy z punktu widzenia UI, ale jest w pełni funkcjonalny w API i
+  wymaga wyłącznie roli `admin` — jedno przypadkowe wywołanie (skrypt, cron, ręczne wpisanie w
+  konsoli przeglądarki przez admina) naliczy nadmiarowe opłaty dla WSZYSTKICH aktywnych spółek
+  naraz, nie tylko jednej.
+
+## Z-101 [KRYTYCZNY] — ręczny wpis opłaty (`POST /api/psa/oplaty/`) przyjmuje DOWOLNĄ kwotę w
+groszach, łącznie z kwotą znacznie przekraczającą stawkę maksymalną z rozporządzenia
+
+- **Co zrobiłem:** `POST /api/psa/oplaty/` z ciałem
+  `{"spolka_id":6,"typ":"wpis","kwota_grosze":100000000}` (czyli 1 000 000 zł za wpis, którego
+  stawka maksymalna to 100 zł — `PRZEPISY-PSA.md` § 9).
+- **Co się stało:** `201`, opłata zapisana z `kwota_grosze: 100000000` bez żadnego błędu ani
+  ostrzeżenia. `server/oplaty.js: dodajOplateReczna` liczy kwotę jako
+  `kwotaGrosze != null ? Number(kwotaGrosze) : ustawienia.stawkaGrosze(...)` — brak JAKIEJKOLWIEK
+  górnej granicy. Dla porównania: `server/logika/ustawienia.js: bledy()` (ekran „Ustawienia
+  kancelarii", zmiana STAWKI DOMYŚLNEJ) ma dokładnie taką walidację
+  (`Math.round(liczba) > gorna` → błąd), więc appka WIE, jaka jest stawka maksymalna i umie ją
+  wyegzekwować — po prostu nie robi tego przy pojedynczym ręcznym wpisie opłaty. Posprzątałem:
+  opłata (id 19) oznaczona `anulowana`.
+- **Co powinno się stać:** `dodajOplateReczna` (albo trasa `POST /api/psa/oplaty/`) powinna
+  odrzucać kwotę przekraczającą `przepisy.STAWKI_MAKSYMALNE_GROSZE[typ]`, tak samo jak robi to już
+  `ustawienia.bledy()` dla stawki domyślnej kancelarii.
+- **Podstawa:** checklista sesji („Czy gdziekolwiek da się naliczyć kwotę powyżej stawki
+  maksymalnej (np. przez ręczną korektę bez walidacji)") — dokładnie ten scenariusz.
+  `PRZEPISY-PSA.md` § 9 (stawki są MAKSYMALNE).
+- **Waga:** KRYTYCZNY. To dokładnie ta furtka, o której ostrzega checklista sesji wprost, i którą
+  aplikacja w INNYM miejscu (ustawienia kancelarii) już umie zamknąć — brakuje tylko powtórzenia tej
+  samej walidacji przy ręcznym wpisie pojedynczej opłaty.
+
+## Z-102 [POWAŻNY] — ręczny wpis opłaty przyjmuje kwotę UJEMNĄ bez żadnej walidacji
+
+- **Co zrobiłem:** `POST /api/psa/oplaty/` z `{"spolka_id":6,"typ":"informacja","kwota_grosze":-5000}`.
+- **Co się stało:** `201`, opłata zapisana z `kwota_grosze: -5000` (`kwota_zl: -50`). Żaden przepis
+  ani reguła domenowa nie przewiduje pojęcia „opłaty ujemnej” — to albo błąd operatora (literówka
+  minusa), albo próba ukrytego rabatu/korekty, która powinna iść inną drogą (np. adnotacja/notatka +
+  osobna, jawna pozycja korygująca), nie przez ujemną kwotę tego samego typu opłaty. Ujemna opłata
+  wchodzi też do sumy `suma_grosze` na liście opłat i do CSV eksportowanego do księgowości bez
+  żadnego oznaczenia. Posprzątałem: opłata (id 18) oznaczona `anulowana`.
+- **Co powinno się stać:** walidacja `kwotaGrosze >= 0` (analogicznie do walidacji, którą
+  `ustawienia.bledy()` już stosuje dla stawki domyślnej: „musi być liczbą nieujemną”).
+- **Podstawa:** reguła domenowa nr 5 (kwoty w groszach) w połączeniu ze zdrowym rozsądkiem
+  księgowym — opłata z ujemną kwotą nie ma odpowiednika w żadnym z trzech typów opłat z
+  `PRZEPISY-PSA.md` § 9.
+- **Waga:** POWAŻNY — nie jest to bezpośrednio „zawyżenie taksy”, ale otwiera furtkę do cichego,
+  niekontrolowanego zaniżania należności kancelarii bez śladu uzasadnienia.
+
+## Z-103 [KRYTYCZNY] — ręczny wpis opłaty przyjmuje kwotę ZMIENNOPRZECINKOWĄ i zapisuje ją
+dosłownie w kolumnie `kwota_grosze`, łamiąc regułę domenową nr 5
+
+- **Co zrobiłem:** `POST /api/psa/oplaty/` z `{"spolka_id":6,"typ":"informacja","kwota_grosze":100.7}`.
+- **Co się stało:** `201`, opłata zapisana i odczytana z powrotem jako
+  `"kwota_grosze":100.7,"kwota_zl":1.0070000000000001` — dosłowny, nieskracalny float trafił do
+  kolumny, która wg `CLAUDE-PSA.md` sekcja 4 reguła 5 („Kwoty w groszach (`INTEGER`). Cena
+  emisyjna, opłaty. Żadnych floatów.”) ma być liczbą całkowitą. `SQLite` NIE wymusza typu kolumny
+  (`psa_oplaty` nie jest tabelą `STRICT` — sprawdziłem, `grep -n STRICT server/migracje.js` nie daje
+  wyników), więc REAL trafia do bazy bez żadnego błędu. Przyczyna: `dodajOplateReczna` liczy
+  `Number(kwotaGrosze)` BEZ `Math.round()` — dla porównania, `ustawienia.stawkaGrosze()` (stawka
+  domyślna kancelarii) używa `Math.round(liczba)` właśnie po to, żeby to wykluczyć. Interfejs
+  (`publiczne/js/wnioski.js: ModalNowaOplata`) chroni przed tym PO STRONIE KLIENTA
+  (`Math.round(Number(dane.kwota_grosze) * 100)`), ale to ochrona wyłącznie w UI — bezpośrednie
+  żądanie ją omija, dokładnie jak przewiduje checklista sesji („Poszukaj arytmetyki
+  zmiennoprzecinkowej na kwotach”). Posprzątałem: opłata (id 17) oznaczona `anulowana`.
+- **Co powinno się stać:** `dodajOplateReczna` powinno robić `Math.round(Number(kwotaGrosze))` (i
+  odrzucać wynik nie-skończony/nie-całkowity) zamiast gołego `Number(...)`, tak jak już robi to
+  `ustawienia.stawkaGrosze()` dla tej samej jednostki (grosze).
+- **Podstawa:** `CLAUDE-PSA.md` sekcja 4, reguła domenowa nr 5 — dosłownie naruszona, ze skutkiem w
+  bazie danych, nie tylko teoretycznym. Checklista sesji FAZA 2, punkt o arytmetyce
+  zmiennoprzecinkowej.
+- **Waga:** KRYTYCZNY. To dokładnie scenariusz, przed którym ostrzega wstęp checklisty sesji
+  („jeden `0.1 + 0.2` w kodzie opłat to błąd na fakturze”) — tu nie jest to nawet arytmetyka w
+  kodzie appki, tylko brak ubezpieczenia przed tym, co przyjdzie z zewnątrz w żądaniu.
+
+## Z-104 [DROBNY] — wartość nienumeryczna `kwota_grosze` w ręcznym wpisie opłaty powoduje
+niezłapany błąd 500 zamiast czytelnego błędu walidacji
+
+- **Co zrobiłem:** `POST /api/psa/oplaty/` z `{"spolka_id":6,"typ":"informacja","kwota_grosze":"abc"}`.
+- **Co się stało:** `{"blad":"Wystąpił nieoczekiwany błąd serwera."}` — czyli wyjątek w handlerze
+  (prawdopodobnie `INSERT` z `kwota_grosze = NaN`, SQLite odrzuca `NaN` jako parametr) zamiast `400`
+  z czytelnym komunikatem. Nie sprawdzałem treści logu serwera pod kątem wycieku stack trace (to
+  zakres FAZA 5 — bezpieczeństwo), odnotowuję wyłącznie brak walidacji wejścia w tym miejscu.
+- **Co powinno się stać:** walidacja `Number.isFinite(...)` PRZED próbą zapisu, z czytelnym `400`
+  („Kwota musi być liczbą”), analogicznie do wzorca stosowanego już w kilku innych miejscach modułu
+  (np. `ustawienia.bledy()`).
+- **Podstawa:** ogólna jakość obsługi błędów; pośrednio ta sama reguła nr 5 (kwota ma być liczbą
+  całkowitą — appka nawet nie sprawdza, czy to w ogóle LICZBA, zanim odrzuci albo przyjmie).
+- **Waga:** DROBNY (błąd 500 jest przynajmniej WIDOCZNY i NIE zapisuje błędnych danych — w
+  przeciwieństwie do Z-101/102/103, które przechodzą bez ostrzeżenia).
+
+## Z-105 [POZYTYWNE] — „jedno żądanie = jeden wpis = jedna opłata” działa poprawnie przy
+przeniesieniu akcji do trzech nabywców naraz
+
+- **Co zrobiłem:** na spółce `6` założyłem sprawę `przeniesienie` (zbywca — akcjonariuszka z 95
+  akcjami serii `AZ`) z JEDNĄ pozycją `pozycje` zawierającą TRZECH różnych nabywców (30/30/35 akcji,
+  osoby nowo założone z `aml_status: "wykonane"`), zweryfikowałem sprawę i wykonałem
+  `POST /api/psa/sprawy/4/wpisz` w jednym żądaniu.
+- **Co się stało:** powstało DOKŁADNIE JEDNO zdarzenie `przeniesienie` (`zdarzenie.id: 26`,
+  wszystkie trzy przeniesienia w jednym `dane_json.pozycje`) i DOKŁADNIE JEDNA opłata typu `wpis`
+  (100 zł, `kwota_grosze: 10000`) — nie 300 zł, nie trzy osobne wiersze `psa_oplaty`.
+- **Co powinno się stać:** dokładnie to, co się stało.
+- **Podstawa:** checklista sesji („Jedno żądanie = jeden wpis = jedna opłata (...) Czy naliczono
+  100 zł, czy 300 zł?").
+- **Waga:** POZYTYWNE.
+
+## Z-106 [POZYTYWNE] — odmowa wpisu nie nalicza opłaty; zajęcie egzekucyjne z urzędu jest wolne od
+opłat i nie wymaga żądającego
+
+- **Co zrobiłem:** (a) założyłem sprawę `przeniesienie` na spółce `6`, przeniosłem ją do
+  `weryfikacja`, wykonałem `PATCH .../6 {"akcja":"odmow","powod_odmowy_kod":"brak_dokumentow"}` i
+  porównałem listę opłat spółki przed/po (6 opłat przed, 6 opłat po — bez zmian, suma
+  `130000` groszy identyczna); (b) założyłem sprawę `zajecie` ze `zrodlo: "z_urzedu"` BEZ
+  `zadajacy_osoba_id`/`zadajacy_rola` (endpoint ich nie zażądał — sprawa od razu wylądowała w stanie
+  `weryfikacja`, z pominięciem `nowa`) i wykonałem wpis.
+- **Co się stało:** (a) żadna nowa opłata nie powstała po odmowie. (b) sprawa przyjęta bez
+  żądającego, odpowiedź `POST .../wpisz` zawierała `"oplata": null` — zero opłat naliczonych za
+  wpis z urzędu.
+- **Co powinno się stać:** dokładnie to, co się stało — art. 300³⁴ § 2 KSH (zajęcie wolne od
+  opłat, bez żądania) i ogólna zasada „opłata za DOKONANY wpis”, nie za samo złożenie/rozpatrzenie
+  żądania.
+- **Podstawa:** checklista sesji („Odmowa wpisu (...) Nie powinno [naliczać]”; „Zajęcie egzekucyjne
+  (...) wolne od opłat (...) Sprawdź, że aplikacja nie nalicza niczego i nie wymaga żądania”).
+  `PRZEPISY-PSA.md` § 9, art. 300³⁴ § 2 KSH.
+- **Waga:** POZYTYWNE.
+
+## Z-107 [POZYTYWNE] — rok prowadzenia rejestru liczony konsekwentnie od rocznicy otwarcia
+rejestru (nie kalendarzowo); mechanizm rocznicowy jest sam w sobie idempotentny
+
+- **Co zrobiłem:** (a) zweryfikowałem bezpośrednio funkcję `oplaty.okresProwadzenia("2025-12-20", 1)`
+  (czysta funkcja z `server/oplaty.js`, bez zapisu do bazy) — data otwarcia rejestru 20 grudnia; (b)
+  na spółce `6` (opłata `prowadzenie` już istniejąca za okres `2026-09-17`–`2027-09-16`) wywołałem
+  `POST /api/psa/oplaty/odnowienia {"dni":365}` DWUKROTNIE pod rząd.
+- **Co się stało:** (a) `{"od":"2025-12-20","do":"2026-12-19","etykieta":"2025/2026"}` — JEDNA
+  opłata 1200 zł pokrywająca cały rok od 20 grudnia do 19 grudnia następnego roku, NIE osobno za
+  „rozpoczęty” grudzień i osobno za styczeń nowego roku kalendarzowego. (b) pierwsze wywołanie
+  naliczyło dokładnie jedną nową opłatę (kolejny rok, `okres: "2027/2028"`), drugie identyczne
+  wywołanie: `"naliczone":0,"pominiete":0` — brak duplikatu. Posprzątałem: opłata z testu (b),
+  id 20, oznaczona `anulowana` (nie była jeszcze wymagalna — powstała tylko dzięki sztucznie dużemu
+  oknu `dni:365` użytemu do testu).
+- **Co powinno się stać:** dokładnie to, co się stało — § 15b pkt 1 rozporządzenia mówi „za każdy
+  rozpoczęty rok”, nie „za każdy rozpoczęty rok kalendarzowy”.
+- **Podstawa:** checklista sesji („Rok rozpoczęty. Zawrzyj umowę z datą 20 grudnia (...) Sprawdź,
+  czy rok liczony jest kalendarzowo, czy od daty umowy”; „Czy naliczenie roczne jest
+  idempotentne — uruchom je dwa razy”).
+- **Waga:** POZYTYWNE — w kontraście z Z-100, gdzie ten sam mechanizm rocznicowy jest poprawny SAM
+  W SOBIE, ale nie chroni przed równoległym mechanizmem kalendarzowym operującym na tej samej
+  tabeli.
+
+## Z-108 [POWAŻNY] — spółki zakładane wewnętrznym kreatorem kancelarii (z pominięciem wniosku
+portalowego) nigdy nie dostają automatycznie naliczonej opłaty za prowadzenie rejestru — ani przy
+otwarciu, ani później
+
+- **Co zrobiłem:** założyłem nową spółkę WYŁĄCZNIE przez `POST /api/psa/spolki/` (bez żadnego
+  wniosku portalowego), z `data_otwarcia_rejestru: "2025-12-20"`, i otworzyłem jej rejestr przez
+  `POST /api/psa/spolki/10/otworz-rejestr` z dwoma zdarzeniami założycielskimi (emisja 50 akcji +
+  objęcie przez jednego akcjonariusza). Osobno sprawdziłem stan opłat spółek `1`–`5` (już istniejące
+  w bazie testowej, też założone bez `data_otwarcia_rejestru`/bez wniosku — sądząc po `otwarcie:
+  null` na liście spółek).
+- **Co się stało:** po otwarciu rejestru spółki `10` (2 zdarzenia w łańcuchu, akcjonariusz wpisany)
+  `GET /api/psa/oplaty/?spolka_id=10` zwróciło ZERO opłat. Spółki `1`–`5` miały ZERO opłat typu
+  `prowadzenie` przed moim testem z Z-100 (dopiero mój — potem anulowany — kalendarzowy
+  `naliczenie-roczne` cokolwiek im naliczył). Przyczyna: `naliczPierwszyRok` (jedyny automatyczny
+  „starter” opłaty rocznicowej) jest wołany WYŁĄCZNIE z `server/trasy/wnioski.js:820`, czyli tylko
+  przy przyjęciu wniosku ZŁOŻONEGO PRZEZ PORTAL. Ścieżka „kancelaria zakłada spółkę i otwiera jej
+  rejestr ręcznie" (`spolki.js` + `otworz-rejestr`) nigdy tej funkcji nie woła. A skoro
+  `okresyDoOdnowienia`/`/odnowienia` (mechanizm przypomnień i automatycznego naliczania KOLEJNYCH
+  lat) wymaga JUŻ ISTNIEJĄCEGO wiersza `prowadzenie` z wypełnionym `okres_od`/`okres_do`, żeby
+  policzyć „następny okres" — dla takiej spółki nie odpali się NIGDY, nawet w kolejnych latach,
+  chyba że ktoś ręcznie doda pierwszą opłatę PRZEZ WYWOŁANIE NIEDOSTĘPNEJ Z ZEWNĄTRZ funkcji
+  `naliczOkresProwadzenia` (jedyna droga „ręczna" — `POST /api/psa/oplaty/` z `dodajOplateReczna` —
+  zapisuje `okres` jako tekst, ale NIGDY `okres_od`/`okres_do`, więc i tak nie wejdzie do
+  mechanizmu odnowień).
+- **Co powinno się stać:** albo `POST /:id/otworz-rejestr` powinno też naliczać pierwszy rok
+  prowadzenia (analogicznie do `wnioski.js:820`), albo powinien istnieć jawny, osobny przycisk/
+  endpoint „nalicz pierwszy rok prowadzenia" dla spółek zakładanych ręcznie, dostępny z poziomu
+  kokpitu spółki — żeby nie polegać na tym, że pracownik PAMIĘTA o ręcznym wystawieniu pierwszej
+  opłaty i wpisaniu jej w sposób zgodny z mechanizmem odnowień (co dziś nie jest w ogóle możliwe
+  przez żaden dostępny endpoint).
+- **Podstawa:** checklista sesji, punkt „Otwarcie rejestru (...) Ile opłat naliczono?" — zbadany tu
+  dla DRUGIEJ, mniej oczywistej ścieżki zakładania spółki (patrz też pytanie P-007 poniżej dla
+  ścieżki wniosku portalowego, gdzie naliczana jest dokładnie jedna opłata `prowadzenie`, zero
+  opłat `wpis`).
+- **Waga:** POWAŻNY. To odwrotność Z-100/Z-101 — nie „zawyżenie", tylko cichy, systemowy brak
+  naliczenia, zależny wyłącznie od tego, KTÓRĄ z dwóch ścieżek zakładania spółki wybrał pracownik.
+  Realne ryzyko utraty przychodu kancelarii, bez żadnego sygnału ostrzegawczego w UI.
+
+## Z-109 [DROBNY] — pole `okres` przy ręcznym wpisie opłaty typu `prowadzenie` nie jest w ogóle
+walidowane formatem, w przeciwieństwie do endpointu `/naliczenie-roczne`
+
+- **Co zrobiłem:** przejrzałem `server/trasy/oplaty.js` — trasa `POST /` sprawdza tylko, że
+  `cialo.okres` jest „prawdziwe" (`if (typ === 'prowadzenie' && !cialo.okres)`), bez żadnego
+  dopasowania do wzorca roku. Endpoint `/naliczenie-roczne` obok wymaga `^\d{4}$`.
+- **Co się stało:** (analiza kodu, bez dodatkowego żądania — pochodna Z-100/Z-109 nie wymagała
+  osobnego testu) — pracownik może ręcznie wpisać `okres` w dowolnym formacie (np. `"rok 2026"`,
+  `" 2026 "`, `"2026/2027 (dodatkowo)"`), co jeszcze bardziej utrudnia późniejsze dopasowanie do
+  istniejących opłat rocznicowych (pogłębia ryzyko z Z-100, bo zwiększa liczbę możliwych,
+  wzajemnie niedopasowanych zapisów tego samego roku).
+- **Co powinno się stać:** walidacja formatu `okres` przy ręcznym wpisie, analogiczna do
+  `/naliczenie-roczne`, ewentualnie z ostrzeżeniem, jeśli podobny `okres` już istnieje dla tej
+  spółki.
+- **Podstawa:** spójność walidacji między dwoma endpointami operującymi na tym samym polu.
+- **Waga:** DROBNY.
