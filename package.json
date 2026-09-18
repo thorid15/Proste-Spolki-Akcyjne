@@ -9,7 +9,8 @@
     "start": "node serwer.js",
     "dev": "node --watch serwer.js",
     "test": "node --test \"testy/*.test.js\"",
-    "scenariusz": "node narzedzia/scenariusz-e2e.js"
+    "scenariusz": "node narzedzia/scenariusz-e2e.js",
+    "dokumentacja": "node narzedzia/dokumentacja-baza.js && node narzedzia/dokumentacja-endpointy.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
