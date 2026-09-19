@@ -181,7 +181,8 @@ router.get(
 // ─────────────────────────────────────────────────────────────
 // Zgloszenie wstepne (etap 3A) - PUBLICZNE, bez zadnej sesji. Pierwszy
 // kontakt nieznanego dotad klienta: wylacznie dane kontaktowe, zadnego
-// PESEL ani adresu. Kancelaria decyduje, czy wyslac zaproszenie (etap 3B).
+// PESEL ani adresu. Zaproszenie do portalu (etap 3B) wychodzi automatycznie
+// i od razu - patrz komentarz przy `zapros.wyslij()` nizej.
 // ─────────────────────────────────────────────────────────────
 
 const WZORZEC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -309,10 +310,11 @@ router.post(
 );
 
 // ─────────────────────────────────────────────────────────────
-// Aktywacja konta (etap 3B) - PUBLICZNE, bez sesji. Kancelaria zaklada
-// konto (rola 'wnioskodawca', aktywne=0) po zaakceptowaniu zgloszenia
-// (`server/trasy/zgloszenia.js: POST /:id/zapros`) i wysyla token mailem -
-// klient go tu wymienia na haslo i od razu ma otwarta sesje portalowa.
+// Aktywacja konta (etap 3B) - PUBLICZNE, bez sesji. Konto (rola
+// 'wnioskodawca', aktywne=0) i token aktywacyjny powstaja automatycznie
+// w chwili zgloszenia (`POST /zgloszenia` wyzej, `zapros.wyslij()`) albo
+// przy ponownej wysylce (`server/trasy/zgloszenia.js: POST /:id/zapros`) -
+// klient token tu wymienia na haslo i od razu ma otwarta sesje portalowa.
 // ─────────────────────────────────────────────────────────────
 
 function znajdzKontoDoAktywacji(token) {
