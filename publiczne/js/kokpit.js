@@ -621,9 +621,9 @@ function EkranKokpitu({ spolkaId }) {
             <button
               className="btn"
               onClick={() => idz(`/spolki/${spolkaId}/migracja`)}
-              title="Wprowadzenie stanu przeniesionego z innego rejestru (np. Rejestrów Notarialnych), z datami historycznymi."
+              title="WYŁĄCZNIE dla spółki przenoszonej z innego rejestru (np. Rejestrów Notarialnych), z datami historycznymi z przeszłości. Nowa spółka (w tym z przyjętego wniosku portalowego) otwiera rejestr przez przycisk „Otwórz rejestr” w kreatorze, nie tędy."
             >
-              Migracja — stan otwarcia
+              Migracja z innego rejestru — stan otwarcia
             </button>
           )}
         </div>

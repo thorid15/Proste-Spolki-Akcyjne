@@ -279,6 +279,10 @@ function Aplikacja() {
       const id = Number(segmenty[1]);
       if (!Number.isInteger(id)) return <NieZnaleziono />;
       if (segmenty.length === 2) return <EkranKokpitu spolkaId={id} />;
+      // Naprawa Z-005: dokonczenie otwarcia rejestru dla spolki juz
+      // zalozonej (np. z przyjetego wniosku portalowego) - ten sam kreator
+      // co nowa spolka, wystartowany od razu na kroku akcjonariatu.
+      if (segmenty[2] === 'otworz') return <EkranOtwarciaRejestru spolkaId={id} />;
       if (segmenty[2] === 'zdarzenie') {
         // Przejście EMISJA → OBJĘCIE: typ i seria przychodzą z ekranu wyniku
         // wpisu emisji, żeby nie zakładać sprawy „od zera" (sprawy.js).

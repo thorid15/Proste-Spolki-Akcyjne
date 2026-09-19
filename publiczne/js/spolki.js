@@ -161,9 +161,22 @@ function PozycjaZalozycielska({ pozycja, ustawPozycje, usun, mozna_usunac, wyklu
   );
 }
 
-function EkranNowejSpolki() {
-  const [krok, ustawKrok] = useState(0);
-  const [dane, ustawDane] = useState(PUSTA_SPOLKA);
+/**
+ * Naprawa Z-005: spółka z portalu ma trafiać na TEN SAM ekran otwarcia
+ * rejestru (checklista 10 punktów + krok akcjonariatu), co spółka zakładana
+ * wewnętrznie — dotąd po przyjęciu wniosku pracownik lądował w zwykłym
+ * kokpicie i musiał sam wiedzieć, że "Dodaj akcjonariusza" tam nie przechodzi
+ * przez żadną checklistę. `spolkaIstniejaca` (pełny rekord z `GET /:id`,
+ * rola kancelaria) uruchamia kreator od razu na kroku 2 — dane spółki i
+ * umowy są już w bazie (formularz wniosku je zebrał), więc kroki 0-1 nie
+ * mają czego pytać ponownie. Liczby akcji per akcjonariusz NIE dają się
+ * przenieść z wniosku — `psa_wnioski_akcjonariusze` ich nie przechowuje
+ * (formularz klienta zbiera tożsamość, nie kapitał) — pracownik wpisuje je
+ * tu samodzielnie, tak jak przy spółce zakładanej wewnętrznie.
+ */
+function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
+  const [krok, ustawKrok] = useState(spolkaIstniejaca ? 2 : 0);
+  const [dane, ustawDane] = useState(spolkaIstniejaca ? { ...PUSTA_SPOLKA, ...spolkaIstniejaca } : PUSTA_SPOLKA);
   const [surowyJson, ustawSurowyJson] = useState(null);
   const [pokazJson, ustawPokazJson] = useState(false);
   const [skladOrganu, ustawSkladOrganu] = useState([]);
@@ -198,7 +211,7 @@ function EkranNowejSpolki() {
   }, [dane.data_zawarcia_umowy_spolki]);
 
   const [odhaczone, ustawOdhaczone] = useState({});
-  const [spolkaId, ustawSpolkaId] = useState(null);
+  const [spolkaId, ustawSpolkaId] = useState(spolkaIstniejaca ? spolkaIstniejaca.id : null);
   const [zapisywanie, ustawZapisywanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
 
@@ -395,14 +408,21 @@ function EkranNowejSpolki() {
   return (
     <>
       <div className="okruszki">
-        <button onClick={() => idz('/spolki')}>Spółki</button> → nowa spółka
+        <button onClick={() => idz('/spolki')}>Spółki</button>
+        {' → '}
+        {spolkaIstniejaca ? (
+          <button onClick={() => idz(`/spolki/${spolkaIstniejaca.id}`)}>{spolkaIstniejaca.nazwa}</button>
+        ) : 'nowa spółka'}
+        {spolkaIstniejaca && ' → otwarcie rejestru'}
       </div>
       <div className="pasek-gorny">
         <div>
-          <div className="tytul-strony">Nowa spółka</div>
+          <div className="tytul-strony">{spolkaIstniejaca ? `Otwarcie rejestru — ${dane.nazwa}` : 'Nowa spółka'}</div>
           <div className="podtytul-strony">
-            Rejestr prowadzimy wyłącznie dla prostych spółek akcyjnych — art. 300(31) § 1 KSH.
-            Spółka w chwili powstania ma już akcje — kreator odzwierciedla to od razu.
+            {spolkaIstniejaca
+              ? 'Spółka i akcjonariusze są już w kartotece (wniosek z portalu) — dokończ otwarcie rejestru: wpisz akcjonariat założycielski i przejdź checklistę.'
+              : 'Rejestr prowadzimy wyłącznie dla prostych spółek akcyjnych — art. 300(31) § 1 KSH. ' +
+                'Spółka w chwili powstania ma już akcje — kreator odzwierciedla to od razu.'}
           </div>
         </div>
       </div>
@@ -815,6 +835,19 @@ function EkranNowejSpolki() {
   );
 }
 
+/**
+ * Naprawa Z-005 — wejście do kreatora (krok 2, "otwarcie rejestru") dla
+ * spółki, która już istnieje w kartotece (przyjęty wniosek z portalu).
+ * Pobiera pełny rekord tak jak kokpit (`GET /:id`, rola kancelaria
+ * domyślna — bez maskowania) i dopiero z nim montuje `EkranNowejSpolki`.
+ */
+function EkranOtwarciaRejestru({ spolkaId }) {
+  const { dane, ladowanie, blad } = useDane(`/api/psa/spolki/${spolkaId}`);
+  if (ladowanie) return <Spinner />;
+  if (blad || !dane) return <Komunikat odmiana="blad" tresc={blad ? blad.message : 'Nie odnaleziono spółki.'} />;
+  return <EkranNowejSpolki spolkaIstniejaca={dane.spolka} />;
+}
+
 function EkranSpolek() {
   const [szukaj, ustawSzukaj] = useState('');
   const [zapytanie, ustawZapytanie] = useState('');
@@ -938,3 +971,4 @@ function EkranSpolek() {
 
 window.EkranSpolek = EkranSpolek;
 window.EkranNowejSpolki = EkranNowejSpolki;
+window.EkranOtwarciaRejestru = EkranOtwarciaRejestru;

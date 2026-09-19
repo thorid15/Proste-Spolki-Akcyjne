@@ -1376,7 +1376,7 @@ function KrokDecyzja({ wniosek, akcjonariusze, dokumenty, zablokowane, odswiez }
       const wynik = await API.post(`/api/psa/wnioski/${wniosek.id}/przyjmij`, {});
       odswiez();
       if (wynik.spolka_id) {
-        window.alert('Wniosek przyjęty. Spółka i akcjonariusze założeni w kartotece — dokończ otwarcie rejestru (emisja założycielska) w kokpicie spółki.');
+        window.alert('Wniosek przyjęty. Spółka i akcjonariusze założeni w kartotece — dokończ otwarcie rejestru (emisja założycielska i checklista) na ekranie poniżej.');
       }
     } catch (e) {
       ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się przyjąć wniosku.');
@@ -1533,7 +1533,7 @@ function EkranWniosekSzczegoly({ wniosekId }) {
       {wniosek.spolka_id && (
         <Komunikat
           odmiana="ok"
-          tresc={<>Wniosek dowiązany do spółki w kartotece. <a href={`#/spolki/${wniosek.spolka_id}`}>Otwórz kokpit spółki</a>, żeby dokończyć otwarcie rejestru.</>}
+          tresc={<>Wniosek dowiązany do spółki w kartotece. <a href={`#/spolki/${wniosek.spolka_id}/otworz`}>Dokończ otwarcie rejestru</a> — ta sama checklista, co przy spółce zakładanej wewnętrznie (Z-005).</>}
         />
       )}
 
