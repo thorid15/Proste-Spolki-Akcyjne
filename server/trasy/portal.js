@@ -1322,6 +1322,29 @@ router.get(
       odbiorcaOsobaId: zad.konto.osoba_id,
     });
     if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
+
+    // Naprawa Z-152/P-009: to jedyny ekran portalu, na ktorym rola "spolka"
+    // widzi PESEL/adres wspolakcjonariuszy w calosci (art. 300(35) KSH) - bez
+    // wpisu do dziennika taki wglad byl niewidoczny po fakcie. `zamaskowane`
+    // z `zamaskujOsobe` odpowiada na szersze pytanie ("cokolwiek ukryte" -
+    // ustawia je juz samo ukrycie AML/PEP), stad osobny, wezszy test na
+    // POLA_WRAZLIWE. Wlasne dane odbiorcy (widziane bez maskowania z
+    // definicji) sie nie licza - nie ma tu wgladu w CUDZE dane wrazliwe.
+    const rolaOdp = rolaOdbioru(zad.konto);
+    const osobyZWrazliwymiDanymi = maskowanie.widziWrazliweDaneInnych(rolaOdp)
+      ? new Set(
+        stan.akcjonariusze
+          .filter((a) => a.osoba && a.osoba_id !== zad.konto.osoba_id)
+          .map((a) => a.osoba_id)
+      )
+      : new Set();
+    dziennikDostepu.zapiszOdczytRejestruPortalu(db(), {
+      kto: `Portal — ${zad.konto.email}`,
+      spolkaId,
+      liczbaOsob: osobyZWrazliwymiDanymi.size,
+      zamaskowane: osobyZWrazliwymiDanymi.size === 0,
+    });
+
     odp.json(stan);
   })
 );

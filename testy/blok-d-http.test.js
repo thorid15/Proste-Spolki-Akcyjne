@@ -322,3 +322,87 @@ test('D4: pobranie pliku wystawionego dokumentu (kancelaria) zostawia slad w dzi
   assert.equal(wpis.akcja, 'pobranie_pliku');
   assert.equal(wpis.spolka_id, Number(spolkaId));
 });
+
+/**
+ * Naprawa Z-152/P-009: zwykly odczyt "Rejestr" przez rola "spolka" widzi
+ * PESEL/adres wspolakcjonariuszy w calosci (art. 300(35) KSH) - w polaczeniu
+ * z Z-150 to jedyny ekran portalu, na ktorym KLIENT (nie kancelaria) moze
+ * zobaczyc dane wrazliwe innej osoby. Musi zostac slad, ale bez zalewania
+ * dziennika przy kazdym odswiezeniu.
+ */
+test('D4: odczyt rejestru przez role "spolka" (dane niezamaskowane) zostawia JEDEN slad na 15 minut', async () => {
+  const spolkaId = Number(
+    db()
+      .prepare(`INSERT INTO psa_spolki (nazwa, forma_prawna, status, utworzono) VALUES (?, 'PROSTA SPÓŁKA AKCYJNA', 'aktywna', ?)`)
+      .run('Odczyt Rejestru Spolka P.S.A.', czas.terazIso()).lastInsertRowid
+  );
+  const osobaId = Number(
+    db()
+      .prepare(`INSERT INTO psa_osoby (typ, nazwisko, imie, pesel, aml_status, utworzono) VALUES ('fizyczna', 'Wrazliwy', 'Jan', '90010112345', 'wykonane', ?)`)
+      .run(czas.terazIso()).lastInsertRowid
+  );
+  const emisja = rejestr.dokonajWpisu(db(), {
+    spolkaId, typ: 'emisja', data_zdarzenia: '2026-01-10',
+    wejscie: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
+  });
+  rejestr.dokonajWpisu(db(), {
+    spolkaId, typ: 'objecie', data_zdarzenia: '2026-01-10',
+    wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: osobaId, ilosc: 100 }] }, autor: 'Test',
+  });
+
+  const hash = await hasla.hashuj('HasloTestowe123');
+  const email = `spolka-odczyt-${Date.now()}@example.pl`;
+  db()
+    .prepare(`INSERT INTO psa_konta (email, hash_hasla, rola, spolka_id, aktywne, utworzono) VALUES (?, ?, 'spolka', ?, 1, ?)`)
+    .run(email, hash, spolkaId, czas.terazIso());
+  const odpLogin = await fetch(`${baza}/api/psa/portal/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, haslo: 'HasloTestowe123' }),
+  });
+  const ciastkoSpolka = ciasteczkoZOdpowiedzi(odpLogin);
+
+  const liczbaPrzed = db().prepare('SELECT COUNT(*) AS n FROM psa_dziennik_dostepu').get().n;
+
+  const [status] = await zapytajJako(ciastkoSpolka, 'GET', `/api/psa/portal/rejestr/${spolkaId}`);
+  assert.equal(status, 200);
+  const wpis = ostatniWpisDziennika();
+  assert.equal(wpis.typ_kto, 'portal');
+  assert.equal(wpis.spolka_id, spolkaId);
+  assert.equal(wpis.akcja, 'odczyt_rejestru');
+  assert.match(wpis.opis, /1 osoby/);
+
+  // Cztery kolejne odczyty w tym samym oknie - zaden nowy wpis.
+  for (let i = 0; i < 4; i += 1) {
+    await zapytajJako(ciastkoSpolka, 'GET', `/api/psa/portal/rejestr/${spolkaId}`);
+  }
+  const liczbaPo = db().prepare('SELECT COUNT(*) AS n FROM psa_dziennik_dostepu').get().n;
+  assert.equal(liczbaPo, liczbaPrzed + 1, 'piec odczytow w 15 minut daje jeden wpis');
+
+  // Dziennik jest append-only - nawet SQL wprost nie moze go zmienic.
+  assert.throws(() => db().prepare('UPDATE psa_dziennik_dostepu SET opis = ? WHERE id = ?').run('zmienione', wpis.id));
+  assert.throws(() => db().prepare('DELETE FROM psa_dziennik_dostepu WHERE id = ?').run(wpis.id));
+});
+
+test('D4: odczyt rejestru przez role "akcjonariusz" (dane w pelni zamaskowane) nie zostawia sladu', async () => {
+  const { spolkaAId, ciastkoA } = await przygotujDwieSpolki();
+  // Drugi akcjonariusz w tej samej spolce - to jego dane bylyby zamaskowane
+  // wobec pierwszego, gdyby w ogole byly widoczne (rola akcjonariusza widzi
+  // wylacznie tozsamosc wspolakcjonariuszy, art. 300(35) § 1(1) KSH).
+  const drugiId = db()
+    .prepare(`INSERT INTO psa_osoby (typ, nazwisko, imie, pesel, aml_status, utworzono) VALUES ('fizyczna', 'Drugi', 'Adam', '85030512345', 'wykonane', ?)`)
+    .run(czas.terazIso()).lastInsertRowid;
+  const emisja = rejestr.dokonajWpisu(db(), {
+    spolkaId: spolkaAId, typ: 'emisja', data_zdarzenia: '2026-02-10',
+    wejscie: { seria: 'B', ilosc: 50, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
+  });
+  rejestr.dokonajWpisu(db(), {
+    spolkaId: spolkaAId, typ: 'objecie', data_zdarzenia: '2026-02-10',
+    wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: Number(drugiId), ilosc: 50 }] }, autor: 'Test',
+  });
+
+  const liczbaPrzed = db().prepare('SELECT COUNT(*) AS n FROM psa_dziennik_dostepu').get().n;
+  const [status] = await zapytajJako(ciastkoA, 'GET', `/api/psa/portal/rejestr/${spolkaAId}`);
+  assert.equal(status, 200);
+  const liczbaPo = db().prepare('SELECT COUNT(*) AS n FROM psa_dziennik_dostepu').get().n;
+  assert.equal(liczbaPo, liczbaPrzed, 'wlasne dane akcjonariusza plus zamaskowane dane innych nie sa warte wpisu');
+});

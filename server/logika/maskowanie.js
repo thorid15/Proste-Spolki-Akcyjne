@@ -85,4 +85,17 @@ function jawnyIdentyfikator(osoba) {
   return null;
 }
 
-module.exports = { ZASLONA, zamaskujOsobe, oznaczenieOsoby, jawnyIdentyfikator };
+/**
+ * Czy biala lista danej roli w ogole ujawnia POLA_WRAZLIWE (PESEL, data
+ * urodzenia, adres) cudzych osob - Z-152/P-009: `zamaskowane` z
+ * `zamaskujOsobe` mowi "cokolwiek zostalo ukryte" (np. samo AML/PEP dla
+ * roli "spolka" tez to ustawia), a dziennik dostepu ma odpowiadac na
+ * WEZSZE pytanie: czy dane WRAZLIWE wyszly niezamaskowane.
+ */
+function widziWrazliweDaneInnych(rola) {
+  const lista = przepisy.BIALE_LISTY[rola];
+  if (lista === null) return true;
+  return przepisy.POLA_WRAZLIWE.some((pole) => lista.includes(pole));
+}
+
+module.exports = { ZASLONA, zamaskujOsobe, oznaczenieOsoby, jawnyIdentyfikator, widziWrazliweDaneInnych };

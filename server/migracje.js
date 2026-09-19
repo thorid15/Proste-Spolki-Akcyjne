@@ -2022,6 +2022,28 @@ const MIGRACJE = [
       ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_oswiadczenie_data TEXT;
     `,
   },
+
+  {
+    wersja: 50,
+    nazwa: 'dziennik dostepu: wyzwalacz append-only (naprawa Z-152/P-009)',
+    sql: `
+      -- Dziennik, ktory da sie edytowac, nie jest dowodem - ten sam
+      -- argument i ten sam wzorzec co przy psa_zdarzenia (migracja 1).
+      CREATE TRIGGER IF NOT EXISTS psa_dziennik_dostepu_bez_update
+      BEFORE UPDATE ON psa_dziennik_dostepu
+      BEGIN
+        SELECT RAISE(ABORT,
+          'psa_dziennik_dostepu jest append-only — wpisow dziennika nie edytuje sie.');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS psa_dziennik_dostepu_bez_delete
+      BEFORE DELETE ON psa_dziennik_dostepu
+      BEGIN
+        SELECT RAISE(ABORT,
+          'psa_dziennik_dostepu jest append-only — wpisow dziennika nie usuwa sie.');
+      END;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
