@@ -78,6 +78,18 @@ const POLA_REJESTROWE = [
   'dodatkowe_informacje_umowa_spolki',
 ];
 
+/**
+ * Naprawa Z-009/P-005 — `data_umowy`/`umowe_zawarl*` NIE sa trescia rejestru
+ * (patrz komentarz przy POLA_REJESTROWE), wiec ich zmiana nie idzie przez
+ * `zmiana_danych_spolki` w tym samym trybie co art. 300(33) KSH. Ale gdy
+ * rejestr jest juz OTWARTY (`data_otwarcia_rejestru` ustawione — Z-019,
+ * naprawa Z-108), te pola opisuja fakt juz wykorzystany do otwarcia: cicha
+ * podmiana bez sladu wygladalaby, jakby rejestr powstal na podstawie innej
+ * umowy, niz naprawde. Po otwarciu ich zmiana wiec TEZ zostawia zdarzenie -
+ * przed otwarciem to nadal zwykla korekta roboczego formularza (kreator).
+ */
+const POLA_UMOWY_PO_OTWARCIU = ['data_umowy', 'umowe_zawarl', 'umowe_zawarl_imie_nazwisko'];
+
 function wyczysc(cialo) {
   const wynik = {};
   for (const pole of POLA_SPOLKI) {
@@ -376,10 +388,17 @@ router.put(
         )
         .run({ ...dane, id, zaktualizowano: czas.terazIso() });
 
-      // Zdarzenie zapisujemy tylko dla pol bedacych trescia rejestru -
-      // zmiana wewnetrznych `uwagi` nie jest czynnoscia rejestrowa.
+      // Zdarzenie zapisujemy dla pol bedacych trescia rejestru (art. 300(33)
+      // KSH), a takze - Z-009/P-005 - dla danych umowy o prowadzenie
+      // rejestru, gdy rejestr jest juz otwarty (patrz POLA_UMOWY_PO_OTWARCIU
+      // wyzej). Zmiana wewnetrznych `uwagi` ani korekta danych umowy PRZED
+      // otwarciem nie zostawia zdarzenia - to jeszcze robocza edycja.
       const rejestrowe = zmienione.filter((p) => POLA_REJESTROWE.includes(p));
-      if (rejestrowe.length === 0) return null;
+      const umowaPoOtwarciu = biezaca.data_otwarcia_rejestru
+        ? zmienione.filter((p) => POLA_UMOWY_PO_OTWARCIU.includes(p))
+        : [];
+      const doZdarzenia = [...rejestrowe, ...umowaPoOtwarciu];
+      if (doZdarzenia.length === 0) return null;
 
       return rejestr.zapiszZdarzenie(db(), {
         spolka_id: id,
@@ -387,9 +406,9 @@ router.put(
         data_zdarzenia: czas.dzisIso(),
         autor: kto,
         dane: {
-          przed: Object.fromEntries(rejestrowe.map((p) => [p, biezaca[p] ?? null])),
-          po: Object.fromEntries(rejestrowe.map((p) => [p, dane[p] ?? null])),
-          zmienione_pola: rejestrowe,
+          przed: Object.fromEntries(doZdarzenia.map((p) => [p, biezaca[p] ?? null])),
+          po: Object.fromEntries(doZdarzenia.map((p) => [p, dane[p] ?? null])),
+          zmienione_pola: doZdarzenia,
           podstawa_opis: zad.body?.podstawa_opis || null,
         },
       });
