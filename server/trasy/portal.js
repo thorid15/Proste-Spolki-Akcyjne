@@ -51,6 +51,7 @@ const czas = require('../pomocnicze/czas');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien, BladZadania } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
 const { pobierzZKrs } = require('./krs');
+const osobyModul = require('./osoby');
 
 const router = express.Router();
 
@@ -1346,6 +1347,116 @@ router.get(
     });
 
     odp.json(stan);
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Skan dokumentu AML — samodzielne wgranie przez akcjonariusza (P-012)
+//
+// Dotad jedyna droga do skanu dokumentu tozsamosci byla `POST
+// /api/psa/osoby/:id/aml-skany`, za `wymagajPracownika` — dokument i tak
+// krazyl mailem (najslabszym kanalem w calym procesie), zanim pracownik
+// go tam wgral. Ten endpoint pozwala akcjonariuszowi wgrac WYLACZNIE
+// WLASNY skan, ten sam rezim hasha/retencji/miejsca na dysku co kartoteka
+// pracownika (`trasy/osoby.js`) — obie drogi skladaja sie w JEDNA liste.
+// ─────────────────────────────────────────────────────────────
+
+const uploadWlasnegoSkanuAml = multer({
+  storage: multer.diskStorage({
+    destination(zad, plik, wywolaj) {
+      const katalog = osobyModul.katalogSkanowAml(zad.konto.osoba_id);
+      fs.mkdirSync(katalog, { recursive: true });
+      wywolaj(null, katalog);
+    },
+    filename(zad, plik, wywolaj) {
+      const bezpiecznaNazwa = path.basename(plik.originalname).replace(/[^\w.\- ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/gu, '_');
+      wywolaj(null, `${crypto.randomUUID()}-${bezpiecznaNazwa}`);
+    },
+  }),
+  limits: { fileSize: osobyModul.LIMIT_ROZMIARU_SKANU_AML_BAJTY, files: 1 },
+  fileFilter(zad, plik, wywolaj) {
+    const rozszerzenie = path.extname(plik.originalname).toLowerCase();
+    if (!osobyModul.ROZSZERZENIA_SKANU_AML_DOZWOLONE.has(rozszerzenie)) {
+      return wywolaj(new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Dozwolone: PDF, JPG, PNG.`));
+    }
+    wywolaj(null, true);
+  },
+});
+
+/** Wylacznie rola "akcjonariusz" ma wlasna osobe (i wlasny skan do wgrania). */
+function wymagajAkcjonariusza(zad, odp, dalej) {
+  if (zad.konto.rola !== 'akcjonariusz') {
+    return dalej(brakUprawnien('Tylko akcjonariusz może wgrać własny skan dokumentu.'));
+  }
+  dalej();
+}
+
+router.get(
+  '/aml-skany',
+  wymagajAkcjonariusza,
+  asy((zad, odp) => {
+    const skany = db()
+      .prepare(
+        `SELECT id, spolka_id, typ_dokumentu, nazwa_pliku, rozmiar, retencja_do, utworzono
+           FROM psa_osoby_skany_aml WHERE osoba_id = ? ORDER BY utworzono DESC`
+      )
+      .all(zad.konto.osoba_id);
+    odp.json({ skany });
+  })
+);
+
+router.post(
+  '/aml-skany/:spolkaId',
+  wymagajAkcjonariusza,
+  // Kolejnosc jak w trasy/osoby.js: multer NAJPIERW (destynacja pliku zalezy
+  // tylko od `zad.konto.osoba_id`, znanego juz z sesji), wlaczona procedura
+  // AML sprawdzana PO uploadzie - a gdy sie nie powiedzie, plik jest kasowany.
+  // Dostep do `:spolkaId` juz sprawdzony przez `router.param` wyzej.
+  (zad, odp, dalej) => uploadWlasnegoSkanuAml.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  asy((zad, odp) => {
+    const spolkaId = Number(zad.params.spolkaId);
+    const spolka = db().prepare('SELECT id, stosuje_procedure_aml FROM psa_spolki WHERE id = ?').get(spolkaId);
+    if (!spolka || !spolka.stosuje_procedure_aml) {
+      if (zad.file) fs.rm(zad.file.path, { force: true }, () => {});
+      throw bledneZadanie('Ta spółka nie ma włączonej procedury AML — skany dokumentów nie są zbierane.');
+    }
+    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    // Naprawa Z-253: kontrola SYGNATURY tresci, nie samego rozszerzenia -
+    // ten sam wymog co na kazdej innej trasie uploadu.
+    if (!pliki.trescPasuje(zad.file.path, pliki.typZNazwy(zad.file.originalname))) {
+      fs.rmSync(zad.file.path, { force: true });
+      throw bledneZadanie(`Treść pliku „${zad.file.originalname}" nie odpowiada jego rozszerzeniu. Prześlij PDF albo zdjęcie.`);
+    }
+    const typDokumentu = String((zad.body || {}).typ_dokumentu || 'inny');
+    if (!osobyModul.TYPY_DOKUMENTU_AML.includes(typDokumentu)) {
+      throw bledneZadanie(`Nieznany typ dokumentu: „${typDokumentu}”.`);
+    }
+
+    const hash = crypto.createHash('sha256').update(fs.readFileSync(zad.file.path)).digest('hex');
+    const wynik = db()
+      .prepare(
+        `INSERT INTO psa_osoby_skany_aml
+           (osoba_id, spolka_id, typ_dokumentu, nazwa_pliku, sciezka, mime, rozmiar, hash, wgral, utworzono)
+         VALUES (@osoba_id, @spolka_id, @typ_dokumentu, @nazwa_pliku, @sciezka, @mime, @rozmiar, @hash, @wgral, @utworzono)`
+      )
+      .run({
+        osoba_id: zad.konto.osoba_id,
+        spolka_id: spolkaId,
+        typ_dokumentu: typDokumentu,
+        nazwa_pliku: zad.file.originalname,
+        sciezka: path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path),
+        mime: zad.file.mimetype,
+        rozmiar: zad.file.size,
+        hash,
+        wgral: `Portal — ${zad.konto.email}`,
+        utworzono: czas.terazIso(),
+      });
+
+    odp.status(201).json({
+      skan: db()
+        .prepare('SELECT id, spolka_id, typ_dokumentu, nazwa_pliku, rozmiar, utworzono FROM psa_osoby_skany_aml WHERE id = ?')
+        .get(wynik.lastInsertRowid),
+    });
   })
 );
 

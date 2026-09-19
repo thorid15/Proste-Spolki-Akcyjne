@@ -106,6 +106,12 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'GET /zadania',
     'POST /login',
     'POST /logout',
+    // Naprawa P-012: samodzielne wgranie skanu AML przez akcjonariusza.
+    // `POST` niesie `:spolkaId` (kontekst procedury AML danej spolki) - D3
+    // chroni go automatycznie. `GET` (wlasna lista) dziala WYLACZNIE po
+    // `konto.osoba_id` z sesji, zadnego identyfikatora spolki nie przyjmuje.
+    'GET /aml-skany',
+    'POST /aml-skany/:spolkaId',
     // Etap 3A: publiczny formularz zgloszenia wstepnego, PRZED bramka
     // `wymagajKonta` (linia z komentarzem w portal.js) - swiadomie bez
     // identyfikatora spolki, bo w tym momencie zadna spolka jeszcze nie

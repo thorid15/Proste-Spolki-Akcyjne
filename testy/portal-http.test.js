@@ -423,6 +423,79 @@ test('akcjonariusz nie otworzy informacji wydanej SPOLCE', async () => {
   );
 });
 
+/**
+ * Naprawa P-012: dotad jedyna droga do skanu dokumentu tozsamosci byla
+ * `POST /api/psa/osoby/:id/aml-skany`, za `wymagajPracownika` - dokument i
+ * tak krazyl mailem, zanim pracownik go tam wgral. Ten test sprawdza nowy,
+ * portalowy kanal: WYLACZNIE wlasny skan, ten sam rezim co kartoteka.
+ */
+test('AML: akcjonariusz wgrywa WLASNY skan dokumentu, trafia do wspolnej kartoteki z pracownikiem', async () => {
+  const spolkaAmlId = dodajSpolke({ nazwa: `Portal AML ${czas.terazIso()}` });
+  db().prepare('UPDATE psa_spolki SET stosuje_procedure_aml = 1 WHERE id = ?').run(spolkaAmlId);
+  const osobaAmlId = dodajOsobe({ nazwisko: 'Skanowy', imie: 'Piotr', pesel: '90010112345' });
+  const emisjaAml = rejestr.dokonajWpisu(db(), {
+    spolkaId: spolkaAmlId, typ: 'emisja', data_zdarzenia: '2026-01-10',
+    wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
+  });
+  rejestr.dokonajWpisu(db(), {
+    spolkaId: spolkaAmlId, typ: 'objecie', data_zdarzenia: '2026-01-10',
+    wejscie: { emisja_zdarzenie_id: emisjaAml.zdarzenie.id, pozycje: [{ osoba_id: osobaAmlId, ilosc: 10 }] }, autor: 'Test',
+  });
+  await dodajKonto({ email: 'skanowy@example.pl', haslo: 'HasloPiotra123', rola: 'akcjonariusz', osobaId: osobaAmlId });
+  const ciastkoSkanowy = await zalogujPortal('skanowy@example.pl', 'HasloPiotra123');
+
+  // Rola "spolka" nie ma wlasnej osoby - nie ma czyjego skanu wgrac.
+  const odmowaRoli = await fetch(`${baza}/api/psa/portal/aml-skany`, { headers: { Cookie: ciastkoSpolka } });
+  assert.equal(odmowaRoli.status, 403);
+
+  // Zla koncowka pliku jest odrzucona (ten sam rezim co kartoteka pracownika).
+  const zlaKoncowka = new FormData();
+  zlaKoncowka.append('plik', new Blob(['x'], { type: 'text/plain' }), 'notatka.txt');
+  const odpZlaKoncowka = await fetch(`${baza}/api/psa/portal/aml-skany/${spolkaAmlId}`, {
+    method: 'POST', headers: { Cookie: ciastkoSkanowy }, body: zlaKoncowka,
+  });
+  assert.equal(odpZlaKoncowka.status, 400);
+
+  // Spolka bez wlaczonej procedury AML - odmowa, tak jak w kartotece pracownika.
+  const formularzBezAml = new FormData();
+  formularzBezAml.append('plik', new Blob(['%PDF-1.4\nx'], { type: 'application/pdf' }), 'dowod.pdf');
+  const odpBezAml = await fetch(`${baza}/api/psa/portal/aml-skany/${spolkaId}`, {
+    method: 'POST', headers: { Cookie: ciastkoAkcjonariusz }, body: formularzBezAml,
+  });
+  assert.equal(odpBezAml.status, 400, 'spolkaId nalezy do Kowalskiego, ale nie ma wlaczonej procedury AML');
+
+  // Spolka, w ktorej ten akcjonariusz NIE ma akcji - D3, 404.
+  const formularzCudza = new FormData();
+  formularzCudza.append('plik', new Blob(['%PDF-1.4\nx'], { type: 'application/pdf' }), 'dowod.pdf');
+  const odpCudza = await fetch(`${baza}/api/psa/portal/aml-skany/${spolkaAmlId}`, {
+    method: 'POST', headers: { Cookie: ciastkoAkcjonariusz }, body: formularzCudza,
+  });
+  assert.equal(odpCudza.status, 404, 'Kowalski nie ma akcji w tej spolce');
+
+  // Wgranie wlasnego skanu, we wlasciwym kontekscie - sukces.
+  const formularz = new FormData();
+  formularz.append('typ_dokumentu', 'dowod_osobisty');
+  formularz.append('plik', new Blob(['%PDF-1.4\ntresc skanu'], { type: 'application/pdf' }), 'dowod-piotra.pdf');
+  const odpUpload = await fetch(`${baza}/api/psa/portal/aml-skany/${spolkaAmlId}`, {
+    method: 'POST', headers: { Cookie: ciastkoSkanowy }, body: formularz,
+  });
+  assert.equal(odpUpload.status, 201);
+  const dane = await odpUpload.json();
+  assert.equal(dane.skan.typ_dokumentu, 'dowod_osobisty');
+
+  const lista = await (await fetch(`${baza}/api/psa/portal/aml-skany`, { headers: { Cookie: ciastkoSkanowy } })).json();
+  assert.equal(lista.skany.length, 1);
+  assert.equal(lista.skany[0].id, dane.skan.id);
+
+  // Ten sam wiersz jest widoczny po stronie kartoteki pracownika - jedna
+  // wspolna lista, nie dwie osobne.
+  const wiersz = db().prepare('SELECT * FROM psa_osoby_skany_aml WHERE id = ?').get(dane.skan.id);
+  assert.equal(wiersz.osoba_id, osobaAmlId);
+  assert.equal(wiersz.spolka_id, spolkaAmlId);
+  assert.match(wiersz.wgral, /skanowy@example\.pl/);
+  assert.ok(wiersz.hash, 'ten sam rezim hasha co upload pracownika');
+});
+
 test('dwuklik w „Zamow informacje" nie tworzy dwoch dlugow', async () => {
   const przed = db().prepare(`SELECT COUNT(*) c FROM psa_oplaty WHERE typ = 'informacja'`).get().c;
 

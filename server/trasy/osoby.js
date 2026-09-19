@@ -492,6 +492,13 @@ router.get(
 );
 
 module.exports = router;
+// Naprawa P-012: reuzywane przez trasy/portal.js (upload wlasnego skanu
+// akcjonariusza) - ten sam rezim hasha, retencji i miejsca na dysku, zeby
+// oba kanaly (pracownik i klient) skladaly sie w JEDNA kartoteke skanow.
+module.exports.TYPY_DOKUMENTU_AML = TYPY_DOKUMENTU_AML;
+module.exports.katalogSkanowAml = katalogSkanowAml;
+module.exports.ROZSZERZENIA_SKANU_AML_DOZWOLONE = ROZSZERZENIA_SKANU_AML_DOZWOLONE;
+module.exports.LIMIT_ROZMIARU_SKANU_AML_BAJTY = LIMIT_ROZMIARU_SKANU_AML_BAJTY;
 // Etap 3F: kancelaria materializuje akcjonariuszy proponowanych we wniosku
 // klienta do kartoteki wspólnej - wnioski.js reużywa TĘ SAMĄ walidację
 // (regula domenowa nr 10 - jeden inwestor wpisany raz - nie duplikujemy
