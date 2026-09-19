@@ -51,8 +51,18 @@ function flaga(nazwa, domyslna) {
   return ['1', 'true', 'tak', 'yes', 'on'].includes(String(v).toLowerCase());
 }
 
+/**
+ * Naprawa Z-002: `:memory:` to specjalna wartosc SQLite (baza wylacznie
+ * w pamieci, bez pliku), nie sciezka wzgledna. `path.resolve` tego nie
+ * wiedzial i skladal ja z KATALOG_GLOWNY jak kazdy inny tekst, tworzac
+ * REALNY plik na dysku o nazwie dosłownie `:memory:` - `server/baza.js`
+ * porownuje potem wynik z literalem `':memory:'`, ktory po przejsciu
+ * przez ta funkcje nigdy juz nie pasowal.
+ */
 function sciezka(nazwa, domyslna) {
-  return path.resolve(KATALOG_GLOWNY, tekst(nazwa, domyslna));
+  const wartosc = tekst(nazwa, domyslna);
+  if (wartosc === ':memory:') return wartosc;
+  return path.resolve(KATALOG_GLOWNY, wartosc);
 }
 
 const konfiguracja = {
@@ -151,3 +161,7 @@ const konfiguracja = {
 };
 
 module.exports = konfiguracja;
+// Eksportowana osobno do testow jednostkowych (Z-002) - reszta modulu zalezy
+// od `process.env` odczytanego raz przy pierwszym `require`, ale `sciezka()`
+// sama w sobie jest funkcja czysta.
+module.exports.sciezka = sciezka;

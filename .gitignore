@@ -2,6 +2,13 @@ node_modules/
 dane/*.db
 dane/*.db-wal
 dane/*.db-shm
+# Naprawa Z-002: konfiguracja.js::sciezka() kiedys skladala ':memory:' z
+# katalogiem glownym zamiast rozpoznac specjalna wartosc SQLite, tworzac
+# realny plik o tej nazwie w korzeniu repo. Naprawione, ale wpis zostaje -
+# gdyby ktos mial jeszcze stara kopie robocza z tym plikiem.
+/:memory:
+/:memory:-wal
+/:memory:-shm
 dane/.manual-check-dokumenty/
 dokumenty/
 .env
