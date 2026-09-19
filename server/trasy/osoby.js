@@ -22,6 +22,7 @@ const konfiguracja = require('../konfiguracja');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
+const zaproszenia = require('../logika/zaproszenia');
 
 const router = express.Router();
 
@@ -308,6 +309,34 @@ router.get(
       )
       .all(id);
     odp.json({ spolki: wiersze });
+  })
+);
+
+/**
+ * Naprawa Z-006/P-004 — zaproszenie akcjonariusza do portalu, akcja przy
+ * osobie w kartotece, wykonywana przez pracownika. Adres e-mail podaje
+ * pracownik przy wysylce (kanal OPERACYJNY konta - odrebny od e-maila w
+ * tresci rejestru, ktory wymaga zgody akcjonariusza, art. 300(33) § 1 pkt 5
+ * KSH / Z-157) - nie jest wiec brany z `psa_osoby.email` automatycznie.
+ */
+router.post(
+  '/:id/zapros-do-portalu',
+  asy(async (zad, odp) => {
+    const id = Number(zad.params.id);
+    if (!db().prepare('SELECT id FROM psa_osoby WHERE id = ?').get(id)) {
+      throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
+    }
+    const email = String((zad.body || {}).email || '').trim();
+    if (!email) throw bledneZadanie('Adres e-mail jest wymagany.');
+
+    let wynik;
+    try {
+      wynik = await zaproszenia.wyslijAkcjonariuszowi(db(), { osobaId: id, email, autor: autor(zad) });
+    } catch (e) {
+      throw bledneZadanie(e.message);
+    }
+
+    odp.json(wynik);
   })
 );
 

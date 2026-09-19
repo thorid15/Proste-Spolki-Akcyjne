@@ -103,6 +103,62 @@ function SekcjaSkanowAml({ osobaId, spolkaId }) {
   );
 }
 
+/**
+ * Naprawa Z-006/P-004 — zaproszenie akcjonariusza do portalu, akcja przy
+ * osobie w kartotece (widoczna tylko, gdy osoba JEST akcjonariuszem
+ * przynajmniej jednej spółki — `spolkiOsoby` z `GET /:id/spolki`).
+ * E-mail operacyjny konta jest ODRĘBNY od e-maila w treści rejestru
+ * (`dane.email` na formularzu wyżej, wymaga osobnej zgody — Z-157), więc
+ * podpowiadamy go tylko jako punkt startowy, nie podstawiamy automatycznie.
+ */
+function SekcjaZaproszeniaPortal({ osobaId, emailPodpowiedz }) {
+  const [email, ustawEmail] = useState(emailPodpowiedz || '');
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [wynik, ustawWynik] = useState(null);
+  const [blad, ustawBlad] = useState(null);
+
+  async function zapros() {
+    ustawWysylanie(true);
+    ustawBlad(null);
+    ustawWynik(null);
+    try {
+      const odpowiedz = await API.post(`/api/psa/osoby/${osobaId}/zapros-do-portalu`, { email });
+      ustawWynik(odpowiedz);
+    } catch (e) {
+      ustawBlad(e.message);
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  return (
+    <Pole
+      etykieta="Zaproszenie do portalu"
+      podpowiedz="Adres OPERACYJNY konta portalowego — niezależny od e-maila w rejestrze i jego zgody (pole „Adres e-mail” wyżej)."
+    >
+      <div className="rzad" style={{ gap: 8 }}>
+        <input type="text" value={email} onChange={(z) => ustawEmail(z.target.value)} placeholder="adres@przyklad.pl" style={{ flex: 1 }} />
+        <button className="btn btn-maly btn-glowny" onClick={zapros} disabled={!email.trim() || wysylanie}>
+          {wysylanie ? 'Wysyłanie…' : 'Zaproś do portalu'}
+        </button>
+      </div>
+      <Komunikat odmiana="blad" tresc={blad} />
+      {wynik && wynik.juz_aktywne && (
+        <Komunikat odmiana="info" tresc="Konto na ten adres jest już aktywne — akcjonariusz ma się jak zalogować, nie trzeba nowego zaproszenia." />
+      )}
+      {wynik && !wynik.juz_aktywne && wynik.email_wyslany && (
+        <Komunikat odmiana="ok" tresc="Zaproszenie wysłane e-mailem." />
+      )}
+      {wynik && !wynik.juz_aktywne && !wynik.email_wyslany && wynik.link_aktywacyjny && (
+        <Komunikat
+          odmiana="uwaga"
+          tresc={<>Wysyłka e-mail nie jest skonfigurowana — przekaż link ręcznie: <code>{wynik.link_aktywacyjny}</code></>}
+        />
+      )}
+    </Pole>
+  );
+}
+
 function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
   const [dane, ustawDane] = useState({ ...PUSTA_OSOBA, ...(osoba || {}) });
   const [blad, ustawBlad] = useState(null);
@@ -402,6 +458,10 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
       <Pole etykieta="Notatka AML" podpowiedz="Nigdy nie trafia na wydruki dla klienta.">
         <textarea {...pole('aml_notatka')} style={{ minHeight: 70 }} />
       </Pole>
+
+      {edycja && spolkiOsoby.length > 0 && (
+        <SekcjaZaproszeniaPortal osobaId={osoba.id} emailPodpowiedz={dane.email} />
+      )}
 
       {edycja && spolkiOsoby.length > 0 && (
         <Pole

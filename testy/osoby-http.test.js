@@ -286,3 +286,58 @@ test('Z-253: POST /api/psa/osoby/:id/aml-skany odrzuca plik, ktorego tresc nie o
   const [, lista] = await zapytaj('GET', `/api/psa/osoby/${osoba.osoba.id}/aml-skany`);
   assert.equal(lista.skany.length, 0, 'odrzucony plik nie zostaje zapisany w kartotece');
 });
+
+// ─────────────────────────────────────────────────────────────
+// Naprawa Z-006/P-004: zaproszenie akcjonariusza do portalu
+// ─────────────────────────────────────────────────────────────
+
+test('Z-006: POST /api/psa/osoby/:id/zapros-do-portalu zaklada konto akcjonariusza i zwraca link (SMTP wylaczone w testach)', async () => {
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Zapraszany${sufiks()}`, imie: 'Jan' });
+  const email = `jan.zapraszany${sufiks()}@example-test.pl`;
+
+  const [status, wynik] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, { email });
+  assert.equal(status, 200);
+  assert.equal(wynik.nowe_konto, true);
+  assert.equal(wynik.email_wyslany, false, 'SMTP niekonfigurowane w testach - link zwracany wprost');
+  assert.ok(wynik.link_aktywacyjny);
+
+  const konto = db().prepare('SELECT * FROM psa_konta WHERE lower(email) = ?').get(email.toLowerCase());
+  assert.equal(konto.rola, 'akcjonariusz');
+  assert.equal(konto.osoba_id, osoba.osoba.id);
+  assert.equal(konto.aktywne, 0);
+});
+
+test('Z-006: POST /:id/zapros-do-portalu bez adresu e-mail odrzuca; dla nieistniejacej osoby zwraca 404', async () => {
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `BezEmaila${sufiks()}` });
+  const [stBrak] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, {});
+  assert.equal(stBrak, 400);
+
+  const [st404] = await zapytaj('POST', '/api/psa/osoby/9999999/zapros-do-portalu', { email: 'x@example.pl' });
+  assert.equal(st404, 404);
+});
+
+test('Z-006: adres e-mail juz uzywany przez INNA osobe/rolo jest odrzucony, nie podpina sie pod cudze konto', async () => {
+  const [, osobaA] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Kolizja1${sufiks()}` });
+  const [, osobaB] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Kolizja2${sufiks()}` });
+  const email = `kolizja${sufiks()}@example-test.pl`;
+
+  const [stA] = await zapytaj('POST', `/api/psa/osoby/${osobaA.osoba.id}/zapros-do-portalu`, { email });
+  assert.equal(stA, 200);
+
+  const [stB, wynikB] = await zapytaj('POST', `/api/psa/osoby/${osobaB.osoba.id}/zapros-do-portalu`, { email });
+  assert.equal(stB, 400);
+  assert.match(wynikB.blad, /już przypisany do innego konta/);
+});
+
+test('Z-006: powtorne zaproszenie TEJ SAMEJ osoby na ten sam adres odswieza token, nie zaklada drugiego konta', async () => {
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Ponowione${sufiks()}` });
+  const email = `ponowione${sufiks()}@example-test.pl`;
+
+  const [, pierwsze] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, { email });
+  const [, drugie] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, { email });
+  assert.equal(drugie.konto_id, pierwsze.konto_id);
+  assert.notEqual(drugie.link_aktywacyjny, pierwsze.link_aktywacyjny, 'token sie odswieza');
+
+  const liczbaKont = db().prepare('SELECT COUNT(*) AS ile FROM psa_konta WHERE lower(email) = ?').get(email.toLowerCase()).ile;
+  assert.equal(liczbaKont, 1);
+});
