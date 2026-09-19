@@ -15,6 +15,8 @@ const migracje = require('./server/migracje');
 const { posrednikBledow } = require('./server/pomocnicze/odpowiedzi');
 const autoryzacja = require('./server/pomocnicze/autoryzacja');
 const auth = require('./server/trasy/auth');
+const przypomnienia = require('./server/logika/przypomnienia');
+const { uruchomHarmonogramPrzypomnien } = require('./server/logika/harmonogram');
 
 const aplikacja = express();
 
@@ -146,6 +148,10 @@ if (require.main === module) {
       console.log(`[psa] baza: ${konfiguracja.WSPOLNA_BAZA}`);
       console.log(`[psa] portal klienta: ${konfiguracja.PORTAL_WLACZONY ? 'włączony' : 'wyłączony (PORTAL_WLACZONY=false)'}`);
     });
+    // Naprawa Z-357: przypomnienia o konczacym sie roku prowadzenia rejestru
+    // dzialaly wylacznie po recznym kliknieciu w zakladce „Oplaty" - realny
+    // wyzwalacz, nie tylko przycisk (patrz komentarz w harmonogram.js).
+    uruchomHarmonogramPrzypomnien(db(), { wyslij: przypomnienia.wyslijPrzypomnienia });
   });
 }
 
