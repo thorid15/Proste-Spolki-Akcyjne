@@ -999,6 +999,14 @@ function akcjonariatNaDzien(stan, data) {
     if (p.data_od < g.data_najstarszego_nabycia) g.data_najstarszego_nabycia = p.data_od;
   }
 
+  // Naprawa Z-057: liczba akcji OGOLEM to liczba FIZYCZNYCH numerow w rekach
+  // jakiegokolwiek akcjonariusza - numer podzielony ulamkowo miedzy kilku
+  // wspoluprawnionych to WCIAZ JEDEN numer, nie jeden na kazdego z nich.
+  // Suma per-pozycja (dawny sposob) liczyla go tyle razy, ilu bylo
+  // wspoluprawnionych.
+  const razemZakresy = n.normalizuj(przedzialy.map((p) => ({ nr_od: p.nr_od, nr_do: p.nr_do })));
+  const razem = n.ilosc(razemZakresy);
+
   const pozycje = [...grupy.values()].map(({ pokrycia, ...g }) => {
     const zakresy = n.normalizuj(g.zakresy);
     // Jedna wartosc dla calej pozycji tylko wtedy, gdy wszystkie przedzialy
@@ -1021,21 +1029,48 @@ function akcjonariatNaDzien(stan, data) {
         osoba_id: o.osoba_id,
         opis: o.opis,
       }));
+
+    // Naprawa Z-057: udzial WYMIERNY tej pozycji - cale numery licza sie
+    // jako 1/1 kazdy, numery ulamkowe DOKLADNIE tak, jak ulamek wskazuje
+    // (nie jako "1 numer", co dawniej zawyzalo i liczbe akcji, i procent
+    // udzialu kazdego wspoluprawnionego z osobna).
+    const calychNumerow = n.ilosc(zakresy) - g.czesci_ulamkowe.length;
+    let udzial = { licznik: calychNumerow, mianownik: 1 };
+    for (const fr of g.czesci_ulamkowe) {
+      udzial = u.suma(udzial, { licznik: fr.czesc_licznik, mianownik: fr.czesc_mianownik });
+    }
+    const udzialFloat = udzial.licznik / udzial.mianownik;
+
+    // Glosy (art. 300(23) § 1 w zw. z art. 300(38) § 3 KSH): akcja dzielona
+    // ulamkowo daje JEDEN glos, oddawany przez wspolnego przedstawiciela -
+    // tu wpada wylacznie, jesli TA pozycja jest tym przedstawicielem dla
+    // danego numeru (inny wspoluprawniony na tym samym numerze go nie
+    // dostaje - inaczej jeden podzielony numer dawalby kilka glosow).
+    // Brak wskazania przedstawiciela NIE odbiera glosu numerowi - oznacza
+    // wylacznie pozycje jako wymagajaca jego wskazania, zeby glos mial kto
+    // oddac (`wymaga_przedstawiciela` nizej).
+    const glosy =
+      calychNumerow +
+      g.czesci_ulamkowe.filter(
+        (fr) => fr.przedstawiciel_osoba_id != null && Number(fr.przedstawiciel_osoba_id) === Number(g.osoba_id)
+      ).length;
+    const wymagaPrzedstawiciela = g.czesci_ulamkowe.some((fr) => fr.przedstawiciel_osoba_id == null);
+
     return {
       ...g,
       zakresy,
-      // UWAGA: `ilosc` liczy numery akcji DOTKNIETE (choc czesciowo) - dla
-      // wiersza ulamkowego to nadal "1 numer", nie ulamek. Dokladny udzial
-      // wymierny jest w `czesci_ulamkowe`. Precyzyjne przeliczenie procentu
-      // na podstawie ulamkow to zadanie warstwy prezentacji (sprint 6).
-      ilosc: n.ilosc(zakresy),
+      ilosc: udzialFloat,
+      // Ulamek dokladny (regula domenowa 4a - zadnych floatow do porownan
+      // ani przechowywania), do formatowania „X 1/3" zamiast lossy decimala.
+      udzial_ulamek: udzial,
+      glosy,
+      wymaga_przedstawiciela: wymagaPrzedstawiciela,
       wspolwlasnosc: g.czesci_ulamkowe.length > 0,
       pokryta,
       obciazenia: moje,
     };
   });
 
-  const razem = pozycje.reduce((s, p) => s + p.ilosc, 0);
   for (const p of pozycje) {
     p.procent = razem === 0 ? 0 : (p.ilosc / razem) * 100;
   }

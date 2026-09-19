@@ -31,6 +31,8 @@
  * § 1(1) KSH jest juz w `stan` zastosowane — tu tylko ukladamy strone.
  */
 
+const u = require('./ulamki');
+
 const ZASLONA = '—';
 
 function esc(tekst) {
@@ -62,6 +64,21 @@ function liczba(n) {
 function procent(p) {
   if (p === null || p === undefined) return null;
   return `${Number(p).toFixed(2).replace('.', ',')} %`;
+}
+
+/**
+ * Liczba akcji na dokumencie - regula domenowa 4a: zadnych lossy decimali.
+ * Naprawa Z-057: pozycja z ulamkowo wspoluprawnionym numerem pokazuje
+ * dokladny ulamek ("2 i 1/3"), nie np. "2.3333333333333335".
+ */
+function liczbaAkcji(ilosc, udzialUlamek) {
+  if (ilosc === null || ilosc === undefined) return null;
+  if (!udzialUlamek || udzialUlamek.licznik % udzialUlamek.mianownik === 0) {
+    return liczba(ilosc);
+  }
+  const cale = Math.floor(udzialUlamek.licznik / udzialUlamek.mianownik);
+  const reszta = u.skroc({ licznik: udzialUlamek.licznik - cale * udzialUlamek.mianownik, mianownik: udzialUlamek.mianownik });
+  return cale > 0 ? `${liczba(cale)} i ${u.opisz(reszta)}` : u.opisz(reszta);
 }
 
 /* ── Slowniki ─────────────────────────────────────────────── */
@@ -498,7 +515,7 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
         + opisy.map((o) => `<div class="akcjonariusz-wiersz">${o}</div>`).join(''),
       esc(a.seria || ZASLONA),
       `<span class="numery">${esc(a.numery)}</span>`,
-      liczba(a.ilosc),
+      liczbaAkcji(a.ilosc, a.udzial_ulamek),
       procent(a.procent),
       esc(NAZWY_POKRYCIA[a.pokryta] || NAZWY_POKRYCIA.nieustalone),
     ];

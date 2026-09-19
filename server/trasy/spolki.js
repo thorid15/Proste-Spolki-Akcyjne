@@ -15,6 +15,7 @@ const rejestr = require('../rejestr');
 const widoki = require('../widoki');
 const oplaty = require('../oplaty');
 const przepisy = require('../logika/przepisy');
+const u = require('../logika/ulamki');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const wzoryDysk = require('../logika/wzory-dysk');
 const docx = require('../logika/docx');
@@ -447,14 +448,18 @@ router.get(
           a.osoba ? a.osoba.oznaczenie : `osoba #${a.osoba_id}`,
           (a.osoba && a.osoba.jawny_identyfikator) || '',
           a.seria,
-          a.ilosc,
+          // Naprawa Z-057: pozycja z ulamkowo wspoluprawnionym numerem
+          // pokazuje dokladny ulamek ("2 i 1/3"), nie lossy decimal.
+          u.opiszLiczbeAkcji(a.ilosc, a.udzial_ulamek),
           a.numery,
-          a.procent,
+          // Naprawa Z-051: zaokraglenie do 2 miejsc, tak jak w informacji
+          // z rejestru (`logika/informacja-dokument.js: procent()`).
+          a.procent == null ? '' : Number(a.procent).toFixed(2),
           a.obciazenia
             .map((o) => `${o.typ === 'zajecie' ? 'zajecie' : o.typ} ${o.numery}`)
             .join('; '),
           (a.czesci_ulamkowe || [])
-            .map((u) => `${u.czesc_licznik}/${u.czesc_mianownik} akcji nr ${u.nr}`)
+            .map((fr) => `${fr.czesc_licznik}/${fr.czesc_mianownik} akcji nr ${fr.nr}`)
             .join('; '),
         ].map(pole).join(',')
       );

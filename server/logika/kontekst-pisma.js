@@ -34,6 +34,7 @@
 const przepisy = require('./przepisy');
 const konfiguracja = require('../konfiguracja');
 const ustawienia = require('./ustawienia');
+const u = require('./ulamki');
 const { db } = require('../baza');
 const widoki = require('../widoki');
 
@@ -218,7 +219,7 @@ function pozycjeKlucze(akcjonariusze) {
     pozycja_akcjonariusz: mianownik(a.osoba),
     pozycja_seria: a.seria,
     pozycja_numery: a.numery,
-    pozycja_liczba: String(a.ilosc),
+    pozycja_liczba: u.opiszLiczbeAkcji(a.ilosc, a.udzial_ulamek),
     pozycja_obciazenia: opiszObciazenia(a.obciazenia),
   }));
 }
@@ -353,11 +354,15 @@ function akcjonariuszeKlucze(akcjonariusze) {
     akcjonariusz_lp: String(i + 1),
     akcjonariusz_nazwa: mianownik(a.osoba),
     akcjonariusz_seria: a.seria,
-    akcjonariusz_liczba_akcji: String(a.ilosc),
-    // Aplikacja nie prowadzi odrebnej wagi glosu na akcje (kazda niesie
-    // jeden glos, chyba ze umowa spolki stanowi inaczej - art. 300(23) § 1
-    // KSH - a to nie jest dzis modelowane) - liczba glosow rowna liczbie akcji.
-    akcjonariusz_liczba_glosow: String(a.ilosc),
+    akcjonariusz_liczba_akcji: u.opiszLiczbeAkcji(a.ilosc, a.udzial_ulamek),
+    // Naprawa Z-057 (art. 300(23) § 1 w zw. z art. 300(38) § 3 KSH): akcja
+    // dzielona ulamkowo daje JEDEN glos, oddawany przez wspolnego
+    // przedstawiciela - `a.glosy` (logika/stan.js: akcjonariatNaDzien) to juz
+    // uwzglednia, wiec nie rowna sie zwyklej liczbie akcji przy wspolwlasnosci.
+    akcjonariusz_liczba_glosow: String(a.glosy ?? a.ilosc),
+    // Bez wskazanego przedstawiciela glos NIE przepada, ale ktos musi go
+    // dostac przed glosowaniem - pozycja niesie ten fakt na dokument.
+    akcjonariusz_wymaga_przedstawiciela: Boolean(a.wymaga_przedstawiciela),
     akcjonariusz_obciazenia: opiszObciazenia(a.obciazenia),
   }));
 }

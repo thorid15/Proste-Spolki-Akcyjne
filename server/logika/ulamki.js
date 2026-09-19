@@ -136,6 +136,25 @@ function opisz(u) {
   return `${w.licznik}/${w.mianownik}`;
 }
 
+/**
+ * Liczba akcji do wyswietlenia na dokumencie/eksporcie - regula domenowa 4a:
+ * zadnych lossy decimali. Pozycja calkowita pokazuje sie jak liczba
+ * (`ilosc`); pozycja z ulamkowo wspoluprawnionym numerem (Z-057) pokazuje
+ * dokladny ulamek ("2 i 1/3"), nigdy np. "2.3333333333333335".
+ */
+function opiszLiczbeAkcji(ilosc, udzialUlamek) {
+  if (ilosc === null || ilosc === undefined) return null;
+  if (!udzialUlamek || udzialUlamek.licznik % udzialUlamek.mianownik === 0) {
+    return String(ilosc);
+  }
+  const cale = Math.floor(udzialUlamek.licznik / udzialUlamek.mianownik);
+  const reszta = skroc({
+    licznik: udzialUlamek.licznik - cale * udzialUlamek.mianownik,
+    mianownik: udzialUlamek.mianownik,
+  });
+  return cale > 0 ? `${cale} i ${opisz(reszta)}` : opisz(reszta);
+}
+
 module.exports = {
   BladUlamka,
   JEDEN,
@@ -150,6 +169,7 @@ module.exports = {
   roznica,
   jestZero,
   jestJeden,
+  opiszLiczbeAkcji,
   naProcent,
   opisz,
 };

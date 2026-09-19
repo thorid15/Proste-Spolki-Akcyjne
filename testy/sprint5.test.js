@@ -158,6 +158,62 @@ test('pokrycie_akcji: wzmianka o pokryciu obejmuje wszystkie akcje akcjonariusza
   assert.equal(wiersze[0].pokryta, 'czesciowo');
 });
 
+test('Z-057: 1/3+1/3+1/3 tego samego numeru -> 1 akcja w sumie i jeden glos, nie trzy (art. 300(23) § 1 w zw. z art. 300(38) § 3 KSH)', () => {
+  const zdarzenia = [
+    emisjaZdarzenie(1, { ilosc: 1 }),
+    zdarzenie(2, 'objecie', '2026-01-02', {
+      emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: 100, zakresy: [{ nr_od: 1, nr_do: 1 }] }],
+    }),
+    zdarzenie(3, 'przeniesienie_ulamka', '2026-01-03', {
+      emisja_zdarzenie_id: 1, nr: 1, zbywca_osoba_id: 100, nabywca_osoba_id: 200,
+      czesc_licznik: 1, czesc_mianownik: 3,
+    }),
+    zdarzenie(4, 'przeniesienie_ulamka', '2026-01-04', {
+      emisja_zdarzenie_id: 1, nr: 1, zbywca_osoba_id: 100, nabywca_osoba_id: 300,
+      czesc_licznik: 1, czesc_mianownik: 3,
+    }),
+  ];
+  const stan = stanLogika.odtworzStan(zdarzenia);
+  const { pozycje, razem_akcji } = stanLogika.akcjonariatNaDzien(stan, '2026-01-04');
+
+  // Bez wskazanego przedstawiciela zaden z trzech wspoluprawnionych nie
+  // dostaje wlasnego glosu za ten numer, ale glos NIE PRZEPADA - kazda
+  // pozycja jest oznaczona jako wymagajaca wskazania przedstawiciela.
+  assert.equal(pozycje.length, 3);
+  assert.equal(razem_akcji, 1, '1 akcja w sumie, nie trzy');
+  const sumaIlosci = pozycje.reduce((s, p) => s + p.ilosc, 0);
+  assert.ok(Math.abs(sumaIlosci - 1) < 1e-9, 'suma udzialow wspoluprawnionych = 1 akcja');
+  for (const p of pozycje) {
+    assert.equal(p.glosy, 0);
+    assert.equal(p.wymaga_przedstawiciela, true);
+  }
+  const sumaGlosowBezPrzedstawiciela = pozycje.reduce((s, p) => s + p.glosy, 0);
+  assert.equal(sumaGlosowBezPrzedstawiciela, 0, 'glos nie przepada - czeka na wskazanie przedstawiciela, nie znika');
+
+  // Wskazanie 200 na przedstawiciela numeru 1 - TERAZ glos jest oddawany:
+  // dokladnie JEDEN, wylacznie przez 200, nie po jednym na kazdego z trzech.
+  const zdarzeniaZPrzedstawicielem = [
+    ...zdarzenia,
+    zdarzenie(5, 'przedstawiciel', '2026-01-05', {
+      emisja_zdarzenie_id: 1, nr: 1, przedstawiciel_osoba_id: 200,
+    }),
+  ];
+  const stanPo = stanLogika.odtworzStan(zdarzeniaZPrzedstawicielem);
+  const wynikPo = stanLogika.akcjonariatNaDzien(stanPo, '2026-01-05');
+  assert.equal(wynikPo.razem_akcji, 1);
+  const pozycja200 = wynikPo.pozycje.find((p) => p.osoba_id === 200);
+  const pozycja100 = wynikPo.pozycje.find((p) => p.osoba_id === 100);
+  const pozycja300 = wynikPo.pozycje.find((p) => p.osoba_id === 300);
+  assert.equal(pozycja200.glosy, 1, 'wspolny przedstawiciel oddaje JEDEN glos za caly numer');
+  assert.equal(pozycja100.glosy, 0);
+  assert.equal(pozycja300.glosy, 0);
+  assert.equal(pozycja200.wymaga_przedstawiciela, false);
+  assert.equal(pozycja100.wymaga_przedstawiciela, false);
+  assert.equal(pozycja300.wymaga_przedstawiciela, false);
+  const sumaGlosowPo = wynikPo.pozycje.reduce((s, p) => s + p.glosy, 0);
+  assert.equal(sumaGlosowPo, 1, 'jeden glos w sumie za jeden podzielony numer, nie trzy');
+});
+
 // ─────────────────────────────────────────────────────────────
 // Migracja: istniejacy stan (sprzed sprintu 5) domyslnie 1/1
 // ─────────────────────────────────────────────────────────────
