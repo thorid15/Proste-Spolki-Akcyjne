@@ -191,6 +191,28 @@ test('status PEP: zapisuje sie z opisem, a sprzecznosc z oswiadczeniem daje ostr
   assert.ok(brak.braki_ustawowe.some((b) => /eksponowane stanowisko polityczne/.test(b)));
 });
 
+/**
+ * Naprawa Z-151/P-010: osoba, ktorej NIKT jeszcze nie ocenil pod katem PEP,
+ * wygladala identycznie jak osoba SWIADOMIE uznana za nie-PEP (obie 'nie') -
+ * falszywy zapis, nie brak danych. Nowa osoba dostaje teraz 'nieustalono'.
+ */
+test('status PEP: nowa osoba bez podanego statusu dostaje "nieustalono", nie "nie"', async () => {
+  const [status, ok] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `PepDomyslny${sufiks()}`,
+  });
+  assert.equal(status, 201);
+  assert.equal(ok.osoba.pep, 'nieustalono');
+  // Status nieustalony to brak ustalenia, nie zaznaczenie PEP - zaden
+  // komunikat o brakujacym opisie nie powinien sie pojawic.
+  assert.ok(!ok.braki_ustawowe.some((b) => /eksponowane stanowisko polityczne/.test(b)));
+
+  // Pusty string ma sie zachowywac tak samo jak brak pola.
+  const [, pusty] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `PepPusty${sufiks()}`, pep: '',
+  });
+  assert.equal(pusty.osoba.pep, 'nieustalono');
+});
+
 // ─────────────────────────────────────────────────────────────
 // Etap 3.1: modul AML konfigurowalny per spolka - wylaczony domyslnie.
 // ─────────────────────────────────────────────────────────────

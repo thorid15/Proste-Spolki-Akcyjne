@@ -283,6 +283,36 @@ test('POST /api/psa/wnioski/:id/przyjmij: zaklada spolke i osobe, dowiazuje wnio
   assert.equal(stKorektaPoZamknieciu, 400, 'zamknietego wniosku nie mozna juz korygowac');
 });
 
+/**
+ * Naprawa Z-151/P-010: `pep_oswiadczenie` (OSWIADCZENIE OSOBY) przechodzi
+ * z wniosku do kartoteki normalnie, ale `pep`/`pep_opis` (USTALENIE
+ * KANCELARII) - nawet jesli ktos je wypelnil na wniosku - NIGDY. Nowa osoba
+ * dostaje `pep` z DEFAULT bazy ('nieustalono'), bo to pracownik ustala je
+ * PO przyjeciu, nie wniosek klienta.
+ */
+test('POST /api/psa/wnioski/:id/przyjmij: oswiadczenie PEP przechodzi do kartoteki, ustalenie kancelarii - nigdy', async () => {
+  const { wniosekId } = await wnioskGotowyDoWeryfikacji('pep-przyjmij@example.pl');
+  const [, dane] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
+  const akcId = dane.akcjonariusze[0].id;
+
+  await zapytaj(
+    'PUT', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${akcId}`,
+    { pep_oswiadczenie: 'tak', pep_oswiadczenie_data: '2026-08-16', pep: 'tak', pep_opis: 'Wpisane omylkowo na wnioski' },
+    ciastkoPracownik
+  );
+  await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${akcId}/zweryfikuj`, { zweryfikowano: true }, ciastkoPracownik);
+
+  const [status] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, undefined, ciastkoPracownik);
+  assert.equal(status, 200);
+
+  const akcjonariuszPo = db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(akcId);
+  const osoba = db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(akcjonariuszPo.osoba_id);
+  assert.equal(osoba.pep_oswiadczenie, 'tak', 'oswiadczenie osoby przechodzi z wniosku');
+  assert.equal(osoba.pep_oswiadczenie_data, '2026-08-16');
+  assert.equal(osoba.pep, 'nieustalono', 'ustalenie kancelarii NIE dziedziczy sie z wniosku');
+  assert.equal(osoba.pep_opis, null);
+});
+
 test('POST /api/psa/wnioski/:id/przyjmij: przepina konto wnioskodawcy na role spolki — i tylko na JEGO spolke', async () => {
   const { wniosekId, ciastkoKlienta } = await wnioskGotowyDoWeryfikacji('przepiecie-konta@example.pl');
   const [, dane] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);

@@ -152,5 +152,6 @@ test('akcjonariusz: PEP bez opisu jest brakiem, nieznany status jest bledem', ()
 
   assert.ok(akcjonariusz.bledy({ pep: 'prezydent' }).some((b) => /Nieznany status PEP/.test(b)));
   assert.deepEqual(akcjonariusz.bledy({ pep: 'tak' }), []);
-  assert.equal(akcjonariusz.znormalizuj({ pep: '' }).pep, 'nie', 'puste normalizuje sie do „nie”');
+  // Naprawa Z-151/P-010: puste nie jest twierdzeniem „nie” - to brak ustalenia.
+  assert.equal(akcjonariusz.znormalizuj({ pep: '' }).pep, 'nieustalono', 'puste normalizuje sie do „nieustalono”');
 });

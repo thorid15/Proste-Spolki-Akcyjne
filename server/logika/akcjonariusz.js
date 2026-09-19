@@ -57,7 +57,9 @@ function znormalizuj(dane) {
   if ('wspolwlasnosc' in wynik && pusty(wynik.wspolwlasnosc)) {
     wynik.wspolwlasnosc = WSPOL.BRAK;
   }
-  if ('pep' in wynik && pusty(wynik.pep)) wynik.pep = PEP.NIE;
+  // Naprawa Z-151/P-010: brak wartosci NIE oznacza "nie" (twierdzenie), tylko
+  // "nikt jeszcze nie ustalil".
+  if ('pep' in wynik && pusty(wynik.pep)) wynik.pep = PEP.NIEUSTALONO;
   if ('rodzaj_adresu_rejestrowego' in wynik && pusty(wynik.rodzaj_adresu_rejestrowego)) {
     wynik.rodzaj_adresu_rejestrowego = null;
   }
@@ -171,8 +173,9 @@ function ostrzezenia(a) {
 
   // Ustawa AML: przy PEP kancelaria stosuje WZMOŻONE środki bezpieczeństwa
   // finansowego, a te wymagają wiedzy, na czym status polega — samo „tak"
-  // nie wystarcza do udokumentowania czynności.
-  if (przepisy.pepWymagaWzmozonych(a.pep) && pusty(a.pep_opis)) {
+  // nie wystarcza do udokumentowania czynności. „nieustalono" to brak
+  // ustalenia, nie zaznaczenie PEP — nie dotyczy go ten komunikat.
+  if (a.pep !== PEP.NIEUSTALONO && przepisy.pepWymagaWzmozonych(a.pep) && pusty(a.pep_opis)) {
     lista.push(
       `${oznaczenie}: zaznaczono eksponowane stanowisko polityczne, ale nie opisano, `
       + 'jakiej funkcji albo relacji dotyczy.'

@@ -633,6 +633,10 @@ const OPISY_RODZAJOW_WSPOLWLASNOSCI = {
  * (art. 2 ust. 2 pkt 12) to osobne przesłanki, nie warianty tej samej.
  */
 const STATUSY_PEP = {
+  // Naprawa Z-151/P-010: wartosc DOMYSLNA - nikt jeszcze nie ustalil. Osoba
+  // niesprawdzona nie moze wygladac identycznie jak osoba SWIADOMIE uznana
+  // za nie-PEP ('nie') - to byloby twierdzenie bez podstawy.
+  NIEUSTALONO: 'nieustalono',
   NIE: 'nie',
   TAK: 'tak',
   RODZINA: 'rodzina',
@@ -640,6 +644,7 @@ const STATUSY_PEP = {
 };
 
 const OPISY_STATUSOW_PEP = {
+  [STATUSY_PEP.NIEUSTALONO]: 'status nieustalony',
   [STATUSY_PEP.NIE]: 'nie zajmuje eksponowanego stanowiska politycznego',
   [STATUSY_PEP.TAK]: 'zajmuje eksponowane stanowisko polityczne',
   [STATUSY_PEP.RODZINA]: 'jest członkiem rodziny osoby zajmującej eksponowane stanowisko polityczne',

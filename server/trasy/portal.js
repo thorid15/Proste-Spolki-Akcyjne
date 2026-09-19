@@ -562,6 +562,10 @@ const POLA_AKCJONARIUSZA_WNIOSKU = [
   'adres_doreczen', 'adres_edoreczen', 'email', 'telefon', 'zgoda_email',
   // Art. 300(33) § 1 pkt 2-5 KSH - patrz logika/akcjonariusz.js.
   ...akcjonariuszLogika.POLA_USTAWOWE,
+  // Naprawa Z-151/P-010: OSWIADCZENIE OSOBY (art. 46 ustawy AML), odrebne od
+  // `pep`/`pep_opis` wyzej - te dwa pola sa USTALENIEM KANCELARII i celowo
+  // NIE przechodza z wniosku do kartoteki (patrz trasy/wnioski.js: przyjmij).
+  'pep_oswiadczenie', 'pep_oswiadczenie_data',
 ];
 
 function wyczyscAkcjonariuszaWniosku(cialo) {
@@ -590,6 +594,14 @@ function sprawdzAkcjonariuszaWniosku(dane) {
   }
   if (dane.plec && !['mezczyzna', 'kobieta'].includes(dane.plec)) {
     throw bledneZadanie('Płeć musi być „mężczyzna” albo „kobieta”.');
+  }
+  // Oswiadczenie PEP (art. 46 ustawy AML) - skladane przez OSOBE, stad
+  // katalog zamkniety tak/nie (ten sam co na kartotece, patrz trasy/osoby.js).
+  if (dane.pep_oswiadczenie && !['tak', 'nie'].includes(dane.pep_oswiadczenie)) {
+    throw bledneZadanie('Oświadczenie PEP musi być „tak” albo „nie”.');
+  }
+  if (dane.pep_oswiadczenie_data && !czas.poprawnaData(dane.pep_oswiadczenie_data)) {
+    throw bledneZadanie('Data oświadczenia PEP musi mieć format RRRR-MM-DD.');
   }
   // Sprzecznosci ustawowe blokuja zapis; niekompletnosc NIE - wniosek
   // wypelnia sie etapami i zapisuje po kazdej zmianie.

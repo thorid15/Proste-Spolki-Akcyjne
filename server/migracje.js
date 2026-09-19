@@ -1980,6 +1980,48 @@ const MIGRACJE = [
         ON psa_zgloszenia (krs) WHERE status <> 'odrzucone';
     `,
   },
+
+  {
+    wersja: 49,
+    nazwa: 'PEP: status "nieustalono", pep_oswiadczenie na wniosku (naprawa Z-151/P-010)',
+    sql: `
+      -- Domyslna wartosc 'pep' byla 'nie' - osoba, ktorej NIKT nigdy nie ocenil,
+      -- wygladala identycznie jak osoba SWIADOMIE ocenionia jako nie-PEP. To
+      -- falszywy zapis (twierdzenie bez podstawy), nie brak danych. 'nieustalono'
+      -- staje sie nowa wartoscia domyslna - CHECK trzeba poszerzyc, a SQLite nie
+      -- pozwala zmienic CHECK/DEFAULT istniejacej kolumny in place, stad
+      -- dodaj-skopiuj-usun-zmien-nazwe zamiast pelnej przebudowy tabeli.
+      --
+      -- Backfill: rekordy juz na 'tak'/'rodzina'/'wspolpracownik' to jednoznacznie
+      -- SWIADOME ustalenie (default nigdy nie mogl wygenerowac tych wartosci) -
+      -- zostaja nietkniete. Rekordy na 'nie' NIE DA SIE odroznic „ustalono: nie"
+      -- od „nikt nie ustalil" - zgodnie z decyzja sesji wszystkie takie rekordy
+      -- przechodza na 'nieustalono' (odnotowane w DECYZJE.md).
+      ALTER TABLE psa_osoby ADD COLUMN pep_v2 TEXT NOT NULL DEFAULT 'nieustalono'
+        CHECK (pep_v2 IN ('nieustalono','nie','tak','rodzina','wspolpracownik'));
+      UPDATE psa_osoby SET pep_v2 = CASE WHEN pep = 'nie' THEN 'nieustalono' ELSE pep END;
+      ALTER TABLE psa_osoby DROP COLUMN pep;
+      ALTER TABLE psa_osoby RENAME COLUMN pep_v2 TO pep;
+
+      -- Ten sam katalog na psa_wnioski_akcjonariusze - znormalizuj()
+      -- w logika/akcjonariusz.js jest WSPOLNA dla obu tabel, wiec musza miec
+      -- identyczny zestaw dopuszczalnych wartosci.
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_v2 TEXT NOT NULL DEFAULT 'nieustalono'
+        CHECK (pep_v2 IN ('nieustalono','nie','tak','rodzina','wspolpracownik'));
+      UPDATE psa_wnioski_akcjonariusze SET pep_v2 = CASE WHEN pep = 'nie' THEN 'nieustalono' ELSE pep END;
+      ALTER TABLE psa_wnioski_akcjonariusze DROP COLUMN pep;
+      ALTER TABLE psa_wnioski_akcjonariusze RENAME COLUMN pep_v2 TO pep;
+
+      -- Naprawa Z-151: 'pep_oswiadczenie'/'pep_oswiadczenie_data' (OSWIADCZENIE
+      -- OSOBY, art. 46 ustawy AML) istnialy dotad WYLACZNIE na psa_osoby -
+      -- wniosek portalowy (glowny kanal onboardingu) nie mial gdzie zapisac
+      -- oswiadczenia klienta osobno od 'pep'/'pep_opis' (USTALENIE KANCELARII),
+      -- wiec przejecie wniosku mieszalo oba pojecia w jedno pole.
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_oswiadczenie TEXT
+        CHECK (pep_oswiadczenie IS NULL OR pep_oswiadczenie IN ('tak', 'nie'));
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_oswiadczenie_data TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

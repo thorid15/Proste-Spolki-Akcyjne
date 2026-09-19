@@ -747,6 +747,13 @@ router.post(
       if (a.osoba_id) continue;
       const daneOsoby = {};
       for (const pole of osobyModul.POLA_OSOBY) {
+        // Naprawa Z-151/P-010: `pep` to USTALENIE KANCELARII, wypelniane
+        // wylacznie przez pracownika PO weryfikacji - nigdy nie dziedziczy
+        // sie z wniosku klienta, nawet jesli kolumna istnieje po obu
+        // stronach pod ta sama nazwa. Nowa osoba dostaje wiec DEFAULT bazy
+        // ('nieustalono'). `pep_oswiadczenie`/`_data` (oswiadczenie OSOBY)
+        // przechodza normalnie - o to chodzi w rozdzieleniu tych dwoch pol.
+        if (pole === 'pep' || pole === 'pep_opis') continue;
         if (a[pole] !== undefined && a[pole] !== null) daneOsoby[pole] = a[pole];
       }
       osobyModul.sprawdzOsobe(daneOsoby);
