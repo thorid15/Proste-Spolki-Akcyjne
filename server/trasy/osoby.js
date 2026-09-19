@@ -144,6 +144,37 @@ function ostrzezeniaOsoby(dane) {
 }
 
 /**
+ * Naprawa Z-350: kartoteka deklaruje wprost "jeden inwestor wpisywany RAZ"
+ * (regula domenowa nr 10, cytat w naglowku pliku), ale nic tego nie
+ * egzekwowalo - dwie ROZNE osoby moglysie zapisac z tym samym PESEL/NIP
+ * bez zadnego sygnalu. OSTRZEZENIE, nie blokada: ta sama osoba wystepuje
+ * legalnie w wielu spolkach, wiec kolizja bywa prawdziwa - ale zawsze
+ * oznacza TEN SAM rekord kartoteki, nie dwa osobne, wiec pracownik musi to
+ * zobaczyc i sam zdecydowac (polaczyc rekordy recznie, sprostowac pomylke).
+ */
+function ostrzezeniaKolizji(dane, id = null) {
+  const ostrzezenia = [];
+  for (const pole of ['pesel', 'nip']) {
+    const wartosc = dane[pole];
+    if (!wartosc) continue;
+    const kolizja = db()
+      .prepare(
+        `SELECT id, nazwisko, imie, nazwa FROM psa_osoby
+          WHERE ${pole} = ? AND id IS NOT ?
+          LIMIT 5`
+      )
+      .all(wartosc, id);
+    if (kolizja.length === 0) continue;
+    const nazwy = kolizja.map((o) => `„${maskowanie.oznaczenieOsoby(o)}” (#${o.id})`).join(', ');
+    ostrzezenia.push(
+      `${pole.toUpperCase()} „${wartosc}” jest już w kartotece pod inną pozycją: ${nazwy}. ` +
+        'Jeśli to ta sama osoba, kartoteka ma mieć jeden rekord, nie dwa — sprawdź przed zapisaniem.'
+    );
+  }
+  return ostrzezenia;
+}
+
+/**
  * Beneficjent rzeczywisty (blok C2) - z definicji OSOBA FIZYCZNA (art. 2
  * ust. 2 pkt 1 ustawy AML), sensowny wylacznie dla podmiotu typu "prawna".
  * Odwolanie miedzy wierszami - CHECK w schemacie tego nie sprawdzi, stad
@@ -223,6 +254,9 @@ router.post(
     const dane = wyczysc(zad.body || {});
     sprawdzOsobe(dane);
     sprawdzBeneficjenta(dane.beneficjent_rzeczywisty_id, null, dane.typ);
+    // PRZED insertem - rekord jeszcze nie istnieje, wiec nie trzeba go
+    // wykluczac z wyniku samego siebie (patrz PUT nizej, gdzie trzeba).
+    const kolizje = ostrzezeniaKolizji(dane);
 
     const teraz = czas.terazIso();
     const kolumny = Object.keys(dane);
@@ -237,7 +271,7 @@ router.post(
       osoba: zOznaczeniem(
         db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(wynik.lastInsertRowid)
       ),
-      ostrzezenia: ostrzezeniaOsoby(dane),
+      ostrzezenia: [...ostrzezeniaOsoby(dane), ...kolizje],
       // Braki wobec art. 300(33) § 1 KSH sa czyms innym niz ostrzezenia
       // o jakosci danych: kartoteke zaklada sie czesto zanim komplet danych
       // wroci od akcjonariusza, a wiaza dopiero przy wpisie do rejestru.
@@ -283,7 +317,7 @@ router.put(
 
     odp.json({
       osoba: zOznaczeniem(db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(id)),
-      ostrzezenia: ostrzezeniaOsoby(scalone),
+      ostrzezenia: [...ostrzezeniaOsoby(scalone), ...ostrzezeniaKolizji(scalone, id)],
       braki_ustawowe: akcjonariuszLogika.ostrzezenia(scalone),
     });
   })

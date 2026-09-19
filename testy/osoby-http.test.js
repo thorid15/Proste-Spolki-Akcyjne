@@ -112,7 +112,10 @@ test('PESEL: niepoprawna suma kontrolna daje ostrzezenie, NIE blokuje zapisu (et
   assert.equal(stNiepoprawny, 201, 'zla suma kontrolna nie blokuje zapisu osoby');
   assert.ok(niepoprawny.ostrzezenia.some((o) => o.includes('Suma kontrolna')));
 
-  const [, poprawka] = await zapytaj('PUT', `/api/psa/osoby/${niepoprawny.osoba.id}`, { pesel: '90071500118' });
+  // Inny (tez poprawny) numer niz ten z pierwszego zapisu wyzej - Z-350
+  // ostrzega o kolizji PESEL z innym rekordem, a tu sprawdzana jest
+  // WYLACZNIE poprawa sumy kontrolnej, nie ta druga sprawa.
+  const [, poprawka] = await zapytaj('PUT', `/api/psa/osoby/${niepoprawny.osoba.id}`, { pesel: '90071500125' });
   assert.deepEqual(poprawka.ostrzezenia, [], 'poprawiony PESEL usuwa ostrzezenie przy PUT');
 });
 
@@ -211,6 +214,50 @@ test('status PEP: nowa osoba bez podanego statusu dostaje "nieustalono", nie "ni
     typ: 'fizyczna', nazwisko: `PepPusty${sufiks()}`, pep: '',
   });
   assert.equal(pusty.osoba.pep, 'nieustalono');
+});
+
+/**
+ * Naprawa Z-350: kartoteka deklaruje "jeden inwestor wpisywany RAZ" (regula
+ * domenowa nr 10), ale nic tego nie egzekwowalo - dwie ROZNE osoby moglysie
+ * zapisac z tym samym PESEL/NIP bez zadnego sygnalu. Ostrzezenie, NIE
+ * blokada - ta sama osoba wystepuje legalnie w wielu spolkach.
+ */
+test('Z-350: kolizja PESEL/NIP z INNYM rekordem daje ostrzezenie, nie blokuje zapisu', async () => {
+  const [, pierwsza] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `Kolizja1${sufiks()}`, imie: 'Anna', pesel: '90010112349',
+  });
+  assert.ok(!pierwsza.ostrzezenia.some((o) => /PESEL.*jest już w kartotece/.test(o)), 'pierwszy zapis nie koliduje sam ze soba');
+
+  const [status, druga] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `Kolizja2-INNA-OSOBA${sufiks()}`, imie: 'Ewa', pesel: '90010112349',
+  });
+  assert.equal(status, 201, 'kolizja PESEL nie blokuje zapisu');
+  assert.ok(
+    druga.ostrzezenia.some((o) => /PESEL „90010112349” jest już w kartotece/.test(o) && o.includes(`#${pierwsza.osoba.id}`)),
+    druga.ostrzezenia.join(' | ')
+  );
+
+  // Edycja osoby BEZ zadnej prawdziwej kolizji nie koliduje sama ze soba
+  // (wyjatek po `id` w zapytaniu dziala, nie tylko przypadkiem nic nie
+  // znajduje - "druga" i "pierwsza" wyzej NADAL koliduja ze soba naprawde,
+  // wiec nie nadaja sie do sprawdzenia braku samo-kolizji).
+  const [, osobna] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `BezKolizji${sufiks()}`, pesel: '90010112322',
+  });
+  const [, poEdycji] = await zapytaj('PUT', `/api/psa/osoby/${osobna.osoba.id}`, { telefon: '600000000' });
+  assert.ok(!poEdycji.ostrzezenia.some((o) => /PESEL.*jest już w kartotece/.test(o)));
+
+  // NIP dziala tak samo.
+  const [, prawnaA] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'prawna', nazwa: `Spolka A ${sufiks()}`, nip: '1234563218',
+  });
+  const [, prawnaB] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'prawna', nazwa: `Spolka B ${sufiks()}`, nip: '1234563218',
+  });
+  assert.ok(
+    prawnaB.ostrzezenia.some((o) => /NIP „1234563218” jest już w kartotece/.test(o) && o.includes(`#${prawnaA.osoba.id}`)),
+    prawnaB.ostrzezenia.join(' | ')
+  );
 });
 
 // ─────────────────────────────────────────────────────────────
