@@ -58,7 +58,34 @@ function rozbijNaSzczegoly(akcjonariusze) {
   return wiersze;
 }
 
-function TabelaAkcjonariatu({ akcjonariusze, razem }) {
+/* Naprawa Z-058: pokrycie i rodzaj akcji (art. 300(33) § 1 pkt 4 i 9 KSH) sa
+   USTAWOWA TRESCIA REJESTRU — dotad widoczne wylacznie na wydruku, kokpit
+   ma je pokazywac na biezaco, bez potrzeby generowania dokumentu. */
+const NAZWY_POKRYCIA_KOKPIT = {
+  tak: 'w całości',
+  nie: 'niepokryte',
+  czesciowo: 'częściowo',
+};
+const NAZWA_POKRYCIA_NIEUSTALONE = 'nieustalone';
+
+function opiszPokrycieKokpit(pokryta) {
+  return NAZWY_POKRYCIA_KOKPIT[pokryta] || NAZWA_POKRYCIA_NIEUSTALONE;
+}
+
+const NAZWY_RODZAJU_AKCJI_KOKPIT = {
+  zwykla: 'zwykła',
+  uprzywilejowana: 'uprzywilejowana',
+  zalozycielska: 'założycielska',
+  niema: 'niema',
+};
+
+function rodzajAkcjiDlaEmisji(emisje, emisjaKlucz) {
+  const emisja = (emisje || []).find((e) => e.klucz === emisjaKlucz);
+  const rodzaj = emisja ? emisja.rodzaj_akcji : null;
+  return NAZWY_RODZAJU_AKCJI_KOKPIT[rodzaj] || 'zwykła';
+}
+
+function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
   if (akcjonariusze.length === 0) {
     return (
       <Pusto
@@ -74,9 +101,11 @@ function TabelaAkcjonariatu({ akcjonariusze, razem }) {
         <tr>
           <th>Akcjonariusz</th>
           <th>Seria</th>
+          <th>Rodzaj akcji</th>
           <th className="do-prawej">Liczba akcji</th>
           <th>Numery</th>
           <th className="do-prawej">% akcji</th>
+          <th>Pokrycie</th>
           <th>Obciążenia</th>
         </tr>
       </thead>
@@ -99,9 +128,11 @@ function TabelaAkcjonariatu({ akcjonariusze, razem }) {
                 </div>
               </td>
               <td>{a.seria}</td>
+              <td>{rodzajAkcjiDlaEmisji(emisje, a.emisja_klucz)}</td>
               <td className="do-prawej" style={{ fontWeight: 600 }}>{fmt.liczba(a.ilosc)}</td>
               <td className="kol-dane">{a.numery}</td>
               <td className="do-prawej">{fmt.procent(a.procent)}</td>
+              <td>{opiszPokrycieKokpit(a.pokryta)}</td>
               <td>
                 {a.obciazenia.length === 0 ? (
                   <span className="wyciszony">—</span>
@@ -121,10 +152,11 @@ function TabelaAkcjonariatu({ akcjonariusze, razem }) {
       </tbody>
       <tfoot>
         <tr>
-          <td colSpan={2}>Razem</td>
+          <td colSpan={3}>Razem</td>
           <td className="do-prawej">{fmt.liczba(razem)}</td>
           <td />
           <td className="do-prawej">100%</td>
+          <td />
           <td />
         </tr>
       </tfoot>
@@ -656,6 +688,7 @@ function EkranKokpitu({ spolkaId }) {
               <TabelaAkcjonariatu
                 akcjonariusze={szczegolowy ? rozbijNaSzczegoly(akcjonariusze) : akcjonariusze}
                 razem={dane.razem_akcji}
+                emisje={emisje}
               />
               {!wstecz && (
                 <DalszeWpisy tytul="Dalsze wpisy:">
