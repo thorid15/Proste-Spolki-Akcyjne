@@ -300,26 +300,26 @@ Dwie niezależne ścieżki generujące ten sam dokument (`logika/informacja-doku
 | 3 | Bilans akcji per numer = suma ułamków dokładnie 1 lub 0 | **kod aplikacji** | `stan.js: sprawdzBilans()`, `walidacje.js:770-793`, `rejestr.js:418-423`. Brak agregatowego CHECK (niemożliwe w SQLite). Z-013, Z-056. |
 | 4 | Ułamek ≠ 1/1 ⇒ dokładnie jeden numer akcji | **CHECK w schemacie** | `migracje.js:452-453,595-598`. |
 | 5 | Brak akcji przed wpisem KRS (obecność `data_wpisu_krs`) | **kod aplikacji** | `walidacje.js:311-324,334-342`. Pozytywnie: Z-011. |
-| 5b | …ale wiarygodność daty KRS względem daty rejestracji spółki | **NIC** | Sprawdza wyłącznie obecność pola, nigdy relację do `data_utworzenia_spolki` → **Z-012 (KRYTYCZNY)**. |
-| 6 | Jeden aktywny podmiot prowadzący rejestr na spółkę | **NIC** | „Brak innej aktywnej umowy" to tylko checkbox UI; `PUT /api/psa/spolki/:id` cicho nadpisuje dane umowy bez walidacji i bez śladu → **Z-009 (POWAŻNY)**. |
+| 5b | …ale wiarygodność daty KRS względem daty rejestracji spółki | **kod aplikacji — NAPRAWIONE** | `walidacje.js: sprawdzDataWpisuKrsEmisji()` (komentarz „Naprawa Z-012") — emisja założycielska musi mieć `data_wpisu_krs` RÓWNĄ dacie rejestracji spółki, kolejne emisje wyłącznie PÓŹNIEJSZĄ, żadna data z przyszłości. Był: Z-012 (KRYTYCZNY). |
+| 6 | Jeden aktywny podmiot prowadzący rejestr na spółkę | **kod aplikacji — NAPRAWIONE (częściowo)** | `spolki.js: POLA_UMOWY_PO_OTWARCIU` (komentarz „Z-009/P-005") — zmiana danych umowy PO otwarciu rejestru zostawia zdarzenie rejestrowe zamiast cichego nadpisania. Sama liczba aktywnych podmiotów nadal bez osobnej tabeli/blokady — pytanie modelowe pozostaje częściowo otwarte, patrz D-009. Był: Z-009 (POWAŻNY). |
 | 7 | Forma prawna = PSA | **kod aplikacji** | `spolki.js:126` + `przepisy.ocenFormePrawna()`. Kolumna bez CHECK — gwarancja zależy od dyscypliny wywołania. Pozytywnie: Z-010. |
-| 8 | Grosze jako INTEGER, zero floatów | **kod aplikacji, niespójny** | `ustawienia.stawkaGrosze()` zaokrągla, `oplaty.dodajOplateReczna()` nie. Kolumny `_grosze` bez CHECK/STRICT → **Z-103, Z-101 (KRYTYCZNE)**, Z-102 (POWAŻNY). |
-| 9 | Pokrycie jako atrybut akcji, przechodzi niezmienione przy przeniesieniu | **kod aplikacji, niespójny między handlerami** | Poprawnie: `objecie`, `przeniesienie_ulamka`. Źle: zwykłe `przeniesienie`/`przenies()` gubią pole `pokryta` → **Z-054 (KRYTYCZNY)**. |
-| 10 | Zbycie niepokrytej akcji wymaga zgody spółki | **kod aplikacji, skuteczny tylko raz** | `walidacje.sprawdzPokrycie()` blokuje pierwsze zbycie poprawnie; od drugiej transakcji na tych samych akcjach staje się **NIC**, bo zależy od niezmiennika #9 — Z-054. |
-| 11 | Głos per akcja, nie per ułamek | **NIC** w dokumentach/UI | `kontekst-pisma.akcjonariuszeKlucze()` liczy numery akcji, nie ułamki; `przedstawiciel_osoba_id` nigdy nie czytany przy głosach → **Z-057 (KRYTYCZNY)**. |
-| 12 | Unikalność osoby w kartotece wspólnej | **NIC** | Brak `UNIQUE` na `pesel`/`nip`; `sprawdzOsobe()` liczy tylko sumę kontrolną, nigdy kolizję z innym rekordem → **Z-350 (POWAŻNY)**. |
+| 8 | Grosze jako INTEGER, zero floatów | **kod aplikacji — NAPRAWIONE** | `oplaty.js: dodajOplateReczna()` woła teraz `przepisy.walidujKwoteGrosze()` — ta sama walidacja (integer, brak ujemnych, limit stawki maksymalnej) co automat. Komentarz w kodzie: „Z-101..Z-104". Były: Z-103, Z-101 (KRYTYCZNE), Z-102, Z-104 (POWAŻNE/DROBNE). |
+| 9 | Pokrycie jako atrybut akcji, przechodzi niezmienione przy przeniesieniu | **kod aplikacji — NAPRAWIONE** | `server/logika/stan.js` (komentarz „Naprawa Z-054") — `pokryta` domyślnie dziedziczy się ze stanu źródłowych pozycji, gdy wywołujący jej wprost nie narzuca; obejmuje teraz też zwykłe `przeniesienie`. Był: Z-054 (KRYTYCZNY). |
+| 10 | Zbycie niepokrytej akcji wymaga zgody spółki | **kod aplikacji — NAPRAWIONE** | Konsekwencja naprawy niezmiennika #9 — `pokryta` już nie ginie po pierwszej transakcji, więc `walidacje.sprawdzPokrycie()` blokuje też kolejne zbycia tych samych akcji. Był: Z-054 (KRYTYCZNY). |
+| 11 | Głos per akcja, nie per ułamek | **kod aplikacji — NAPRAWIONE** | `server/logika/kontekst-pisma.js` (komentarz „Naprawa Z-057") — dokumenty/UI liczą głos właściwie dla akcji ułamkowych (współwłasność, przedstawiciel), nie trzy niezależne głosy na jedną akcję. Był: Z-057 (KRYTYCZNY). |
+| 12 | Unikalność osoby w kartotece wspólnej | **kod aplikacji — NAPRAWIONE (ostrzeżenie, nie blokada)** | `server/trasy/osoby.js: ostrzezeniaKolizji()` (Z-350, sesja napraw 2026-09-19) — kolizja PESEL/NIP z innym rekordem generuje ostrzeżenie widoczne pracownikowi; świadomie NIE jest twardą blokadą (ta sama osoba legalnie występuje w wielu spółkach — D-042). Był: Z-350 (POWAŻNY). |
 | 13 | Maskowanie PESEL/data urodzenia/adres dla innego akcjonariusza | **kod aplikacji — DZIAŁA** | `maskowanie.zamaskujOsobe()`. Z-014, Z-155, Z-156. |
-| 14 | Maskowanie AML/PEP/beneficjenta/`uwagi` dla ról spółka/organ | **NIC** | Usuwane WYŁĄCZNIE w gałęzi zamaskowanej, nigdy w `pelnyDostep` → **Z-150 (KRYTYCZNY)**, żywy kanał `GET /portal/rejestr/:spolkaId`. |
-| 14b | …pól PEP/beneficjenta dla PEER-akcjonariusza | **NIC** | Nawet gałąź „zamaskowana" usuwa tylko 4 z ~8 pól wrażliwych — ta sama Z-150. |
-| 15 | Sesja unieważniana przy wylogowaniu | **NIC** | `POST /logout` kasuje tylko ciasteczko; token ważny do TTL → **Z-250 (KRYTYCZNY)**. Kontrast: dezaktywacja konta działa natychmiast. |
-| 16 | Sesja unieważniana przy zmianie hasła | **NIC** | → **Z-251 (KRYTYCZNY)**. |
+| 14 | Maskowanie AML/PEP/beneficjenta/`uwagi` dla ról spółka/organ | **kod aplikacji — NAPRAWIONE** | `server/logika/maskowanie.js` (komentarz „Naprawa Z-150") — odpowiedź budowana z BIAŁEJ listy pól per rola (`przepisy.BIALE_LISTY`), nie z listy pól do usunięcia; `pelnyDostep` już nie omija maskowania. Był: Z-150 (KRYTYCZNY). |
+| 14b | …pól PEP/beneficjenta dla PEER-akcjonariusza | **kod aplikacji — NAPRAWIONE** | Ta sama naprawa (biała lista) obejmuje komplet ~8 pól wrażliwych, nie tylko 4 — ta sama Z-150. |
+| 15 | Sesja unieważniana przy wylogowaniu | **kod aplikacji — NAPRAWIONE** | `server/pomocnicze/autoryzacja.js` — wylogowanie dopisuje bieżący token do czarnej listy unieważnień (komentarz „Z-250"); token przestaje działać natychmiast, nie dopiero po TTL. Był: Z-250 (KRYTYCZNY). |
+| 16 | Sesja unieważniana przy zmianie hasła | **kod aplikacji — NAPRAWIONE** | `server/pomocnicze/autoryzacja.js` — licznik wersji tokenów podbijany przy zmianie hasła (komentarz „Z-251") unieważnia NATYCHMIAST wszystkie dotychczasowe tokeny konta, nie tylko bieżący. Był: Z-251 (KRYTYCZNY). |
 | 17 | Integralność łańcucha zdarzeń | **wyzwalacz DB + kod (weryfikacja)** | `GET /api/psa/integralnosc` przelicza łańcuch, wykrywa manipulacje (Z-302). |
 | 18 | Ochrona zdarzenia referencjonowanego przed DELETE | **klucz obcy (FK)** | `PRAGMA foreign_keys=ON`. Działa tylko dla zdarzeń faktycznie referencjonowanych — Z-301 (z zastrzeżeniem). |
 | 19 | Odbudowa stanu ze zdarzeń = stan bieżący | **kod aplikacji** | `stan.odtworzStan()` + `POST /:id/przelicz`. Z-303. |
-| 20 | Stawka maksymalna opłaty wg typu | **kod aplikacji, niespójny** | Egzekwowane dla stawki domyślnej, nie dla ręcznego wpisu → **Z-101 (KRYTYCZNY)**. |
-| 21 | „Jedno żądanie = jedna opłata" (idempotencja) | **kod, tylko wewnątrz jednego mechanizmu** | Działa w obrębie mechanizmu rocznicowego LUB kalendarzowego osobno, nie MIĘDZY nimi → **Z-100 (KRYTYCZNY)**. |
+| 20 | Stawka maksymalna opłaty wg typu | **kod aplikacji — NAPRAWIONE** | Ta sama `przepisy.walidujKwoteGrosze()` co niezmiennik #8 — limit egzekwowany też dla ręcznego wpisu. Był: Z-101 (KRYTYCZNY). |
+| 21 | „Jedno żądanie = jedna opłata" (idempotencja) | **kod aplikacji — NAPRAWIONE** | `server/oplaty.js: naliczOkresProwadzenia()` — jedna, wspólna, idempotentna funkcja naliczania woła się teraz zarówno z trasy `/naliczenie-roczne`, jak i z `okresyDoOdnowienia()`/przypomnień (Z-357); dwa niezależne mechanizmy z audytu połączone w jeden. Był: Z-100 (KRYTYCZNY). |
 | 22 | Zajęcie egzekucyjne wolne od opłaty, bez powiadomienia | **kod aplikacji** | `typy-zdarzen.js:234-246`. Z-106. |
-| 23 | Integralność treści podpisanego dokumentu po potwierdzeniu kancelarii | **NIC** w oknie przed formalnym odesłaniem | Nadpisanie pliku bez czyszczenia znacznika potwierdzenia, brak hasha treści → **Z-205 (KRYTYCZNY)**. |
+| 23 | Integralność treści podpisanego dokumentu po potwierdzeniu kancelarii | **kod aplikacji — NAPRAWIONE** | Migracja dodaje skrót SHA-256 treści podpisanego skanu w chwili potwierdzenia (komentarz „naprawa Z-205" w `server/migracje.js`); `server/logika/pakiet-wniosku.js` porównuje go przy odczycie, wykrywając podmianę pliku po potwierdzeniu. Był: Z-205 (KRYTYCZNY). |
 
 ---
 
@@ -348,7 +348,7 @@ ręczną. Konfiguracja: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMT
 
 ---
 
-## 6. Migracje (`server/migracje.js`, tablica `MIGRACJE`, 44 pozycje)
+## 6. Migracje (`server/migracje.js`, tablica `MIGRACJE`, 51 pozycji)
 
 | # | Co zmieniła |
 |---|---|
@@ -396,6 +396,13 @@ ręczną. Konfiguracja: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMT
 | 42 | `psa_platnosci` (transakcje tpay) + fakturowanie/okres na opłatach + `oczekuje_na_oplate` na sprawach. |
 | 43 | `wydany_dokument_id` na opłatach (opłacona informacja wydaje się raz). |
 | 44 | `zamawiajacy_osoba_id` na opłatach (NULL=należność spółki, wypełnione=prywatna należność akcjonariusza). |
+| 45 | Unieważnianie sesji: czarna lista tokenów przy wylogowaniu + licznik wersji tokenów przy zmianie hasła (naprawa Z-250/Z-251). |
+| 46 | Skrót SHA-256 treści podpisanego skanu w chwili potwierdzenia przez kancelarię — wykrywa podmianę pliku po fakcie (naprawa Z-205). |
+| 47 | VAT na opłatach: osobna kolumna stawki, kwoty w bazie zostają netto (naprawa sekcji 2.1 planu VAT). |
+| 48 | Unikalność numeru KRS w zgłoszeniach na poziomie bazy (indeks częściowy `WHERE status <> 'odrzucone'`) — koniec wyścigu przy równoczesnym zgłoszeniu (naprawa Z-004). |
+| 49 | Status PEP `nieustalono` (trzeci stan obok `tak`/`nie`) na osobach i akcjonariuszach wniosku; `pep_oswiadczenie`/`pep_oswiadczenie_data` także na wniosku (naprawa Z-151/P-010). |
+| 50 | `psa_dziennik_dostepu` dostaje wyzwalacze append-only (`BEFORE UPDATE`/`DELETE` → RAISE ABORT), analogicznie do `psa_zdarzenia` (naprawa Z-152/P-009). |
+| 51 | Klucz idempotencyjny (`klucz_idempotencji` + indeks unikalny częściowy) przy zakładaniu sprawy — kancelaria i portal (naprawa Z-351/Z-353). |
 
 **Uwaga techniczna:** tabela śledząca wersje (`psa_migracje`) jest tworzona osobno, poza tablicą
 `MIGRACJE` — to nie jest migracja nr 44 ani żadna inna pozycja tablicy.
@@ -410,17 +417,17 @@ ręczną. Konfiguracja: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMT
 | 2 | **TAK** | `stan.js: odtworzStan()`; `POST /:id/przelicz` | Z-303. |
 | 3 | **TAK** | `stan.js: sprawdzBilans()`; `walidacje.js:770-793` | Brak DB CHECK na agregacie (niemożliwe w SQLite) — wyłącznie kod. Z-013, Z-056. |
 | 4 | **TAK** | `numery.js: przydzielFifo()`, `ilosc()` | — |
-| 4a | **TAK** (CHECK+kod), **ale głosy błędne** | CHECK: `migracje.js:452-453,595-598`; arytmetyka: `ulamki.js`; głosy: `kontekst-pisma.js: akcjonariuszeKlucze()` + `numery.js: ilosc()` | Bilans działa (Z-056); liczenie głosów ignoruje ułamki — **Z-057 (KRYTYCZNY)**. |
-| 4b | **TAK** (zapis), **ale nieużywany przy głosowaniu** | `stan.js` handler `przedstawiciel`, `walidacje.js:640-658` | `przedstawiciel_osoba_id` nigdy nie czytany przy głosach — ta sama Z-057. |
-| 4c | **CZĘŚCIOWO — luka potwierdzona** | blokada: `walidacje.js: sprawdzPokrycie()`; przekazanie atrybutu: OK dla `objecie`/`przeniesienie_ulamka`, gubione przy zwykłym `przeniesienie`; zaliczanie wkładów: `kreator.js:377-392` to etykieta, nie algorytm | Blokada skuteczna tylko przy pierwszej transakcji — **Z-054 (KRYTYCZNY)**; brak pola/algorytmu na kwotę wpłaty. |
-| 5 | **TAK w deklaracji typu, NIE egzekwowane realnie** | `ustawienia.js: stawkaGrosze()` OK; `oplaty.js: dodajOplateReczna()` brak zaokrąglenia | Kolumny `_grosze` bez CHECK/STRICT — **Z-103, Z-101 (KRYTYCZNE)**, Z-102 (POWAŻNY). |
+| 4a | **TAK — naprawione** | CHECK: `migracje.js:452-453,595-598`; arytmetyka: `ulamki.js`; głosy: `kontekst-pisma.js: akcjonariuszeKlucze()` (komentarz „Naprawa Z-057") | Bilans działa (Z-056); liczenie głosów teraz poprawnie uwzględnia ułamki. Był: Z-057 (KRYTYCZNY). |
+| 4b | **TAK — naprawione** | `stan.js` handler `przedstawiciel`; `kontekst-pisma.js` (Z-057) | `przedstawiciel_osoba_id` czytany przy głosach — ta sama naprawa Z-057. |
+| 4c | **TAK — naprawione (blokada); zaliczanie wkładów nadal etykieta** | blokada: `walidacje.js: sprawdzPokrycie()`; przekazanie atrybutu: `stan.js` (komentarz „Naprawa Z-054") — `pokryta` dziedziczy się domyślnie ze stanu źródłowego, obejmuje też zwykłe `przeniesienie`; zaliczanie wkładów: `kreator.js:377-392` nadal etykieta, nie algorytm | Blokada teraz skuteczna przy KAŻDEJ transakcji, nie tylko pierwszej. Był: Z-054 (KRYTYCZNY). |
+| 5 | **TAK — naprawione** | `oplaty.js: dodajOplateReczna()` woła `przepisy.walidujKwoteGrosze()` (komentarz „Z-101..Z-104") — integer, brak ujemnych, limit stawki maksymalnej, ta sama walidacja co automat | Kolumny `_grosze` nadal bez CHECK/STRICT w schemacie, ale egzekwowane spójnie w kodzie aplikacji. Były: Z-103, Z-101 (KRYTYCZNE), Z-102 (POWAŻNY). |
 | 6 | **TAK** | `rejestr.js:106` | Fallback `\|\|` to teoretyczna, nieużywana furtka; drobne zastrzeżenie co do momentu ustawiania daty otwarcia — Z-019. |
 | 7 | **TAK** | `terminy.js:74-138` | Z-358. |
 | 8 | **TAK** | `typy-zdarzen.js:234-246`; `rejestr.js:568` | Z-106. |
-| 9 | **CZĘŚCIOWO** | DZIAŁA: `maskowanie.js: zamaskujOsobe()` dla PESEL/data urodzenia/adres. NIE DZIAŁA: te same linie nie usuwają AML/PEP/beneficjenta/`uwagi` w gałęzi `pelnyDostep` ani pól PEP/beneficjenta w gałęzi zamaskowanej | **Z-150 (KRYTYCZNY)**, żywy kanał `trasy/portal.js:1267-1282`. |
-| 10 | **NIE — potwierdzona luka** | `trasy/osoby.js: sprawdzOsobe()` | Sprawdza tylko sumę kontrolną PESEL, nigdy kolizję z innym rekordem; brak UNIQUE — **Z-350 (POWAŻNY)**. |
+| 9 | **TAK — naprawione** | `maskowanie.js` (komentarz „Naprawa Z-150") — odpowiedź budowana z BIAŁEJ listy pól per rola (`przepisy.BIALE_LISTY`), nie z listy do usunięcia; `pelnyDostep` już nie omija maskowania, komplet pól wrażliwych ukryty też dla peer-akcjonariusza | Był: **Z-150 (KRYTYCZNY)**, żywy kanał `trasy/portal.js`. |
+| 10 | **TAK — naprawione (ostrzeżenie, nie blokada)** | `trasy/osoby.js: ostrzezeniaKolizji()` (Z-350, sesja napraw 2026-09-19) | Kolizja PESEL/NIP z innym rekordem generuje teraz ostrzeżenie; świadomie nie jest twardą blokadą (D-042). Był: Z-350 (POWAŻNY). |
 | 11 | **TAK** | `spolki.js:126`, `krs.js:234` → `przepisy.js: ocenFormePrawna()` | Ta sama funkcja przy tworzeniu i edycji. Z-010. Kolumna bez CHECK. |
-| 12 | **CZĘŚCIOWO — obecność TAK, wiarygodność NIE** | `walidacje.js:311-324,334-342` | Sprawdza tylko niepustość — **Z-012 (KRYTYCZNY)**. |
+| 12 | **TAK — naprawione** | `walidacje.js: sprawdzDataWpisuKrsEmisji()` (komentarz „Naprawa Z-012") | Emisja założycielska musi mieć `data_wpisu_krs` równą dacie rejestracji spółki, kolejne — wyłącznie późniejszą; żadna data z przyszłości. Był: Z-012 (KRYTYCZNY). |
 | 13 | **NIE — martwa etykieta** | klasyfikacja: `przepisy.js: charakterWpisu()`; zapis: `rejestr.js:541-549` | Etykieta zapisywana, treść checklisty/zawiadomień identyczna niezależnie od wartości. Potwierdzone też README odstępstwo 27 (D-027). Dopasowanie tytułu prawnego przez `.includes()` na wolnym tekście — kruche. |
 | 14 | **TAK** (fakt braku obsługi płatności/dywidend) | brak wyników grep w modułach płatności | Patrz niżej — rozjazd numeracji dot. migracji 17 jest w `RAPORT.md`, nie w kodzie. |
 
@@ -456,39 +463,41 @@ Zweryfikowane grepem nazw tabel/tematów po `CLAUDE-PSA.md` → zero trafień dl
 | Zgłoszenia wstępne | `psa_zgloszenia` | Nieopisany — pierwszy publiczny endpoint całej ścieżki (Z-003, Z-004). |
 | Płatności online tpay | `psa_platnosci` | Nieopisany — webhook ITN, CRC, podpis JWS. |
 | Skany AML | `psa_osoby_skany_aml` | Nieopisany — moduł AML przełączany per spółka, skany z hashem i retencją. |
-| Dziennik dostępu | `psa_dziennik_dostepu` | Nieopisany — celowo wąski zakres, co osłabia Z-150 (patrz Z-152). |
+| Dziennik dostępu | `psa_dziennik_dostepu` | Nieopisany. Był celowo wąski zakres (Z-152) — naprawiony, teraz append-only i obejmuje też odczyty portalu (D-041). Specyfikacja nadal nie wspomina samego istnienia podsystemu. |
 | Deklinacja polska | `logika/deklinacja.js` (nieistniejący), kolumny `*_recznie` | Nieopisany — automat porzucony na rzecz mianownika z etykietą. |
 
 ### Rozbieżności punktowe
 
-1. **Reguła 4c** — tekst: „zbycie akcji nie w pełni pokrytej wymaga zgody spółki — reguła
-   blokująca" (bez zastrzeżenia zakresu). Rzeczywistość: skuteczna wyłącznie przy pierwszej
-   transakcji (Z-054). Brak odpowiadającej pozycji w README — dryf bez śladu uzasadnienia.
-2. **Reguła 4a** — kod (`stan.js:970-973`) ma komentarz WPROST odkładający korektę liczenia głosów
-   do „warstwy prezentacji, sprint 6" (czyli sam kod przyznaje lukę, Z-057), ale README nie wymienia
-   jej — luka znana autorom kodu, ale nieudokumentowana produktowo.
-3. **Reguła 9** — tekst wymienia tylko PESEL/datę urodzenia/adres jako maskowane; AML/PEP nie są
-   nawet w katalogu treści rejestru §5. Kod łączy obie kategorie pod jedną flagą `pelnyDostep`, więc
-   spółka/organ dostają też AML/PEP (Z-150) — sprzeczne z własną sekcją 10 specyfikacji („czego NIE
-   umieszczać na wydrukach: notatki AML"). Brak w README.
-4. **Reguła 10** — struktura wspólnej kartoteki istnieje, zero deduplikacji (Z-350). Cisza w README,
-   nie decyzja.
-5. **Reguła 13** — jedyny przypadek, gdzie dryf JEST udokumentowany: README odstępstwo 27 (D-027)
-   wprost nazywa brak osobnej treści zawiadomienia „świadomie odłożonym krokiem".
-6. **§11 „Integralność"** — tekst sugeruje wywołanie nocne; w kodzie brak jakiegokolwiek
-   harmonogramu/crona (zero zależności planującej zadania) — endpoint istnieje wyłącznie on-demand.
-7. **§9 kreator** — tekst: przycisk „Dokonaj wpisu" zablokowany do czasu odhaczenia checklisty.
-   Kod: odhaczenie to WYŁĄCZNIE stan UI, serwer nigdy go nie waliduje (Z-201) — pozycja „aml" może
-   zostać odhaczona nieuczciwie bez konsekwencji serwerowej.
-8. **Reguła 4a** (zaokrąglanie) — tekst implikuje zaokrąglanie przy każdym wyświetlaniu procentu, ale
-   „Wykaz akcjonariuszy" i eksport `stan.csv` (dokument idący do sądu) go nie mają (Z-051).
-9. **Reguła 12** — „twarda blokada, nie ostrzeżenie" zaimplementowana jako sprawdzenie samej
-   obecności pola, zero walidacji krzyżowej z datą rejestracji spółki (Z-012). README odstępstwo 25
-   (D-025) dotyczy tylko backfillu historycznego, nie adresuje braku walidacji idącej naprzód.
-10. **§11 „nie logujemy danych osobowych"** — prawdziwe dla logów serwera (Z-261), ale
-    `psa_dziennik_dostepu` (podsystem nieopisany) ma świadomie wąski zakres, który w praktyce czyni
-    wyciek z Z-150 niewykrywalnym post factum (Z-152) — specyfikacja nie przewiduje w ogóle
-    istnienia dziennika dostępu.
+1. **Reguła 4c** — **ZAMKNIĘTE.** Tekst: „zbycie akcji nie w pełni pokrytej wymaga zgody spółki —
+   reguła blokująca". Było: skuteczna wyłącznie przy pierwszej transakcji (Z-054); naprawione —
+   `pokryta` dziedziczy się przez KAŻDĄ transakcję (patrz §4 niezmiennik #9/#10).
+2. **Reguła 4a** — **ZAMKNIĘTE.** Było: liczenie głosów ignorowało ułamki (Z-057); naprawione w
+   `kontekst-pisma.js` (patrz §4 niezmiennik #11, §7 wiersz 4a/4b).
+3. **Reguła 9** — **ZAMKNIĘTE.** Było: `pelnyDostep` omijał maskowanie AML/PEP/beneficjenta dla
+   spółki/organu (Z-150); naprawione — biała lista pól per rola (patrz §4 niezmiennik #14/14b).
+4. **Reguła 10** — **ZAMKNIĘTE (jako ostrzeżenie, świadomie nie jako blokada).** Było: zero
+   deduplikacji (Z-350); dodano ostrzeżenie przy kolizji PESEL/NIP — twarda blokada świadomie
+   odrzucona, bo ta sama osoba legalnie występuje w wielu spółkach (D-042).
+5. **Reguła 13** — **NADAL OTWARTE.** Jedyny przypadek, gdzie dryf JEST udokumentowany: README
+   odstępstwo 27 (D-027) wprost nazywa brak osobnej treści zawiadomienia „świadomie odłożonym
+   krokiem" — pytanie, czy `charakter_wpisu` dostanie własną treść, pozostaje bez odpowiedzi
+   Łukasza (patrz pytania końcowe sesji napraw, 2026-09-19).
+6. **§11 „Integralność"** — **NADAL OTWARTE.** Tekst sugeruje wywołanie nocne; w kodzie brak
+   harmonogramu dla WERYFIKACJI ŁAŃCUCHA (`GET /api/psa/integralnosc` istnieje wyłącznie on-demand).
+   Nie mylić z Z-357 (przypomnienia o odnowieniu rejestru), który dostał wyzwalacz w tej sesji
+   (D-042) — to inny, nienaprawiony jeszcze mechanizm.
+7. **§9 kreator** — **ZAMKNIĘTE.** Było: odhaczenie checklisty to wyłącznie stan UI, serwer nigdy go
+   nie walidował (Z-201); naprawione — `POST /:id/otworz-rejestr` odrzuca otwarcie bez kompletnej
+   checklisty 10 pozycji (D-040).
+8. **Reguła 4a** (zaokrąglanie) — **ZAMKNIĘTE.** Było: „Wykaz akcjonariuszy" i `stan.csv` bez
+   zaokrąglenia procentu (Z-051); naprawione w `dokumenty-tresc.js`/`spolki.js`.
+9. **Reguła 12** — **ZAMKNIĘTE.** Było: sprawdzenie samej obecności pola, zero walidacji krzyżowej
+   z datą rejestracji spółki (Z-012); naprawione — patrz §4 niezmiennik #5b, §7 wiersz 12.
+10. **§11 „nie logujemy danych osobowych"** — **CZĘŚCIOWO ZAMKNIĘTE.** Prawdziwe dla logów serwera
+    (Z-261). Dziennik dostępu miał świadomie wąski zakres, przez co wyciek z Z-150 był
+    niewykrywalny post factum (Z-152) — naprawione: odczyt danych wrażliwych przez portal zostawia
+    teraz ślad (D-041). Specyfikacja `CLAUDE-PSA.md` nadal nie WSPOMINA istnienia dziennika dostępu
+    jako podsystemu — to pozostaje rozbieżnością dokumentacyjną, nie funkcjonalną.
 
 Pełne opisy znalezisk cytowanych powyżej: `testy-audyt/ZNALEZISKA.md`. Rejestr decyzji projektowych
 (w tym te, które adresują część powyższych rozbieżności): `DECYZJE.md`.

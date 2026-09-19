@@ -127,6 +127,11 @@
   potwierdził empirycznie, że `aml_status='brak'` (stan KAŻDEJ nowej osoby) nadal tylko ostrzega,
   nigdy nie blokuje wpisu, na wszystkich trzech drogach zapisu zdarzenia. Czy to nadal zamierzony
   stan — patrz P-013 w „Decyzje otwarte”.
+- **Uzupełnienie (sesja napraw, 2026-09-19, D-040):** próg blokujący (`niemozliwe`) SAM się nie
+  zmienił — `aml_status='brak'` nadal wyłącznie ostrzega, P-013 zostaje otwarte. Dodano natomiast
+  OSOBNĄ bramkę na etapie OTWARCIA rejestru (`POST /:id/otworz-rejestr`): serwer odrzuca otwarcie,
+  jeśli pozycja „aml” checklisty otwarcia nie jest odhaczona, tak samo jak pozostałe 9 pozycji —
+  patrz D-040.
 
 ### D-011 — Zainstalowane tylko `express` i `better-sqlite3` na starcie
 - Data: 2026-08-04 (sprint 1)
@@ -390,6 +395,8 @@
 - **Uwaga (audyt, 2026-09-17):** Z-305 (POWAŻNY) — ten mechanizm istnieje dziś WYŁĄCZNIE w API;
   UI kokpitu (`publiczne/js/kokpit.js`) używa z powrotem tylko pola daty, bez godziny. Czy to
   świadoma regresja czy przypadkowa — patrz P-011 w „Decyzje otwarte”.
+- **Zmieniony przez D-043 (sesja napraw, 2026-09-19):** godzina wróciła do UI kokpitu — ta uwaga
+  (regresja UI-do-samej-daty) już nieaktualna, patrz D-043.
 
 ### D-033 — Weryfikacja UI zastąpiona metodami offline, gdy CDN (`unpkg.com`) zablokowane w sesji
 - Data: 2026-08-07 (sprint 5), 2026-08-07/08 (sprint 6)
@@ -490,6 +497,97 @@
   `server/trasy/portal.js`, funkcja `maDostepDoSpolki`, linia ~126)
 - Skutek w kodzie: `server/trasy/portal.js`.
 
+### D-040 — Checklista otwarcia rejestru: pozycja „aml” traktowana jak pozostałe 9, bez progu EUR
+- Data: 2026-09-19 (sesja napraw)
+- Obszar: AML / rejestr
+- Decyzja: literalny plan naprawy Z-200/Z-201/Z-204 („trzy dopuszczalne zamknięcia” checklisty,
+  zależne od progu 15 000 EUR) NIE został zbudowany — zamiast tego `POST /:id/otworz-rejestr`
+  odrzuca otwarcie, jeśli którakolwiek z 10 pozycji checklisty (w tym „aml”) nie jest odhaczona.
+  Próg 15 000 EUR pozostaje wyłącznie ręcznym przełącznikiem `stosuje_procedure_aml` per spółka
+  (D-036) — żadna automatyczna kwota transakcji nie jest liczona ani porównywana z kursem EUR.
+- Uzasadnienie: wprost od Łukasza w tej sesji — pracownik sam ocenia, czy spółka w ogóle podlega
+  procedurze AML (np. po wysokości kapitału), reszta ma być tylko miejscem na to, „nic nie musi się
+  dziać automatycznie”. Budowa progu EUR/kursu byłaby zmianą spoza tego zlecenia.
+- Odrzucono: automatyczne śledzenie wartości transakcji względem progu 15 000 EUR i „trzy zamknięcia”
+  checklisty (`wykonano`/`nie_dotyczy_prog`/`odstąpiono`) z oryginalnego planu naprawy.
+- Źródło: instrukcja użytkownika w tej sesji; `testy-audyt/ZNALEZISKA.md` Z-200/Z-201/Z-204.
+- Skutek w kodzie: `server/trasy/spolki.js` (`KODY_CHECKLISTY_OTWARCIA`, `sprawdzChecklisteOtwarcia`),
+  `publiczne/js/spolki.js`. Patrz też uzupełnienie przy D-010.
+
+### D-041 — PEP „nieustalono” jako trzeci stan, dziennik dostępu obejmuje też odczyty portalu
+- Data: 2026-09-19 (sesja napraw)
+- Obszar: AML / dane osobowe / dziennik dostępu
+- Decyzja: (a) domyślny status PEP nowej osoby to `nieustalono`, nie `nie` — „nieocenione” i
+  „ocenione jako niebędące PEP” to teraz rozróżnialne stany (Z-151); (b) `pep_oswiadczenie` (deklaracja
+  osoby) przenosi się z wniosku portalowego do kartoteki, `pep`/`pep_opis` (ocena kancelarii) — NIGDY;
+  (c) `GET /portal/rejestr/:spolkaId` zapisuje wpis w dzienniku dostępu przy odczycie danych
+  wrażliwych cudzych akcjonariuszy (nie tylko przy „wyniesieniu” dokumentu), z 15-minutową
+  deduplikacją tego samego widza (Z-152); (d) akcjonariusz może sam wgrać własny skan dokumentu AML
+  przez portal, tym samym mechanizmem co pracownik (P-012, część mechaniczna).
+- Uzasadnienie: (a)-(b) mapowanie pól PEP było źródłem realnego rozjazdu (wniosek ustawiał `pep`,
+  które jest oceną KANCELARII, nie deklaracją osoby); (c) audyt (Z-152, POWAŻNY) wskazał ślepą plamę
+  w dzienniku; (d) zmniejsza obciążenie kancelarii przy identyfikacji zdalnej.
+- Odrzucono: pytanie z UI wniosku o samoocenę PEP (osobna, większa funkcja niż naprawa mapowania);
+  przechwytywanie danych płatnika z ITN Tpay (brak dostępu do dokumentacji pól API operatora —
+  pozostaje jako P-012, część nierozstrzygnięta).
+- Źródło: `testy-audyt/PYTANIA-DO-LUKASZA.md` P-009, P-010, P-012; `testy-audyt/ZNALEZISKA.md`
+  Z-151, Z-152.
+- Skutek w kodzie: `server/logika/przepisy.js`, `server/logika/akcjonariusz.js`,
+  `server/logika/dziennik-dostepu.js`, `server/logika/maskowanie.js`, `server/trasy/{osoby,portal,
+  wnioski}.js`, `publiczne/js/osoby.js`, migracje 49-50.
+- **Decyzja otwarta:** okres retencji dziennika dostępu (mechanizm zapisu istnieje, wartość/polityka
+  usuwania — nie); klauzula informacyjna RODO i oświadczenie PEP dla akcjonariuszy dochodzących PO
+  założeniu spółki (Z-153) — podstawa prawna poza `PRZEPISY-PSA.md`, wymaga potwierdzenia Łukasza.
+
+### D-042 — Drobne naprawy FAZA 6: integralność techniczna bez zmiany reguł prawnych
+- Data: 2026-09-19 (sesja napraw)
+- Obszar: techniczne (bezpieczeństwo, dostępność, odporność na błędy)
+- Decyzja: seria niezależnych, wąsko zakresowanych poprawek, żadna nie zmienia reguł domenowych:
+  - `TZ` serwera: nieustawione → programowy domyślny `Europe/Warsaw`; jawnie ustawione na coś
+    innego → odmowa startu (wariant hybrydowy, wybrany i uzasadniony w kodzie — `server/konfiguracja.js`);
+  - kartoteka osób ostrzega (nie blokuje) przy kolizji PESEL/NIP z innym rekordem (Z-350);
+  - klucz idempotencyjny przy zakładaniu sprawy (kancelaria i portal) — powtórzone żądanie zwraca
+    ten sam rekord zamiast duplikatu (Z-351/Z-353);
+  - limit 200 znaków na nazwę spółki + obcinanie tekstu w listach (Z-354);
+  - usunięty zacommitowany plik `:memory:`, naprawiona `konfiguracja.js::sciezka()` (Z-002);
+  - błędy multer (limit rozmiaru/liczby plików) i niepoprawny JSON w ciele żądania mają teraz
+    czytelne komunikaty PL i kod 400, nie surowy angielski tekst ani 500 (Z-254/Z-255);
+  - `GET /api/psa/meta` wymaga sesji pracownika, jak reszta `/api/psa/*` (Z-001/Z-252);
+  - przypomnienia o kończącym się roku prowadzenia rejestru dostały realny automatyczny wyzwalacz
+    (`setInterval`, bez nowej zależności) zamiast wyłącznie ręcznego przycisku (Z-357);
+  - etykiety formularzy kancelarii poprawnie powiązane z polami (`htmlFor`/`useId`) — dostępność
+    WCAG (Z-018).
+- Uzasadnienie: pozycje „drobne” z planu naprawy — każda ma regresyjny test (fails-before/passes-after)
+  i nie zmienia żadnej reguły ustawowej ani decyzji Łukasza o ostrzeżeniach vs blokadach.
+- Odrzucono: nic — żadna z tych pozycji nie miała alternatywy wartej odrzucenia poza status quo.
+- Źródło: `testy-audyt/ZNALEZISKA.md` Z-001/Z-002/Z-018/Z-254/Z-255/Z-306/Z-350/Z-351/Z-353/Z-354/Z-357.
+- Skutek w kodzie: `server/konfiguracja.js`, `server/trasy/{osoby,spolki,sprawy,portal}.js`,
+  `server/pomocnicze/odpowiedzi.js`, `server/logika/harmonogram.js` (nowy), `publiczne/js/{app,ui,
+  ui-rejestr,spolki}.js`, `.gitignore`, migracja 51.
+
+### D-043 — „Stan na” z godziną wraca do UI kokpitu (koniec regresji z D-032)
+- Data: 2026-09-19 (sesja napraw)
+- Obszar: rejestr / interfejs
+- Decyzja: kokpit spółki znowu pokazuje pole godziny obok daty przy „stan na chwilę” — mechanizm
+  API (D-032) od teraz ma odpowiadający mu element UI, nie tylko samą datę.
+- Uzasadnienie: Z-305 (POWAŻNY) — funkcja wymagana specyfikacją istniała wyłącznie w API; UI
+  cichcem zredukował ją do samej daty, co dla pracownika wygląda jak brak funkcji.
+- Odrzucono: pozostawienie regresji do czasu wyraźnej decyzji Łukasza (odrzucone — P-011 pytał też o
+  coś INNEGO, wariant `TZ`, nie o to, czy przywrócić już istniejącą, udokumentowaną funkcję UI).
+- Źródło: `testy-audyt/ZNALEZISKA.md` Z-305; P-011.
+- Skutek w kodzie: `publiczne/js/kokpit.js`.
+
+### D-044 — Mechanizm oznaczania danych jako testowe/demo: niepotrzebny
+- Data: 2026-09-19 (sesja napraw)
+- Obszar: operacyjne
+- Decyzja: nie budujemy żadnego pola/mechanizmu odróżniającego rekordy „na serio” od demonstracyjnych
+  w `psa_spolki`/`psa_osoby`/`psa_zdarzenia`/innych tabelach.
+- Uzasadnienie: świadome pominięcie z planu naprawy tej sesji — pozycja uznana za niepotrzebną.
+- Odrzucono: nowa kolumna `jest_testowy`/`tryb_testowy` per tabela (rozważana w audycie, Z-359).
+- Źródło: plan naprawy tej sesji („Pomijamy świadomie: Z-359”); `testy-audyt/ZNALEZISKA.md` Z-359;
+  P-015.
+- Skutek w kodzie: brak (świadomy brak zmiany).
+
 ---
 
 ## Decyzje otwarte
@@ -500,23 +598,23 @@
 
 ### Z `testy-audyt/PYTANIA-DO-LUKASZA.md` — wszystkie 15, bez odpowiedzi na dziś (2026-09-18)
 
-| ID | Skrót pytania | Obszar |
-|---|---|---|
-| P-001 | Czy przy wpisie transakcyjnym na rzecz osoby prawnej wymagamy identyfikacji beneficjenta rzeczywistego? | AML |
-| P-002 | Czy akcja `niema` ma być automatycznie pozbawiona głosu, czy zależy to od umowy spółki? | rejestr |
-| P-003 | Czy automatyczne zaproszenie „od razu” po zgłoszeniu ma zostać, czy przywrócić ocenę kancelarii? | portal (patrz D-038) |
-| P-004 | Jaki ma być docelowy sposób nadawania dostępu portalowego akcjonariuszom innym niż wnioskodawca? | portal |
-| P-005 | Czy niezgodność dat uchwała/umowa i nadpisanie umowy bez śladu mają być blokadą czy ostrzeżeniem? | rejestr |
-| P-006 | Jaka ma być reguła walidacji krzyżowej `data_wpisu_krs` emisji względem daty rejestracji spółki? | rejestr |
-| P-007 | Czy stan otwarcia to wpisy na żądanie (każdy odpłatny), czy tylko opłata za prowadzenie? | opłaty |
-| P-008 | Czy martwy w UI endpoint `/naliczenie-roczne` ma zostać usunięty, zabezpieczony, czy zostać bez zmian? | opłaty |
-| P-009 | Czy dziennik dostępu ma objąć też zwykłe odczyty portalowe? | dziennik dostępu |
-| P-010 | Jak naprawić rozjazd pól PEP przy przejęciu wniosku; czy dokumenty RODO/PEP mają powstawać też dla akcjonariuszy dochodzących po założeniu spółki? | AML / dane osobowe |
-| P-011 | Czy „stan na” z dokładnością do minuty ma wrócić do UI (patrz D-032); czy `TZ` serwera ma być programowo wymuszony? | rejestr / interfejs |
-| P-012 | Czy zdalna identyfikacja akcjonariusza (dane + opcjonalny skan wgrywany przez pracownika) spełnia wymogi AML? | AML |
-| P-013 | Czy status AML `brak` powinien blokować wpis tak jak `niemozliwe` (patrz D-010)? | AML |
-| P-014 | Czy dezaktualizacja AML i brak beneficjenta rzeczywistego mają blokować wpis? | AML |
-| P-015 | Czy potrzebny jest mechanizm oznaczania danych jako testowe/demo na produkcji? | operacyjne |
+| ID | Skrót pytania | Obszar | Stan po sesji napraw (2026-09-19) |
+|---|---|---|---|
+| P-001 | Czy przy wpisie transakcyjnym na rzecz osoby prawnej wymagamy identyfikacji beneficjenta rzeczywistego? | AML | otwarte |
+| P-002 | Czy akcja `niema` ma być automatycznie pozbawiona głosu, czy zależy to od umowy spółki? | rejestr | otwarte |
+| P-003 | Czy automatyczne zaproszenie „od razu” po zgłoszeniu ma zostać, czy przywrócić ocenę kancelarii? | portal (patrz D-038) | otwarte |
+| P-004 | Jaki ma być docelowy sposób nadawania dostępu portalowego akcjonariuszom innym niż wnioskodawca? | portal | otwarte |
+| P-005 | Czy niezgodność dat uchwała/umowa i nadpisanie umowy bez śladu mają być blokadą czy ostrzeżeniem? | rejestr | otwarte |
+| P-006 | Jaka ma być reguła walidacji krzyżowej `data_wpisu_krs` emisji względem daty rejestracji spółki? | rejestr | otwarte |
+| P-007 | Czy stan otwarcia to wpisy na żądanie (każdy odpłatny), czy tylko opłata za prowadzenie? | opłaty | otwarte |
+| P-008 | Czy martwy w UI endpoint `/naliczenie-roczne` ma zostać usunięty, zabezpieczony, czy zostać bez zmian? | opłaty | otwarte |
+| P-009 | Czy dziennik dostępu ma objąć też zwykłe odczyty portalowe? | dziennik dostępu | **rozstrzygnięte → D-041** (tak, objęto); okres retencji nadal otwarty |
+| P-010 | Jak naprawić rozjazd pól PEP przy przejęciu wniosku; czy dokumenty RODO/PEP mają powstawać też dla akcjonariuszy dochodzących po założeniu spółki? | AML / dane osobowe | **częściowo → D-041** (mapowanie PEP naprawione); rozszerzenie RODO/PEP (Z-153) nadal otwarte |
+| P-011 | Czy „stan na” z dokładnością do minuty ma wrócić do UI (patrz D-032); czy `TZ` serwera ma być programowo wymuszony? | rejestr / interfejs | **rozstrzygnięte → D-042, D-043** (oba warianty wdrożone, do potwierdzenia przez Łukasza) |
+| P-012 | Czy zdalna identyfikacja akcjonariusza (dane + opcjonalny skan wgrywany przez pracownika) spełnia wymogi AML? | AML | częściowo — mechanizm samodzielnego wgrywania skanu przez akcjonariusza dodany (D-041); ocena PRAWNA wymogów AML nadal otwarta |
+| P-013 | Czy status AML `brak` powinien blokować wpis tak jak `niemozliwe` (patrz D-010)? | AML | otwarte (świadomie nietknięte — patrz uzupełnienie D-010) |
+| P-014 | Czy dezaktualizacja AML i brak beneficjenta rzeczywistego mają blokować wpis? | AML | otwarte (świadomie nietknięte) |
+| P-015 | Czy potrzebny jest mechanizm oznaczania danych jako testowe/demo na produkcji? | operacyjne | **rozstrzygnięte → D-044** (nie, niepotrzebny) |
 
 Pełny kontekst i warianty odpowiedzi dla każdego: `testy-audyt/PYTANIA-DO-LUKASZA.md`.
 
