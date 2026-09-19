@@ -288,6 +288,28 @@ test('POST /api/psa/portal/wniosek/zloz: odmawia przy niepelnych danych akcjonar
   assert.equal(stPo, 200);
 });
 
+test('Z-006/P-004: POST /api/psa/portal/wniosek/zloz odmawia bez e-maila akcjonariusza, niezaleznie od zgody na e-mail w rejestrze', async () => {
+  const { ciastko } = await kontoWnioskodawcy('zlozenie-bez-emaila@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
+  await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Wniosek Bez Emaila P.S.A.' }, ciastko);
+  const { email, ...bezEmaila } = AKCJONARIUSZ_PELNY;
+  const [, dodany] = await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', bezEmaila, ciastko);
+
+  const [status, wynik] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+  assert.equal(status, 400);
+  assert.ok(
+    wynik.szczegoly.some((b) => /brak adresu e-mail/.test(b)),
+    `oczekiwano braku e-maila w szczegolach, dostano: ${JSON.stringify(wynik.szczegoly)}`
+  );
+
+  await zapytaj(
+    'PUT', `/api/psa/portal/wniosek/akcjonariusze/${dodany.akcjonariusz.id}`,
+    { email: 'anna.bezemaila@example-test.pl' }, ciastko
+  );
+  const [stPo] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+  assert.equal(stPo, 200, 'sam adres e-mail operacyjny wystarcza - zgoda na e-mail W REJESTRZE to osobna sprawa (Z-157)');
+});
+
 /**
  * Od etapu „dokumenty przygotowuje kancelaria" zlozenie wniosku NIE generuje
  * juz zadnych plikow. Komplet wystawia pracownik (`/api/psa/wnioski/...`),

@@ -473,7 +473,7 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
       </div>
 
       <div className="siatka-2">
-        <Pole etykieta="Adres e-mail">
+        <Pole etykieta="Adres e-mail" wymagane podpowiedz="Potrzebny do zaproszenia akcjonariusza do portalu po otwarciu rejestru — niezależny od zgody na komunikację elektroniczną poniżej.">
           <input type="text" {...pole('email')} placeholder="przyklad@example.com" />
         </Pole>
         <Pole etykieta="Numer telefonu" opcjonalne><input type="text" {...pole('telefon')} /></Pole>
