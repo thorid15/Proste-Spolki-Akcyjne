@@ -284,9 +284,23 @@ router.post(
     };
 
     const kolumny = Object.keys(dane);
-    const wynikZgloszenia = db()
-      .prepare(`INSERT INTO psa_zgloszenia (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
-      .run(dane);
+    let wynikZgloszenia;
+    try {
+      wynikZgloszenia = db()
+        .prepare(`INSERT INTO psa_zgloszenia (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
+        .run(dane);
+    } catch (e) {
+      // Ostatnia linia obrony przed wyscigiem: dwa rownoczesne zgloszenia dla
+      // tego samego KRS moga oba minac SELECT wyzej, zanim ktorykolwiek INSERT
+      // sie wykona - indeks unikalny (migracja 48) to wtedy lapie tutaj.
+      if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        throw bledneZadanie(
+          `Zgłoszenie dla spółki o numerze KRS ${krs} jest już w toku. `
+          + 'Sprawdź skrzynkę — zaproszenie do portalu poszło na wskazany wcześniej adres.'
+        );
+      }
+      throw e;
+    }
 
     // Zaproszenie idzie OD RAZU. Na tym etapie kancelaria niczego jeszcze nie
     // sprawdza — sprawdza dopiero wniosek — a kazdy dzien zwloki miedzy

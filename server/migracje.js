@@ -1047,8 +1047,8 @@ const MIGRACJE = [
     sql: `
       -- Pierwszy kontakt nowego, nieznanego dotad klienta - WYLACZNIE dane
       -- kontaktowe (e-mail, telefon, nazwa spolki, krotki opis), bez PESEL
-      -- i bez adresow. Zadnego konta portalowego ani sprawy nie zaklada -
-      -- to kancelaria decyduje, czy wyslac zaproszenie (etap 3B) czy odrzucic.
+      -- i bez adresow. Zaproszenie do portalu (etap 3B) wychodzi automatycznie
+      -- i od razu przy zgloszeniu (server/logika/zaproszenia.js: wyslij()).
       -- Celowo NIE jest tabela append-only (jak psa_zdarzenia) - to wylacznie
       -- lead przed jakakolwiek weryfikacja tozsamosci, wolno go edytowac
       -- i usuwac (np. RODO - zadanie usuniecia danych przed zawarciem umowy).
@@ -1961,6 +1961,23 @@ const MIGRACJE = [
       -- DEFAULT wypelnia kolumne u wszystkich naraz. Brutto NIGDY nie jest
       -- przechowywane, wylacznie wyliczane (logika/przepisy.js: obliczBrutto).
       ALTER TABLE psa_oplaty ADD COLUMN stawka_vat_procent INTEGER NOT NULL DEFAULT 23;
+    `,
+  },
+
+  {
+    wersja: 48,
+    nazwa: 'unikalnosc KRS w zgloszeniach na poziomie bazy (naprawa Z-004)',
+    sql: `
+      -- Trasa sprawdzala duplikat KRS zapytaniem SELECT przed INSERT -
+      -- dwa rownoczesne zgloszenia dla tego samego KRS (podwojne klikniecie,
+      -- dwie karty przegladarki) mogly obie przejsc przez SELECT, zanim
+      -- ktorykolwiek INSERT zdazyl sie wykonac (TOCTOU). Indeks unikalny
+      -- czyni to niemozliwym na poziomie bazy, niezaleznie od wyscigu w kodzie.
+      --
+      -- Warunek WHERE pomija status 'odrzucone' - po odrzuceniu spolka moze
+      -- zglosic sie ponownie (zgloszenia.js dopuszcza to juz w SELECT-cie).
+      CREATE UNIQUE INDEX IF NOT EXISTS psa_ix_zgloszenia_krs_aktywne
+        ON psa_zgloszenia (krs) WHERE status <> 'odrzucone';
     `,
   },
 ];
