@@ -28,6 +28,7 @@ const zawiadomienia = require('../zawiadomienia');
 const terminy = require('../logika/terminy');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const przepisy = require('../logika/przepisy');
+const aml = require('../logika/aml');
 const maskowanie = require('../logika/maskowanie');
 const konfiguracja = require('../konfiguracja');
 const pliki = require('../pomocnicze/pliki');
@@ -50,19 +51,45 @@ const TYPY_DOKUMENTU = Object.values(przepisy.RODZAJE_DOKUMENTU);
 // Odczyt
 // ─────────────────────────────────────────────────────────────
 
+// `zadajacy_aml_*` dolaczone LEFT JOIN-em wylacznie do wyliczenia sygnalu
+// przegladu AML w `widokSprawy` (Z-202/P-014) - jedno miejsce dla obu
+// odczytow (pojedyncza sprawa i kolejka), zeby sygnal nie znikal zaleznie
+// od tego, ktora sciezka po sprawe siegnela.
+const SQL_SPRAWA_Z_ZADAJACYM = `
+  SELECT sp.*, o.aml_status AS zadajacy_aml_status, o.aml_data AS zadajacy_aml_data,
+         o.aml_data_przegladu AS zadajacy_aml_data_przegladu
+    FROM psa_sprawy sp
+    LEFT JOIN psa_osoby o ON o.id = sp.zadajacy_osoba_id
+`;
+
 function wczytajSprawe(id) {
-  return db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(id) || null;
+  return db().prepare(`${SQL_SPRAWA_Z_ZADAJACYM} WHERE sp.id = ?`).get(id) || null;
 }
 
-/** Sprawa wzbogacona o nazwe typu i wyliczony termin - ksztalt do JSON-a. */
+/**
+ * Sprawa wzbogacona o nazwe typu i wyliczony termin - ksztalt do JSON-a.
+ *
+ * Naprawa Z-202/P-014: przegląd AML zadajacego to WYLACZNIE sygnal
+ * informacyjny w kolejce (jak juz w kartotece osob, `trasy/osoby.js`) -
+ * bramka `walidacje.js: sprawdzAml` go celowo nie sprawdza i dezaktualizacja
+ * niczego nie blokuje. `sprawa.zadajacy_aml_*` to surowe kolumny dolaczone
+ * LEFT JOIN-em wylacznie do wyliczenia ponizej - nie wychodza na zewnatrz.
+ */
 function widokSprawy(sprawa, dzis = czas.dzisIso()) {
+  const { zadajacy_aml_status, zadajacy_aml_data, zadajacy_aml_data_przegladu, ...reszta } = sprawa;
   const typ = typyZdarzen.istnieje(sprawa.typ_zdarzenia) ? typyZdarzen.typ(sprawa.typ_zdarzenia) : null;
   return {
-    ...sprawa,
+    ...reszta,
     typ_nazwa: typ ? typ.nazwa : sprawa.typ_zdarzenia,
     typ_symbol: typ ? typ.symbol : '?',
     odplatne: typ ? typ.odplatne : null,
     termin: terminy.policzTermin(sprawa, dzis),
+    zadajacy_wymaga_przegladu_aml: sprawa.zadajacy_osoba_id
+      ? aml.wymagaPrzegladu(
+          { aml_status: zadajacy_aml_status, aml_data: zadajacy_aml_data, aml_data_przegladu: zadajacy_aml_data_przegladu },
+          dzis
+        )
+      : false,
   };
 }
 
@@ -94,9 +121,12 @@ router.get(
 
     const wiersze = db()
       .prepare(
-        `SELECT sp.*, s.nazwa AS spolka_nazwa, s.krs AS spolka_krs
+        `SELECT sp.*, s.nazwa AS spolka_nazwa, s.krs AS spolka_krs,
+                o.aml_status AS zadajacy_aml_status, o.aml_data AS zadajacy_aml_data,
+                o.aml_data_przegladu AS zadajacy_aml_data_przegladu
            FROM psa_sprawy sp
            JOIN psa_spolki s ON s.id = sp.spolka_id
+           LEFT JOIN psa_osoby o ON o.id = sp.zadajacy_osoba_id
           WHERE ${warunki.join(' AND ')}
           ORDER BY sp.data_wplywu ASC`
       )

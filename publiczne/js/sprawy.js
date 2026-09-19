@@ -147,6 +147,8 @@ function EkranKolejkiSpraw({ spolkaId }) {
                 przyKlik={() => idz(`/sprawy/${s.id}`)}
                 prawo={
                   <>
+                    {/* Z-202/P-014: sygnal, nie blokada - sprawa idzie dalej normalnie. */}
+                    <ZnacznikPrzegladuAml wymaga={s.zadajacy_wymaga_przegladu_aml} />
                     <Pigulka odmiana={s.stan === 'wpisana' ? 'rejestr' : s.stan === 'odmowa' ? 'sygnal' : undefined}>
                       {NAZWY_STANU_SPRAWY[s.stan] || s.stan}
                     </Pigulka>
@@ -982,6 +984,8 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
           <div className="row-g" style={{ marginTop: 8 }}>
             <Znacznik odmiana={ODMIANY_STANU_SPRAWY[sprawa.stan]}>{NAZWY_STANU_SPRAWY[sprawa.stan]}</Znacznik>
             {!zakonczona && !wlasnieWpisano && <ZnacznikTerminu termin={sprawa.termin} />}
+            {/* Z-202/P-014: sygnal, nie blokada - sprawa idzie dalej normalnie. */}
+            <ZnacznikPrzegladuAml wymaga={sprawa.zadajacy_wymaga_przegladu_aml} />
           </div>
         </div>
       </div>

@@ -112,6 +112,42 @@ async function przygotujSpolke() {
   return { spolkaId, kowalski: kowalski.osoba, nowak: nowak.osoba, emisjaZdarzenieId: emisja.zdarzenie.id };
 }
 
+/**
+ * Z-202/P-014: przeglad AML zadajacego to WYLACZNIE sygnal informacyjny -
+ * juz widoczny w kartotece osob (`trasy/osoby.js`), tu sprawdzamy, ze
+ * dociera tez do kolejki spraw i do widoku pojedynczej sprawy, bez
+ * blokowania niczego (sprawa zaklada sie i idzie dalej normalnie).
+ */
+test('GET /api/psa/sprawy i GET /api/psa/sprawy/:id: sygnalizuja przeterminowany przeglad AML zadajacego, bez blokady', async () => {
+  const { spolkaId } = await przygotujSpolke();
+
+  const [, przeterminowany] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: 'Przeterminowany', imie: 'Piotr',
+    data_urodzenia: '1975-01-01', email: 'piotr.przegladaml@example.pl',
+    aml_status: 'wykonane', aml_data: '2020-01-01',
+  });
+
+  const [stZal, zalozona] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'obciazenie', zrodlo: 'email',
+    zadajacy_osoba_id: przeterminowany.osoba.id, zadajacy_rola: 'akcjonariusz',
+  });
+  assert.equal(stZal, 201, JSON.stringify(zalozona));
+  assert.equal(zalozona.sprawa.zadajacy_wymaga_przegladu_aml, true, 'przeglad sprzed lat jest przeterminowany');
+
+  const [, kolejka] = await zapytaj('GET', `/api/psa/sprawy?spolka_id=${spolkaId}`);
+  const wKolejce = kolejka.sprawy.find((s) => s.id === zalozona.sprawa.id);
+  assert.ok(wKolejce, 'sprawa stoi w kolejce - sygnal AML jej nie blokuje');
+  assert.equal(wKolejce.zadajacy_wymaga_przegladu_aml, true);
+
+  const [, szczegol] = await zapytaj('GET', `/api/psa/sprawy/${zalozona.sprawa.id}`);
+  assert.equal(szczegol.sprawa.zadajacy_wymaga_przegladu_aml, true);
+
+  // Zadne surowe dane AML zadajacego nie wychodza na zewnatrz - wylacznie
+  // wyliczony sygnal boolowski.
+  assert.equal(wKolejce.zadajacy_aml_status, undefined);
+  assert.equal(wKolejce.zadajacy_aml_data, undefined);
+});
+
 test('PATCH /api/psa/sprawy/:id akcja "zmien-typ": poprawia kwalifikacje przed wpisem, odmawia po', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
 
