@@ -251,6 +251,68 @@ test('blokada: emisji bez data_wpisu_krs w ogole sie nie zapisuje (art. 300(30) 
   }, /daty wpisu do KRS/);
 });
 
+test('Z-012/P-006: emisja zalozycielska musi miec date wpisu do KRS rowna dacie rejestracji spolki', () => {
+  const spolka = { id: 1, status: 'aktywna', data_utworzenia_spolki: '2026-03-10' };
+
+  const zla = walidacje.sprawdz({
+    zdarzenia: [],
+    spolka,
+    dzisiaj: '2026-12-31',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-03-10', dane: { seria: 'A', ilosc: 100, nr_pierwszy: 1, data_wpisu_krs: '2026-03-15' } },
+  });
+  assert.equal(zla.dopuszczalne, false);
+  assert.ok(zla.bledy.some((b) => /założycielska.*równą dacie rejestracji/.test(b)), zla.bledy.join(' | '));
+
+  const dobra = walidacje.sprawdz({
+    zdarzenia: [],
+    spolka,
+    dzisiaj: '2026-12-31',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-03-10', dane: { seria: 'A', ilosc: 100, nr_pierwszy: 1, data_wpisu_krs: '2026-03-10' } },
+  });
+  assert.equal(dobra.dopuszczalne, true, dobra.bledy.join(' | '));
+});
+
+test('Z-012/P-006: kolejna emisja (podwyzszenie) musi miec date wpisu PO dacie rejestracji spolki, nigdy przed ani rowno', () => {
+  const spolka = { id: 1, status: 'aktywna', data_utworzenia_spolki: '2026-03-10' };
+  const zdarzenia = [emisjaZdarzenie(1, { data_wpisu_krs: '2026-03-10' })];
+
+  const przed = walidacje.sprawdz({
+    zdarzenia,
+    spolka,
+    dzisiaj: '2026-12-31',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-03-01' } },
+  });
+  assert.equal(przed.dopuszczalne, false);
+  assert.ok(przed.bledy.some((b) => /musi być późniejsza/.test(b)), przed.bledy.join(' | '));
+
+  const rowno = walidacje.sprawdz({
+    zdarzenia,
+    spolka,
+    dzisiaj: '2026-12-31',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-03-10' } },
+  });
+  assert.equal(rowno.dopuszczalne, false, 'rowna dacie rejestracji spolki tez jest za wczesnie dla KOLEJNEJ emisji');
+
+  const po = walidacje.sprawdz({
+    zdarzenia,
+    spolka,
+    dzisiaj: '2026-12-31',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-05-01' } },
+  });
+  assert.equal(po.dopuszczalne, true, po.bledy.join(' | '));
+});
+
+test('Z-012/P-006: data wpisu emisji do KRS z przyszlosci jest odrzucona', () => {
+  const wynik = walidacje.sprawdz({
+    zdarzenia: [],
+    spolka: { id: 1, status: 'aktywna' },
+    dzisiaj: '2026-06-01',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-07-01' } },
+  });
+  assert.equal(wynik.dopuszczalne, false);
+  assert.ok(wynik.bledy.some((b) => /z przyszłości/.test(b)), wynik.bledy.join(' | '));
+});
+
 /* Emisji bez daty wpisu do KRS nie da sie juz zapisac, ale w bazach zalozonych
    PRZED ta zmiana takie emisje siedza — dziennik zdarzen jest append-only, wiec
    nie znikna. Bramka przy objeciu zostaje wlasnie dla nich i sprawdzamy ja tam,

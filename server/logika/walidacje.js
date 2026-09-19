@@ -85,6 +85,47 @@ function sprawdzDate(propozycja, dzisiaj, bledy) {
   }
 }
 
+/**
+ * Naprawa Z-012/P-006 — walidacja krzyzowa daty wpisu emisji do KRS wobec
+ * daty rejestracji spolki (art. 592 § 3 KSH - sankcja karna za dzialanie
+ * bez wpisu): emisja ZALOZYCIELSKA (pierwsza w rejestrze tej spolki) ma
+ * date wpisu RÓWNA dacie utworzenia spolki - to ten sam wpis do KRS, ktory
+ * rejestruje jednoczesnie spolke i jej pierwsze akcje. Kazda KOLEJNA emisja
+ * (podwyzszenie kapitalu) dostaje wlasny, PÓŹNIEJSZY wpis - nie moze
+ * poprzedzac istnienia spolki, do ktorej akcje ma nalezec. Zadna z dwoch
+ * dat nie moze byc z przyszlosci - rejestr odzwierciedla fakty juz
+ * stwierdzone przez sad, nie zapowiedzi.
+ */
+function sprawdzDataWpisuKrsEmisji(stanPrzed, propozycja, spolka, dzisiaj, bledy) {
+  if (propozycja.typ !== 'emisja') return;
+  const dataWpisu = String((propozycja.dane || {}).data_wpisu_krs || '');
+  if (!dataWpisu) return; // brak daty jest juz zablokowane w PER_TYP.emisja
+
+  if (!DATA_ISO.test(dataWpisu) || Number.isNaN(Date.parse(`${dataWpisu}T00:00:00Z`))) {
+    bledy.push(`Data wpisu emisji do KRS „${dataWpisu}” nie jest poprawną datą.`);
+    return;
+  }
+  if (dataWpisu > dzisiaj) {
+    bledy.push(`Data wpisu emisji do KRS (${dataWpisu}) jest z przyszłości.`);
+  }
+
+  const dataUtworzenia = spolka && spolka.data_utworzenia_spolki ? String(spolka.data_utworzenia_spolki) : null;
+  if (!dataUtworzenia) return; // brak daty rejestracji spolki - nie ma z czym porownac
+
+  const zalozycielska = stanPrzed.emisje.length === 0;
+  if (zalozycielska && dataWpisu !== dataUtworzenia) {
+    bledy.push(
+      `Emisja założycielska musi mieć datę wpisu do KRS równą dacie rejestracji spółki ` +
+        `(${dataUtworzenia}), a nie ${dataWpisu}.`
+    );
+  } else if (!zalozycielska && dataWpisu <= dataUtworzenia) {
+    bledy.push(
+      `Data wpisu tej emisji do KRS (${dataWpisu}) musi być późniejsza niż data rejestracji ` +
+        `spółki (${dataUtworzenia}) — akcje nie mogą powstać przed samą spółką.`
+    );
+  }
+}
+
 function sprawdzChronologie(stanPrzed, propozycja, bledy) {
   const data = String(propozycja.data_zdarzenia || '');
   if (!DATA_ISO.test(data)) return;
@@ -739,6 +780,7 @@ function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map(), dzisia
 
   sprawdzSpolke(spolka, bledy);
   sprawdzDate(propozycja, dzis, bledy);
+  sprawdzDataWpisuKrsEmisji(stanPrzed, propozycja, spolka, dzis, bledy);
   sprawdzOsoby(propozycja, osoby, bledy);
 
   const perTyp = PER_TYP[propozycja.typ];
