@@ -539,8 +539,11 @@ function EkranNowejSpolki() {
               <Pole etykieta="Data umowy o prowadzenie rejestru">
                 <PoleDaty wartosc={dane.data_umowy} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_umowy: v }))} />
               </Pole>
-              <Pole etykieta="Data otwarcia rejestru">
-                <PoleDaty wartosc={dane.data_otwarcia_rejestru} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_otwarcia_rejestru: v }))} />
+              <Pole
+                etykieta="Data otwarcia rejestru"
+                podpowiedz="Ustawia się automatycznie w chwili faktycznego otwarcia rejestru (krok „Otwarcie rejestru” niżej) — nie da się jej wpisać wcześniej (Z-019)."
+              >
+                <PoleDaty wartosc={dane.data_otwarcia_rejestru} wylaczone />
               </Pole>
             </div>
             <div className="siatka-2">

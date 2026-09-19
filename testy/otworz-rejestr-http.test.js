@@ -105,6 +105,25 @@ test('Z-008: sprawdzenie dziala tez przy PUT, gdy tylko jedno z pol sie zmienia 
   assert.match(dane.blad, /uchwały o wyborze notariusza.*nie może być późniejsza/);
 });
 
+test('Z-019: data_otwarcia_rejestru nie da sie ustawic recznie przez POST/PUT - wylacznie automatem przy otworz-rejestr', async () => {
+  const [stPost, spolkaOdp] = await zapytaj(
+    'POST', '/api/psa/spolki',
+    { nazwa: 'Bez Recznej Daty Otwarcia P.S.A.', krs: '0000776622', data_otwarcia_rejestru: '2020-01-01' },
+    { Cookie: ciastkoSesji }
+  );
+  assert.equal(stPost, 201);
+  assert.equal(spolkaOdp.spolka.data_otwarcia_rejestru, null, 'POST ignoruje reczna date otwarcia');
+
+  const spolkaId = spolkaOdp.spolka.id;
+  const [stPut, poEdycji] = await zapytaj(
+    'PUT', `/api/psa/spolki/${spolkaId}`,
+    { data_otwarcia_rejestru: '2020-01-01' },
+    { Cookie: ciastkoSesji }
+  );
+  assert.equal(stPut, 200);
+  assert.equal(poEdycji.spolka.data_otwarcia_rejestru, null, 'PUT tez ignoruje reczna date otwarcia');
+});
+
 test('POST /:id/otworz-rejestr bez sesji zwraca 401', async () => {
   const [status] = await zapytaj('POST', '/api/psa/spolki/1/otworz-rejestr', { zdarzenia: [] });
   assert.equal(status, 401);
