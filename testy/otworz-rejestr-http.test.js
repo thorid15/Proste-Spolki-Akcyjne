@@ -69,6 +69,42 @@ async function zapytaj(metoda, sciezka, cialo, naglowki = {}) {
   return [odp.status, dane];
 }
 
+test('Z-008: data uchwaly o wyborze notariusza pozniejsza niz data umowy o prowadzenie rejestru jest odrzucona', async () => {
+  const [status, dane] = await zapytaj(
+    'POST', '/api/psa/spolki',
+    { nazwa: 'Uchwala Po Umowie P.S.A.', krs: '0000776655', data_uchwaly_wyboru: '2026-03-10', data_umowy: '2026-03-01' },
+    { Cookie: ciastkoSesji }
+  );
+  assert.equal(status, 400);
+  assert.match(dane.blad, /uchwały o wyborze notariusza.*nie może być późniejsza/);
+});
+
+test('Z-008: data uchwaly rowna albo wczesniejsza niz data umowy przechodzi', async () => {
+  const [status] = await zapytaj(
+    'POST', '/api/psa/spolki',
+    { nazwa: 'Uchwala Przed Umowa P.S.A.', krs: '0000776644', data_uchwaly_wyboru: '2026-03-01', data_umowy: '2026-03-01' },
+    { Cookie: ciastkoSesji }
+  );
+  assert.equal(status, 201);
+});
+
+test('Z-008: sprawdzenie dziala tez przy PUT, gdy tylko jedno z pol sie zmienia (porownanie z wartoscia juz zapisana)', async () => {
+  const [, spolkaOdp] = await zapytaj(
+    'POST', '/api/psa/spolki',
+    { nazwa: 'Uchwala Edycja P.S.A.', krs: '0000776633', data_umowy: '2026-03-01' },
+    { Cookie: ciastkoSesji }
+  );
+  const spolkaId = spolkaOdp.spolka.id;
+
+  const [status, dane] = await zapytaj(
+    'PUT', `/api/psa/spolki/${spolkaId}`,
+    { data_uchwaly_wyboru: '2026-03-15' },
+    { Cookie: ciastkoSesji }
+  );
+  assert.equal(status, 400);
+  assert.match(dane.blad, /uchwały o wyborze notariusza.*nie może być późniejsza/);
+});
+
 test('POST /:id/otworz-rejestr bez sesji zwraca 401', async () => {
   const [status] = await zapytaj('POST', '/api/psa/spolki/1/otworz-rejestr', { zdarzenia: [] });
   assert.equal(status, 401);

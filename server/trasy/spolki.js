@@ -107,6 +107,16 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
       throw bledneZadanie(`Pole „${pole}” musi być datą w formacie RRRR-MM-DD.`);
     }
   }
+  // Naprawa Z-008: spolka wybiera notariusza UCHWALA, dopiero potem z nim
+  // zawiera umowe o prowadzenie rejestru - uchwala nie moze byc pozniejsza
+  // niz sama umowa. Sprawdzamy tylko, gdy obie daty sa znane (formularz
+  // uzupelnia je stopniowo, w kreatorze i pozniej).
+  if (dane.data_uchwaly_wyboru && dane.data_umowy && dane.data_uchwaly_wyboru > dane.data_umowy) {
+    throw bledneZadanie(
+      `Data uchwały o wyborze notariusza (${dane.data_uchwaly_wyboru}) nie może być późniejsza ` +
+        `niż data umowy o prowadzenie rejestru (${dane.data_umowy}).`
+    );
+  }
   if (dane.status && !Object.values(przepisy.STATUSY_SPOLKI).includes(dane.status)) {
     throw bledneZadanie(`Nieznany status spółki: „${dane.status}”.`);
   }
