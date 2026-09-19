@@ -158,6 +158,17 @@ router.post(
     const kto = autor(zad);
     const cialo = zad.body || {};
 
+    // Naprawa Z-351/Z-353: klucz idempotencyjny wyslany PONOWNIE (podwojne
+    // klikniecie, ponowienie po zerwanym polaczeniu) oddaje JUZ zalozona
+    // sprawe zamiast zakladac druga, niezaleznie liczaca wlasny termin.
+    const kluczIdempotencji = cialo.klucz_idempotencji ? String(cialo.klucz_idempotencji).trim() : null;
+    if (kluczIdempotencji) {
+      const istniejaca = db().prepare('SELECT id FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
+      if (istniejaca) {
+        return odp.status(200).json({ sprawa: widokSprawy(wczytajSprawe(istniejaca.id)), juz_istniala: true });
+      }
+    }
+
     const spolkaId = Number(cialo.spolka_id);
     const spolka = rejestr.wczytajSpolke(db(), spolkaId);
     if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
@@ -248,6 +259,7 @@ router.post(
       numer: nastepnyNumerSprawy(db(), dataWplywu),
       dokument_rodzaj: dokumentRodzaj,
       dokument_data: dokumentData,
+      klucz_idempotencji: kluczIdempotencji,
       utworzono: czas.terazIso(),
     };
     dane.termin_do = terminy.policzTermin(
@@ -256,11 +268,23 @@ router.post(
     ).termin_do;
 
     const kolumny = Object.keys(dane);
-    const wynik = db()
-      .prepare(
-        `INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`
-      )
-      .run(dane);
+    let wynik;
+    try {
+      wynik = db()
+        .prepare(
+          `INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`
+        )
+        .run(dane);
+    } catch (e) {
+      // Ostatnia linia obrony przed wyscigiem: dwa naprawde ROWNOCZESNE
+      // zadania z tym samym kluczem moga oba minac SELECT wyzej, zanim
+      // ktorykolwiek INSERT sie wykona - indeks unikalny to wtedy lapie tutaj.
+      if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' && kluczIdempotencji) {
+        const wygrana = db().prepare('SELECT id FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
+        if (wygrana) return odp.status(200).json({ sprawa: widokSprawy(wczytajSprawe(wygrana.id)), juz_istniala: true });
+      }
+      throw e;
+    }
 
     odp.status(201).json({ sprawa: widokSprawy(wczytajSprawe(wynik.lastInsertRowid)) });
   })

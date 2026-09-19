@@ -2044,6 +2044,27 @@ const MIGRACJE = [
       END;
     `,
   },
+
+  {
+    wersja: 51,
+    nazwa: 'klucz idempotencyjny przy zakladaniu sprawy (naprawa Z-351/Z-353)',
+    sql: `
+      -- Podwojne zadanie POST (dwa kliknieca, dwie karty, ponowienie po
+      -- zerwanym polaczeniu - klient nie wie, czy pierwsze dotarlo) zakladalo
+      -- dotad DWIE niezalezne sprawy dla tego samego zdarzenia, kazda z
+      -- WLASNYM biegnacym terminem ustawowym 7 dni (art. 300(34) § 1 KSH).
+      --
+      -- Klucz generuje KLIENT raz, na poczatku proby zalozenia sprawy, i
+      -- wysyla ten sam klucz przy kazdym ponowieniu tej samej proby - trasa
+      -- (server/trasy/sprawy.js, server/trasy/portal.js) sprawdza go PRZED
+      -- insertem i przy trafieniu oddaje JUZ istniejaca sprawe zamiast
+      -- zakladac druga. Indeks czesciowy: stare sprawy i klienci, ktorzy nie
+      -- wysylaja klucza, maja NULL - wiele NULL-i nie koliduje ze soba.
+      ALTER TABLE psa_sprawy ADD COLUMN klucz_idempotencji TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS psa_ix_sprawy_klucz_idempotencji
+        ON psa_sprawy (klucz_idempotencji) WHERE klucz_idempotencji IS NOT NULL;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

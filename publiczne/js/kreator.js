@@ -1296,6 +1296,11 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawy
   const [typDokumentu, ustawTypDokumentu] = useState('inny');
   const [zapisywanie, ustawZapisywanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
+  // Naprawa Z-351/Z-353: jeden klucz na CALA proba zalozenia tej sprawy -
+  // wygenerowany raz przy otwarciu ekranu, wysylany PONOWNIE przy kazdym
+  // ponowieniu (przycisk "Zaloz" po bledzie/zerwanym polaczeniu), zeby
+  // serwer rozpoznal powtorke zamiast zalozyc druga, niezalezna sprawe.
+  const kluczIdempotencji = useRef(crypto.randomUUID());
 
   const meta = useDane('/api/psa/meta');
   const spolkaDane = useDane(`/api/psa/spolki/${spolkaId}`);
@@ -1352,6 +1357,7 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawy
         dokument_rodzaj: dokumentRodzaj || null,
         dokument_data: dokumentData || null,
         notatka: podstawaOpis || null,
+        klucz_idempotencji: kluczIdempotencji.current,
       });
       const sprawaId = odpowiedz.sprawa.id;
 

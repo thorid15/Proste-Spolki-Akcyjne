@@ -148,6 +148,46 @@ test('GET /api/psa/sprawy i GET /api/psa/sprawy/:id: sygnalizuja przeterminowany
   assert.equal(wKolejce.zadajacy_aml_data, undefined);
 });
 
+/**
+ * Naprawa Z-351/Z-353: podwojne zadanie (dwa kliknieca, ponowienie po
+ * zerwanym polaczeniu) zakladalo dwie NIEZALEZNE sprawy dla tego samego
+ * zdarzenia, kazda z wlasnym biegnacym terminem 7-dniowym. Klucz
+ * idempotencyjny generuje klient i wysyla go PONOWNIE przy kazdej
+ * ponowionej probie tej samej czynnosci.
+ */
+test('POST /api/psa/sprawy: ten sam klucz_idempotencji drugi raz oddaje JUZ zalozona sprawe, nie zaklada drugiej', async () => {
+  const { spolkaId, kowalski } = await przygotujSpolke();
+  const klucz = `test-idempotencja-${Date.now()}`;
+
+  const [st1, pierwsza] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'emisja', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'spolka',
+    klucz_idempotencji: klucz,
+  });
+  assert.equal(st1, 201, JSON.stringify(pierwsza));
+
+  const [st2, druga] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'emisja', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'spolka',
+    klucz_idempotencji: klucz,
+  });
+  assert.equal(st2, 200, 'ponowienie z tym samym kluczem nie zaklada drugiej sprawy');
+  assert.equal(druga.sprawa.id, pierwsza.sprawa.id);
+  assert.equal(druga.juz_istniala, true);
+
+  const liczbaSpraw = db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy WHERE klucz_idempotencji = ?').get(klucz).n;
+  assert.equal(liczbaSpraw, 1, 'dokladnie jedna sprawa w bazie, nie dwie');
+
+  // Bez klucza (klient starszy albo swiadomie inna proba) zachowanie
+  // dotychczasowe - kazde zadanie zaklada nowa sprawe.
+  const [st3, trzecia] = await zapytaj('POST', '/api/psa/sprawy', {
+    spolka_id: spolkaId, typ_zdarzenia: 'emisja', zrodlo: 'papier',
+    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'spolka',
+  });
+  assert.equal(st3, 201);
+  assert.notEqual(trzecia.sprawa.id, pierwsza.sprawa.id);
+});
+
 test('PATCH /api/psa/sprawy/:id akcja "zmien-typ": poprawia kwalifikacje przed wpisem, odmawia po', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
 

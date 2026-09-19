@@ -881,6 +881,11 @@ function EkranZgloszeniePortal({ spolkaId }) {
   const [blad, ustawBlad] = useState(null);
   const [gotowe, ustawGotowe] = useState(null);
   const wejscie = useRef(null);
+  // Naprawa Z-351/Z-353: jeden klucz na CALA proba zlozenia tego zgloszenia -
+  // ponowienie (przycisk po bledzie/zerwanym polaczeniu) wysyla ten sam
+  // klucz, wiec serwer nie zaklada drugiej sprawy ani nie nabija drugiej
+  // oplaty za ten sam wpis.
+  const kluczIdempotencji = useRef(crypto.randomUUID());
 
   // Wpis robi sie NA PODSTAWIE DOKUMENTU (art. 300(34) § 4 KSH), wiec plik
   // jest tu rzecza najwazniejsza. Zgloszenie bez pliku przyjmujemy, ale
@@ -905,6 +910,7 @@ function EkranZgloszeniePortal({ spolkaId }) {
     try {
       const wynik = await API.post('/api/psa/portal/zadania', {
         spolka_id: spolkaId, typ_zdarzenia: typ, opis: opis.trim(),
+        klucz_idempotencji: kluczIdempotencji.current,
       });
       if (pliki.length > 0) {
         const formularz = new FormData();

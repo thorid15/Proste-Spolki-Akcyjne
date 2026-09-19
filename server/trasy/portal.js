@@ -1534,6 +1534,26 @@ router.post(
     const konto = zad.konto;
     const cialo = zad.body || {};
 
+    // Naprawa Z-351/Z-353: klucz idempotencyjny wyslany PONOWNIE (podwojne
+    // klikniecie, ponowienie po zerwanym polaczeniu) oddaje JUZ zalozona
+    // sprawe (i jej JUZ naliczona oplate) zamiast zakladac druga sprawe
+    // i podwojnie obciazyc klienta za ten sam wpis.
+    const kluczIdempotencji = cialo.klucz_idempotencji ? String(cialo.klucz_idempotencji).trim() : null;
+    if (kluczIdempotencji) {
+      const istniejaca = db().prepare('SELECT id FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
+      if (istniejaca) {
+        const sprawaIstniejaca = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(istniejaca.id);
+        const oplataIstniejaca = db()
+          .prepare(`SELECT id FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
+          .get(istniejaca.id);
+        return odp.status(200).json({
+          sprawa: widokSprawyPortal(sprawaIstniejaca),
+          oplata_id: oplataIstniejaca ? oplataIstniejaca.id : null,
+          juz_istniala: true,
+        });
+      }
+    }
+
     // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
     const spolkaId = Number(cialo.spolka_id);
     const spolka = rejestr.wczytajSpolke(db(), spolkaId);
@@ -1574,6 +1594,7 @@ router.post(
       wymaga_powiadomienia: typ.wymaga_powiadomienia === true ? 1 : 0,
       autor: `Portal — ${konto.email}`,
       notatka: opis || null,
+      klucz_idempotencji: kluczIdempotencji,
       utworzono: czas.terazIso(),
     };
     dane.termin_do = terminy.policzTermin(
@@ -1601,9 +1622,30 @@ router.post(
     dane.oczekuje_na_oplate = tpay.skonfigurowany() ? 1 : 0;
 
     const kolumny = Object.keys(dane);
-    const wynik = db()
-      .prepare(`INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
-      .run(dane);
+    let wynik;
+    try {
+      wynik = db()
+        .prepare(`INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
+        .run(dane);
+    } catch (e) {
+      // Ostatnia linia obrony przed wyscigiem: dwa naprawde ROWNOCZESNE
+      // zadania z tym samym kluczem moga oba minac SELECT wyzej, zanim
+      // ktorykolwiek INSERT sie wykona - indeks unikalny to wtedy lapie tutaj.
+      if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' && kluczIdempotencji) {
+        const wygrana = db().prepare('SELECT * FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
+        if (wygrana) {
+          const oplataWygranej = db()
+            .prepare(`SELECT id FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
+            .get(wygrana.id);
+          return odp.status(200).json({
+            sprawa: widokSprawyPortal(wygrana),
+            oplata_id: oplataWygranej ? oplataWygranej.id : null,
+            juz_istniala: true,
+          });
+        }
+      }
+      throw e;
+    }
     const sprawaId = Number(wynik.lastInsertRowid);
 
     // Oplata za wpis powstaje RAZEM ze sprawa i jest z nia zwiazana — to po

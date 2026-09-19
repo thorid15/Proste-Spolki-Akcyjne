@@ -250,6 +250,53 @@ test('zadania: zgloszenie bez opisu przechodzi — podstawa jest dokument', asyn
   assert.equal(wiersz.notatka, null, 'pusty opis nie zostaje pustym napisem w notatce');
 });
 
+/**
+ * Naprawa Z-351/Z-353: portal.js/zadania nalicza OPLATE razem ze sprawa -
+ * podwojne zadanie bez ochrony obciazyloby klienta dwa razy za ten sam wpis.
+ * Klucz idempotencyjny generuje klient i wysyla go ponownie przy ponowieniu
+ * tej samej proby (dwa kliknieca, ponowienie po zerwanym polaczeniu).
+ * Wlasna spolka/konto - test nie ma wplywac na liczniki spraw uzywane
+ * przez sasiednie testy tego pliku.
+ */
+test('POST /api/psa/portal/zadania: ten sam klucz_idempotencji nie zaklada drugiej sprawy ani drugiej oplaty', async () => {
+  const spolkaIdempId = dodajSpolke({ nazwa: `Portal Idempotencja ${czas.terazIso()}` });
+  const osobaIdempId = dodajOsobe({ nazwisko: 'Idempotentny', imie: 'Karol', pesel: '90010112360' });
+  const emisjaIdemp = rejestr.dokonajWpisu(db(), {
+    spolkaId: spolkaIdempId, typ: 'emisja', data_zdarzenia: '2026-01-10',
+    wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
+  });
+  rejestr.dokonajWpisu(db(), {
+    spolkaId: spolkaIdempId, typ: 'objecie', data_zdarzenia: '2026-01-10',
+    wejscie: { emisja_zdarzenie_id: emisjaIdemp.zdarzenie.id, pozycje: [{ osoba_id: osobaIdempId, ilosc: 10 }] }, autor: 'Test',
+  });
+  await dodajKonto({ email: 'idempotentny@example.pl', haslo: 'HasloKarola123', rola: 'akcjonariusz', osobaId: osobaIdempId });
+  const ciastkoIdemp = await zalogujPortal('idempotentny@example.pl', 'HasloKarola123');
+
+  const klucz = `test-portal-idempotencja-${Date.now()}`;
+  const cialo = JSON.stringify({ spolka_id: spolkaIdempId, typ_zdarzenia: 'przeniesienie', opis: 'proba', klucz_idempotencji: klucz });
+
+  const odp1 = await fetch(`${baza}/api/psa/portal/zadania`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastkoIdemp }, body: cialo,
+  });
+  assert.equal(odp1.status, 201);
+  const pierwsza = await odp1.json();
+
+  const odp2 = await fetch(`${baza}/api/psa/portal/zadania`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastkoIdemp }, body: cialo,
+  });
+  assert.equal(odp2.status, 200, 'ponowienie z tym samym kluczem nie zaklada drugiej sprawy');
+  const druga = await odp2.json();
+  assert.equal(druga.sprawa.id, pierwsza.sprawa.id);
+  assert.equal(druga.oplata_id, pierwsza.oplata_id, 'ta sama, JUZ naliczona oplata - nie druga');
+
+  const liczbaSpraw = db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy WHERE klucz_idempotencji = ?').get(klucz).n;
+  assert.equal(liczbaSpraw, 1);
+  const liczbaOplat = db()
+    .prepare(`SELECT COUNT(*) AS n FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
+    .get(pierwsza.sprawa.id).n;
+  assert.equal(liczbaOplat, 1, 'dokladnie jedna oplata za wpis, nie dwie');
+});
+
 test('dokumenty: upload do wlasnej sprawy dziala, do cudzej jest odrzucany', async () => {
   const zadanie = await (
     await fetch(`${baza}/api/psa/portal/zadania`, {
