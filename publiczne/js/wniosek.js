@@ -1000,10 +1000,12 @@ function EkranWniosku() {
                 <input type="text" {...pole('reprezentant_funkcja')} placeholder="np. Prezes Zarządu" />
               </Pole>
             </div>
-            {/* Sposób reprezentacji NIE jest polem do wypełnienia — kancelaria
-                sprawdza go na wydruku z KRS przy podpisaniu umowy, a przy
-                pobraniu danych przyciskiem „Pobierz z KRS” wartość dochodzi
-                razem z resztą i trafia do umowy bez udziału tego formularza. */}
+            <Pole
+              etykieta="Sposób reprezentacji"
+              podpowiedz="Z odpisu KRS, dział 2 — np. „jednoosobowo” albo „dwóch członków zarządu łącznie”. Dane pobrane przyciskiem „Pobierz z KRS” nadpiszą to pole automatycznie."
+            >
+              <input type="text" {...pole('reprezentant_reprezentacja')} placeholder="np. jednoosobowo" />
+            </Pole>
             <div className="siatka-2">
               <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
               <Pole etykieta="Dowód osobisty"><input type="text" {...pole('reprezentant_dowod')} placeholder="ABC 123456" /></Pole>
