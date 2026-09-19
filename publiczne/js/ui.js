@@ -42,20 +42,13 @@ function Karta({ tytul, akcje, dzieci, tight, children }) {
   );
 }
 
-function Pole({ etykieta, podpowiedz, children, wymagane }) {
-  return (
-    <div className="frow">
-      {etykieta && (
-        <label className="fl">
-          {etykieta}
-          {wymagane && <span style={{ color: 'var(--burgundy)' }}> *</span>}
-        </label>
-      )}
-      {children}
-      {podpowiedz && <div className="podpowiedz">{podpowiedz}</div>}
-    </div>
-  );
-}
+// Naprawa Z-018: `Pole` byl tu zdublowany bez `htmlFor` na etykiecie (blad
+// WCAG z audytu). Ale `ui-rejestr.js` deklaruje WLASNA funkcje `Pole` i
+// laduje sie zaraz PO tym pliku w tym samym globalnym zakresie (skrypty
+// `text/babel` bez modulow) - jej deklaracja nadpisuje te tutaj, wiec
+// definicja ponizej nigdy realnie nie renderowala sie w przegladarce.
+// Usunieta jako martwy, mylacy kod - dzialajaca wersja (z `useId`+`htmlFor`)
+// jest w ui-rejestr.js.
 
 function Znacznik({ odmiana = 'neutralny', children }) {
   return <span className={`znacznik znacznik-${odmiana}`}>{children}</span>;
