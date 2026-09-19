@@ -532,7 +532,19 @@ function EkranKokpitu({ spolkaId }) {
   // Stan rejestru na wskazany dzień (art. 300(35) KSH — informacja wydaje się
   // NA DZIEŃ). Dawniej wybierało się go playheadem na osi akcji; oś zniknęła,
   // więc została sama data, czyli to, o co naprawdę chodziło.
-  const [data, ustawDate] = useState(fmt.dzisIso());
+  //
+  // Naprawa Z-305/P-011: serwer przyjmuje `data` z dokładnością do minuty
+  // (`RRRR-MM-DDTGG:MM`, `czas.poprawnaChwila`) od dawna — rano w rejestrze
+  // może być inny wpis niż wieczorem tego samego dnia, a UI dawał wybrać
+  // wyłącznie sam dzień. Godzina jest polem OSOBNYM i opcjonalnym: pusta
+  // znaczy „cały dzień” (bez zmiany dotychczasowego zachowania).
+  const [dataDnia, ustawDataDnia] = useState(fmt.dzisIso());
+  const [godzina, ustawGodzine] = useState('');
+  const data = godzina ? `${dataDnia}T${godzina}` : dataDnia;
+  function ustawDate(nowaData) {
+    ustawDataDnia(nowaData);
+    ustawGodzine('');
+  }
   const [szczegolowy, ustawSzczegolowy] = useState(false);
   const [przeliczanie, ustawPrzeliczanie] = useState(null);
   const [sprostowanie, ustawSprostowanie] = useState(null);
@@ -595,7 +607,7 @@ function EkranKokpitu({ spolkaId }) {
             {wstecz && (
               <span className="pigulka-archiwalna">
                 <Ikona nazwa="zegar" rozmiar={13} />
-                Stan na {fmt.data(data)}
+                Stan na {fmt.dataCzas(data)}
               </span>
             )}
           </div>
@@ -609,7 +621,14 @@ function EkranKokpitu({ spolkaId }) {
               archiwalnym, tak jak wydruki. */}
           <div className="stan-na-dzien bez-druku">
             <span className="stan-na-dzien-etykieta">Stan na dzień</span>
-            <PoleDaty wartosc={data} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDate(v)} />
+            <PoleDaty wartosc={dataDnia} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDate(v)} />
+            <input
+              type="time"
+              className="pole-godziny-stanu"
+              value={godzina}
+              title="Godzina (opcjonalnie) — puste znaczy „cały dzień”. Rano w rejestrze może być inny wpis niż wieczorem tego samego dnia."
+              onChange={(z) => ustawGodzine(z.target.value)}
+            />
             {wstecz && (
               <button className="btn btn-maly" onClick={() => ustawDate(fmt.dzisIso())}>Dziś</button>
             )}
