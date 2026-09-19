@@ -26,7 +26,7 @@ const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
-const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
+const { asy, autor, bledneZadanie, nieZnaleziono, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
 const { pobierzZKrs } = require('./krs');
 
 const router = express.Router();
@@ -288,7 +288,10 @@ const uploadUmowy = multer({
 
 router.post(
   '/:id/umowa-zalacznik',
-  (zad, odp, dalej) => uploadUmowy.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  // Naprawa Z-254: blad multera idzie nieopakowany, zeby zadzialala
+  // przetlumaczona galaz "MulterError"; blad z fileFilter (juz po polsku)
+  // staje sie 400, a nie ogolnym 500.
+  (zad, odp, dalej) => uploadUmowy.single('plik')(zad, odp, dalejPoUploadzie(dalej)),
   asy((zad, odp) => {
     const id = Number(zad.params.id);
     const spolka = db().prepare('SELECT id FROM psa_spolki WHERE id = ?').get(id);

@@ -34,7 +34,7 @@ const konfiguracja = require('../konfiguracja');
 const pliki = require('../pomocnicze/pliki');
 const { nastepnyNumerSprawy } = require('../logika/znak-sprawy');
 const czas = require('../pomocnicze/czas');
-const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
+const { asy, autor, bledneZadanie, nieZnaleziono, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
 const wzoryDysk = require('../logika/wzory-dysk');
 const docx = require('../logika/docx');
 const kontekstPisma = require('../logika/kontekst-pisma');
@@ -727,7 +727,10 @@ function zaladujSprawe(zad, odp, dalej) {
 router.post(
   '/:id/dokumenty',
   zaladujSprawe,
-  (zad, odp, dalej) => upload.array('pliki', 10)(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  // Naprawa Z-254: blad multera idzie nieopakowany, zeby zadzialala
+  // przetlumaczona galaz "MulterError"; blad z fileFilter (juz po polsku)
+  // staje sie 400, a nie ogolnym 500.
+  (zad, odp, dalej) => upload.array('pliki', 10)(zad, odp, dalejPoUploadzie(dalej)),
   asy((zad, odp) => {
     const sprawa = zad.psaSprawa;
     const kto = autor(zad);

@@ -592,3 +592,31 @@ test('POST /api/psa/portal/wniosek/umowa-podpisana: odmawia przed udostepnieniem
   assert.equal(pobrana.status, 200);
   assert.equal(pobrana.headers.get('content-type'), 'application/pdf');
 });
+
+test('POST /api/psa/portal/wniosek/dowod: za duzy plik dostaje przetlumaczony komunikat (Z-254)', async () => {
+  const { ciastko } = await kontoWnioskodawcy('za-duzy-dowod@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko); // zaloz wniosek
+
+  const zaDuzy = new FormData();
+  zaDuzy.append('plik', new Blob([Buffer.alloc(21 * 1024 * 1024)], { type: 'application/pdf' }), 'dowod.pdf');
+  const odp = await fetch(`${baza}/api/psa/portal/wniosek/dowod`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: zaDuzy,
+  });
+  const wynik = await odp.json();
+  assert.equal(odp.status, 400);
+  assert.equal(wynik.blad, 'Plik jest za duży (limit 20 MB).', 'komunikat przetlumaczony, nie surowy "File too large"');
+});
+
+test('PUT /api/psa/portal/wniosek: niepoprawny JSON w ciele zwraca 400, nie 500 (Z-255)', async () => {
+  const { ciastko } = await kontoWnioskodawcy('zly-json-wniosek@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko); // zaloz wniosek
+
+  const odp = await fetch(`${baza}/api/psa/portal/wniosek`, {
+    method: 'PUT',
+    headers: { Cookie: ciastko, 'Content-Type': 'application/json' },
+    body: '{nazwa: "brak cudzyslowow"',
+  });
+  const wynik = await odp.json();
+  assert.equal(odp.status, 400);
+  assert.equal(wynik.blad, 'Treść żądania nie jest poprawnym JSON-em.');
+});

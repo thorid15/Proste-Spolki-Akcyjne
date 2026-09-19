@@ -21,7 +21,7 @@ const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
-const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
+const { asy, autor, bledneZadanie, nieZnaleziono, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
 const zaproszenia = require('../logika/zaproszenia');
 
 const router = express.Router();
@@ -453,7 +453,10 @@ router.post(
   // zad.body jest puste, dopoki multer nie sparsuje strumienia; destynacja
   // pliku zalezy tylko od :id z URL, wiec walidacja procedury AML moze
   // bezpiecznie isc PO uploadzie - a gdy sie nie powiedzie, plik jest kasowany).
-  (zad, odp, dalej) => uploadSkanuAml.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  // Naprawa Z-254: blad multera (limit rozmiaru/liczby) idzie do
+  // posrednikaBledow nieopakowany, zeby zadzialala tam przetlumaczona
+  // galaz "MulterError"; blad z fileFilter (juz po polsku) staje sie 400.
+  (zad, odp, dalej) => uploadSkanuAml.single('plik')(zad, odp, dalejPoUploadzie(dalej)),
   (zad, odp, dalej) => wymagajProceduryAml(zad, odp, (blad) => {
     if (blad && zad.file) fs.rm(zad.file.path, { force: true }, () => {});
     dalej(blad);

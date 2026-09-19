@@ -48,7 +48,7 @@ const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
-const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien, BladZadania } = require('../pomocnicze/odpowiedzi');
+const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien, BladZadania, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
 const { pobierzZKrs } = require('./krs');
 const osobyModul = require('./osoby');
@@ -873,7 +873,11 @@ const uploadPodpisanego = multer({
  */
 function przyjmijSkan(zad, odp, dalej) {
   uploadPodpisanego.single('plik')(zad, odp, (e) => {
-    if (e) return dalej(bledneZadanie(e.message));
+    // Naprawa Z-254: blad multera idzie nieopakowany do posrednikaBledow, zeby
+    // zadzialala tam przetlumaczona galaz `blad.name === 'MulterError'`; blad
+    // z fileFilter (juz po polsku) trzeba owinac w BladZadanie, inaczej
+    // trafia do ogolnego 500 zamiast 400.
+    if (e) return dalejPoUploadzie(dalej)(e);
     if (zad.file && !pliki.trescPasuje(zad.file.path, pliki.typZNazwy(zad.file.originalname))) {
       fs.rmSync(zad.file.path, { force: true });
       return dalej(bledneZadanie(
@@ -1412,7 +1416,10 @@ router.post(
   // tylko od `zad.konto.osoba_id`, znanego juz z sesji), wlaczona procedura
   // AML sprawdzana PO uploadzie - a gdy sie nie powiedzie, plik jest kasowany.
   // Dostep do `:spolkaId` juz sprawdzony przez `router.param` wyzej.
-  (zad, odp, dalej) => uploadWlasnegoSkanuAml.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  // Naprawa Z-254: blad multera idzie nieopakowany, zeby zadzialala
+  // przetlumaczona galaz "MulterError"; blad z fileFilter (juz po polsku)
+  // staje sie 400, a nie ogolnym 500.
+  (zad, odp, dalej) => uploadWlasnegoSkanuAml.single('plik')(zad, odp, dalejPoUploadzie(dalej)),
   asy((zad, odp) => {
     const spolkaId = Number(zad.params.spolkaId);
     const spolka = db().prepare('SELECT id, stosuje_procedure_aml FROM psa_spolki WHERE id = ?').get(spolkaId);
@@ -1739,7 +1746,10 @@ function zaladujWlasnaSprawe(zad, odp, dalej) {
 router.post(
   '/zadania/:id/dokumenty',
   zaladujWlasnaSprawe,
-  (zad, odp, dalej) => upload.array('pliki', 10)(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  // Naprawa Z-254: blad multera idzie nieopakowany, zeby zadzialala
+  // przetlumaczona galaz "MulterError"; blad z fileFilter (juz po polsku)
+  // staje sie 400, a nie ogolnym 500.
+  (zad, odp, dalej) => upload.array('pliki', 10)(zad, odp, dalejPoUploadzie(dalej)),
   asy((zad, odp) => {
     const sprawa = zad.psaSprawa;
     const konto = zad.konto;
