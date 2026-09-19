@@ -97,6 +97,23 @@ test('trasy kancelaryjne wymagaja sesji pracownika', async () => {
   assert.equal(z.status, 200);
 });
 
+test('Z-001: GET /api/psa/meta wymaga sesji pracownika, tak jak reszta pozostale.js', async () => {
+  const bez = await fetch(`${baza}/api/psa/meta`);
+  assert.equal(bez.status, 401);
+
+  const login = await fetch(`${baza}/api/psa/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: process.env.ADMIN_EMAIL, haslo: hasloAdmina }),
+  });
+  const ciastko = ciasteczkoZOdpowiedzi(login);
+
+  const z = await fetch(`${baza}/api/psa/meta`, { headers: { Cookie: ciastko } });
+  assert.equal(z.status, 200);
+  const dane = await z.json();
+  assert.ok(dane.typy_zdarzen, 'katalog nadal wraca po zalogowaniu');
+});
+
 test('rate limiting: blokuje logowanie po 5 nieudanych probach', async () => {
   const email = 'limiter-test@example.pl';
   for (let i = 0; i < 5; i += 1) {

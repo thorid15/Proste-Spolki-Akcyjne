@@ -64,9 +64,17 @@ router.put(
 /**
  * Katalogi domenowe dla UI. Front NIE powiela slownikow ani stawek -
  * wszystko pochodzi z `logika/przepisy.js` (sekcja 16 specyfikacji).
+ *
+ * Naprawa Z-001/Z-252: trasa byla jedyna w tym pliku bez `wymagajPracownika`
+ * - niespojnosc modelu autoryzacji wzgledem reszty `/api/psa/*`, choc audyt
+ * nie znalazl tu zadnych danych osobowych ani danych konkretnej spolki
+ * (wylacznie slowniki i stawki DOMYSLNE ze zrodla). Portal klienta z tej
+ * trasy nie korzysta wcale - jedyny konsument, ktory odpytywal ja PRZED
+ * zalogowaniem, byl naprawiony rownolegle w `publiczne/js/app.js`.
  */
 router.get(
   '/meta',
+  wymagajPracownika,
   asy((zad, odp) => {
     odp.json({
       portal_wlaczony: konfiguracja.PORTAL_WLACZONY,

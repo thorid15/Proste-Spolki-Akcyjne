@@ -256,7 +256,12 @@ function Aplikacja() {
   const { dane: daneKancelarii } = useDane('/api/wspolne/kancelaria');
   const kancelaria = daneKancelarii && daneKancelarii.kancelaria;
   // `/api/psa/meta` mowi, czy serwer wystawia katalog komponentow (`/podglad`).
-  const { dane: meta } = useDane('/api/psa/meta');
+  // Naprawa Z-001: trasa wymaga teraz sesji pracownika (`wymagajPracownika`),
+  // wiec odpytujemy ja dopiero PO zalogowaniu - tak samo jak `/api/psa/liczniki`
+  // ponizej. Przed zalogowaniem zwracalaby 401 i `meta` zostalby trwale `null`
+  // (efekt hooka nie sledzi zmiany sesji, wiec bez tego warunku nigdy by sie
+  // nie doladowal po zalogowaniu).
+  const { dane: meta } = useDane(sesja.zalogowany ? '/api/psa/meta' : null);
   const podgladSystemu = Boolean(meta && meta.podglad_systemu);
 
   // Liczniki kolejek w szynie i na dzwonku. Odświeżane przy każdej zmianie
