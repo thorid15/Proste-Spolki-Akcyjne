@@ -685,6 +685,31 @@ router.post(
 );
 
 /**
+ * Kody checklisty otwarcia rejestru - MUSZA byc zgodne z `CHECKLISTA_OTWARCIA`
+ * w `publiczne/js/spolki.js` (tresc jest wylacznie po stronie UI, tu liczy
+ * sie tylko zestaw kodow). Naprawa Z-200/Z-201/Z-204: checklista gasila
+ * wylacznie przycisk w przegladarce - zadanie wyslane wprost na API omijalo
+ * ja calkowicie. Pozycja „aml" jest tu traktowana tak samo jak pozostale
+ * dziewiec: wymagane jest SWIADOME odhaczenie, zgodnie z P-013 to NIE jest
+ * blokada na podstawie wyniku AML (ktorego system i tak nie ocenia), tylko
+ * wymog, zeby pracownik nie pominal tego kroku, otwierajac rejestr wprost
+ * przez API z pominieciem kreatora.
+ */
+const KODY_CHECKLISTY_OTWARCIA = [
+  'forma', 'wpis_krs', 'uchwala', 'umowa', 'jedna_umowa',
+  'dane_z_umowy', 'ograniczenia', 'bilans', 'zakres_danych', 'aml',
+];
+
+function sprawdzChecklisteOtwarcia(checklista) {
+  const brakujace = KODY_CHECKLISTY_OTWARCIA.filter((kod) => !(checklista && checklista[kod]));
+  if (brakujace.length > 0) {
+    throw bledneZadanie(
+      `Checklista otwarcia rejestru nie jest kompletna (brakuje: ${brakujace.join(', ')}).`
+    );
+  }
+}
+
+/**
  * OTWARCIE REJESTRU (sesja 6, faza 3, krok 4 kreatora rejestracji spolki).
  * Zapisuje KOMPLET zdarzen zalozycielskich (emisja, objecie, opcjonalnie
  * ograniczenie z umowy spolki) w jednej transakcji - patrz
@@ -708,6 +733,7 @@ router.post(
     const spolka = rejestr.wczytajSpolke(db(), id);
     if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
     const kto = autor(zad);
+    sprawdzChecklisteOtwarcia(zad.body && zad.body.checklista);
     const zdarzenia = Array.isArray(zad.body && zad.body.zdarzenia) ? zad.body.zdarzenia : [];
     if (zdarzenia.length === 0) {
       throw bledneZadanie('Otwarcie rejestru wymaga co najmniej jednego zdarzenia (emisji).');

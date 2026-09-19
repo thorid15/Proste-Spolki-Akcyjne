@@ -25,6 +25,13 @@ let serwer;
 let baza;
 let ciastkoSesji = '';
 
+// Z-200/Z-201/Z-204: serwer wymaga teraz kompletnej checklisty otwarcia
+// rejestru (patrz `server/trasy/spolki.js: KODY_CHECKLISTY_OTWARCIA`).
+const CHECKLISTA_PELNA = {
+  forma: true, wpis_krs: true, uchwala: true, umowa: true, jedna_umowa: true,
+  dane_z_umowy: true, ograniczenia: true, bilans: true, zakres_danych: true, aml: true,
+};
+
 function ciasteczkoZOdpowiedzi(odp) {
   const surowe = typeof odp.headers.getSetCookie === 'function' ? odp.headers.getSetCookie() : [odp.headers.get('set-cookie')];
   return surowe.filter(Boolean).map((c) => c.split(';')[0]).join('; ');
@@ -147,7 +154,10 @@ test('Z-009/P-005: zmiana danych umowy (data_umowy, umowe_zawarl) PRZED otwarcie
   // Otwarcie rejestru.
   await zapytaj(
     'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`,
-    { zdarzenia: [{ typ: 'emisja', data_zdarzenia: '2026-03-05', dane: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-03-05' } }] },
+    {
+      zdarzenia: [{ typ: 'emisja', data_zdarzenia: '2026-03-05', dane: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-03-05' } }],
+      checklista: CHECKLISTA_PELNA,
+    },
     { Cookie: ciastkoSesji }
   );
 
@@ -179,9 +189,35 @@ test('POST /:id/otworz-rejestr bez zdarzeń zwraca 400', async () => {
   const [, spolkaOdp] = await zapytaj('POST', '/api/psa/spolki', { nazwa: 'Otwarcie Testowa P.S.A.', krs: '0000777666' }, { Cookie: ciastkoSesji });
   const spolkaId = spolkaOdp.spolka.id;
 
-  const [status, dane] = await zapytaj('POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`, { zdarzenia: [] }, { Cookie: ciastkoSesji });
+  const [status, dane] = await zapytaj(
+    'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`,
+    { zdarzenia: [], checklista: CHECKLISTA_PELNA },
+    { Cookie: ciastkoSesji }
+  );
   assert.equal(status, 400);
   assert.ok(dane.blad);
+});
+
+test('POST /:id/otworz-rejestr: niekompletna checklista zwraca 400 (naprawa Z-200/Z-201/Z-204)', async () => {
+  const [, spolkaOdp] = await zapytaj('POST', '/api/psa/spolki', { nazwa: 'Checklista Niepelna P.S.A.', krs: '0000777555' }, { Cookie: ciastkoSesji });
+  const spolkaId = spolkaOdp.spolka.id;
+
+  const [status, dane] = await zapytaj(
+    'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`,
+    { zdarzenia: [{ typ: 'emisja', data_zdarzenia: '2026-01-10', dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' } }], checklista: { ...CHECKLISTA_PELNA, aml: false } },
+    { Cookie: ciastkoSesji }
+  );
+  assert.equal(status, 400);
+  assert.match(dane.blad, /aml/);
+
+  const [statusBrak] = await zapytaj(
+    'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`,
+    { zdarzenia: [{ typ: 'emisja', data_zdarzenia: '2026-01-10', dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' } }] },
+    { Cookie: ciastkoSesji }
+  );
+  assert.equal(statusBrak, 400, 'brak checklisty w ogole tez jest odrzucany');
+
+  assert.equal(db().prepare('SELECT COUNT(*) AS n FROM psa_zdarzenia WHERE spolka_id = ?').get(spolkaId).n, 0);
 });
 
 test('POST /:id/otworz-rejestr zapisuje emisję + objęcie atomowo w jednym wywołaniu (odwołanie przez klucz_tymczasowy)', async () => {
@@ -215,6 +251,7 @@ test('POST /:id/otworz-rejestr zapisuje emisję + objęcie atomowo w jednym wywo
           },
         },
       ],
+      checklista: CHECKLISTA_PELNA,
     },
     { Cookie: ciastkoSesji }
   );
@@ -264,6 +301,7 @@ test('POST /:id/otworz-rejestr: cena emisyjna jest per pozycja akcjonariatu, nie
           },
         },
       ],
+      checklista: CHECKLISTA_PELNA,
     },
     { Cookie: ciastkoSesji }
   );
@@ -305,6 +343,7 @@ test('POST /:id/otworz-rejestr: nieudane drugie zdarzenie cofa całą partię, �
           },
         },
       ],
+      checklista: CHECKLISTA_PELNA,
     },
     { Cookie: ciastkoSesji }
   );

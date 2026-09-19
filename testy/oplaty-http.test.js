@@ -33,6 +33,13 @@ let baza;
 let ciastkoAdmina;
 let ciastkoPracownika;
 
+// Z-200/Z-201/Z-204: serwer wymaga teraz kompletnej checklisty otwarcia
+// rejestru (patrz `server/trasy/spolki.js: KODY_CHECKLISTY_OTWARCIA`).
+const CHECKLISTA_PELNA = {
+  forma: true, wpis_krs: true, uchwala: true, umowa: true, jedna_umowa: true,
+  dane_z_umowy: true, ograniczenia: true, bilans: true, zakres_danych: true, aml: true,
+};
+
 function ciasteczkoZOdpowiedzi(odp) {
   const surowe = typeof odp.headers.getSetCookie === 'function' ? odp.headers.getSetCookie() : [odp.headers.get('set-cookie')];
   return surowe.filter(Boolean).map((c) => c.split(';')[0]).join('; ');
@@ -191,6 +198,7 @@ test('Z-108/P-007: otworz-rejestr nalicza 1200 zl (prowadzenie) + 100 zl (wpis) 
         dane: { emisja_zdarzenie_id: { __odwolanie_do_partii: 'emisja-A' }, pozycje: [{ osoba_id: osobaOdp.osoba.id, ilosc: 100 }] },
       },
     ],
+    checklista: CHECKLISTA_PELNA,
   };
 
   const [status, dane] = await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`, cialo);

@@ -395,7 +395,7 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
         }
       }
 
-      await API.post(`/api/psa/spolki/${id}/otworz-rejestr`, { zdarzenia });
+      await API.post(`/api/psa/spolki/${id}/otworz-rejestr`, { zdarzenia, checklista: odhaczone });
       idz(`/spolki/${id}`);
     } catch (e) {
       const szczegoly = e.dane && Array.isArray(e.dane.bledy) ? e.dane.bledy : null;
