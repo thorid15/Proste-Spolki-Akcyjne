@@ -938,7 +938,7 @@ function EkranSpolek() {
               {wycinek.map((s) => (
                 <tr key={s.id} className="klikalna" onClick={() => idz(`/spolki/${s.id}`)}>
                   <td>
-                    <div style={{ fontWeight: 500 }}>{s.nazwa}</div>
+                    <div className="tekst-obciety" style={{ fontWeight: 500 }} title={s.nazwa}>{s.nazwa}</div>
                     <div className="wiersz-podtytul">
                       {s.krs ? `KRS ${s.krs}` : 'bez numeru KRS'}
                       {s.miejscowosc ? ` · ${s.miejscowosc}` : ''}

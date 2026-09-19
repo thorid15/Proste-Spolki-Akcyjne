@@ -95,6 +95,27 @@ test('Z-008: data uchwaly rowna albo wczesniejsza niz data umowy przechodzi', as
   assert.equal(status, 201);
 });
 
+/**
+ * Naprawa Z-354: nazwa bez limitu dlugosci psula uklad pulpitu, listy
+ * spolek i kolejki spraw (test brzegowy audytu - 300 znakow).
+ */
+test('Z-354: nazwa spolki dluzsza niz 200 znakow jest odrzucona, 200 znakow przechodzi', async () => {
+  const [stZaDluga, zaDluga] = await zapytaj(
+    'POST', '/api/psa/spolki',
+    { nazwa: 'A'.repeat(300), krs: '0000776699' },
+    { Cookie: ciastkoSesji }
+  );
+  assert.equal(stZaDluga, 400);
+  assert.match(zaDluga.blad, /za długa/);
+
+  const [stOk] = await zapytaj(
+    'POST', '/api/psa/spolki',
+    { nazwa: 'B'.repeat(200), krs: '0000776698' },
+    { Cookie: ciastkoSesji }
+  );
+  assert.equal(stOk, 201, 'dokladnie 200 znakow jest jeszcze dopuszczalne');
+});
+
 test('Z-008: sprawdzenie dziala tez przy PUT, gdy tylko jedno z pol sie zmienia (porownanie z wartoscia juz zapisana)', async () => {
   const [, spolkaOdp] = await zapytaj(
     'POST', '/api/psa/spolki',

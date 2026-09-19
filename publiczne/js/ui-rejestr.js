@@ -308,8 +308,12 @@ function WierszListy({ ikona, tytul, podtytul, prawo, data, przyKlik }) {
     <button className="wiersz" onClick={przyKlik} disabled={!przyKlik}>
       {ikona && <span className="wiersz-ikona"><Ikona nazwa={ikona} rozmiar={17} /></span>}
       <span className="wiersz-tresc">
-        <span className="wiersz-tytul" style={{ display: 'block' }}>{tytul}</span>
-        {podtytul && <span className="wiersz-podtytul" style={{ display: 'block' }}>{podtytul}</span>}
+        <span className="wiersz-tytul" style={{ display: 'block' }} title={typeof tytul === 'string' ? tytul : undefined}>{tytul}</span>
+        {podtytul && (
+          <span className="wiersz-podtytul" style={{ display: 'block' }} title={typeof podtytul === 'string' ? podtytul : undefined}>
+            {podtytul}
+          </span>
+        )}
       </span>
       <span className="wiersz-prawo">
         {prawo}

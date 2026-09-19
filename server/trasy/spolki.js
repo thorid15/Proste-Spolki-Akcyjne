@@ -104,9 +104,18 @@ function wyczysc(cialo) {
   return wynik;
 }
 
+// Naprawa Z-354: nazwa bez limitu dlugosci psula uklad pulpitu, listy
+// spolek i kolejki spraw (test brzegowy - 300 znakow, brak dowolnego
+// text-overflow/skracania w tabelach). Realne firmy spolek prawa
+// handlowego rzadko przekraczaja 200 znakow.
+const DLUGOSC_NAZWY_SPOLKI_MAX = 200;
+
 function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   if (wymaganaNazwa && !dane.nazwa) {
     throw bledneZadanie('Nazwa spółki jest wymagana.');
+  }
+  if (dane.nazwa && dane.nazwa.length > DLUGOSC_NAZWY_SPOLKI_MAX) {
+    throw bledneZadanie(`Nazwa spółki jest za długa (maksymalnie ${DLUGOSC_NAZWY_SPOLKI_MAX} znaków).`);
   }
   if (dane.krs && !/^\d{10}$/.test(dane.krs)) {
     throw bledneZadanie('Numer KRS składa się z 10 cyfr.');
