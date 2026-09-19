@@ -298,14 +298,20 @@ function sprawdzAml(propozycja, osoby, bledy, ostrzezenia) {
     const osoba = osoby.get(id);
     if (!osoba) continue;
     const nazwa = osoba.nazwa || [osoba.nazwisko, osoba.imie].filter(Boolean).join(' ') || `#${id}`;
+    // Naprawa Z-203: komunikat rozroznia osobe fizyczna i prawna - dla
+    // podmiotu srodki bezpieczenstwa obejmuja tozsamosc reprezentanta i (gdy
+    // wskazany) beneficjenta rzeczywistego, nie sam wpis do KRS. Bez
+    // blokowania (P-013) i bez osobnego sygnalu o braku wskazania
+    // beneficjenta (P-001 - to swiadomie zero ostrzezenia, decyzja pracownika).
+    const okreslenie = osoba.typ === 'prawna' ? 'nabywcy (podmiotu)' : 'nabywcy';
     if (osoba.aml_status === przepisy.AML_STATUSY.NIEMOZLIWE) {
       bledy.push(
-        `Wobec nabywcy „${nazwa}” odnotowano brak możliwości zastosowania środków bezpieczeństwa ` +
+        `Wobec ${okreslenie} „${nazwa}” odnotowano brak możliwości zastosowania środków bezpieczeństwa ` +
           `finansowego. To przeszkoda wpisu — przy jej nieusunięciu wpisu odmawia się.`
       );
     } else if (osoba.aml_status !== przepisy.AML_STATUS_WYMAGANY) {
       ostrzezenia.push(
-        `Wobec nabywcy „${nazwa}” nie odnotowano wykonania środków bezpieczeństwa finansowego (AML).`
+        `Wobec ${okreslenie} „${nazwa}” nie odnotowano wykonania środków bezpieczeństwa finansowego (AML).`
       );
     }
   }

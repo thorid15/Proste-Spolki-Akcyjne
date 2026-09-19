@@ -540,3 +540,48 @@ test('pelny cykl: emisja -> objecie -> przeniesienie_ulamka -> przedstawiciel, m
   const integralnosc = rejestr.zweryfikujIntegralnosc(db);
   assert.equal(integralnosc.ok, true);
 });
+
+/**
+ * Naprawa Z-203: bramka AML rozroznia nabywce-osobe fizyczna i prawna w
+ * tresci komunikatu (bez blokowania - P-013 - i bez osobnego sygnalu o
+ * braku wskazania beneficjenta rzeczywistego, ktore P-001 celowo zostawia
+ * bez zadnego ostrzezenia).
+ */
+test('Z-203: ostrzezenie AML rozroznia nabywce-osobe prawna od fizycznej w tresci komunikatu', () => {
+  const dziennik = [emisjaZdarzenie(1, { data_wpisu_krs: '2026-01-01' })];
+
+  const wynikPrawna = walidacje.sprawdz({
+    zdarzenia: dziennik,
+    spolka: { id: 1, status: 'aktywna' },
+    osoby: new Map([[7, { id: 7, typ: 'prawna', nazwa: 'Inwestor Sp. z o.o.', aml_status: 'brak' }]]),
+    dzisiaj: '2026-02-01',
+    propozycja: {
+      typ: 'objecie',
+      data_zdarzenia: '2026-01-02',
+      dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: 7, zakresy: [{ nr_od: 1, nr_do: 10 }] }] },
+    },
+  });
+  assert.equal(wynikPrawna.dopuszczalne, true, wynikPrawna.bledy.join(' | '));
+  assert.ok(
+    wynikPrawna.ostrzezenia.some((o) => /nabywcy \(podmiotu\)/.test(o) && /Inwestor Sp\. z o\.o\./.test(o)),
+    wynikPrawna.ostrzezenia.join(' | ')
+  );
+
+  const wynikFizyczna = walidacje.sprawdz({
+    zdarzenia: dziennik,
+    spolka: { id: 1, status: 'aktywna' },
+    osoby: new Map([[8, { id: 8, typ: 'fizyczna', nazwisko: 'Kowalski', imie: 'Jan', aml_status: 'brak' }]]),
+    dzisiaj: '2026-02-01',
+    propozycja: {
+      typ: 'objecie',
+      data_zdarzenia: '2026-01-02',
+      dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: 8, zakresy: [{ nr_od: 1, nr_do: 10 }] }] },
+    },
+  });
+  assert.equal(wynikFizyczna.dopuszczalne, true, wynikFizyczna.bledy.join(' | '));
+  assert.ok(
+    wynikFizyczna.ostrzezenia.some((o) => /^Wobec nabywcy „Kowalski Jan”/.test(o)),
+    wynikFizyczna.ostrzezenia.join(' | ')
+  );
+  assert.ok(!wynikFizyczna.ostrzezenia.some((o) => /podmiotu/.test(o)), 'osoba fizyczna nie dostaje etykiety "podmiotu"');
+});
