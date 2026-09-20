@@ -97,6 +97,23 @@ test('trasy kancelaryjne wymagaja sesji pracownika', async () => {
   assert.equal(z.status, 200);
 });
 
+test('Z-001: GET /api/psa/meta wymaga sesji pracownika, tak jak reszta pozostale.js', async () => {
+  const bez = await fetch(`${baza}/api/psa/meta`);
+  assert.equal(bez.status, 401);
+
+  const login = await fetch(`${baza}/api/psa/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: process.env.ADMIN_EMAIL, haslo: hasloAdmina }),
+  });
+  const ciastko = ciasteczkoZOdpowiedzi(login);
+
+  const z = await fetch(`${baza}/api/psa/meta`, { headers: { Cookie: ciastko } });
+  assert.equal(z.status, 200);
+  const dane = await z.json();
+  assert.ok(dane.typy_zdarzen, 'katalog nadal wraca po zalogowaniu');
+});
+
 test('rate limiting: blokuje logowanie po 5 nieudanych probach', async () => {
   const email = 'limiter-test@example.pl';
   for (let i = 0; i < 5; i += 1) {
@@ -211,12 +228,12 @@ test('zmiana hasla: bledne obecne odrzucone, poprawne dziala i pozwala zalogowac
   hasloAdmina = 'NoweHaslo123';
 });
 
-test('wylogowanie kasuje ciasteczko sesji po stronie przegladarki', async () => {
-  // Token jest bezstanowy (HMAC, sekcja 11/13 — brak nowej zaleznosci do
-  // magazynu sesji), wiec serwer nie prowadzi listy uniewaznionych tokenow -
-  // wylogowanie dziala przez `Set-Cookie` z `Max-Age=0`, ktore realna
-  // przegladarka respektuje i przestaje wysylac stare ciasteczko. Testujemy
-  // wiec dokladnie to - naglowek wylogowania, nie ponowne uzycie tokenu.
+test('wylogowanie kasuje ciasteczko sesji po stronie przegladarki I uniewaznia biezacy token serwerowo (Z-250)', async () => {
+  // Naglowek wylogowania (Set-Cookie, Max-Age=0) chroni normalna przegladarke,
+  // ale token jest samodzielnie wazny do konca TTL (do 12h) az do naprawy
+  // Z-250 — kopia ciastka sprzed wylogowania dzialala dalej. Sprawdzamy wiec
+  // OBA mechanizmy: naglowek DLA przegladarki i odrzucenie tokenu na SERWERZE
+  // (`whoami` z ta sama, zapamietana wartoscia ciastka).
   const login = await fetch(`${baza}/api/psa/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -224,8 +241,48 @@ test('wylogowanie kasuje ciasteczko sesji po stronie przegladarki', async () => 
   });
   const ciastko = ciasteczkoZOdpowiedzi(login);
 
+  const przedWylogowaniem = await fetch(`${baza}/api/psa/auth/whoami`, { headers: { Cookie: ciastko } });
+  assert.equal((await przedWylogowaniem.json()).zalogowany, true);
+
   const wylogowanie = await fetch(`${baza}/api/psa/auth/logout`, { method: 'POST', headers: { Cookie: ciastko } });
   const naglowekUsuniecia = wylogowanie.headers.get('set-cookie') || '';
   assert.match(naglowekUsuniecia, /psa_sesja=;/);
   assert.match(naglowekUsuniecia, /Max-Age=0/);
+
+  // Ta sama, zapamietana wartosc ciastka (symulacja klienta, ktory zignorowal
+  // Max-Age=0 albo skopiowal token wczesniej) — serwer musi go juz odrzucic.
+  const poWylogowaniu = await fetch(`${baza}/api/psa/auth/whoami`, { headers: { Cookie: ciastko } });
+  assert.equal((await poWylogowaniu.json()).zalogowany, false);
+});
+
+test('zmiana hasla uniewaznia WSZYSTKIE dotychczasowe tokeny konta, nie tylko to jedno uzyte do zmiany (Z-251)', async () => {
+  const loginA = await fetch(`${baza}/api/psa/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: process.env.ADMIN_EMAIL, haslo: hasloAdmina }),
+  });
+  const ciastkoUrzadzeniaA = ciasteczkoZOdpowiedzi(loginA);
+
+  // Drugie, niezalezne "urzadzenie" (osobny token, to samo konto).
+  const loginB = await fetch(`${baza}/api/psa/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: process.env.ADMIN_EMAIL, haslo: hasloAdmina }),
+  });
+  const ciastkoUrzadzeniaB = ciasteczkoZOdpowiedzi(loginB);
+
+  const zmiana = await fetch(`${baza}/api/psa/auth/zmiana-hasla`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: ciastkoUrzadzeniaA },
+    body: JSON.stringify({ haslo_obecne: hasloAdmina, haslo_nowe: 'PoZmianieHasla123' }),
+  });
+  assert.equal(zmiana.status, 200);
+  hasloAdmina = 'PoZmianieHasla123';
+
+  const urzadzenieBPoZmianie = await fetch(`${baza}/api/psa/auth/whoami`, { headers: { Cookie: ciastkoUrzadzeniaB } });
+  assert.equal(
+    (await urzadzenieBPoZmianie.json()).zalogowany,
+    false,
+    'token innego, rownolegle zalogowanego urzadzenia musi przestac dzialac natychmiast po zmianie hasla'
+  );
 });

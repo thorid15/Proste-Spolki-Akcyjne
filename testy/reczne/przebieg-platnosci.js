@@ -53,7 +53,10 @@ const PDF = '%PDF-1.4\ntrailer<</Root 1 0 R>>\n%%EOF\n';
   }
   const [, przyj] = await prac('POST', `/api/psa/wnioski/${w.id}/przyjmij`, {});
   const spolkaId = przyj.spolka_id;
-  krok('rejestr otwarty, pierwszy rok naliczony', Boolean(przyj.oplata_prowadzenia));
+  // Naprawa Z-108/P-007: prowadzenie + wpis nalicza sie TERAZ przy
+  // `POST /spolki/:id/otworz-rejestr`, nie tutaj — ten skrypt nie zaklada
+  // akcji, wiec pomija ten krok (patrz oplaty-http.test.js).
+  krok('spolka zalozona', Boolean(spolkaId));
 
   // ── Bramka na zadaniu wpisu ──
   const [, zad] = await kl('POST', '/api/psa/portal/zadania', { spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', opis: '' });

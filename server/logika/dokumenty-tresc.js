@@ -13,6 +13,8 @@
  * notatki AML, dane kontaktowe innych akcjonariuszy, hashe lancucha.
  */
 
+const u = require('./ulamki');
+
 function esc(tekst) {
   return String(tekst == null ? '' : tekst).replace(/[&<>"']/g, (znak) => ({
     '&': '&amp;',
@@ -27,6 +29,27 @@ function dataPl(iso) {
   if (!iso) return '—';
   const [r, m, d] = String(iso).slice(0, 10).split('-');
   return `${d}.${m}.${r}`;
+}
+
+/** Procent zaokraglony do 2 miejsc — naprawa Z-051, wylacznie do wyswietlania. */
+function procentPl(p) {
+  if (p === null || p === undefined) return '—';
+  return Number(p).toFixed(2).replace('.', ',');
+}
+
+/**
+ * Liczba akcji na dokumencie — regula domenowa 4a: zadnych lossy decimali.
+ * Naprawa Z-057: pozycja z ulamkowo wspoluprawnionym numerem pokazuje
+ * dokladny ulamek ("2 i 1/3"), nie np. "2.3333333333333335".
+ */
+function liczbaAkcjiPl(ilosc, udzialUlamek) {
+  if (ilosc === null || ilosc === undefined) return '—';
+  if (!udzialUlamek || udzialUlamek.licznik % udzialUlamek.mianownik === 0) {
+    return String(ilosc);
+  }
+  const cale = Math.floor(udzialUlamek.licznik / udzialUlamek.mianownik);
+  const reszta = u.skroc({ licznik: udzialUlamek.licznik - cale * udzialUlamek.mianownik, mianownik: udzialUlamek.mianownik });
+  return cale > 0 ? `${cale} i ${u.opisz(reszta)}` : u.opisz(reszta);
 }
 
 /**
@@ -209,9 +232,9 @@ function wykazAkcjonariuszy({ kancelaria, spolka, data, stan, powod }) {
         <tr>
           <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA};">${oznaczenie}${identyfikator}${pesel}</td>
           <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA};">${esc(a.seria)}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; text-align: right;">${esc(a.ilosc)}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; text-align: right;">${esc(liczbaAkcjiPl(a.ilosc, a.udzial_ulamek))}</td>
           <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; font-family: ${FONT_DANE}; font-size: 11px;">${esc(a.numery)}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; text-align: right;">${esc(a.procent)}%</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid ${LINIA}; text-align: right;">${esc(procentPl(a.procent))}%</td>
         </tr>`;
     })
     .join('');

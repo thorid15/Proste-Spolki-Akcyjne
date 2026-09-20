@@ -753,10 +753,25 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 .wiersz-tresc { flex: 1; min-width: 0; }
-.wiersz-tytul { font-size: var(--st-13); font-weight: 500; }
-.wiersz-podtytul { font-size: var(--st-11); color: var(--atrament-3); margin-top: 1px; font-family: var(--font-dane); }
+/* Naprawa Z-354: nazwa spolki (albo dowolny inny tekst z bazy) bez limitu
+   dlugosci lamala sie na kazdym slowie i rozciagala pojedynczy wiersz na
+   kilkanascie linii, psujac uklad calej listy - `title` w JSX dorzuca
+   pelny tekst jako podpowiedz przy najechaniu. */
+.wiersz-tytul {
+  font-size: var(--st-13); font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wiersz-podtytul {
+  font-size: var(--st-11); color: var(--atrament-3); margin-top: 1px; font-family: var(--font-dane);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .wiersz-prawo { display: flex; align-items: center; gap: var(--od-16); flex-shrink: 0; }
 .wiersz-data { font-size: var(--st-11); color: var(--atrament-3); font-family: var(--font-dane); }
+
+/* Naprawa Z-354: utility do skracania dowolnego dlugiego tekstu z bazy
+   (np. nazwy spolki) w komorkach tabel, gdzie `table-layout: auto` samo
+   nie ograniczy szerokosci - `title` w JSX dorzuca pelny tekst na hover. */
+.tekst-obciety { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Lista szybkich akcji ── */
 .szybkie { display: flex; flex-direction: column; gap: 2px; }

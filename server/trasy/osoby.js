@@ -21,7 +21,8 @@ const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
-const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
+const { asy, autor, bledneZadanie, nieZnaleziono, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
+const zaproszenia = require('../logika/zaproszenia');
 
 const router = express.Router();
 
@@ -131,10 +132,43 @@ function ostrzezeniaOsoby(dane) {
   // `pep` to ustalenie kancelarii, `pep_oswiadczenie` - to, co oswiadczyla
   // osoba. Wolno im sie roznic (po to sa dwa pola), ale roznica musi byc
   // widoczna, bo to ona uruchamia wzmozone srodki mimo zaprzeczenia klienta.
-  if (przepisy.pepWymagaWzmozonych(dane.pep) && dane.pep_oswiadczenie === 'nie') {
+  // `nieustalono` to brak ustalenia, nie sprzeczna ocena - nie ma tu z czym
+  // porownywac oswiadczenia osoby.
+  if (dane.pep !== przepisy.STATUSY_PEP.NIEUSTALONO && przepisy.pepWymagaWzmozonych(dane.pep) && dane.pep_oswiadczenie === 'nie') {
     ostrzezenia.push(
       'Kartoteka wskazuje na eksponowane stanowisko polityczne, a osoba oświadczyła, że go nie zajmuje — '
         + 'rozbieżność wymaga wyjaśnienia, wzmożone środki bezpieczeństwa stosuje się mimo oświadczenia.'
+    );
+  }
+  return ostrzezenia;
+}
+
+/**
+ * Naprawa Z-350: kartoteka deklaruje wprost "jeden inwestor wpisywany RAZ"
+ * (regula domenowa nr 10, cytat w naglowku pliku), ale nic tego nie
+ * egzekwowalo - dwie ROZNE osoby moglysie zapisac z tym samym PESEL/NIP
+ * bez zadnego sygnalu. OSTRZEZENIE, nie blokada: ta sama osoba wystepuje
+ * legalnie w wielu spolkach, wiec kolizja bywa prawdziwa - ale zawsze
+ * oznacza TEN SAM rekord kartoteki, nie dwa osobne, wiec pracownik musi to
+ * zobaczyc i sam zdecydowac (polaczyc rekordy recznie, sprostowac pomylke).
+ */
+function ostrzezeniaKolizji(dane, id = null) {
+  const ostrzezenia = [];
+  for (const pole of ['pesel', 'nip']) {
+    const wartosc = dane[pole];
+    if (!wartosc) continue;
+    const kolizja = db()
+      .prepare(
+        `SELECT id, nazwisko, imie, nazwa FROM psa_osoby
+          WHERE ${pole} = ? AND id IS NOT ?
+          LIMIT 5`
+      )
+      .all(wartosc, id);
+    if (kolizja.length === 0) continue;
+    const nazwy = kolizja.map((o) => `„${maskowanie.oznaczenieOsoby(o)}” (#${o.id})`).join(', ');
+    ostrzezenia.push(
+      `${pole.toUpperCase()} „${wartosc}” jest już w kartotece pod inną pozycją: ${nazwy}. ` +
+        'Jeśli to ta sama osoba, kartoteka ma mieć jeden rekord, nie dwa — sprawdź przed zapisaniem.'
     );
   }
   return ostrzezenia;
@@ -220,6 +254,9 @@ router.post(
     const dane = wyczysc(zad.body || {});
     sprawdzOsobe(dane);
     sprawdzBeneficjenta(dane.beneficjent_rzeczywisty_id, null, dane.typ);
+    // PRZED insertem - rekord jeszcze nie istnieje, wiec nie trzeba go
+    // wykluczac z wyniku samego siebie (patrz PUT nizej, gdzie trzeba).
+    const kolizje = ostrzezeniaKolizji(dane);
 
     const teraz = czas.terazIso();
     const kolumny = Object.keys(dane);
@@ -234,7 +271,7 @@ router.post(
       osoba: zOznaczeniem(
         db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(wynik.lastInsertRowid)
       ),
-      ostrzezenia: ostrzezeniaOsoby(dane),
+      ostrzezenia: [...ostrzezeniaOsoby(dane), ...kolizje],
       // Braki wobec art. 300(33) § 1 KSH sa czyms innym niz ostrzezenia
       // o jakosci danych: kartoteke zaklada sie czesto zanim komplet danych
       // wroci od akcjonariusza, a wiaza dopiero przy wpisie do rejestru.
@@ -280,7 +317,7 @@ router.put(
 
     odp.json({
       osoba: zOznaczeniem(db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(id)),
-      ostrzezenia: ostrzezeniaOsoby(scalone),
+      ostrzezenia: [...ostrzezeniaOsoby(scalone), ...ostrzezeniaKolizji(scalone, id)],
       braki_ustawowe: akcjonariuszLogika.ostrzezenia(scalone),
     });
   })
@@ -308,6 +345,34 @@ router.get(
       )
       .all(id);
     odp.json({ spolki: wiersze });
+  })
+);
+
+/**
+ * Naprawa Z-006/P-004 — zaproszenie akcjonariusza do portalu, akcja przy
+ * osobie w kartotece, wykonywana przez pracownika. Adres e-mail podaje
+ * pracownik przy wysylce (kanal OPERACYJNY konta - odrebny od e-maila w
+ * tresci rejestru, ktory wymaga zgody akcjonariusza, art. 300(33) § 1 pkt 5
+ * KSH / Z-157) - nie jest wiec brany z `psa_osoby.email` automatycznie.
+ */
+router.post(
+  '/:id/zapros-do-portalu',
+  asy(async (zad, odp) => {
+    const id = Number(zad.params.id);
+    if (!db().prepare('SELECT id FROM psa_osoby WHERE id = ?').get(id)) {
+      throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
+    }
+    const email = String((zad.body || {}).email || '').trim();
+    if (!email) throw bledneZadanie('Adres e-mail jest wymagany.');
+
+    let wynik;
+    try {
+      wynik = await zaproszenia.wyslijAkcjonariuszowi(db(), { osobaId: id, email, autor: autor(zad) });
+    } catch (e) {
+      throw bledneZadanie(e.message);
+    }
+
+    odp.json(wynik);
   })
 );
 
@@ -388,7 +453,10 @@ router.post(
   // zad.body jest puste, dopoki multer nie sparsuje strumienia; destynacja
   // pliku zalezy tylko od :id z URL, wiec walidacja procedury AML moze
   // bezpiecznie isc PO uploadzie - a gdy sie nie powiedzie, plik jest kasowany).
-  (zad, odp, dalej) => uploadSkanuAml.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  // Naprawa Z-254: blad multera (limit rozmiaru/liczby) idzie do
+  // posrednikaBledow nieopakowany, zeby zadzialala tam przetlumaczona
+  // galaz "MulterError"; blad z fileFilter (juz po polsku) staje sie 400.
+  (zad, odp, dalej) => uploadSkanuAml.single('plik')(zad, odp, dalejPoUploadzie(dalej)),
   (zad, odp, dalej) => wymagajProceduryAml(zad, odp, (blad) => {
     if (blad && zad.file) fs.rm(zad.file.path, { force: true }, () => {});
     dalej(blad);
@@ -397,6 +465,14 @@ router.post(
     const id = Number(zad.params.id);
     if (!db().prepare('SELECT id FROM psa_osoby WHERE id = ?').get(id)) throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    // Naprawa Z-253: rozszerzenie to obietnica klienta — sprawdzamy tresc
+    // pliku po sygnaturze (te sama kontrola co przy dokumentach sprawy
+    // i wniosku; wczesniej ta trasa jej nie miala, mimo ze zbiera skany
+    // dokumentow tozsamosci — najbardziej wrazliwa kategoria uploadu).
+    if (!pliki.trescPasuje(zad.file.path, pliki.typZNazwy(zad.file.originalname))) {
+      fs.rmSync(zad.file.path, { force: true });
+      throw bledneZadanie(`Treść pliku „${zad.file.originalname}" nie odpowiada jego rozszerzeniu. Prześlij PDF albo zdjęcie.`);
+    }
     const typDokumentu = String((zad.body || {}).typ_dokumentu || 'inny');
     if (!TYPY_DOKUMENTU_AML.includes(typDokumentu)) throw bledneZadanie(`Nieznany typ dokumentu: „${typDokumentu}”.`);
     const retencjaDo = (zad.body || {}).retencja_do || null;
@@ -453,6 +529,13 @@ router.get(
 );
 
 module.exports = router;
+// Naprawa P-012: reuzywane przez trasy/portal.js (upload wlasnego skanu
+// akcjonariusza) - ten sam rezim hasha, retencji i miejsca na dysku, zeby
+// oba kanaly (pracownik i klient) skladaly sie w JEDNA kartoteke skanow.
+module.exports.TYPY_DOKUMENTU_AML = TYPY_DOKUMENTU_AML;
+module.exports.katalogSkanowAml = katalogSkanowAml;
+module.exports.ROZSZERZENIA_SKANU_AML_DOZWOLONE = ROZSZERZENIA_SKANU_AML_DOZWOLONE;
+module.exports.LIMIT_ROZMIARU_SKANU_AML_BAJTY = LIMIT_ROZMIARU_SKANU_AML_BAJTY;
 // Etap 3F: kancelaria materializuje akcjonariuszy proponowanych we wniosku
 // klienta do kartoteki wspólnej - wnioski.js reużywa TĘ SAMĄ walidację
 // (regula domenowa nr 10 - jeden inwestor wpisany raz - nie duplikujemy

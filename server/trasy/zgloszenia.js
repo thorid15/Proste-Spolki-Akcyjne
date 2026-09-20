@@ -4,10 +4,11 @@
  * Trasy `/api/psa/zgloszenia/...` - zglobszenia wstepne portalu (etap 3A).
  *
  * Pierwszy kontakt nieznanego dotad klienta (formularz publiczny,
- * `server/trasy/portal.js: POST /zgloszenia`) - kancelaria przeglada liste
- * i decyduje: zaprosic (etap 3B - tworzy konto portalowe + wysyla token
- * aktywacyjny) albo odrzucic. Samo zgloszenie NIE zaklada zadnego konta ani
- * spolki - to wylacznie lead do oceny.
+ * `server/trasy/portal.js: POST /zgloszenia`) - zaproszenie do portalu
+ * (etap 3B - konto + token aktywacyjny) idzie OD RAZU, automatycznie, przy
+ * samym zgloszeniu (patrz `server/logika/zaproszenia.js: wyslij()`).
+ * `POST /:id/zapros` ponizej sluzy do PONOWNEJ wysylki (np. gdy mail odbil
+ * sie albo klient zgubil link) - nie do podjecia pierwszej decyzji.
  */
 
 const express = require('express');

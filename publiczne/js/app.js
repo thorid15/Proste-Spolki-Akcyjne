@@ -256,7 +256,12 @@ function Aplikacja() {
   const { dane: daneKancelarii } = useDane('/api/wspolne/kancelaria');
   const kancelaria = daneKancelarii && daneKancelarii.kancelaria;
   // `/api/psa/meta` mowi, czy serwer wystawia katalog komponentow (`/podglad`).
-  const { dane: meta } = useDane('/api/psa/meta');
+  // Naprawa Z-001: trasa wymaga teraz sesji pracownika (`wymagajPracownika`),
+  // wiec odpytujemy ja dopiero PO zalogowaniu - tak samo jak `/api/psa/liczniki`
+  // ponizej. Przed zalogowaniem zwracalaby 401 i `meta` zostalby trwale `null`
+  // (efekt hooka nie sledzi zmiany sesji, wiec bez tego warunku nigdy by sie
+  // nie doladowal po zalogowaniu).
+  const { dane: meta } = useDane(sesja.zalogowany ? '/api/psa/meta' : null);
   const podgladSystemu = Boolean(meta && meta.podglad_systemu);
 
   // Liczniki kolejek w szynie i na dzwonku. Odświeżane przy każdej zmianie
@@ -279,6 +284,10 @@ function Aplikacja() {
       const id = Number(segmenty[1]);
       if (!Number.isInteger(id)) return <NieZnaleziono />;
       if (segmenty.length === 2) return <EkranKokpitu spolkaId={id} />;
+      // Naprawa Z-005: dokonczenie otwarcia rejestru dla spolki juz
+      // zalozonej (np. z przyjetego wniosku portalowego) - ten sam kreator
+      // co nowa spolka, wystartowany od razu na kroku akcjonariatu.
+      if (segmenty[2] === 'otworz') return <EkranOtwarciaRejestru spolkaId={id} />;
       if (segmenty[2] === 'zdarzenie') {
         // Przejście EMISJA → OBJĘCIE: typ i seria przychodzą z ekranu wyniku
         // wpisu emisji, żeby nie zakładać sprawy „od zera" (sprawy.js).

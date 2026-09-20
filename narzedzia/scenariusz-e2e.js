@@ -176,8 +176,12 @@ async function main() {
   }
 
   // ── 1. Zgłoszenie wstępne (formularz publiczny) ───────────────────────
+  // Naprawa (D-038/P-003, FAZA 4): zaproszenie do portalu idzie OD RAZU przy
+  // zgłoszeniu, nie dopiero po ręcznej ocenie kancelarii — link aktywacyjny
+  // wraca więc już w TEJ odpowiedzi, kolejka „Zgłoszenia" jest śladem, nie
+  // bramką (status od razu „zaproszono", nie „nowe").
   krok('klient', 'Wysyła zgłoszenie z publicznego formularza „Zgłoś zainteresowanie"');
-  await zapytaj(klient, 'POST', '/api/psa/portal/zgloszenia', {
+  const zgloszenieOdpowiedz = await zapytaj(klient, 'POST', '/api/psa/portal/zgloszenia', {
     email: EMAIL_KLIENTA,
     krs: KRS_SPOLKI,
     telefon: '+48 500 100 200',
@@ -185,26 +189,26 @@ async function main() {
     opis: 'Chcemy powierzyć kancelarii prowadzenie rejestru akcjonariuszy.',
   });
   ekran(`${ADRES}/portal.html#/zglos-sie`);
-  info('zgłoszenie trafiło do kolejki „Zgłoszenia" po stronie kancelarii');
+  info('zaproszenie do portalu poszło od razu — kolejka „Zgłoszenia" po stronie kancelarii jest śladem, nie bramką');
   ekran(`${ADRES}/#/zgloszenia`);
   if (koniec('zgloszenie')) return;
 
-  // ── 2. Zaproszenie (kancelaria) ───────────────────────────────────────
-  krok('kancelaria', 'Ocenia zgłoszenie i wysyła zaproszenie do portalu');
-  const lista = await zapytaj(kancelaria, 'GET', '/api/psa/zgloszenia?status=nowe');
+  // ── 2. Zaproszenie (kancelaria widzi zgłoszenie już zaproszone) ────────
+  krok('kancelaria', 'Widzi zgłoszenie w kolejce, już automatycznie zaproszone do portalu');
+  const lista = await zapytaj(kancelaria, 'GET', '/api/psa/zgloszenia?status=zaproszono');
   const zgloszenie = lista.zgloszenia.find((z) => z.email === EMAIL_KLIENTA);
   if (!zgloszenie) throw new Error('Nie odnaleziono zgłoszenia w kolejce kancelarii.');
-  const zaproszenie = await zapytaj(kancelaria, 'POST', `/api/psa/zgloszenia/${zgloszenie.id}/zapros`, {});
+  info(`zgłoszenie #${zgloszenie.id} widoczne w kolejce, status: ${zgloszenie.status}`);
 
-  let link = zaproszenie.link_aktywacyjny;
-  if (zaproszenie.email_wyslany) {
+  let link = zgloszenieOdpowiedz.link_aktywacyjny;
+  if (zgloszenieOdpowiedz.zaproszenie_wyslane) {
     info('e-mail z linkiem aktywacyjnym został wysłany na adres klienta');
     throw new Error(
       'SMTP jest skonfigurowany, więc link nie wraca w odpowiedzi — otwórz link z maila ' +
         'i dokończ scenariusz ręcznie albo uruchom skrypt na konfiguracji bez SMTP.'
     );
   }
-  info(`e-mail NIE wyszedł (${zaproszenie.powod})`);
+  info('e-mail NIE wyszedł (SMTP nieskonfigurowany)');
   info('link aktywacyjny wraca w odpowiedzi i pokazuje się w oknie do skopiowania:');
   info(link);
   if (koniec('zaproszenie')) return;
@@ -332,7 +336,11 @@ async function main() {
     podpisana = await zapytaj(klient, 'POST', `/api/psa/portal/wniosek/dokumenty/${d.id}/podpis`, formularz);
     info(`odesłano podpisany: ${d.nazwa}`);
   }
-  info(`status wniosku: ${podpisana ? podpisana.wniosek.status : '(brak dokumentów)'}`);
+  // Skan pojedynczego dokumentu NIE rusza statusu wniosku — dopiero
+  // odesłanie CAŁEGO kompletu naraz przestawia go na „umowa_podpisana"
+  // (patrz `POST /wniosek/odeslij`, `testy/wniosek-http.test.js`).
+  const odeslanie = await zapytaj(klient, 'POST', '/api/psa/portal/wniosek/odeslij');
+  info(`komplet odesłany, status wniosku: ${odeslanie.wniosek.status}`);
   ekran(`${ADRES}/#/wnioski`);
   if (koniec('umowa')) return;
 
@@ -369,7 +377,14 @@ async function main() {
   // ── 7. Otwarcie rejestru (kancelaria) ─────────────────────────────────
   krok('kancelaria', 'Otwiera rejestr: emisja założycielska i objęcie akcji');
   const osoby = przyjecie.akcjonariusze.map((a) => a.osoba_id);
+  // Naprawa Z-200/Z-201/Z-204 (FAZA 5): serwer odmawia otwarcia rejestru bez
+  // kompletnie odhaczonej checklisty 10 pozycji, AML wliczając — dokładnie
+  // te same kody co `CHECKLISTA_OTWARCIA` w `publiczne/js/spolki.js`.
   const otwarcie = await zapytaj(kancelaria, 'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`, {
+    checklista: {
+      forma: true, wpis_krs: true, uchwala: true, umowa: true, jedna_umowa: true,
+      dane_z_umowy: true, ograniczenia: true, bilans: true, zakres_danych: true, aml: true,
+    },
     zdarzenia: [
       {
         typ: 'emisja',
@@ -446,23 +461,19 @@ async function main() {
     throw new Error(`Podgląd odrzucił wpis: ${podglad.bledy.join('; ')}`);
   }
 
-  krok('kancelaria', 'Dokonuje wpisu — automat wystawia pierwsze zawiadomienie');
+  // Zawiadomienie o wpisie (art. 300(34) § 7 KSH) NIE wychodzi stąd automatem
+  // (patrz komentarz przy `POST /:id/wpisz` w `server/trasy/sprawy.js`) —
+  // pracownik wystawia je RĘCZNIE z osobnej zakładki „Zawiadomienia", gdy
+  // uzna komplet wpisów przy danej spółce za gotowy.
+  krok('kancelaria', 'Dokonuje wpisu');
   const wpis = await zapytaj(kancelaria, 'POST', `/api/psa/sprawy/${sprawa.sprawa.id}/wpisz`, {
     data_zdarzenia: DZIS,
     dane: wejscie,
   });
   info(`wpisano zdarzenie #${wpis.zdarzenie.id} (${wpis.zdarzenie.typ}), skrót ${wpis.zdarzenie.hash_skrocony}`);
-  for (const p of wpis.powiadomienia) {
-    if (p.blad) {
-      info(`zawiadomienie: ${p.blad}`);
-      continue;
-    }
-    info(
-      `zawiadomienie „${p.typ || 'zawiadomienie_wpis'}" dla ${p.odbiorca || 'odbiorcy'} — ` +
-        (p.wyslano ? 'wysłane e-mailem' : `NIEwysłane (${p.powod || 'brak SMTP'}), czeka na wysyłkę ręczną`)
-    );
-  }
+  info('zawiadomienie o wpisie czeka w zakładce „Zawiadomienia" — kancelaria wystawia je ręcznie');
   ekran(`${ADRES}/#/sprawy/${sprawa.sprawa.id}`);
+  ekran(`${ADRES}/#/zawiadomienia`);
 
   console.log('\n' + '═'.repeat(72));
   console.log('Scenariusz przeszedł całą ścieżkę.');

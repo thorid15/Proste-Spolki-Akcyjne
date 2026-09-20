@@ -18,7 +18,9 @@ const PUSTA_OSOBA = {
   pep_oswiadczenie: '', pep_oswiadczenie_data: '',
   // Etap 14 — status PEP jako DANA (ocena kancelarii, katalog z przepisy.js),
   // obok `pep_oswiadczenie`, ktore jest oswiadczeniem zlozonym przez osobe.
-  pep: 'nie', pep_opis: '',
+  // Naprawa Z-151/P-010: domyslnie NIEUSTALONO, nie „nie” — nikt jeszcze
+  // nie ocenil tej osoby, a to nie to samo, co swiadome „nie jest PEP”.
+  pep: 'nieustalono', pep_opis: '',
 };
 
 const TYPY_DOKUMENTU_AML = [
@@ -99,6 +101,62 @@ function SekcjaSkanowAml({ osobaId, spolkaId }) {
       <button className="btn btn-maly" onClick={wgraj} disabled={!plik || wgrywanie} style={{ marginTop: 8 }}>
         {wgrywanie ? 'Przesyłanie…' : 'Dodaj skan'}
       </button>
+    </Pole>
+  );
+}
+
+/**
+ * Naprawa Z-006/P-004 — zaproszenie akcjonariusza do portalu, akcja przy
+ * osobie w kartotece (widoczna tylko, gdy osoba JEST akcjonariuszem
+ * przynajmniej jednej spółki — `spolkiOsoby` z `GET /:id/spolki`).
+ * E-mail operacyjny konta jest ODRĘBNY od e-maila w treści rejestru
+ * (`dane.email` na formularzu wyżej, wymaga osobnej zgody — Z-157), więc
+ * podpowiadamy go tylko jako punkt startowy, nie podstawiamy automatycznie.
+ */
+function SekcjaZaproszeniaPortal({ osobaId, emailPodpowiedz }) {
+  const [email, ustawEmail] = useState(emailPodpowiedz || '');
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [wynik, ustawWynik] = useState(null);
+  const [blad, ustawBlad] = useState(null);
+
+  async function zapros() {
+    ustawWysylanie(true);
+    ustawBlad(null);
+    ustawWynik(null);
+    try {
+      const odpowiedz = await API.post(`/api/psa/osoby/${osobaId}/zapros-do-portalu`, { email });
+      ustawWynik(odpowiedz);
+    } catch (e) {
+      ustawBlad(e.message);
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  return (
+    <Pole
+      etykieta="Zaproszenie do portalu"
+      podpowiedz="Adres OPERACYJNY konta portalowego — niezależny od e-maila w rejestrze i jego zgody (pole „Adres e-mail” wyżej)."
+    >
+      <div className="rzad" style={{ gap: 8 }}>
+        <input type="text" value={email} onChange={(z) => ustawEmail(z.target.value)} placeholder="adres@przyklad.pl" style={{ flex: 1 }} />
+        <button className="btn btn-maly btn-glowny" onClick={zapros} disabled={!email.trim() || wysylanie}>
+          {wysylanie ? 'Wysyłanie…' : 'Zaproś do portalu'}
+        </button>
+      </div>
+      <Komunikat odmiana="blad" tresc={blad} />
+      {wynik && wynik.juz_aktywne && (
+        <Komunikat odmiana="info" tresc="Konto na ten adres jest już aktywne — akcjonariusz ma się jak zalogować, nie trzeba nowego zaproszenia." />
+      )}
+      {wynik && !wynik.juz_aktywne && wynik.email_wyslany && (
+        <Komunikat odmiana="ok" tresc="Zaproszenie wysłane e-mailem." />
+      )}
+      {wynik && !wynik.juz_aktywne && !wynik.email_wyslany && wynik.link_aktywacyjny && (
+        <Komunikat
+          odmiana="uwaga"
+          tresc={<>Wysyłka e-mail nie jest skonfigurowana — przekaż link ręcznie: <code>{wynik.link_aktywacyjny}</code></>}
+        />
+      )}
     </Pole>
   );
 }
@@ -368,40 +426,47 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
       {/* Status PEP jest DANĄ osoby, nie tylko treścią oświadczenia: wobec
           osoby zajmującej eksponowane stanowisko polityczne kancelaria
           stosuje wzmożone środki bezpieczeństwa finansowego, więc musi go
-          widzieć na ekranie, a nie odczytywać z papieru w aktach. */}
-      <Przelacznik
-        wlaczony={Boolean(dane.pep) && dane.pep !== 'nie'}
-        przyZmianie={(v) =>
-          ustawDane((p) => ({ ...p, pep: v ? 'tak' : 'nie', pep_opis: v ? p.pep_opis : '' }))
-        }
+          widzieć na ekranie, a nie odczytywać z papieru w aktach.
+
+          Naprawa Z-151/P-010: trzy stany, nie przełącznik — „nieustalono”
+          (nikt jeszcze nie ocenił) musi wyglądać INACZEJ niż świadome „nie
+          jest PEP”, inaczej niesprawdzona osoba wygląda tak samo jak
+          sprawdzona. */}
+      <Pole
         etykieta="Eksponowane stanowisko polityczne (PEP)"
-        opis="Osoba pełniąca znaczącą funkcję publiczną, członek jej rodziny albo bliski współpracownik — ustawa o przeciwdziałaniu praniu pieniędzy. Wobec takiej osoby stosuje się WZMOŻONE środki bezpieczeństwa finansowego."
-        dzieci={
-          <>
-            <Pole etykieta="Na czym polega status" wymagane>
-              <select
-                value={dane.pep && dane.pep !== 'nie' ? dane.pep : 'tak'}
-                onChange={(z) => ustawDane((p) => ({ ...p, pep: z.target.value }))}
-              >
-                <option value="tak">Zajmuje eksponowane stanowisko polityczne</option>
-                <option value="rodzina">Jest członkiem rodziny takiej osoby</option>
-                <option value="wspolpracownik">Jest bliskim współpracownikiem takiej osoby</option>
-              </select>
-            </Pole>
-            <Pole
-              etykieta={dane.pep === 'tak' ? 'Stanowisko lub funkcja' : 'Osoba i charakter relacji'}
-              wymagane
-              podpowiedz="Trafia wprost do oświadczenia AML przygotowanego do podpisu."
-            >
-              <input type="text" {...pole('pep_opis')} />
-            </Pole>
-          </>
-        }
-      />
+        podpowiedz="Osoba pełniąca znaczącą funkcję publiczną, członek jej rodziny albo bliski współpracownik — ustawa o przeciwdziałaniu praniu pieniędzy. Wobec takiej osoby stosuje się WZMOŻONE środki bezpieczeństwa finansowego. To OCENA KANCELARII, nie oświadczenie osoby (patrz pole niżej)."
+      >
+        <select
+          value={dane.pep || 'nieustalono'}
+          onChange={(z) => {
+            const v = z.target.value;
+            ustawDane((p) => ({ ...p, pep: v, pep_opis: ['tak', 'rodzina', 'wspolpracownik'].includes(v) ? p.pep_opis : '' }));
+          }}
+        >
+          <option value="nieustalono">Nieustalono</option>
+          <option value="nie">Nie jest PEP</option>
+          <option value="tak">Zajmuje eksponowane stanowisko polityczne</option>
+          <option value="rodzina">Jest członkiem rodziny takiej osoby</option>
+          <option value="wspolpracownik">Jest bliskim współpracownikiem takiej osoby</option>
+        </select>
+      </Pole>
+      {['tak', 'rodzina', 'wspolpracownik'].includes(dane.pep) && (
+        <Pole
+          etykieta={dane.pep === 'tak' ? 'Stanowisko lub funkcja' : 'Osoba i charakter relacji'}
+          wymagane
+          podpowiedz="Trafia wprost do oświadczenia AML przygotowanego do podpisu."
+        >
+          <input type="text" {...pole('pep_opis')} />
+        </Pole>
+      )}
 
       <Pole etykieta="Notatka AML" podpowiedz="Nigdy nie trafia na wydruki dla klienta.">
         <textarea {...pole('aml_notatka')} style={{ minHeight: 70 }} />
       </Pole>
+
+      {edycja && spolkiOsoby.length > 0 && (
+        <SekcjaZaproszeniaPortal osobaId={osoba.id} emailPodpowiedz={dane.email} />
+      )}
 
       {edycja && spolkiOsoby.length > 0 && (
         <Pole

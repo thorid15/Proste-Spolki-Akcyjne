@@ -48,9 +48,10 @@ const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
-const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien, BladZadania } = require('../pomocnicze/odpowiedzi');
+const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien, BladZadania, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
 const { pobierzZKrs } = require('./krs');
+const osobyModul = require('./osoby');
 
 const router = express.Router();
 
@@ -181,7 +182,8 @@ router.get(
 // ─────────────────────────────────────────────────────────────
 // Zgloszenie wstepne (etap 3A) - PUBLICZNE, bez zadnej sesji. Pierwszy
 // kontakt nieznanego dotad klienta: wylacznie dane kontaktowe, zadnego
-// PESEL ani adresu. Kancelaria decyduje, czy wyslac zaproszenie (etap 3B).
+// PESEL ani adresu. Zaproszenie do portalu (etap 3B) wychodzi automatycznie
+// i od razu - patrz komentarz przy `zapros.wyslij()` nizej.
 // ─────────────────────────────────────────────────────────────
 
 const WZORZEC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -283,9 +285,23 @@ router.post(
     };
 
     const kolumny = Object.keys(dane);
-    const wynikZgloszenia = db()
-      .prepare(`INSERT INTO psa_zgloszenia (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
-      .run(dane);
+    let wynikZgloszenia;
+    try {
+      wynikZgloszenia = db()
+        .prepare(`INSERT INTO psa_zgloszenia (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
+        .run(dane);
+    } catch (e) {
+      // Ostatnia linia obrony przed wyscigiem: dwa rownoczesne zgloszenia dla
+      // tego samego KRS moga oba minac SELECT wyzej, zanim ktorykolwiek INSERT
+      // sie wykona - indeks unikalny (migracja 48) to wtedy lapie tutaj.
+      if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        throw bledneZadanie(
+          `Zgłoszenie dla spółki o numerze KRS ${krs} jest już w toku. `
+          + 'Sprawdź skrzynkę — zaproszenie do portalu poszło na wskazany wcześniej adres.'
+        );
+      }
+      throw e;
+    }
 
     // Zaproszenie idzie OD RAZU. Na tym etapie kancelaria niczego jeszcze nie
     // sprawdza — sprawdza dopiero wniosek — a kazdy dzien zwloki miedzy
@@ -309,10 +325,11 @@ router.post(
 );
 
 // ─────────────────────────────────────────────────────────────
-// Aktywacja konta (etap 3B) - PUBLICZNE, bez sesji. Kancelaria zaklada
-// konto (rola 'wnioskodawca', aktywne=0) po zaakceptowaniu zgloszenia
-// (`server/trasy/zgloszenia.js: POST /:id/zapros`) i wysyla token mailem -
-// klient go tu wymienia na haslo i od razu ma otwarta sesje portalowa.
+// Aktywacja konta (etap 3B) - PUBLICZNE, bez sesji. Konto (rola
+// 'wnioskodawca', aktywne=0) i token aktywacyjny powstaja automatycznie
+// w chwili zgloszenia (`POST /zgloszenia` wyzej, `zapros.wyslij()`) albo
+// przy ponownej wysylce (`server/trasy/zgloszenia.js: POST /:id/zapros`) -
+// klient token tu wymienia na haslo i od razu ma otwarta sesje portalowa.
 // ─────────────────────────────────────────────────────────────
 
 function znajdzKontoDoAktywacji(token) {
@@ -546,6 +563,10 @@ const POLA_AKCJONARIUSZA_WNIOSKU = [
   'adres_doreczen', 'adres_edoreczen', 'email', 'telefon', 'zgoda_email',
   // Art. 300(33) § 1 pkt 2-5 KSH - patrz logika/akcjonariusz.js.
   ...akcjonariuszLogika.POLA_USTAWOWE,
+  // Naprawa Z-151/P-010: OSWIADCZENIE OSOBY (art. 46 ustawy AML), odrebne od
+  // `pep`/`pep_opis` wyzej - te dwa pola sa USTALENIEM KANCELARII i celowo
+  // NIE przechodza z wniosku do kartoteki (patrz trasy/wnioski.js: przyjmij).
+  'pep_oswiadczenie', 'pep_oswiadczenie_data',
 ];
 
 function wyczyscAkcjonariuszaWniosku(cialo) {
@@ -574,6 +595,14 @@ function sprawdzAkcjonariuszaWniosku(dane) {
   }
   if (dane.plec && !['mezczyzna', 'kobieta'].includes(dane.plec)) {
     throw bledneZadanie('Płeć musi być „mężczyzna” albo „kobieta”.');
+  }
+  // Oswiadczenie PEP (art. 46 ustawy AML) - skladane przez OSOBE, stad
+  // katalog zamkniety tak/nie (ten sam co na kartotece, patrz trasy/osoby.js).
+  if (dane.pep_oswiadczenie && !['tak', 'nie'].includes(dane.pep_oswiadczenie)) {
+    throw bledneZadanie('Oświadczenie PEP musi być „tak” albo „nie”.');
+  }
+  if (dane.pep_oswiadczenie_data && !czas.poprawnaData(dane.pep_oswiadczenie_data)) {
+    throw bledneZadanie('Data oświadczenia PEP musi mieć format RRRR-MM-DD.');
   }
   // Sprzecznosci ustawowe blokuja zapis; niekompletnosc NIE - wniosek
   // wypelnia sie etapami i zapisuje po kazdej zmianie.
@@ -844,7 +873,11 @@ const uploadPodpisanego = multer({
  */
 function przyjmijSkan(zad, odp, dalej) {
   uploadPodpisanego.single('plik')(zad, odp, (e) => {
-    if (e) return dalej(bledneZadanie(e.message));
+    // Naprawa Z-254: blad multera idzie nieopakowany do posrednikaBledow, zeby
+    // zadzialala tam przetlumaczona galaz `blad.name === 'MulterError'`; blad
+    // z fileFilter (juz po polsku) trzeba owinac w BladZadanie, inaczej
+    // trafia do ogolnego 500 zamiast 400.
+    if (e) return dalejPoUploadzie(dalej)(e);
     if (zad.file && !pliki.trescPasuje(zad.file.path, pliki.typZNazwy(zad.file.originalname))) {
       fs.rmSync(zad.file.path, { force: true });
       return dalej(bledneZadanie(
@@ -1067,6 +1100,12 @@ router.post(
       fs.rmSync(zad.file.path, { force: true });
       throw nieZnaleziono('Nie odnaleziono dokumentu.');
     }
+    if (dokument.podpis_potwierdzono) {
+      fs.rmSync(zad.file.path, { force: true });
+      throw bledneZadanie(
+        'Ten dokument został już potwierdzony przez kancelarię — nie można podmienić przesłanego skanu. Skontaktuj się z kancelarią.'
+      );
+    }
 
     zapiszPodpisanySkan(zad.psaWniosek, dokument, zad.file);
     odp.status(201).json({
@@ -1109,6 +1148,11 @@ router.delete(
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
       .get(Number(zad.params.id), wniosek.id);
     if (!dokument || !dokument.podpis_sciezka) throw nieZnaleziono('Nie odesłano jeszcze tego dokumentu.');
+    if (dokument.podpis_potwierdzono) {
+      throw bledneZadanie(
+        'Ten dokument został już potwierdzony przez kancelarię — nie można usunąć przesłanego skanu. Skontaktuj się z kancelarią.'
+      );
+    }
 
     const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, dokument.podpis_sciezka);
     if (pelna.startsWith(konfiguracja.KATALOG_DOKUMENTOW)) fs.rmSync(pelna, { force: true });
@@ -1156,6 +1200,12 @@ router.post(
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE wniosek_id = ? AND typ = ? AND udostepniono IS NOT NULL')
       .get(zad.psaWniosek.id, dokumentyWniosku.TYPY.UMOWA_REJESTRU);
     if (!umowa) throw nieZnaleziono('Projekt umowy nie został jeszcze wygenerowany.');
+    if (umowa.podpis_potwierdzono) {
+      fs.rmSync(zad.file.path, { force: true });
+      throw bledneZadanie(
+        'Ten dokument został już potwierdzony przez kancelarię — nie można podmienić przesłanego skanu. Skontaktuj się z kancelarią.'
+      );
+    }
 
     zapiszPodpisanySkan(zad.psaWniosek, umowa, zad.file);
     odp.status(201).json({
@@ -1277,7 +1327,143 @@ router.get(
       odbiorcaOsobaId: zad.konto.osoba_id,
     });
     if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
+
+    // Naprawa Z-152/P-009: to jedyny ekran portalu, na ktorym rola "spolka"
+    // widzi PESEL/adres wspolakcjonariuszy w calosci (art. 300(35) KSH) - bez
+    // wpisu do dziennika taki wglad byl niewidoczny po fakcie. `zamaskowane`
+    // z `zamaskujOsobe` odpowiada na szersze pytanie ("cokolwiek ukryte" -
+    // ustawia je juz samo ukrycie AML/PEP), stad osobny, wezszy test na
+    // POLA_WRAZLIWE. Wlasne dane odbiorcy (widziane bez maskowania z
+    // definicji) sie nie licza - nie ma tu wgladu w CUDZE dane wrazliwe.
+    const rolaOdp = rolaOdbioru(zad.konto);
+    const osobyZWrazliwymiDanymi = maskowanie.widziWrazliweDaneInnych(rolaOdp)
+      ? new Set(
+        stan.akcjonariusze
+          .filter((a) => a.osoba && a.osoba_id !== zad.konto.osoba_id)
+          .map((a) => a.osoba_id)
+      )
+      : new Set();
+    dziennikDostepu.zapiszOdczytRejestruPortalu(db(), {
+      kto: `Portal — ${zad.konto.email}`,
+      spolkaId,
+      liczbaOsob: osobyZWrazliwymiDanymi.size,
+      zamaskowane: osobyZWrazliwymiDanymi.size === 0,
+    });
+
     odp.json(stan);
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Skan dokumentu AML — samodzielne wgranie przez akcjonariusza (P-012)
+//
+// Dotad jedyna droga do skanu dokumentu tozsamosci byla `POST
+// /api/psa/osoby/:id/aml-skany`, za `wymagajPracownika` — dokument i tak
+// krazyl mailem (najslabszym kanalem w calym procesie), zanim pracownik
+// go tam wgral. Ten endpoint pozwala akcjonariuszowi wgrac WYLACZNIE
+// WLASNY skan, ten sam rezim hasha/retencji/miejsca na dysku co kartoteka
+// pracownika (`trasy/osoby.js`) — obie drogi skladaja sie w JEDNA liste.
+// ─────────────────────────────────────────────────────────────
+
+const uploadWlasnegoSkanuAml = multer({
+  storage: multer.diskStorage({
+    destination(zad, plik, wywolaj) {
+      const katalog = osobyModul.katalogSkanowAml(zad.konto.osoba_id);
+      fs.mkdirSync(katalog, { recursive: true });
+      wywolaj(null, katalog);
+    },
+    filename(zad, plik, wywolaj) {
+      const bezpiecznaNazwa = path.basename(plik.originalname).replace(/[^\w.\- ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/gu, '_');
+      wywolaj(null, `${crypto.randomUUID()}-${bezpiecznaNazwa}`);
+    },
+  }),
+  limits: { fileSize: osobyModul.LIMIT_ROZMIARU_SKANU_AML_BAJTY, files: 1 },
+  fileFilter(zad, plik, wywolaj) {
+    const rozszerzenie = path.extname(plik.originalname).toLowerCase();
+    if (!osobyModul.ROZSZERZENIA_SKANU_AML_DOZWOLONE.has(rozszerzenie)) {
+      return wywolaj(new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Dozwolone: PDF, JPG, PNG.`));
+    }
+    wywolaj(null, true);
+  },
+});
+
+/** Wylacznie rola "akcjonariusz" ma wlasna osobe (i wlasny skan do wgrania). */
+function wymagajAkcjonariusza(zad, odp, dalej) {
+  if (zad.konto.rola !== 'akcjonariusz') {
+    return dalej(brakUprawnien('Tylko akcjonariusz może wgrać własny skan dokumentu.'));
+  }
+  dalej();
+}
+
+router.get(
+  '/aml-skany',
+  wymagajAkcjonariusza,
+  asy((zad, odp) => {
+    const skany = db()
+      .prepare(
+        `SELECT id, spolka_id, typ_dokumentu, nazwa_pliku, rozmiar, retencja_do, utworzono
+           FROM psa_osoby_skany_aml WHERE osoba_id = ? ORDER BY utworzono DESC`
+      )
+      .all(zad.konto.osoba_id);
+    odp.json({ skany });
+  })
+);
+
+router.post(
+  '/aml-skany/:spolkaId',
+  wymagajAkcjonariusza,
+  // Kolejnosc jak w trasy/osoby.js: multer NAJPIERW (destynacja pliku zalezy
+  // tylko od `zad.konto.osoba_id`, znanego juz z sesji), wlaczona procedura
+  // AML sprawdzana PO uploadzie - a gdy sie nie powiedzie, plik jest kasowany.
+  // Dostep do `:spolkaId` juz sprawdzony przez `router.param` wyzej.
+  // Naprawa Z-254: blad multera idzie nieopakowany, zeby zadzialala
+  // przetlumaczona galaz "MulterError"; blad z fileFilter (juz po polsku)
+  // staje sie 400, a nie ogolnym 500.
+  (zad, odp, dalej) => uploadWlasnegoSkanuAml.single('plik')(zad, odp, dalejPoUploadzie(dalej)),
+  asy((zad, odp) => {
+    const spolkaId = Number(zad.params.spolkaId);
+    const spolka = db().prepare('SELECT id, stosuje_procedure_aml FROM psa_spolki WHERE id = ?').get(spolkaId);
+    if (!spolka || !spolka.stosuje_procedure_aml) {
+      if (zad.file) fs.rm(zad.file.path, { force: true }, () => {});
+      throw bledneZadanie('Ta spółka nie ma włączonej procedury AML — skany dokumentów nie są zbierane.');
+    }
+    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    // Naprawa Z-253: kontrola SYGNATURY tresci, nie samego rozszerzenia -
+    // ten sam wymog co na kazdej innej trasie uploadu.
+    if (!pliki.trescPasuje(zad.file.path, pliki.typZNazwy(zad.file.originalname))) {
+      fs.rmSync(zad.file.path, { force: true });
+      throw bledneZadanie(`Treść pliku „${zad.file.originalname}" nie odpowiada jego rozszerzeniu. Prześlij PDF albo zdjęcie.`);
+    }
+    const typDokumentu = String((zad.body || {}).typ_dokumentu || 'inny');
+    if (!osobyModul.TYPY_DOKUMENTU_AML.includes(typDokumentu)) {
+      throw bledneZadanie(`Nieznany typ dokumentu: „${typDokumentu}”.`);
+    }
+
+    const hash = crypto.createHash('sha256').update(fs.readFileSync(zad.file.path)).digest('hex');
+    const wynik = db()
+      .prepare(
+        `INSERT INTO psa_osoby_skany_aml
+           (osoba_id, spolka_id, typ_dokumentu, nazwa_pliku, sciezka, mime, rozmiar, hash, wgral, utworzono)
+         VALUES (@osoba_id, @spolka_id, @typ_dokumentu, @nazwa_pliku, @sciezka, @mime, @rozmiar, @hash, @wgral, @utworzono)`
+      )
+      .run({
+        osoba_id: zad.konto.osoba_id,
+        spolka_id: spolkaId,
+        typ_dokumentu: typDokumentu,
+        nazwa_pliku: zad.file.originalname,
+        sciezka: path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path),
+        mime: zad.file.mimetype,
+        rozmiar: zad.file.size,
+        hash,
+        wgral: `Portal — ${zad.konto.email}`,
+        utworzono: czas.terazIso(),
+      });
+
+    odp.status(201).json({
+      skan: db()
+        .prepare('SELECT id, spolka_id, typ_dokumentu, nazwa_pliku, rozmiar, utworzono FROM psa_osoby_skany_aml WHERE id = ?')
+        .get(wynik.lastInsertRowid),
+    });
   })
 );
 
@@ -1326,7 +1512,7 @@ router.get(
     const oplatyWgSprawy = new Map(
       db()
         .prepare(
-          `SELECT sprawa_id, id, status, kwota_grosze FROM psa_oplaty
+          `SELECT sprawa_id, id, status, kwota_grosze, stawka_vat_procent FROM psa_oplaty
             WHERE sprawa_id IS NOT NULL AND typ = 'wpis' AND status != 'anulowana'`
         )
         .all()
@@ -1341,7 +1527,8 @@ router.get(
           oczekuje_na_oplate: s.oczekuje_na_oplate === 1,
           oplata_id: oplata ? oplata.id : null,
           oplata_status: oplata ? oplata.status : null,
-          oplata_grosze: oplata ? oplata.kwota_grosze : null,
+          // Klient widzi BRUTTO (sekcja 2.1) - to kwota, ktora placi.
+          oplata_grosze: oplata ? przepisy.obliczBrutto(oplata.kwota_grosze, oplata.stawka_vat_procent) : null,
         };
       }),
     });
@@ -1353,6 +1540,26 @@ router.post(
   asy((zad, odp) => {
     const konto = zad.konto;
     const cialo = zad.body || {};
+
+    // Naprawa Z-351/Z-353: klucz idempotencyjny wyslany PONOWNIE (podwojne
+    // klikniecie, ponowienie po zerwanym polaczeniu) oddaje JUZ zalozona
+    // sprawe (i jej JUZ naliczona oplate) zamiast zakladac druga sprawe
+    // i podwojnie obciazyc klienta za ten sam wpis.
+    const kluczIdempotencji = cialo.klucz_idempotencji ? String(cialo.klucz_idempotencji).trim() : null;
+    if (kluczIdempotencji) {
+      const istniejaca = db().prepare('SELECT id FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
+      if (istniejaca) {
+        const sprawaIstniejaca = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(istniejaca.id);
+        const oplataIstniejaca = db()
+          .prepare(`SELECT id FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
+          .get(istniejaca.id);
+        return odp.status(200).json({
+          sprawa: widokSprawyPortal(sprawaIstniejaca),
+          oplata_id: oplataIstniejaca ? oplataIstniejaca.id : null,
+          juz_istniala: true,
+        });
+      }
+    }
 
     // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
     const spolkaId = Number(cialo.spolka_id);
@@ -1394,6 +1601,7 @@ router.post(
       wymaga_powiadomienia: typ.wymaga_powiadomienia === true ? 1 : 0,
       autor: `Portal — ${konto.email}`,
       notatka: opis || null,
+      klucz_idempotencji: kluczIdempotencji,
       utworzono: czas.terazIso(),
     };
     dane.termin_do = terminy.policzTermin(
@@ -1421,9 +1629,30 @@ router.post(
     dane.oczekuje_na_oplate = tpay.skonfigurowany() ? 1 : 0;
 
     const kolumny = Object.keys(dane);
-    const wynik = db()
-      .prepare(`INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
-      .run(dane);
+    let wynik;
+    try {
+      wynik = db()
+        .prepare(`INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
+        .run(dane);
+    } catch (e) {
+      // Ostatnia linia obrony przed wyscigiem: dwa naprawde ROWNOCZESNE
+      // zadania z tym samym kluczem moga oba minac SELECT wyzej, zanim
+      // ktorykolwiek INSERT sie wykona - indeks unikalny to wtedy lapie tutaj.
+      if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' && kluczIdempotencji) {
+        const wygrana = db().prepare('SELECT * FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
+        if (wygrana) {
+          const oplataWygranej = db()
+            .prepare(`SELECT id FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
+            .get(wygrana.id);
+          return odp.status(200).json({
+            sprawa: widokSprawyPortal(wygrana),
+            oplata_id: oplataWygranej ? oplataWygranej.id : null,
+            juz_istniala: true,
+          });
+        }
+      }
+      throw e;
+    }
     const sprawaId = Number(wynik.lastInsertRowid);
 
     // Oplata za wpis powstaje RAZEM ze sprawa i jest z nia zwiazana — to po
@@ -1517,7 +1746,10 @@ function zaladujWlasnaSprawe(zad, odp, dalej) {
 router.post(
   '/zadania/:id/dokumenty',
   zaladujWlasnaSprawe,
-  (zad, odp, dalej) => upload.array('pliki', 10)(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  // Naprawa Z-254: blad multera idzie nieopakowany, zeby zadzialala
+  // przetlumaczona galaz "MulterError"; blad z fileFilter (juz po polsku)
+  // staje sie 400, a nie ogolnym 500.
+  (zad, odp, dalej) => upload.array('pliki', 10)(zad, odp, dalejPoUploadzie(dalej)),
   asy((zad, odp) => {
     const sprawa = zad.psaSprawa;
     const konto = zad.konto;
@@ -1568,6 +1800,7 @@ const OPISY_TYPU_OPLATY = {
   informacja: 'Informacja z rejestru akcjonariuszy',
 };
 
+/** Klient widzi wylacznie BRUTTO (sekcja 2.1) - to jest kwota, ktora placi. */
 function widokOplatyKlienta(w) {
   return {
     id: w.id,
@@ -1578,7 +1811,7 @@ function widokOplatyKlienta(w) {
     okres: w.okres,
     okres_od: w.okres_od,
     okres_do: w.okres_do,
-    kwota_grosze: w.kwota_grosze,
+    kwota_grosze: przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent),
     status: w.status,
     data_naliczenia: w.data_naliczenia,
     oplacona_kiedy: w.oplacona_kiedy,
@@ -1593,15 +1826,20 @@ function widokOplatyKlienta(w) {
 /**
  * Stawki, ktore klient zobaczy PRZED zamowieniem czynnosci. Cena musi byc
  * znana przed kliknieciem, nie po — inaczej "Zamow" jest zgoda w ciemno.
+ *
+ * BRUTTO (sekcja 2.1 promptu naprawczego) — to jest kwota, ktora klient
+ * faktycznie zaplaci, z VAT. Stawka bierzemy z przepisy.js NA CHWILE
+ * odpowiedzi, tak jak zrobi to naliczenie w chwili zamowienia.
  */
 router.get(
   '/cennik',
   asy((zad, odp) => {
+    const brutto = (typ) => przepisy.obliczBrutto(ustawienia.stawkaGrosze(db(), typ), przepisy.STAWKA_VAT_PROCENT);
     odp.json({
       stawki: {
-        prowadzenie: ustawienia.stawkaGrosze(db(), 'prowadzenie'),
-        wpis: ustawienia.stawkaGrosze(db(), 'wpis'),
-        informacja: ustawienia.stawkaGrosze(db(), 'informacja'),
+        prowadzenie: brutto('prowadzenie'),
+        wpis: brutto('wpis'),
+        informacja: brutto('informacja'),
       },
       platnosci_wlaczone: tpay.skonfigurowany(),
     });
@@ -1631,7 +1869,7 @@ router.get(
 
     const doZaplaty = wiersze
       .filter((w) => w.status !== 'oplacona')
-      .reduce((suma, w) => suma + w.kwota_grosze, 0);
+      .reduce((suma, w) => suma + przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent), 0);
 
     odp.json({
       oplaty: wiersze.map(widokOplatyKlienta),

@@ -126,4 +126,87 @@ function oznaczZgloszenie(db, zgloszenieId, autor) {
   ).run(autor || 'Portal', czas.terazIso(), zgloszenieId);
 }
 
-module.exports = { wyslij, trescZaproszenia, TOKEN_WAZNOSC_MS };
+function trescZaproszeniaAkcjonariusza({ link, kancelariaNazwa, osobaOznaczenie }) {
+  return `
+    <p>Dzień dobry${osobaOznaczenie ? `, ${osobaOznaczenie}` : ''},</p>
+    <p>Kancelaria ${kancelariaNazwa} zaprasza Panią/Pana do portalu klienta, w którym można
+       sprawdzić stan posiadanych akcji i zamówić informację z rejestru akcjonariuszy.</p>
+    <p><a href="${link}">${link}</a></p>
+    <p>Link jest ważny przez 7 dni. Po jego otwarciu ustawisz hasło i od razu zalogujesz się na konto.</p>
+    <p>W razie pytań prosimy o kontakt z kancelarią.</p>
+  `;
+}
+
+/**
+ * Naprawa Z-006/P-004 — zaproszenie do portalu dla akcjonariusza JUŻ
+ * WPISANEGO do rejestru (akcja przy osobie w kartotece, wykonywana przez
+ * pracownika — w odróżnieniu od `wyslij()`, wołanego automatycznie przy
+ * zgłoszeniu wnioskodawcy PRZED istnieniem spółki). Adres e-mail podaje
+ * pracownik przy wysyłce — to kanał OPERACYJNY konta portalowego, nie
+ * e-mail w treści rejestru (art. 300(33) § 1 pkt 5 KSH, wymaga osobnej
+ * zgody — Z-157); te dwa pola nie mają się ze sobą zlewać.
+ *
+ * @returns {{konto_id:number, nowe_konto:boolean, juz_aktywne?:boolean,
+ *            email_wyslany:boolean, powod?:string, link_aktywacyjny?:string}}
+ */
+async function wyslijAkcjonariuszowi(db, { osobaId, email, autor }) {
+  const osoba = db.prepare('SELECT * FROM psa_osoby WHERE id = ?').get(osobaId);
+  if (!osoba) throw new Error('Nie odnaleziono osoby w kartotece.');
+
+  const adres = String(email || '').trim().toLowerCase();
+  if (!adres) throw new Error('Adres e-mail jest wymagany.');
+
+  const kancelaria = ustawienia.kancelaria(db);
+  const istniejace = db.prepare('SELECT * FROM psa_konta WHERE lower(email) = ?').get(adres);
+
+  // Adres juz naleay do INNEGO konta (inna rola albo inna osoba) - kartoteka
+  // prowadzi jeden rekord na osobe (regula domenowa deduplikacji, Z-350),
+  // wiec podpiecie pod cudze konto bylby bledem danych, nie zbiegiem
+  // okolicznosci. Odmawiamy zamiast cicho przejmowac konto.
+  if (istniejace && (istniejace.rola !== 'akcjonariusz' || Number(istniejace.osoba_id) !== Number(osobaId))) {
+    throw new Error(
+      `Ten adres e-mail jest już przypisany do innego konta portalowego — wybierz inny adres ` +
+        `albo sprawdź, czy ta osoba nie ma już duplikatu w kartotece.`
+    );
+  }
+
+  if (istniejace && istniejace.aktywne) {
+    return { konto_id: istniejace.id, nowe_konto: false, juz_aktywne: true, email_wyslany: false };
+  }
+
+  const token = crypto.randomBytes(32).toString('base64url');
+  const tokenWygasa = new Date(Date.now() + TOKEN_WAZNOSC_MS).toISOString();
+
+  let kontoId;
+  if (istniejace) {
+    db.prepare('UPDATE psa_konta SET token_aktywacji = ?, token_wygasa = ? WHERE id = ?')
+      .run(token, tokenWygasa, istniejace.id);
+    kontoId = istniejace.id;
+  } else {
+    const wynik = db
+      .prepare(
+        `INSERT INTO psa_konta (email, rola, osoba_id, aktywne, token_aktywacji, token_wygasa, utworzono)
+         VALUES (?, 'akcjonariusz', ?, 0, ?, ?, ?)`
+      )
+      .run(adres, osobaId, token, tokenWygasa, czas.terazIso());
+    kontoId = Number(wynik.lastInsertRowid);
+  }
+
+  const link = `${konfiguracja.URL_PORTALU}#/aktywuj/${token}`;
+  const oznaczenie = osoba.typ === 'prawna' ? osoba.nazwa : [osoba.imie, osoba.nazwisko].filter(Boolean).join(' ');
+  const proba = await poczta.wyslij({
+    do: adres,
+    temat: `Zaproszenie do portalu — ${kancelaria.nazwa}`,
+    html: trescZaproszeniaAkcjonariusza({ link, kancelariaNazwa: kancelaria.nazwa, osobaOznaczenie: oznaczenie || null }),
+  });
+
+  return {
+    konto_id: kontoId,
+    nowe_konto: !istniejace,
+    email_wyslany: proba.wyslano,
+    powod: proba.powod,
+    link_aktywacyjny: proba.wyslano ? undefined : link,
+  };
+}
+
+module.exports = { wyslij, wyslijAkcjonariuszowi, trescZaproszenia, trescZaproszeniaAkcjonariusza, TOKEN_WAZNOSC_MS };

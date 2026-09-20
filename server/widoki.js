@@ -117,6 +117,11 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
       seria: p.seria,
       emisja_klucz: p.emisja_klucz,
       ilosc: p.ilosc,
+      // Ulamek dokladny (Z-057) - do formatowania "X i N/D" zamiast lossy
+      // decimala, gdy pozycja obejmuje ulamkowo wspoluprawniony numer.
+      udzial_ulamek: p.udzial_ulamek,
+      glosy: p.glosy,
+      wymaga_przedstawiciela: p.wymaga_przedstawiciela,
       zakresy: p.zakresy,
       numery: n.opisz(p.zakresy),
       procent: p.procent,

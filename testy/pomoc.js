@@ -111,6 +111,9 @@ const AKCJONARIUSZ_PELNY = {
   kod_pocztowy: '80-280',
   miejscowosc: 'Gdansk',
   ulica: 'Boleslawa Lesmiana 3/U10',
+  // E-mail operacyjny (Z-006/P-004) - obowiazkowy do zlozenia wniosku,
+  // niezalezny od zgody na e-mail W REJESTRZE (Z-157).
+  email: 'anna.nowak@example-test.pl',
 };
 
 /** Zdarzenie w formie "surowej" - do testow czystej logiki, bez bazy. */

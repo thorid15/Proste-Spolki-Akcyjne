@@ -124,6 +124,59 @@ const STAWKI_MAKSYMALNE_GROSZE = {
   INFORMACJA: 5000,
 };
 
+/**
+ * VAT (naprawa Z-100..Z-109 / sekcja 2.1 promptu naprawczego) - kwoty
+ * z rozporzadzenia sa NETTO, do kazdej dolicza sie 23% VAT. To korekta
+ * mylnego twierdzenia RAPORT.md § 5 (audyt pomylil usuniecie migracja 17
+ * pola `platnik_vat` spolki - status podatnika do klauzuli umownej - z
+ * jakoby swiadomym usunieciem VAT z oplat; migracja 17 nigdy nie dotyczyla
+ * oplat), nie zmiana polityki - `psa_spolki.platnik_vat` NIE wraca.
+ *
+ * `psa_oplaty.kwota_grosze` pozostaje NETTO. Brutto NIGDY nie jest
+ * przechowywane, wylacznie wyliczane - tu, w jednym miejscu, uzywanym
+ * wszedzie (kancelaria i portal, `server/platnosci.js`).
+ */
+const STAWKA_VAT_PROCENT = 23;
+
+/** Brutto z netto w groszach - zaokraglenie matematyczne do pelnego grosza, na POZYCJI. */
+function obliczBrutto(nettoGrosze, vatProcent = STAWKA_VAT_PROCENT) {
+  return Math.round((Number(nettoGrosze) * (100 + Number(vatProcent))) / 100);
+}
+
+/** Typ opłaty -> klucz w STAWKI_MAKSYMALNE_GROSZE. */
+const TYP_OPLATY_KLUCZ_MAKSYMALNEJ = {
+  prowadzenie: 'PROWADZENIE_ROCZNIE',
+  wpis: 'WPIS',
+  informacja: 'INFORMACJA',
+};
+
+/**
+ * Waliduje kwote oplaty w groszach (Z-101..Z-104) - JEDNO miejsce, wspolne
+ * dla automatu (ktory zawsze bierze stawke wprost stad, wiec zawsze
+ * przechodzi) i recznego wpisu pracownika (jedyna droga, ktora faktycznie
+ * moze dostac zly numer): liczba calkowita (regula domenowa nr 5 - zadnych
+ * floatow), dodatnia, nie wyzsza niz stawka maksymalna danego typu
+ * z rozporzadzenia.
+ */
+function walidujKwoteGrosze(typ, kwotaGrosze) {
+  const liczba = Number(kwotaGrosze);
+  if (!Number.isFinite(liczba) || !Number.isInteger(liczba)) {
+    return { ok: false, powod: 'Kwota musi być liczbą całkowitą groszy, bez ułamków.' };
+  }
+  if (liczba <= 0) {
+    return { ok: false, powod: 'Kwota musi być dodatnia.' };
+  }
+  const klucz = TYP_OPLATY_KLUCZ_MAKSYMALNEJ[typ];
+  const maksimum = klucz ? STAWKI_MAKSYMALNE_GROSZE[klucz] : null;
+  if (maksimum != null && liczba > maksimum) {
+    return {
+      ok: false,
+      powod: `Kwota nie może przekraczać stawki maksymalnej dla tego typu opłaty (${(maksimum / 100).toFixed(2)} zł netto).`,
+    };
+  }
+  return { ok: true, powod: null };
+}
+
 /** Waluta domyslna rejestru. */
 const WALUTA_DOMYSLNA = 'PLN';
 
@@ -186,6 +239,56 @@ const POLA_WRAZLIWE = [
 const POLA_KONTAKTOWE = ['email', 'telefon', 'adres_doreczen', 'adres_edoreczen'];
 
 /**
+ * Tozsamosc i tresc rejestru dostepna KAZDEJ roli, ktora w ogole ma prawo
+ * widziec osobe (wlacznie z zamaskowanym akcjonariuszem-peer) - nigdy
+ * PESEL/adres/kontakt (POLA_WRAZLIWE/POLA_KONTAKTOWE, osobno dopuszczane
+ * per rola nizej) i nigdy dane kancelaryjne (POLA_KANCELARYJNE).
+ */
+const POLA_TOZSAMOSCI = [
+  'id',
+  'typ',
+  'nazwisko',
+  'imie',
+  'nazwa',
+  'nip',
+  'regon',
+  'numer_w_rejestrze',
+  'nazwa_rejestru',
+  'kraj',
+  'plec',
+  'rodzaj_adresu_rejestrowego',
+  'bez_pesel',
+  'zgoda_email',
+  'zgoda_email_status',
+];
+
+/**
+ * Dane AML/PEP i ocena ryzyka kancelarii - naprawa Z-150. NIGDY nie wychodza
+ * poza kancelarie, niezaleznie od roli odbiorcy: to nie jest tresc rejestru
+ * w rozumieniu art. 300(33) KSH (sekcja 10 CLAUDE-PSA.md - "czego NIE
+ * umieszczac na wydrukach"), tylko wewnetrzna dokumentacja obowiazku AML
+ * notariusza. `wspolwlasnosc`/`udzial_*` opisuja strukture wlascicielska
+ * SAMEGO podmiotu (kto jest wlascicielem tej osoby prawnej) - to ten sam
+ * rodzaj informacji co beneficjent rzeczywisty, nie tresc rejestru akcji.
+ */
+const POLA_KANCELARYJNE = [
+  'aml_status',
+  'aml_data',
+  'aml_notatka',
+  'aml_data_przegladu',
+  'beneficjent_rzeczywisty_id',
+  'pep',
+  'pep_opis',
+  'pep_oswiadczenie',
+  'pep_oswiadczenie_data',
+  'uwagi',
+  'wspolwlasnosc',
+  'wspolwlasciciele',
+  'udzial_licznik',
+  'udzial_mianownik',
+];
+
+/**
  * Role odbiorcy informacji z rejestru. Decyduja o zakresie maskowania.
  * PRZEPISY-PSA.md art. 300(35) § 1, § 1(1), § 4.
  */
@@ -209,6 +312,30 @@ const ROLE_PELNY_DOSTEP = [
   ROLE_ODBIORCY.WLASCICIEL_DANYCH,
   ROLE_ODBIORCY.ORGAN,
 ];
+
+/**
+ * Biala lista pol widocznych per rola (naprawa Z-150). Poprzednia wersja
+ * budowala odpowiedz przez USUWANIE pol z pelnego obiektu - kazde nowe pole
+ * dodane do `psa_osoby` (np. AML/PEP w kolejnym sprincie) bylo domyslnie
+ * WIDOCZNE, dopoki ktos rowniez nie dopisal go do listy usuwanych. Tak
+ * wyciekly `aml_status`/`aml_notatka`/`pep`/`beneficjent_rzeczywisty_id` do
+ * roli `spolka`/`organ` (maja "pelny dostep" do TRESCI REJESTRU, ale to nie
+ * jest tresc rejestru), a pola PEP/beneficjenta - nawet do roli
+ * `akcjonariusz` (bo lista usuwanych obejmowala tylko 4 z ~14 pol
+ * kancelaryjnych). Teraz: kazda rola dostaje WYLACZNIE to, co jest na jej
+ * liscie - nowe pole w schemacie jest domyslnie NIEWIDOCZNE wszedzie poza
+ * kancelaria, dopoki ktos świadomie nie doda go do wlasciwej listy.
+ *
+ * `null` = pelny dostep (wszystkie pola, wlacznie z kancelaryjnymi) -
+ * wylacznie kancelaria i sama osoba (jej wlasne dane).
+ */
+const BIALE_LISTY = {
+  [ROLE_ODBIORCY.KANCELARIA]: null,
+  [ROLE_ODBIORCY.WLASCICIEL_DANYCH]: null,
+  [ROLE_ODBIORCY.SPOLKA]: [...POLA_TOZSAMOSCI, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
+  [ROLE_ODBIORCY.ORGAN]: [...POLA_TOZSAMOSCI, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
+  [ROLE_ODBIORCY.AKCJONARIUSZ]: POLA_TOZSAMOSCI,
+};
 
 /** Katalog organow z art. 300(35) § 4 KSH - do wyboru na wydruku informacji. */
 const ORGANY_UPRAWNIONE = [
@@ -506,6 +633,10 @@ const OPISY_RODZAJOW_WSPOLWLASNOSCI = {
  * (art. 2 ust. 2 pkt 12) to osobne przesłanki, nie warianty tej samej.
  */
 const STATUSY_PEP = {
+  // Naprawa Z-151/P-010: wartosc DOMYSLNA - nikt jeszcze nie ustalil. Osoba
+  // niesprawdzona nie moze wygladac identycznie jak osoba SWIADOMIE uznana
+  // za nie-PEP ('nie') - to byloby twierdzenie bez podstawy.
+  NIEUSTALONO: 'nieustalono',
   NIE: 'nie',
   TAK: 'tak',
   RODZINA: 'rodzina',
@@ -513,6 +644,7 @@ const STATUSY_PEP = {
 };
 
 const OPISY_STATUSOW_PEP = {
+  [STATUSY_PEP.NIEUSTALONO]: 'status nieustalony',
   [STATUSY_PEP.NIE]: 'nie zajmuje eksponowanego stanowiska politycznego',
   [STATUSY_PEP.TAK]: 'zajmuje eksponowane stanowisko polityczne',
   [STATUSY_PEP.RODZINA]: 'jest członkiem rodziny osoby zajmującej eksponowane stanowisko polityczne',
@@ -714,14 +846,20 @@ module.exports = {
   STAWKI_GROSZE,
   STAWKI_MAKSYMALNE_GROSZE,
   STAWKI_DO_WERYFIKACJI,
+  STAWKA_VAT_PROCENT,
+  obliczBrutto,
+  walidujKwoteGrosze,
   WALUTA_DOMYSLNA,
   FORMA_PRAWNA_WYMAGANA,
   FORMA_PRAWNA_WARIANTY,
   FORMY_PRAWNE_ZABRONIONE,
   POLA_WRAZLIWE,
   POLA_KONTAKTOWE,
+  POLA_TOZSAMOSCI,
+  POLA_KANCELARYJNE,
   ROLE_ODBIORCY,
   ROLE_PELNY_DOSTEP,
+  BIALE_LISTY,
   ORGANY_UPRAWNIONE,
   AML_STATUSY,
   AML_STATUS_WYMAGANY,

@@ -45,50 +45,26 @@ test('naliczOplateInformacji wstawia oplate typu informacja', () => {
   assert.equal(inf.kwota_grosze, przepisy.STAWKI_GROSZE.INFORMACJA);
 });
 
-test('naliczOplateProwadzenia jest idempotentne per spolka+rok', () => {
+test('naliczOtwarcieRejestru nalicza prowadzenie + wpis w jednym zadaniu, idempotentnie (Z-108/P-007)', () => {
   const db = bazaTestowa();
   const spolka = dodajSpolke(db);
 
-  const pierwsza = oplaty.naliczOplateProwadzenia(db, { spolkaId: spolka, rok: '2026', autor: 'Test' });
-  assert.equal(pierwsza.utworzono, true);
-  assert.equal(pierwsza.oplata.kwota_grosze, przepisy.STAWKI_GROSZE.PROWADZENIE_ROCZNIE);
+  const pierwsze = oplaty.naliczOtwarcieRejestru(db, { spolkaId: spolka, dataOtwarcia: '2026-03-10', autor: 'Test' });
+  assert.equal(pierwsze.prowadzenie.utworzono, true);
+  assert.equal(pierwsze.prowadzenie.oplata.kwota_grosze, przepisy.STAWKI_GROSZE.PROWADZENIE_ROCZNIE);
+  assert.equal(pierwsze.wpis.utworzono, true);
+  assert.equal(pierwsze.wpis.oplata.kwota_grosze, przepisy.STAWKI_GROSZE.WPIS);
+  assert.equal(pierwsze.wpis.oplata.sprawa_id, null);
 
-  const druga = oplaty.naliczOplateProwadzenia(db, { spolkaId: spolka, rok: '2026', autor: 'Test' });
-  assert.equal(druga.utworzono, false);
-  assert.equal(druga.oplata.id, pierwsza.oplata.id);
+  // Druga proba (np. po przerwanym zadaniu) nic nie dublauje.
+  const druga = oplaty.naliczOtwarcieRejestru(db, { spolkaId: spolka, dataOtwarcia: '2026-03-10', autor: 'Test' });
+  assert.equal(druga.prowadzenie.utworzono, false);
+  assert.equal(druga.prowadzenie.oplata.id, pierwsze.prowadzenie.oplata.id);
+  assert.equal(druga.wpis.utworzono, false);
+  assert.equal(druga.wpis.oplata.id, pierwsze.wpis.oplata.id);
 
-  const innyRok = oplaty.naliczOplateProwadzenia(db, { spolkaId: spolka, rok: '2027', autor: 'Test' });
-  assert.equal(innyRok.utworzono, true);
-  assert.notEqual(innyRok.oplata.id, pierwsza.oplata.id);
-});
-
-test('anulowana oplata prowadzenia nie blokuje ponownego naliczenia za ten sam rok', () => {
-  const db = bazaTestowa();
-  const spolka = dodajSpolke(db);
-  const { oplata } = oplaty.naliczOplateProwadzenia(db, { spolkaId: spolka, rok: '2026', autor: 'Test' });
-  oplaty.zmienStatus(db, { id: oplata.id, status: 'anulowana' });
-
-  const ponownie = oplaty.naliczOplateProwadzenia(db, { spolkaId: spolka, rok: '2026', autor: 'Test' });
-  assert.equal(ponownie.utworzono, true);
-  assert.notEqual(ponownie.oplata.id, oplata.id);
-});
-
-test('naliczOplateRoczneWszystkie pomija spolki wykreslone i jest idempotentne', () => {
-  const db = bazaTestowa();
-  const aktywna = dodajSpolke(db, { krs: '0000000001' });
-  const wykreslona = dodajSpolke(db, { krs: '0000000002', status: 'wykreslona' });
-
-  const pierwsze = oplaty.naliczOplateRoczneWszystkie(db, { rok: '2026', autor: 'Test' });
-  assert.equal(pierwsze.naliczone.length, 1);
-  assert.equal(pierwsze.naliczone[0].spolka_id, aktywna);
-  assert.equal(pierwsze.pominiete.length, 0);
-
-  const drugie = oplaty.naliczOplateRoczneWszystkie(db, { rok: '2026', autor: 'Test' });
-  assert.equal(drugie.naliczone.length, 0);
-  assert.equal(drugie.pominiete.length, 1);
-
-  const oplatyWykreslonej = db.prepare('SELECT * FROM psa_oplaty WHERE spolka_id = ?').all(wykreslona);
-  assert.equal(oplatyWykreslonej.length, 0);
+  const wszystkie = db.prepare('SELECT * FROM psa_oplaty WHERE spolka_id = ?').all(spolka);
+  assert.equal(wszystkie.length, 2, 'dokladnie dwie pozycje - prowadzenie i wpis - bez wzgledu na liczbe wywolan');
 });
 
 test('dodajOplateReczna: domyslna kwota ze stawki, mozliwe nadpisanie', () => {
@@ -100,6 +76,36 @@ test('dodajOplateReczna: domyslna kwota ze stawki, mozliwe nadpisanie', () => {
 
   const nadpisana = oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'informacja', kwotaGrosze: 1234, autor: 'Test' });
   assert.equal(nadpisana.kwota_grosze, 1234);
+});
+
+test('dodajOplateReczna: Z-101..Z-104 - kwota niecalkowita, ujemna albo powyzej stawki maksymalnej odrzucone', () => {
+  const db = bazaTestowa();
+  const spolka = dodajSpolke(db);
+
+  assert.throws(
+    () => oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'informacja', kwotaGrosze: 100.5, autor: 'Test' }),
+    /liczbą całkowitą/
+  );
+  assert.throws(
+    () => oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'informacja', kwotaGrosze: -500, autor: 'Test' }),
+    /dodatnia/
+  );
+  assert.throws(
+    () => oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'wpis', kwotaGrosze: 100000000, autor: 'Test' }),
+    /stawki maksymalnej/
+  );
+  assert.throws(
+    () => oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'wpis', kwotaGrosze: 'abc', autor: 'Test' }),
+    /liczbą całkowitą/
+  );
+});
+
+test('obliczBrutto: 23% VAT, zaokraglenie matematyczne do pelnego grosza', () => {
+  assert.equal(przepisy.obliczBrutto(10000), 12300);
+  assert.equal(przepisy.obliczBrutto(5000), 6150);
+  // 33 * 1.23 = 40.59 -> zaokraglenie matematyczne w dol do 41 (40.59 -> 41).
+  assert.equal(przepisy.obliczBrutto(33), 41);
+  assert.equal(przepisy.obliczBrutto(10000, 8), 10800);
 });
 
 test('zmienStatus aktualizuje status i znacznik czasu', () => {

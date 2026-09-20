@@ -38,7 +38,7 @@ const KOLUMNY_WIDOKU = `id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id, k
         utworzono, zmodyfikowano, zmodyfikowal, udostepniono, brakujace,
         sprawdzono, sprawdzil,
         podpis_nazwa_pliku, podpis_rozmiar, podpis_wgrano,
-        podpis_potwierdzono, podpis_potwierdzil,
+        podpis_potwierdzono, podpis_potwierdzil, podpis_hash,
         (tresc_bloki IS NOT NULL) AS edytowalny`;
 
 function katalogWniosku(wniosekId) {
@@ -281,9 +281,21 @@ function potwierdzPodpis(wniosekId, dokumentId, potwierdzono, autor) {
   if (!wiersz) return null;
   if (!wiersz.podpis_sciezka) return false;
 
+  // Skrot tresci PLIKU NA DYSKU w chwili potwierdzenia — dokumentuje, co
+  // dokladnie kancelaria zaakceptowala (Z-205). Trasa portalu, ktora
+  // przyjmuje skany, odrzuca kazda probe podmiany tego pliku, gdy
+  // podpis_potwierdzono jest juz wypelnione — skrot jest wiec zapisem
+  // faktu, a nie jedynym zabezpieczeniem.
+  const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, wiersz.podpis_sciezka);
+  const skrot = potwierdzono && pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) && fs.existsSync(pelnaSciezka)
+    ? crypto.createHash('sha256').update(fs.readFileSync(pelnaSciezka)).digest('hex')
+    : null;
+
   db()
-    .prepare('UPDATE psa_wnioski_dokumenty SET podpis_potwierdzono = ?, podpis_potwierdzil = ? WHERE id = ?')
-    .run(potwierdzono ? czas.terazIso() : null, potwierdzono ? autor || null : null, wiersz.id);
+    .prepare(
+      'UPDATE psa_wnioski_dokumenty SET podpis_potwierdzono = ?, podpis_potwierdzil = ?, podpis_hash = ? WHERE id = ?'
+    )
+    .run(potwierdzono ? czas.terazIso() : null, potwierdzono ? autor || null : null, skrot, wiersz.id);
 
   return widokDokumentu(
     db().prepare(`SELECT ${KOLUMNY_WIDOKU} FROM psa_wnioski_dokumenty WHERE id = ?`).get(wiersz.id)

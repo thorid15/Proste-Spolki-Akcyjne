@@ -236,8 +236,48 @@ function zdejmij(stan, { emisjaKlucz, kategoria, osobaId, zakresy, data, zdarzen
   stan.przedzialy.push(...noweOtwarte);
 }
 
-/** Przeniesienie akcji miedzy pulami - jedyna droga zmiany kategorii/wlasciciela. */
+/**
+ * Grupuje `zakresy` wedlug BIEZACEGO stanu pokrycia posiadacza — pokrycie
+ * (art. 300(33) § 1 pkt 9 KSH) jest atrybutem SAMEJ AKCJI, nie osoby, wiec
+ * przy zwyklym przeniesieniu (calych akcji) musi przejsc na nabywce
+ * niezmienione, tak jak juz dziala `przeniesienie_ulamka`. Rozny odcinek
+ * `zakresy` moze miec rozna wzmianke o pokryciu (np. czesc akcji objeta
+ * gotowka, czesc aportem w innym terminie) - stad grupowanie, nie jedna
+ * wspolna wartosc.
+ */
+function pokrytaWedlugStanu(stan, emisjaKlucz, osobaId, zakresy) {
+  const przedzialy = przedzialyPuli(stan, emisjaKlucz, K.AKCJONARIUSZ, osobaId).filter(
+    (p) => (p.czesc_licznik ?? 1) === (p.czesc_mianownik ?? 1)
+  );
+  const grupy = new Map();
+  for (const p of przedzialy) {
+    const wspolne = n.przeciecie([{ nr_od: p.nr_od, nr_do: p.nr_do }], zakresy);
+    if (wspolne.length === 0) continue;
+    const klucz = p.pokryta ?? '';
+    if (!grupy.has(klucz)) grupy.set(klucz, { pokryta: p.pokryta ?? null, zakresy: [] });
+    grupy.get(klucz).zakresy.push(...wspolne);
+  }
+  return [...grupy.values()].map((g) => ({ pokryta: g.pokryta, zakresy: n.normalizuj(g.zakresy) }));
+}
+
+/**
+ * Przeniesienie akcji miedzy pulami - jedyna droga zmiany kategorii/wlasciciela.
+ *
+ * Naprawa Z-054: gdy wywolujacy NIE narzuca wprost `pokryta` (jak przy
+ * zwyklym `przeniesienie` — `objecie` zawsze ustala ja na nowo z tresci
+ * zdarzenia, wiec nie wchodzi tu), a zbywca traci akcje z wlasnej puli
+ * akcjonariusza, wzmianke o pokryciu bierzemy z BIEZACEGO stanu tych akcji,
+ * zamiast zerowac ja do `null`. Bez tego kazde zwykle przeniesienie kasowalo
+ * `pokryta`, wiec blokada zbycia niepokrytych akcji (art. 300(40) § 1 KSH,
+ * `walidacje.js: sprawdzPokrycie`) dzialala tylko przy PIERWSZYM zbyciu -
+ * kolejne widzialy juz `null` ("nieustalone"), ktore regula celowo przepuszcza.
+ */
 function przenies(stan, opcje) {
+  const grupyPokrycia =
+    opcje.pokryta === undefined && opcje.zKategorii === K.AKCJONARIUSZ
+      ? pokrytaWedlugStanu(stan, opcje.emisjaKlucz, opcje.zOsoby, opcje.zakresy)
+      : null;
+
   zdejmij(stan, {
     emisjaKlucz: opcje.emisjaKlucz,
     kategoria: opcje.zKategorii,
@@ -246,16 +286,33 @@ function przenies(stan, opcje) {
     data: opcje.data,
     zdarzenieId: opcje.zdarzenieId,
   });
-  otworz(stan, {
-    emisjaKlucz: opcje.emisjaKlucz,
-    kategoria: opcje.doKategorii,
-    osobaId: opcje.doOsoby,
-    zakresy: opcje.zakresy,
-    data: opcje.data,
-    zdarzenieId: opcje.zdarzenieId,
-    tytul: opcje.tytul,
-    pokryta: opcje.pokryta,
-  });
+
+  if (!grupyPokrycia) {
+    otworz(stan, {
+      emisjaKlucz: opcje.emisjaKlucz,
+      kategoria: opcje.doKategorii,
+      osobaId: opcje.doOsoby,
+      zakresy: opcje.zakresy,
+      data: opcje.data,
+      zdarzenieId: opcje.zdarzenieId,
+      tytul: opcje.tytul,
+      pokryta: opcje.pokryta,
+    });
+    return;
+  }
+
+  for (const grupa of grupyPokrycia) {
+    otworz(stan, {
+      emisjaKlucz: opcje.emisjaKlucz,
+      kategoria: opcje.doKategorii,
+      osobaId: opcje.doOsoby,
+      zakresy: grupa.zakresy,
+      data: opcje.data,
+      zdarzenieId: opcje.zdarzenieId,
+      tytul: opcje.tytul,
+      pokryta: grupa.pokryta,
+    });
+  }
 }
 
 /**
@@ -942,6 +999,14 @@ function akcjonariatNaDzien(stan, data) {
     if (p.data_od < g.data_najstarszego_nabycia) g.data_najstarszego_nabycia = p.data_od;
   }
 
+  // Naprawa Z-057: liczba akcji OGOLEM to liczba FIZYCZNYCH numerow w rekach
+  // jakiegokolwiek akcjonariusza - numer podzielony ulamkowo miedzy kilku
+  // wspoluprawnionych to WCIAZ JEDEN numer, nie jeden na kazdego z nich.
+  // Suma per-pozycja (dawny sposob) liczyla go tyle razy, ilu bylo
+  // wspoluprawnionych.
+  const razemZakresy = n.normalizuj(przedzialy.map((p) => ({ nr_od: p.nr_od, nr_do: p.nr_do })));
+  const razem = n.ilosc(razemZakresy);
+
   const pozycje = [...grupy.values()].map(({ pokrycia, ...g }) => {
     const zakresy = n.normalizuj(g.zakresy);
     // Jedna wartosc dla calej pozycji tylko wtedy, gdy wszystkie przedzialy
@@ -964,21 +1029,48 @@ function akcjonariatNaDzien(stan, data) {
         osoba_id: o.osoba_id,
         opis: o.opis,
       }));
+
+    // Naprawa Z-057: udzial WYMIERNY tej pozycji - cale numery licza sie
+    // jako 1/1 kazdy, numery ulamkowe DOKLADNIE tak, jak ulamek wskazuje
+    // (nie jako "1 numer", co dawniej zawyzalo i liczbe akcji, i procent
+    // udzialu kazdego wspoluprawnionego z osobna).
+    const calychNumerow = n.ilosc(zakresy) - g.czesci_ulamkowe.length;
+    let udzial = { licznik: calychNumerow, mianownik: 1 };
+    for (const fr of g.czesci_ulamkowe) {
+      udzial = u.suma(udzial, { licznik: fr.czesc_licznik, mianownik: fr.czesc_mianownik });
+    }
+    const udzialFloat = udzial.licznik / udzial.mianownik;
+
+    // Glosy (art. 300(23) § 1 w zw. z art. 300(38) § 3 KSH): akcja dzielona
+    // ulamkowo daje JEDEN glos, oddawany przez wspolnego przedstawiciela -
+    // tu wpada wylacznie, jesli TA pozycja jest tym przedstawicielem dla
+    // danego numeru (inny wspoluprawniony na tym samym numerze go nie
+    // dostaje - inaczej jeden podzielony numer dawalby kilka glosow).
+    // Brak wskazania przedstawiciela NIE odbiera glosu numerowi - oznacza
+    // wylacznie pozycje jako wymagajaca jego wskazania, zeby glos mial kto
+    // oddac (`wymaga_przedstawiciela` nizej).
+    const glosy =
+      calychNumerow +
+      g.czesci_ulamkowe.filter(
+        (fr) => fr.przedstawiciel_osoba_id != null && Number(fr.przedstawiciel_osoba_id) === Number(g.osoba_id)
+      ).length;
+    const wymagaPrzedstawiciela = g.czesci_ulamkowe.some((fr) => fr.przedstawiciel_osoba_id == null);
+
     return {
       ...g,
       zakresy,
-      // UWAGA: `ilosc` liczy numery akcji DOTKNIETE (choc czesciowo) - dla
-      // wiersza ulamkowego to nadal "1 numer", nie ulamek. Dokladny udzial
-      // wymierny jest w `czesci_ulamkowe`. Precyzyjne przeliczenie procentu
-      // na podstawie ulamkow to zadanie warstwy prezentacji (sprint 6).
-      ilosc: n.ilosc(zakresy),
+      ilosc: udzialFloat,
+      // Ulamek dokladny (regula domenowa 4a - zadnych floatow do porownan
+      // ani przechowywania), do formatowania „X 1/3" zamiast lossy decimala.
+      udzial_ulamek: udzial,
+      glosy,
+      wymaga_przedstawiciela: wymagaPrzedstawiciela,
       wspolwlasnosc: g.czesci_ulamkowe.length > 0,
       pokryta,
       obciazenia: moje,
     };
   });
 
-  const razem = pozycje.reduce((s, p) => s + p.ilosc, 0);
   for (const p of pozycje) {
     p.procent = razem === 0 ? 0 : (p.ilosc / razem) * 100;
   }

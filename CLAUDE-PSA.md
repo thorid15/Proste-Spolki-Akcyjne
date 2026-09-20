@@ -136,13 +136,20 @@ mastera sekcji 9 — jeśli PSA ich potrzebuje (np. `--sb` do szerokości sideba
    - **głos liczy się per akcja, nie per ułamek** (art. 300²³ § 1): akcja dzielona daje jeden głos,
      przypisany wspólnemu przedstawicielowi;
    - procent udziału liczony na ułamkach, zaokrąglany **wyłącznie przy wyświetlaniu**.
+   - *Stan (sesja napraw 2026-09-19):* liczenie głosów i zaokrąglanie procentu w dokumentach/UI w
+     pełni zgodne z powyższym (był realny błąd — Z-057, Z-051 — naprawione, patrz
+     `ARCHITEKTURA-PSA.md` §4 poz. 11, §7 wiersz 4a/4b).
 4b. **Współuprawnieni** (art. 300³⁸ § 3–4). Akcja z ułamkami ma pole **wspólnego przedstawiciela**;
    jego brak nie blokuje wpisu, ale jest oznaczany w rejestrze i na wydruku (spółka może wtedy
    składać oświadczenia wobec któregokolwiek ze współuprawnionych).
 4c. **Pokrycie akcji** (art. 300³³ § 1 pkt 9, art. 300⁹, art. 300⁴⁰). Wzmianka o pokryciu jest
    ustawowym elementem rejestru. Zbycie akcji nie w pełni pokrytej **wymaga zgody spółki** — reguła
-   blokująca. Domyślne zaliczanie wkładów: **równomiernie na wszystkie akcje akcjonariusza**
-   (art. 300⁹ § 3), chyba że umowa spółki stanowi inaczej.
+   blokująca, skuteczna przy KAŻDEJ transakcji na tych akcjach, nie tylko pierwszej. Domyślne
+   zaliczanie wkładów: **równomiernie na wszystkie akcje akcjonariusza** (art. 300⁹ § 3), chyba że
+   umowa spółki stanowi inaczej — to wciąż etykieta, nie algorytm liczący kwoty wpłat.
+   *Stan (sesja napraw 2026-09-19):* blokada naprawiona (był: Z-054 — atrybut `pokryta` gubił się
+   przy zwykłym przeniesieniu, więc druga i kolejne transakcje na tych samych akcjach omijały
+   blokadę; patrz `ARCHITEKTURA-PSA.md` §4 poz. 9/10).
 5. **Kwoty w groszach (`INTEGER`).** Cena emisyjna, opłaty. Żadnych floatów.
 6. **Data zdarzenia ≠ data wpisu.** `data_zdarzenia` (z dokumentu, `DATE`) i `data_wpisu`
    (`DATETIME` co do sekundy, ustawiana przez system, nieedytowalna).
@@ -152,18 +159,34 @@ mastera sekcji 9 — jeśli PSA ich potrzebuje (np. `--sb` do szerokości sideba
    zainteresowanego, **bez opłaty**.
 9. **Maskowanie danych wrażliwych** (PESEL, data urodzenia, adres zamieszkania) w każdym widoku i
    dokumencie kierowanym do **innego akcjonariusza**. Pełne dane: kancelaria, sama osoba, spółka,
-   organy wymienione w art. 300³⁵ § 1¹.
+   organy wymienione w art. 300³⁵ § 1¹. Osobna kategoria: dane AML/PEP/beneficjenta rzeczywistego i
+   wewnętrzne `uwagi` NIE są treścią rejestru (patrz §10 „czego NIE umieszczać na wydrukach") —
+   widzi je WYŁĄCZNIE kancelaria, nigdy spółka/organ/inny akcjonariusz, niezależnie od reguły
+   maskowania PESEL/adresu powyżej.
+   *Stan (sesja napraw 2026-09-19):* obie kategorie wdrożone spójnie, jedną białą listą pól per rola
+   (był: Z-150 — flaga `pelnyDostep` cicho ujawniała też AML/PEP/beneficjenta spółce/organowi;
+   naprawione, patrz `ARCHITEKTURA-PSA.md` §4 poz. 14/14b).
 10. **Osoby w kartotece wspólnej** (`psa_osoby`) — jeden inwestor w wielu spółkach wpisywany raz.
 11. **Nie prowadzimy rejestru dla S.A./S.K.A.** — walidacja przy dodawaniu spółki (forma prawna
     musi być PSA).
 12. **Akcje nie istnieją przed wpisem do KRS** (art. 300³⁰ § 2, art. 300¹⁰⁷ § 3). Wpis akcji do
     rejestru możliwy dopiero po wpisie spółki albo emisji do KRS. Sankcja karna wobec zarządu
-    (art. 592 § 3) → **twarda blokada**, nie ostrzeżenie.
+    (art. 592 § 3) → **twarda blokada**, nie ostrzeżenie. Blokada obejmuje zarówno OBECNOŚĆ daty
+    wpisu emisji do KRS, jak i jej WIARYGODNOŚĆ względem daty rejestracji spółki: emisja
+    założycielska = data wpisu RÓWNA dacie rejestracji spółki, każda kolejna — wyłącznie późniejsza.
+    *Stan (sesja napraw 2026-09-19):* obie części blokady zaimplementowane (był: Z-012 — sprawdzana
+    wyłącznie obecność pola, nigdy jego wiarygodność; naprawione, patrz `ARCHITEKTURA-PSA.md` §4
+    poz. 5b).
 13. **Wpis bywa deklaratoryjny** (art. 300³⁷ § 2). Przy objęciu akcji, dziedziczeniu, zapisie
     windykacyjnym, aporcie akcji, połączeniu, podziale, przekształceniu i innych przejściach
     z mocy prawa — prawo przechodzi poza rejestrem, wpis tylko ujawnia stan. Inna checklista, inna
     treść zawiadomienia, inne skutki opóźnienia. Wyjątek: warunkowa emisja (art. 300¹¹⁸ § 1) —
     tam wpis jest konstytutywny.
+    *Stan (sesja napraw 2026-09-19):* NADAL NIEZAMKNIĘTE — `charakter_wpisu` jest liczony i
+    zapisywany przy każdym zdarzeniu (D-027), ale checklista i treść zawiadomienia pozostają dziś
+    IDENTYCZNE niezależnie od jego wartości — świadomie odłożone, czeka na odpowiedź Łukasza, czy
+    ta sesja ma dodać osobną treść zawiadomienia dla wpisu deklaratoryjnego (patrz pytania końcowe
+    sesji napraw i `ARCHITEKTURA-PSA.md` §7 wiersz 13).
 14. **Rejestr nie pośredniczy w płatnościach.** Żadnych przepływów pieniężnych, dywidend ani
     rozliczeń spłat — patrz `PRZEPISY-PSA.md` sekcja 12 pkt 1.
 

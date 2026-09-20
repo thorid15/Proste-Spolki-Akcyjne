@@ -42,16 +42,29 @@ function Karta({ tytul, akcje, dzieci, tight, children }) {
   );
 }
 
+// Naprawa Z-018: etykieta nie byla powiazana z polem (`htmlFor`) - czytnik
+// ekranu jej nie czytal, klikniecie w nia nie ustawialo kursora. Ten sam
+// wzorzec co `Pole` w `ui-rejestr.js`: `useId` + doklejenie `id` do
+// pojedynczego pola-dziecka (ukladow zlozonych, gdzie nie wiadomo, ktore
+// dziecko etykieta opisuje, celowo nie wiaze).
 function Pole({ etykieta, podpowiedz, children, wymagane }) {
+  const id = useId();
+  const dziecko = React.isValidElement(children)
+    && ['input', 'select', 'textarea'].includes(children.type)
+    && !children.props.id
+    ? React.cloneElement(children, { id })
+    : children;
+  const powiazane = dziecko !== children;
+
   return (
     <div className="frow">
       {etykieta && (
-        <label className="fl">
+        <label className="fl" htmlFor={powiazane ? id : undefined}>
           {etykieta}
           {wymagane && <span style={{ color: 'var(--burgundy)' }}> *</span>}
         </label>
       )}
-      {children}
+      {dziecko}
       {podpowiedz && <div className="podpowiedz">{podpowiedz}</div>}
     </div>
   );

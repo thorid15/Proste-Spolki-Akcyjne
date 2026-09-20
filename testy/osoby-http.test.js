@@ -112,7 +112,10 @@ test('PESEL: niepoprawna suma kontrolna daje ostrzezenie, NIE blokuje zapisu (et
   assert.equal(stNiepoprawny, 201, 'zla suma kontrolna nie blokuje zapisu osoby');
   assert.ok(niepoprawny.ostrzezenia.some((o) => o.includes('Suma kontrolna')));
 
-  const [, poprawka] = await zapytaj('PUT', `/api/psa/osoby/${niepoprawny.osoba.id}`, { pesel: '90071500118' });
+  // Inny (tez poprawny) numer niz ten z pierwszego zapisu wyzej - Z-350
+  // ostrzega o kolizji PESEL z innym rekordem, a tu sprawdzana jest
+  // WYLACZNIE poprawa sumy kontrolnej, nie ta druga sprawa.
+  const [, poprawka] = await zapytaj('PUT', `/api/psa/osoby/${niepoprawny.osoba.id}`, { pesel: '90071500125' });
   assert.deepEqual(poprawka.ostrzezenia, [], 'poprawiony PESEL usuwa ostrzezenie przy PUT');
 });
 
@@ -191,6 +194,72 @@ test('status PEP: zapisuje sie z opisem, a sprzecznosc z oswiadczeniem daje ostr
   assert.ok(brak.braki_ustawowe.some((b) => /eksponowane stanowisko polityczne/.test(b)));
 });
 
+/**
+ * Naprawa Z-151/P-010: osoba, ktorej NIKT jeszcze nie ocenil pod katem PEP,
+ * wygladala identycznie jak osoba SWIADOMIE uznana za nie-PEP (obie 'nie') -
+ * falszywy zapis, nie brak danych. Nowa osoba dostaje teraz 'nieustalono'.
+ */
+test('status PEP: nowa osoba bez podanego statusu dostaje "nieustalono", nie "nie"', async () => {
+  const [status, ok] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `PepDomyslny${sufiks()}`,
+  });
+  assert.equal(status, 201);
+  assert.equal(ok.osoba.pep, 'nieustalono');
+  // Status nieustalony to brak ustalenia, nie zaznaczenie PEP - zaden
+  // komunikat o brakujacym opisie nie powinien sie pojawic.
+  assert.ok(!ok.braki_ustawowe.some((b) => /eksponowane stanowisko polityczne/.test(b)));
+
+  // Pusty string ma sie zachowywac tak samo jak brak pola.
+  const [, pusty] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `PepPusty${sufiks()}`, pep: '',
+  });
+  assert.equal(pusty.osoba.pep, 'nieustalono');
+});
+
+/**
+ * Naprawa Z-350: kartoteka deklaruje "jeden inwestor wpisywany RAZ" (regula
+ * domenowa nr 10), ale nic tego nie egzekwowalo - dwie ROZNE osoby moglysie
+ * zapisac z tym samym PESEL/NIP bez zadnego sygnalu. Ostrzezenie, NIE
+ * blokada - ta sama osoba wystepuje legalnie w wielu spolkach.
+ */
+test('Z-350: kolizja PESEL/NIP z INNYM rekordem daje ostrzezenie, nie blokuje zapisu', async () => {
+  const [, pierwsza] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `Kolizja1${sufiks()}`, imie: 'Anna', pesel: '90010112349',
+  });
+  assert.ok(!pierwsza.ostrzezenia.some((o) => /PESEL.*jest już w kartotece/.test(o)), 'pierwszy zapis nie koliduje sam ze soba');
+
+  const [status, druga] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `Kolizja2-INNA-OSOBA${sufiks()}`, imie: 'Ewa', pesel: '90010112349',
+  });
+  assert.equal(status, 201, 'kolizja PESEL nie blokuje zapisu');
+  assert.ok(
+    druga.ostrzezenia.some((o) => /PESEL „90010112349” jest już w kartotece/.test(o) && o.includes(`#${pierwsza.osoba.id}`)),
+    druga.ostrzezenia.join(' | ')
+  );
+
+  // Edycja osoby BEZ zadnej prawdziwej kolizji nie koliduje sama ze soba
+  // (wyjatek po `id` w zapytaniu dziala, nie tylko przypadkiem nic nie
+  // znajduje - "druga" i "pierwsza" wyzej NADAL koliduja ze soba naprawde,
+  // wiec nie nadaja sie do sprawdzenia braku samo-kolizji).
+  const [, osobna] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'fizyczna', nazwisko: `BezKolizji${sufiks()}`, pesel: '90010112322',
+  });
+  const [, poEdycji] = await zapytaj('PUT', `/api/psa/osoby/${osobna.osoba.id}`, { telefon: '600000000' });
+  assert.ok(!poEdycji.ostrzezenia.some((o) => /PESEL.*jest już w kartotece/.test(o)));
+
+  // NIP dziala tak samo.
+  const [, prawnaA] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'prawna', nazwa: `Spolka A ${sufiks()}`, nip: '1234563218',
+  });
+  const [, prawnaB] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'prawna', nazwa: `Spolka B ${sufiks()}`, nip: '1234563218',
+  });
+  assert.ok(
+    prawnaB.ostrzezenia.some((o) => /NIP „1234563218” jest już w kartotece/.test(o) && o.includes(`#${prawnaA.osoba.id}`)),
+    prawnaB.ostrzezenia.join(' | ')
+  );
+});
+
 // ─────────────────────────────────────────────────────────────
 // Etap 3.1: modul AML konfigurowalny per spolka - wylaczony domyslnie.
 // ─────────────────────────────────────────────────────────────
@@ -266,4 +335,78 @@ test('POST/GET /api/psa/osoby/:id/aml-skany: upload, lista, pobranie z logiem do
   assert.equal(odpPlik.headers.get('content-type'), 'application/pdf');
   const liczbaWpisowDziennikaPo = db().prepare('SELECT COUNT(*) AS ile FROM psa_dziennik_dostepu').get().ile;
   assert.equal(liczbaWpisowDziennikaPo, liczbaWpisowDziennikaPrzed + 1, 'pobranie skanu zostawia slad w dzienniku dostepu');
+});
+
+test('Z-253: POST /api/psa/osoby/:id/aml-skany odrzuca plik, ktorego tresc nie odpowiada rozszerzeniu', async () => {
+  // Rozszerzenie „.pdf" przechodzilo przez fileFilter (sprawdza tylko
+  // rozszerzenie), a skan tozsamosci trafial na dysk mimo ze w srodku jest
+  // HTML ze <script> — najbardziej wrazliwa kategoria uploadu w calej
+  // aplikacji nie miala kontroli sygnatury tresci.
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `SkanFalszywy${sufiks()}` });
+  const [, spolka] = await zapytaj('POST', '/api/psa/spolki', { nazwa: `AML Falsz ${sufiks()}`, stosuje_procedure_aml: true });
+
+  const podrobiony = new FormData();
+  podrobiony.append('spolka_id', String(spolka.spolka.id));
+  podrobiony.append('plik', new Blob(['<html><script>alert(1)</script></html>'], { type: 'application/pdf' }), 'dowod.pdf');
+  const odp = await fetch(`${baza}/api/psa/osoby/${osoba.osoba.id}/aml-skany`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: podrobiony,
+  });
+  assert.equal(odp.status, 400);
+  const [, lista] = await zapytaj('GET', `/api/psa/osoby/${osoba.osoba.id}/aml-skany`);
+  assert.equal(lista.skany.length, 0, 'odrzucony plik nie zostaje zapisany w kartotece');
+});
+
+// ─────────────────────────────────────────────────────────────
+// Naprawa Z-006/P-004: zaproszenie akcjonariusza do portalu
+// ─────────────────────────────────────────────────────────────
+
+test('Z-006: POST /api/psa/osoby/:id/zapros-do-portalu zaklada konto akcjonariusza i zwraca link (SMTP wylaczone w testach)', async () => {
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Zapraszany${sufiks()}`, imie: 'Jan' });
+  const email = `jan.zapraszany${sufiks()}@example-test.pl`;
+
+  const [status, wynik] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, { email });
+  assert.equal(status, 200);
+  assert.equal(wynik.nowe_konto, true);
+  assert.equal(wynik.email_wyslany, false, 'SMTP niekonfigurowane w testach - link zwracany wprost');
+  assert.ok(wynik.link_aktywacyjny);
+
+  const konto = db().prepare('SELECT * FROM psa_konta WHERE lower(email) = ?').get(email.toLowerCase());
+  assert.equal(konto.rola, 'akcjonariusz');
+  assert.equal(konto.osoba_id, osoba.osoba.id);
+  assert.equal(konto.aktywne, 0);
+});
+
+test('Z-006: POST /:id/zapros-do-portalu bez adresu e-mail odrzuca; dla nieistniejacej osoby zwraca 404', async () => {
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `BezEmaila${sufiks()}` });
+  const [stBrak] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, {});
+  assert.equal(stBrak, 400);
+
+  const [st404] = await zapytaj('POST', '/api/psa/osoby/9999999/zapros-do-portalu', { email: 'x@example.pl' });
+  assert.equal(st404, 404);
+});
+
+test('Z-006: adres e-mail juz uzywany przez INNA osobe/rolo jest odrzucony, nie podpina sie pod cudze konto', async () => {
+  const [, osobaA] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Kolizja1${sufiks()}` });
+  const [, osobaB] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Kolizja2${sufiks()}` });
+  const email = `kolizja${sufiks()}@example-test.pl`;
+
+  const [stA] = await zapytaj('POST', `/api/psa/osoby/${osobaA.osoba.id}/zapros-do-portalu`, { email });
+  assert.equal(stA, 200);
+
+  const [stB, wynikB] = await zapytaj('POST', `/api/psa/osoby/${osobaB.osoba.id}/zapros-do-portalu`, { email });
+  assert.equal(stB, 400);
+  assert.match(wynikB.blad, /już przypisany do innego konta/);
+});
+
+test('Z-006: powtorne zaproszenie TEJ SAMEJ osoby na ten sam adres odswieza token, nie zaklada drugiego konta', async () => {
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Ponowione${sufiks()}` });
+  const email = `ponowione${sufiks()}@example-test.pl`;
+
+  const [, pierwsze] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, { email });
+  const [, drugie] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, { email });
+  assert.equal(drugie.konto_id, pierwsze.konto_id);
+  assert.notEqual(drugie.link_aktywacyjny, pierwsze.link_aktywacyjny, 'token sie odswieza');
+
+  const liczbaKont = db().prepare('SELECT COUNT(*) AS ile FROM psa_konta WHERE lower(email) = ?').get(email.toLowerCase()).ile;
+  assert.equal(liczbaKont, 1);
 });

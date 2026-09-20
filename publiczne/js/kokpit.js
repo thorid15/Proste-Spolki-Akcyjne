@@ -58,7 +58,34 @@ function rozbijNaSzczegoly(akcjonariusze) {
   return wiersze;
 }
 
-function TabelaAkcjonariatu({ akcjonariusze, razem }) {
+/* Naprawa Z-058: pokrycie i rodzaj akcji (art. 300(33) § 1 pkt 4 i 9 KSH) sa
+   USTAWOWA TRESCIA REJESTRU — dotad widoczne wylacznie na wydruku, kokpit
+   ma je pokazywac na biezaco, bez potrzeby generowania dokumentu. */
+const NAZWY_POKRYCIA_KOKPIT = {
+  tak: 'w całości',
+  nie: 'niepokryte',
+  czesciowo: 'częściowo',
+};
+const NAZWA_POKRYCIA_NIEUSTALONE = 'nieustalone';
+
+function opiszPokrycieKokpit(pokryta) {
+  return NAZWY_POKRYCIA_KOKPIT[pokryta] || NAZWA_POKRYCIA_NIEUSTALONE;
+}
+
+const NAZWY_RODZAJU_AKCJI_KOKPIT = {
+  zwykla: 'zwykła',
+  uprzywilejowana: 'uprzywilejowana',
+  zalozycielska: 'założycielska',
+  niema: 'niema',
+};
+
+function rodzajAkcjiDlaEmisji(emisje, emisjaKlucz) {
+  const emisja = (emisje || []).find((e) => e.klucz === emisjaKlucz);
+  const rodzaj = emisja ? emisja.rodzaj_akcji : null;
+  return NAZWY_RODZAJU_AKCJI_KOKPIT[rodzaj] || 'zwykła';
+}
+
+function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
   if (akcjonariusze.length === 0) {
     return (
       <Pusto
@@ -74,9 +101,11 @@ function TabelaAkcjonariatu({ akcjonariusze, razem }) {
         <tr>
           <th>Akcjonariusz</th>
           <th>Seria</th>
+          <th>Rodzaj akcji</th>
           <th className="do-prawej">Liczba akcji</th>
           <th>Numery</th>
           <th className="do-prawej">% akcji</th>
+          <th>Pokrycie</th>
           <th>Obciążenia</th>
         </tr>
       </thead>
@@ -99,9 +128,11 @@ function TabelaAkcjonariatu({ akcjonariusze, razem }) {
                 </div>
               </td>
               <td>{a.seria}</td>
+              <td>{rodzajAkcjiDlaEmisji(emisje, a.emisja_klucz)}</td>
               <td className="do-prawej" style={{ fontWeight: 600 }}>{fmt.liczba(a.ilosc)}</td>
               <td className="kol-dane">{a.numery}</td>
               <td className="do-prawej">{fmt.procent(a.procent)}</td>
+              <td>{opiszPokrycieKokpit(a.pokryta)}</td>
               <td>
                 {a.obciazenia.length === 0 ? (
                   <span className="wyciszony">—</span>
@@ -121,10 +152,11 @@ function TabelaAkcjonariatu({ akcjonariusze, razem }) {
       </tbody>
       <tfoot>
         <tr>
-          <td colSpan={2}>Razem</td>
+          <td colSpan={3}>Razem</td>
           <td className="do-prawej">{fmt.liczba(razem)}</td>
           <td />
           <td className="do-prawej">100%</td>
+          <td />
           <td />
         </tr>
       </tfoot>
@@ -500,7 +532,19 @@ function EkranKokpitu({ spolkaId }) {
   // Stan rejestru na wskazany dzień (art. 300(35) KSH — informacja wydaje się
   // NA DZIEŃ). Dawniej wybierało się go playheadem na osi akcji; oś zniknęła,
   // więc została sama data, czyli to, o co naprawdę chodziło.
-  const [data, ustawDate] = useState(fmt.dzisIso());
+  //
+  // Naprawa Z-305/P-011: serwer przyjmuje `data` z dokładnością do minuty
+  // (`RRRR-MM-DDTGG:MM`, `czas.poprawnaChwila`) od dawna — rano w rejestrze
+  // może być inny wpis niż wieczorem tego samego dnia, a UI dawał wybrać
+  // wyłącznie sam dzień. Godzina jest polem OSOBNYM i opcjonalnym: pusta
+  // znaczy „cały dzień” (bez zmiany dotychczasowego zachowania).
+  const [dataDnia, ustawDataDnia] = useState(fmt.dzisIso());
+  const [godzina, ustawGodzine] = useState('');
+  const data = godzina ? `${dataDnia}T${godzina}` : dataDnia;
+  function ustawDate(nowaData) {
+    ustawDataDnia(nowaData);
+    ustawGodzine('');
+  }
   const [szczegolowy, ustawSzczegolowy] = useState(false);
   const [przeliczanie, ustawPrzeliczanie] = useState(null);
   const [sprostowanie, ustawSprostowanie] = useState(null);
@@ -563,7 +607,7 @@ function EkranKokpitu({ spolkaId }) {
             {wstecz && (
               <span className="pigulka-archiwalna">
                 <Ikona nazwa="zegar" rozmiar={13} />
-                Stan na {fmt.data(data)}
+                Stan na {fmt.dataCzas(data)}
               </span>
             )}
           </div>
@@ -577,7 +621,14 @@ function EkranKokpitu({ spolkaId }) {
               archiwalnym, tak jak wydruki. */}
           <div className="stan-na-dzien bez-druku">
             <span className="stan-na-dzien-etykieta">Stan na dzień</span>
-            <PoleDaty wartosc={data} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDate(v)} />
+            <PoleDaty wartosc={dataDnia} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDate(v)} />
+            <input
+              type="time"
+              className="pole-godziny-stanu"
+              value={godzina}
+              title="Godzina (opcjonalnie) — puste znaczy „cały dzień”. Rano w rejestrze może być inny wpis niż wieczorem tego samego dnia."
+              onChange={(z) => ustawGodzine(z.target.value)}
+            />
             {wstecz && (
               <button className="btn btn-maly" onClick={() => ustawDate(fmt.dzisIso())}>Dziś</button>
             )}
@@ -589,9 +640,9 @@ function EkranKokpitu({ spolkaId }) {
             <button
               className="btn"
               onClick={() => idz(`/spolki/${spolkaId}/migracja`)}
-              title="Wprowadzenie stanu przeniesionego z innego rejestru (np. Rejestrów Notarialnych), z datami historycznymi."
+              title="WYŁĄCZNIE dla spółki przenoszonej z innego rejestru (np. Rejestrów Notarialnych), z datami historycznymi z przeszłości. Nowa spółka (w tym z przyjętego wniosku portalowego) otwiera rejestr przez przycisk „Otwórz rejestr” w kreatorze, nie tędy."
             >
-              Migracja — stan otwarcia
+              Migracja z innego rejestru — stan otwarcia
             </button>
           )}
         </div>
@@ -656,6 +707,7 @@ function EkranKokpitu({ spolkaId }) {
               <TabelaAkcjonariatu
                 akcjonariusze={szczegolowy ? rozbijNaSzczegoly(akcjonariusze) : akcjonariusze}
                 razem={dane.razem_akcji}
+                emisje={emisje}
               />
               {!wstecz && (
                 <DalszeWpisy tytul="Dalsze wpisy:">

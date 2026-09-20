@@ -283,6 +283,36 @@ test('POST /api/psa/wnioski/:id/przyjmij: zaklada spolke i osobe, dowiazuje wnio
   assert.equal(stKorektaPoZamknieciu, 400, 'zamknietego wniosku nie mozna juz korygowac');
 });
 
+/**
+ * Naprawa Z-151/P-010: `pep_oswiadczenie` (OSWIADCZENIE OSOBY) przechodzi
+ * z wniosku do kartoteki normalnie, ale `pep`/`pep_opis` (USTALENIE
+ * KANCELARII) - nawet jesli ktos je wypelnil na wniosku - NIGDY. Nowa osoba
+ * dostaje `pep` z DEFAULT bazy ('nieustalono'), bo to pracownik ustala je
+ * PO przyjeciu, nie wniosek klienta.
+ */
+test('POST /api/psa/wnioski/:id/przyjmij: oswiadczenie PEP przechodzi do kartoteki, ustalenie kancelarii - nigdy', async () => {
+  const { wniosekId } = await wnioskGotowyDoWeryfikacji('pep-przyjmij@example.pl');
+  const [, dane] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
+  const akcId = dane.akcjonariusze[0].id;
+
+  await zapytaj(
+    'PUT', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${akcId}`,
+    { pep_oswiadczenie: 'tak', pep_oswiadczenie_data: '2026-08-16', pep: 'tak', pep_opis: 'Wpisane omylkowo na wnioski' },
+    ciastkoPracownik
+  );
+  await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${akcId}/zweryfikuj`, { zweryfikowano: true }, ciastkoPracownik);
+
+  const [status] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, undefined, ciastkoPracownik);
+  assert.equal(status, 200);
+
+  const akcjonariuszPo = db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(akcId);
+  const osoba = db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(akcjonariuszPo.osoba_id);
+  assert.equal(osoba.pep_oswiadczenie, 'tak', 'oswiadczenie osoby przechodzi z wniosku');
+  assert.equal(osoba.pep_oswiadczenie_data, '2026-08-16');
+  assert.equal(osoba.pep, 'nieustalono', 'ustalenie kancelarii NIE dziedziczy sie z wniosku');
+  assert.equal(osoba.pep_opis, null);
+});
+
 test('POST /api/psa/wnioski/:id/przyjmij: przepina konto wnioskodawcy na role spolki — i tylko na JEGO spolke', async () => {
   const { wniosekId, ciastkoKlienta } = await wnioskGotowyDoWeryfikacji('przepiecie-konta@example.pl');
   const [, dane] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
@@ -471,6 +501,50 @@ test('PUT /api/psa/wnioski/:id/dokumenty/:dokId/tresc: zapis oznacza sprawdzenie
   );
   assert.equal(stPoPodpisie, 400);
   assert.match(wynik.blad, /podpisany/i);
+});
+
+test('Z-205: po potwierdzeniu podpisu kancelaria zapisuje skrot tresci, a klient nie moze juz podmienic ani usunac skanu', async () => {
+  const { wniosekId, ciastkoKlienta } = await wnioskGotowyDoWeryfikacji('integralnosc-podpisu@example.pl', {
+    bezSkanow: true,
+  });
+  const [, przedSkanem] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
+  const dokument = przedSkanem.dokumenty[0];
+  assert.equal(dokument.podpis_nazwa_pliku, null);
+
+  const oryginalny = new FormData();
+  oryginalny.append('plik', new Blob(['%PDF-1.4\noryginalna tresc'], { type: 'application/pdf' }), 'oryginal.pdf');
+  const odpUpload = await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`, {
+    method: 'POST', headers: { Cookie: ciastkoKlienta }, body: oryginalny,
+  });
+  assert.equal(odpUpload.status, 201);
+
+  const [stPotw, poPotw] = await zapytaj(
+    'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/podpis-potwierdz`, {}, ciastkoPracownik
+  );
+  assert.equal(stPotw, 200);
+  assert.ok(poPotw.dokument.podpis_potwierdzono, 'kancelaria potwierdzila podpis');
+  const wpisPoPotw = db().prepare('SELECT podpis_hash FROM psa_wnioski_dokumenty WHERE id = ?').get(dokument.id);
+  assert.match(wpisPoPotw.podpis_hash, /^[0-9a-f]{64}$/, 'skrot SHA-256 tresci zapisany w chwili potwierdzenia');
+
+  // Proba podmiany JUZ POTWIERDZONEGO skanu — dokladnie scenariusz z audytu.
+  const podmieniony = new FormData();
+  podmieniony.append('plik', new Blob(['%PDF-1.4\nINNA tresc podsunieta po potwierdzeniu'], { type: 'application/pdf' }), 'podmiana.pdf');
+  const odpPodmiana = await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`, {
+    method: 'POST', headers: { Cookie: ciastkoKlienta }, body: podmieniony,
+  });
+  assert.equal(odpPodmiana.status, 400);
+  const cialoPodmiany = await odpPodmiana.json();
+  assert.match(cialoPodmiany.blad, /już potwierdzon/i);
+
+  // Ani usunac, zeby wgrac na nowo.
+  const odpUsun = await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`, {
+    method: 'DELETE', headers: { Cookie: ciastkoKlienta },
+  });
+  assert.equal(odpUsun.status, 400);
+
+  // Skrot i tresc na dysku zostaly te sprzed proby podmiany.
+  const wpisPoProbie = db().prepare('SELECT podpis_hash FROM psa_wnioski_dokumenty WHERE id = ?').get(dokument.id);
+  assert.equal(wpisPoProbie.podpis_hash, wpisPoPotw.podpis_hash);
 });
 
 test('POST /api/psa/wnioski/:id/akcjonariusze/:akcId/do-poprawy: uwaga siada przy pozycji, wniosek wraca do klienta', async () => {

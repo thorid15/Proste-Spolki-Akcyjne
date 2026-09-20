@@ -35,6 +35,38 @@ function wczytajEnv(sciezka) {
 
 wczytajEnv(path.join(KATALOG_GLOWNY, '.env'));
 
+/**
+ * Naprawa Z-306 — kancelaria dziala WYLACZNIE w Europie/Warszawie, a
+ * `data_wpisu` na zawiadomieniach o wpisie musi byc czasem LOKALNYM
+ * (patrz `pomocnicze/czas.js`, ktory czyta strefe z `Date` procesu). Zla
+ * strefa nie rzuca zadnego bledu w trakcie dzialania - po cichu przesuwa
+ * godziny na oficjalnych dokumentach notarialnych, do wykrycia dopiero
+ * przy realnym sporze.
+ *
+ * Wariant WYBRANY: zmienna NIEUSTAWIONA (swiezy checkout bez `.env`, CI bez
+ * `.env` w repo - jest w `.gitignore`) dostaje BEZPIECZNY domyslny wymog
+ * programowo, zeby brak konfiguracji nie byl przeszkoda do uruchomienia
+ * testow ani pierwszego startu. Zmienna USTAWIONA na COKOLWIEK innego niz
+ * Europe/Warsaw to natomiast SWIADOMA (choc zapewne omylkowa) decyzja kogos,
+ * kto skonfigurowal srodowisko - taka odmawiamy uruchomienia od razu, zamiast
+ * pozwolic jej po cichu popsuc daty na dokumentach. Symetryczny wzgledem
+ * reszty kodu: "rola nieznana dostaje najwezszy zakres" (maskowanie.js) -
+ * tu "strefa nieustalona dostaje bezpieczny domysl, strefa zla odmawia".
+ */
+const STREFA_WYMAGANA = 'Europe/Warsaw';
+if (!process.env.TZ) {
+  process.env.TZ = STREFA_WYMAGANA;
+}
+const strefaFaktyczna = Intl.DateTimeFormat().resolvedOptions().timeZone;
+if (strefaFaktyczna !== STREFA_WYMAGANA) {
+  throw new Error(
+    `Serwer wymaga strefy czasowej "${STREFA_WYMAGANA}" (zmienna TZ) - kancelaria dziala wylacznie w tej ` +
+      `strefie, a data i godzina wpisu na zawiadomieniach musza byc czasem lokalnym kancelarii. Wykryto ` +
+      `strefe "${strefaFaktyczna}" (TZ=${process.env.TZ}). Ustaw TZ=${STREFA_WYMAGANA} w .env albo w ` +
+      'srodowisku procesu.'
+  );
+}
+
 function tekst(nazwa, domyslna) {
   const v = process.env[nazwa];
   return v === undefined || v === '' ? domyslna : v;
@@ -51,8 +83,18 @@ function flaga(nazwa, domyslna) {
   return ['1', 'true', 'tak', 'yes', 'on'].includes(String(v).toLowerCase());
 }
 
+/**
+ * Naprawa Z-002: `:memory:` to specjalna wartosc SQLite (baza wylacznie
+ * w pamieci, bez pliku), nie sciezka wzgledna. `path.resolve` tego nie
+ * wiedzial i skladal ja z KATALOG_GLOWNY jak kazdy inny tekst, tworzac
+ * REALNY plik na dysku o nazwie dosłownie `:memory:` - `server/baza.js`
+ * porownuje potem wynik z literalem `':memory:'`, ktory po przejsciu
+ * przez ta funkcje nigdy juz nie pasowal.
+ */
 function sciezka(nazwa, domyslna) {
-  return path.resolve(KATALOG_GLOWNY, tekst(nazwa, domyslna));
+  const wartosc = tekst(nazwa, domyslna);
+  if (wartosc === ':memory:') return wartosc;
+  return path.resolve(KATALOG_GLOWNY, wartosc);
 }
 
 const konfiguracja = {
@@ -151,3 +193,7 @@ const konfiguracja = {
 };
 
 module.exports = konfiguracja;
+// Eksportowana osobno do testow jednostkowych (Z-002) - reszta modulu zalezy
+// od `process.env` odczytanego raz przy pierwszym `require`, ale `sciezka()`
+// sama w sobie jest funkcja czysta.
+module.exports.sciezka = sciezka;

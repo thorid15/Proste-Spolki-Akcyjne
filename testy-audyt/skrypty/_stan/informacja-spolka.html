@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Informacja z rejestru akcjonariuszy — Audyt S1 410411 Prosta Spółka Akcyjna — 17.09.2026</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Bez tego iOS zamienia „art. 300³⁵ § 1" na numer telefonu: sygnatury
+     przepisów robiły się niebieskimi odnośnikami. -->
+<meta name="format-detection" content="telephone=no,date=no,address=no">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Kroje wczytujemy NIEBLOKUJACO. Zwykly arkusz stylow wstrzymuje
+     rysowanie strony do czasu pobrania — przy wolnym albo odcietym laczu
+     dokument stoi wtedy pusty, a wydruk wychodzi z pustej kartki. Dokument
+     ma sie przeczytac i wydrukowac bez sieci; kroje z Google Fonts sa
+     ulepszeniem, nie warunkiem. Stad preload i podmiana rel po wczytaniu,
+     a dla przegladarek bez skryptow zwykly link w noscript. -->
+<link rel="preload" as="style"
+      href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600&family=Inter+Tight:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'">
+<noscript>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600&family=Inter+Tight:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+</noscript>
+<style>
+:root {
+  --atrament: #14181C;
+  --atrament-2: #565E68;
+  --atrament-3: #8A929C;
+  --rejestr: #1F4D3D;
+  --rejestr-tlo: #F1F5F2;
+  --linia: #E6E8E3;
+  --mosiadz: #8A6531;
+  --papier: #FFFFFF;
+
+  /* Szerokosc kolumny tekstu = szerokosc zadruku A4 przy marginesach
+     16 mm. Ekran pokazuje wiec dokladnie to, co wyjdzie z drukarki. */
+  --kolumna: 178mm;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  padding: 12mm 8mm 20mm;
+  background: #EDEFEC;
+  color: var(--atrament);
+  font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+
+.arkusz {
+  max-width: var(--kolumna);
+  margin: 0 auto;
+  padding: 16mm 16mm 14mm;
+  background: var(--papier);
+  box-shadow: 0 1px 3px rgba(20, 24, 28, 0.10), 0 8px 24px -12px rgba(20, 24, 28, 0.18);
+}
+
+/* ── Nagłówek ── */
+.glowka {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12mm;
+  padding-bottom: 5mm;
+  border-bottom: 1.5pt solid var(--rejestr);
+}
+.glowka-znak { height: 15mm; width: auto; display: block; }
+.glowka-kancelaria {
+  text-align: right;
+  font-size: 8.5pt;
+  line-height: 1.45;
+  color: var(--atrament-2);
+}
+.glowka-kancelaria strong {
+  display: block;
+  font-family: 'EB Garamond', 'Iowan Old Style', Georgia, serif;
+  font-size: 12pt;
+  font-weight: 500;
+  color: var(--atrament);
+}
+/* Rola kancelarii stoi przy jej danych, a nie w osobnej sekcji niżej:
+   to ta sama informacja co nazwa i adres — kto wydał ten dokument. */
+.glowka-rola {
+  display: block;
+  font-size: 8pt;
+  letter-spacing: 0.02em;
+  color: var(--rejestr);
+  margin-bottom: 1mm;
+}
+
+/* ── Tytuł ── */
+.tytul {
+  font-family: 'EB Garamond', 'Iowan Old Style', Georgia, serif;
+  font-size: 21pt;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.005em;
+  margin: 8mm 0 1.5mm;
+  text-wrap: balance;
+}
+
+/* ── Metryka: trzy fakty, które identyfikują ten konkretny wypis ──
+   Jedyne miejsce z tłem. Nie jest ozdobą: to one odróżniają dwa wypisy
+   z tego samego rejestru, więc mają się rzucać w oczy przed treścią. */
+.metryka {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1.2fr;
+  gap: 6mm;
+  padding: 4mm 5mm;
+  background: var(--rejestr-tlo);
+  border-left: 2pt solid var(--rejestr);
+  margin-bottom: 9mm;
+}
+.metryka-etykieta {
+  font-size: 7pt;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--rejestr);
+  margin-bottom: 1mm;
+}
+.metryka-wartosc { font-size: 10.5pt; line-height: 1.35; }
+.metryka-wartosc strong { font-weight: 600; }
+
+/* ── Sekcje ── */
+.sekcja { margin-bottom: 6mm; break-inside: avoid; }
+.sekcja-tytul {
+  font-family: 'EB Garamond', 'Iowan Old Style', Georgia, serif;
+  font-size: 13.5pt;
+  font-weight: 500;
+  line-height: 1.2;
+  margin: 0 0 3mm;
+  padding-bottom: 1.5mm;
+  border-bottom: 0.5pt solid var(--linia);
+}
+.sekcja-numer {
+  color: var(--atrament-3);
+  font-variant-numeric: normal;
+  margin-right: 1mm;
+}
+.sekcja-pusto { font-size: 9.5pt; color: var(--atrament-2); margin: 0; }
+
+/* ── Pary „etykieta — wartość" ── */
+.pary { display: grid; grid-template-columns: 52mm 1fr; gap: 1.5mm 6mm; margin: 0; }
+.pary dt { font-size: 9pt; color: var(--atrament-2); }
+.pary dd { margin: 0; font-size: 10pt; }
+.pary dd.mocno { font-weight: 600; }
+.pary dd.numery { font-size: 9.5pt; }
+
+/* ── Tabele ──
+   Bez linii pionowych i bez tła w wierszach: na papierze siatka konkuruje
+   z danymi. Rozdziela je włosowa linia i odstęp. */
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  font-size: 7pt;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--atrament-2);
+  text-align: left;
+  padding: 0 4mm 1.5mm 0;
+  border-bottom: 0.75pt solid var(--atrament-3);
+  white-space: nowrap;
+}
+tbody td {
+  font-size: 9.5pt;
+  padding: 2mm 4mm 2mm 0;
+  border-bottom: 0.5pt solid var(--linia);
+  vertical-align: top;
+}
+thead th:last-child, tbody td:last-child { padding-right: 0; }
+.do-prawej { text-align: right; }
+.numery {
+  font-family: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+  font-size: 8.5pt;
+  letter-spacing: -0.01em;
+}
+tbody tr { break-inside: avoid; }
+
+/* ── Wiersz akcjonariusza ──
+   Nazwisko, identyfikator i adresy to jedna dana z art. 300(33) § 1 pkt 5,
+   więc stoją w jednej komórce, jedno pod drugim — a nie w pięciu kolumnach,
+   z których większość byłaby pusta. */
+.akcjonariusz-nazwa { font-weight: 600; font-size: 10pt; }
+.akcjonariusz-wiersz { font-size: 8.5pt; color: var(--atrament-2); line-height: 1.4; }
+.akcjonariusz-wiersz .numery { font-size: 8pt; }
+.znacznik {
+  display: inline-block;
+  font-size: 7.5pt;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mosiadz);
+  white-space: nowrap;
+}
+
+/* ── Podsumowanie akcjonariatu ── */
+.suma {
+  display: flex;
+  justify-content: space-between;
+  gap: 6mm;
+  margin-top: 2.5mm;
+  font-size: 9pt;
+  color: var(--atrament-2);
+}
+.suma strong { color: var(--atrament); font-weight: 600; }
+
+/* ── Klauzule i podpis ── */
+/* Klauzula ustawowa, miejsce na podpis i identyfikacja arkusza to JEDEN
+   blok nierozdzielny. Podpis oderwany od klauzuli, którą uwierzytelnia,
+   jest wadą dokumentu, a nie kwestią estetyki — więc albo mieszczą się
+   razem, albo razem przechodzą na następną stronę. */
+.zakonczenie { break-inside: avoid; }
+.klauzula {
+  margin: 7mm 0 0;
+  padding-top: 3.5mm;
+  border-top: 0.75pt solid var(--atrament-3);
+  font-size: 9.5pt;
+}
+.klauzula-drobne { font-size: 8.5pt; color: var(--atrament-2); margin: 2mm 0 0; }
+
+.podpis {
+  margin-top: 12mm;
+  display: flex;
+  justify-content: flex-end;
+}
+.podpis-linia {
+  width: 64mm;
+  padding-top: 1.5mm;
+  border-top: 0.5pt solid var(--atrament);
+  text-align: center;
+  font-size: 8pt;
+  color: var(--atrament-2);
+}
+
+.stopka-arkusza {
+  margin-top: 8mm;
+  padding-top: 3mm;
+  border-top: 0.5pt solid var(--linia);
+  font-size: 7.5pt;
+  color: var(--atrament-3);
+  display: flex;
+  justify-content: space-between;
+  gap: 6mm;
+}
+
+/* ── Druk ──────────────────────────────────────────────────── */
+@page { size: A4; margin: 16mm; }
+
+@media print {
+  body { padding: 0; background: #FFF; }
+  .arkusz {
+    max-width: none;
+    padding: 0;
+    box-shadow: none;
+  }
+  /* Tło metryki i barwa przepisów muszą wyjść na papier — bez tego
+     jedyne dwa miejsca, w których kolor coś znaczy, drukują się na biało. */
+  html, body, .metryka { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sekcja { break-inside: auto; }
+  .sekcja-tytul { break-after: avoid; }
+}
+
+/* Dokument ma jeden wygląd — papierowy — więc nie przełącza się na ciemny
+   motyw. Kolory są wypisane wprost, żeby nie zależał od tła osadzającej go
+   strony (ekran kancelarii pokazuje go w ramce). */
+</style>
+</head>
+<body>
+<article class="arkusz">
+  <header class="glowka">
+    <img class="glowka-znak" src="/obrazy/notariat.png" alt="Notariat Rzeczypospolitej Polskiej">
+    <div class="glowka-kancelaria">
+      <strong>Kancelaria Notarialna Łukasz Kozon</strong>
+      <span class="glowka-rola">podmiot prowadzący rejestr akcjonariuszy</span>
+      Bolesława Leśmiana nr 3/U10, 80-280 Gdańsk<br>
+      Gdańsk<br>
+      
+    </div>
+  </header>
+
+  <h1 class="tytul">Informacja z rejestru akcjonariuszy</h1>
+  <div class="metryka">
+    <div>
+      <div class="metryka-etykieta">Spółka</div>
+      <div class="metryka-wartosc"><strong>Audyt S1 410411 Prosta Spółka Akcyjna</strong><br>KRS 0000410411</div>
+    </div>
+    <div>
+      <div class="metryka-etykieta">Stan na dzień</div>
+      <div class="metryka-wartosc"><strong>17.09.2026</strong></div>
+    </div>
+    <div>
+      <div class="metryka-etykieta">Odbiorca informacji</div>
+      <div class="metryka-wartosc">spółka, której rejestr dotyczy</div>
+    </div>
+  </div>
+
+  
+  
+  <section class="sekcja">
+    <h2 class="sekcja-tytul"><span class="sekcja-numer">I.</span> Spółka</h2>
+    <dl class="pary"><dt>Firma</dt><dd class="mocno">Audyt S1 410411 Prosta Spółka Akcyjna</dd><dt>Forma prawna</dt><dd>PROSTA SPÓŁKA AKCYJNA</dd><dt>Siedziba i adres</dt><dd>Testowa 1, 80-280 Gdańsk</dd><dt>Sąd rejestrowy</dt><dd>Sąd Rejonowy Gdańsk-Północ w Gdańsku, VII Wydział Gospodarczy KRS, VII Wydział Gospodarczy KRS</dd><dt>Numer KRS</dt><dd class="numery">0000410411</dd><dt>Data zarejestrowania spółki</dt><dd>17.09.2026</dd></dl>
+  </section>
+  <section class="sekcja">
+    <h2 class="sekcja-tytul"><span class="sekcja-numer">II.</span> Rejestr akcjonariuszy</h2>
+    <dl class="pary"><dt>Data uchwały o wyborze podmiotu</dt><dd>17.09.2026</dd><dt>Data umowy o prowadzenie rejestru</dt><dd>17.09.2026</dd><dt>Data otwarcia rejestru</dt><dd>17.09.2026</dd></dl>
+  </section>
+  <section class="sekcja">
+    <h2 class="sekcja-tytul"><span class="sekcja-numer">III.</span> Emisje i serie akcji</h2>
+    <table><thead><tr><th>Seria</th><th>Rodzaj akcji</th><th>Numery</th><th class="do-prawej">Wyemitowane</th><th class="do-prawej">Umorzone</th><th class="do-prawej">Istniejące</th><th>Data emisji</th></tr></thead><tbody><tr><td><strong>ZZ-WCZESNA</strong><div class="akcjonariusz-wiersz">Test data wczesna</div></td><td>zwykła</td><td class="numery"><span class="numery">1–10</span></td><td class="do-prawej">10</td><td class="do-prawej">0</td><td class="do-prawej">10</td><td>17.09.2026</td></tr><tr><td><strong>AZ</strong><div class="akcjonariusz-wiersz">Emisja założycielska</div></td><td>zwykła</td><td class="numery"><span class="numery">1–100</span></td><td class="do-prawej">100</td><td class="do-prawej">0</td><td class="do-prawej">100</td><td>17.09.2026</td></tr></tbody></table>
+  </section>
+  <section class="sekcja">
+    <h2 class="sekcja-tytul"><span class="sekcja-numer">IV.</span> Akcjonariusze</h2>
+    <table><thead><tr><th>Akcjonariusz</th><th>Seria</th><th>Numery</th><th class="do-prawej">Akcje</th><th class="do-prawej">Udział</th><th>Pokrycie</th></tr></thead><tbody><tr><td><div class="akcjonariusz-nazwa">Kowalska Anna</div><div class="akcjonariusz-wiersz">Testowa 1, 80-280 Gdańsk</div></td><td>AZ</td><td class="numery"><span class="numery">1–95</span></td><td class="do-prawej">95</td><td class="do-prawej">95,00 %</td><td>w całości</td></tr><tr><td><div class="akcjonariusz-nazwa">Inwestor 410411 Sp. z o.o.</div><div class="akcjonariusz-wiersz">Krajowy Rejestr Sądowy — rejestr przedsiębiorców 0000410411</div><div class="akcjonariusz-wiersz">Inwestorska 5, 00-001 Warszawa</div></td><td>AZ</td><td class="numery"><span class="numery">96–100</span></td><td class="do-prawej">5</td><td class="do-prawej">5,00 %</td><td>w całości</td></tr></tbody></table>
+        <div class="suma">
+          <span>Akcje przypisane akcjonariuszom: <strong>100</strong></span>
+          <span>Pozycji w rejestrze: <strong>2</strong></span>
+        </div>
+  </section>
+
+  
+
+  <footer class="stopka-arkusza">
+    <span>Audyt S1 410411 Prosta Spółka Akcyjna — stan na 17.09.2026</span>
+    <span>Sporządzono 17.09.2026</span>
+  </footer>
+</article>
+</body>
+</html>

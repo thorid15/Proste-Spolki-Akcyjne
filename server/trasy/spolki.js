@@ -13,7 +13,9 @@ const multer = require('multer');
 const { db } = require('../baza');
 const rejestr = require('../rejestr');
 const widoki = require('../widoki');
+const oplaty = require('../oplaty');
 const przepisy = require('../logika/przepisy');
+const u = require('../logika/ulamki');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const wzoryDysk = require('../logika/wzory-dysk');
 const docx = require('../logika/docx');
@@ -24,7 +26,7 @@ const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
-const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
+const { asy, autor, bledneZadanie, nieZnaleziono, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
 const { pobierzZKrs } = require('./krs');
 
 const router = express.Router();
@@ -34,7 +36,11 @@ const POLA_SPOLKI = [
   'krs', 'nip', 'regon', 'nazwa', 'forma_prawna', 'kraj', 'kod_pocztowy', 'miejscowosc',
   'ulica', 'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial', 'telefon', 'email', 'www',
   'status', 'komentarz_statusu', 'data_utworzenia_spolki', 'data_uchwaly_wyboru', 'data_umowy',
-  'data_otwarcia_rejestru', 'data_zakonczenia_umowy', 'opis', 'uwagi',
+  // `data_otwarcia_rejestru` CELOWO nie jest tu (Z-019): ustawia sie WYLACZNIE
+  // automatycznie, w chwili faktycznego otwarcia rejestru
+  // (`POST /:id/otworz-rejestr`, ponizej) - swobodny formularz pozwalalby
+  // wpisac ja przed pierwszym wpisem, co myli "otwarcie" z "planem otwarcia".
+  'data_zakonczenia_umowy', 'opis', 'uwagi',
   // Etap 2.5 poprawek: data zawarcia umowy spolki (akt zalozycielski) - rozna
   // od daty rejestracji w KRS i od daty umowy o prowadzenie rejestru.
   'data_zawarcia_umowy_spolki',
@@ -72,6 +78,18 @@ const POLA_REJESTROWE = [
   'dodatkowe_informacje_umowa_spolki',
 ];
 
+/**
+ * Naprawa Z-009/P-005 — `data_umowy`/`umowe_zawarl*` NIE sa trescia rejestru
+ * (patrz komentarz przy POLA_REJESTROWE), wiec ich zmiana nie idzie przez
+ * `zmiana_danych_spolki` w tym samym trybie co art. 300(33) KSH. Ale gdy
+ * rejestr jest juz OTWARTY (`data_otwarcia_rejestru` ustawione — Z-019,
+ * naprawa Z-108), te pola opisuja fakt juz wykorzystany do otwarcia: cicha
+ * podmiana bez sladu wygladalaby, jakby rejestr powstal na podstawie innej
+ * umowy, niz naprawde. Po otwarciu ich zmiana wiec TEZ zostawia zdarzenie -
+ * przed otwarciem to nadal zwykla korekta roboczego formularza (kreator).
+ */
+const POLA_UMOWY_PO_OTWARCIU = ['data_umowy', 'umowe_zawarl', 'umowe_zawarl_imie_nazwisko'];
+
 function wyczysc(cialo) {
   const wynik = {};
   for (const pole of POLA_SPOLKI) {
@@ -86,9 +104,18 @@ function wyczysc(cialo) {
   return wynik;
 }
 
+// Naprawa Z-354: nazwa bez limitu dlugosci psula uklad pulpitu, listy
+// spolek i kolejki spraw (test brzegowy - 300 znakow, brak dowolnego
+// text-overflow/skracania w tabelach). Realne firmy spolek prawa
+// handlowego rzadko przekraczaja 200 znakow.
+const DLUGOSC_NAZWY_SPOLKI_MAX = 200;
+
 function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   if (wymaganaNazwa && !dane.nazwa) {
     throw bledneZadanie('Nazwa spółki jest wymagana.');
+  }
+  if (dane.nazwa && dane.nazwa.length > DLUGOSC_NAZWY_SPOLKI_MAX) {
+    throw bledneZadanie(`Nazwa spółki jest za długa (maksymalnie ${DLUGOSC_NAZWY_SPOLKI_MAX} znaków).`);
   }
   if (dane.krs && !/^\d{10}$/.test(dane.krs)) {
     throw bledneZadanie('Numer KRS składa się z 10 cyfr.');
@@ -98,12 +125,21 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   }
   for (const pole of [
     'data_utworzenia_spolki', 'data_uchwaly_wyboru', 'data_umowy',
-    'data_otwarcia_rejestru', 'data_zakonczenia_umowy',
-    'data_zawarcia_umowy_spolki',
+    'data_zakonczenia_umowy', 'data_zawarcia_umowy_spolki',
   ]) {
     if (dane[pole] && !czas.poprawnaData(dane[pole])) {
       throw bledneZadanie(`Pole „${pole}” musi być datą w formacie RRRR-MM-DD.`);
     }
+  }
+  // Naprawa Z-008: spolka wybiera notariusza UCHWALA, dopiero potem z nim
+  // zawiera umowe o prowadzenie rejestru - uchwala nie moze byc pozniejsza
+  // niz sama umowa. Sprawdzamy tylko, gdy obie daty sa znane (formularz
+  // uzupelnia je stopniowo, w kreatorze i pozniej).
+  if (dane.data_uchwaly_wyboru && dane.data_umowy && dane.data_uchwaly_wyboru > dane.data_umowy) {
+    throw bledneZadanie(
+      `Data uchwały o wyborze notariusza (${dane.data_uchwaly_wyboru}) nie może być późniejsza ` +
+        `niż data umowy o prowadzenie rejestru (${dane.data_umowy}).`
+    );
   }
   if (dane.status && !Object.values(przepisy.STATUSY_SPOLKI).includes(dane.status)) {
     throw bledneZadanie(`Nieznany status spółki: „${dane.status}”.`);
@@ -252,12 +288,22 @@ const uploadUmowy = multer({
 
 router.post(
   '/:id/umowa-zalacznik',
-  (zad, odp, dalej) => uploadUmowy.single('plik')(zad, odp, (e) => (e ? dalej(bledneZadanie(e.message)) : dalej())),
+  // Naprawa Z-254: blad multera idzie nieopakowany, zeby zadzialala
+  // przetlumaczona galaz "MulterError"; blad z fileFilter (juz po polsku)
+  // staje sie 400, a nie ogolnym 500.
+  (zad, odp, dalej) => uploadUmowy.single('plik')(zad, odp, dalejPoUploadzie(dalej)),
   asy((zad, odp) => {
     const id = Number(zad.params.id);
     const spolka = db().prepare('SELECT id FROM psa_spolki WHERE id = ?').get(id);
     if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+    // Naprawa Z-253: rozszerzenie to obietnica klienta — sprawdzamy tresc
+    // pliku po sygnaturze (audyt: HTML ze <script> nazwany „.pdf" byl
+    // przyjmowany jako zalacznik umowy spolki na tej trasie).
+    if (!pliki.trescPasuje(zad.file.path, pliki.typZNazwy(zad.file.originalname))) {
+      fs.rmSync(zad.file.path, { force: true });
+      throw bledneZadanie(`Treść pliku „${zad.file.originalname}" nie odpowiada jego rozszerzeniu. Prześlij plik PDF.`);
+    }
 
     db()
       .prepare(
@@ -354,10 +400,17 @@ router.put(
         )
         .run({ ...dane, id, zaktualizowano: czas.terazIso() });
 
-      // Zdarzenie zapisujemy tylko dla pol bedacych trescia rejestru -
-      // zmiana wewnetrznych `uwagi` nie jest czynnoscia rejestrowa.
+      // Zdarzenie zapisujemy dla pol bedacych trescia rejestru (art. 300(33)
+      // KSH), a takze - Z-009/P-005 - dla danych umowy o prowadzenie
+      // rejestru, gdy rejestr jest juz otwarty (patrz POLA_UMOWY_PO_OTWARCIU
+      // wyzej). Zmiana wewnetrznych `uwagi` ani korekta danych umowy PRZED
+      // otwarciem nie zostawia zdarzenia - to jeszcze robocza edycja.
       const rejestrowe = zmienione.filter((p) => POLA_REJESTROWE.includes(p));
-      if (rejestrowe.length === 0) return null;
+      const umowaPoOtwarciu = biezaca.data_otwarcia_rejestru
+        ? zmienione.filter((p) => POLA_UMOWY_PO_OTWARCIU.includes(p))
+        : [];
+      const doZdarzenia = [...rejestrowe, ...umowaPoOtwarciu];
+      if (doZdarzenia.length === 0) return null;
 
       return rejestr.zapiszZdarzenie(db(), {
         spolka_id: id,
@@ -365,9 +418,9 @@ router.put(
         data_zdarzenia: czas.dzisIso(),
         autor: kto,
         dane: {
-          przed: Object.fromEntries(rejestrowe.map((p) => [p, biezaca[p] ?? null])),
-          po: Object.fromEntries(rejestrowe.map((p) => [p, dane[p] ?? null])),
-          zmienione_pola: rejestrowe,
+          przed: Object.fromEntries(doZdarzenia.map((p) => [p, biezaca[p] ?? null])),
+          po: Object.fromEntries(doZdarzenia.map((p) => [p, dane[p] ?? null])),
+          zmienione_pola: doZdarzenia,
           podstawa_opis: zad.body?.podstawa_opis || null,
         },
       });
@@ -439,14 +492,18 @@ router.get(
           a.osoba ? a.osoba.oznaczenie : `osoba #${a.osoba_id}`,
           (a.osoba && a.osoba.jawny_identyfikator) || '',
           a.seria,
-          a.ilosc,
+          // Naprawa Z-057: pozycja z ulamkowo wspoluprawnionym numerem
+          // pokazuje dokladny ulamek ("2 i 1/3"), nie lossy decimal.
+          u.opiszLiczbeAkcji(a.ilosc, a.udzial_ulamek),
           a.numery,
-          a.procent,
+          // Naprawa Z-051: zaokraglenie do 2 miejsc, tak jak w informacji
+          // z rejestru (`logika/informacja-dokument.js: procent()`).
+          a.procent == null ? '' : Number(a.procent).toFixed(2),
           a.obciazenia
             .map((o) => `${o.typ === 'zajecie' ? 'zajecie' : o.typ} ${o.numery}`)
             .join('; '),
           (a.czesci_ulamkowe || [])
-            .map((u) => `${u.czesc_licznik}/${u.czesc_mianownik} akcji nr ${u.nr}`)
+            .map((fr) => `${fr.czesc_licznik}/${fr.czesc_mianownik} akcji nr ${fr.nr}`)
             .join('; '),
         ].map(pole).join(',')
       );
@@ -640,19 +697,55 @@ router.post(
 );
 
 /**
+ * Kody checklisty otwarcia rejestru - MUSZA byc zgodne z `CHECKLISTA_OTWARCIA`
+ * w `publiczne/js/spolki.js` (tresc jest wylacznie po stronie UI, tu liczy
+ * sie tylko zestaw kodow). Naprawa Z-200/Z-201/Z-204: checklista gasila
+ * wylacznie przycisk w przegladarce - zadanie wyslane wprost na API omijalo
+ * ja calkowicie. Pozycja „aml" jest tu traktowana tak samo jak pozostale
+ * dziewiec: wymagane jest SWIADOME odhaczenie, zgodnie z P-013 to NIE jest
+ * blokada na podstawie wyniku AML (ktorego system i tak nie ocenia), tylko
+ * wymog, zeby pracownik nie pominal tego kroku, otwierajac rejestr wprost
+ * przez API z pominieciem kreatora.
+ */
+const KODY_CHECKLISTY_OTWARCIA = [
+  'forma', 'wpis_krs', 'uchwala', 'umowa', 'jedna_umowa',
+  'dane_z_umowy', 'ograniczenia', 'bilans', 'zakres_danych', 'aml',
+];
+
+function sprawdzChecklisteOtwarcia(checklista) {
+  const brakujace = KODY_CHECKLISTY_OTWARCIA.filter((kod) => !(checklista && checklista[kod]));
+  if (brakujace.length > 0) {
+    throw bledneZadanie(
+      `Checklista otwarcia rejestru nie jest kompletna (brakuje: ${brakujace.join(', ')}).`
+    );
+  }
+}
+
+/**
  * OTWARCIE REJESTRU (sesja 6, faza 3, krok 4 kreatora rejestracji spolki).
  * Zapisuje KOMPLET zdarzen zalozycielskich (emisja, objecie, opcjonalnie
  * ograniczenie z umowy spolki) w jednej transakcji - patrz
  * `rejestr.otworzRejestr`. Spolka musi juz istniec (krok 1-2 zapisuja ja
  * przez `POST /`) - ta trasa dotyczy WYLACZNIE poczatkowego stanu akcji,
  * nie danych samej spolki.
+ *
+ * Naprawa Z-108/P-007: to jest TA sama „chwila otwarcia rejestru" dla obu
+ * sciezek onboardingu (kreator wewnetrzny i przyjecie wniosku z portalu) -
+ * spolka zalozona przez portal tez konczy zakladanie akcji TUTAJ (patrz
+ * naglowek `trasy/wnioski.js`), wiec to jedyne miejsce, w ktorym rejestr
+ * FAKTYCZNIE zaczyna istniec (ma jakiekolwiek akcje). Oplata za pierwszy
+ * rok prowadzenia i za pierwszy wpis naliczana jest wiec WYLACZNIE tu,
+ * jednym zadaniem, identycznie dla kazdej spolki — bez wzgledu na to, ktora
+ * sciezka ja tu doprowadzila.
  */
 router.post(
   '/:id/otworz-rejestr',
   asy((zad, odp) => {
     const id = Number(zad.params.id);
-    if (!rejestr.wczytajSpolke(db(), id)) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const spolka = rejestr.wczytajSpolke(db(), id);
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
     const kto = autor(zad);
+    sprawdzChecklisteOtwarcia(zad.body && zad.body.checklista);
     const zdarzenia = Array.isArray(zad.body && zad.body.zdarzenia) ? zad.body.zdarzenia : [];
     if (zdarzenia.length === 0) {
       throw bledneZadanie('Otwarcie rejestru wymaga co najmniej jednego zdarzenia (emisji).');
@@ -664,10 +757,24 @@ router.post(
       }
     }
 
+    const dzis = czas.dzisIso();
     const wyniki = rejestr.otworzRejestr(db(), id, {
       zdarzenia,
       autor: kto,
-      dzisiaj: czas.dzisIso(),
+      dzisiaj: dzis,
+    });
+
+    // Rok prowadzenia biegnie od dnia, w ktorym rejestr faktycznie rusza
+    // (§ 15b pkt 1 rozporzadzenia: "za kazdy rozpoczety rok") - tym dniem
+    // jest DZIS, chyba ze pole bylo juz wczesniej recznie wypelnione.
+    const dataOtwarcia = spolka.data_otwarcia_rejestru || dzis;
+    if (!spolka.data_otwarcia_rejestru) {
+      db().prepare('UPDATE psa_spolki SET data_otwarcia_rejestru = ? WHERE id = ?').run(dzis, id);
+    }
+    const { prowadzenie, wpis } = oplaty.naliczOtwarcieRejestru(db(), {
+      spolkaId: id,
+      dataOtwarcia,
+      autor: kto,
     });
 
     odp.status(201).json({
@@ -677,6 +784,8 @@ router.post(
         data_zdarzenia: w.zdarzenie.data_zdarzenia,
         hash_skrocony: w.zdarzenie.hash.slice(0, 12),
       })),
+      oplata_prowadzenia: prowadzenie.utworzono ? prowadzenie.oplata : null,
+      oplata_wpisu: wpis.utworzono ? wpis.oplata : null,
     });
   })
 );

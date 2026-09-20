@@ -35,6 +35,24 @@ function asy(handler) {
 }
 
 /**
+ * Callback po zakonczeniu przetwarzania uploadu przez multer.
+ *
+ * Naprawa Z-254: blad SAMEGO multera (limit rozmiaru/liczby plikow) ma
+ * przetlumaczona galaz w `posrednikBledow` (`blad.name === 'MulterError'`),
+ * wiec idzie tam NIEZMIENIONY. Kazdy inny blad (np. z `fileFilter` -
+ * niedozwolone rozszerzenie) to zwykly `Error`, ktory bez opakowania
+ * spadalby na ogolne 500 - a juz niesie gotowy polski komunikat dla
+ * klienta, wiec owija sie go w `BladZadania` (400).
+ */
+function dalejPoUploadzie(dalej) {
+  return (e) => {
+    if (!e) return dalej();
+    if (e.name === 'MulterError') return dalej(e);
+    return dalej(bledneZadanie(e.message));
+  };
+}
+
+/**
  * Autor czynnosci. Od sprintu 3 tozsamosc niesie sesja pracownika
  * (`pomocnicze/autoryzacja.js`), nie naglowek `X-User-Name` - odstepstwo nr 2
  * z sekcji 2 specyfikacji: dostep publiczny wyklucza identyfikacje samym
@@ -81,6 +99,13 @@ function posrednikBledow(blad, zad, odp, dalej) {
     };
     return odp.status(400).json({ blad: komunikaty[blad.code] || `Błąd przesyłania pliku: ${blad.message}` });
   }
+  // Naprawa Z-255: nieprawidlowy JSON w ciele zadania (express.json()) to
+  // BLAD KLIENTA, nie awaria serwera - `SyntaxError` z parsera niesie wlasny
+  // `status`/`statusCode` (Express, `type: 'entity.parse.failed'`), inne
+  // SyntaxError (np. z kodu aplikacji) go nie maja i trafiaja do 500 nizej.
+  if (blad instanceof SyntaxError && (blad.status === 400 || blad.statusCode === 400)) {
+    return odp.status(400).json({ blad: 'Treść żądania nie jest poprawnym JSON-em.' });
+  }
 
   // Metadane techniczne - bez tresci zadania i bez danych osobowych.
   console.error(`[psa] ${zad.method} ${zad.path} — ${blad.name}: ${blad.message}`);
@@ -95,5 +120,6 @@ module.exports = {
   brakUprawnien,
   asy,
   autor,
+  dalejPoUploadzie,
   posrednikBledow,
 };

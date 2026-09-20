@@ -288,6 +288,28 @@ test('POST /api/psa/portal/wniosek/zloz: odmawia przy niepelnych danych akcjonar
   assert.equal(stPo, 200);
 });
 
+test('Z-006/P-004: POST /api/psa/portal/wniosek/zloz odmawia bez e-maila akcjonariusza, niezaleznie od zgody na e-mail w rejestrze', async () => {
+  const { ciastko } = await kontoWnioskodawcy('zlozenie-bez-emaila@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
+  await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Wniosek Bez Emaila P.S.A.' }, ciastko);
+  const { email, ...bezEmaila } = AKCJONARIUSZ_PELNY;
+  const [, dodany] = await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', bezEmaila, ciastko);
+
+  const [status, wynik] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+  assert.equal(status, 400);
+  assert.ok(
+    wynik.szczegoly.some((b) => /brak adresu e-mail/.test(b)),
+    `oczekiwano braku e-maila w szczegolach, dostano: ${JSON.stringify(wynik.szczegoly)}`
+  );
+
+  await zapytaj(
+    'PUT', `/api/psa/portal/wniosek/akcjonariusze/${dodany.akcjonariusz.id}`,
+    { email: 'anna.bezemaila@example-test.pl' }, ciastko
+  );
+  const [stPo] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+  assert.equal(stPo, 200, 'sam adres e-mail operacyjny wystarcza - zgoda na e-mail W REJESTRZE to osobna sprawa (Z-157)');
+});
+
 /**
  * Od etapu „dokumenty przygotowuje kancelaria" zlozenie wniosku NIE generuje
  * juz zadnych plikow. Komplet wystawia pracownik (`/api/psa/wnioski/...`),
@@ -569,4 +591,32 @@ test('POST /api/psa/portal/wniosek/umowa-podpisana: odmawia przed udostepnieniem
   const pobrana = await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, { headers: { Cookie: ciastko } });
   assert.equal(pobrana.status, 200);
   assert.equal(pobrana.headers.get('content-type'), 'application/pdf');
+});
+
+test('POST /api/psa/portal/wniosek/dowod: za duzy plik dostaje przetlumaczony komunikat (Z-254)', async () => {
+  const { ciastko } = await kontoWnioskodawcy('za-duzy-dowod@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko); // zaloz wniosek
+
+  const zaDuzy = new FormData();
+  zaDuzy.append('plik', new Blob([Buffer.alloc(21 * 1024 * 1024)], { type: 'application/pdf' }), 'dowod.pdf');
+  const odp = await fetch(`${baza}/api/psa/portal/wniosek/dowod`, {
+    method: 'POST', headers: { Cookie: ciastko }, body: zaDuzy,
+  });
+  const wynik = await odp.json();
+  assert.equal(odp.status, 400);
+  assert.equal(wynik.blad, 'Plik jest za duży (limit 20 MB).', 'komunikat przetlumaczony, nie surowy "File too large"');
+});
+
+test('PUT /api/psa/portal/wniosek: niepoprawny JSON w ciele zwraca 400, nie 500 (Z-255)', async () => {
+  const { ciastko } = await kontoWnioskodawcy('zly-json-wniosek@example.pl');
+  await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko); // zaloz wniosek
+
+  const odp = await fetch(`${baza}/api/psa/portal/wniosek`, {
+    method: 'PUT',
+    headers: { Cookie: ciastko, 'Content-Type': 'application/json' },
+    body: '{nazwa: "brak cudzyslowow"',
+  });
+  const wynik = await odp.json();
+  assert.equal(odp.status, 400);
+  assert.equal(wynik.blad, 'Treść żądania nie jest poprawnym JSON-em.');
 });

@@ -1,0 +1,15 @@
+{
+  "cookies": [
+    {
+      "name": "psa_sesja",
+      "value": "eyJ0eXAiOiJwcmFjb3duaWsiLCJpZCI6MSwiZXhwIjoxNzg5NzE4NjE2OTAzfQ.E1aax0GVrqS5FtnAe0aX1Xl0-GhOy_uXmCSlO1gMf5U",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1789718616.904107,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}

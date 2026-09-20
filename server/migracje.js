@@ -1047,8 +1047,8 @@ const MIGRACJE = [
     sql: `
       -- Pierwszy kontakt nowego, nieznanego dotad klienta - WYLACZNIE dane
       -- kontaktowe (e-mail, telefon, nazwa spolki, krotki opis), bez PESEL
-      -- i bez adresow. Zadnego konta portalowego ani sprawy nie zaklada -
-      -- to kancelaria decyduje, czy wyslac zaproszenie (etap 3B) czy odrzucic.
+      -- i bez adresow. Zaproszenie do portalu (etap 3B) wychodzi automatycznie
+      -- i od razu przy zgloszeniu (server/logika/zaproszenia.js: wyslij()).
       -- Celowo NIE jest tabela append-only (jak psa_zdarzenia) - to wylacznie
       -- lead przed jakakolwiek weryfikacja tozsamosci, wolno go edytowac
       -- i usuwac (np. RODO - zadanie usuniecia danych przed zawarciem umowy).
@@ -1890,6 +1890,179 @@ const MIGRACJE = [
       -- zamawiane przez reprezentanta). Wypelnione = prywatna naleznosc
       -- tego akcjonariusza.
       ALTER TABLE psa_oplaty ADD COLUMN zamawiajacy_osoba_id INTEGER REFERENCES psa_osoby(id);
+    `,
+  },
+
+  {
+    wersja: 45,
+    nazwa: 'uniewaznianie sesji — wylogowanie i zmiana hasla (naprawa Z-250/Z-251)',
+    sql: `
+      -- Token sesji jest bezstanowy (HMAC, brak listy sesji po stronie
+      -- serwera) — audyt (Z-250, Z-251) pokazal, ze to oznaczalo: wylogowanie
+      -- kasowalo wylacznie ciasteczko w przegladarce, a token pozostawal
+      -- kryptograficznie wazny do konca TTL (do 12h); zmiana hasla nie
+      -- uniewazniala zadnego juz wydanego tokenu.
+      --
+      -- Dwa niezalezne mechanizmy, bo maja rozny zasieg:
+      --  1) tokeny_wersja — licznik przy koncie. Token niesie wersje z
+      --     chwili wystawienia; przy KAZDYM zadaniu porownujemy z biezaca
+      --     wartoscia w bazie. Zmiana hasla podbija licznik -> WSZYSTKIE
+      --     dotychczasowe tokeny tego konta (na kazdym urzadzeniu) przestaja
+      --     byc wazne natychmiast.
+      --  2) psa_sesje_uniewaznione — czarna lista pojedynczych tokenow
+      --     (identyfikator jti, losowy przy kazdym wystawieniu). Wylogowanie
+      --     wpisuje TYLKO token z biezacego ciastka -> inne, rownolegle
+      --     zalogowane urzadzenia zostaja zalogowane, zgodnie z oczekiwanym
+      --     zakresem operacji "wyloguj sie tutaj".
+      -- Wpis na liscie ma wlasna date wygasniecia (= exp tokenu) — po niej
+      -- token i tak przestalby byc wazny z powodu TTL, wiec wpis staje sie
+      -- nieszkodliwym balastem; sprzatanie przy starcie serwera usuwa
+      -- przeterminowane wpisy, zeby tabela nie rosla bez konca.
+      ALTER TABLE psa_uzytkownicy ADD COLUMN tokeny_wersja INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE psa_konta ADD COLUMN tokeny_wersja INTEGER NOT NULL DEFAULT 0;
+
+      CREATE TABLE IF NOT EXISTS psa_sesje_uniewaznione (
+        jti     TEXT PRIMARY KEY,
+        wygasa  TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS psa_ix_sesje_uniewaznione_wygasa
+        ON psa_sesje_uniewaznione (wygasa);
+    `,
+  },
+
+  {
+    wersja: 46,
+    nazwa: 'skrot tresci podpisanego skanu (naprawa Z-205)',
+    sql: `
+      -- Audyt (Z-205) pokazal, ze klient mogl wgrac skan pod dokumentem, ktory
+      -- kancelaria juz potwierdzila jako odebrany i prawidlowy (podpis_potwierdzono
+      -- wypelnione) — trasa portalu przyjmowala kolejny plik bez zadnego sprawdzenia
+      -- stanu potwierdzenia i po cichu podmieniala tresc na dysku, zostawiajac stara
+      -- date potwierdzenia przy nowej, nigdy nie widzianej przez kancelarie tresci.
+      --
+      -- Skrot SHA-256 liczony w chwili potwierdzenia dokumentuje, jaka DOKLADNIE
+      -- tresc kancelaria zaakceptowala — niezalezne od blokady po stronie trasy,
+      -- ktora od teraz odrzuca kazda probe podmiany po potwierdzeniu.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_hash TEXT;
+    `,
+  },
+
+  {
+    wersja: 47,
+    nazwa: 'VAT na oplatach — kolumna stawki, kwoty zostaja netto (naprawa sekcji 2.1)',
+    sql: `
+      -- Kwoty z rozporzadzenia sa NETTO; do kazdej dolicza sie VAT. Stawka na
+      -- POZYCJI, nie globalnie w kodzie - pozycja historyczna zachowuje swoja
+      -- stawke, gdy przepis kiedys sie zmieni (przyszla zmiana ustawi inna
+      -- wartosc TYLKO w nowych naliczeniach, w server/oplaty.js).
+      --
+      -- Zalozenie startowe: 23%, tak dla nowych pozycji jak i dla historii -
+      -- kwoty netto istniejacych pozycji sa poprawne i zostaja bez zmian,
+      -- DEFAULT wypelnia kolumne u wszystkich naraz. Brutto NIGDY nie jest
+      -- przechowywane, wylacznie wyliczane (logika/przepisy.js: obliczBrutto).
+      ALTER TABLE psa_oplaty ADD COLUMN stawka_vat_procent INTEGER NOT NULL DEFAULT 23;
+    `,
+  },
+
+  {
+    wersja: 48,
+    nazwa: 'unikalnosc KRS w zgloszeniach na poziomie bazy (naprawa Z-004)',
+    sql: `
+      -- Trasa sprawdzala duplikat KRS zapytaniem SELECT przed INSERT -
+      -- dwa rownoczesne zgloszenia dla tego samego KRS (podwojne klikniecie,
+      -- dwie karty przegladarki) mogly obie przejsc przez SELECT, zanim
+      -- ktorykolwiek INSERT zdazyl sie wykonac (TOCTOU). Indeks unikalny
+      -- czyni to niemozliwym na poziomie bazy, niezaleznie od wyscigu w kodzie.
+      --
+      -- Warunek WHERE pomija status 'odrzucone' - po odrzuceniu spolka moze
+      -- zglosic sie ponownie (zgloszenia.js dopuszcza to juz w SELECT-cie).
+      CREATE UNIQUE INDEX IF NOT EXISTS psa_ix_zgloszenia_krs_aktywne
+        ON psa_zgloszenia (krs) WHERE status <> 'odrzucone';
+    `,
+  },
+
+  {
+    wersja: 49,
+    nazwa: 'PEP: status "nieustalono", pep_oswiadczenie na wniosku (naprawa Z-151/P-010)',
+    sql: `
+      -- Domyslna wartosc 'pep' byla 'nie' - osoba, ktorej NIKT nigdy nie ocenil,
+      -- wygladala identycznie jak osoba SWIADOMIE ocenionia jako nie-PEP. To
+      -- falszywy zapis (twierdzenie bez podstawy), nie brak danych. 'nieustalono'
+      -- staje sie nowa wartoscia domyslna - CHECK trzeba poszerzyc, a SQLite nie
+      -- pozwala zmienic CHECK/DEFAULT istniejacej kolumny in place, stad
+      -- dodaj-skopiuj-usun-zmien-nazwe zamiast pelnej przebudowy tabeli.
+      --
+      -- Backfill: rekordy juz na 'tak'/'rodzina'/'wspolpracownik' to jednoznacznie
+      -- SWIADOME ustalenie (default nigdy nie mogl wygenerowac tych wartosci) -
+      -- zostaja nietkniete. Rekordy na 'nie' NIE DA SIE odroznic „ustalono: nie"
+      -- od „nikt nie ustalil" - zgodnie z decyzja sesji wszystkie takie rekordy
+      -- przechodza na 'nieustalono' (odnotowane w DECYZJE.md).
+      ALTER TABLE psa_osoby ADD COLUMN pep_v2 TEXT NOT NULL DEFAULT 'nieustalono'
+        CHECK (pep_v2 IN ('nieustalono','nie','tak','rodzina','wspolpracownik'));
+      UPDATE psa_osoby SET pep_v2 = CASE WHEN pep = 'nie' THEN 'nieustalono' ELSE pep END;
+      ALTER TABLE psa_osoby DROP COLUMN pep;
+      ALTER TABLE psa_osoby RENAME COLUMN pep_v2 TO pep;
+
+      -- Ten sam katalog na psa_wnioski_akcjonariusze - znormalizuj()
+      -- w logika/akcjonariusz.js jest WSPOLNA dla obu tabel, wiec musza miec
+      -- identyczny zestaw dopuszczalnych wartosci.
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_v2 TEXT NOT NULL DEFAULT 'nieustalono'
+        CHECK (pep_v2 IN ('nieustalono','nie','tak','rodzina','wspolpracownik'));
+      UPDATE psa_wnioski_akcjonariusze SET pep_v2 = CASE WHEN pep = 'nie' THEN 'nieustalono' ELSE pep END;
+      ALTER TABLE psa_wnioski_akcjonariusze DROP COLUMN pep;
+      ALTER TABLE psa_wnioski_akcjonariusze RENAME COLUMN pep_v2 TO pep;
+
+      -- Naprawa Z-151: 'pep_oswiadczenie'/'pep_oswiadczenie_data' (OSWIADCZENIE
+      -- OSOBY, art. 46 ustawy AML) istnialy dotad WYLACZNIE na psa_osoby -
+      -- wniosek portalowy (glowny kanal onboardingu) nie mial gdzie zapisac
+      -- oswiadczenia klienta osobno od 'pep'/'pep_opis' (USTALENIE KANCELARII),
+      -- wiec przejecie wniosku mieszalo oba pojecia w jedno pole.
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_oswiadczenie TEXT
+        CHECK (pep_oswiadczenie IS NULL OR pep_oswiadczenie IN ('tak', 'nie'));
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_oswiadczenie_data TEXT;
+    `,
+  },
+
+  {
+    wersja: 50,
+    nazwa: 'dziennik dostepu: wyzwalacz append-only (naprawa Z-152/P-009)',
+    sql: `
+      -- Dziennik, ktory da sie edytowac, nie jest dowodem - ten sam
+      -- argument i ten sam wzorzec co przy psa_zdarzenia (migracja 1).
+      CREATE TRIGGER IF NOT EXISTS psa_dziennik_dostepu_bez_update
+      BEFORE UPDATE ON psa_dziennik_dostepu
+      BEGIN
+        SELECT RAISE(ABORT,
+          'psa_dziennik_dostepu jest append-only — wpisow dziennika nie edytuje sie.');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS psa_dziennik_dostepu_bez_delete
+      BEFORE DELETE ON psa_dziennik_dostepu
+      BEGIN
+        SELECT RAISE(ABORT,
+          'psa_dziennik_dostepu jest append-only — wpisow dziennika nie usuwa sie.');
+      END;
+    `,
+  },
+
+  {
+    wersja: 51,
+    nazwa: 'klucz idempotencyjny przy zakladaniu sprawy (naprawa Z-351/Z-353)',
+    sql: `
+      -- Podwojne zadanie POST (dwa kliknieca, dwie karty, ponowienie po
+      -- zerwanym polaczeniu - klient nie wie, czy pierwsze dotarlo) zakladalo
+      -- dotad DWIE niezalezne sprawy dla tego samego zdarzenia, kazda z
+      -- WLASNYM biegnacym terminem ustawowym 7 dni (art. 300(34) § 1 KSH).
+      --
+      -- Klucz generuje KLIENT raz, na poczatku proby zalozenia sprawy, i
+      -- wysyla ten sam klucz przy kazdym ponowieniu tej samej proby - trasa
+      -- (server/trasy/sprawy.js, server/trasy/portal.js) sprawdza go PRZED
+      -- insertem i przy trafieniu oddaje JUZ istniejaca sprawe zamiast
+      -- zakladac druga. Indeks czesciowy: stare sprawy i klienci, ktorzy nie
+      -- wysylaja klucza, maja NULL - wiele NULL-i nie koliduje ze soba.
+      ALTER TABLE psa_sprawy ADD COLUMN klucz_idempotencji TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS psa_ix_sprawy_klucz_idempotencji
+        ON psa_sprawy (klucz_idempotencji) WHERE klucz_idempotencji IS NOT NULL;
     `,
   },
 ];

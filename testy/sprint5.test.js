@@ -158,6 +158,62 @@ test('pokrycie_akcji: wzmianka o pokryciu obejmuje wszystkie akcje akcjonariusza
   assert.equal(wiersze[0].pokryta, 'czesciowo');
 });
 
+test('Z-057: 1/3+1/3+1/3 tego samego numeru -> 1 akcja w sumie i jeden glos, nie trzy (art. 300(23) § 1 w zw. z art. 300(38) § 3 KSH)', () => {
+  const zdarzenia = [
+    emisjaZdarzenie(1, { ilosc: 1 }),
+    zdarzenie(2, 'objecie', '2026-01-02', {
+      emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: 100, zakresy: [{ nr_od: 1, nr_do: 1 }] }],
+    }),
+    zdarzenie(3, 'przeniesienie_ulamka', '2026-01-03', {
+      emisja_zdarzenie_id: 1, nr: 1, zbywca_osoba_id: 100, nabywca_osoba_id: 200,
+      czesc_licznik: 1, czesc_mianownik: 3,
+    }),
+    zdarzenie(4, 'przeniesienie_ulamka', '2026-01-04', {
+      emisja_zdarzenie_id: 1, nr: 1, zbywca_osoba_id: 100, nabywca_osoba_id: 300,
+      czesc_licznik: 1, czesc_mianownik: 3,
+    }),
+  ];
+  const stan = stanLogika.odtworzStan(zdarzenia);
+  const { pozycje, razem_akcji } = stanLogika.akcjonariatNaDzien(stan, '2026-01-04');
+
+  // Bez wskazanego przedstawiciela zaden z trzech wspoluprawnionych nie
+  // dostaje wlasnego glosu za ten numer, ale glos NIE PRZEPADA - kazda
+  // pozycja jest oznaczona jako wymagajaca wskazania przedstawiciela.
+  assert.equal(pozycje.length, 3);
+  assert.equal(razem_akcji, 1, '1 akcja w sumie, nie trzy');
+  const sumaIlosci = pozycje.reduce((s, p) => s + p.ilosc, 0);
+  assert.ok(Math.abs(sumaIlosci - 1) < 1e-9, 'suma udzialow wspoluprawnionych = 1 akcja');
+  for (const p of pozycje) {
+    assert.equal(p.glosy, 0);
+    assert.equal(p.wymaga_przedstawiciela, true);
+  }
+  const sumaGlosowBezPrzedstawiciela = pozycje.reduce((s, p) => s + p.glosy, 0);
+  assert.equal(sumaGlosowBezPrzedstawiciela, 0, 'glos nie przepada - czeka na wskazanie przedstawiciela, nie znika');
+
+  // Wskazanie 200 na przedstawiciela numeru 1 - TERAZ glos jest oddawany:
+  // dokladnie JEDEN, wylacznie przez 200, nie po jednym na kazdego z trzech.
+  const zdarzeniaZPrzedstawicielem = [
+    ...zdarzenia,
+    zdarzenie(5, 'przedstawiciel', '2026-01-05', {
+      emisja_zdarzenie_id: 1, nr: 1, przedstawiciel_osoba_id: 200,
+    }),
+  ];
+  const stanPo = stanLogika.odtworzStan(zdarzeniaZPrzedstawicielem);
+  const wynikPo = stanLogika.akcjonariatNaDzien(stanPo, '2026-01-05');
+  assert.equal(wynikPo.razem_akcji, 1);
+  const pozycja200 = wynikPo.pozycje.find((p) => p.osoba_id === 200);
+  const pozycja100 = wynikPo.pozycje.find((p) => p.osoba_id === 100);
+  const pozycja300 = wynikPo.pozycje.find((p) => p.osoba_id === 300);
+  assert.equal(pozycja200.glosy, 1, 'wspolny przedstawiciel oddaje JEDEN glos za caly numer');
+  assert.equal(pozycja100.glosy, 0);
+  assert.equal(pozycja300.glosy, 0);
+  assert.equal(pozycja200.wymaga_przedstawiciela, false);
+  assert.equal(pozycja100.wymaga_przedstawiciela, false);
+  assert.equal(pozycja300.wymaga_przedstawiciela, false);
+  const sumaGlosowPo = wynikPo.pozycje.reduce((s, p) => s + p.glosy, 0);
+  assert.equal(sumaGlosowPo, 1, 'jeden glos w sumie za jeden podzielony numer, nie trzy');
+});
+
 // ─────────────────────────────────────────────────────────────
 // Migracja: istniejacy stan (sprzed sprintu 5) domyslnie 1/1
 // ─────────────────────────────────────────────────────────────
@@ -193,6 +249,68 @@ test('blokada: emisji bez data_wpisu_krs w ogole sie nie zapisuje (art. 300(30) 
       wejscie: { seria: 'A', ilosc: 10 }, autor: 'Test',
     });
   }, /daty wpisu do KRS/);
+});
+
+test('Z-012/P-006: emisja zalozycielska musi miec date wpisu do KRS rowna dacie rejestracji spolki', () => {
+  const spolka = { id: 1, status: 'aktywna', data_utworzenia_spolki: '2026-03-10' };
+
+  const zla = walidacje.sprawdz({
+    zdarzenia: [],
+    spolka,
+    dzisiaj: '2026-12-31',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-03-10', dane: { seria: 'A', ilosc: 100, nr_pierwszy: 1, data_wpisu_krs: '2026-03-15' } },
+  });
+  assert.equal(zla.dopuszczalne, false);
+  assert.ok(zla.bledy.some((b) => /założycielska.*równą dacie rejestracji/.test(b)), zla.bledy.join(' | '));
+
+  const dobra = walidacje.sprawdz({
+    zdarzenia: [],
+    spolka,
+    dzisiaj: '2026-12-31',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-03-10', dane: { seria: 'A', ilosc: 100, nr_pierwszy: 1, data_wpisu_krs: '2026-03-10' } },
+  });
+  assert.equal(dobra.dopuszczalne, true, dobra.bledy.join(' | '));
+});
+
+test('Z-012/P-006: kolejna emisja (podwyzszenie) musi miec date wpisu PO dacie rejestracji spolki, nigdy przed ani rowno', () => {
+  const spolka = { id: 1, status: 'aktywna', data_utworzenia_spolki: '2026-03-10' };
+  const zdarzenia = [emisjaZdarzenie(1, { data_wpisu_krs: '2026-03-10' })];
+
+  const przed = walidacje.sprawdz({
+    zdarzenia,
+    spolka,
+    dzisiaj: '2026-12-31',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-03-01' } },
+  });
+  assert.equal(przed.dopuszczalne, false);
+  assert.ok(przed.bledy.some((b) => /musi być późniejsza/.test(b)), przed.bledy.join(' | '));
+
+  const rowno = walidacje.sprawdz({
+    zdarzenia,
+    spolka,
+    dzisiaj: '2026-12-31',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-03-10' } },
+  });
+  assert.equal(rowno.dopuszczalne, false, 'rowna dacie rejestracji spolki tez jest za wczesnie dla KOLEJNEJ emisji');
+
+  const po = walidacje.sprawdz({
+    zdarzenia,
+    spolka,
+    dzisiaj: '2026-12-31',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-05-01' } },
+  });
+  assert.equal(po.dopuszczalne, true, po.bledy.join(' | '));
+});
+
+test('Z-012/P-006: data wpisu emisji do KRS z przyszlosci jest odrzucona', () => {
+  const wynik = walidacje.sprawdz({
+    zdarzenia: [],
+    spolka: { id: 1, status: 'aktywna' },
+    dzisiaj: '2026-06-01',
+    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-07-01' } },
+  });
+  assert.equal(wynik.dopuszczalne, false);
+  assert.ok(wynik.bledy.some((b) => /z przyszłości/.test(b)), wynik.bledy.join(' | '));
 });
 
 /* Emisji bez daty wpisu do KRS nie da sie juz zapisac, ale w bazach zalozonych
@@ -291,6 +409,71 @@ test('blokada: zbycie ulamka akcji nie w pelni pokrytej bez zgody spolki jest od
   assert.ok(wpisZgoda.zdarzenie.id);
 });
 
+test('Z-054: blokada zbycia niepokrytych CALYCH akcji dziala przy KAZDYM kolejnym przeniesieniu, nie tylko pierwszym (art. 300(40) § 1 KSH)', () => {
+  const db = bazaTestowa();
+  const spolka = dodajSpolke(db);
+  const a = dodajOsobe(db, { nazwisko: 'Adamski' });
+  const b = dodajOsobe(db, { nazwisko: 'Borowska' });
+  const c = dodajOsobe(db, { nazwisko: 'Cieslak' });
+
+  const emisja = rejestr.dokonajWpisu(db, {
+    spolkaId: spolka, typ: 'emisja', data_zdarzenia: '2026-01-01',
+    wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-01' }, autor: 'Test',
+  });
+  rejestr.dokonajWpisu(db, {
+    spolkaId: spolka, typ: 'objecie', data_zdarzenia: '2026-01-02',
+    wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: a, ilosc: 10, pokryta: 'nie' }] },
+    autor: 'Test',
+  });
+
+  // Pierwsze zbycie niepokrytych akcji bez zgody spolki - odrzucone.
+  assert.throws(() => {
+    rejestr.dokonajWpisu(db, {
+      spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-03',
+      wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: a, pozycje: [{ nabywca_osoba_id: b, ilosc: 10 }] },
+      autor: 'Test',
+    });
+  }, /nie są w pełni pokryte/);
+
+  // Ze zgoda - przechodzi. Wzmianka o pokryciu MUSI przejsc na nabywce B
+  // niezmieniona ('nie'), nie zzerowac sie do null ("nieustalone").
+  rejestr.dokonajWpisu(db, {
+    spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-03',
+    wejscie: {
+      emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: a,
+      pozycje: [{ nabywca_osoba_id: b, ilosc: 10 }], zgoda_spolki_niepelne_pokrycie: true,
+    },
+    autor: 'Test',
+  });
+  const stanPoPierwszym = stanLogika.odtworzStan(rejestr.wczytajZdarzenia(db, spolka));
+  const pozycjaB = stanLogika.otwarte(stanPoPierwszym).find(
+    (p) => p.kategoria === 'akcjonariusz' && Number(p.osoba_id) === b
+  );
+  assert.equal(pozycjaB.pokryta, 'nie', 'pokrycie akcji przechodzi na nabywce, nie zeruje sie');
+
+  // DRUGIE zbycie (B -> C) TYCH SAMYCH, wciaz niepokrytych akcji, bez zgody -
+  // przed naprawa Z-054 przechodziloby bez przeszkod, bo `otworz()` dostawal
+  // `pokryta: undefined` przy pierwszym przeniesieniu i zerowal go do null.
+  assert.throws(() => {
+    rejestr.dokonajWpisu(db, {
+      spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-04',
+      wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: b, pozycje: [{ nabywca_osoba_id: c, ilosc: 10 }] },
+      autor: 'Test',
+    });
+  }, /nie są w pełni pokryte/);
+
+  // Ze zgoda spolki drugie zbycie tez przechodzi.
+  const wpisDrugi = rejestr.dokonajWpisu(db, {
+    spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-04',
+    wejscie: {
+      emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: b,
+      pozycje: [{ nabywca_osoba_id: c, ilosc: 10 }], zgoda_spolki_niepelne_pokrycie: true,
+    },
+    autor: 'Test',
+  });
+  assert.ok(wpisDrugi.zdarzenie.id);
+});
+
 // ─────────────────────────────────────────────────────────────
 // Pelny stos, przez kreator + materializacja do bazy
 // ─────────────────────────────────────────────────────────────
@@ -356,4 +539,49 @@ test('pelny cykl: emisja -> objecie -> przeniesienie_ulamka -> przedstawiciel, m
   // Integralnosc lancucha nienaruszona.
   const integralnosc = rejestr.zweryfikujIntegralnosc(db);
   assert.equal(integralnosc.ok, true);
+});
+
+/**
+ * Naprawa Z-203: bramka AML rozroznia nabywce-osobe fizyczna i prawna w
+ * tresci komunikatu (bez blokowania - P-013 - i bez osobnego sygnalu o
+ * braku wskazania beneficjenta rzeczywistego, ktore P-001 celowo zostawia
+ * bez zadnego ostrzezenia).
+ */
+test('Z-203: ostrzezenie AML rozroznia nabywce-osobe prawna od fizycznej w tresci komunikatu', () => {
+  const dziennik = [emisjaZdarzenie(1, { data_wpisu_krs: '2026-01-01' })];
+
+  const wynikPrawna = walidacje.sprawdz({
+    zdarzenia: dziennik,
+    spolka: { id: 1, status: 'aktywna' },
+    osoby: new Map([[7, { id: 7, typ: 'prawna', nazwa: 'Inwestor Sp. z o.o.', aml_status: 'brak' }]]),
+    dzisiaj: '2026-02-01',
+    propozycja: {
+      typ: 'objecie',
+      data_zdarzenia: '2026-01-02',
+      dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: 7, zakresy: [{ nr_od: 1, nr_do: 10 }] }] },
+    },
+  });
+  assert.equal(wynikPrawna.dopuszczalne, true, wynikPrawna.bledy.join(' | '));
+  assert.ok(
+    wynikPrawna.ostrzezenia.some((o) => /nabywcy \(podmiotu\)/.test(o) && /Inwestor Sp\. z o\.o\./.test(o)),
+    wynikPrawna.ostrzezenia.join(' | ')
+  );
+
+  const wynikFizyczna = walidacje.sprawdz({
+    zdarzenia: dziennik,
+    spolka: { id: 1, status: 'aktywna' },
+    osoby: new Map([[8, { id: 8, typ: 'fizyczna', nazwisko: 'Kowalski', imie: 'Jan', aml_status: 'brak' }]]),
+    dzisiaj: '2026-02-01',
+    propozycja: {
+      typ: 'objecie',
+      data_zdarzenia: '2026-01-02',
+      dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: 8, zakresy: [{ nr_od: 1, nr_do: 10 }] }] },
+    },
+  });
+  assert.equal(wynikFizyczna.dopuszczalne, true, wynikFizyczna.bledy.join(' | '));
+  assert.ok(
+    wynikFizyczna.ostrzezenia.some((o) => /^Wobec nabywcy „Kowalski Jan”/.test(o)),
+    wynikFizyczna.ostrzezenia.join(' | ')
+  );
+  assert.ok(!wynikFizyczna.ostrzezenia.some((o) => /podmiotu/.test(o)), 'osoba fizyczna nie dostaje etykiety "podmiotu"');
 });

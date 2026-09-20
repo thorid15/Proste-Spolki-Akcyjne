@@ -308,8 +308,12 @@ function WierszListy({ ikona, tytul, podtytul, prawo, data, przyKlik }) {
     <button className="wiersz" onClick={przyKlik} disabled={!przyKlik}>
       {ikona && <span className="wiersz-ikona"><Ikona nazwa={ikona} rozmiar={17} /></span>}
       <span className="wiersz-tresc">
-        <span className="wiersz-tytul" style={{ display: 'block' }}>{tytul}</span>
-        {podtytul && <span className="wiersz-podtytul" style={{ display: 'block' }}>{podtytul}</span>}
+        <span className="wiersz-tytul" style={{ display: 'block' }} title={typeof tytul === 'string' ? tytul : undefined}>{tytul}</span>
+        {podtytul && (
+          <span className="wiersz-podtytul" style={{ display: 'block' }} title={typeof podtytul === 'string' ? podtytul : undefined}>
+            {podtytul}
+          </span>
+        )}
       </span>
       <span className="wiersz-prawo">
         {prawo}
@@ -1089,8 +1093,23 @@ function useAutozapis(wartosci, zapisz, opcje = {}) {
   funkcja.current = zapisz;
   const powiadom = useRef(przyZapisie);
   powiadom.current = przyZapisie;
+  // Naprawa Z-017: od zmiany pola do wystartowania zapisu (debounce) i przez
+  // caly czas trwania zapytania jest okno, w ktorym zamkniecie karty albo
+  // odswiezenie strony traci ostatnia wartosc bez zadnego ostrzezenia -
+  // dyskretny napis "Zapisywanie..." latwo przeoczyc przy szybkim dzialaniu.
+  const niezapisane = useRef(false);
 
   const serializacja = JSON.stringify(wartosci);
+
+  useEffect(() => {
+    function ostrzezPrzedZamknieciem(e) {
+      if (!niezapisane.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+    }
+    window.addEventListener('beforeunload', ostrzezPrzedZamknieciem);
+    return () => window.removeEventListener('beforeunload', ostrzezPrzedZamknieciem);
+  }, []);
 
   useEffect(() => {
     if (!wlaczony) return undefined;
@@ -1101,6 +1120,7 @@ function useAutozapis(wartosci, zapisz, opcje = {}) {
     }
     if (serializacja === ostatnie.current) return undefined;
 
+    niezapisane.current = true;
     const czasomierz = setTimeout(() => {
       const doZapisu = JSON.parse(serializacja);
       ostatnie.current = serializacja;
@@ -1108,12 +1128,14 @@ function useAutozapis(wartosci, zapisz, opcje = {}) {
       kolejka.current = kolejka.current
         .then(() => funkcja.current(doZapisu))
         .then((odpowiedz) => {
+          niezapisane.current = false;
           ustawStan({ stan: 'zapisano', blad: null });
           if (powiadom.current) powiadom.current(odpowiedz);
         })
         .catch((e) => {
           // Zapis się nie udał — następna zmiana ma spróbować ponownie,
-          // więc kasujemy pamięć ostatnio wysłanej wersji.
+          // więc kasujemy pamięć ostatnio wysłanej wersji. Ostrzeżenie
+          // przed zamknięciem karty ma zostać, dopóki zapis się nie uda.
           ostatnie.current = null;
           ustawStan({
             stan: 'blad',

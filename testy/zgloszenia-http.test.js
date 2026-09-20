@@ -194,6 +194,33 @@ test('POST /api/psa/portal/zgloszenia: druga spolka tego samego klienta przechod
   assert.match(duplikat.blad, /już w toku|już prowadzony/);
 });
 
+/**
+ * Z-004: pre-check w trasie robil SELECT przed INSERT - dwa rownoczesne
+ * zgloszenia dla tego samego KRS mogly oba minac SELECT, zanim ktorykolwiek
+ * INSERT sie wykonal (TOCTOU). Migracja 48 dodaje indeks unikalny na
+ * poziomie bazy, wiec test wprost na `db()` (bez przechodzenia przez trase,
+ * gdzie prawdziwy wyscig watkow jest w SQLite niepraktyczny do wywolania)
+ * jest najbardziej bezposrednim sprawdzeniem mechanizmu, ktory naprawde
+ * zamyka luke.
+ */
+test('psa_zgloszenia: indeks unikalny blokuje dwa aktywne zgloszenia z tym samym KRS (Z-004)', () => {
+  db().prepare(`INSERT INTO psa_zgloszenia (email, krs, status, utworzono) VALUES (?, ?, 'nowe', ?)`)
+    .run('wyscig-a@example.pl', '0000555666', new Date().toISOString());
+
+  assert.throws(
+    () => db().prepare(`INSERT INTO psa_zgloszenia (email, krs, status, utworzono) VALUES (?, ?, 'nowe', ?)`)
+      .run('wyscig-b@example.pl', '0000555666', new Date().toISOString()),
+    /UNIQUE/
+  );
+
+  // Po odrzuceniu KRS jest znowu wolny - kolejne zgloszenie nie koliduje.
+  db().prepare(`UPDATE psa_zgloszenia SET status = 'odrzucone' WHERE email = 'wyscig-a@example.pl'`).run();
+  assert.doesNotThrow(
+    () => db().prepare(`INSERT INTO psa_zgloszenia (email, krs, status, utworzono) VALUES (?, ?, 'nowe', ?)`)
+      .run('wyscig-c@example.pl', '0000555666', new Date().toISOString())
+  );
+});
+
 test('GET /api/psa/zgloszenia: wymaga zalogowanego pracownika', async () => {
   const [status] = await zapytaj('GET', '/api/psa/zgloszenia', undefined, null);
   assert.equal(status, 401);

@@ -97,6 +97,10 @@ router.post(
 
     const nowyHash = await hasla.hashuj(haslo_nowe);
     db().prepare('UPDATE psa_uzytkownicy SET hash_hasla = ? WHERE id = ?').run(nowyHash, zad.uzytkownik.id);
+    // Zmiana hasla uniewaznia WSZYSTKIE dotychczasowe tokeny tego konta,
+    // na kazdym urzadzeniu, natychmiast (Z-251) — wlacznie z tym, ktorym
+    // zostalo wlasnie wywolane to zadanie (uzytkownik zaloguje sie ponownie).
+    autoryzacja.uniewaznijWszystkieTokeny('pracownik', zad.uzytkownik.id);
     odp.json({ ok: true });
   })
 );
@@ -194,6 +198,7 @@ router.post(
     const nowe = hasla.losoweHaslo();
     const hash = await hasla.hashuj(nowe);
     db().prepare('UPDATE psa_uzytkownicy SET hash_hasla = ? WHERE id = ?').run(hash, id);
+    autoryzacja.uniewaznijWszystkieTokeny('pracownik', id);
     odp.json({ ok: true, haslo_tymczasowe: nowe });
   })
 );
