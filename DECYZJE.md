@@ -588,6 +588,69 @@
   P-015.
 - Skutek w kodzie: brak (świadomy brak zmiany).
 
+### D-045 — Cena emisyjna: zostaje pole „cena za akcję”, naprawiona precyzja (odpowiedź Q1)
+- Data: 2026-09-20 (sesja frontendowa, FAZA 0 STOP)
+- Obszar: rejestr / interfejs
+- Decyzja: pole ceny emisyjnej zostaje w formie „cena za jedną akcję” (wariant A z pytania Q1), NIE
+  przechodzi na „łączną cenę emisji” (wariant B). Ma zostać naprawione tak, by realnie
+  odrzucało/ostrzegało przy próbie wpisania więcej niż 2 miejsc po przecinku, zamiast dzisiejszego
+  cichego zaokrąglania (patrz B7, `FRONTEND-INWENTARZ.md` §7) — w tym przypadek zaokrąglenia do ZERA
+  dla bardzo małych wartości (P.S.A. nie ma wartości nominalnej, cena poniżej 1 grosza za akcję jest
+  prawnie dopuszczalna i realna).
+- Uzasadnienie: odpowiedź Łukasza na Q1 z `SESJA-PSA-FRONTEND.md` §FAZA 0 STOP.
+- Odrzucono: wariant B (łączna cena emisji, system wylicza cenę za akcję).
+- Źródło: użytkownik (STOP po FAZA 0), `FRONTEND-INWENTARZ.md` §7 (B7).
+- Skutek w kodzie: do wykonania w FAZIE 2 (B7) — podłączenie `kreator.js` do istniejącego
+  `PoleKwoty` (`ui-rejestr.js`), które już poprawnie operuje na groszach jako liczbie całkowitej.
+
+### D-046 — Zgoda na `esbuild`: prekompilacja JSX przy budowaniu (odpowiedź Q4)
+- Data: 2026-09-20 (sesja frontendowa, FAZA 0 STOP)
+- Obszar: wydajność / zależności
+- Decyzja: `esbuild` wolno dodać jako zależność deweloperską do prekompilacji JSX przy budowaniu,
+  zastępując kompilację Babela w przeglądarce.
+- Uzasadnienie: zmierzone w FAZIE 0 (`FRONTEND-INWENTARZ.md` §5) — `babel.min.js` to 62-66%
+  transferu strony logowania (2,98 MB), czas do interaktywności na profilu mobile 4G ok. 18-19 s,
+  z czego 1,6-3,2 s to czysty koszt kompilacji CPU niezależny od sieci. Odpowiedź Łukasza na Q4.
+- Odrzucono: pozostanie bez build stepu (samo cache'owanie skompilowanych modułów, bez realnego
+  usunięcia Babela z przeglądarki) — to była alternatywna opcja w pytaniu, nie wybrana.
+- Źródło: użytkownik (STOP po FAZA 0), `SESJA-PSA-FRONTEND.md` FAZA 1 pkt 6.
+- Skutek w kodzie: do wykonania w FAZIE 1 pkt 6 — wprowadzenie kroku budowania, usunięcie
+  `vendor/babel.min.js` z ładowania w przeglądarce, dostosowanie CSP (można zdjąć `unsafe-eval`).
+
+### D-047 — Formularz publiczny zgłoszenia: numer KRS zostaje wymagany (odpowiedź Q3)
+- Data: 2026-09-20 (sesja frontendowa, FAZA 0 STOP)
+- Obszar: portal / zgłoszenia
+- Decyzja: publiczny formularz „Zgłoś zainteresowanie” NIE przyjmuje zgłoszeń bez numeru KRS —
+  wymóg KRS zostaje bez zmian.
+- Uzasadnienie: odpowiedź Łukasza na Q3. Spółki w organizacji (przed wpisem do KRS) obsługuje
+  kancelaria poza tym formularzem.
+- Odrzucono: dopuszczenie zgłoszenia z pustym KRS i uzupełnieniem go później.
+- Źródło: użytkownik (STOP po FAZA 0), `SESJA-PSA-FRONTEND.md` §FAZA 0 STOP Q3.
+- Skutek w kodzie: brak — `server/trasy/portal.js` (walidacja KRS w `POST /zgloszenia`) zostaje bez
+  zmian.
+
+### D-048 — Strona publiczna: bez podstrony „/wzory” do pobrania (odpowiedź Q5)
+- Data: 2026-09-20 (sesja frontendowa, FAZA 0 STOP)
+- Obszar: strona publiczna (SEO)
+- Decyzja: strona publiczna (FAZA 5) nie dostaje podstrony `/wzory` z dokumentami do pobrania.
+- Uzasadnienie: odpowiedź Łukasza na Q5.
+- Odrzucono: publikacja wzorów (uchwała o wyborze podmiotu prowadzącego rejestr, żądanie wpisu) do
+  samodzielnego pobrania przez odwiedzających stronę.
+- Źródło: użytkownik (STOP po FAZA 0), `SESJA-PSA-FRONTEND.md` §5.2 tabela stron.
+- Skutek w kodzie: brak jeszcze — dotyczy FAZY 5, nieplanowanej struktury stron.
+
+### D-049 — Domena strony publicznej: nierozstrzygnięta, `BASE_URL` jako parametr (odpowiedź Q2)
+- Data: 2026-09-20 (sesja frontendowa, FAZA 0 STOP)
+- Obszar: strona publiczna (SEO) / infrastruktura
+- Decyzja: Łukasz nie rozstrzygnął jeszcze Q2 (podstrony `notariusz.gdansk.pl` / subdomena tej
+  aplikacji / osobna domena). Do czasu decyzji strony FAZY 5 budowane tak, by domena była
+  parametrem (`BASE_URL`), zgodnie z zaleceniem samego dokumentu sesji.
+- Uzasadnienie: jawnie odłożone przez użytkownika przy STOP po FAZIE 0.
+- Odrzucono: nic — decyzja odłożona, nie odrzucona.
+- Źródło: użytkownik (STOP po FAZA 0), `SESJA-PSA-FRONTEND.md` §FAZA 0 STOP Q2.
+- Skutek w kodzie: brak na razie — dotyczy FAZY 5.
+- **Decyzja otwarta:** Q2 pozostaje w „Decyzje otwarte” niżej do czasu odpowiedzi.
+
 ---
 
 ## Decyzje otwarte
@@ -650,3 +713,10 @@ Pełny kontekst i warianty odpowiedzi dla każdego: `testy-audyt/PYTANIA-DO-LUKA
 - **Uzasadnienie migracji 34/41/28 (AML per spółka, wiele spółek na konto, drugi silnik dokumentów)
   nieznane** — jeśli Łukasz pamięta kontekst tych decyzji, warto go dopisać do wpisów D-034/D-036/
   D-037 (dziś oznaczonych „uzasadnienie nieznane”), żeby rejestr był kompletny.
+
+### Z sesji frontendowej (`SESJA-PSA-FRONTEND.md`, STOP po FAZIE 0, 2026-09-20)
+
+- **Q2 — domena strony publicznej.** Jedyne z pytań Q1-Q5 bez odpowiedzi — Łukasz zapytany, wraca do
+  tematu później. Warianty: (A) podstrony `notariusz.gdansk.pl` (WordPress), (B) subdomena
+  obsługiwana przez tę aplikację, (C) osobna domena. Do czasu decyzji: strony FAZY 5 budowane z
+  `BASE_URL` jako parametrem (patrz D-049).
