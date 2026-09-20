@@ -136,6 +136,7 @@
 
 /* Checklista weryfikacji */
 .chk-watpliwosci .chk-tresc { color: var(--olive); }
+.chk-watpliwosci-uwaga { font-size: 12.5px; font-weight: 600; color: var(--olive); margin-top: 4px; }
 
 /* Pozycje kreatora (nabywcy / obejmujący) */
 .pozycja {

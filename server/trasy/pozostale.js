@@ -125,7 +125,14 @@ router.get(
       .prepare(
         `SELECT
            (SELECT COUNT(*) FROM psa_zgloszenia WHERE status = 'nowe')            AS zgloszenia,
-           (SELECT COUNT(*) FROM psa_wnioski WHERE status = 'umowa_podpisana')    AS wnioski,
+           -- Naprawa B5 (FRONTEND-INWENTARZ.md): 'zlozony' czeka na wystawienie
+           -- dokumentow przez kancelarie (patrz STATUSY_WYSTAWIENIA w
+           -- wnioski.js), 'umowa_podpisana' czeka na jej weryfikacje i
+           -- przyjecie - oba stany czekaja na RUCH KANCELARII, nie klienta
+           -- ('do_uzupelnienia'/'umowa_wygenerowana' czekaja na klienta i
+           -- swiadomie NIE sa tu liczone).
+           (SELECT COUNT(*) FROM psa_wnioski
+             WHERE status IN ('zlozony', 'umowa_podpisana'))                      AS wnioski,
            -- Zadania nieoplacone nie licza sie do kolejki: jeszcze ich nie ma
            -- (art. 300(34) § 1 KSH liczy termin od otrzymania zadania).
            (SELECT COUNT(*) FROM psa_sprawy

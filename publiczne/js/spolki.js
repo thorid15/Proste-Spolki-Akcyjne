@@ -296,6 +296,10 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
   const mozeDalejZ0 = Boolean(dane.nazwa && dane.nazwa.trim());
   const mozeDalejZ2 =
     Boolean(emisja.seria && emisja.data_emisji) &&
+    // Bez tej daty akcje formalnie nie istnieja (art. 300(30) § 2 KSH) - lepiej
+    // zatrzymac tu, na kroku gdzie pole zyje i jest edytowalne, niz dopiero
+    // przy koncowym zapisie po odhaczeniu calej checklisty (patrz pole nizej).
+    Boolean(dane.data_utworzenia_spolki) &&
     ileAkcji > 0 &&
     !przekroczonyBilans &&
     pozycje.length > 0 &&
@@ -725,9 +729,24 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
               </Pole>
               <Pole
                 etykieta="Data wpisu emisji do KRS"
+                wymagane
                 podpowiedz="Emisja założycielska rejestruje się razem ze spółką — to zawsze data rejestracji w KRS z kroku 1. Bez tej daty nie można dokonać wpisu akcji do rejestru akcjonariuszy (art. 300(30) § 2 KSH)."
               >
-                <PoleDaty wartosc={dane.data_utworzenia_spolki} wylaczone />
+                {/* Naprawa (FRONTEND-INWENTARZ.md §8, zlapane w zadaniu (a)):
+                    pole bylo `wylaczone` (tylko-do-odczytu) bez zadnego innego
+                    miejsca do jego uzupelnienia w tej sciezce - kreator
+                    otwarcia rejestru dla ISTNIEJACEJ spolki (z przyjetego
+                    wniosku) startuje wprost na tym kroku (`krok=2`), wiec krok
+                    1 ("Spolka"), gdzie normalnie edytuje sie ten sam
+                    `dane.data_utworzenia_spolki`, nigdy nie jest odwiedzany
+                    bez cofania sie. Puste pole po pelnym odhaczeniu checklisty
+                    konczylo sie odrzuceniem zapisu bez zadnej wczesniejszej
+                    zapowiedzi. Teraz edytowalne wprost tutaj - to wciaz TO
+                    SAMO pole `dane.data_utworzenia_spolki`, nie kopia. */}
+                <PoleDaty
+                  wartosc={dane.data_utworzenia_spolki || ''}
+                  przyZmianie={(v) => ustawDane((p) => ({ ...p, data_utworzenia_spolki: v }))}
+                />
               </Pole>
               <Pole etykieta="Rodzaj akcji" podpowiedz="art. 300(33) § 1 pkt 4 KSH">
                 <select value={emisja.rodzaj_akcji} onChange={(z) => ustawEmisje((p) => ({ ...p, rodzaj_akcji: z.target.value }))}>

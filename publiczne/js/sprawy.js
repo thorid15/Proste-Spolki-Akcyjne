@@ -725,6 +725,18 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
                       {p.tresc}
                       {!p.wymagana && !p.watpliwosci && <span className="przyciemnione"> (jeśli dotyczy)</span>}
                       {p.podstawa && <div className="podstawa-prawna">{p.podstawa}</div>}
+                      {/* Naprawa (FRONTEND-INWENTARZ.md §8): zaznaczenie TEJ
+                          pozycji podmienia caly przycisk pod checklistiem z
+                          "Dokonaj wpisu" na "Wstrzymaj sprawe" - dotad jedynym
+                          sygnalem byl kolor tresci checklisty (chk-watpliwosci)
+                          i zmiana przycisku daleko nizej, latwa do przeoczenia
+                          przy szybkim odhaczaniu calej listy. Komunikat tutaj,
+                          DOKLADNIE przy checkboxie, w chwili jego zaznaczenia. */}
+                      {p.watpliwosci && odhaczone[p.kod] && (
+                        <div className="chk-watpliwosci-uwaga">
+                          Zaznaczenie wstrzyma sprawę do wyjaśnienia — zamiast „Dokonaj wpisu” zobaczysz niżej przycisk „Wstrzymaj sprawę”.
+                        </div>
+                      )}
                     </span>
                   </label>
                 ))}
