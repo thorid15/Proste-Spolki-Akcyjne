@@ -574,3 +574,36 @@ test('POST /api/psa/wnioski/:id/akcjonariusze/:akcId/do-poprawy: uwaga siada prz
   );
   assert.equal(poWeryfikacji.akcjonariusz.uwagi_kancelarii, null);
 });
+
+test('GET /api/psa/liczniki: licznik "wnioski" obejmuje status "zlozony", nie tylko "umowa_podpisana" (B5)', async () => {
+  // "zlozony" czeka na wystawienie dokumentow przez KANCELARIE (STATUSY_WYSTAWIENIA
+  // w wnioski.js) - dokladnie to samo "czeka na ruch kancelarii", co komentarz nad
+  // zapytaniem SQL deklaruje jako regule licznika. Mierzymy DELTE, nie wartosc
+  // bezwzgledna - inne testy w tym pliku juz zostawily w bazie wnioski w stanie
+  // "umowa_podpisana", wiec sama obecnosc >=1 niczego by nie dowodzila.
+  const hash = await hasla.hashuj('HasloWnioskodawcy123');
+
+  const [, przed] = await zapytaj('GET', '/api/psa/liczniki', undefined, ciastkoPracownik);
+  const bazowy = przed.liczniki.wnioski;
+
+  const kontoId = db()
+    .prepare(`INSERT INTO psa_konta (email, hash_hasla, rola, aktywne, utworzono) VALUES (?, ?, 'wnioskodawca', 1, ?)`)
+    .run('licznik-zlozony@example.pl', hash, new Date().toISOString()).lastInsertRowid;
+  db()
+    .prepare(`INSERT INTO psa_wnioski (konto_id, status, nazwa, utworzono) VALUES (?, 'zlozony', 'Licznik Zlozony P.S.A.', ?)`)
+    .run(kontoId, new Date().toISOString());
+
+  const [status, poZlozonym] = await zapytaj('GET', '/api/psa/liczniki', undefined, ciastkoPracownik);
+  assert.equal(status, 200);
+  assert.equal(poZlozonym.liczniki.wnioski, bazowy + 1, 'wniosek ze statusem "zlozony" musi podbic licznik o dokladnie 1');
+
+  // "do_uzupelnienia" czeka na KLIENTA, nie kancelarie - NIE powinien podbijac licznika.
+  const kontoId2 = db()
+    .prepare(`INSERT INTO psa_konta (email, hash_hasla, rola, aktywne, utworzono) VALUES (?, ?, 'wnioskodawca', 1, ?)`)
+    .run('licznik-do-uzupelnienia@example.pl', hash, new Date().toISOString()).lastInsertRowid;
+  db()
+    .prepare(`INSERT INTO psa_wnioski (konto_id, status, nazwa, utworzono) VALUES (?, 'do_uzupelnienia', 'Licznik Do Uzupelnienia P.S.A.', ?)`)
+    .run(kontoId2, new Date().toISOString());
+  const [, poDrugimWniosku] = await zapytaj('GET', '/api/psa/liczniki', undefined, ciastkoPracownik);
+  assert.equal(poDrugimWniosku.liczniki.wnioski, bazowy + 1, '"do_uzupelnienia" czeka na klienta, nie podbija licznika');
+});
