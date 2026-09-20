@@ -181,18 +181,20 @@ Pełne kroki odtworzenia i cytaty plik:linia dla każdego: `frontend-audyt/rapor
 
 ## 8. Lista problemów z priorytetem
 
-### 🔴 KRYTYCZNE (3)
+### 🔴 KRYTYCZNE (3) — wszystkie naprawione przed FAZĄ 1 (2026-09-20)
 
-1. **B5 — licznik wniosków nie liczy statusu `zlozony`.** Nowy wniosek klienta niewidoczny w panelu
-   bocznym kancelarii dopóki ktoś ręcznie nie zajrzy do listy. Realne ryzyko przeoczenia przy
-   większej liczbie spraw. *(nowe odkrycie, potwierdza i pogłębia B5 z briefu)*
-2. **Otwarcie rejestru może się zablokować mimo w pełni zielonej checklisty** — pole „data wpisu
-   emisji do KRS" nie jest przenoszone automatycznie z przyjętego wniosku portalowego; naprawa
-   kosztuje 8 dodatkowych kliknięć bez żadnej wcześniejszej zapowiedzi. *(nowe odkrycie spoza
-   B1–B12, złapane żywo w zadaniu (a))*
+1. **B5 — licznik wniosków nie liczy statusu `zlozony`.** ✅ **Naprawione** (`1a41d6a`) — SQL rozszerzony
+   o `status IN ('zlozony', 'umowa_podpisana')`, regresyjny test mierzący deltę liczby w
+   `testy/wnioski-kancelaria-http.test.js`.
+2. **Otwarcie rejestru może się zablokować mimo w pełni zielonej checklisty** (brak automatycznego
+   przeniesienia daty wpisu emisji do KRS). ✅ **Naprawione** (`1a41d6a`) — pole edytowalne wprost na
+   kroku „Pierwsza emisja i akcjonariat" (ta sama zmienna stanu co krok 1), dodane do warunku
+   blokującego „Dalej". Zweryfikowane żywo w przeglądarce (Playwright): edytowalne, blokada działa
+   przed wypełnieniem, odblokowuje po, zero błędów konsoli.
 3. **Checklista weryfikacji wpisu zbycia akcji ma pozycję, którą zaznaczenie BLOKUJE zapis zamiast
-   go odblokować** — brak jakiegokolwiek wyjaśnienia w miejscu kliknięcia. *(nowe odkrycie spoza
-   B1–B12, złapane żywo w zadaniu (b))*
+   go odblokować, bez wyjaśnienia w miejscu kliknięcia.** ✅ **Naprawione** (`e7b996c`) — mechanizm był
+   już funkcjonalnie poprawny (zmiana przycisku, wymagana notatka, kolor tekstu), dodano wyłącznie
+   natychmiastowy komunikat DOKŁADNIE przy checkboxie, w chwili zaznaczenia.
 
 ### 🟠 POWAŻNE (13)
 
