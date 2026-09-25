@@ -25,7 +25,7 @@ Poniższe stawki to stawki **maksymalne** wynikające z rozporządzenia o taksie
 ## Zajęcie komornicze bez opłaty
 
 Ujawnienie zajęcia praw majątkowych akcjonariusza przez komornika sądowego następuje **z urzędu i
-jest wolne od opłat** (art. 300³⁴ § 2 KSH).
+jest wolne od opłat** {{c:300-34-2}}.
 
 ## Jak zapłacić
 

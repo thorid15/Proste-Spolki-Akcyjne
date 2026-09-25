@@ -1,217 +1,197 @@
-/* strona/styl.css — tożsamość wizualna strony publicznej (sesja 5.4):
-   sama paleta i te same dwa kroje co aplikacja (publiczne/style/rejestr.css),
-   w wydaniu redakcyjnym — szeroka kolumna tekstu, dużo światła, bez
-   elementów aplikacyjnych (kart, przycisków-akcji). Zero zależności
-   zewnętrznych (sekcja 5.3) — fonty self-hosted, skopiowane do
-   strona/dist/fonty przez narzedzia/buduj-strone.js (D-063: osobne
-   wdrożenie, nie może liczyć na /fonty aplikacji). */
+/* Strona publiczna — system wizualny wspólny z portalem (rejestr.css), Faza B SESJA-PSA-STRONA.md. */
 
-@font-face {
-  font-family: 'Inter Tight';
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url(/fonty/inter-tight-latin-ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-  font-family: 'Inter Tight';
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url(/fonty/inter-tight-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'EB Garamond';
-  font-style: normal;
-  font-weight: 400 600;
-  font-display: swap;
-  src: url(/fonty/eb-garamond-latin-ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-  font-family: 'EB Garamond';
-  font-style: normal;
-  font-weight: 400 600;
-  font-display: swap;
-  src: url(/fonty/eb-garamond-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
+@font-face { font-family:'Inter Tight'; font-weight:400 700; font-display:swap; src:url(/fonty/inter-tight-latin.woff2) format('woff2'); }
+@font-face { font-family:'EB Garamond'; font-weight:400 600; font-display:swap; src:url(/fonty/eb-garamond-latin.woff2) format('woff2'); }
+@font-face { font-family:'IBM Plex Mono'; font-weight:400; font-display:swap; src:url(/fonty/ibm-plex-mono-400-latin.woff2) format('woff2'); }
+@font-face { font-family:'IBM Plex Mono'; font-weight:500; font-display:swap; src:url(/fonty/ibm-plex-mono-500-latin.woff2) format('woff2'); }
 
-:root {
-  --atrament:    #14181C;
-  --atrament-2:  #565E68;
-  --atrament-3:  #646C76;
-  --papier:      #F6F7F5;
-  --karta:       #FFFFFF;
-  --linia:       #E6E8E3;
-  --rejestr:     #1F4D3D;
-  --rejestr-2:   #2E6B54;
-  --rejestr-tlo: #E8EFEA;
-  --mosiadz:     #8A6330;
-  --mosiadz-tlo: #F7EFE2;
-  --font-display: 'EB Garamond', 'Iowan Old Style', Georgia, serif;
-  --font-ui:      'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+:root{
+  --papier:#F6F7F5; --karta:#FFFFFF; --atrament:#14181C; --atrament-2:#565E68; --atrament-3:#646C76;
+  --linia:#E6E8E3; --rejestr:#1F4D3D; --rejestr-2:#2E6B54; --rejestr-tlo:#E8EFEA;
+  --rejestr-cien-4:#6BA88C; --rejestr-cien-5:#8FC4AB;
+  --mosiadz:#8A6330; --mosiadz-tlo:#F7EFE2;
+  --font-display:'EB Garamond', Georgia, serif;
+  --font-ui:'Inter Tight', -apple-system, sans-serif;
+  --font-dane:'IBM Plex Mono', ui-monospace, monospace;
 }
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--papier);color:var(--atrament);font-family:var(--font-ui);font-size:17px;line-height:1.6}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--rejestr);outline-offset:2px}
+.mono{font-family:var(--font-dane)}
+.tresc-szer{max-width:1200px;margin:0 auto;padding:0 24px}
+.pomin{position:absolute;left:-9999px;top:0}
+.pomin:focus{left:24px;top:8px;z-index:100;background:var(--karta);padding:8px 14px;border-radius:8px;box-shadow:0 2px 8px rgba(20,24,28,.2)}
 
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0;
-  background: var(--papier);
-  color: var(--atrament);
-  font-family: var(--font-ui);
-  font-size: 16px;
-  line-height: 1.6;
-}
+/* ── pasek górny ── */
+.pasek{position:sticky;top:0;z-index:10;background:var(--papier);border-bottom:1px solid var(--linia)}
+.pasek-wew{position:relative;display:flex;align-items:center;justify-content:space-between;gap:24px;max-width:1200px;margin:0 auto;padding:14px 24px}
+.marka-nazwa{font-family:var(--font-display);font-size:19px;text-decoration:none;color:var(--atrament);white-space:nowrap}
+.pasek-nav{display:flex;align-items:center;gap:28px;font-size:14px}
+.pasek-nav a{text-decoration:none;color:var(--atrament-2)}
+.pasek-nav a:hover,.pasek-nav a[aria-current]{color:var(--atrament)}
+.pasek-cta{display:flex;align-items:center;gap:10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 16px;border-radius:9px;font-size:14px;font-weight:600;text-decoration:none;border:1px solid transparent;cursor:pointer;white-space:nowrap;font-family:inherit}
+.btn-glowny{background:var(--rejestr);color:#fff}
+.btn-glowny:hover{background:var(--rejestr-2)}
+.btn-cichy{background:transparent;color:var(--atrament);border-color:var(--linia)}
+.btn-cichy:hover{background:var(--karta)}
 
-a { color: var(--rejestr); }
-a:hover { color: var(--rejestr-2); }
+/* menu mobilne — <details>, bez JS */
+.menu-mobilne{display:none}
+.menu-mobilne summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;border:1px solid var(--linia)}
+.menu-mobilne summary::-webkit-details-marker{display:none}
+.menu-mobilne summary::after{content:"☰";font-size:16px}
+.menu-mobilne[open] summary::after{content:"✕"}
+.menu-mobilne-panel{display:none;position:absolute;left:0;right:0;top:100%;background:var(--papier);border-bottom:1px solid var(--linia);padding:8px 24px 16px;flex-direction:column;gap:2px}
+.menu-mobilne[open] .menu-mobilne-panel{display:flex}
+.menu-mobilne-panel a{padding:10px 0;text-decoration:none;color:var(--atrament);border-bottom:1px solid var(--linia)}
+.menu-mobilne-panel a:last-child{border-bottom:none}
 
-.marka {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 24px;
-  background: var(--rejestr);
-}
-.marka-znak {
-  color: #fff;
-  font-family: var(--font-display);
-  font-size: 20px;
-  text-decoration: none;
-}
-.nawigacja a {
-  color: #fff;
-  text-decoration: none;
-  border: 1px solid rgba(255,255,255,.5);
-  border-radius: 8px;
-  padding: 8px 14px;
-  font-size: 14px;
-}
-.nawigacja a:hover { background: rgba(255,255,255,.12); }
+/* ── HERO ── */
+.hero{padding:56px 0 64px}
+.hero-siatka{display:grid;grid-template-columns:7fr 5fr;gap:56px;align-items:center}
+.hero h1{font-family:var(--font-display);font-size:clamp(34px,6vw,64px);line-height:1.1;margin:0 0 20px;text-wrap:balance}
+.hero-podtytul{font-size:19px;color:var(--atrament-2);margin:0 0 28px;max-width:46ch}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap}
+.hero .btn{padding:13px 22px;font-size:15px}
 
-.uklad {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 720px);
-  gap: 48px;
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 40px 24px 64px;
-}
-.boczna { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
-.boczna a {
-  padding: 6px 0;
-  text-decoration: none;
-  color: var(--atrament-2);
-  border-left: 2px solid transparent;
-  padding-left: 10px;
-}
-.boczna a[aria-current="page"] { color: var(--rejestr); border-left-color: var(--rejestr); font-weight: 600; }
+/* ── żywy wpis ── */
+.wpis-karta{background:var(--karta);border:1px solid var(--linia);border-radius:16px;padding:24px;box-shadow:0 1px 2px rgba(20,24,28,.04)}
+.wpis-etykieta{display:inline-block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mosiadz);background:var(--mosiadz-tlo);padding:3px 8px;border-radius:5px;margin-bottom:14px}
+.wpis-tytul{font-size:14px;color:var(--atrament-2);margin-bottom:16px}
+.wpis-tytul strong{color:var(--atrament)}
+.wpis-wiersz{display:grid;grid-template-columns:120px 1fr;gap:8px;padding:7px 0;border-top:1px solid var(--linia);font-size:14px}
+.wpis-wiersz:first-of-type{border-top:none}
+.wpis-etykieta-wiersza{color:var(--atrament-3);font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
+.wpis-wartosc{font-family:var(--font-dane);font-size:14px}
+.wpis-skrot{color:var(--atrament-3)}
 
-main { min-width: 0; }
+@keyframes wpisPodswietl{ 0%{background:var(--rejestr-tlo)} 100%{background:transparent} }
+.wpis-wiersz[data-animuj] .wpis-wartosc{animation:wpisPodswietl 700ms ease-out both}
+.wpis-wiersz[data-animuj="1"] .wpis-wartosc{animation-delay:80ms}
+.wpis-wiersz[data-animuj="2"] .wpis-wartosc{animation-delay:220ms}
+.wpis-wiersz[data-animuj="3"] .wpis-wartosc{animation-delay:360ms}
+.wpis-wiersz[data-animuj="4"] .wpis-wartosc{animation-delay:500ms}
+@media (prefers-reduced-motion: reduce){ .wpis-wiersz[data-animuj] .wpis-wartosc{animation:none} }
 
-.okruszki { font-size: 13px; color: var(--atrament-3); margin-bottom: 16px; }
-.okruszki a { color: var(--atrament-3); }
-.okruszki span[aria-hidden] { margin: 0 6px; }
+.os-akcji{margin-top:20px;padding-top:16px;border-top:1px solid var(--linia)}
+.os-akcji-etykieta{font-size:11px;color:var(--atrament-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.os-akcji-pasek{display:flex;height:28px;border-radius:6px;overflow:hidden}
+.os-akcji-odc{display:flex;align-items:center;justify-content:center;font-family:var(--font-dane);font-size:11px;color:#fff}
+.os-akcji-odc.a{background:var(--rejestr);flex:1}
+.os-akcji-odc.b{background:var(--rejestr-cien-4);color:var(--atrament);flex:1}
+.os-akcji-legenda{display:flex;justify-content:space-between;font-size:12px;color:var(--atrament-3);margin-top:6px}
 
-h1 {
-  font-family: var(--font-display);
-  font-size: 36px;
-  line-height: 1.2;
-  margin: 0 0 8px;
-}
-h2 {
-  font-family: var(--font-display);
-  font-size: 26px;
-  line-height: 1.25;
-  margin: 40px 0 12px;
-}
-h3 {
-  font-family: var(--font-display);
-  font-size: 20px;
-  margin: 28px 0 8px;
-}
-p { margin: 0 0 16px; max-width: 68ch; }
-ul { margin: 0 0 16px; padding-left: 22px; }
-li { margin-bottom: 8px; max-width: 68ch; }
+/* ── najkrótsze odpowiedzi ── */
+.fakty{padding:48px 0;border-top:1px solid var(--linia)}
+.fakty-siatka{display:grid;grid-template-columns:repeat(4,1fr);gap:32px}
+.fakt-liczba{font-family:var(--font-display);font-size:34px;color:var(--rejestr);margin:0 0 6px}
+.fakt-opis{font-size:14px;color:var(--atrament-2);margin:0}
 
-blockquote {
-  margin: 0 0 16px;
-  padding: 12px 16px;
-  background: var(--karta);
-  border: 1px solid var(--linia);
-  border-left: 3px solid var(--rejestr);
-  border-radius: 8px;
-  font-size: 15px;
-  color: var(--atrament-2);
-}
-blockquote p { margin: 0; max-width: none; }
+/* przypis / cytat prawny — button popover, zero JS */
+.przypis{font-family:var(--font-dane);font-size:11px;color:var(--atrament-3);background:var(--rejestr-tlo);padding:1px 6px;border-radius:4px;white-space:nowrap;border:none;cursor:pointer}
+.przypis:hover{color:var(--atrament)}
+[popover].dymek-przepisu{max-width:420px;border:1px solid var(--linia);border-radius:12px;padding:16px 18px;box-shadow:0 8px 24px rgba(20,24,28,.16);font-size:14px;line-height:1.55}
+[popover].dymek-przepisu strong{display:block;font-family:var(--font-dane);font-size:12px;color:var(--rejestr);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
+.lista-przypisow{font-size:13px;color:var(--atrament-2)}
+.lista-przypisow li{margin-bottom:10px}
+.lista-przypisow strong{font-family:var(--font-dane);color:var(--rejestr)}
 
-.tabela-oplat {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 8px 0 24px;
-  font-size: 15px;
-}
-.tabela-oplat caption {
-  text-align: left;
-  font-size: 13px;
-  color: var(--mosiadz);
-  background: var(--mosiadz-tlo);
-  padding: 8px 12px;
-  border-radius: 8px 8px 0 0;
-}
-.tabela-oplat th, .tabela-oplat td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--linia);
-  text-align: left;
-}
-.tabela-oplat .prawo { text-align: right; font-variant-numeric: tabular-nums; }
+/* ── sekcje ogólne ── */
+.sekcja{padding:56px 0;border-top:1px solid var(--linia)}
+.sekcja h2{font-family:var(--font-display);font-size:32px;margin:0 0 32px;text-wrap:balance}
+main h1{font-family:var(--font-display);font-size:clamp(30px,5vw,44px);margin:40px 0 12px;text-wrap:balance}
+main>.tresc-szer>p:first-of-type{font-size:18px;color:var(--atrament-2);max-width:60ch}
+.okruszki{font-size:13px;color:var(--atrament-3);padding-top:24px}
+.okruszki a{text-decoration:none;color:var(--atrament-3)}
+.okruszki a:hover{color:var(--atrament)}
 
-.podstawa-prawna-stopka {
-  margin-top: 48px;
-  padding-top: 16px;
-  border-top: 1px solid var(--linia);
-  font-size: 13px;
-  color: var(--atrament-3);
-}
-.podstawa-prawna-stopka p { margin: 0 0 6px; max-width: none; }
-.podstawa-prawna-stopka code {
-  background: var(--karta);
-  border: 1px solid var(--linia);
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-size: 12px;
-}
+/* ── sytuacje ── */
+.sytuacje{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.karta-sytuacji{display:block;background:var(--karta);border:1px solid var(--linia);border-radius:14px;padding:22px;text-decoration:none;color:inherit}
+.karta-sytuacji:hover{border-color:var(--rejestr)}
+.karta-sytuacji-tytul{font-weight:600;font-size:16px;margin:0 0 6px}
+.karta-sytuacji-opis{font-size:14px;color:var(--atrament-2);margin:0}
+.karta-sytuacji-strzalka{color:var(--rejestr);font-size:14px;margin-top:12px;display:block}
 
-.stopka {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 32px;
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 24px;
-  border-top: 1px solid var(--linia);
-  font-size: 13px;
-  color: var(--atrament-2);
-}
-.stopka-kolumna { display: flex; flex-direction: column; gap: 4px; }
-.stopka a { text-decoration: none; }
+/* ── jak to działa ── */
+.kroki{display:flex;flex-direction:column;gap:0}
+.krok{display:grid;grid-template-columns:40px 1fr;gap:16px;padding:18px 0;border-top:1px solid var(--linia)}
+.krok:first-child{border-top:none}
+.krok-numer{width:32px;height:32px;border-radius:50%;background:var(--rejestr-tlo);color:var(--rejestr);display:flex;align-items:center;justify-content:center;font-family:var(--font-dane);font-size:13px;font-weight:500}
+.krok-tytul{font-weight:600;margin:0 0 4px}
+.krok-opis{font-size:14px;color:var(--atrament-2);margin:0}
+.krok-kto{font-size:12px;color:var(--mosiadz);margin-top:6px}
+.jak-siatka{display:grid;grid-template-columns:3fr 2fr;gap:48px;align-items:start}
+.przygotuj{background:var(--karta);border:1px solid var(--linia);border-radius:14px;padding:22px}
+.przygotuj h3{font-size:15px;margin:0 0 12px}
+.przygotuj ul{margin:0;padding-left:18px;font-size:14px;color:var(--atrament-2)}
+.przygotuj li{margin-bottom:8px}
+.przygotuj-czas{margin-top:16px;padding-top:16px;border-top:1px solid var(--linia);font-size:14px}
+.przygotuj-czas strong{color:var(--rejestr)}
 
-@media (max-width: 720px) {
-  .uklad { grid-template-columns: 1fr; padding: 24px 16px 48px; }
-  .boczna {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 8px 16px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--linia);
-    margin-bottom: 8px;
-  }
-  .boczna a { border-left: none; padding-left: 0; border-bottom: 2px solid transparent; }
-  .boczna a[aria-current="page"] { border-left-color: transparent; border-bottom-color: var(--rejestr); }
-  h1 { font-size: 28px; }
+/* ── czym jest rejestr ── */
+.dwie-kolumny{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.dwie-kolumny p{color:var(--atrament-2)}
+.mini-os{background:var(--karta);border:1px solid var(--linia);border-radius:14px;padding:20px}
+
+/* ── co w portalu ── */
+.lista-czynnosci{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;list-style:none;margin:0;padding:0}
+.lista-czynnosci li{display:flex;align-items:center;gap:10px;font-size:15px;padding:8px 0}
+.lista-czynnosci li::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--rejestr);flex-shrink:0}
+
+/* ── opłaty ── */
+.tabela-wrap{overflow-x:auto;margin-bottom:20px}
+.tabela-oplat{width:100%;min-width:480px;border-collapse:collapse;font-size:15px}
+.tabela-oplat th,.tabela-oplat td{padding:12px 14px;border-bottom:1px solid var(--linia);text-align:left}
+.tabela-oplat .prawo{text-align:right;font-family:var(--font-dane)}
+.tabela-oplat thead th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--atrament-3);font-weight:500}
+.kalkulator{background:var(--karta);border:1px solid var(--linia);border-radius:14px;padding:22px;margin-top:24px;max-width:420px}
+.kalkulator h2{font-family:var(--font-ui);font-size:15px;margin:0 0 14px}
+.kalkulator-pole{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;font-size:14px}
+.kalkulator-pole input{width:64px;padding:6px 8px;border:1px solid var(--linia);border-radius:6px;font-family:var(--font-dane);font-size:14px}
+.kalkulator-wynik{margin-top:14px;padding-top:14px;border-top:1px solid var(--linia);font-size:14px}
+.kalkulator-wynik strong{font-family:var(--font-dane);color:var(--rejestr);font-size:18px}
+.kalkulator[hidden]{display:none}
+
+/* ── pytania ── */
+.pytania{max-width:760px}
+.pytania details{border-bottom:1px solid var(--linia);padding:16px 0}
+.pytania summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.pytania summary::-webkit-details-marker{display:none}
+.pytania summary::after{content:"+";font-weight:400;color:var(--atrament-3);font-size:20px}
+.pytania details[open] summary::after{content:"–"}
+.pytania details p{color:var(--atrament-2);margin:10px 0 0;font-size:15px}
+
+/* ── pas końcowy ── */
+.pas-koncowy{background:var(--rejestr);color:#fff;padding:56px 0;text-align:center}
+.pas-koncowy h2{font-family:var(--font-display);font-size:30px;margin:0 0 10px}
+.pas-koncowy p{color:rgba(255,255,255,.8);margin:0 0 24px}
+.pas-koncowy .btn-glowny{background:#fff;color:var(--rejestr)}
+.pas-koncowy .btn-glowny:hover{background:var(--rejestr-tlo)}
+
+/* ── CTA przyklejone (telefon) ── */
+.cta-przyklejone{display:none;position:fixed;left:0;right:0;bottom:0;z-index:20;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:var(--karta);border-top:1px solid var(--linia);box-shadow:0 -2px 12px rgba(20,24,28,.08)}
+.cta-przyklejone.pokaz{display:block}
+.cta-przyklejone .btn{display:flex;width:100%}
+
+/* ── stopka ── */
+.stopka{padding:32px 0 48px;font-size:13px;color:var(--atrament-2)}
+.stopka-siatka{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
+.stopka a{text-decoration:none}
+.stopka a:hover{color:var(--atrament)}
+
+@media (max-width:900px){
+  .hero-siatka{grid-template-columns:1fr;gap:32px}
+  .fakty-siatka{grid-template-columns:1fr 1fr}
+  .sytuacje{grid-template-columns:1fr}
+  .jak-siatka{grid-template-columns:1fr}
+  .dwie-kolumny{grid-template-columns:1fr}
+  .lista-czynnosci{grid-template-columns:1fr}
+  .pasek-nav{display:none}
+  .pasek-cta{display:none}
+  .menu-mobilne{display:block}
+  body{padding-bottom:0}
 }

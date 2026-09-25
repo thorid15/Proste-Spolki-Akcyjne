@@ -930,6 +930,53 @@
 
 ---
 
+### D-064 — Strona publiczna przeprojektowana od zera (SESJA-PSA-STRONA.md, zastępuje FAZĘ 5); bez `/nowelizacja-2027`
+
+- Data: 2026-09-25 (sesja `SESJA-PSA-STRONA.md`)
+- Obszar: strona publiczna (SEO)
+- Decyzja: strona publiczna zbudowana w FAZIE 5 (`SESJA-PSA-FRONTEND.md`) była poprawna merytorycznie,
+  ale wyglądała jak dokumentacja (lewa kolumna menu, identyczny szablon każdej strony, ściana tekstu
+  z przepisami w nawiasach). `SESJA-PSA-STRONA.md` zleciła przeprojektowanie od zera: wąski pasek
+  górny zamiast bocznego menu, hero z „żywym wpisem” (przykładowy wpis do rejestru złożony z
+  HTML/CSS, oś akcji), sekcje odpowiadające na konkretne pytania klienta („Wybierz swoją sytuację”,
+  „Jak to działa”, „Najkrótsze odpowiedzi”), cytaty prawne jako przyciski `popover`/`popovertarget`
+  (dymek z brzmieniem przepisu, zero JavaScriptu) zamiast przepisów w nawiasach w zdaniu. Faza A
+  (plan + statyczna makieta + STOP A z odpowiedziami Łukasza na Q-S1/Q-S2/Q-S4) opisana w
+  `frontend-audyt/raporty/faza-strona-plan-a.md` i `faza-strona-teksty-a.md`; wynik Fazy B (build,
+  pomiary, lista DO WERYFIKACJI) w `frontend-audyt/raporty/faza-strona-stop-b.md`.
+- **Nowa mapa strony** (zastępuje FAZĘ 5): `/`, `/jak-zaczac`, `/sprzedaz-akcji`,
+  `/przeniesienie-rejestru`, `/oplaty`, `/pytania`, `/kontakt`. Usunięte adresy FAZY 5:
+  `/czym-jest-rejestr-akcjonariuszy`, `/nowelizacja-2027`, `/zbycie-akcji-i-wpisy`,
+  `/zmiana-podmiotu-prowadzacego-rejestr` — bundel D-063 nigdy nie był wdrożony pod realną domeną
+  (Q2/D-049 wciąż otwarte), więc stare adresy nie były nigdzie publicznie zaindeksowane: usunięte
+  bez przekierowań 301, zamiast ich utrzymywania.
+- **Bez strony o nowelizacji 2027** — decyzja Łukasza z 25.09.2026 (przekazana wprost w
+  `SESJA-PSA-STRONA.md` sekcja 2 pkt 4), niezależna od usunięcia starych adresów: termin 18.05.2027
+  z FAZY 5 i tak nie miał odzwierciedlenia w `PRZEPISY-PSA.md` i wymagał sprawdzenia z tekstem
+  ustawy nowelizującej przed publikacją (patrz `frontend-audyt/raporty/faza5-raport.md` § 4) —
+  temat odłożony do czasu, aż będzie potrzebny.
+- **STOP A — decyzje Łukasza (2026-09-25), zapisane też w `faza-strona-teksty-a.md`:**
+  - Nagłówek hero: „Rejestr Akcjonariuszy Prostej Spółki Akcyjnej” (prosty, dosłowny wariant D,
+    nie żaden z A/B/C zaproponowanych w makiecie).
+  - Q-S1 (czy strona może obiecać „bez wizyty w kancelarii”): **tak** — ale zdanie z tą obietnicą
+    zostaje oznaczone `<!-- DO WERYFIKACJI -->` w źródle, bo ocena prawna zdalnej identyfikacji AML
+    (P-012, `## Decyzje otwarte` niżej) pozostaje **formalnie nadal otwarta** — to decyzja o treści
+    marketingowej strony, nie zamknięcie P-012.
+  - Q-S2 (jakie ceny publikować): stawki maksymalne z `przepisy.js` (1200/100/50 zł netto) — te
+    same co dziś, oznaczone ⚠️ DO WERYFIKACJI (patrz `STAWKI_DO_WERYFIKACJI` w `przepisy.js`).
+  - Q-S4 (czy pokazać notariusza z imienia): tak, „Notariusz Łukasz Kozon” w stopce/kontakcie, bez
+    zdjęcia na razie.
+  - Q-S3 (domena) — nadal otwarte, bez zmian względem D-049.
+- Skutek w kodzie: `narzedzia/buduj-strone.js` (przepisany — szablon z paskiem górnym/menu
+  mobilnym/CTA przyklejonym, strona główna komponowana bezpośrednio jako HTML), `strona/styl.css`
+  (przepisany), `strona/js/wzmocnienia.js` (nowy, < 3 KB — kalkulator opłat + przyklejone CTA na
+  telefonie, jedyny JavaScript na stronie), `strona/przepisy-cytaty.js` (nowy — brzmienie przepisów
+  do dymków popover, wyłącznie z `PRZEPISY-PSA.md`), `strona/tresc/*.md` (nowe/usunięte pliki wg
+  mapy wyżej). D-063 (bundel osobny od `serwer.js`) bez zmian.
+- Źródło: `SESJA-PSA-STRONA.md`.
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w
