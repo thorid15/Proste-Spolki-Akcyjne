@@ -485,6 +485,11 @@ function PoleDowoduReprezentanta({ wniosek, edytowalne, przyZmianie }) {
 
 function EkranWniosku() {
   const [krok, ustawKrok] = useState(0);
+  // Pasek postępu klikalny wstecz i do kroków już odwiedzonych (0.4 pkt 8,
+  // FAZA4 pkt 4) — bez osobnego śledzenia „najdalej” każdy powrót do kroku
+  // 0 cofałby granicę klikalności do bieżącego kroku.
+  const [najdalejOsiagniety, ustawNajdalej] = useState(0);
+  useEffect(() => { ustawNajdalej((m) => Math.max(m, krok)); }, [krok]);
   // Otwarty akcjonariusz zasłania listę: jeden temat na ekranie naraz.
   const [otwartyAkcjonariusz, ustawOtwartyAkcjonariusz] = useState(null);
   const [dane, ustawDane] = useState(null);
@@ -693,7 +698,7 @@ function EkranWniosku() {
 
   return (
     <div className="pion kreator-waski" style={{ gap: 16 }}>
-      <Kroki kroki={KROKI_WNIOSKU} biezacy={krok} />
+      <Kroki kroki={KROKI_WNIOSKU} biezacy={krok} przyWyborze={ustawKrok} osiagniety={najdalejOsiagniety} />
       <Komunikat odmiana="blad" tresc={blad} />
       {/* Wniosek odesłany do uzupełnienia prowadzi teraz PROSTO do formularza
           (portal.js), więc uwagi kancelarii muszą być widoczne tutaj — inaczej
@@ -1021,6 +1026,12 @@ function EkranWniosku() {
               />
             )}
 
+            <div className="rzad-rozdzielony">
+              <h3 className="podsumowanie-naglowek">Dane spółki</h3>
+              {wniosekEdytowalny && (
+                <button type="button" className="btn-tekstowy" onClick={() => ustawKrok(0)}>Zmień</button>
+              )}
+            </div>
             <dl className="podsumowanie">
               <dt>Firma (nazwa)</dt>
               <dd>{dane.nazwa || <span className="brak">nie uzupełniono</span>}</dd>
@@ -1028,6 +1039,15 @@ function EkranWniosku() {
               <dd className="kol-dane">{dane.krs || <span className="brak">nie uzupełniono</span>}</dd>
               <dt>Siedziba</dt>
               <dd>{adresSpolki || <span className="brak">nie uzupełniono</span>}</dd>
+            </dl>
+
+            <div className="rzad-rozdzielony">
+              <h3 className="podsumowanie-naglowek">Reprezentant</h3>
+              {wniosekEdytowalny && (
+                <button type="button" className="btn-tekstowy" onClick={() => ustawKrok(1)}>Zmień</button>
+              )}
+            </div>
+            <dl className="podsumowanie">
               <dt>Reprezentant</dt>
               <dd>
                 {dane.reprezentant_imie_nazwisko || <span className="brak">nie uzupełniono</span>}
@@ -1039,7 +1059,12 @@ function EkranWniosku() {
               <dd>{dane.reprezentant_email || <span className="brak">nie uzupełniono</span>}</dd>
             </dl>
 
-            <h3 className="podsumowanie-naglowek">{`Akcjonariusze (${akcjonariusze.length})`}</h3>
+            <div className="rzad-rozdzielony">
+              <h3 className="podsumowanie-naglowek">{`Akcjonariusze (${akcjonariusze.length})`}</h3>
+              {wniosekEdytowalny && (
+                <button type="button" className="btn-tekstowy" onClick={() => ustawKrok(2)}>Zmień</button>
+              )}
+            </div>
             {akcjonariusze.length === 0 ? (
               <Pusto
                 ikona="osoby"
