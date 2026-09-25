@@ -843,6 +843,31 @@
 
 ---
 
+### D-063 — Strona publiczna: bundel statyczny osobny od `serwer.js`, nie wpięty w routing kancelarii
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 5)
+- Obszar: strona publiczna (SEO) / infrastruktura
+- Decyzja: `serwer.js` dziś serwuje aplikację kancelarii pod `/` i w catch-allu (`aplikacja.get('*', ...)`
+  → `publiczne/index.html`) — każda nieznana ścieżka ląduje w SPA kancelarii. FAZA 5 chce stron
+  publicznych pod `/`, `/oplaty` itd., co koliduje z tym catch-allem. Zamiast przepinać `/` kancelarii
+  na inny adres (zmiana wpływająca na codzienny adres pracy notariusza, poza wyraźnym zakresem tego
+  dokumentu sesji), strona publiczna buduje się jako **osobny bundel statyczny**
+  (`narzedzia/buduj-strone.js` → `strona/dist/*.html` + `sitemap.xml` + `robots.txt`), niepodłączony
+  do `serwer.js` w tej sesji. Zgodne z D-049 (domena nierozstrzygnięta, Q2) — skoro nie wiadomo,
+  czy strona stanie na subdomenie tej aplikacji, na `notariusz.gdansk.pl`, czy na osobnej domenie,
+  wpięcie jej w ten sam proces Express byłoby przedwczesne i mogłoby wymagać odkręcenia.
+- `publiczne/robots.txt` (nowy) blokuje CAŁĄ resztę tej aplikacji (`Disallow: /`) — uzupełnienie
+  istniejących meta `noindex` na `index.html`/`portal.html` (już były, sprzed tej fazy).
+  `strona/dist/robots.txt` (osobny plik, część bundla) zezwala na indeksowanie — to inna domena.
+- Odrzucono: przepięcie `/` kancelarii na `/kancelaria` i oddanie `/` stronie publicznej w tym samym
+  procesie — zbyt duża, nieodwracalna bez ostrzeżenia zmiana adresu roboczego notariusza, nigdzie
+  wprost nie zlecona w tym dokumencie sesji.
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, FAZA 5.
+- Skutek w kodzie: `server/konfiguracja.js` (`BASE_URL_STRONA`); `narzedzia/buduj-strone.js` (nowy);
+  `strona/tresc/*.md` (nowy, źródła treści); `publiczne/robots.txt` (nowy). `serwer.js` — bez zmian.
+
+---
+
 ### D-057 — Zgłoszenie nieprawidłowości we wpisie: nowa tabela, odrębna od `psa_sprawy` (B9)
 
 - Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)

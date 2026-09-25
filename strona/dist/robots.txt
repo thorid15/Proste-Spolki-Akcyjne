@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://przyklad-domena-do-ustalenia.pl/sitemap.xml

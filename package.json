@@ -7,6 +7,7 @@
   "type": "commonjs",
   "scripts": {
     "buduj": "node narzedzia/buduj-front.js",
+    "buduj-strone": "node narzedzia/buduj-strone.js",
     "prestart": "node narzedzia/buduj-front.js",
     "start": "node serwer.js",
     "dev": "node narzedzia/buduj-front.js --dev",

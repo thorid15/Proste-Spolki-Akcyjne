@@ -1,0 +1,217 @@
+/* strona/styl.css — tożsamość wizualna strony publicznej (sesja 5.4):
+   sama paleta i te same dwa kroje co aplikacja (publiczne/style/rejestr.css),
+   w wydaniu redakcyjnym — szeroka kolumna tekstu, dużo światła, bez
+   elementów aplikacyjnych (kart, przycisków-akcji). Zero zależności
+   zewnętrznych (sekcja 5.3) — fonty self-hosted, skopiowane do
+   strona/dist/fonty przez narzedzia/buduj-strone.js (D-063: osobne
+   wdrożenie, nie może liczyć na /fonty aplikacji). */
+
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(/fonty/inter-tight-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(/fonty/inter-tight-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url(/fonty/eb-garamond-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url(/fonty/eb-garamond-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --atrament:    #14181C;
+  --atrament-2:  #565E68;
+  --atrament-3:  #646C76;
+  --papier:      #F6F7F5;
+  --karta:       #FFFFFF;
+  --linia:       #E6E8E3;
+  --rejestr:     #1F4D3D;
+  --rejestr-2:   #2E6B54;
+  --rejestr-tlo: #E8EFEA;
+  --mosiadz:     #8A6330;
+  --mosiadz-tlo: #F7EFE2;
+  --font-display: 'EB Garamond', 'Iowan Old Style', Georgia, serif;
+  --font-ui:      'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--papier);
+  color: var(--atrament);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+a { color: var(--rejestr); }
+a:hover { color: var(--rejestr-2); }
+
+.marka {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  background: var(--rejestr);
+}
+.marka-znak {
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 20px;
+  text-decoration: none;
+}
+.nawigacja a {
+  color: #fff;
+  text-decoration: none;
+  border: 1px solid rgba(255,255,255,.5);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+.nawigacja a:hover { background: rgba(255,255,255,.12); }
+
+.uklad {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 720px);
+  gap: 48px;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+}
+.boczna { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.boczna a {
+  padding: 6px 0;
+  text-decoration: none;
+  color: var(--atrament-2);
+  border-left: 2px solid transparent;
+  padding-left: 10px;
+}
+.boczna a[aria-current="page"] { color: var(--rejestr); border-left-color: var(--rejestr); font-weight: 600; }
+
+main { min-width: 0; }
+
+.okruszki { font-size: 13px; color: var(--atrament-3); margin-bottom: 16px; }
+.okruszki a { color: var(--atrament-3); }
+.okruszki span[aria-hidden] { margin: 0 6px; }
+
+h1 {
+  font-family: var(--font-display);
+  font-size: 36px;
+  line-height: 1.2;
+  margin: 0 0 8px;
+}
+h2 {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.25;
+  margin: 40px 0 12px;
+}
+h3 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  margin: 28px 0 8px;
+}
+p { margin: 0 0 16px; max-width: 68ch; }
+ul { margin: 0 0 16px; padding-left: 22px; }
+li { margin-bottom: 8px; max-width: 68ch; }
+
+blockquote {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-left: 3px solid var(--rejestr);
+  border-radius: 8px;
+  font-size: 15px;
+  color: var(--atrament-2);
+}
+blockquote p { margin: 0; max-width: none; }
+
+.tabela-oplat {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 24px;
+  font-size: 15px;
+}
+.tabela-oplat caption {
+  text-align: left;
+  font-size: 13px;
+  color: var(--mosiadz);
+  background: var(--mosiadz-tlo);
+  padding: 8px 12px;
+  border-radius: 8px 8px 0 0;
+}
+.tabela-oplat th, .tabela-oplat td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--linia);
+  text-align: left;
+}
+.tabela-oplat .prawo { text-align: right; font-variant-numeric: tabular-nums; }
+
+.podstawa-prawna-stopka {
+  margin-top: 48px;
+  padding-top: 16px;
+  border-top: 1px solid var(--linia);
+  font-size: 13px;
+  color: var(--atrament-3);
+}
+.podstawa-prawna-stopka p { margin: 0 0 6px; max-width: none; }
+.podstawa-prawna-stopka code {
+  background: var(--karta);
+  border: 1px solid var(--linia);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+}
+
+.stopka {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+  border-top: 1px solid var(--linia);
+  font-size: 13px;
+  color: var(--atrament-2);
+}
+.stopka-kolumna { display: flex; flex-direction: column; gap: 4px; }
+.stopka a { text-decoration: none; }
+
+@media (max-width: 720px) {
+  .uklad { grid-template-columns: 1fr; padding: 24px 16px 48px; }
+  .boczna {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--linia);
+    margin-bottom: 8px;
+  }
+  .boczna a { border-left: none; padding-left: 0; border-bottom: 2px solid transparent; }
+  .boczna a[aria-current="page"] { border-left-color: transparent; border-bottom-color: var(--rejestr); }
+  h1 { font-size: 28px; }
+}
