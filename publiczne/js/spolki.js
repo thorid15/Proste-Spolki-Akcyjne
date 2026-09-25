@@ -199,6 +199,13 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
   const [pobranoZKrsBezAde, ustawPobranoZKrsBezAde] = useState(false);
   const [sadZaproponowany, ustawSadZaproponowany] = useState(false);
   const [umowaZalacznik, ustawUmowaZalacznik] = useState(null);
+  // K6 (FAZA 3 sesji frontendowej v2): dane pobrane z KRS pokazują się jako
+  // podsumowanie tylko do odczytu („Czy to Twoja spółka?") — pełny
+  // edytowalny formularz wraca dopiero po „Popraw" albo gdy API zawiodło
+  // (0.4 pkt 2). Dla spółki z przyjętego wniosku (krok 0 nieodwiedzany bez
+  // cofania) i tak nieistotne — startuje jak dotąd.
+  const [trybReczny, ustawTrybReczny] = useState(Boolean(spolkaIstniejaca));
+  const ostatniPobranyKrs = useRef(null);
 
   const [emisja, ustawEmisje] = useState(PUSTA_EMISJA_ZALOZYCIELSKA);
   // K2 (FAZA 3 sesji frontendowej v2): osoby z przyjętego wniosku podstawione
@@ -251,8 +258,10 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
       ustawSurowyJson(wynik.surowa || null);
       if (!wynik.znaleziono) {
         ustawKomunikatKrs({ odmiana: 'uwaga', tresc: wynik.komunikat });
+        ustawTrybReczny(true);
       } else if (wynik.dopuszczalna === false) {
         ustawKomunikatKrs({ odmiana: 'blad', tresc: wynik.komunikat });
+        ustawTrybReczny(true);
       } else {
         const { sklad_organu, ...reszta } = wynik.dane;
         const pobrane = Object.fromEntries(
@@ -262,20 +271,38 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
         ustawSkladOrganu(sklad_organu || []);
         ustawPobranoZKrsBezAde(!wynik.dane.adres_edorecze);
         ustawSadZaproponowany(Boolean(wynik.sad_rejestrowy_propozycja));
-        ustawKomunikatKrs({
-          odmiana: (wynik.ostrzezenia || []).length ? 'uwaga' : 'ok',
-          tresc: (wynik.ostrzezenia || []).length
-            ? wynik.ostrzezenia.join(' ')
-            : 'Dane pobrane z rejestru przedsiębiorców. Sprawdź je przed zapisaniem, zwłaszcza sąd rejestrowy — API KRS go nie zwraca, uzupełnij ręcznie.',
-        });
-        ustawPokazJson(true);
+        ustawKomunikatKrs(
+          (wynik.ostrzezenia || []).length
+            ? { odmiana: 'uwaga', tresc: wynik.ostrzezenia.join(' ') }
+            : null
+        );
+        // K6: dane z KRS jako podsumowanie tylko do odczytu — pracownik
+        // sprawdza je jako „Czy to Twoja spółka?" i albo przechodzi dalej,
+        // albo klika „Popraw", żeby wrócić do edytowalnego formularza.
+        ustawTrybReczny(false);
       }
     } catch (e) {
       ustawKomunikatKrs({ odmiana: 'uwaga', tresc: `${e.message} Uzupełnij dane ręcznie.` });
+      ustawTrybReczny(true);
     } finally {
       ustawPobieranie(false);
     }
   }
+
+  // K6: pobranie startuje samo po wpisaniu 10 cyfr — bez osobnego
+  // przycisku (0.4 pkt 2). Nie odpala się drugi raz dla tego samego
+  // numeru (np. gdy pracownik wraca na krok 0 z „Popraw").
+  useEffect(() => {
+    if (spolkaIstniejaca) return undefined;
+    const numer = String(dane.krs || '').replace(/\D/g, '');
+    if (numer.length !== 10 || numer === ostatniPobranyKrs.current) return undefined;
+    const uchwyt = setTimeout(() => {
+      ostatniPobranyKrs.current = numer;
+      pobierzZKrs();
+    }, 400);
+    return () => clearTimeout(uchwyt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dane.krs]);
 
   function ustawPozycje(i, nowa) {
     ustawPozycjeState((p) => p.map((x, j) => (j === i ? nowa : x)));
@@ -506,26 +533,18 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
           <>
             <Pole
               etykieta="Numer KRS"
-              podpowiedz="Dane pobierzemy z otwartego API rejestru przedsiębiorców; przy niepowodzeniu uzupełnisz je ręcznie — awaria API nie blokuje rejestracji."
+              podpowiedz="Dane pobierzemy same z otwartego API rejestru przedsiębiorców po wpisaniu 10 cyfr; przy niepowodzeniu uzupełnisz je ręcznie — awaria API nie blokuje rejestracji."
             >
-              <div className="row-g">
-                <input type="text" {...pole('krs')} maxLength={10} placeholder="0000123456" />
-                <button
-                  className="btn"
-                  onClick={pobierzZKrs}
-                  disabled={pobieranie || String(dane.krs || '').replace(/\D/g, '').length !== 10}
-                >
-                  {pobieranie ? 'Pobieranie…' : 'Pobierz z KRS'}
-                </button>
-              </div>
+              <input type="text" {...pole('krs')} maxLength={10} placeholder="0000123456" />
+              {pobieranie && <div className="podstawa-prawna">Pobieranie z rejestru przedsiębiorców…</div>}
             </Pole>
 
             {komunikatKrs && <Komunikat odmiana={komunikatKrs.odmiana} tresc={komunikatKrs.tresc} />}
 
             {surowyJson && (
-              <Pole etykieta="Surowa odpowiedź API KRS" podpowiedz="Sprawdź na żywych danych, że mapowanie poniższych pól jest poprawne — zwłaszcza kapitał akcyjny i adres do doręczeń elektronicznych.">
+              <Pole etykieta="Odpowiedź KRS" podpowiedz="Sprawdź na żywych danych, że mapowanie poniższych pól jest poprawne — zwłaszcza kapitał akcyjny i adres do doręczeń elektronicznych.">
                 <button className="btn btn-maly" onClick={() => ustawPokazJson((p) => !p)}>
-                  {pokazJson ? 'Ukryj surowy JSON' : 'Pokaż surowy JSON'}
+                  {pokazJson ? 'Ukryj odpowiedź KRS' : 'Pokaż odpowiedź KRS'}
                 </button>
                 {pokazJson && (
                   <pre className="dane" style={{ maxHeight: 320, overflow: 'auto', padding: 12, background: 'var(--karta)', border: '1px solid var(--linia)', borderRadius: 'var(--r-sm)', marginTop: 8 }}>
@@ -535,87 +554,118 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
               </Pole>
             )}
 
-            <Pole etykieta="Firma (nazwa) spółki" id="otwarcie-nazwa">
-              <input type="text" {...pole('nazwa')} />
-            </Pole>
-            <Pole
-              etykieta="Forma prawna"
-              podpowiedz="Notariusz nie może prowadzić rejestru akcjonariuszy S.A. ani S.K.A."
-              wymagane
-            >
-              <input type="text" {...pole('forma_prawna')} />
-            </Pole>
-            <Pole
-              etykieta="Organ zarządzający"
-              podpowiedz="P.S.A. może mieć zarząd albo (struktura monistyczna) radę dyrektorów — decyduje umowa spółki. Widoczne na pismach jako adresat po stronie spółki."
-            >
-              <select {...pole('organ_rodzaj')}>
-                <option value="">— nie ustalono —</option>
-                <option value="zarzad">Zarząd</option>
-                <option value="rada_dyrektorow">Rada Dyrektorów</option>
-              </select>
-            </Pole>
-            <div className="siatka-2">
-              <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
-              <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
-              <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
-            </div>
-            <div className="siatka-3">
-              <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
-              <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
-              <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole
-                etykieta="Sąd rejestrowy"
-                podpowiedz={sadZaproponowany ? 'Zaproponowano na podstawie siedziby spółki — sprawdź przed zapisaniem.' : undefined}
-              >
-                <input type="text" {...pole('sad_rejestrowy')} />
-              </Pole>
-              <Pole etykieta="Wydział"><input type="text" {...pole('wydzial')} /></Pole>
-            </div>
-            <div className="siatka-3">
-              <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
-              <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
-              <Pole
-                etykieta="Adres do doręczeń elektronicznych"
-                podpowiedz={pobranoZKrsBezAde ? 'Brak w KRS — uzupełnij ręcznie. ADE często nie jest ujawniony w KRS, tylko w bazie adresów elektronicznych.' : undefined}
-              >
-                <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
-              </Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole etykieta="Data rejestracji w KRS">
-                <PoleDaty wartosc={dane.data_utworzenia_spolki} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_utworzenia_spolki: v }))} />
-              </Pole>
-              <Pole etykieta="Kapitał akcyjny">
-                <PoleKwoty grosze={dane.kapital_akcyjny_grosze} przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))} />
-              </Pole>
-            </div>
-            <Pole
-              etykieta="Data zawarcia umowy spółki"
-              podpowiedz="Data aktu notarialnego zawiązania spółki — przy spółce zakładanej w S24 data podpisania w systemie. Różna od daty rejestracji w KRS powyżej. Uzupełnia „datę emisji” pierwszej emisji w kroku 3."
-            >
-              <PoleDaty
-                wartosc={dane.data_zawarcia_umowy_spolki}
-                przyZmianie={(v) => ustawDane((p) => ({ ...p, data_zawarcia_umowy_spolki: v }))}
-              />
-            </Pole>
-
-            {skladOrganu.length > 0 && (
-              <Pole etykieta="Skład organu reprezentującego" podpowiedz="Wyłącznie informacyjne — rejestr akcjonariuszy nie prowadzi własnej ewidencji osób w organach spółki.">
-                <div className="lista-wierszy">
-                  {skladOrganu.map((o, i) => (
-                    <div key={i} className="wiersz-podtytul">
-                      {[o.imiona, o.nazwisko].filter(Boolean).join(' ')}
-                      {o.funkcja ? ` — ${o.funkcja}` : ''}
-                    </div>
-                  ))}
+            {/* K6: dane pobrane z KRS — podsumowanie tylko do odczytu,
+                „Czy to Twoja spółka?" zamiast formularza do przepisania
+                (0.4 pkt 2). Pełny edytowalny formularz wraca po „Popraw"
+                albo gdy KRS nie odpowiedział / odrzucił numer. */}
+            {!trybReczny && surowyJson ? (
+              <>
+                <div className="card-h">Czy to Twoja spółka?</div>
+                <div className="metryka-pion">
+                  <MetrykaPoz etykieta="Firma (nazwa)" wartosc={dane.nazwa} dane />
+                  <MetrykaPoz etykieta="Adres siedziby" wartosc={formatujAdres(dane)} dane />
+                  <MetrykaPoz etykieta="NIP" wartosc={dane.nip} dane />
+                  <MetrykaPoz etykieta="REGON" wartosc={dane.regon} dane />
+                  <MetrykaPoz
+                    etykieta="Sąd rejestrowy"
+                    wartosc={[dane.sad_rejestrowy, dane.wydzial].filter(Boolean).join(', ') || null}
+                    podpowiedz={sadZaproponowany ? 'Zaproponowany na podstawie siedziby — sprawdź przed zapisaniem.' : undefined}
+                  />
+                  <MetrykaPoz etykieta="Kapitał akcyjny" wartosc={dane.kapital_akcyjny_grosze != null ? fmt.zlote(dane.kapital_akcyjny_grosze) : null} dane />
+                  <MetrykaPoz etykieta="Data rejestracji w KRS" wartosc={fmt.data(dane.data_utworzenia_spolki)} dane />
                 </div>
-              </Pole>
+                {skladOrganu.length > 0 && (
+                  <Pole etykieta="Skład organu reprezentującego" podpowiedz="Wyłącznie informacyjne — rejestr akcjonariuszy nie prowadzi własnej ewidencji osób w organach spółki.">
+                    <div className="lista-wierszy">
+                      {skladOrganu.map((o, i) => (
+                        <div key={i} className="wiersz-podtytul">
+                          {[o.imiona, o.nazwisko].filter(Boolean).join(' ')}
+                          {o.funkcja ? ` — ${o.funkcja}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  </Pole>
+                )}
+                <button className="btn btn-sm" onClick={() => ustawTrybReczny(true)}>Popraw</button>
+              </>
+            ) : (
+              <>
+                <Pole etykieta="Firma (nazwa) spółki" id="otwarcie-nazwa">
+                  <input type="text" {...pole('nazwa')} />
+                </Pole>
+                <Pole
+                  etykieta="Organ zarządzający"
+                  podpowiedz="P.S.A. może mieć zarząd albo (struktura monistyczna) radę dyrektorów — decyduje umowa spółki. Widoczne na pismach jako adresat po stronie spółki."
+                >
+                  <select {...pole('organ_rodzaj')}>
+                    <option value="">— nie ustalono —</option>
+                    <option value="zarzad">Zarząd</option>
+                    <option value="rada_dyrektorow">Rada Dyrektorów</option>
+                  </select>
+                </Pole>
+                <div className="siatka-2">
+                  <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
+                  <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
+                </div>
+                <div className="siatka-2">
+                  <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
+                  <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
+                </div>
+                <div className="siatka-3">
+                  <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
+                  <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
+                  <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
+                </div>
+                <div className="siatka-2">
+                  <Pole
+                    etykieta="Sąd rejestrowy"
+                    podpowiedz={sadZaproponowany ? 'Zaproponowano na podstawie siedziby spółki — sprawdź przed zapisaniem.' : undefined}
+                  >
+                    <input type="text" {...pole('sad_rejestrowy')} />
+                  </Pole>
+                  <Pole etykieta="Wydział"><input type="text" {...pole('wydzial')} /></Pole>
+                </div>
+                <div className="siatka-3">
+                  <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
+                  <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
+                  <Pole
+                    etykieta="Adres do doręczeń elektronicznych"
+                    podpowiedz={pobranoZKrsBezAde ? 'Brak w KRS — uzupełnij ręcznie. ADE często nie jest ujawniony w KRS, tylko w bazie adresów elektronicznych.' : undefined}
+                  >
+                    <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
+                  </Pole>
+                </div>
+                <div className="siatka-2">
+                  <Pole etykieta="Data rejestracji w KRS">
+                    <PoleDaty wartosc={dane.data_utworzenia_spolki} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_utworzenia_spolki: v }))} />
+                  </Pole>
+                  <Pole etykieta="Kapitał akcyjny">
+                    <PoleKwoty grosze={dane.kapital_akcyjny_grosze} przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))} />
+                  </Pole>
+                </div>
+                <Pole
+                  etykieta="Data zawarcia umowy spółki"
+                  podpowiedz="Data aktu notarialnego zawiązania spółki — przy spółce zakładanej w S24 data podpisania w systemie. Różna od daty rejestracji w KRS powyżej. Uzupełnia „datę emisji” pierwszej emisji w kroku 3."
+                >
+                  <PoleDaty
+                    wartosc={dane.data_zawarcia_umowy_spolki}
+                    przyZmianie={(v) => ustawDane((p) => ({ ...p, data_zawarcia_umowy_spolki: v }))}
+                  />
+                </Pole>
+
+                {skladOrganu.length > 0 && (
+                  <Pole etykieta="Skład organu reprezentującego" podpowiedz="Wyłącznie informacyjne — rejestr akcjonariuszy nie prowadzi własnej ewidencji osób w organach spółki.">
+                    <div className="lista-wierszy">
+                      {skladOrganu.map((o, i) => (
+                        <div key={i} className="wiersz-podtytul">
+                          {[o.imiona, o.nazwisko].filter(Boolean).join(' ')}
+                          {o.funkcja ? ` — ${o.funkcja}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  </Pole>
+                )}
+              </>
             )}
           </>
         )}
