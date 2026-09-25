@@ -60,8 +60,8 @@ function PolaKlauzuli({ klauzula, ustawKlauzule, zbywcaId, ustawZbywce, nabywcaI
   return (
     <>
       <div className="siatka-2">
-        <Pole etykieta="Zbywca"><WyborOsoby wartosc={zbywcaId} przyZmianie={ustawZbywce} /></Pole>
-        <Pole etykieta="Nabywca"><WyborOsoby wartosc={nabywcaId} przyZmianie={ustawNabywce} wyklucz={zbywcaId ? [zbywcaId] : []} /></Pole>
+        <Pole etykieta="Zbywca"><WyborZKartoteki wartosc={zbywcaId} przyZmianie={ustawZbywce} /></Pole>
+        <Pole etykieta="Nabywca"><WyborZKartoteki wartosc={nabywcaId} przyZmianie={ustawNabywce} wyklucz={zbywcaId ? [zbywcaId] : []} /></Pole>
       </div>
       <Pole etykieta="Numer paragrafu"><input type="text" {...pole('paragraf')} placeholder="np. 7" /></Pole>
       <Pole etykieta="Oświadczenie o pokryciu"><input type="text" {...pole('pokrycie')} placeholder="np. zostały w całości pokryte" /></Pole>

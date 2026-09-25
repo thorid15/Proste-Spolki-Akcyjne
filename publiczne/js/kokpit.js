@@ -126,6 +126,14 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
                   akcjonariusz od {fmt.data(a.data_nabycia)}
                   {a.osoba && a.osoba.jawny_identyfikator ? ` · ${a.osoba.jawny_identyfikator}` : ''}
                 </div>
+                {/* D-050/B12: moment SYSTEMOWEGO wpisu (co do sekundy) —
+                    inny od daty prawnej zdarzenia wyżej. Puste dla pozycji
+                    wpisanych przed kolumną `data_wpisu` z sekundami. */}
+                {a.wpisano_do_rejestru && (
+                  <div className="wiersz-podtytul wyciszony">
+                    Wpisano do rejestru: {fmt.dataCzas(a.wpisano_do_rejestru)}
+                  </div>
+                )}
               </td>
               <td>{a.seria}</td>
               <td>{rodzajAkcjiDlaEmisji(emisje, a.emisja_klucz)}</td>
@@ -212,6 +220,78 @@ function ModalSprostowania({ zdarzenie, przyZamknieciu, przyZapisie }) {
       <Pole etykieta="Uzasadnienie" wymagane>
         <textarea value={uzasadnienie} onChange={(z) => ustawUzasadnienie(z.target.value)} autoFocus />
       </Pole>
+    </Modal>
+  );
+}
+
+/* ═════════════════════════════════════════════════════
+   ZGŁOSZENIA NIEPRAWIDŁOWOŚCI Z PORTALU (B9) — klient sygnalizuje, że
+   ISTNIEJĄCY wpis jest błędny; pracownik wyłącznie KWALIFIKUJE zgłoszenie
+   (samo zakwalifikowanie nie zakłada sprostowania ani sprawy — to
+   świadoma, osobna czynność w zwykłym kreatorze zdarzenia).
+   ═════════════════════════════════════════════════════ */
+const CZEGO_DOTYCZY_ZGLOSZENIA_ETYKIETY = {
+  blad_w_danych: 'Błąd w danych (literówka, zła data, zły numer)',
+  niezgodny_z_dokumentem: 'Wpis niezgodny z dokumentem, na podstawie którego powstał',
+  inne: 'Inne',
+};
+
+function ModalKwalifikacjaZgloszenia({ zgloszenie, przyZamknieciu, przyZapisie }) {
+  const [kwalifikacja, ustawKwalifikacje] = useState('');
+  const [notatka, ustawNotatke] = useState('');
+  const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+
+  async function zapisz() {
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    try {
+      await API.post(`/api/psa/zgloszenia-nieprawidlowosci/${zgloszenie.id}/kwalifikuj`, {
+        kwalifikacja, notatka,
+      });
+      przyZapisie();
+    } catch (e) {
+      ustawBlad(e.message);
+      ustawZapisywanie(false);
+    }
+  }
+
+  return (
+    <Modal
+      tytul="Kwalifikacja zgłoszenia nieprawidłowości"
+      przyZamknieciu={przyZamknieciu}
+      szerokosc={560}
+      stopka={
+        <>
+          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          <button className="btn btn-glowny" disabled={!kwalifikacja || zapisywanie} onClick={zapisz}>
+            {zapisywanie ? 'Zapisywanie…' : 'Zapisz kwalifikację'}
+          </button>
+        </>
+      }
+    >
+      <Komunikat odmiana="blad" tresc={blad} />
+      <Pole etykieta="Czego dotyczy">
+        {CZEGO_DOTYCZY_ZGLOSZENIA_ETYKIETY[zgloszenie.czego_dotyczy] || zgloszenie.czego_dotyczy}
+      </Pole>
+      <Pole etykieta="Opis klienta">{zgloszenie.opis}</Pole>
+      <Pole etykieta="Kwalifikacja" wymagane>
+        <select value={kwalifikacja} onChange={(z) => ustawKwalifikacje(z.target.value)}>
+          <option value="">— wybierz —</option>
+          <option value="sprostowanie">Sprostowanie — dokonam go w kreatorze zdarzenia</option>
+          <option value="zadanie_wpisu">To żądanie nowego wpisu, nie błąd</option>
+          <option value="brak_nieprawidlowosci">Rejestr jest poprawny — brak nieprawidłowości</option>
+        </select>
+      </Pole>
+      <Pole etykieta="Notatka (opcjonalnie)">
+        <textarea rows={3} value={notatka} onChange={(z) => ustawNotatke(z.target.value)} />
+      </Pole>
+      {kwalifikacja === 'sprostowanie' && (
+        <Komunikat
+          odmiana="info"
+          tresc="Kwalifikacja NIE dokonuje sprostowania automatycznie — po zapisaniu wykonaj je zwykłym kreatorem zdarzenia (przycisk „Sprostuj” przy zdarzeniu w historii)."
+        />
+      )}
     </Modal>
   );
 }
@@ -345,16 +425,6 @@ function MetrykaBoczna({ spolka, dane, spolkaId, odswiez }) {
 
       <KartaProceduryAml spolka={spolka} spolkaId={spolkaId} odswiez={odswiez} />
     </aside>
-  );
-}
-
-function MetrykaPoz({ etykieta, wartosc, dane, podpowiedz }) {
-  return (
-    <div className="metryka-pion-poz">
-      <div className="metryka-pion-etykieta">{etykieta}</div>
-      <div className={`metryka-pion-wartosc ${dane ? 'dane' : ''}`}>{wartosc || '—'}</div>
-      {podpowiedz && <div className="podstawa-prawna">{podpowiedz}</div>}
-    </div>
   );
 }
 
@@ -533,22 +603,21 @@ function EkranKokpitu({ spolkaId }) {
   // NA DZIEŃ). Dawniej wybierało się go playheadem na osi akcji; oś zniknęła,
   // więc została sama data, czyli to, o co naprawdę chodziło.
   //
-  // Naprawa Z-305/P-011: serwer przyjmuje `data` z dokładnością do minuty
-  // (`RRRR-MM-DDTGG:MM`, `czas.poprawnaChwila`) od dawna — rano w rejestrze
-  // może być inny wpis niż wieczorem tego samego dnia, a UI dawał wybrać
-  // wyłącznie sam dzień. Godzina jest polem OSOBNYM i opcjonalnym: pusta
-  // znaczy „cały dzień” (bez zmiany dotychczasowego zachowania).
+  // D-050 (sesja frontendowa v2, B12): pole godziny dodane naprawą Z-305/P-011
+  // usunięte z powrotem — serwer nadal przyjmuje `data` z dokładnością do
+  // minuty, ale w UI to niepotrzebna złożoność (rejestr zmienia się kilka
+  // razy w roku, nie kilka razy dziennie); dokładny moment wpisu widać teraz
+  // przy KAŻDEJ pozycji akcjonariusza i w historii zdarzeń (fmt.dataCzas).
   const [dataDnia, ustawDataDnia] = useState(fmt.dzisIso());
-  const [godzina, ustawGodzine] = useState('');
-  const data = godzina ? `${dataDnia}T${godzina}` : dataDnia;
+  const data = dataDnia;
   function ustawDate(nowaData) {
     ustawDataDnia(nowaData);
-    ustawGodzine('');
   }
   const [szczegolowy, ustawSzczegolowy] = useState(false);
   const [przeliczanie, ustawPrzeliczanie] = useState(null);
   const [sprostowanie, ustawSprostowanie] = useState(null);
   const [dodawanieAkcjonariusza, ustawDodawanieAkcjonariusza] = useState(false);
+  const [kwalifikowanieZgloszenia, ustawKwalifikowanieZgloszenia] = useState(null);
 
   const wstecz = data !== fmt.dzisIso();
 
@@ -558,6 +627,10 @@ function EkranKokpitu({ spolkaId }) {
   );
   const wszystkieZdarzenia = useDane(`/api/psa/spolki/${spolkaId}/zdarzenia`);
   const akta = useDane(`/api/psa/spolki/${spolkaId}/akta`);
+  const zgloszeniaNieprawidlowosci = useDane(
+    `/api/psa/zgloszenia-nieprawidlowosci?spolka_id=${spolkaId}&stan=nowe`,
+    [spolkaId]
+  );
 
   /** Etap 5.1: skok miedzy zdarzeniem prostowanym a prostujacym - link dziala w OBIE strony. */
   function skoczDoZdarzenia(id) {
@@ -614,6 +687,25 @@ function EkranKokpitu({ spolkaId }) {
           <div className="naglowek-strony-kontekst">
             Rejestr prowadzi {spolka.organ_prowadzacy || 'Kancelaria Notarialna Łukasz Kozon'} —
             art. 300³¹ § 1 KSH
+            {/* K7 (FAZA 3 sesji frontendowej v2, pkt 2): akcja niemal nigdy
+                nie używana (wyłącznie przy przeniesieniu spółki z innego
+                rejestru) stała dotąd na pierwszym planie, obok „Informacja
+                z rejestru" — tego samego formatu przycisku. Zostaje jako
+                dyskretny odnośnik tekstowy, nie znika (bywa potrzebna raz na
+                spółkę), ale nie konkuruje wzrokowo ze zwykłymi akcjami. */}
+            {!wstecz && dane.liczba_zdarzen === 0 && (
+              <>
+                {' · '}
+                <button
+                  type="button"
+                  className="btn-tekstowy"
+                  onClick={() => idz(`/spolki/${spolkaId}/migracja`)}
+                  title="WYŁĄCZNIE dla spółki przenoszonej z innego rejestru (np. Rejestrów Notarialnych), z datami historycznymi z przeszłości. Nowa spółka (w tym z przyjętego wniosku portalowego) otwiera rejestr przez przycisk „Otwórz rejestr” w kreatorze, nie tędy."
+                >
+                  Migracja z innego rejestru — stan otwarcia
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="naglowek-strony-akcje">
@@ -622,13 +714,6 @@ function EkranKokpitu({ spolkaId }) {
           <div className="stan-na-dzien bez-druku">
             <span className="stan-na-dzien-etykieta">Stan na dzień</span>
             <PoleDaty wartosc={dataDnia} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDate(v)} />
-            <input
-              type="time"
-              className="pole-godziny-stanu"
-              value={godzina}
-              title="Godzina (opcjonalnie) — puste znaczy „cały dzień”. Rano w rejestrze może być inny wpis niż wieczorem tego samego dnia."
-              onChange={(z) => ustawGodzine(z.target.value)}
-            />
             {wstecz && (
               <button className="btn btn-maly" onClick={() => ustawDate(fmt.dzisIso())}>Dziś</button>
             )}
@@ -636,15 +721,6 @@ function EkranKokpitu({ spolkaId }) {
           <button className="btn" onClick={() => idz(`/spolki/${spolkaId}/wydruk/informacja?data=${data}`)}>
             <Ikona nazwa="dokument" rozmiar={16} /> Informacja z rejestru
           </button>
-          {!wstecz && dane.liczba_zdarzen === 0 && (
-            <button
-              className="btn"
-              onClick={() => idz(`/spolki/${spolkaId}/migracja`)}
-              title="WYŁĄCZNIE dla spółki przenoszonej z innego rejestru (np. Rejestrów Notarialnych), z datami historycznymi z przeszłości. Nowa spółka (w tym z przyjętego wniosku portalowego) otwiera rejestr przez przycisk „Otwórz rejestr” w kreatorze, nie tędy."
-            >
-              Migracja z innego rejestru — stan otwarcia
-            </button>
-          )}
         </div>
       </div>
 
@@ -971,6 +1047,36 @@ function EkranKokpitu({ spolkaId }) {
             </div>
           </Sekcja>
 
+          {/* ─── 5b. ZGŁOSZENIA NIEPRAWIDŁOWOŚCI Z PORTALU (B9) ─────────── */}
+          {zgloszeniaNieprawidlowosci.dane && zgloszeniaNieprawidlowosci.dane.zgloszenia.length > 0 && (
+            <Sekcja
+              tytul="Zgłoszenia nieprawidłowości z portalu"
+              licznik={zgloszeniaNieprawidlowosci.dane.zgloszenia.length}
+            >
+              <div style={{ padding: '20px 24px' }}>
+                <table className="tbl">
+                  <thead>
+                    <tr><th>Zgłoszono</th><th>Czego dotyczy</th><th>Opis</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {zgloszeniaNieprawidlowosci.dane.zgloszenia.map((z) => (
+                      <tr key={z.id}>
+                        <td className="wyciszony">{fmt.dataCzas(z.utworzono)}</td>
+                        <td>{CZEGO_DOTYCZY_ZGLOSZENIA_ETYKIETY[z.czego_dotyczy] || z.czego_dotyczy}</td>
+                        <td className="zawijaj">{z.opis}</td>
+                        <td>
+                          <button className="btn btn-maly" onClick={() => ustawKwalifikowanieZgloszenia(z)}>
+                            Kwalifikuj
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Sekcja>
+          )}
+
           {/* ─── 6. DOKUMENTY ─────────────────────────────────────────── */}
           <Sekcja tytul="Dokumenty" licznik={akta.ladowanie ? undefined : dokumentyAkt.length}>
             <ZawartoscAkt dokumenty={dokumentyAkt} ladowanie={akta.ladowanie} spolkaId={spolkaId} />
@@ -1061,6 +1167,17 @@ function EkranKokpitu({ spolkaId }) {
           przyZapisie={() => {
             ustawSprostowanie(null);
             odswiez();
+          }}
+        />
+      )}
+
+      {kwalifikowanieZgloszenia && (
+        <ModalKwalifikacjaZgloszenia
+          zgloszenie={kwalifikowanieZgloszenia}
+          przyZamknieciu={() => ustawKwalifikowanieZgloszenia(null)}
+          przyZapisie={() => {
+            ustawKwalifikowanieZgloszenia(null);
+            zgloszeniaNieprawidlowosci.odswiez();
           }}
         />
       )}

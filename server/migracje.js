@@ -2065,6 +2065,145 @@ const MIGRACJE = [
         ON psa_sprawy (klucz_idempotencji) WHERE klucz_idempotencji IS NOT NULL;
     `,
   },
+
+  {
+    wersja: 52,
+    nazwa: 'kraj w adresie akcjonariusza z wniosku (FAZA 1 sesji frontendowej, B11, D-055)',
+    sql: `
+      -- Kartoteka (psa_osoby) ma kraj od poczatku, wniosek klienta go nie mial:
+      -- akcjonariusz z zagranicznym adresem trafial do kartoteki jako
+      -- mieszkajacy w Polsce. Wspolny formularz osoby (publiczne/js/
+      -- formularz-osoby.js) zbiera kraj w obu miejscach; przyjecie wniosku
+      -- przepisuje go do kartoteki razem z reszta POLA_OSOBY. Istniejace
+      -- wiersze dostaja 'Polska' - tak jak dotad byly traktowane.
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN kraj TEXT NOT NULL DEFAULT 'Polska';
+    `,
+  },
+
+  {
+    wersja: 53,
+    nazwa: 'reprezentant: dowod (rodzaj+numer) i adres ustrukturyzowany (FAZA 2 sesji frontendowej, B2/B3)',
+    sql: `
+      -- Reprezentant mial dotad dwa pola tekstowe bez struktury:
+      -- reprezentant_dowod ("DGK 138559", bez rozroznienia dowod/paszport) i
+      -- reprezentant_adres ("76-015 Manowo, ulica Kasztanowa nr 17 m. 1",
+      -- jeden ciag znakow) - w odroznieniu od akcjonariusza i psa_osoby,
+      -- gdzie te same dane sa rozbite na kolumny. Nowe kolumny obok starych;
+      -- stare NIE sa usuwane ani migrowane automatycznie do struktury (adresu
+      -- tekstowego nie da sie bezpiecznie sparsowac na ulica/nr/kod) -
+      -- server/logika/kontekst-pisma.js woli nowe, ustrukturyzowane pola,
+      -- gdy sa wypelnione, w przeciwnym razie czyta stary tekst (kontrakt:
+      -- stare pole zostaje TYLKO DO ODCZYTU, dopoki ktos nie przepisze go
+      -- przez nowy formularz PoleAdres/PoleDowod).
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_dowod_rodzaj TEXT
+        CHECK (reprezentant_dowod_rodzaj IS NULL OR reprezentant_dowod_rodzaj IN ('dowod_osobisty','paszport'));
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_dowod_numer TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_kraj TEXT NOT NULL DEFAULT 'Polska';
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_kod_pocztowy TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_miejscowosc TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_ulica TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_nr_domu TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_nr_lokalu TEXT;
+
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_dowod_rodzaj TEXT
+        CHECK (reprezentant_dowod_rodzaj IS NULL OR reprezentant_dowod_rodzaj IN ('dowod_osobisty','paszport'));
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_dowod_numer TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_kraj TEXT NOT NULL DEFAULT 'Polska';
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_kod_pocztowy TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_miejscowosc TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_ulica TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_nr_domu TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_nr_lokalu TEXT;
+
+      -- Dotychczasowy tekst dowodu przenosi sie do _numer - rodzaj zostaje
+      -- pusty i oznaczony w UI "do uzupelnienia" (brak wiarygodnego sposobu
+      -- odgadniecia dowod/paszport z samego numeru).
+      UPDATE psa_spolki SET reprezentant_dowod_numer = reprezentant_dowod
+        WHERE reprezentant_dowod IS NOT NULL AND TRIM(reprezentant_dowod) != '';
+      UPDATE psa_wnioski SET reprezentant_dowod_numer = reprezentant_dowod
+        WHERE reprezentant_dowod IS NOT NULL AND TRIM(reprezentant_dowod) != '';
+    `,
+  },
+
+  {
+    wersja: 54,
+    nazwa: 'slad pierwszego otwarcia dokumentu w portalu (B6, FAZA 2 sesji frontendowej)',
+    sql: `
+      -- Portal nie mial dotad zadnego sposobu odroznienia dokumentu, ktorego
+      -- klient jeszcze nie widzial, od tego, ktory juz otworzyl - stad brak
+      -- licznika "coś nowego czeka" (FRONTEND-INWENTARZ.md B6). Kolumna
+      -- ustawia sie RAZ, przy pierwszym pobraniu pliku przez klienta
+      -- (server/logika/pakiet-wniosku.js: oznaczOtwarte) - jednoczesnie
+      -- slad doreczenia (WDROZENIE-PSA.md § 1): moment, w ktorym dokument
+      -- na pewno dotarl do adresata, a nie tylko zostal wystawiony.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN otwarto_w_portalu TEXT;
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN otwarto_w_portalu TEXT;
+    `,
+  },
+
+  {
+    wersja: 55,
+    nazwa: 'zgloszenia nieprawidlowosci we wpisie (B9, FAZA 2 sesji frontendowej)',
+    sql: `
+      -- Odrebne od psa_sprawy: to NIE jest zadanie wpisu (art. 300(34) § 1
+      -- KSH) - klient zglasza, ze WCZESNIEJSZY wpis jest bledny albo
+      -- niezgodny z dokumentem, nie ze cos sie zdarzylo i trzeba to wpisac.
+      -- Bez wlasnego "stanu" wpisu i terminu ustawowego 7 dni (te pojecia
+      -- nie maja tu zastosowania) - pracownik wylacznie KWALIFIKUJE
+      -- zgloszenie: jako sprostowanie (dokonuje go przez zwykly kreator
+      -- zdarzenia, typ "sprostowanie"), jako w istocie zadanie NOWEGO wpisu
+      -- (klient pomylil sciezki - kieruje go do wlasciwej), albo jako
+      -- "brak nieprawidlowosci" (rejestr jest poprawny).
+      --
+      -- Podstawa: obowiazek prowadzenia rejestru w sposob zapewniajacy
+      -- bezpieczenstwo i integralnosc danych (art. 300(31) § 4 KSH), prawo
+      -- do sprostowania danych osobowych (art. 16 RODO).
+      CREATE TABLE psa_zgloszenia_nieprawidlowosci (
+        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+        spolka_id             INTEGER NOT NULL REFERENCES psa_spolki(id),
+        konto_id              INTEGER NOT NULL REFERENCES psa_konta(id),
+        -- Wypelnione, gdy zgloszenie przyszlo z odnosnika PRZY KONKRETNYM
+        -- wpisie (widok "Rejestr" spolki) - puste przy ogolnym "Coś się nie
+        -- zgadza?" pod calym rejestrem.
+        zdarzenie_id          INTEGER REFERENCES psa_zdarzenia(id),
+        czego_dotyczy         TEXT NOT NULL
+                                CHECK (czego_dotyczy IN ('blad_w_danych','niezgodny_z_dokumentem','inne')),
+        opis                  TEXT NOT NULL,
+        zalacznik_sciezka     TEXT,
+        zalacznik_nazwa_pliku TEXT,
+        zalacznik_mime        TEXT,
+        zalacznik_rozmiar     INTEGER,
+        stan                  TEXT NOT NULL DEFAULT 'nowe' CHECK (stan IN ('nowe','zakwalifikowane')),
+        kwalifikacja          TEXT
+                                CHECK (kwalifikacja IN ('sprostowanie','zadanie_wpisu','brak_nieprawidlowosci')),
+        notatka_kancelarii    TEXT,
+        autor_kwalifikacji    TEXT,
+        utworzono             TEXT NOT NULL,
+        zaktualizowano        TEXT
+      );
+      CREATE INDEX IF NOT EXISTS psa_ix_zgloszenia_nieprawidlowosci_spolka
+        ON psa_zgloszenia_nieprawidlowosci (spolka_id, stan);
+      CREATE INDEX IF NOT EXISTS psa_ix_zgloszenia_nieprawidlowosci_konto
+        ON psa_zgloszenia_nieprawidlowosci (konto_id);
+    `,
+  },
+
+  {
+    wersja: 56,
+    nazwa: 'powiazanie zgloszenie -> konto -> wniosek (P2, FAZA 4 sesji frontendowej)',
+    sql: `
+      -- D-055/P2: wniosek zakladal sie dotad calkiem pusty
+      -- (wczytajLubZalozWniosek w server/trasy/portal.js), a klient wpisywal
+      -- numer KRS DRUGI RAZ, mimo ze podal go juz w publicznym formularzu
+      -- zgloszenia (psa_zgloszenia.krs) - naruszenie zasady "raz wpisane,
+      -- nigdy wiecej" (0.4 pkt 1 sesji frontendowej v2). Kolumna wskazuje
+      -- zgloszenie, z ktorego dane konto powstalo (server/logika/zaproszenia.js),
+      -- zeby przy pierwszym zalozeniu wniosku dalo sie podstawic KRS/nazwe
+      -- bez pytania o nie ponownie. NULL dla kont zalozonych inna droga
+      -- (np. bezposrednio przez pracownika, bez zgloszenia).
+      ALTER TABLE psa_konta ADD COLUMN zgloszenie_id INTEGER REFERENCES psa_zgloszenia(id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

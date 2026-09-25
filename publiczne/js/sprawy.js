@@ -10,8 +10,8 @@ const NAZWY_STANU_SPRAWY = {
   wpisana: 'wpisana', odmowa: 'odmowa', anulowana: 'anulowana',
 };
 const ODMIANY_STANU_SPRAWY = {
-  nowa: 'neutralny', weryfikacja: 'lupek', wstrzymana: 'oliwka',
-  wpisana: 'zielony', odmowa: 'bordo', anulowana: 'neutralny',
+  nowa: 'neutralna', weryfikacja: 'neutralna', wstrzymana: 'mosiadz',
+  wpisana: 'rejestr', odmowa: 'sygnal', anulowana: 'neutralna',
 };
 
 /* Charakter żądającego (art. 300(34) § 1 KSH) — lustro słownika z
@@ -43,19 +43,19 @@ const PRZYCZYNA_ODMOWY_WYMAGA_OPISU = 'inna';
 
 /** Widok sprawy — pełniejszy niż pigułka w kolejce: nazywa oba zegary wprost. */
 function ZnacznikTerminu({ termin }) {
-  if (termin.zamrozony) return <Znacznik odmiana="oliwka">termin zawieszony</Znacznik>;
-  if (termin.po_terminie) return <Znacznik odmiana="bordo">po terminie ustawowym</Znacznik>;
+  if (termin.zamrozony) return <Pigulka odmiana="mosiadz">termin zawieszony</Pigulka>;
+  if (termin.po_terminie) return <Pigulka odmiana="sygnal">po terminie ustawowym</Pigulka>;
   if (termin.po_celu) {
     return (
-      <Znacznik odmiana="oliwka">
+      <Pigulka odmiana="mosiadz">
         po celu wewnętrznym · do terminu ustawowego {termin.dni_pozostale} dz.
-      </Znacznik>
+      </Pigulka>
     );
   }
   return (
-    <Znacznik odmiana="neutralny">
+    <Pigulka odmiana="neutralna">
       do celu {termin.dni_do_celu} dz. · do terminu ustawowego {termin.dni_pozostale} dz.
-    </Znacznik>
+    </Pigulka>
   );
 }
 
@@ -67,8 +67,8 @@ function ZnacznikTerminu({ termin }) {
    KOLEJKA
    ───────────────────────────────────────────────────── */
 function EkranKolejkiSpraw({ spolkaId }) {
-  const [pokazZakonczone, ustawPokazZakonczone] = useState(false);
-  const [szukaj, ustawSzukaj] = useState('');
+  const [pokazZakonczone, ustawPokazZakonczone] = useParametrAdresu('zakonczone', false);
+  const [szukaj, ustawSzukaj] = useParametrAdresu('q', '');
   const parametry = new URLSearchParams();
   if (pokazZakonczone) parametry.set('stan', 'wpisana,odmowa,anulowana');
   if (spolkaId) parametry.set('spolka_id', spolkaId);
@@ -494,7 +494,7 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
       <div className="siatka-2">
         <div>
           <Pole etykieta="Wyślij powiadomienie">
-            <WyborOsoby wartosc={osobaId} przyZmianie={ustawOsobeId} />
+            <WyborZKartoteki wartosc={osobaId} przyZmianie={ustawOsobeId} />
           </Pole>
           <button className="btn btn-sm" disabled={!osobaId || wysylanie} onClick={wyslij}>
             {wysylanie ? 'Wysyłanie…' : 'Wyślij powiadomienie'}
@@ -529,9 +529,22 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   // `emisjaPoczatkowa` przychodzi z przejścia EMISJA → OBJĘCIE (kreator.js) —
   // seria jest już wskazana, notariusz uzupełnia tylko, kto ją obejmuje.
   // Zapisany draft ma pierwszeństwo: to stan, do którego ktoś wrócił.
+  // K3 (FAZA 3 sesji frontendowej v2): żądający wpisu jest już wybrany przy
+  // zakładaniu sprawy (kreator.js, krok „Podstawa wpisu") — przy zbyciu
+  // akcji to w praktyce zwykle ten sam człowiek, który w kroku „Co się
+  // zmienia” wybierałby zbywcę z osobnej listy. Podstawiamy go od razu
+  // (0.4 pkt 1 — „raz wpisane, nigdy więcej”), zbywcę wciąż można zmienić —
+  // sprawę mógł założyć pełnomocnik albo osoba trzecia w czyimś imieniu.
   const [dane, ustawDane] = useState(
     (draft && draft.dane) || (emisjaPoczatkowa ? { emisja_zdarzenie_id: emisjaPoczatkowa } : {})
   );
+  useEffect(() => {
+    if (draft || emisjaPoczatkowa) return;
+    if (sprawa.typ_zdarzenia === 'przeniesienie' && sprawa.zadajacy_rola === 'zbywca' && sprawa.zadajacy_osoba_id) {
+      ustawDane((p) => (p.zbywca_osoba_id ? p : { ...p, zbywca_osoba_id: sprawa.zadajacy_osoba_id }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [odhaczone, ustawOdhaczone] = useState({});
   const [notatkaWatpliwosci, ustawNotatkeWatpliwosci] = useState('');
   const [podglad, ustawPodglad] = useState(null);
@@ -665,6 +678,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   const checklista = definicjaTypu ? definicjaTypu.checklista : [];
   const wymagane = checklista.filter((p) => p.wymagana && !p.watpliwosci);
   const wszystkoOdhaczone = wymagane.every((p) => odhaczone[p.kod]);
+  const pozycjaWatpliwosci = checklista.find((p) => p.watpliwosci);
   const sawatpliwosci = checklista.some((p) => p.watpliwosci && odhaczone[p.kod]);
   const mozeWpisac =
     podglad && podglad.dopuszczalne && wszystkoOdhaczone && (!sawatpliwosci || notatkaWatpliwosci.trim());
@@ -714,8 +728,12 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
               <div className="rozdzielacz" />
               <div className="fl">Checklista weryfikacji</div>
               <div className="checklista">
-                {checklista.map((p) => (
-                  <label key={p.kod} className={`chk ${p.watpliwosci ? 'chk-watpliwosci' : ''}`}>
+                {/* K3 (FAZA 3 sesji frontendowej v2): „Zachodzą uzasadnione
+                    wątpliwości…” NIE jest potwierdzeniem jak reszta tej listy —
+                    to zgłoszenie przeszkody. Renderuje się osobno, poniżej,
+                    żeby nie wyglądała jak kolejna pozycja do odhaczenia. */}
+                {checklista.filter((p) => !p.watpliwosci).map((p) => (
+                  <label key={p.kod} className="chk">
                     <input
                       type="checkbox"
                       checked={Boolean(odhaczone[p.kod])}
@@ -723,24 +741,33 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
                     />
                     <span className="chk-tresc">
                       {p.tresc}
-                      {!p.wymagana && !p.watpliwosci && <span className="przyciemnione"> (jeśli dotyczy)</span>}
+                      {!p.wymagana && <span className="przyciemnione"> (jeśli dotyczy)</span>}
                       {p.podstawa && <div className="podstawa-prawna">{p.podstawa}</div>}
-                      {/* Naprawa (FRONTEND-INWENTARZ.md §8): zaznaczenie TEJ
-                          pozycji podmienia caly przycisk pod checklistiem z
-                          "Dokonaj wpisu" na "Wstrzymaj sprawe" - dotad jedynym
-                          sygnalem byl kolor tresci checklisty (chk-watpliwosci)
-                          i zmiana przycisku daleko nizej, latwa do przeoczenia
-                          przy szybkim odhaczaniu calej listy. Komunikat tutaj,
-                          DOKLADNIE przy checkboxie, w chwili jego zaznaczenia. */}
-                      {p.watpliwosci && odhaczone[p.kod] && (
-                        <div className="chk-watpliwosci-uwaga">
-                          Zaznaczenie wstrzyma sprawę do wyjaśnienia — zamiast „Dokonaj wpisu” zobaczysz niżej przycisk „Wstrzymaj sprawę”.
-                        </div>
-                      )}
                     </span>
                   </label>
                 ))}
               </div>
+
+              {pozycjaWatpliwosci && (
+                <div className="komunikat komunikat-uwaga">
+                  <label className="chk chk-watpliwosci">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(odhaczone[pozycjaWatpliwosci.kod])}
+                      onChange={(z) => ustawOdhaczone((o) => ({ ...o, [pozycjaWatpliwosci.kod]: z.target.checked }))}
+                    />
+                    <span className="chk-tresc">
+                      Mam wątpliwości — wstrzymaj wpis
+                      <div className="podstawa-prawna">{pozycjaWatpliwosci.tresc}{pozycjaWatpliwosci.podstawa ? ` (${pozycjaWatpliwosci.podstawa})` : ''}</div>
+                    </span>
+                  </label>
+                  {odhaczone[pozycjaWatpliwosci.kod] && (
+                    <div className="chk-watpliwosci-uwaga">
+                      Zaznaczenie wstrzyma sprawę do wyjaśnienia — zamiast „Dokonaj wpisu” zobaczysz niżej przycisk „Wstrzymaj sprawę”.
+                    </div>
+                  )}
+                </div>
+              )}
 
               {sawatpliwosci && (
                 <Pole etykieta="Notatka o uzasadnionych wątpliwościach" wymagane podpowiedz="Wymagana. Sprawa zostanie wstrzymana do wyjaśnienia.">
@@ -752,6 +779,9 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
                 <div className="podstawa-prawna">
                   Przycisk „Dokonaj wpisu” pozostaje nieaktywny do czasu odhaczenia całej checklisty.
                 </div>
+              )}
+              {!sawatpliwosci && (
+                <p className="zdanie-nieodwracalne">Wpisu nie można cofnąć — możliwe jest tylko sprostowanie.</p>
               )}
             </>
           )}
@@ -994,7 +1024,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
             {sprawa.zadajacy_rola ? ` (${OPISY_ROL_ZADAJACEGO[sprawa.zadajacy_rola] || sprawa.zadajacy_rola})` : ''}
           </div>
           <div className="row-g" style={{ marginTop: 8 }}>
-            <Znacznik odmiana={ODMIANY_STANU_SPRAWY[sprawa.stan]}>{NAZWY_STANU_SPRAWY[sprawa.stan]}</Znacznik>
+            <Pigulka odmiana={ODMIANY_STANU_SPRAWY[sprawa.stan]}>{NAZWY_STANU_SPRAWY[sprawa.stan]}</Pigulka>
             {!zakonczona && !wlasnieWpisano && <ZnacznikTerminu termin={sprawa.termin} />}
             {/* Z-202/P-014: sygnal, nie blokada - sprawa idzie dalej normalnie. */}
             <ZnacznikPrzegladuAml wymaga={sprawa.zadajacy_wymaga_przegladu_aml} />

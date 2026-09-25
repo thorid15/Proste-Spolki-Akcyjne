@@ -1,0 +1,6 @@
+# Aplikacja kancelarii i portal klienta (ten host) nie są przeznaczone do
+# indeksowania — patrz też meta robots="noindex, nofollow" w index.html
+# i portal.html. Strona publiczna (SEO) to osobny bundel statyczny,
+# z własnym robots.txt — patrz DECYZJE.md D-063.
+User-agent: *
+Disallow: /

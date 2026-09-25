@@ -1,10 +1,86 @@
 /* pulpit.js — ekran startowy.
-   Sesja SESJA-PSA-6-INTERFEJS.md, faza 1.
+   Sesja SESJA-PSA-6-INTERFEJS.md, faza 1; FAZA 3 sesji frontendowej v2 (K1).
 
-   Zadanie ekranu (brief, sekcja 1): wiedzieć, co ma termin, i wejść w to
-   jednym kliknięciem. Stąd układ: cztery liczby na górze, po nich sprawy
-   w toku jako lista wierszy (a nie tabela — wiersz ma być celem kliknięcia,
-   nie siatką do czytania), a w prawej szynie szybkie akcje i tempo pracy. */
+   Zadanie ekranu: wiedzieć, co czeka na ruch kancelarii, i wejść w to jednym
+   kliknięciem. Cztery kafle statystyk (D-051, K1) zastąpione sekcją „Do
+   zrobienia" — jedna lista wierszy (nie tabela — wiersz ma być celem
+   kliknięcia, nie siatką do czytania) łącząca sprawy z terminem, zgłoszenia
+   nowe, wnioski złożone/podpisane i zawiadomienia do wysłania. Ta sama
+   definicja „co czeka" co liczniki w nawigacji (Faza 1 pkt 9,
+   `server/trasy/pozostale.js: GET /liczniki` i `GET /pulpit` — jedno
+   źródło, żeby liczba przy pozycji menu i wiersz na pulpicie zawsze się
+   zgadzały). W prawej szynie zostają szybkie akcje i tempo pracy (sprawy
+   z terminem) — jedyne, czego nie widać już w liście „Do zrobienia" wprost. */
+
+/** Priorytet w sekcji „Do zrobienia": sprawy z realnym terminem ustawowym
+    (art. 300(34) § 1 KSH) idą przed pozycjami bez takiego terminu — te
+    ostatnie sortowane od najdłużej czekającej (K1: „posortowane według
+    terminu"; zgłoszenia/wnioski/zawiadomienia nie mają własnego terminu
+    ustawowego w tym systemie, więc czas oczekiwania jest tu jego zastępstwem). */
+const PRIORYTET_DO_ZROBIENIA = { sprawa_po_terminie: 0, sprawa_po_celu: 1, inne: 2, sprawa_w_celu: 3 };
+
+function pozycjeDoZrobienia({ sprawy, zgloszenia, wnioski, zawiadomienia }) {
+  const pozycje = [];
+  for (const s of sprawy) {
+    const priorytet = s.termin && s.termin.po_terminie
+      ? PRIORYTET_DO_ZROBIENIA.sprawa_po_terminie
+      : s.termin && s.termin.po_celu
+      ? PRIORYTET_DO_ZROBIENIA.sprawa_po_celu
+      : PRIORYTET_DO_ZROBIENIA.sprawa_w_celu;
+    pozycje.push({
+      klucz: `sprawa-${s.id}`,
+      priorytet,
+      data: s.data_wplywu,
+      ikona: IKONY_ZDARZEN[s.typ_zdarzenia] || 'sprawy',
+      tytul: s.typ_nazwa,
+      podtytul: s.spolka_nazwa,
+      przyKlik: () => idz(`/sprawy/${s.id}`),
+      prawo: (
+        <>
+          <Pigulka>{NAZWY_STANU_PULPIT[s.stan] || s.stan}</Pigulka>
+          <TerminPigulka termin={s.termin} />
+        </>
+      ),
+    });
+  }
+  for (const z of zgloszenia) {
+    pozycje.push({
+      klucz: `zgloszenie-${z.id}`,
+      priorytet: PRIORYTET_DO_ZROBIENIA.inne,
+      data: z.utworzono,
+      ikona: 'sprawy',
+      tytul: 'Nowe zgłoszenie',
+      podtytul: z.nazwa_spolki || z.email,
+      przyKlik: () => idz('/zgloszenia'),
+      prawo: <Pigulka odmiana="mosiadz">do oceny</Pigulka>,
+    });
+  }
+  for (const w of wnioski) {
+    pozycje.push({
+      klucz: `wniosek-${w.id}`,
+      priorytet: PRIORYTET_DO_ZROBIENIA.inne,
+      data: w.zaktualizowano || w.utworzono,
+      ikona: 'sprawy',
+      tytul: w.nazwa || w.konto_email,
+      podtytul: w.status === 'zlozony' ? 'wniosek złożony — wystaw dokumenty' : 'umowa podpisana — zweryfikuj i przyjmij',
+      przyKlik: () => idz(`/wnioski/${w.id}`),
+      prawo: <Pigulka odmiana="mosiadz">wniosek</Pigulka>,
+    });
+  }
+  for (const z of zawiadomienia) {
+    pozycje.push({
+      klucz: `zawiadomienie-${z.spolka_id}`,
+      priorytet: PRIORYTET_DO_ZROBIENIA.inne,
+      data: z.najstarsze,
+      ikona: 'szablony',
+      tytul: `${z.ile} ${fmt.odmien(z.ile, 'wpis czeka', 'wpisy czekają', 'wpisów czeka')} na zawiadomienie`,
+      podtytul: z.spolka_nazwa,
+      przyKlik: () => idz('/zawiadomienia'),
+      prawo: <Pigulka odmiana="mosiadz">zawiadomienie</Pigulka>,
+    });
+  }
+  return pozycje.sort((a, b) => (a.priorytet - b.priorytet) || (new Date(a.data) - new Date(b.data)));
+}
 
 const NAZWY_STANU_PULPIT = {
   nowa: 'nowa',
@@ -60,13 +136,13 @@ function EkranPulpitu() {
   if (ladowanie) return <Spinner />;
   if (blad) return <Komunikat odmiana="blad" tytul="Nie udało się wczytać pulpitu" tresc={blad.message} />;
 
-  const { spolki, liczniki, integralnosc, sprawy } = dane;
+  const { spolki, integralnosc, sprawy, zgloszenia, wnioski, zawiadomienia } = dane;
   const wToku = sprawy.pozycje || [];
   const poTerminie = wToku.filter((s) => s.termin && s.termin.po_terminie).length;
   // Wczesny sygnal to przekroczenie CELU wewnetrznego, nie zblizanie sie do
   // siodmego dnia - po to cel istnieje, zeby ostrzegal wczesniej niz ustawa.
   const poCelu = wToku.filter((s) => s.termin && s.termin.po_celu && !s.termin.po_terminie).length;
-  const nieobjete = spolki.reduce((suma, s) => suma + (s.akcje_nieobjete || 0), 0);
+  const doZrobienia = pozycjeDoZrobienia({ sprawy: wToku, zgloszenia, wnioski, zawiadomienia });
 
   return (
     <>
@@ -82,79 +158,37 @@ function EkranPulpitu() {
         />
       )}
 
-      <div className="kafle">
-        <Kafel
-          etykieta="Prowadzone rejestry"
-          wartosc={fmt.liczba(liczniki.spolki)}
-          delta={nieobjete > 0 ? `${fmt.AKCJE(nieobjete)} bez objęcia` : 'bilans akcji zgodny'}
-          deltaOdmiana={nieobjete > 0 ? 'uwaga' : 'dodatnia'}
-          ikona="spolki"
-          przyKlik={() => idz('/spolki')}
-        />
-        <Kafel
-          etykieta="Sprawy w toku"
-          wartosc={fmt.liczba(wToku.length)}
-          delta={
-            poTerminie > 0
-              ? `${poTerminie} po terminie`
-              : poCelu > 0
-              ? `${poCelu} po celu`
-              : 'wszystkie w celu'
-          }
-          deltaOdmiana={poTerminie > 0 ? '' : poCelu > 0 ? 'uwaga' : 'dodatnia'}
-          ikona="sprawy"
-          przyKlik={() => idz('/sprawy')}
-        />
-        <Kafel
-          etykieta="Akcjonariusze"
-          wartosc={fmt.liczba(liczniki.akcjonariusze)}
-          delta={`${fmt.liczba(liczniki.osoby)} ${fmt.odmien(liczniki.osoby, 'osoba', 'osoby', 'osób')} w kartotece`}
-          ikona="osoby"
-          przyKlik={() => idz('/osoby')}
-        />
-        <Kafel
-          etykieta="Zdarzenia rejestrowe"
-          wartosc={fmt.liczba(liczniki.zdarzenia)}
-          delta={
-            integralnosc.ok
-              ? `łańcuch nieprzerwany (${fmt.liczba(integralnosc.sprawdzono)})`
-              : 'łańcuch zerwany'
-          }
-          deltaOdmiana={integralnosc.ok ? 'dodatnia' : ''}
-          ikona="zdarzenie"
-        />
-      </div>
-
       <div className="siatka-tresc">
         <div style={{ minWidth: 0 }}>
           <Karta
             scisla
-            tytul="Sprawy w toku"
-            akcje={<button className="karta-link" onClick={() => idz('/sprawy')}>Cała kolejka</button>}
+            tytul="Do zrobienia"
+            akcje={
+              doZrobienia.length > 0 && (
+                <span className="male drugorzedny">
+                  {doZrobienia.length} {fmt.odmien(doZrobienia.length, 'pozycja', 'pozycje', 'pozycji')}
+                </span>
+              )
+            }
           >
-            {wToku.length === 0 ? (
+            {doZrobienia.length === 0 ? (
               <Pusto
                 ikona="sprawdz"
-                tytul="Kolejka jest pusta"
-                opis="Żadna sprawa nie czeka na wpis. Nowe zakładasz z kokpitu spółki."
+                tytul="Wszystko załatwione"
+                opis="Nic nie czeka na ruch kancelarii. Nową sprawę zakładasz z kokpitu spółki."
                 akcja={<button className="btn" onClick={() => idz('/spolki')}>Przejdź do spółek</button>}
               />
             ) : (
               <div className="lista-wierszy">
-                {wToku.slice(0, 6).map((s) => (
+                {doZrobienia.map((p) => (
                   <WierszListy
-                    key={s.id}
-                    ikona={IKONY_ZDARZEN[s.typ_zdarzenia] || 'sprawy'}
-                    tytul={s.typ_nazwa}
-                    podtytul={s.spolka_nazwa}
-                    przyKlik={() => idz(`/sprawy/${s.id}`)}
-                    prawo={
-                      <>
-                        <Pigulka>{NAZWY_STANU_PULPIT[s.stan] || s.stan}</Pigulka>
-                        <TerminPigulka termin={s.termin} />
-                      </>
-                    }
-                    data={fmt.data(s.data_wplywu)}
+                    key={p.klucz}
+                    ikona={p.ikona}
+                    tytul={p.tytul}
+                    podtytul={p.podtytul}
+                    przyKlik={p.przyKlik}
+                    prawo={p.prawo}
+                    data={fmt.data(p.data)}
                   />
                 ))}
               </div>

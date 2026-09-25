@@ -53,9 +53,15 @@ const POLA_SPOLKI = [
   // Reprezentant - wszystkie dane w MIANOWNIKU. Pisma nie odmieniaja ich
   // przez przypadki, tylko opisuja etykieta ("imiona rodzicow:", "dzialajacy
   // jako:"), wiec zadne pole korekty odmiany nie jest potrzebne.
-  'reprezentant_imie_nazwisko', 'reprezentant_rodzice', 'reprezentant_dowod',
-  'reprezentant_pesel', 'reprezentant_adres', 'reprezentant_funkcja', 'reprezentant_reprezentacja',
-  'reprezentant_email',
+  'reprezentant_imie_nazwisko', 'reprezentant_rodzice', 'reprezentant_pesel',
+  'reprezentant_funkcja', 'reprezentant_reprezentacja', 'reprezentant_email',
+  // B2/B3 (FAZA 2, migracja 53) — dowód i adres ustrukturyzowane. Stare
+  // `reprezentant_dowod`/`reprezentant_adres` NIE są już w tej liście: nie
+  // da się ich nadpisać z formularza, zostają tylko do odczytu w piśmie
+  // (`server/logika/kontekst-pisma.js`), dopóki nie zastąpią ich te pola.
+  'reprezentant_dowod_rodzaj', 'reprezentant_dowod_numer',
+  'reprezentant_kraj', 'reprezentant_kod_pocztowy', 'reprezentant_miejscowosc',
+  'reprezentant_ulica', 'reprezentant_nr_domu', 'reprezentant_nr_lokalu',
   // Etap 2.2 poprawek: umowa jako fakt juz zaistnialy (data zawarcia to juz
   // istniejace 'data_umowy'). Zalacznik NIE jest tu - ma dedykowany
   // endpoint uploadu, zeby nie przyjmowac dowolnej sciezki z ciala JSON.
@@ -343,6 +349,37 @@ router.get(
 
     pliki.naglowkiPliku(odp, { nazwaPliku: spolka.umowa_zalacznik_nazwa_pliku, wRamce: false });
     fs.createReadStream(pelnaSciezka).pipe(odp);
+  })
+);
+
+/**
+ * K2 (FAZA 3 sesji frontendowej v2): akcjonariusze przyjętego wniosku, z
+ * którego ta spółka powstała — kreator otwarcia rejestru (krok „Pierwsza
+ * emisja") podstawia ich jako pozycje objęcia, żeby pracownik nie wybierał
+ * ich drugi raz z kartoteki (0.4 pkt 1 — „raz wpisane, nigdy więcej"; te
+ * same osoby zostały tam już założone/dopasowane przy `POST
+ * /wnioski/:id/przyjmij`). Bez liczby akcji ani ceny (D-053) — to wpisuje
+ * kancelaria z umowy spółki.
+ */
+router.get(
+  '/:id/wniosek-akcjonariusze',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const wniosek = db()
+      .prepare(`SELECT id FROM psa_wnioski WHERE spolka_id = ? AND status = 'przyjety' ORDER BY id DESC LIMIT 1`)
+      .get(id);
+    if (!wniosek) return odp.json({ akcjonariusze: [] });
+    const maskowanie = require('../logika/maskowanie');
+    const wiersze = db()
+      .prepare(
+        `SELECT o.* FROM psa_wnioski_akcjonariusze a
+           JOIN psa_osoby o ON o.id = a.osoba_id
+          WHERE a.wniosek_id = ? AND a.osoba_id IS NOT NULL`
+      )
+      .all(wniosek.id);
+    odp.json({
+      akcjonariusze: wiersze.map((o) => ({ osoba_id: o.id, oznaczenie: maskowanie.oznaczenieOsoby(o) })),
+    });
   })
 );
 

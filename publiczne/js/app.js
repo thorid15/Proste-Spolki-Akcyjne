@@ -73,7 +73,7 @@ function NawigacjaWaska({ sciezka, liczniki }) {
   const aktywna = (poz) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
 
   return (
-    <nav className="topbar-nawigacja bez-druku">
+    <nav className="topbar-nawigacja bez-druku" aria-label="Nawigacja główna">
       {pozycje.map((poz) => (
         <button
           key={poz.sciezka}
@@ -82,9 +82,7 @@ function NawigacjaWaska({ sciezka, liczniki }) {
         >
           <Ikona nazwa={poz.ikona} rozmiar={17} />
           <span>{poz.nazwa}</span>
-          {poz.licznik && liczniki[poz.licznik] > 0 && (
-            <span className="szyna-licznik">{liczniki[poz.licznik]}</span>
-          )}
+          {poz.licznik && <Licznik wartosc={liczniki[poz.licznik]} opis={OPIS_LICZNIKA[poz.licznik]} />}
         </button>
       ))}
     </nav>
@@ -99,7 +97,7 @@ function Szyna({ sciezka, uzytkownik, podgladSystemu, liczniki }) {
     (!poz.admin || uzytkownik.rola === 'admin') && (!poz.deweloperski || podgladSystemu);
 
   return (
-    <nav className="szyna bez-druku">
+    <nav className="szyna bez-druku" aria-label="Menu">
       <div className="szyna-marka">
         <span className="szyna-znak"><Ikona nazwa="znak" rozmiar={19} /></span>
         <div style={{ minWidth: 0 }}>
@@ -115,18 +113,12 @@ function Szyna({ sciezka, uzytkownik, podgladSystemu, liczniki }) {
             <button
               key={poz.sciezka}
               className={`szyna-poz ${aktywna(poz) ? 'aktywna' : ''}`}
+              aria-current={aktywna(poz) ? 'page' : undefined}
               onClick={() => idz(poz.sciezka)}
             >
               <Ikona nazwa={poz.ikona} rozmiar={17} />
               <span className="szyna-poz-etykieta">{poz.nazwa}</span>
-              {poz.licznik && liczniki[poz.licznik] > 0 && (
-                <span
-                  className="szyna-licznik"
-                  title={`${liczniki[poz.licznik]} ${OPIS_LICZNIKA[poz.licznik]}`}
-                >
-                  {liczniki[poz.licznik]}
-                </span>
-              )}
+              {poz.licznik && <Licznik wartosc={liczniki[poz.licznik]} opis={OPIS_LICZNIKA[poz.licznik]} />}
             </button>
           ))}
         </div>
@@ -188,11 +180,15 @@ function Konto({ uzytkownik, przyWylogowaniu }) {
   );
 }
 
-function Topbar({ tytul, podtytul, uzytkownik, przyWylogowaniu, przyPalecie, liczbaSpraw }) {
+/* `naglowekEkranu` — ekran nie ma własnego `h1` (listy, konfiguracja), więc
+   jest nim tytuł w topbarze. Ekrany szczegółu i kreatory mają własny h1
+   (NaglowekStrony) — wtedy topbar zostaje zwykłym tekstem: jeden h1 na widok. */
+function Topbar({ tytul, podtytul, uzytkownik, przyWylogowaniu, przyPalecie, liczbaSpraw, naglowekEkranu }) {
+  const Tytul = naglowekEkranu ? 'h1' : 'div';
   return (
-    <header className="topbar bez-druku">
+    <div className="topbar bez-druku" role="region" aria-label="Tytuł ekranu">
       <div style={{ minWidth: 0 }}>
-        <div className="topbar-tytul">{tytul}</div>
+        <Tytul className="topbar-tytul">{tytul}</Tytul>
         {podtytul && <div className="topbar-podtytul">{podtytul}</div>}
       </div>
       <div className="topbar-narzedzia">
@@ -210,7 +206,7 @@ function Topbar({ tytul, podtytul, uzytkownik, przyWylogowaniu, przyPalecie, lic
         </button>
         <Konto uzytkownik={uzytkownik} przyWylogowaniu={przyWylogowaniu} />
       </div>
-    </header>
+    </div>
   );
 }
 
@@ -233,6 +229,9 @@ function opisTrasy(segmenty) {
       tytul: 'Pulpit',
       podtytul: 'Rejestry akcjonariuszy prostych spółek akcyjnych prowadzone przez kancelarię.',
     };
+  }
+  if (segmenty[0] === 'spolki' && segmenty[1] === 'nowa') {
+    return { tytul: 'Nowa spółka', podtytul: 'Otwarcie rejestru akcjonariuszy — dane z KRS, umowa, pierwsza emisja, weryfikacja.' };
   }
   const wg = {
     sprawy: { tytul: 'Kolejka spraw', podtytul: 'Cel wewnętrzny 3 dni, termin ustawowy 7 dni (art. 300³⁴ § 1 KSH) — sprawy posortowane po pozostałym czasie.' },
@@ -267,7 +266,9 @@ function Aplikacja() {
   // Liczniki kolejek w szynie i na dzwonku. Odświeżane przy każdej zmianie
   // trasy, żeby po obsłużeniu zgłoszenia albo wpisu znacznik nie został
   // z nieaktualną liczbą.
-  const { dane: daneLicznikow } = useDane(sesja.zalogowany ? '/api/psa/liczniki' : null, [sciezka]);
+  // Odświeżane także przy powrocie do karty i co 60 s (FAZA 1 pkt 9) —
+  // wniosek złożony w portalu pojawia się bez klikania.
+  const { dane: daneLicznikow } = useOdswiezaneDane(sesja.zalogowany ? '/api/psa/liczniki' : null, [sciezka]);
   const liczniki = (daneLicznikow && daneLicznikow.liczniki) || {};
   const liczbaSpraw = liczniki.sprawy || 0;
 
@@ -322,7 +323,12 @@ function Aplikacja() {
       return <EkranSprawy sprawaId={id} emisjaPoczatkowa={zapytanie.get('emisja') || undefined} />;
     }
 
-    if (segmenty[0] === 'osoby') return <EkranOsob />;
+    if (segmenty[0] === 'osoby') {
+      if (segmenty.length === 1) return <EkranOsob />;
+      const id = Number(segmenty[1]);
+      if (!Number.isInteger(id)) return <NieZnaleziono />;
+      return <EkranProfiluOsoby osobaId={id} />;
+    }
     if (segmenty[0] === 'zgloszenia') return <EkranZgloszenWstepnych />;
     if (segmenty[0] === 'zawiadomienia') return <EkranZawiadomien />;
     if (segmenty[0] === 'wnioski') {
@@ -358,7 +364,7 @@ function Aplikacja() {
   // Ekrany szczegółu i kreatory niosą własny nagłówek (okruszki, nazwa spółki,
   // metryka), więc topbar zostaje przy samej nazwie modułu.
   const wlasnyNaglowek =
-    (segmenty[0] === 'spolki' && segmenty.length >= 2) ||
+    (segmenty[0] === 'spolki' && segmenty.length >= 2 && segmenty[1] !== 'nowa') ||
     (segmenty[0] === 'sprawy' && segmenty.length >= 2) ||
     (segmenty[0] === 'wnioski' && segmenty.length >= 2);
   const opis = wlasnyNaglowek
@@ -367,7 +373,10 @@ function Aplikacja() {
 
   return (
     <div className="powloka">
-      <div className="marka-pasek bez-druku">
+      <a className="przeskocz-do-tresci" href="#tresc" onClick={(z) => { z.preventDefault(); document.getElementById('tresc').focus(); }}>
+        Przejdź do treści
+      </a>
+      <div className="marka-pasek bez-druku" role="banner">
         <div className="marka-pasek-nazwa">{(kancelaria || KANCELARIA_ZAPASOWA).nazwa}</div>
       </div>
       <Szyna
@@ -384,9 +393,10 @@ function Aplikacja() {
           przyWylogowaniu={() => sesja.odswiez()}
           przyPalecie={paleta.otworz}
           liczbaSpraw={liczbaSpraw}
+          naglowekEkranu={!wlasnyNaglowek}
         />
         <NawigacjaWaska sciezka={sciezka} liczniki={liczniki} />
-        <main className="tresc">{ekran()}</main>
+        <main className="tresc" id="tresc" tabIndex={-1}>{ekran()}</main>
         <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} />
       </div>
       {paleta.otwarta && <PaletaPolecen przyZamknieciu={paleta.zamknij} />}

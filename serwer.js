@@ -36,13 +36,14 @@ aplikacja.use(express.json({ limit: '1mb' }));
  * (wgrany „skan" udajacy HTML wykonalby sie w kontekscie rejestru), a adres
  * strony z numerem sprawy wycieka w Refererze na kazdy klikniety odnosnik.
  *
- * CSP ma `unsafe-eval`, bo interfejs kompiluje JSX w przegladarce
- * (`publiczne/vendor/babel.min.js`). To jedyny powod — po przeniesieniu
- * kompilacji na start serwera te dyrektywe nalezy usunac.
+ * Od FAZY 1 sesji frontendowej (D-046) JSX kompiluje sie przy budowaniu
+ * (`narzedzia/buduj-front.js`), wiec CSP nie ma juz `unsafe-eval` ani
+ * `unsafe-inline` dla skryptow — przegladarka wykonuje wylacznie pliki
+ * z tego serwera.
  */
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+  "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   // Kroje pisma leza w `publiczne/fonty` — zaden cudzy serwer nie jest
@@ -105,6 +106,11 @@ aplikacja.use('/api/psa/zdarzenia', autoryzacja.wymagajPracownika, require('./se
 aplikacja.use('/api/psa/oplaty', autoryzacja.wymagajPracownika, require('./server/trasy/oplaty'));
 aplikacja.use('/api/psa/szablony', autoryzacja.wymagajPracownika, require('./server/trasy/szablony'));
 aplikacja.use('/api/psa/zgloszenia', autoryzacja.wymagajPracownika, require('./server/trasy/zgloszenia'));
+aplikacja.use(
+  '/api/psa/zgloszenia-nieprawidlowosci',
+  autoryzacja.wymagajPracownika,
+  require('./server/trasy/zgloszenia-nieprawidlowosci')
+);
 aplikacja.use('/api/psa/wnioski', autoryzacja.wymagajPracownika, require('./server/trasy/wnioski'));
 aplikacja.use('/api/psa/zawiadomienia', autoryzacja.wymagajPracownika, require('./server/trasy/zawiadomienia'));
 aplikacja.use('/api/psa', require('./server/trasy/pozostale'));
@@ -129,7 +135,7 @@ aplikacja.use('/api', (zad, odp) => {
 // `<img src="/obrazy/notariat.svg">` dostawal w odpowiedzi index.html
 // z kodem 200 - przegladarka i tak nie zrobila z tego obrazka, ale
 // "200 OK" na nieistniejacy plik myli przy kazdej diagnozie.
-aplikacja.use(['/obrazy', '/style', '/js', '/vendor'], (zad, odp) => {
+aplikacja.use(['/obrazy', '/style', '/js', '/vendor', '/dist', '/fonty'], (zad, odp) => {
   odp.status(404).type('text/plain').send('Nie odnaleziono pliku.');
 });
 

@@ -117,6 +117,11 @@ const konfiguracja = {
   // Adres portalu klienta w mailach zapraszajacych (etap 3B) - link
   // aktywacyjny musi wskazywac na PUBLICZNY adres, nie na "localhost".
   URL_PORTALU: tekst('URL_PORTALU', `http://localhost:${liczba('PORT', 3005)}/portal.html`),
+  // D-049/FAZA 5 — domena strony publicznej (SEO) nierozstrzygnieta (Q2);
+  // uzywana wylacznie przez `narzedzia/buduj-strone.js` (adresy bezwzgledne,
+  // canonical, sitemap.xml, JSON-LD) - NIE przez ten serwer, ktory strony
+  // publicznej nie serwuje w tej sesji (patrz DECYZJE.md D-063).
+  BASE_URL_STRONA: tekst('BASE_URL_STRONA', 'https://przyklad-domena-do-ustalenia.pl'),
   SMTP: {
     host: tekst('SMTP_HOST', null),
     port: liczba('SMTP_PORT', 587),

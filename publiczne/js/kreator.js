@@ -16,6 +16,21 @@
 
 const KROKI_ZDARZENIA = ['Co się stało', 'Podstawa', 'Co się zmienia', 'Weryfikacja i podgląd'];
 
+/**
+ * K3 (FAZA 3 sesji frontendowej v2): zmiana serii/emisji zerowała zbywcę
+ * BEZWARUNKOWO — nawet gdy ten sam człowiek ma akcje też w nowo wybranej
+ * serii. Przy „przeniesieniu” zbywca bywa już znany z samej sprawy (żądający
+ * w roli „zbywca akcji”, podstawiony w sprawy.js) — zerowanie go od nowa
+ * kazało wybierać tę samą osobę drugi raz z rozwijanej listy (0.4 pkt 1).
+ */
+function zbywcaNadalWSerii(spolka, emisjaKlucz, zbywcaOsobaId) {
+  if (!zbywcaOsobaId) return null;
+  const nadalMa = spolka.akcjonariusze.some(
+    (a) => a.emisja_klucz === Number(emisjaKlucz) && Number(a.osoba_id) === Number(zbywcaOsobaId)
+  );
+  return nadalMa ? zbywcaOsobaId : null;
+}
+
 const NAZWY_GRUP = { akcje: 'Akcje', obciazenia: 'Obciążenia i zajęcia', prawa: 'Prawa i ograniczenia', dane: 'Dane', inne: 'Inne' };
 
 /* Rodzaje dokumentu będącego podstawą wpisu (art. 300(34) § 4 KSH) — jeden
@@ -43,7 +58,7 @@ function PozycjaKreatora({
   return (
     <div className="pozycja">
       <Pole etykieta={etykietaOsoby} wymagane>
-        <WyborOsoby
+        <WyborZKartoteki
           wartosc={pozycja[kluczOsoby]}
           wyklucz={wyklucz}
           przyZmianie={(id) => ustawPozycje({ ...pozycja, [kluczOsoby]: id })}
@@ -51,11 +66,11 @@ function PozycjaKreatora({
       </Pole>
 
       <Pole etykieta="Liczba akcji" wymagane>
-        <input
-          type="number"
-          min="1"
-          value={pozycja.ilosc ?? ''}
-          onChange={(z) => ustawPozycje({ ...pozycja, ilosc: z.target.value })}
+        <PoleLiczbowe
+          sufiks="akcji"
+          min={1}
+          wartosc={pozycja.ilosc === '' || pozycja.ilosc === undefined ? null : Number(pozycja.ilosc)}
+          przyZmianie={(v) => ustawPozycje({ ...pozycja, ilosc: v ?? '' })}
         />
       </Pole>
 
@@ -285,7 +300,11 @@ function KrokEmisja({ dane, ustawDane, spolka }) {
           <input type="text" {...pole('seria')} placeholder="A" />
         </Pole>
         <Pole etykieta="Liczba akcji" wymagane>
-          <input type="number" min="1" {...pole('ilosc')} />
+          <PoleLiczbowe
+            sufiks="akcji" min={1}
+            wartosc={dane.ilosc === '' || dane.ilosc === undefined ? null : Number(dane.ilosc)}
+            przyZmianie={(v) => ustawDane({ ...dane, ilosc: v ?? '' })}
+          />
         </Pole>
       </div>
       <div className="siatka-2">
@@ -293,15 +312,25 @@ function KrokEmisja({ dane, ustawDane, spolka }) {
           etykieta="Numer pierwszej akcji"
           podpowiedz="Domyślnie 1. Numeracja biegnie osobno w każdej serii."
         >
-          <input type="number" min="1" {...pole('nr_pierwszy')} placeholder="1" />
+          <PoleLiczbowe
+            min={1} placeholder="1"
+            wartosc={dane.nr_pierwszy === '' || dane.nr_pierwszy === undefined ? null : Number(dane.nr_pierwszy)}
+            przyZmianie={(v) => ustawDane({ ...dane, nr_pierwszy: v ?? '' })}
+          />
         </Pole>
-        <Pole etykieta="Cena emisyjna jednej akcji (zł)">
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={dane.cena_zl ?? ''}
-            onChange={(z) => ustawDane({ ...dane, cena_zl: z.target.value })}
+        <Pole
+          etykieta="Cena emisyjna jednej akcji"
+          podpowiedz="P.S.A. nie ma wartości nominalnej akcji — cena poniżej 1 grosza jest dopuszczalna, ale nie da się jej dziś zapisać z większą precyzją niż grosz (D-056)."
+        >
+          {/* Naprawa B7: dawny <input type="number" step="0.01"> pozwalał
+              wpisać dowolną liczbę miejsc po przecinku i CICHO zaokrąglał
+              (0,015 zł -> 2 grosze, 0,0001 zł -> 0), bez ostrzeżenia — bo
+              nie korzystał z gotowego `PoleKwoty` (ui-rejestr.js), które od
+              FAZY 1 tego nie robi (D-045): więcej niż 2 miejsca po przecinku
+              to komunikat przy polu, nie cichy błąd w wystawionej cenie. */}
+          <PoleKwoty
+            grosze={dane.cena_emisyjna_grosze ?? null}
+            przyZmianie={(v) => ustawDane({ ...dane, cena_emisyjna_grosze: v })}
           />
         </Pole>
       </div>
@@ -393,7 +422,7 @@ function KrokPrzeniesienie({ dane, ustawDane, spolka }) {
         emisje={spolka.emisje}
         bilans={spolka.bilans}
         wartosc={dane.emisja_zdarzenie_id}
-        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k, zbywca_osoba_id: null })}
+        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k, zbywca_osoba_id: zbywcaNadalWSerii(spolka, k, dane.zbywca_osoba_id) })}
       />
 
       {dane.emisja_zdarzenie_id && (
@@ -695,10 +724,10 @@ function KrokObciazenie({ dane, ustawDane, spolka }) {
             </select>
           </Pole>
           <Pole etykieta="Akcjonariusz, którego akcje są obciążane" wymagane>
-            <WyborOsoby wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id })} />
+            <WyborZKartoteki wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id })} />
           </Pole>
           <Pole etykieta="Zastawnik / użytkownik" wymagane>
-            <WyborOsoby
+            <WyborZKartoteki
               wartosc={dane.osoba_id}
               wyklucz={dane.akcjonariusz_osoba_id ? [Number(dane.akcjonariusz_osoba_id)] : []}
               przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })}
@@ -764,10 +793,10 @@ function KrokZajecie({ dane, ustawDane, spolka }) {
       {dane.emisja_zdarzenie_id && (
         <>
           <Pole etykieta="Organ egzekucyjny" podpowiedz="Komornik sądowy albo administracyjny organ egzekucyjny — z kartoteki.">
-            <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
+            <WyborZKartoteki wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
           </Pole>
           <Pole etykieta="Akcjonariusz (dłużnik)" podpowiedz="Jeśli znany — numery dobiorą się automatycznie z jego pakietu.">
-            <WyborOsoby wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id, zakresy_tekst: '' })} />
+            <WyborZKartoteki wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id, zakresy_tekst: '' })} />
           </Pole>
           {dane.akcjonariusz_osoba_id ? (
             <Pole etykieta="Liczba akcji objętych zajęciem" wymagane>
@@ -850,7 +879,7 @@ function KrokUprawnienie({ dane, ustawDane, spolka }) {
       )}
       {dane.zakres === 'akcjonariusz' && (
         <Pole etykieta="Akcjonariusz" wymagane>
-          <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
+          <WyborZKartoteki wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
         </Pole>
       )}
       <Pole etykieta="Tytuł"><input type="text" {...pole('tytul')} /></Pole>
@@ -936,7 +965,7 @@ function KrokZmianaDanychAkcjonariusza({ dane, ustawDane }) {
   return (
     <>
       <Pole etykieta="Akcjonariusz" wymagane>
-        <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id, po: {} })} />
+        <WyborZKartoteki wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id, po: {} })} />
       </Pole>
       {osoba && (
         <>
@@ -963,7 +992,7 @@ function KrokZobowiazanie({ dane, ustawDane, spolka }) {
   return (
     <>
       <Pole etykieta="Akcjonariusz składający oświadczenie" wymagane>
-        <WyborOsoby wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id })} />
+        <WyborZKartoteki wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id })} />
       </Pole>
       <Pole etykieta="Rodzaj zobowiązania">
         <select value={dane.rodzaj || 'przeniesienie'} onChange={(z) => ustawDane({ ...dane, rodzaj: z.target.value })}>
@@ -1005,7 +1034,7 @@ function KrokPrzeniesienieUlamka({ dane, ustawDane, spolka }) {
         emisje={spolka.emisje}
         bilans={spolka.bilans}
         wartosc={dane.emisja_zdarzenie_id}
-        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k, zbywca_osoba_id: null })}
+        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k, zbywca_osoba_id: zbywcaNadalWSerii(spolka, k, dane.zbywca_osoba_id) })}
       />
 
       {dane.emisja_zdarzenie_id && (
@@ -1076,7 +1105,7 @@ function KrokPrzeniesienieUlamka({ dane, ustawDane, spolka }) {
           </Pole>
 
           <Pole etykieta="Nabywca" wymagane>
-            <WyborOsoby
+            <WyborZKartoteki
               wartosc={dane.nabywca_osoba_id}
               przyZmianie={(id) => ustawDane({ ...dane, nabywca_osoba_id: id })}
               wyklucz={[Number(dane.zbywca_osoba_id)].filter(Boolean)}
@@ -1116,7 +1145,7 @@ function KrokPrzedstawiciel({ dane, ustawDane, spolka }) {
             <input type="number" min="1" value={dane.nr ?? ''} onChange={(z) => ustawDane({ ...dane, nr: z.target.value })} />
           </Pole>
           <Pole etykieta="Wspólny przedstawiciel" podpowiedz="Musi być jednym ze współuprawnionych z tej akcji. Zostaw puste, by usunąć wskazanie.">
-            <WyborOsoby
+            <WyborZKartoteki
               wartosc={dane.przedstawiciel_osoba_id}
               przyZmianie={(id) => ustawDane({ ...dane, przedstawiciel_osoba_id: id })}
             />
@@ -1144,7 +1173,7 @@ function KrokPokrycieAkcji({ dane, ustawDane, spolka }) {
       {dane.emisja_zdarzenie_id && (
         <>
           <Pole etykieta="Akcjonariusz" wymagane>
-            <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
+            <WyborZKartoteki wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
           </Pole>
           <Pole etykieta="Wzmianka o pokryciu" wymagane>
             <select value={dane.pokryta || ''} onChange={(z) => ustawDane({ ...dane, pokryta: z.target.value })}>
@@ -1189,13 +1218,13 @@ const KROKI_TRESCI = {
 /** Zamienia stan formularza (`dane`) na treść żądania do API, per typ. */
 function zbudujDaneZdarzenia(typ, dane) {
   const wynik = { ...dane, podstawa_opis: dane.podstawa_opis || null };
-  delete wynik.cena_zl;
 
   if (typ === 'emisja') {
     wynik.ilosc = Number(dane.ilosc);
     wynik.nr_pierwszy = dane.nr_pierwszy ? Number(dane.nr_pierwszy) : 1;
-    wynik.cena_emisyjna_grosze =
-      dane.cena_zl === '' || dane.cena_zl === undefined ? null : Math.round(Number(dane.cena_zl) * 100);
+    // `PoleKwoty` przechowuje już grosze jako liczbę całkowitą (albo `null`)
+    // — bez pośredniego pola w złotych i bez zaokrąglania tutaj (B7, D-056).
+    wynik.cena_emisyjna_grosze = dane.cena_emisyjna_grosze ?? null;
   }
   if (dane.pozycje) wynik.pozycje = przygotujPozycje(dane.pozycje);
   if (['obciazenie', 'zajecie'].includes(typ)) {
@@ -1436,12 +1465,11 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawy
                       <button
                         key={t.kod}
                         className={`kafelek-wyboru ${typ === t.kod ? 'wybrany' : ''}`}
-                        onClick={() => ustawTyp(t.kod)}
+                        onClick={() => { ustawTyp(t.kod); ustawKrok(1); }}
                       >
                         <Ikona nazwa={IKONY_ZDARZEN[t.kod] || 'zdarzenie'} rozmiar={20} />
                         <span className="kafelek-wyboru-tytul">{t.opis_zdarzeniem}</span>
                         <span className="kafelek-wyboru-opis">{t.podpowiedz || t.nazwa}</span>
-                        <span className="kafelek-wyboru-kategoria"><Pigulka>{nazwaGrupy}</Pigulka></span>
                       </button>
                     ))}
                   </div>
@@ -1493,7 +1521,7 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawy
                   wymagane
                   podpowiedz="Spółka albo inna osoba mająca interes prawny — art. 300(34) § 1 KSH. Kogoś spoza kartoteki najpierw się do niej dopisuje."
                 >
-                  <WyborOsoby wartosc={zadajacyOsobaId} przyZmianie={ustawZadajacegoOsobaId} />
+                  <WyborZKartoteki wartosc={zadajacyOsobaId} przyZmianie={ustawZadajacegoOsobaId} />
                 </Pole>
                 <Pole
                   etykieta="W jakim charakterze"
@@ -1581,17 +1609,15 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawy
           >
             {krok === 0 ? 'Anuluj' : 'Wstecz'}
           </button>
-          <div className="kreator-stopka-prawa">
-            {krok < 1 ? (
-              <button className="btn btn-glowny" disabled={!mozeDalej} onClick={() => ustawKrok((k) => k + 1)}>
-                Dalej
-              </button>
-            ) : (
+          {/* Krok 0 (wybór typu) nie ma już własnego „Dalej" — kliknięcie
+              kafelka przechodzi dalej samo (K3, FAZA 3 sesji frontendowej v2). */}
+          {krok >= 1 && (
+            <div className="kreator-stopka-prawa">
               <button className="btn btn-glowny btn-lg" disabled={!mozeDalej || zapisywanie} onClick={zalozSprawe}>
                 {zapisywanie ? 'Zakładanie sprawy…' : 'Załóż sprawę i przejdź dalej'}
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </Karta>
     </>

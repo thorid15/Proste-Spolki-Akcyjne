@@ -37,7 +37,7 @@ function useKancelaria() {
 function OpisPortalu({ tytul, lead, punkty }) {
   return (
     <div className="brama-opis">
-      <div className="brama-tytul">{tytul}</div>
+      <h1 className="brama-tytul">{tytul}</h1>
       <div className="brama-lead">{lead}</div>
       <div className="brama-punkty">
         {punkty.map((p) => (
@@ -59,13 +59,13 @@ function RamaPubliczna({ opis, children }) {
   const kancelaria = useKancelaria();
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <div className="marka-pasek bez-druku">
+      <div className="marka-pasek bez-druku" role="banner">
         <div className="marka-pasek-nazwa">{kancelaria.nazwa}</div>
       </div>
-      <div className="brama rama-publiczna-tresc">
+      <main className="brama rama-publiczna-tresc">
         {opis}
         <div className="brama-karta">{children}</div>
-      </div>
+      </main>
       {/* Ta sama szerokość, co `.brama` nad nią. */}
       <StopkaKancelarii kancelaria={kancelaria} szerokosc="1080px" />
     </div>
@@ -74,19 +74,19 @@ function RamaPubliczna({ opis, children }) {
 
 const PUNKTY_LOGOWANIA = [
   {
-    ikona: 'spolki',
-    tytul: 'Podgląd rejestru akcjonariuszy',
-    tresc: 'Stan na dowolny dzień, w zakresie odpowiadającym roli konta.',
+    ikona: 'zegar',
+    tytul: 'Wpis w 7 dni',
+    tresc: 'Kancelaria dokonuje wpisu w ciągu 7 dni od żądania (art. 300³⁴ § 1 KSH).',
   },
   {
-    ikona: 'sprawy',
-    tytul: 'Zgłaszanie zmian',
-    tresc: 'Żądanie wpisu wraz z dokumentami, bez wizyty w kancelarii.',
+    ikona: 'sprawdz',
+    tytul: 'Rejestr elektroniczny, zabezpieczony',
+    tresc: 'Rejestr prowadzony jest w postaci elektronicznej z zapewnieniem integralności danych (art. 300³¹ § 3–4 KSH).',
   },
   {
     ikona: 'dokument',
-    tytul: 'Informacja z rejestru',
-    tresc: 'Pobierz informację z rejestru na dany dzień.',
+    tytul: 'Informacja z rejestru na żądanie',
+    tresc: 'Podgląd rejestru i informacja z rejestru na dowolny dzień (art. 300³⁵ KSH).',
   },
 ];
 
@@ -112,12 +112,14 @@ const PUNKTY_ZGLOSZENIA = [
    SESJA PORTALOWA
    ───────────────────────────────────────────────────── */
 function usePortalSesja() {
-  const [stan, ustawStan] = useState({ ladowanie: true, zalogowany: false, konto: null });
+  const [stan, ustawStan] = useState({ ladowanie: true, zalogowany: false, konto: null, sesjaWygasa: null });
 
   const odswiez = useCallback(() => {
     return API.get('/api/psa/portal/whoami')
-      .then((d) => ustawStan({ ladowanie: false, zalogowany: d.zalogowany, konto: d.konto }))
-      .catch(() => ustawStan({ ladowanie: false, zalogowany: false, konto: null }));
+      .then((d) => ustawStan({
+        ladowanie: false, zalogowany: d.zalogowany, konto: d.konto, sesjaWygasa: d.sesja_wygasa,
+      }))
+      .catch(() => ustawStan({ ladowanie: false, zalogowany: false, konto: null, sesjaWygasa: null }));
   }, []);
 
   useEffect(() => {
@@ -125,6 +127,35 @@ function usePortalSesja() {
   }, [odswiez]);
 
   return { ...stan, odswiez };
+}
+
+/**
+ * Ostrzeżenie 5 minut przed wygaśnięciem sesji portalu (FAZA4 pkt 6, sesja
+ * 8h). Sam upływ czasu wylogowuje przy najbliższym zapytaniu do API (token
+ * przestaje być ważny) — to ostrzeżenie tylko informuje wcześniej, żeby
+ * klient zdążył dokończyć to, co robi; szkic wniosku i tak nie ginie
+ * (zapis automatyczny po każdym polu, 0.4 pkt 4).
+ */
+const OSTRZEZENIE_PRZED_WYGASNIECIEM_MS = 5 * 60 * 1000;
+
+function OstrzezenieWygasajacejSesji({ sesjaWygasa }) {
+  const [pokaz, ustawPokaz] = useState(false);
+
+  useEffect(() => {
+    if (!sesjaWygasa) { ustawPokaz(false); return undefined; }
+    const sprawdz = () => ustawPokaz(sesjaWygasa - Date.now() <= OSTRZEZENIE_PRZED_WYGASNIECIEM_MS);
+    sprawdz();
+    const id = setInterval(sprawdz, 15000);
+    return () => clearInterval(id);
+  }, [sesjaWygasa]);
+
+  if (!pokaz) return null;
+  return (
+    <div className="pasek-ostrzezenia bez-druku" role="status">
+      Za chwilę zostaniesz wylogowany/-a — sesja kończy się po 8 godzinach od zalogowania. Zaloguj się
+      ponownie, żeby kontynuować; wypełniany wniosek jest już zapisany.
+    </div>
+  );
 }
 
 function EkranLoginPortal({ przyZalogowaniu }) {
@@ -159,7 +190,7 @@ function EkranLoginPortal({ przyZalogowaniu }) {
         <input type="email" autoFocus value={email} onChange={(z) => ustawEmail(z.target.value)} autoComplete="username" />
       </Pole>
       <Pole etykieta="Hasło" wymagane>
-        <input type="password" value={haslo} onChange={(z) => ustawHaslo(z.target.value)} autoComplete="current-password" />
+        <PoleHaslo id="portal-login-haslo" wartosc={haslo} przyZmianie={ustawHaslo} autoComplete="current-password" />
       </Pole>
 
       <button
@@ -350,13 +381,25 @@ function EkranAktywacjaKonta({ token }) {
       <div className="brama-karta-tytul">Aktywacja konta</div>
       <div className="brama-karta-podtytul">{email}</div>
 
+      {/* Pole widoczne wyłącznie dla menedżera haseł (B1): bez inputu
+          `autoComplete="username"` powiązanego z formularzem hasła
+          przeglądarka nie wie, z jakim kontem skojarzyć zapisane hasło —
+          e-mail jako sam tekst (bez inputu) tej roli nie spełnia. Pole jest
+          tylko do odczytu i pomijane w kolejności Tab (nie ma czego w nim
+          poprawiać — adres pochodzi z zaproszenia). */}
+      <input
+        type="email" value={email || ''} readOnly tabIndex={-1}
+        autoComplete="username" name="email" aria-hidden="true"
+        style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+      />
+
       <Komunikat odmiana="blad" tresc={blad} />
 
-      <Pole etykieta="Hasło" wymagane podpowiedz="Co najmniej 10 znaków, litera i cyfra.">
-        <input type="password" autoFocus value={haslo} onChange={(z) => ustawHaslo(z.target.value)} autoComplete="new-password" />
+      <Pole etykieta="Hasło" wymagane podpowiedz="Co najmniej 12 znaków — bez wymogu wielkich liter czy cyfr.">
+        <PoleHaslo id="haslo-nowe" autoFocus wartosc={haslo} przyZmianie={ustawHaslo} autoComplete="new-password" />
       </Pole>
       <Pole etykieta="Powtórz hasło" wymagane>
-        <input type="password" value={powtorzHaslo} onChange={(z) => ustawPowtorzHaslo(z.target.value)} autoComplete="new-password" />
+        <PoleHaslo id="haslo-powtorz" wartosc={powtorzHaslo} przyZmianie={ustawPowtorzHaslo} autoComplete="new-password" />
       </Pole>
 
       <button
@@ -399,7 +442,21 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
   }
 
   return (
-    <Karta tytul="Informacja o przetwarzaniu danych osobowych">
+    <div className="pion" style={{ gap: 16 }}>
+      <Karta tytul="Co przygotować">
+        <div className="pion" style={{ gap: 8 }}>
+          <p className="podpowiedz">Wypełnienie wniosku zajmuje zwykle około 15 minut. Przyda się:</p>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            <li>umowa spółki (data i sposób zawarcia),</li>
+            <li>uchwała o wyborze kancelarii do prowadzenia rejestru,</li>
+            <li>dane akcjonariuszy — imię, nazwisko, PESEL albo data urodzenia, adres.</li>
+          </ul>
+          <p className="podpowiedz">
+            Wniosek zapisuje się automatycznie po każdym polu — możesz wrócić do niego w dowolnym momencie.
+          </p>
+        </div>
+      </Karta>
+      <Karta tytul="Informacja o przetwarzaniu danych osobowych">
       <div className="pion" style={{ gap: 16 }}>
         <p>
           Zanim przejdziesz do wypełnienia wniosku o prowadzenie rejestru akcjonariuszy, zapoznaj się
@@ -449,7 +506,8 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
           {wysylanie ? 'Zapisywanie…' : 'Przejdź dalej'}
         </button>
       </div>
-    </Karta>
+      </Karta>
+    </div>
   );
 }
 
@@ -483,21 +541,32 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
 function kartyNawigacji(rola) {
   if (rola === 'wnioskodawca') {
     return [
-      { sciezka: '/wniosek', nazwa: 'Wniosek', ikona: 'dokument' },
-      { sciezka: '/', nazwa: 'Moja spółka', ikona: 'spolki' },
-      { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia', ikona: 'sprawy' },
-      { sciezka: '/platnosci', nazwa: 'Płatności', ikona: 'oplaty', licznik: true },
+      { sciezka: '/', nazwa: 'Start', ikona: 'pulpit' },
+      { sciezka: '/wniosek', nazwa: 'Wniosek', ikona: 'dokument', licznik: true },
+      { sciezka: '/konto', nazwa: 'Konto', ikona: 'uzytkownicy' },
+      { sciezka: '/pomoc', nazwa: 'Pomoc', ikona: 'pomoc' },
     ];
   }
   return [
-    { sciezka: '/', nazwa: rola === 'spolka' ? 'Moja spółka' : 'Moje spółki', ikona: 'spolki' },
-    { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia', ikona: 'sprawy' },
-    { sciezka: '/platnosci', nazwa: 'Płatności', ikona: 'oplaty', licznik: true },
+    { sciezka: '/', nazwa: 'Start', ikona: 'pulpit' },
+    { sciezka: '/spolki', nazwa: rola === 'spolka' ? 'Moja spółka' : 'Moje spółki', ikona: 'spolki' },
+    // Akcjonariusz nie składa wniosków o nową spółkę (B8 — wyłącznie rola
+    // „spolka") — pozycja „Wnioski" nie miałaby mu czego pokazać.
+    ...(rola === 'spolka' ? [{ sciezka: '/wniosek', nazwa: 'Wnioski', ikona: 'dokument', licznik: true }] : []),
+    { sciezka: '/konto', nazwa: 'Konto', ikona: 'uzytkownicy' },
+    { sciezka: '/pomoc', nazwa: 'Pomoc', ikona: 'pomoc' },
   ];
 }
 
-function SzynaPortalu({ sciezka, rola, doZaplaty }) {
-  const aktywna = (poz) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
+/** Widok spółki (`/spolka/:id`) należy do tej samej pozycji nawigacji co lista „/spolki”. */
+function aktywnaPozycjaNawigacji(poz, sciezka) {
+  if (poz.sciezka === '/') return sciezka === '/';
+  if (poz.sciezka === '/spolki') return sciezka === '/spolki' || sciezka === '/spolka' || sciezka === '/rejestr';
+  return sciezka.startsWith(poz.sciezka);
+}
+
+function SzynaPortalu({ sciezka, rola, liczniki }) {
+  const aktywna = (poz) => aktywnaPozycjaNawigacji(poz, sciezka);
   return (
     <nav className="szyna bez-druku">
       <div className="szyna-marka">
@@ -516,15 +585,21 @@ function SzynaPortalu({ sciezka, rola, doZaplaty }) {
           >
             <Ikona nazwa={poz.ikona} rozmiar={17} />
             <span className="szyna-poz-etykieta">{poz.nazwa}</span>
-            {poz.licznik && doZaplaty > 0 && (
-              <span className="szyna-licznik" title="należności do zapłaty">{doZaplaty}</span>
-            )}
+            {poz.licznik && <Licznik wartosc={liczniki[poz.sciezka]} opis={OPIS_LICZNIKA_PORTALU[poz.sciezka]} />}
           </button>
         ))}
       </div>
     </nav>
   );
 }
+
+/* B6/B5-portal: jeden znacznik dla „coś czeka na Ciebie" — należności
+   niezapłacone i dokumenty jeszcze nieotwarte, ta sama Pigułka co w
+   kancelarii (FAZA 1 pkt 9). */
+const OPIS_LICZNIKA_PORTALU = {
+  '/platnosci': 'należności do zapłaty',
+  '/wniosek': 'nowych dokumentów do zobaczenia',
+};
 
 const ETYKIETA_ROLI_KONTA = {
   spolka: 'konto spółki',
@@ -533,13 +608,23 @@ const ETYKIETA_ROLI_KONTA = {
   wnioskodawca: 'konto wnioskodawcy',
 };
 
-function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
+function PortalLayout({ sciezka, waski, konto, sesjaWygasa, przyWylogowaniu, children }) {
   const [wylogowywanie, ustawWylogowywanie] = useState(false);
   const kancelaria = useKancelaria();
   // Licznik naleznosci odswieza sie przy kazdej zmianie ekranu — po zaplacie
   // klient wraca na inna sciezke i znacznik ma zniknac od razu.
   const { dane: rozliczenia } = useDane('/api/psa/portal/oplaty', [sciezka]);
   const doZaplaty = rozliczenia ? rozliczenia.oplaty.filter((o) => o.status !== 'oplacona').length : 0;
+  // B6 — dokument nowy (jeszcze nieotwarty przez klienta) w komplecie do
+  // podpisu wniosku. Tylko wnioskodawca ma zakładkę „Wniosek" w nawigacji.
+  const { dane: dokumentyWniosku } = useOdswiezaneDane(
+    konto.rola === 'wnioskodawca' ? '/api/psa/portal/wniosek/dokumenty' : null,
+    [sciezka]
+  );
+  const nowychDokumentow = dokumentyWniosku
+    ? dokumentyWniosku.dokumenty.filter((d) => !d.otwarto_w_portalu).length
+    : 0;
+  const liczniki = { '/platnosci': doZaplaty, '/wniosek': nowychDokumentow };
 
   async function wyloguj() {
     ustawWylogowywanie(true);
@@ -556,21 +641,22 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
   // jeden miał nawigację w pionie, a drugi rząd przycisków w belce.
   return (
     <div className="powloka">
-      <div className="marka-pasek bez-druku">
+      <div className="marka-pasek bez-druku" role="banner">
         <div className="marka-pasek-nazwa">{kancelaria.nazwa}</div>
       </div>
-      <SzynaPortalu sciezka={sciezka} rola={konto.rola} doZaplaty={doZaplaty} />
-      <NawigacjaPortaluWaska sciezka={sciezka} rola={konto.rola} doZaplaty={doZaplaty} />
+      <OstrzezenieWygasajacejSesji sesjaWygasa={sesjaWygasa} />
+      <SzynaPortalu sciezka={sciezka} rola={konto.rola} liczniki={liczniki} />
+      <NawigacjaPortaluWaska sciezka={sciezka} rola={konto.rola} liczniki={liczniki} />
       <div className="obszar">
-        <header className="topbar bez-druku">
+        <div className="topbar bez-druku" role="region" aria-label="Tytuł ekranu">
           <div>
-            <div className="topbar-tytul">{opisEkranuPortalu(sciezka).tytul}</div>
+            <h1 className="topbar-tytul">{opisEkranuPortalu(sciezka).tytul}</h1>
             <div className="topbar-podtytul">
               {konto.email} · {ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola}
             </div>
           </div>
           <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>Wyloguj się</button>
-        </header>
+        </div>
         <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
         {/* Wąskie widoki portalu (wniosek, zgłoszenie) mają treść na 880 px —
             stopka idzie za nimi, zamiast rozpychać się na pełne 1240 px. */}
@@ -581,10 +667,10 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
 }
 
 /** Nawigacja na wąskim ekranie — szyna się chowa, zostaje jeden rząd. */
-function NawigacjaPortaluWaska({ sciezka, rola, doZaplaty }) {
-  const aktywna = (poz) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
+function NawigacjaPortaluWaska({ sciezka, rola, liczniki }) {
+  const aktywna = (poz) => aktywnaPozycjaNawigacji(poz, sciezka);
   return (
-    <nav className="topbar-nawigacja bez-druku">
+    <nav className="topbar-nawigacja bez-druku" aria-label="Nawigacja główna">
       {kartyNawigacji(rola).map((poz) => (
         <button
           key={poz.sciezka}
@@ -593,7 +679,7 @@ function NawigacjaPortaluWaska({ sciezka, rola, doZaplaty }) {
         >
           <Ikona nazwa={poz.ikona} rozmiar={16} />
           <span>{poz.nazwa}</span>
-          {poz.licznik && doZaplaty > 0 && <span className="szyna-licznik">{doZaplaty}</span>}
+          {poz.licznik && <Licznik wartosc={liczniki[poz.sciezka]} opis={OPIS_LICZNIKA_PORTALU[poz.sciezka]} />}
         </button>
       ))}
     </nav>
@@ -602,9 +688,15 @@ function NawigacjaPortaluWaska({ sciezka, rola, doZaplaty }) {
 
 /** Tytuł w belce — mówi, gdzie jesteś, zamiast powtarzać nazwę modułu. */
 function opisEkranuPortalu(sciezka) {
+  if (sciezka === '/') return { tytul: 'Start' };
+  if (sciezka.startsWith('/spolki')) return { tytul: 'Moje spółki' };
+  if (sciezka === '/spolka' || sciezka === '/rejestr') return { tytul: 'Spółka' };
   if (sciezka.startsWith('/wniosek')) return { tytul: 'Wniosek o prowadzenie rejestru' };
+  if (sciezka.startsWith('/konto')) return { tytul: 'Konto' };
+  if (sciezka.startsWith('/pomoc')) return { tytul: 'Pomoc' };
   if (sciezka.startsWith('/sprawy')) return { tytul: 'Moje zgłoszenia' };
   if (sciezka.startsWith('/platnosci')) return { tytul: 'Płatności' };
+  if (sciezka.startsWith('/zgloszenie-bledu')) return { tytul: 'Zgłoś błąd we wpisie' };
   if (sciezka.startsWith('/zgloszenie')) return { tytul: 'Zgłoszenie zmiany w rejestrze' };
   if (sciezka.startsWith('/informacja')) return { tytul: 'Informacja z rejestru' };
   if (sciezka.startsWith('/rejestr')) return { tytul: 'Rejestr akcjonariuszy' };
@@ -689,39 +781,228 @@ function StanWniosku({ wniosek }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────
-   MOJE SPÓŁKI / AKCJE
-   ───────────────────────────────────────────────────── */
-function EkranMoje() {
+/**
+ * „Wnioski" (Faza 4 pkt 1) dla roli „spolka" — wniosek o KOLEJNĄ spółkę
+ * (B8), niezależnie od tego, że rola „spolka" ma już przynajmniej jeden
+ * rejestr otwarty. Bez wniosku w toku pokazuje zaproszenie do złożenia
+ * nowego (ten sam komponent, co na liście spółek); w trakcie — formularz
+ * albo oś statusu, zależnie od etapu.
+ */
+function EkranWnioski() {
   const { dane, ladowanie } = useDane('/api/psa/portal/moje');
-  // Naleznosci na widoku domowym, nie tylko w zakladce: konczacy sie rok
-  // prowadzenia rejestru to rzecz, o ktorej klient ma sie dowiedziec, zanim
-  // sam pojdzie szukac.
-  const { dane: rozliczenia } = useDane('/api/psa/portal/oplaty');
   if (ladowanie) return <Spinner />;
   if (!dane) return null;
 
-  const doZaplaty = rozliczenia ? rozliczenia.oplaty.filter((o) => o.status !== 'oplacona') : [];
+  if (!dane.wniosek) {
+    return (
+      <div className="pion" style={{ gap: 16 }}>
+        <Pusto tytul="Brak wniosków w toku" opis="Wnioski o prowadzenie rejestru dla nowej spółki pojawią się tutaj." />
+        <PrzyciskDodajSpolke wniosekWToku={null} />
+      </div>
+    );
+  }
 
-  // Konto wnioskodawcy: spółki jeszcze nie ma w rejestrze, więc zamiast
-  // pustej listy pokazujemy, na czym stoi wniosek i co dzieje się dalej.
-  if (dane.rola === 'wnioskodawca') return <StanWniosku wniosek={dane.wniosek} />;
+  if (['w_przygotowaniu', 'do_uzupelnienia', 'umowa_wygenerowana'].includes(dane.wniosek.status)) {
+    return <EkranWniosku />;
+  }
+
+  const stan = STANY_WNIOSKU_KLIENTA[dane.wniosek.status] || {
+    odmiana: 'info', tytul: 'Wniosek w toku', tresc: 'Sprawa jest w toku po stronie kancelarii.',
+  };
+  return (
+    <div className="pion" style={{ gap: 16 }}>
+      <Karta tytul={dane.wniosek.nazwa || 'Wniosek o prowadzenie rejestru'}>
+        {dane.wniosek.krs && <div className="podpowiedz" style={{ marginBottom: 16 }}>KRS {dane.wniosek.krs}</div>}
+        <Komunikat odmiana={stan.odmiana} tytul={stan.tytul} tresc={stan.tresc} />
+      </Karta>
+    </div>
+  );
+}
+
+/**
+ * „Dodaj spółkę" (B8) — nowy wniosek zakłada się jednym kliknięciem, bez
+ * przechodzenia przez publiczny formularz zgłoszenia: to konto już jest
+ * zweryfikowanym klientem kancelarii. Gdy wniosek o kolejną spółkę jest już
+ * w toku, przycisk zamienia się w „Kontynuuj wniosek" — jedna czynność do
+ * końca (0.4 pkt 5), bez ryzyka próby założenia drugiego naraz.
+ */
+function PrzyciskDodajSpolke({ wniosekWToku }) {
+  const [zakladanie, ustawZakladanie] = useState(null);
+
+  async function dodaj() {
+    ustawZakladanie(null);
+    try {
+      await API.post('/api/psa/portal/wniosek/nowy', {});
+      idz('/wniosek');
+    } catch (e) {
+      ustawZakladanie(e instanceof BladApi ? e.message : 'Nie udało się założyć nowego wniosku.');
+    }
+  }
+
+  if (wniosekWToku) {
+    return (
+      <Karta tytul="Wniosek o kolejną spółkę">
+        <div className="rzad-rozdzielony">
+          <div>
+            <div style={{ fontWeight: 600 }}>{wniosekWToku.nazwa || 'Nowa spółka — dane niewypełnione'}</div>
+            <div className="podpowiedz">{(STAN_WNIOSKU_ETYKIETA[wniosekWToku.status] || wniosekWToku.status)}</div>
+          </div>
+          <button className="btn btn-glowny" onClick={() => idz('/wniosek')}>Kontynuuj wniosek</button>
+        </div>
+      </Karta>
+    );
+  }
+
+  return (
+    <Karta>
+      <div className="rzad-rozdzielony">
+        <div>
+          <div style={{ fontWeight: 600 }}>Prowadzisz u nas kolejną prostą spółkę akcyjną?</div>
+          <div className="podpowiedz">Dodajesz ją bez ponownego wypełniania zgłoszenia — od razu wniosek z pobraniem danych z KRS.</div>
+        </div>
+        <button className="btn btn-glowny" onClick={dodaj}>+ Dodaj spółkę</button>
+      </div>
+      <Komunikat odmiana="blad" tresc={zakladanie} />
+    </Karta>
+  );
+}
+
+const STAN_WNIOSKU_ETYKIETA = {
+  w_przygotowaniu: 'wypełnianie w toku',
+  do_uzupelnienia: 'kancelaria prosi o uzupełnienie',
+  zlozony: 'złożony — czeka na weryfikację',
+  umowa_wygenerowana: 'dokumenty czekają na podpis',
+  umowa_podpisana: 'podpisany — czeka na przyjęcie',
+};
+
+/* ─────────────────────────────────────────────────────
+   START — „Co dalej" (Faza 4 pkt 1)
+   ───────────────────────────────────────────────────── */
+
+/** Pozycje „Do zrobienia" złożone z trzech źródeł, ta sama zasada co K1 (kancelaria): jedno miejsce, jeden przycisk na pozycję. */
+function pozycjeDoZrobieniaPortal({ wniosek, sprawy, oplaty }) {
+  const pozycje = [];
+
+  if (wniosek && ['w_przygotowaniu', 'do_uzupelnienia', 'umowa_wygenerowana'].includes(wniosek.status)) {
+    pozycje.push({
+      klucz: `wniosek-${wniosek.id || 0}`,
+      priorytet: wniosek.status === 'umowa_wygenerowana' ? 0 : 1,
+      tytul: wniosek.status === 'umowa_wygenerowana' ? 'Podpisz dokumenty do wniosku' : 'Dokończ wniosek o prowadzenie rejestru',
+      podtytul: wniosek.nazwa || STAN_WNIOSKU_ETYKIETA[wniosek.status] || wniosek.status,
+      przyKlik: () => idz('/wniosek'),
+    });
+  }
+
+  for (const s of sprawy || []) {
+    if (!s.termin || (!s.termin.pilny && !s.termin.po_terminie)) continue;
+    pozycje.push({
+      klucz: `sprawa-${s.id}`,
+      priorytet: s.termin.po_terminie ? 0 : 1,
+      tytul: `${s.typ_nazwa} — ${s.spolka_nazwa}`,
+      podtytul: s.termin.po_terminie ? 'termin minął' : `termin za ${s.termin.dni_pozostale} dni`,
+      przyKlik: () => idz(`/spolka/${s.spolka_id}?zakladka=zgloszenia`),
+    });
+  }
+
+  const doZaplaty = (oplaty || []).filter((o) => o.status !== 'oplacona');
+  for (const o of doZaplaty) {
+    pozycje.push({
+      klucz: `oplata-${o.id}`,
+      priorytet: 2,
+      tytul: `${o.opis} — ${fmt.zlote(o.kwota_grosze)}`,
+      podtytul: o.spolka_nazwa,
+      przyKlik: () => idz(`/spolka/${o.spolka_id}?zakladka=oplaty`),
+    });
+  }
+
+  return pozycje.sort((a, b) => a.priorytet - b.priorytet);
+}
+
+function EkranStart() {
+  const { dane: moje, ladowanie: ladowanieMoje } = useDane('/api/psa/portal/moje');
+  const { dane: zadania, ladowanie: ladowanieZadania } = useDane(
+    moje && moje.rola !== 'wnioskodawca' ? '/api/psa/portal/zadania' : null
+  );
+  const { dane: rozliczenia, ladowanie: ladowanieOplat } = useDane(
+    moje && moje.rola !== 'wnioskodawca' ? '/api/psa/portal/oplaty' : null
+  );
+
+  if (ladowanieMoje || (moje && moje.rola !== 'wnioskodawca' && (ladowanieZadania || ladowanieOplat))) {
+    return <Spinner />;
+  }
+  if (!moje) return null;
+
+  const pozycje = pozycjeDoZrobieniaPortal({
+    wniosek: moje.wniosek,
+    sprawy: zadania ? zadania.sprawy : [],
+    oplaty: rozliczenia ? rozliczenia.oplaty : [],
+  });
+
+  return (
+    <div className="pion" style={{ gap: 16 }}>
+      <Karta tytul="Do zrobienia">
+        {pozycje.length === 0 ? (
+          <Pusto ikona="sprawdz" tytul="Wszystko załatwione" opis="Nic teraz nie wymaga Twojej uwagi." />
+        ) : (
+          <div className="lista-wierszy">
+            {pozycje.map((p) => (
+              <WierszListy key={p.klucz} tytul={p.tytul} podtytul={p.podtytul} przyKlik={p.przyKlik} />
+            ))}
+          </div>
+        )}
+      </Karta>
+      {moje.rola === 'wnioskodawca' && !pozycje.some((p) => p.klucz.startsWith('wniosek-')) && (
+        <Komunikat odmiana="info" tresc="Sprawa jest w toku po stronie kancelarii — napiszemy, gdy będzie coś do zrobienia." />
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
+   MOJE SPÓŁKI / AKCJE
+   ───────────────────────────────────────────────────── */
+/**
+ * „Moje spółki" (Faza 4 pkt 1) — lista spółek konta, wejście do widoku
+ * spółki z zakładkami. Klient z JEDNĄ spółką nie ma czego wybierać —
+ * trafia od razu do niej (0.4: nie da się utknąć na liście długości 1).
+ * Należności przeniesione na Start (`EkranStart`) — nie powtarzamy tej
+ * samej informacji na dwóch ekranach (0.4 pkt 7).
+ */
+function EkranMojeSpolki() {
+  const { dane, ladowanie } = useDane('/api/psa/portal/moje');
+
+  // Jedna spółka = jedno miejsce, do którego to konto w ogóle może trafić —
+  // lista pośrednia byłaby dodatkowym, zbędnym klikiem (0.4 pkt 1). Konto
+  // wnioskodawcy nie ma jeszcze żadnej spółki w rejestrze — jego jedyne
+  // miejsce to formularz wniosku.
+  useEffect(() => {
+    if (!dane) return;
+    if (dane.rola === 'wnioskodawca') { idz('/wniosek'); return; }
+    if (dane.spolki.length === 1) {
+      const jedyna = dane.spolki[0];
+      idz(`/spolka/${dane.rola === 'spolka' ? jedyna.id : jedyna.spolka_id}`);
+    }
+  }, [dane]);
+
+  if (ladowanie || !dane) return <Spinner />;
+  if (dane.rola === 'wnioskodawca' || dane.spolki.length === 1) return <Spinner />;
 
   if (dane.spolki.length === 0) {
-    return <Pusto tytul="Brak powiązanych spółek" opis="To konto nie jest jeszcze powiązane z żadną spółką w rejestrze." />;
+    // B8 — „Dodaj spółkę" właściwe temu kontu żyje na ekranie „Wnioski"
+    // (`EkranWnioski`) — jedno miejsce na tę czynność, nie dwa (0.4 pkt 1).
+    return (
+      <div className="pion" style={{ gap: 16 }}>
+        <Pusto
+          tytul="Brak powiązanych spółek"
+          opis="To konto nie jest jeszcze powiązane z żadną spółką w rejestrze."
+          akcja={dane.rola === 'spolka' && <button className="btn btn-glowny" onClick={() => idz('/wniosek')}>Złóż wniosek</button>}
+        />
+      </div>
+    );
   }
 
   return (
     <div className="pion" style={{ gap: 16 }}>
-      {doZaplaty.length > 0 && (
-        <Komunikat
-          odmiana="uwaga"
-          tytul={`Do zapłaty: ${fmt.zlote(rozliczenia.do_zaplaty_grosze)}`}
-          tresc={doZaplaty.some((o) => o.typ === 'prowadzenie')
-            ? 'W tym opłata za kolejny rok prowadzenia rejestru. Szczegóły w zakładce „Płatności”.'
-            : 'Zgłoszone wpisy trafiają do kancelarii po opłaceniu — szczegóły w zakładce „Płatności”.'}
-        />
-      )}
       {dane.spolki.map((s) => {
         const spolkaId = dane.rola === 'spolka' ? s.id : s.spolka_id;
         const nazwa = s.nazwa;
@@ -766,13 +1047,75 @@ function EkranMoje() {
             )}
 
             <div className="row-g">
-              <button className="btn btn-glowny" onClick={() => idz(`/rejestr/${spolkaId}`)}>Zobacz rejestr</button>
-              <button className="btn" onClick={() => idz(`/zgloszenie/${spolkaId}`)}>Zgłoś zmianę</button>
-              <button className="btn" onClick={() => idz(`/informacja/${spolkaId}`)}>Informacja z rejestru</button>
+              <button className="btn btn-glowny" onClick={() => idz(`/spolka/${spolkaId}`)}>Otwórz</button>
             </div>
           </Karta>
         );
       })}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
+   DOKUMENTY (zakładka widoku spółki — Faza 4 pkt 1)
+   ───────────────────────────────────────────────────── */
+const NAZWA_TYPU_DOKUMENTU_PORTAL = {
+  zawiadomienie_wpis: 'Zawiadomienie o dokonaniu wpisu',
+  zawiadomienie_odmowa: 'Zawiadomienie o odmowie wpisu',
+  informacja_z_rejestru: 'Informacja z rejestru',
+  umowa_rejestru: 'Umowa o prowadzenie rejestru',
+};
+
+function EkranDokumentyPortal({ spolkaId }) {
+  const { dane, ladowanie } = useDane(`/api/psa/portal/spolka/${spolkaId}/dokumenty`);
+  if (ladowanie) return <Spinner />;
+  if (!dane || dane.dokumenty.length === 0) {
+    return <Pusto ikona="dokument" tytul="Brak dokumentów" opis="Zawiadomienia o wpisie i wydane informacje z rejestru pojawią się tutaj." />;
+  }
+  return (
+    <Karta tight tytul="Dokumenty">
+      <table className="tbl">
+        <thead><tr><th>Dokument</th><th>Data</th><th /></tr></thead>
+        <tbody>
+          {dane.dokumenty.map((d) => (
+            <tr key={d.id}>
+              <td>{NAZWA_TYPU_DOKUMENTU_PORTAL[d.typ] || d.typ.replace(/_/g, ' ')}</td>
+              <td>{fmt.data(d.data)}</td>
+              <td>
+                {d.pobierz
+                  ? <a className="btn btn-maly" href={d.pobierz} target="_blank" rel="noopener">Pobierz</a>
+                  : <span className="przyciemnione">—</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Karta>
+  );
+}
+
+const ZAKLADKI_SPOLKI_PORTAL = [
+  { kod: 'rejestr', nazwa: 'Rejestr' },
+  { kod: 'zgloszenia', nazwa: 'Zgłoszenia' },
+  { kod: 'dokumenty', nazwa: 'Dokumenty' },
+  { kod: 'oplaty', nazwa: 'Opłaty' },
+];
+
+/**
+ * Widok jednej spółki (Faza 4 pkt 1) — zastępuje trzy osobne ekrany
+ * (rejestr / zgłoszenie / informacja jako oddzielne strony bez wspólnego
+ * miejsca) jednym miejscem z czterema zakładkami. Zakładka w adresie URL
+ * (0.4: „wstecz” wraca do tej samej pozycji — Faza 1 pkt 5).
+ */
+function EkranSpolkaPortal({ spolkaId }) {
+  const [zakladka, ustawZakladke] = useParametrAdresu('zakladka', 'rejestr');
+  return (
+    <div className="pion" style={{ gap: 16 }}>
+      <Zakladki zakladki={ZAKLADKI_SPOLKI_PORTAL} biezaca={zakladka} przyZmianie={ustawZakladke} />
+      {zakladka === 'rejestr' && <EkranRejestrPortal spolkaId={spolkaId} />}
+      {zakladka === 'zgloszenia' && <EkranSprawyPortal spolkaId={spolkaId} />}
+      {zakladka === 'dokumenty' && <EkranDokumentyPortal spolkaId={spolkaId} />}
+      {zakladka === 'oplaty' && <EkranPlatnosciPortal spolkaId={spolkaId} />}
     </div>
   );
 }
@@ -786,17 +1129,18 @@ function EkranRejestrPortal({ spolkaId }) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
-      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
-
       {blad && <Komunikat odmiana="blad" tresc={blad.message} />}
       {ladowanie && <Spinner />}
 
       {dane && (
         <>
-          <Karta tytul={dane.spolka.nazwa}>
-            <div className="row-g" style={{ marginBottom: 4 }}>
-              <label className="fl" style={{ margin: 0 }}>Stan na dzień</label>
-              <PoleDaty wartosc={dataStan} przyZmianie={(v) => v && ustawDataStan(v)} />
+          <Karta tight>
+            <div className="rzad-rozdzielony">
+              <div className="row-g" style={{ marginBottom: 0 }}>
+                <label className="fl" style={{ margin: 0 }}>Stan na dzień</label>
+                <PoleDaty wartosc={dataStan} przyZmianie={(v) => v && ustawDataStan(v)} />
+              </div>
+              <button className="btn" onClick={() => idz(`/informacja/${spolkaId}`)}>Informacja z rejestru</button>
             </div>
           </Karta>
 
@@ -810,11 +1154,12 @@ function EkranRejestrPortal({ spolkaId }) {
                   <th>Numery</th>
                   <th className="prawo">Udział</th>
                   <th>Obciążenia</th>
+                  <th><span className="sr-only">Zgłoszenie błędu</span></th>
                 </tr>
               </thead>
               <tbody>
                 {dane.akcjonariusze.length === 0 && (
-                  <tr><td colSpan={6} className="przyciemnione">Brak wpisanych akcjonariuszy.</td></tr>
+                  <tr><td colSpan={7} className="przyciemnione">Brak wpisanych akcjonariuszy.</td></tr>
                 )}
                 {dane.akcjonariusze.map((a, i) => (
                   <tr key={i}>
@@ -826,12 +1171,31 @@ function EkranRejestrPortal({ spolkaId }) {
                     <td className="prawo">{fmt.liczba(a.ilosc)}</td>
                     <td className="mono">{a.numery}</td>
                     <td className="prawo">{fmt.procent(a.procent)}</td>
-                    <td>{a.obciazenia.length > 0 ? <Znacznik odmiana="bordo">{a.obciazenia.length}</Znacznik> : '—'}</td>
+                    <td>{a.obciazenia.length > 0 ? <Pigulka odmiana="sygnal">{a.obciazenia.length}</Pigulka> : '—'}</td>
+                    <td>
+                      {/* B9 — dyskretny odnośnik przy KONKRETNYM wpisie, z
+                          wypełnionym odwołaniem do pozycji (seria, numery). */}
+                      <a
+                        href={`#/zgloszenie-bledu/${spolkaId}`}
+                        className="male wyciszony"
+                        onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}?odwolanie=${encodeURIComponent(`${a.osoba ? a.osoba.oznaczenie : 'nieznany'}, seria ${a.seria}, nr ${a.numery}`)}`); }}
+                      >
+                        Zgłoś błąd
+                      </a>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </Karta>
+
+          {/* B9 — ogólny odnośnik pod rejestrem, nie tylko przy pozycji:
+              „coś się nie zgadza" bywa np. w danych spółki, nie akcjonariusza. */}
+          <div className="podpowiedz" style={{ textAlign: 'center' }}>
+            <a href={`#/zgloszenie-bledu/${spolkaId}`} onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}`); }}>
+              Coś się nie zgadza?
+            </a>
+          </div>
 
           {dane.emisje.length > 0 && (
             <Karta tight tytul="Emisje">
@@ -975,8 +1339,8 @@ function EkranZgloszeniePortal({ spolkaId }) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
-      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
-      <Karta tytul="Zgłoś zmianę w rejestrze">
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz(`/spolka/${spolkaId}`)}>← Wróć</button>
+      <Karta tytul="Poproś o nowy wpis w rejestrze">
         <Komunikat odmiana="blad" tresc={blad} />
 
         <Pole etykieta="Czego dotyczy zgłoszenie" wymagane>
@@ -1049,11 +1413,101 @@ function EkranZgloszeniePortal({ spolkaId }) {
 }
 
 /* ─────────────────────────────────────────────────────
+   ZGŁOSZENIE BŁĘDU WE WPISIE (B9) — odrębne od „Poproś o nowy wpis"
+   wyżej: to sygnał, że WCZEŚNIEJSZY wpis jest błędny albo niezgodny
+   z dokumentem, nie że coś się wydarzyło i trzeba to wpisać.
+   ───────────────────────────────────────────────────── */
+const CZEGO_DOTYCZY_BLEDU = [
+  ['blad_w_danych', 'Błąd w danych (literówka, zła data, zły numer)'],
+  ['niezgodny_z_dokumentem', 'Wpis niezgodny z dokumentem, na podstawie którego powstał'],
+  ['inne', 'Inne'],
+];
+
+function EkranZgloszenieBleduPortal({ spolkaId, odwolanie }) {
+  const [czegoDotyczy, ustawCzegoDotyczy] = useState('');
+  const [opis, ustawOpis] = useState(odwolanie ? `Dotyczy: ${odwolanie}. ` : '');
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const [gotowe, ustawGotowe] = useState(false);
+
+  const mozeZlozyc = Boolean(czegoDotyczy) && opis.trim().length > 0;
+
+  async function zglos() {
+    if (!mozeZlozyc) return;
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      await API.post('/api/psa/portal/zgloszenie-nieprawidlowosci', {
+        spolka_id: spolkaId, czego_dotyczy: czegoDotyczy, opis: opis.trim(),
+      });
+      ustawGotowe(true);
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się złożyć zgłoszenia.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  if (gotowe) {
+    return (
+      <Karta>
+        <Pusto
+          tytul="Zgłoszenie zapisane"
+          opis="Kancelaria sprawdzi wpis i zdecyduje, czy potrzebne jest sprostowanie. Wynik zobaczysz w zakładce „Moje zgłoszenia”."
+          akcja={<button className="btn btn-glowny" onClick={() => idz('/sprawy')}>Moje zgłoszenia</button>}
+        />
+      </Karta>
+    );
+  }
+
+  return (
+    <div className="pion" style={{ gap: 16 }}>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz(`/spolka/${spolkaId}`)}>← Wróć do rejestru</button>
+      <Karta tytul="Zgłoś błąd we wpisie">
+        <Komunikat odmiana="blad" tresc={blad} />
+        <Komunikat
+          odmiana="info"
+          tresc={
+            <>
+              To zgłoszenie jest dla wpisu, który już istnieje w rejestrze, a wygląda na błędny —
+              np. literówka w nazwisku albo data niezgodna z dokumentem. Jeśli chcesz zgłosić, że coś
+              się ZMIENIŁO (np. akcjonariusz ma nowy adres, sprzedał akcje) — to nie jest
+              nieprawidłowość, tylko nowy wpis do zrobienia: {' '}
+              <a href={`#/zgloszenie/${spolkaId}`} onClick={(z) => { z.preventDefault(); idz(`/zgloszenie/${spolkaId}`); }}>
+                przejdź do „Poproś o nowy wpis”
+              </a>.
+            </>
+          }
+        />
+
+        <Pole etykieta="Czego dotyczy" wymagane>
+          <select value={czegoDotyczy} onChange={(z) => ustawCzegoDotyczy(z.target.value)}>
+            <option value="">— wybierz —</option>
+            {CZEGO_DOTYCZY_BLEDU.map(([kod, nazwa]) => (
+              <option key={kod} value={kod}>{nazwa}</option>
+            ))}
+          </select>
+        </Pole>
+        <Pole etykieta="Opisz, na czym polega błąd" wymagane>
+          <textarea rows={4} value={opis} onChange={(z) => ustawOpis(z.target.value)} />
+        </Pole>
+
+        <Komunikat odmiana="info" tresc="Zgłoszenie jest bezpłatne. Ewentualne sprostowanie ustali i wykona kancelaria." />
+
+        <button className="btn btn-glowny" disabled={wysylanie || !mozeZlozyc} onClick={zglos} style={{ marginTop: 8 }}>
+          {wysylanie ? 'Wysyłanie…' : 'Zgłoś błąd'}
+        </button>
+      </Karta>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
    STATUS ZGŁOSZEŃ
    ───────────────────────────────────────────────────── */
 const ZNACZNIK_STANU = {
-  nowa: 'neutralny', weryfikacja: 'lupek', wstrzymana: 'oliwka',
-  wpisana: 'zielony', odmowa: 'bordo', anulowana: 'neutralny',
+  nowa: 'neutralna', weryfikacja: 'neutralna', wstrzymana: 'mosiadz',
+  wpisana: 'rejestr', odmowa: 'sygnal', anulowana: 'neutralna',
 };
 
 /* Ten sam pasek starzenia co w kolejce spraw kancelarii (faza 3.1) —
@@ -1066,46 +1520,108 @@ function kolorPaskaTerminuPortal(termin) {
   return 'transparent';
 }
 
-function EkranSprawyPortal() {
-  const { dane, ladowanie } = useDane('/api/psa/portal/zadania');
-  if (ladowanie) return <Spinner />;
-  if (!dane) return null;
+const ETYKIETA_CZEGO_DOTYCZY_BLEDU = Object.fromEntries(CZEGO_DOTYCZY_BLEDU);
+const ETYKIETA_KWALIFIKACJI_BLEDU = {
+  sprostowanie: 'kancelaria dokona sprostowania',
+  zadanie_wpisu: 'to było żądanie nowego wpisu — przekierowane',
+  brak_nieprawidlowosci: 'kancelaria nie stwierdziła nieprawidłowości',
+};
 
-  if (dane.sprawy.length === 0) {
-    return <Pusto tytul="Brak zgłoszeń" opis="Nie złożono jeszcze żadnego zgłoszenia przez portal." />;
-  }
+/** B9 — status zgłoszeń błędu we wpisie, osobna tabela: inne kolumny (bez terminu ustawowego). */
+function TabelaZgloszenNieprawidlowosci({ spolkaId } = {}) {
+  const { dane, ladowanie } = useDane('/api/psa/portal/zgloszenia-nieprawidlowosci');
+  const zgloszenia = dane ? (spolkaId ? dane.zgloszenia.filter((z) => z.spolka_id === spolkaId) : dane.zgloszenia) : [];
+  if (ladowanie || zgloszenia.length === 0) return null;
 
   return (
-    <Karta tight tytul="Moje zgłoszenia">
+    <Karta tight tytul="Zgłoszenia błędu we wpisie">
       <table className="tbl">
         <thead>
-          <tr>
-            <th className="wiersz-kolejki-pasek-glowka" />
-            <th>Spółka</th><th>Rodzaj</th><th>Zgłoszono</th><th>Stan</th><th>Termin</th>
-          </tr>
+          <tr>{!spolkaId && <th>Spółka</th>}<th>Czego dotyczy</th><th>Zgłoszono</th><th>Stan</th></tr>
         </thead>
         <tbody>
-          {dane.sprawy.map((s) => (
-            <tr key={s.id}>
-              <td
-                className="wiersz-kolejki-pasek"
-                style={{ background: kolorPaskaTerminuPortal(s.termin) }}
-                aria-hidden="true"
-              />
-              <td>{s.spolka_nazwa}</td>
-              <td>{s.typ_nazwa}</td>
-              <td>{fmt.dataCzas(s.data_wplywu)}</td>
-              <td><Znacznik odmiana={ZNACZNIK_STANU[s.stan] || 'neutralny'}>{s.stan}</Znacznik></td>
-              <td className="przyciemnione">
-                {s.stan === 'wpisana' || s.stan === 'odmowa' || s.stan === 'anulowana'
-                  ? '—'
-                  : s.termin && s.termin.dni_pozostale != null ? `${s.termin.dni_pozostale} dni` : '—'}
+          {zgloszenia.map((z) => (
+            <tr key={z.id}>
+              {!spolkaId && <td>{z.spolka_nazwa}</td>}
+              <td>{ETYKIETA_CZEGO_DOTYCZY_BLEDU[z.czego_dotyczy] || z.czego_dotyczy}</td>
+              <td>{fmt.dataCzas(z.utworzono)}</td>
+              <td>
+                {z.stan === 'zakwalifikowane' ? (
+                  <Pigulka odmiana="rejestr">{ETYKIETA_KWALIFIKACJI_BLEDU[z.kwalifikacja] || z.kwalifikacja}</Pigulka>
+                ) : (
+                  <Pigulka odmiana="mosiadz">czeka na kancelarię</Pigulka>
+                )}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
     </Karta>
+  );
+}
+
+/**
+ * Bez `spolkaId` — „Wnioski"/wszystkie zgłoszenia konta. Z `spolkaId` —
+ * zakładka „Zgłoszenia" widoku spółki (Faza 4 pkt 1): filtrowane do jednej
+ * spółki, bez kolumny „Spółka" (zbędna, gdy jest jedna) i z akcją
+ * „Poproś o nowy wpis" na widoku, na którym akcja ma sens.
+ */
+function EkranSprawyPortal({ spolkaId } = {}) {
+  const { dane, ladowanie } = useDane('/api/psa/portal/zadania');
+  if (ladowanie) return <Spinner />;
+  if (!dane) return null;
+
+  const sprawy = spolkaId ? dane.sprawy.filter((s) => s.spolka_id === spolkaId) : dane.sprawy;
+  const akcjaNowyWpis = spolkaId && (
+    <button className="btn" onClick={() => idz(`/zgloszenie/${spolkaId}`)}>Poproś o nowy wpis</button>
+  );
+
+  if (sprawy.length === 0) {
+    return (
+      <div className="pion" style={{ gap: 16 }}>
+        {akcjaNowyWpis}
+        <Pusto tytul="Brak zgłoszeń" opis="Nie złożono jeszcze żadnego zgłoszenia przez portal." />
+        <TabelaZgloszenNieprawidlowosci spolkaId={spolkaId} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="pion" style={{ gap: 16 }}>
+      {akcjaNowyWpis}
+      <Karta tight tytul={spolkaId ? 'Zgłoszenia' : 'Moje zgłoszenia'}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th className="wiersz-kolejki-pasek-glowka" />
+              {!spolkaId && <th>Spółka</th>}
+              <th>Rodzaj</th><th>Zgłoszono</th><th>Stan</th><th>Termin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sprawy.map((s) => (
+              <tr key={s.id}>
+                <td
+                  className="wiersz-kolejki-pasek"
+                  style={{ background: kolorPaskaTerminuPortal(s.termin) }}
+                  aria-hidden="true"
+                />
+                {!spolkaId && <td>{s.spolka_nazwa}</td>}
+                <td>{s.typ_nazwa}</td>
+                <td>{fmt.dataCzas(s.data_wplywu)}</td>
+                <td><Pigulka odmiana={ZNACZNIK_STANU[s.stan] || 'neutralna'}>{s.stan}</Pigulka></td>
+                <td className="przyciemnione">
+                  {s.stan === 'wpisana' || s.stan === 'odmowa' || s.stan === 'anulowana'
+                    ? '—'
+                    : s.termin && s.termin.dni_pozostale != null ? `${s.termin.dni_pozostale} dni` : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Karta>
+      <TabelaZgloszenNieprawidlowosci spolkaId={spolkaId} />
+    </div>
   );
 }
 
@@ -1161,7 +1677,7 @@ function EkranInformacjaPortal({ spolkaId }) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
-      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz(`/spolka/${spolkaId}`)}>← Wróć</button>
       <Karta tytul="Informacja z rejestru">
         <div className="podstawa-prawna" style={{ marginBottom: 16 }}>
           Art. 300(35) Kodeksu spółek handlowych — informacja z rejestru akcjonariuszy na wskazany dzień,
@@ -1173,15 +1689,8 @@ function EkranInformacjaPortal({ spolkaId }) {
           <PoleDaty wartosc={data} przyZmianie={(v) => v && ustawData(v)} />
         </Pole>
 
-        {stawka != null && (
-          <Komunikat
-            odmiana="info"
-            tresc={`Informacja z rejestru jest odpłatna — ${fmt.zlote(stawka)}. Dokument pobierzesz po opłaceniu.`}
-          />
-        )}
-
         <button className="btn btn-glowny" onClick={zamow} disabled={pracuje}>
-          {pracuje ? 'Przygotowywanie…' : 'Zamów informację'}
+          {pracuje ? 'Przygotowywanie…' : stawka != null ? `Zapłać ${fmt.zlote(stawka)}` : 'Zamów informację'}
         </button>
 
         {gotowa && gotowa.rodzaj === 'platnosc' && (
@@ -1193,7 +1702,7 @@ function EkranInformacjaPortal({ spolkaId }) {
             />
             <div className="row-g">
               <a className="btn btn-glowny" href={gotowa.adres} target="_blank" rel="noopener">Otwórz płatność</a>
-              <button className="btn" onClick={() => idz('/platnosci')}>Przejdź do płatności</button>
+              <button className="btn" onClick={() => idz(`/spolka/${spolkaId}?zakladka=oplaty`)}>Przejdź do płatności</button>
             </div>
           </>
         )}
@@ -1221,24 +1730,50 @@ function EkranInformacjaPortal({ spolkaId }) {
 
 const OPIS_STATUSU_OPLATY = {
   naliczona: { odmiana: undefined, tekst: 'do zapłaty' },
-  zafakturowana: { odmiana: 'oliwka', tekst: 'na fakturze' },
-  oplacona: { odmiana: 'zielony', tekst: 'opłacona' },
+  zafakturowana: { odmiana: 'mosiadz', tekst: 'na fakturze' },
+  oplacona: { odmiana: 'rejestr', tekst: 'opłacona' },
 };
 
 /**
  * Należności klienta. Trzy rzeczy, które ten ekran musi powiedzieć:
  * ile jest do zapłaty, za co, i gdzie kliknąć, żeby zapłacić.
  */
-function EkranPlatnosciPortal() {
+function EkranPlatnosciPortal({ spolkaId } = {}) {
   const { dane, ladowanie, blad, odswiez } = useDane('/api/psa/portal/oplaty');
   const [wysylanie, ustawWysylanie] = useState(null);
   const [bladPlatnosci, ustawBladPlatnosci] = useState(null);
 
+  // Powrót z operatora płatności (`?zwrot=1` w adresie powrotu, patrz
+  // `server/trasy/portal.js`) NIE jest dowodem zapłaty — źródłem prawdy
+  // jest powiadomienie ITN, asynchroniczne względem tego powrotu. Zamiast
+  // zgadywać z samego faktu powrotu, odpytujemy stan co 3 s przez maks. 30 s.
+  const { zapytanie } = useTrasa();
+  const czekaNaPotwierdzenie = zapytanie.get('zwrot') === '1';
+  const [nadalCzeka, ustawNadalCzeka] = useState(czekaNaPotwierdzenie);
+  useEffect(() => {
+    if (!czekaNaPotwierdzenie) return undefined;
+    let probby = 0;
+    const id = setInterval(() => {
+      probby += 1;
+      odswiez();
+      if (probby >= 10) { ustawNadalCzeka(false); clearInterval(id); }
+    }, 3000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [czekaNaPotwierdzenie]);
+  useEffect(() => {
+    if (czekaNaPotwierdzenie && dane && dane.oplaty.some((o) => o.status === 'oplacona')) {
+      ustawNadalCzeka(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dane]);
+
   if (ladowanie) return <Spinner />;
   if (blad) return <Komunikat odmiana="blad" tresc={blad.message} />;
 
-  const doZaplaty = dane.oplaty.filter((o) => o.status !== 'oplacona');
-  const zaplacone = dane.oplaty.filter((o) => o.status === 'oplacona');
+  const oplaty = spolkaId ? dane.oplaty.filter((o) => o.spolka_id === spolkaId) : dane.oplaty;
+  const doZaplaty = oplaty.filter((o) => o.status !== 'oplacona');
+  const zaplacone = oplaty.filter((o) => o.status === 'oplacona');
 
   async function zaplac(oplata) {
     ustawWysylanie(oplata.id);
@@ -1286,11 +1821,11 @@ function EkranPlatnosciPortal() {
           </div>
         </div>
         <div className="pozycja-platnosci-kwota">{fmt.zlote(o.kwota_grosze)}</div>
-        <Znacznik odmiana={status.odmiana}>{status.tekst}</Znacznik>
+        <Pigulka odmiana={status.odmiana}>{status.tekst}</Pigulka>
         <div className="pozycja-platnosci-akcja">
           {o.status !== 'oplacona' && dane.platnosci_wlaczone && (
             <button className="btn btn-glowny btn-maly" disabled={wysylanie === o.id} onClick={() => zaplac(o)}>
-              {wysylanie === o.id ? 'Otwieram…' : 'Zapłać'}
+              {wysylanie === o.id ? 'Otwieram…' : `Zapłać ${fmt.zlote(o.kwota_grosze)}`}
             </button>
           )}
           {o.do_pobrania && (
@@ -1305,6 +1840,13 @@ function EkranPlatnosciPortal() {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
+      {nadalCzeka && (
+        <Komunikat
+          odmiana="info"
+          tytul="Czekamy na potwierdzenie od operatora płatności"
+          tresc="Płatność jest przetwarzana — status uzupełni się automatycznie, gdy operator ją potwierdzi. Nie trzeba odświeżać strony."
+        />
+      )}
       <Komunikat odmiana="blad" tresc={bladPlatnosci} />
 
       {!dane.platnosci_wlaczone && doZaplaty.length > 0 && (
@@ -1321,7 +1863,7 @@ function EkranPlatnosciPortal() {
           <div className="lista-platnosci">
             <div className="suma-platnosci">
               <span>Razem</span>
-              <strong>{fmt.zlote(dane.do_zaplaty_grosze)}</strong>
+              <strong>{fmt.zlote(spolkaId ? doZaplaty.reduce((s, o) => s + o.kwota_grosze, 0) : dane.do_zaplaty_grosze)}</strong>
             </div>
             {doZaplaty.map(wiersz)}
           </div>
@@ -1338,11 +1880,151 @@ function EkranPlatnosciPortal() {
 }
 
 /* ─────────────────────────────────────────────────────
+   KONTO (Faza 4 pkt 1) — dane logowania, hasło, dokumenty prawne, wylogowanie
+   ───────────────────────────────────────────────────── */
+
+/** Formularz zmiany hasła — ten sam wzorzec pól co logowanie pracownika (B1: autouzupełnianie menedżera haseł). */
+function FormularzZmianyHaslaPortal() {
+  const [obecne, ustawObecne] = useState('');
+  const [nowe, ustawNowe] = useState('');
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const [gotowe, ustawGotowe] = useState(false);
+
+  async function zapisz(z) {
+    z.preventDefault();
+    ustawWysylanie(true);
+    ustawBlad(null);
+    ustawGotowe(false);
+    try {
+      await API.post('/api/psa/portal/zmiana-hasla', { haslo_obecne: obecne, haslo_nowe: nowe });
+      ustawObecne('');
+      ustawNowe('');
+      ustawGotowe(true);
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zmienić hasła.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  return (
+    <form onSubmit={zapisz} className="pion" style={{ gap: 12 }}>
+      <Komunikat odmiana="blad" tresc={blad} />
+      <Komunikat odmiana="ok" tresc={gotowe ? 'Hasło zmienione. Przy kolejnym logowaniu użyj nowego hasła.' : null} />
+      <Pole etykieta="Obecne hasło" wymagane>
+        <input
+          type="password" className="fl" autoComplete="current-password" required
+          value={obecne} onChange={(z) => ustawObecne(z.target.value)}
+        />
+      </Pole>
+      <Pole etykieta="Nowe hasło" wymagane podpowiedz="Minimum 12 znaków.">
+        <input
+          type="password" className="fl" autoComplete="new-password" required minLength={12}
+          value={nowe} onChange={(z) => ustawNowe(z.target.value)}
+        />
+      </Pole>
+      <button className="btn btn-glowny" type="submit" disabled={wysylanie} style={{ alignSelf: 'flex-start' }}>
+        {wysylanie ? 'Zapisywanie…' : 'Zmień hasło'}
+      </button>
+    </form>
+  );
+}
+
+function EkranKonto({ konto, przyWylogowaniu }) {
+  const [wylogowywanie, ustawWylogowywanie] = useState(false);
+
+  async function wyloguj() {
+    ustawWylogowywanie(true);
+    try {
+      await API.post('/api/psa/portal/logout');
+    } finally {
+      przyWylogowaniu();
+    }
+  }
+
+  return (
+    <div className="pion" style={{ gap: 16 }}>
+      <Karta tytul="Dane logowania">
+        <div className="metryka-pion">
+          <MetrykaPoz etykieta="E-mail" wartosc={konto.email} />
+          <MetrykaPoz etykieta="Rodzaj konta" wartosc={ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola} />
+        </div>
+        <div className="podpowiedz odstep-d">
+          Adres e-mail zmienia wyłącznie kancelaria — napisz albo zadzwoń, jeśli trzeba go poprawić.
+        </div>
+      </Karta>
+
+      <Karta tytul="Zmiana hasła">
+        <FormularzZmianyHaslaPortal />
+      </Karta>
+
+      <Karta tytul="Dokumenty prawne">
+        <div className="pion" style={{ gap: 8 }}>
+          <a href="#/regulamin">Regulamin portalu</a>
+          <a href="#/polityka-prywatnosci">Polityka prywatności</a>
+          {konto.rodo_zaakceptowano && (
+            <div className="podpowiedz">Klauzula informacyjna RODO zaakceptowana {fmt.dataCzas(konto.rodo_zaakceptowano)}.</div>
+          )}
+        </div>
+      </Karta>
+
+      <Karta>
+        <button className="btn" onClick={wyloguj} disabled={wylogowywanie}>
+          {wylogowywanie ? 'Wylogowywanie…' : 'Wyloguj się'}
+        </button>
+      </Karta>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
+   POMOC (Faza 4 pkt 1)
+   ───────────────────────────────────────────────────── */
+function EkranPomoc() {
+  const kancelaria = useKancelaria();
+  return (
+    <div className="pion" style={{ gap: 16 }}>
+      <Karta tytul="Jak korzystać z portalu">
+        <div className="pion" style={{ gap: 10 }}>
+          <p>
+            W zakładce <strong>Moje spółki</strong> znajdziesz podgląd rejestru akcjonariuszy, możesz poprosić
+            o nowy wpis (np. sprzedaż akcji) albo zgłosić błąd w istniejącym wpisie, pobrać dokumenty i
+            sprawdzić opłaty.
+          </p>
+          <p>
+            W zakładce <strong>Wnioski</strong> widać postęp wniosku o prowadzenie rejestru — od złożenia,
+            przez podpisanie dokumentów, po otwarcie rejestru.
+          </p>
+          <p>
+            Rejestr akcjonariuszy prowadzi notariusz na podstawie umowy ze spółką (art. 300³¹ § 1 KSH).
+            Wpisy w rejestrze są ostateczne — nie da się ich „poprawić" jak w formularzu; można wyłącznie
+            dokonać sprostowania kolejnym wpisem.
+          </p>
+        </div>
+      </Karta>
+      <Karta tytul="Kontakt z kancelarią">
+        <div className="metryka-pion">
+          <MetrykaPoz etykieta="Kancelaria" wartosc={kancelaria.nazwa} />
+          {kancelaria.telefon && <MetrykaPoz etykieta="Telefon" wartosc={kancelaria.telefon} />}
+          {kancelaria.email && <MetrykaPoz etykieta="E-mail" wartosc={kancelaria.email} />}
+        </div>
+        {kancelaria.www && (
+          <div className="podpowiedz odstep-d">
+            <a href={kancelaria.www} target="_blank" rel="noopener">Strona kancelarii</a>
+          </div>
+        )}
+      </Karta>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
    APLIKACJA
    ───────────────────────────────────────────────────── */
 function AplikacjaPortal() {
   const trasa = useTrasa();
-  const { segmenty, sciezka } = trasa;
+  const { segmenty, sciezka, zapytanie } = trasa;
 
   // Regulamin i polityka prywatności — odnośniki do nich stoją w stopce,
   // którą widać także pod ekranem logowania, więc muszą działać bez sesji.
@@ -1383,13 +2065,16 @@ function AplikacjaPortal() {
     );
   }
 
-  return <AplikacjaPortalZSesja segmenty={segmenty} sciezka={sciezka} />;
+  return <AplikacjaPortalZSesja segmenty={segmenty} sciezka={sciezka} zapytanie={zapytanie} />;
 }
 
 /** Adresy, pod którymi zalogowane konto ma co zobaczyć (pusty = strona główna). */
-const EKRANY_KONTA = ['', 'wniosek', 'sprawy', 'rejestr', 'zgloszenie', 'informacja'];
+const EKRANY_KONTA = [
+  '', 'spolki', 'spolka', 'wniosek', 'konto', 'pomoc',
+  'sprawy', 'rejestr', 'zgloszenie', 'zgloszenie-bledu', 'informacja', 'platnosci',
+];
 
-function AplikacjaPortalZSesja({ segmenty, sciezka }) {
+function AplikacjaPortalZSesja({ segmenty, sciezka, zapytanie }) {
   const sesja = usePortalSesja();
 
   if (sesja.ladowanie) return <Spinner />;
@@ -1430,18 +2115,35 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
     // „Moje spółki" i „Moje zgłoszenia" zmieniały adres, a ekran zostawał
     // ten sam — przyciski wyglądały na zepsute. Teraz nawigacja działa dla
     // każdej roli, a formularz ma własny adres.
-    // Formularz wniosku należy WYŁĄCZNIE do konta wnioskodawcy. Po przyjęciu
-    // wniosku konto przechodzi w rolę „spolka" i ekran nie ma już czego
-    // pokazać — pod tym adresem zostawałby martwy kreator z zamkniętą edycją.
+    // Formularz wniosku należy do konta wnioskodawcy — i, od B8, do konta
+    // „spolka" z otwartym wnioskiem o KOLEJNĄ spółkę („Dodaj spółkę").
+    // Bez otwartego wniosku (rola „spolka", nic w toku) pod tym adresem
+    // zostawałby martwy kreator — wraca na „Moje spółki", skąd zaczyna się
+    // nowy wniosek świadomym kliknięciem.
+    // Wnioskodawca: ten adres to jedyne, co konto ma do roboty, zawsze
+    // formularz. Rola „spolka": wniosek o KOLEJNĄ spółkę (B8) — patrz
+    // `EkranWnioski`. Akcjonariusz nie ma tu czego robić (patrz `kartyNawigacji`).
     if (segmenty[0] === 'wniosek') {
-      return sesja.konto.rola === 'wnioskodawca' ? <EkranWniosku /> : <EkranMoje />;
+      if (sesja.konto.rola === 'wnioskodawca') return <EkranWniosku />;
+      if (sesja.konto.rola === 'spolka') return <EkranWnioski />;
+      return <EkranStart />;
     }
-    if (segmenty.length === 0) return <EkranMoje />;
+    if (segmenty.length === 0) return <EkranStart />;
+    if (segmenty[0] === 'spolki') return <EkranMojeSpolki />;
+    if (segmenty[0] === 'spolka' && segmenty[1]) return <EkranSpolkaPortal spolkaId={Number(segmenty[1])} />;
+    if (segmenty[0] === 'konto') return <EkranKonto konto={sesja.konto} przyWylogowaniu={() => sesja.odswiez()} />;
+    if (segmenty[0] === 'pomoc') return <EkranPomoc />;
+    // Trasy poniżej nie są już w nawigacji głównej (zastąpione widokiem
+    // spółki z zakładkami), ale zostają klikalne — stare odnośniki
+    // (np. z wcześniejszych e-maili) nie mają się urwać w „Nie ma takiej strony".
     if (segmenty[0] === 'sprawy') return <EkranSprawyPortal />;
-    if (segmenty[0] === 'rejestr' && segmenty[1]) return <EkranRejestrPortal spolkaId={Number(segmenty[1])} />;
-    if (segmenty[0] === 'zgloszenie' && segmenty[1]) return <EkranZgloszeniePortal spolkaId={Number(segmenty[1])} />;
-    if (segmenty[0] === 'informacja' && segmenty[1]) return <EkranInformacjaPortal spolkaId={Number(segmenty[1])} />;
     if (segmenty[0] === 'platnosci') return <EkranPlatnosciPortal />;
+    if (segmenty[0] === 'rejestr' && segmenty[1]) return <EkranSpolkaPortal spolkaId={Number(segmenty[1])} />;
+    if (segmenty[0] === 'zgloszenie' && segmenty[1]) return <EkranZgloszeniePortal spolkaId={Number(segmenty[1])} />;
+    if (segmenty[0] === 'zgloszenie-bledu' && segmenty[1]) {
+      return <EkranZgloszenieBleduPortal spolkaId={Number(segmenty[1])} odwolanie={zapytanie.get('odwolanie') || ''} />;
+    }
+    if (segmenty[0] === 'informacja' && segmenty[1]) return <EkranInformacjaPortal spolkaId={Number(segmenty[1])} />;
     return (
       <Karta>
         <Pusto tytul="Nie ma takiej strony" akcja={<button className="btn btn-glowny" onClick={() => idz('/')}>Wróć</button>} />
@@ -1460,6 +2162,7 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
       sciezka={sciezka === '/' ? '/' : `/${segmenty[0]}`}
       waski={waski}
       konto={sesja.konto}
+      sesjaWygasa={sesja.sesjaWygasa}
       przyWylogowaniu={() => sesja.odswiez()}
     >
       {ekran()}

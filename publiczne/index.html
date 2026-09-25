@@ -14,41 +14,19 @@
   <link rel="stylesheet" href="/style/psa.css">
   <link rel="stylesheet" href="/style/rejestr.css">
 
-  <!-- Wersje przypięte (sekcja 13 specyfikacji) — bez bundlera.
-       Serwowane LOKALNIE z /vendor zamiast z unpkg: rejestr akcjonariuszy
-       musi wstawać także wtedy, gdy kancelaria nie ma internetu albo CDN
-       jest niedostępny. Te same wersje, te same pliki, tylko bez sieci. -->
-  <script src="/vendor/react.production.min.js"></script>
-  <script src="/vendor/react-dom.production.min.js"></script>
-  <script src="/vendor/babel.min.js"></script>
+  <!-- Główny krój interfejsu wczytuje się od razu, pozostałe — gdy są potrzebne. -->
+  <link rel="preload" href="/fonty/inter-tight-latin.woff2" as="font" type="font/woff2" crossorigin>
+
+  <!-- React serwowany LOKALNIE z /vendor (rejestr ma wstawać także bez
+       internetu). JSX jest skompilowany przy budowaniu (`npm run buduj`,
+       D-046) — przeglądarka nie ładuje już Babela. -->
+  <script src="/vendor/react.production.min.js" defer></script>
+  <script src="/vendor/react-dom.production.min.js" defer></script>
+  <script src="/dist/kancelaria.js" defer></script>
+  <meta name="robots" content="noindex, nofollow">
 </head>
 <body>
+  <noscript>Ta aplikacja wymaga włączonej obsługi JavaScriptu.</noscript>
   <div id="korzen"></div>
-
-  <script type="text/babel" data-presets="react" src="/js/rdzen.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/ui.js"></script>
-  <!-- ui-rejestr.js ładuje się PO ui.js: nadpisuje prymitywy nową wersją. -->
-  <script type="text/babel" data-presets="react" src="/js/ui-rejestr.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/prawne.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/podglad.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/pulpit.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/pesel.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/osoby.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/zgloszenia.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/wnioski.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/zawiadomienia.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/spolki.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/dokumenty-na-zadanie.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/kokpit.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/kreator.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/sprawy.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/wydruk.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/konfiguracja.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/szablony.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/auth.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/uzytkownicy.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/oplaty.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/migracja.js"></script>
-  <script type="text/babel" data-presets="react" src="/js/app.js"></script>
 </body>
 </html>

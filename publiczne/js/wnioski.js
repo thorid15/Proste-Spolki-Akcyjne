@@ -14,22 +14,22 @@
    literówka klienta wędrowała wprost do umowy. */
 
 const STAN_WNIOSKU = {
-  w_przygotowaniu: { etykieta: 'w przygotowaniu', znacznik: 'neutralny' },
+  w_przygotowaniu: { etykieta: 'w przygotowaniu', znacznik: 'neutralna' },
   zlozony: { etykieta: 'złożony — do sprawdzenia', znacznik: 'mosiadz' },
-  do_uzupelnienia: { etykieta: 'odesłany do uzupełnienia', znacznik: 'bordo' },
-  umowa_wygenerowana: { etykieta: 'dokumenty u klienta', znacznik: 'neutralny' },
-  umowa_podpisana: { etykieta: 'podpisane — do przyjęcia', znacznik: 'zielony' },
-  przyjety: { etykieta: 'przyjęty', znacznik: 'zielony' },
-  odrzucony: { etykieta: 'odrzucony', znacznik: 'bordo' },
+  do_uzupelnienia: { etykieta: 'odesłany do uzupełnienia', znacznik: 'sygnal' },
+  umowa_wygenerowana: { etykieta: 'dokumenty u klienta', znacznik: 'neutralna' },
+  umowa_podpisana: { etykieta: 'podpisane — do przyjęcia', znacznik: 'rejestr' },
+  przyjety: { etykieta: 'przyjęty', znacznik: 'rejestr' },
+  odrzucony: { etykieta: 'odrzucony', znacznik: 'sygnal' },
 };
 
 function ZnacznikWniosku({ status }) {
-  const s = STAN_WNIOSKU[status] || { etykieta: status, znacznik: 'neutralny' };
-  return <Znacznik odmiana={s.znacznik}>{s.etykieta}</Znacznik>;
+  const s = STAN_WNIOSKU[status] || { etykieta: status, znacznik: 'neutralna' };
+  return <Pigulka odmiana={s.znacznik}>{s.etykieta}</Pigulka>;
 }
 
 function EkranWnioski() {
-  const [filtrStatus, ustawFiltrStatus] = useState('');
+  const [filtrStatus, ustawFiltrStatus] = useParametrAdresu('status', '');
   const { dane, ladowanie } = useDane(`/api/psa/wnioski${filtrStatus ? `?status=${filtrStatus}` : ''}`, [filtrStatus]);
   const wnioski = (dane && dane.wnioski) || [];
 
@@ -133,9 +133,7 @@ const GRUPY_POL_SPOLKI = [
       ['reprezentant_imie_nazwisko', 'Imię i nazwisko'],
       ['reprezentant_funkcja', 'Funkcja'],
       ['reprezentant_pesel', 'PESEL'],
-      ['reprezentant_dowod', 'Dowód osobisty'],
       ['reprezentant_rodzice', 'Imiona rodziców'],
-      ['reprezentant_adres', 'Adres zamieszkania'],
       ['reprezentant_email', 'E-mail'],
     ],
   },
@@ -347,6 +345,35 @@ function KrokDaneSpolki({ wniosek, krs, zablokowane, odswiez }) {
                   </Pole>
                 ))}
               </div>
+              {/* Dowód i adres reprezentanta są od migracji 53 ustrukturyzowane
+                  (B2/B3) — nie pasują do generycznej siatki pól tekstowych
+                  wyżej (rodzaj dowodu ma zamknięty katalog, adres kilka
+                  kolumn), więc mają własne komponenty. */}
+              {grupa.tytul === 'Reprezentant podpisujący umowę' && (
+                <>
+                  <PoleDowod
+                    etykieta="Dowód tożsamości"
+                    rodzaj={dane.reprezentant_dowod_rodzaj}
+                    numer={dane.reprezentant_dowod_numer}
+                    przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
+                    idPrefiks="korekta-reprezentant"
+                    klucze={{ rodzaj: 'reprezentant_dowod_rodzaj', numer: 'reprezentant_dowod_numer' }}
+                  />
+                  <PoleAdres
+                    etykieta="Adres zamieszkania"
+                    dane={dane}
+                    przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
+                    prefiks="reprezentant_"
+                    idPrefiks="korekta-reprezentant"
+                  />
+                  {!dane.reprezentant_kod_pocztowy && !dane.reprezentant_ulica && dane.reprezentant_adres && (
+                    <Komunikat
+                      odmiana="info"
+                      tresc={`Adres wpisany wcześniej, w jednym polu: „${dane.reprezentant_adres}”. Wpisz go ponownie powyżej, żeby pisma mogły go użyć w nowym formacie.`}
+                    />
+                  )}
+                </>
+              )}
               {/* Skan dowodu stoi przy danych reprezentanta, bo tam się go
                   sprawdza: pisownia nazwiska i PESEL w umowie mają zgadzać
                   się z dokumentem, który przysłał klient. */}
@@ -484,6 +511,34 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
     autoComplete: 'off',
   });
 
+  // B4 — ta sama reguła, co po stronie serwera (server/logika/akcjonariusz.js
+  // `ostrzezenia()`), tylko przypięta wprost do dwóch pól, których dotyczy.
+  const bladPeselDaty = dane.typ !== 'prawna' && !String(dane.pesel || '').trim() && !String(dane.data_urodzenia || '').trim()
+    ? 'Wpisz PESEL albo — gdy akcjonariusz go nie ma — datę urodzenia.'
+    : null;
+
+  // K4 (FAZA 3 sesji frontendowej v2): dopasowanie do kartoteki było wyłącznie
+  // ręczne (WyborZKartoteki niżej) — ten sam wzorzec kolizji identyfikatora
+  // co w PanelOsoby (D-042), tu jako PROPOZYCJA jednym kliknięciem, bo tu nie
+  // ma ryzyka założenia duplikatu (pozycja bez dopasowania i tak zakłada
+  // nową osobę dopiero przy przyjęciu wniosku, nie od razu).
+  const [sugestia, ustawSugestie] = useState(null);
+  const identyfikatorDopasowania = pozycja.typ === 'prawna' ? pozycja.numer_w_rejestrze : pozycja.pesel;
+  useEffect(() => {
+    ustawSugestie(null);
+    if (pozycja.osoba_id || !identyfikatorDopasowania) return undefined;
+    const klucz = pozycja.typ === 'prawna' ? 'numer_w_rejestrze' : 'pesel';
+    let aktualne = true;
+    API.get(`/api/psa/osoby?q=${encodeURIComponent(identyfikatorDopasowania)}`)
+      .then((o) => {
+        if (!aktualne) return;
+        const trafienie = o.osoby.find((x) => String(x[klucz] || '') === String(identyfikatorDopasowania));
+        if (trafienie) ustawSugestie(trafienie);
+      })
+      .catch(() => {});
+    return () => { aktualne = false; };
+  }, [pozycja.osoba_id, identyfikatorDopasowania, pozycja.typ]);
+
   return (
     <>
       <KrokNaglowek tytul={nazwaPozycji(pozycja)} opis={identyfikatorPozycji(pozycja)} />
@@ -500,6 +555,11 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
       {braki && braki.length > 0 && (
         <Komunikat odmiana="uwaga" tytul="Braki wobec art. 300³³ § 1 KSH" lista={braki} />
       )}
+
+      {/* B4: reguła „PESEL albo data urodzenia" — dziś jedyny błąd wobec
+          art. 300³³ § 1 KSH widoczny WYŁĄCZNIE w banerze wyżej — powtórzona
+          też PRZY POLACH, których dotyczy (wzorzec z FAZY 1 pkt 3), zamiast
+          zmuszać do skojarzenia zdania z bannera z wierszem siatki niżej. */}
 
       <div className="podsumowanie-cechy" style={{ marginBottom: 'var(--od-16)' }}>
         <span>{pozycja.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}</span>
@@ -525,7 +585,11 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
 
       <div className="siatka-2">
         {POLA_KOREKTY_AKCJONARIUSZA.map(([klucz, etykieta]) => (
-          <Pole key={klucz} etykieta={etykieta}>
+          <Pole
+            key={klucz}
+            etykieta={etykieta}
+            blad={(klucz === 'pesel' || klucz === 'data_urodzenia') ? bladPeselDaty : undefined}
+          >
             <input type="text" {...pole(klucz)} />
           </Pole>
         ))}
@@ -549,12 +613,25 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
         </select>
       </Pole>
 
+      {!zablokowane && sugestia && (
+        <div className="kolizja-kartoteki" role="status">
+          <span>W kartotece jest już <strong>{sugestia.oznaczenie}</strong> z tym numerem.</span>
+          <button
+            type="button"
+            className="btn btn-maly"
+            onClick={() => ustawZweryfikowano(pozycja.zweryfikowano ? 1 : 0, sugestia.id)}
+          >
+            Dopasuj
+          </button>
+        </div>
+      )}
+
       {!zablokowane && (
         <Pole
           etykieta="Dopasowanie do kartoteki wspólnej"
           podpowiedz="Puste = przy przyjęciu wniosku powstanie nowa osoba w kartotece."
         >
-          <WyborOsoby
+          <WyborZKartoteki
             wartosc={pozycja.osoba_id}
             przyZmianie={(id) => ustawZweryfikowano(1, id)}
             typFiltr={pozycja.typ}
@@ -1152,15 +1229,15 @@ function PozycjaDokumentuKancelarii({ wniosekId, dokument, dlaKogo, przyOtwarciu
 
       <div className="dokument-pozycja-podpis">
         {dokument.udostepniono
-          ? <Znacznik odmiana="neutralny">u klienta</Znacznik>
-          : <Znacznik odmiana="mosiadz">nieudostępniony</Znacznik>}
+          ? <Pigulka odmiana="neutralna">u klienta</Pigulka>
+          : <Pigulka odmiana="mosiadz">nieudostępniony</Pigulka>}
         {/* Jeden znacznik na stan sprawdzenia, nie trzy: „sprawdzony" mówi, że
             ktoś dokument przeczytał, „podpis potwierdzony" — że sprawdził też
             odesłany skan. Ślad po poprawce treści zostaje osobno. */}
-        {stan && <Znacznik odmiana="zielony">{stan}</Znacznik>}
-        {dokument.zmodyfikowano && <Znacznik odmiana="mosiadz">treść poprawiona</Znacznik>}
+        {stan && <Pigulka odmiana="rejestr">{stan}</Pigulka>}
+        {dokument.zmodyfikowano && <Pigulka odmiana="mosiadz">treść poprawiona</Pigulka>}
         {dokument.brakujace.length > 0 && (
-          <Znacznik odmiana="bordo">{opisPustychMiejsc(dokument.brakujace.length)}</Znacznik>
+          <Pigulka odmiana="sygnal">{opisPustychMiejsc(dokument.brakujace.length)}</Pigulka>
         )}
         {podpisany ? (
           <a
@@ -1486,7 +1563,7 @@ const ZAKLADKI_WNIOSKU = [
 
 function EkranWniosekSzczegoly({ wniosekId }) {
   const { dane, ladowanie, odswiez } = useDane(`/api/psa/wnioski/${wniosekId}`);
-  const [zakladka, ustawZakladke] = useState('spolka');
+  const [zakladka, ustawZakladke] = useParametrAdresu('zakladka', 'spolka');
   // Lista dokumentów zmienia się częściej niż reszta wniosku (wystawienie,
   // poprawka treści, udostępnienie), więc żyje osobno — inaczej każda z tych
   // czynności ciągnęłaby ze sobą ponowne odpytanie KRS.

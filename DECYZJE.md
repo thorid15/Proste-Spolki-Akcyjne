@@ -651,6 +651,330 @@
 - Skutek w kodzie: brak na razie — dotyczy FAZY 5.
 - **Decyzja otwarta:** Q2 pozostaje w „Decyzje otwarte” niżej do czasu odpowiedzi.
 
+### D-050 — „Stan na” w interfejsie tylko jako dzień
+- Data: 2026-09-25 (sesja frontendowa v2, przed FAZĄ 1)
+- Obszar: rejestr / interfejs
+- Decyzja: kokpit spółki pokazuje „stan na” wyłącznie z dokładnością do **dnia** (stan na koniec
+  dnia). Pole godziny znika z UI. Zastępuje D-043 w warstwie interfejsu; mechanizm API „stan na
+  chwilę” z D-032 zostaje bez zmian.
+- Uzasadnienie: decyzja Łukasza — pracownikowi potrzebny jest stan na dzień; chwila wpisu co do
+  sekundy jest pokazywana przy pozycji akcjonariusza (B12), nie w filtrze kokpitu.
+- Odrzucono: utrzymanie pola godziny z D-043.
+- Źródło: Łukasz, przed sesją frontendową v2 (`SESJA-PSA-FRONTEND.md` v2 § 0.5).
+- Skutek w kodzie: FAZA 2 (B12) — `publiczne/js/kokpit.js`. Zamyka P-011 w części UI.
+
+### D-051 — Menu kancelarii bez scalania; pulpit z sekcją „Do zrobienia”
+- Data: 2026-09-25 (sesja frontendowa v2, przed FAZĄ 1)
+- Obszar: interfejs kancelarii
+- Decyzja: pozycje menu Kolejka spraw, Zgłoszenia, Wnioski i Zawiadomienia zostają osobne. Pulpit
+  zamiast kafli statystyk dostaje sekcję „Do zrobienia” zasilaną tą samą definicją co liczniki w
+  nawigacji.
+- Uzasadnienie: decyzja Łukasza.
+- Odrzucono: scalenie czterech pozycji w jedną skrzynkę spraw.
+- Źródło: Łukasz, przed sesją frontendową v2.
+- Skutek w kodzie: FAZA 1 pkt 9 (wspólny `Licznik`), FAZA 3 (K1).
+
+### D-052 — Checklisty weryfikacyjne zaznacza wyłącznie człowiek
+- Data: 2026-09-25 (sesja frontendowa v2, przed FAZĄ 1)
+- Obszar: rejestr / weryfikacja
+- Decyzja: system nigdy sam nie zaznacza pozycji checklisty (otwarcie rejestru, weryfikacja wpisu,
+  podpisy). Może jedynie **zablokować** zaznaczenie pozycji, która na pewno nie jest spełniona — z
+  przyczyną i odnośnikiem „Uzupełnij” do pola, które to naprawia.
+- Uzasadnienie: decyzja Łukasza — automatyzujemy wpisywanie danych, nie ocenę prawną.
+- Odrzucono: automatyczne zaznaczanie pozycji rozstrzygalnych przez system.
+- Źródło: Łukasz, przed sesją frontendową v2.
+- Skutek w kodzie: FAZA 3 (K2, K3).
+
+### D-053 — Wniosek w portalu bez liczby akcji i serii
+- Data: 2026-09-25 (sesja frontendowa v2, przed FAZĄ 1)
+- Obszar: portal / wniosek
+- Decyzja: portal nie zbiera liczby akcji ani serii. Kreator otwarcia rejestru podstawia z wniosku
+  osoby; akcjonariat założycielski (liczby akcji, serie) wpisuje kancelaria z umowy spółki.
+- Uzasadnienie: decyzja Łukasza — źródłem akcjonariatu założycielskiego jest umowa spółki, nie
+  deklaracja klienta.
+- Odrzucono: pola liczby akcji i serii we wniosku klienta.
+- Źródło: Łukasz, przed sesją frontendową v2.
+- Skutek w kodzie: brak zmiany w portalu; FAZA 3 (K2) — podstawienie osób w kreatorze otwarcia.
+
+### D-054 — Dokumenty do podpisu: mechanizm bez zmian
+- Data: 2026-09-25 (sesja frontendowa v2, przed FAZĄ 1)
+- Obszar: portal / kancelaria / dokumenty
+- Decyzja: pobranie, wgranie skanu i potwierdzenie podpisu zostają dokument po dokumencie — w
+  portalu i w kancelarii. Dozwolone wyłącznie zmiany wizualne.
+- Uzasadnienie: decyzja Łukasza — każdy podpis sprawdzany osobno.
+- Odrzucono: zbiorcze „potwierdź wszystkie podpisy” (propozycja z FAZY 0).
+- Źródło: Łukasz, przed sesją frontendową v2.
+- Skutek w kodzie: FAZA 4 (P4) — tylko wygląd listy.
+
+### D-055 — Kraj w adresie akcjonariusza z wniosku; wyszukiwarka kartoteki po numerze KRS
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 1 pkt 1–2)
+- Obszar: portal / kartoteka / schemat
+- Decyzja: (1) `psa_wnioski_akcjonariusze` dostaje kolumnę `kraj TEXT NOT NULL DEFAULT 'Polska'`
+  (migracja 52), przyjmowaną przez `PUT/POST /api/psa/portal/wniosek/akcjonariusze` i przenoszoną do
+  kartoteki przy przyjęciu wniosku (przez `POLA_OSOBY`). Puste pole = „Polska”. (2) `GET
+  /api/psa/osoby?q=` szuka także po `numer_w_rejestrze`; ostrzeżenie o duplikacie przy zapisie osoby
+  (D-042) obejmuje oprócz PESEL i NIP także numer w rejestrze.
+- Uzasadnienie: wspólny `FormularzOsoby` (portal + kancelaria) zbiera kraj w obu miejscach — bez
+  kolumny zagraniczny adres akcjonariusza ginął przy przyjęciu wniosku (B11). Wybór z kartoteki ma
+  znajdować osobę prawną po KRS tak jak fizyczną po PESEL.
+- Odrzucono: ukrycie pola „Kraj” w portalu do FAZY 2 (zostawiałoby lukę B11 w nowym formularzu).
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, FAZA 1 pkt 1–2, B11.
+- Skutek w kodzie: `server/migracje.js` (52), `server/trasy/portal.js`, `server/trasy/osoby.js`,
+  `publiczne/js/formularz-osoby.js`, `pola.js`.
+
+### D-056 — Cena emisyjna poniżej 1 grosza: niemożliwa do zapisania (wariant C, odpowiedź Q6)
+- Data: 2026-09-25 (sesja frontendowa v2, po FAZIE 1 STOP)
+- Obszar: rejestr / interfejs
+- Decyzja: pole „cena za akcję” zostaje przy 2 miejscach po przecinku (wariant C z FAZY 1 STOP).
+  Cena poniżej 1 grosza za akcję jest świadomie niemożliwa do zapisania w tym polu — schemat i
+  `PoleKwoty` (`publiczne/js/ui-rejestr.js`) bez zmian względem stanu z końca FAZY 1: więcej niż
+  2 cyfry po przecinku dają komunikat przy polu, nie ciche zaokrąglenie (D-045).
+- Uzasadnienie: odpowiedź Łukasza na Q6 — najprostszy z trzech wariantów, bez zmiany schematu
+  (ułamki, kolumna łącznej ceny emisji). Przy emisji z ceną poniżej grosza za akcję kancelaria opisuje
+  cenę w polu tekstowym podstawy emisji, tak jak dziś.
+- Odrzucono: wariant A (cena za akcję jako ułamek licznik/mianownik w groszach) i wariant B (cena za
+  akcję do 2 miejsc, a poniżej 0,01 zł formularz zbiera łączną cenę emisji) — oba wymagały zmiany
+  schematu bez wyraźnej potrzeby dziś.
+- Źródło: użytkownik (STOP po FAZIE 1), `frontend-audyt/raporty/faza1-raport.md` §3.
+- Skutek w kodzie: brak — B7 (FAZA 2) podłącza `kreator.js` do już gotowego `PoleKwoty` na tych
+  samych zasadach.
+
+---
+
+### D-059 — Reprezentant: dowód (rodzaj+numer) i adres ustrukturyzowany, stare pola tylko do odczytu (B2/B3)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)
+- Obszar: rejestr / dokumenty
+- Decyzja: reprezentant spółki (osoba, która podpisała umowę o prowadzenie rejestru) miał dotąd
+  dwa pola tekstowe bez struktury: `reprezentant_dowod` (jeden ciąg, np. „DGK 138559", bez
+  rozróżnienia dowód/paszport) i `reprezentant_adres` (jeden ciąg). Migracja 53 dodaje kolumny
+  ustrukturyzowane — `reprezentant_dowod_rodzaj`/`reprezentant_dowod_numer` oraz
+  `reprezentant_kod_pocztowy`/`reprezentant_miejscowosc`/`reprezentant_ulica`/`reprezentant_nr_domu`/
+  `reprezentant_nr_lokalu` — na `psa_spolki` i `psa_wnioski`, analogicznie do akcjonariusza i
+  `psa_osoby`. Formularze (`spolki.js`, `wniosek.js`, `wnioski.js`) używają odtąd dedykowanych
+  komponentów `PoleDowod`/`PoleAdres` z jawnym `klucze` zamiast generycznych pól tekstowych.
+- Uzasadnienie: spójność z resztą formularza osoby (reprezentant był jedynym miejscem bez
+  struktury dowodu/adresu) — dokumenty generowane dla reprezentanta (umowa, uchwała) czytają teraz
+  pola ustrukturyzowane wprost, bez parsowania wolnego tekstu.
+- Migracja: stare kolumny (`reprezentant_dowod`, `reprezentant_adres`) NIE są usuwane ani
+  migrowane automatycznie do struktury — tekstu adresu nie da się bezpiecznie rozbić na
+  ulica/nr/kod. Istniejący `reprezentant_dowod` jest przepisywany do `reprezentant_dowod_numer`
+  (rodzaj zostaje pusty, oznaczony w UI „do uzupełnienia"). `server/logika/kontekst-pisma.js`
+  (`reprezentantDowodPelny`/`reprezentantAdresPelny`) czyta nowe pola, gdy są wypełnione, w
+  przeciwnym razie stary tekst — stare pole zostaje kontraktowo TYLKO DO ODCZYTU, dopóki ktoś nie
+  przepisze go przez nowy formularz.
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, punkty B2+B3.
+- Skutek w kodzie: migracja 53; `server/logika/kontekst-pisma.js`; `publiczne/js/spolki.js`,
+  `wniosek.js`, `wnioski.js` (pola `PoleDowod`/`PoleAdres` z jawnym `klucze`).
+
+---
+
+### D-060 — Ślad pierwszego otwarcia dokumentu w portalu jako dowód doręczenia (B6)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)
+- Obszar: portal
+- Decyzja: kolumna `otwarto_w_portalu` (migracja 54, `psa_wnioski_dokumenty` i
+  `psa_wydane_dokumenty`) ustawia się RAZ, przy pierwszym pobraniu pliku przez klienta
+  (`server/logika/pakiet-wniosku.js: oznaczOtwarte`). Portal pokazuje plakietkę „nowy" przy
+  dokumencie, którego klient jeszcze nie otworzył (`PozycjaDokumentu`, `publiczne/js/wniosek.js`),
+  a `PortalLayout` (`portal.js`) liczy nieotwarte dokumenty do licznika w nawigacji.
+- Uzasadnienie: dwa cele jednym polem — licznik „coś nowego czeka" (brak którego był luką z FAZY 0,
+  punkt B6) I jednocześnie ślad doręczenia: moment, w którym dokument NA PEWNO dotarł do adresata,
+  a nie tylko został wystawiony przez kancelarię.
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, punkt B6; `FRONTEND-INWENTARZ.md` B6.
+- Skutek w kodzie: migracja 54; `server/logika/pakiet-wniosku.js`; `publiczne/js/wniosek.js`
+  (plakietka „nowy"); `publiczne/js/portal.js` (`PortalLayout`, `SzynaPortalu`, liczniki).
+
+---
+
+### D-061 — Portal: „Dodaj spółkę" jako nowy wniosek na już zalogowanym koncie (B8)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)
+- Obszar: portal
+- Decyzja: konto w roli `spolka` (przyjęte, prowadzi już ≥1 spółkę) może samodzielnie założyć
+  KOLEJNY wniosek o drugą spółkę przyciskiem „Dodaj spółkę" (`PrzyciskDodajSpolke`,
+  `publiczne/js/portal.js`) — bez pośrednictwa kancelarii. Backend: nowy `POST
+  /api/psa/portal/wniosek/nowy` (odmawia, gdy konto jest w roli `wnioskodawca` bez żadnej spółki, i
+  gdy konto ma już otwarty wniosek w toku) oraz nowy `GET /api/psa/portal/wnioski` (liczba mnoga —
+  lista wszystkich wniosków konta z ich statusami, do „Użyj danych reprezentanta z poprzedniego
+  wniosku" i etykiet stanu w „Moje spółki").
+- Odrzucono: zmianę kształtu odpowiedzi istniejącego `GET /portal/wniosek` (liczba pojedyncza,
+  dziś zwraca jeden obiekt) na listę/tablicę — literalne brzmienie specyfikacji sesji sugerowało tę
+  zmianę, ale wymagałaby przepisania ~15 istniejących konsumentów tej trasy (dokumenty, podpisy,
+  weryfikacja) pod nowy kontrakt bez wyraźnej korzyści — nowy endpoint w liczbie mnogiej osiąga ten
+  sam cel funkcjonalny przy niższym ryzyku regresji.
+- Wykorzystana infrastruktura: model wielu spółek na jedno konto (`psa_konta_spolki`,
+  D-037) i endpoint `/moje` już poprawnie filtrowały po `status NOT IN ('przyjety', 'odrzucony')` —
+  ten sam warunek zastosowano w nowym `wczytajOtwartyWniosekKonta()`, używanym też przez
+  wszystkie dotychczasowe trasy `PUT/GET /wniosek*` (wcześniej szukały wyłącznie po `konto_id` bez
+  rozróżnienia, KTÓRY z wielu wniosków konta jest „bieżący").
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, punkt B8.
+- Skutek w kodzie: `server/trasy/portal.js` (`wymagajWnioskodawcy`, `wczytajOtwartyWniosekKonta`,
+  `wczytajLubZalozWniosek`, `GET /wnioski`, `POST /wniosek/nowy`); `publiczne/js/portal.js`
+  (`PrzyciskDodajSpolke`, `STAN_WNIOSKU_ETYKIETA`, routing `wniosek` gated po roli);
+  `publiczne/js/wniosek.js` (podpowiedź danych reprezentanta z poprzedniego wniosku).
+
+---
+
+### D-062 — Zgłoszenie → wniosek: KRS podstawiany z powiązanego zgłoszenia (P2)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 4)
+- Obszar: portal
+- Decyzja: konto powstałe z publicznego formularza zgłoszenia (`psa_zgloszenia`, KRS wymagany —
+  D-047) dostaje nową kolumnę `psa_konta.zgloszenie_id`, ustawianą raz, przy założeniu konta w
+  `server/logika/zaproszenia.js: wyslij()`. Pierwszy pusty wniosek tego konta
+  (`wczytajLubZalozWniosek`, `server/trasy/portal.js`) podstawia z powiązanego zgłoszenia `krs` i
+  `nazwa_spolki` — klient nie wpisuje numeru KRS drugi raz (0.4 pkt 1). Front (`EkranWniosku`,
+  `publiczne/js/wniosek.js`) uruchamia automatyczne pobranie z KRS od razu po wczytaniu wniosku,
+  jeśli `krs` jest już wypełnione, a `nazwa` jeszcze nie — ten sam mechanizm co ręczne wpisanie
+  numeru, bez osobnego przycisku.
+- Zakres tej zmiany: wyłącznie KRS + nazwa. Pełne przeniesienie składu organu do wyboru
+  reprezentanta z listy (część P2 dotycząca reprezentanta) **nie zostało zrobione w tej sesji** —
+  krok „Reprezentant" nadal wymaga ręcznego wpisania imienia i nazwiska nawet po udanym pobraniu
+  z KRS; `krs.js` już zwraca skład organu (użyty w kancelarii, K6), więc podłączenie tego samego
+  wyboru w portalu jest gotowe do zrobienia w kolejnej sesji, bez zmian schematu.
+- Konta założone inną drogą niż zgłoszenie (np. bezpośrednio przez pracownika) mają
+  `zgloszenie_id IS NULL` — wniosek zakłada się wtedy pusty, jak dotychczas.
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, FAZA 4 — P2.
+- Skutek w kodzie: migracja 56 (`psa_konta.zgloszenie_id`); `server/logika/zaproszenia.js`
+  (`wyslij()` przyjmuje i zapisuje `zgloszenieId`); `server/trasy/zgloszenia.js` (przekazuje
+  `zgloszenieId` do `wyslij()`); `server/trasy/portal.js` (`wczytajLubZalozWniosek` podstawia
+  krs/nazwa); `publiczne/js/wniosek.js` (auto-pobranie z KRS przy wczytaniu).
+
+---
+
+### D-063 — Strona publiczna: bundel statyczny osobny od `serwer.js`, nie wpięty w routing kancelarii
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 5)
+- Obszar: strona publiczna (SEO) / infrastruktura
+- Decyzja: `serwer.js` dziś serwuje aplikację kancelarii pod `/` i w catch-allu (`aplikacja.get('*', ...)`
+  → `publiczne/index.html`) — każda nieznana ścieżka ląduje w SPA kancelarii. FAZA 5 chce stron
+  publicznych pod `/`, `/oplaty` itd., co koliduje z tym catch-allem. Zamiast przepinać `/` kancelarii
+  na inny adres (zmiana wpływająca na codzienny adres pracy notariusza, poza wyraźnym zakresem tego
+  dokumentu sesji), strona publiczna buduje się jako **osobny bundel statyczny**
+  (`narzedzia/buduj-strone.js` → `strona/dist/*.html` + `sitemap.xml` + `robots.txt`), niepodłączony
+  do `serwer.js` w tej sesji. Zgodne z D-049 (domena nierozstrzygnięta, Q2) — skoro nie wiadomo,
+  czy strona stanie na subdomenie tej aplikacji, na `notariusz.gdansk.pl`, czy na osobnej domenie,
+  wpięcie jej w ten sam proces Express byłoby przedwczesne i mogłoby wymagać odkręcenia.
+- `publiczne/robots.txt` (nowy) blokuje CAŁĄ resztę tej aplikacji (`Disallow: /`) — uzupełnienie
+  istniejących meta `noindex` na `index.html`/`portal.html` (już były, sprzed tej fazy).
+  `strona/dist/robots.txt` (osobny plik, część bundla) zezwala na indeksowanie — to inna domena.
+- Odrzucono: przepięcie `/` kancelarii na `/kancelaria` i oddanie `/` stronie publicznej w tym samym
+  procesie — zbyt duża, nieodwracalna bez ostrzeżenia zmiana adresu roboczego notariusza, nigdzie
+  wprost nie zlecona w tym dokumencie sesji.
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, FAZA 5.
+- Skutek w kodzie: `server/konfiguracja.js` (`BASE_URL_STRONA`); `narzedzia/buduj-strone.js` (nowy);
+  `strona/tresc/*.md` (nowy, źródła treści); `publiczne/robots.txt` (nowy). `serwer.js` — bez zmian.
+
+---
+
+### D-057 — Zgłoszenie nieprawidłowości we wpisie: nowa tabela, odrębna od `psa_sprawy` (B9)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)
+- Obszar: portal / rejestr
+- Decyzja: klient sygnalizujący, że ISTNIEJĄCY wpis w rejestrze jest błędny lub niezgodny z
+  dokumentem, robi to osobnym formularzem portalu (`POST /api/psa/portal/zgloszenie-nieprawidlowosci`,
+  ekran `EkranZgloszenieBleduPortal`) — odrębnym od „Poproś o nowy wpis” (żądanie art. 300³⁴ § 1 KSH,
+  `POST /api/psa/portal/zgloszenia` → `psa_sprawy`). Dane trafiają do nowej tabeli
+  `psa_zgloszenia_nieprawidlowosci` (migracja 55). Pracownik kancelarii wyłącznie KWALIFIKUJE
+  zgłoszenie (`POST /api/psa/zgloszenia-nieprawidlowosci/:id/kwalifikuj`, sekcja w `kokpit.js` przy
+  spółce) jedną z trzech wartości: `sprostowanie` / `zadanie_wpisu` / `brak_nieprawidlowosci`. Sama
+  kwalifikacja NIE zakłada sprawy ani nie dokonuje sprostowania automatycznie — to świadoma, osobna
+  czynność pracownika zwykłym kreatorem zdarzenia (K3), tak jak przy każdym innym wpisie do
+  niezmienialnego rejestru (art. 300³¹ § 4 KSH).
+- Uzasadnienie: `psa_sprawy` ma własne ograniczenia CHECK i semantykę 7-dniowego zegara ustawowego
+  dopasowaną do żądań NOWEGO wpisu — nie pasuje do przepływu czysto triażowego (klient zgłasza
+  wątpliwość, kancelaria ocenia, bez terminu ustawowego). Nowa, mała tabela jest tańsza niż
+  przeciążanie `psa_sprawy` warunkowym polem „typ”.
+- Odrzucono: rozszerzenie `psa_sprawy` o nowy `typ_sprawy` — wymagałoby rozplątania CHECK-ów i
+  logiki terminów dla przypadku, który terminu ustawowego nie ma.
+- Zakres pominięty świadomie: załączniki (upload skanu do zgłoszenia) — kolumny w schemacie
+  zarezerwowane, endpoint uploadu nie zbudowany w tej sesji.
+- Etykiety przycisków „Poproś o nowy wpis” / „Zgłoś błąd we wpisie” są DOMYŚLNE robocze — do
+  akceptacji Łukasza (patrz raport FAZY 2, sekcja B9).
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, punkt B9 (`komponenty-formularze-b1b12-raport.md`).
+- Skutek w kodzie: migracja 55 (`psa_zgloszenia_nieprawidlowosci`); `server/trasy/portal.js` (POST
+  zgłoszenia + GET listy klienta), `server/trasy/zgloszenia-nieprawidlowosci.js` (nowy plik, trasy
+  kancelaryjne); `publiczne/js/portal.js` (formularz + link w rejestrze + tabela „Moje zgłoszenia”);
+  `publiczne/js/kokpit.js` (sekcja „Zgłoszenia nieprawidłowości z portalu” + modal kwalifikacji).
+
+---
+
+### D-058 — „Stan na dzień" bez godziny; „Wpisano do rejestru" z sekundami przy pozycji (B12)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)
+- Obszar: rejestr / interfejs
+- Decyzja: pole godziny dodane naprawą Z-305/P-011 do widgetu „Stan na dzień" w kokpicie
+  (`kokpit.js`, `EkranKokpitu`) zostaje USUNIĘTE — zgodnie z D-050 zostaje wyłącznie wybór dnia.
+  Serwer nadal przyjmuje `data` z dokładnością do minuty (`RRRR-MM-DDTGG:MM`) — kontrakt API bez
+  zmian, zmiana jest wyłącznie w UI. W zamian przy KAŻDEJ pozycji akcjonariusza w kokpicie oraz w
+  wydrukowanej „Informacji z rejestru" pojawia się etykieta „Wpisano do rejestru: DD.MM.RRRR,
+  HH:MM:SS" — moment SYSTEMOWY (kolumna `psa_zdarzenia.data_wpisu`, ma precyzję co do sekundy od
+  początku, patrz `server/migracje.js:92`), odrębny od daty PRAWNEJ zdarzenia (`data_zdarzenia`)
+  widocznej wyżej w tej samej pozycji.
+- Uzasadnienie: „stan na dzień" z godziną rozwiązywał rzadki przypadek (dwa wpisy tego samego dnia)
+  kosztem złożoności widocznej w KAŻDYM użyciu kokpitu; etykieta przy pozycji daje tę samą
+  precyzję tam, gdzie jest faktycznie potrzebna — przy konkretnym wpisie, nie w globalnym filtrze.
+- Skutek w kodzie: `server/logika/stan.js` (`akcjonariatNaDzien`) śledzi
+  `zdarzenie_najstarszego_nabycia_id` obok `data_najstarszego_nabycia`; `server/widoki.js`
+  (`widokStanu`) dołącza `wpisano_do_rejestru` (z mapy `id zdarzenia → data_wpisu`) do każdej
+  pozycji akcjonariusza; `server/logika/informacja-dokument.js` dodaje wiersz „Wpisano do
+  rejestru" pod opisem pozycji, gdy pole jest ustawione; `publiczne/js/kokpit.js`
+  (`EkranKokpitu`, `TabelaAkcjonariatu`) usuwa `<input type="time">` i renderuje tę samą etykietę.
+  Pole jest `null` dla pozycji bez odnalezionego zdarzenia źródłowego (nie powinno się zdarzyć w
+  normalnym przepływie — zabezpieczenie, nie oczekiwany stan).
+- Sprawdzone (2026-09-25): baza produkcyjna (`dane/kancelaria.db`) jest pusta (0 zdarzeń) — nie ma
+  dziś żadnych historycznych rekordów do porównania pod kątem brakującej precyzji sekund. Do
+  ponownego sprawdzenia, gdy w bazie pojawią się prawdziwe dane historyczne.
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, punkt B12.
+
+---
+
+### D-064 — Strona publiczna przeprojektowana od zera (SESJA-PSA-STRONA.md, zastępuje FAZĘ 5); bez `/nowelizacja-2027`
+
+- Data: 2026-09-25 (sesja `SESJA-PSA-STRONA.md`)
+- Obszar: strona publiczna (SEO)
+- Decyzja: strona publiczna zbudowana w FAZIE 5 (`SESJA-PSA-FRONTEND.md`) była poprawna merytorycznie,
+  ale wyglądała jak dokumentacja (lewa kolumna menu, identyczny szablon każdej strony, ściana tekstu
+  z przepisami w nawiasach). `SESJA-PSA-STRONA.md` zleciła przeprojektowanie od zera: wąski pasek
+  górny zamiast bocznego menu, hero z „żywym wpisem” (przykładowy wpis do rejestru złożony z
+  HTML/CSS, oś akcji), sekcje odpowiadające na konkretne pytania klienta („Wybierz swoją sytuację”,
+  „Jak to działa”, „Najkrótsze odpowiedzi”), cytaty prawne jako przyciski `popover`/`popovertarget`
+  (dymek z brzmieniem przepisu, zero JavaScriptu) zamiast przepisów w nawiasach w zdaniu. Faza A
+  (plan + statyczna makieta + STOP A z odpowiedziami Łukasza na Q-S1/Q-S2/Q-S4) opisana w
+  `frontend-audyt/raporty/faza-strona-plan-a.md` i `faza-strona-teksty-a.md`; wynik Fazy B (build,
+  pomiary, lista DO WERYFIKACJI) w `frontend-audyt/raporty/faza-strona-stop-b.md`.
+- **Nowa mapa strony** (zastępuje FAZĘ 5): `/`, `/jak-zaczac`, `/sprzedaz-akcji`,
+  `/przeniesienie-rejestru`, `/oplaty`, `/pytania`, `/kontakt`. Usunięte adresy FAZY 5:
+  `/czym-jest-rejestr-akcjonariuszy`, `/nowelizacja-2027`, `/zbycie-akcji-i-wpisy`,
+  `/zmiana-podmiotu-prowadzacego-rejestr` — bundel D-063 nigdy nie był wdrożony pod realną domeną
+  (Q2/D-049 wciąż otwarte), więc stare adresy nie były nigdzie publicznie zaindeksowane: usunięte
+  bez przekierowań 301, zamiast ich utrzymywania.
+- **Bez strony o nowelizacji 2027** — decyzja Łukasza z 25.09.2026 (przekazana wprost w
+  `SESJA-PSA-STRONA.md` sekcja 2 pkt 4), niezależna od usunięcia starych adresów: termin 18.05.2027
+  z FAZY 5 i tak nie miał odzwierciedlenia w `PRZEPISY-PSA.md` i wymagał sprawdzenia z tekstem
+  ustawy nowelizującej przed publikacją (patrz `frontend-audyt/raporty/faza5-raport.md` § 4) —
+  temat odłożony do czasu, aż będzie potrzebny.
+- **STOP A — decyzje Łukasza (2026-09-25), zapisane też w `faza-strona-teksty-a.md`:**
+  - Nagłówek hero: „Rejestr Akcjonariuszy Prostej Spółki Akcyjnej” (prosty, dosłowny wariant D,
+    nie żaden z A/B/C zaproponowanych w makiecie).
+  - Q-S1 (czy strona może obiecać „bez wizyty w kancelarii”): **tak** — ale zdanie z tą obietnicą
+    zostaje oznaczone `<!-- DO WERYFIKACJI -->` w źródle, bo ocena prawna zdalnej identyfikacji AML
+    (P-012, `## Decyzje otwarte` niżej) pozostaje **formalnie nadal otwarta** — to decyzja o treści
+    marketingowej strony, nie zamknięcie P-012.
+  - Q-S2 (jakie ceny publikować): stawki maksymalne z `przepisy.js` (1200/100/50 zł netto) — te
+    same co dziś, oznaczone ⚠️ DO WERYFIKACJI (patrz `STAWKI_DO_WERYFIKACJI` w `przepisy.js`).
+  - Q-S4 (czy pokazać notariusza z imienia): tak, „Notariusz Łukasz Kozon” w stopce/kontakcie, bez
+    zdjęcia na razie.
+  - Q-S3 (domena) — nadal otwarte, bez zmian względem D-049.
+- Skutek w kodzie: `narzedzia/buduj-strone.js` (przepisany — szablon z paskiem górnym/menu
+  mobilnym/CTA przyklejonym, strona główna komponowana bezpośrednio jako HTML), `strona/styl.css`
+  (przepisany), `strona/js/wzmocnienia.js` (nowy, < 3 KB — kalkulator opłat + przyklejone CTA na
+  telefonie, jedyny JavaScript na stronie), `strona/przepisy-cytaty.js` (nowy — brzmienie przepisów
+  do dymków popover, wyłącznie z `PRZEPISY-PSA.md`), `strona/tresc/*.md` (nowe/usunięte pliki wg
+  mapy wyżej). D-063 (bundel osobny od `serwer.js`) bez zmian.
+- Źródło: `SESJA-PSA-STRONA.md`.
+
 ---
 
 ## Decyzje otwarte
@@ -673,11 +997,13 @@
 | P-008 | Czy martwy w UI endpoint `/naliczenie-roczne` ma zostać usunięty, zabezpieczony, czy zostać bez zmian? | opłaty | otwarte |
 | P-009 | Czy dziennik dostępu ma objąć też zwykłe odczyty portalowe? | dziennik dostępu | **rozstrzygnięte → D-041** (tak, objęto); okres retencji nadal otwarty |
 | P-010 | Jak naprawić rozjazd pól PEP przy przejęciu wniosku; czy dokumenty RODO/PEP mają powstawać też dla akcjonariuszy dochodzących po założeniu spółki? | AML / dane osobowe | **częściowo → D-041** (mapowanie PEP naprawione); rozszerzenie RODO/PEP (Z-153) nadal otwarte |
-| P-011 | Czy „stan na” z dokładnością do minuty ma wrócić do UI (patrz D-032); czy `TZ` serwera ma być programowo wymuszony? | rejestr / interfejs | **rozstrzygnięte → D-042, D-043** (oba warianty wdrożone, do potwierdzenia przez Łukasza) |
+| P-011 | Czy „stan na” z dokładnością do minuty ma wrócić do UI (patrz D-032); czy `TZ` serwera ma być programowo wymuszony? | rejestr / interfejs | **rozstrzygnięte → D-042, D-050** (UI: tylko dzień — D-050 zastępuje D-043; `TZ` — D-042) |
 | P-012 | Czy zdalna identyfikacja akcjonariusza (dane + opcjonalny skan wgrywany przez pracownika) spełnia wymogi AML? | AML | częściowo — mechanizm samodzielnego wgrywania skanu przez akcjonariusza dodany (D-041); ocena PRAWNA wymogów AML nadal otwarta |
 | P-013 | Czy status AML `brak` powinien blokować wpis tak jak `niemozliwe` (patrz D-010)? | AML | otwarte (świadomie nietknięte — patrz uzupełnienie D-010) |
 | P-014 | Czy dezaktualizacja AML i brak beneficjenta rzeczywistego mają blokować wpis? | AML | otwarte (świadomie nietknięte) |
 | P-015 | Czy potrzebny jest mechanizm oznaczania danych jako testowe/demo na produkcji? | operacyjne | **rozstrzygnięte → D-044** (nie, niepotrzebny) |
+| P-016 | Kto fizycznie działa (podpisuje) za akcjonariusza-osobę prawną — brak pola reprezentanta akcjonariusza | AML / dokumenty (sesja frontendowa v2, B11) | otwarte |
+| P-017 | Czy `beneficjent_rzeczywisty_id` (pojedyncze pole) wystarcza przy więcej niż jednym beneficjencie rzeczywistym | AML (sesja frontendowa v2, B11) | otwarte |
 
 Pełny kontekst i warianty odpowiedzi dla każdego: `testy-audyt/PYTANIA-DO-LUKASZA.md`.
 

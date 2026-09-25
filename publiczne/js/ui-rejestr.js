@@ -89,6 +89,9 @@ const SCIEZKI_IKON = {
   telefon: 'M5 4h4l1 4-2 1.5a10 10 0 0 0 6.5 6.5L16 14l4 1v4h-2A13 13 0 0 1 5 6z',
   pinezka: 'M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
   globus: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3.4 9h17.2M3.4 15h17.2M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
+  oko: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
+  okoPrzekreslone: 'M3 3l18 18M9.9 9.9a3 3 0 0 0 4.2 4.2M6.5 6.7C4 8.3 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.5 4.5-1.2M10.6 5.1c.5-.1.9-.1 1.4-.1 6.4 0 10 7 10 7-.5.9-1.3 2.1-2.5 3.2',
+  pomoc: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.2 9a2.8 2.8 0 1 1 3.8 2.6c-.8.3-1 .9-1 1.7v.3M12 16.5v.01',
 };
 
 /**
@@ -114,8 +117,21 @@ function Ikona({ nazwa, rozmiar = 18, grubosc = 1.75 }) {
    PRYMITYWY
    ═════════════════════════════════════════════════════ */
 
-function Spinner() {
-  return <div className="ladowanie"><div className="spin" /></div>;
+/**
+ * Stan ładowania. Szkielet treści zamiast kręcącego się kółka (FAZA 1 pkt 5):
+ * zajmuje mniej więcej tyle miejsca co lista, która się pojawi, więc układ
+ * nie skacze po wczytaniu danych (CLS), a oko od razu widzi kształt ekranu.
+ * Czytnik ekranu dostaje jedno zdanie zamiast pustki.
+ */
+function Spinner({ wierszy = 4 }) {
+  return (
+    <div className="szkielet" role="status" aria-live="polite">
+      <span className="sr-only">Wczytywanie…</span>
+      {Array.from({ length: wierszy }, (_, i) => (
+        <div key={i} className="szkielet-wiersz" style={{ width: `${92 - (i % 3) * 14}%` }} aria-hidden="true" />
+      ))}
+    </div>
+  );
 }
 
 /** `scisla` (dawniej `tight`) — karta bez wewnętrznego marginesu, pod tabelę. */
@@ -150,7 +166,45 @@ function Karta({ tytul, akcje, scisla, tight, dzieci, children }) {
 /** Pigułka. `odmiana`: neutralna (domyślna) | rejestr | mosiadz | sygnal.
     Kolor niesie znaczenie — patrz zasada nadrzędna w rejestr.css. */
 function Pigulka({ odmiana, children }) {
-  return <span className={`pigulka ${odmiana ? `pigulka-${odmiana}` : ''}`}>{children}</span>;
+  const o = ODMIANY_PIGULKI[odmiana] || '';
+  return <span className={`pigulka ${o ? `pigulka-${o}` : ''}`}>{children}</span>;
+}
+
+/* Dawne nazwy odmian `Znacznik` (ui.js, usunięty w FAZIE 1) sprowadzone do
+   czterech znaczeń rejestru — na wypadek danych, które je jeszcze niosą. */
+const ODMIANY_PIGULKI = {
+  rejestr: 'rejestr', mosiadz: 'mosiadz', sygnal: 'sygnal',
+  zielony: 'rejestr', oliwka: 'mosiadz', bordo: 'sygnal',
+};
+
+const NAZWY_STATUSU = {
+  aktywna: 'aktywna',
+  w_likwidacji: 'w likwidacji',
+  zawieszona: 'zawieszona',
+  wykreslona: 'wykreślona',
+  umorzona: 'umorzona',
+  w_umarzaniu: 'w umarzaniu',
+};
+const ODMIANY_STATUSU = {
+  aktywna: 'rejestr', w_likwidacji: 'mosiadz', w_umarzaniu: 'mosiadz', wykreslona: 'sygnal', umorzona: 'sygnal',
+};
+
+function StatusSpolki({ status }) {
+  return <Pigulka odmiana={ODMIANY_STATUSU[status]}>{NAZWY_STATUSU[status] || status}</Pigulka>;
+}
+
+const NAZWY_AML = { brak: 'AML: brak', wykonane: 'AML: wykonane', niemozliwe: 'AML: niemożliwe' };
+const ODMIANY_AML = { brak: 'mosiadz', wykonane: 'rejestr', niemozliwe: 'sygnal' };
+
+function StatusAml({ status }) {
+  if (!status) return null;
+  return <Pigulka odmiana={ODMIANY_AML[status]}>{NAZWY_AML[status] || status}</Pigulka>;
+}
+
+/** Sygnał dezaktualizacji przeglądu AML (blok C1, sesja 8) — NIE blokada, tylko przypomnienie. */
+function ZnacznikPrzegladuAml({ wymaga }) {
+  if (!wymaga) return null;
+  return <Pigulka odmiana="mosiadz">wymaga przeglądu</Pigulka>;
 }
 
 /**
@@ -182,6 +236,35 @@ function Komunikat({ odmiana = 'info', tytul, tresc, lista }) {
 }
 
 /** Pusty stan (2.7): zdanie mówiące CO ZROBIĆ plus przycisk. Nigdy „Brak danych". */
+/**
+ * Licznik przy pozycji nawigacji (FAZA 1 pkt 9): liczba spraw WYMAGAJĄCYCH
+ * DZIAŁANIA tej strony — kancelarii albo klienta. Zero nie rysuje nic. Opis
+ * trafia do czytnika ekranu, bo sama liczba przy „Wnioski" nic nie mówi.
+ */
+function Licznik({ wartosc, opis }) {
+  if (!wartosc) return null;
+  return (
+    <span className="licznik" title={opis ? `${wartosc} ${opis}` : undefined}>
+      <span aria-hidden="true">{wartosc}</span>
+      <span className="sr-only">{opis ? `${wartosc} ${opis}` : `${wartosc} do zrobienia`}</span>
+    </span>
+  );
+}
+
+/** Błędy blokujące i ostrzeżenia — dwie różne rzeczy, dwa różne komunikaty. */
+function Wyniki({ bledy, ostrzezenia }) {
+  return (
+    <>
+      <Komunikat
+        odmiana="blad"
+        tytul={bledy && bledy.length === 1 ? 'Wpis nie może zostać dokonany:' : 'Wpis nie może zostać dokonany — przeszkody:'}
+        lista={bledy}
+      />
+      <Komunikat odmiana="uwaga" tytul="Do sprawdzenia:" lista={ostrzezenia} />
+    </>
+  );
+}
+
 function Pusto({ tytul, opis, akcja, ikona = 'pusto' }) {
   return (
     <div className="pusto">
@@ -193,16 +276,45 @@ function Pusto({ tytul, opis, akcja, ikona = 'pusto' }) {
   );
 }
 
-function Modal({ tytul, children, stopka, przyZamknieciu, szerokosc }) {
+/**
+ * Okno nad treścią. Modal wyłącznie dla krótkich potwierdzeń (FAZA 1 pkt 5);
+ * formularz dłuższy niż cztery pola otwiera się jako PANEL BOCZNY (`panel`)
+ * — tło zostaje widoczne, panel ma pełną wysokość i własne przewijanie, a
+ * przyciski stopki są zawsze na dole ekranu.
+ */
+function Modal({ tytul, children, stopka, przyZamknieciu, szerokosc, panel = false }) {
   useEscape(() => przyZamknieciu && przyZamknieciu());
+  const idTytulu = useId();
+  const ref = useRef(null);
+  // Fokus wchodzi do okna, a po zamknięciu wraca tam, skąd przyszedł.
+  useEffect(() => {
+    const poprzedni = document.activeElement;
+    const pierwsze = ref.current && ref.current.querySelector('input:not([type=hidden]):not([disabled]), select, textarea, button');
+    if (pierwsze) pierwsze.focus({ preventScroll: true });
+    return () => { if (poprzedni && poprzedni.focus) poprzedni.focus({ preventScroll: true }); };
+  }, []);
   return (
     <div
-      className="nakladka"
+      className={`nakladka ${panel ? 'nakladka-panel' : ''}`}
       onMouseDown={(z) => { if (z.target === z.currentTarget && przyZamknieciu) przyZamknieciu(); }}
     >
-      <div className="modal" style={szerokosc ? { maxWidth: szerokosc } : undefined}>
-        {tytul && <div className="modal-tytul">{tytul}</div>}
-        {children}
+      <div
+        ref={ref}
+        className={panel ? 'panel-boczny' : 'modal'}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tytul ? idTytulu : undefined}
+        style={szerokosc && !panel ? { maxWidth: szerokosc } : undefined}
+      >
+        {tytul && (
+          <div className="modal-tytul" id={idTytulu}>
+            {tytul}
+            {panel && przyZamknieciu && (
+              <button type="button" className="btn btn-maly btn-cichy panel-zamknij" onClick={przyZamknieciu} aria-label="Zamknij panel">✕</button>
+            )}
+          </div>
+        )}
+        <div className={panel ? 'panel-tresc' : undefined}>{children}</div>
         {stopka && <div className="modal-stopka">{stopka}</div>}
       </div>
     </div>
@@ -245,16 +357,33 @@ function Sekcja({ tytul, licznik, domyslnieOtwarta = false, akcje, children }) {
   );
 }
 
-function Kroki({ kroki, biezacy }) {
+/**
+ * Pasek kroków kreatora. Z `przyWyborze` kroki są KLIKALNE (zasada 0.4 pkt 8
+ * — nie da się utknąć): wstecz zawsze, do przodu do najdalszego kroku już
+ * osiągniętego (`osiagniety`, domyślnie bieżący).
+ */
+function Kroki({ kroki, biezacy, przyWyborze, osiagniety }) {
+  const najdalej = Math.max(biezacy, osiagniety ?? biezacy);
   return (
-    <div className="kroki">
-      {kroki.map((k, i) => (
-        <div key={k} className={`krok ${i === biezacy ? 'biezacy' : ''} ${i < biezacy ? 'zrobiony' : ''}`}>
-          <span className="krok-numer">{i < biezacy ? '✓' : i + 1}</span>
-          <span>{k}</span>
-        </div>
-      ))}
-    </div>
+    <ol className="kroki" aria-label="Kroki">
+      {kroki.map((k, i) => {
+        const klasa = `krok ${i === biezacy ? 'biezacy' : ''} ${i < biezacy ? 'zrobiony' : ''}`;
+        const tresc = (
+          <>
+            <span className="krok-numer" aria-hidden="true">{i < biezacy ? '✓' : i + 1}</span>
+            <span>{k}</span>
+          </>
+        );
+        const klikalny = przyWyborze && i !== biezacy && i <= najdalej;
+        return (
+          <li key={k} className={klasa} aria-current={i === biezacy ? 'step' : undefined}>
+            {klikalny
+              ? <button type="button" className="krok-przycisk" onClick={() => przyWyborze(i)}>{tresc}</button>
+              : tresc}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -320,6 +449,22 @@ function WierszListy({ ikona, tytul, podtytul, prawo, data, przyKlik }) {
         {data && <span className="wiersz-data">{data}</span>}
       </span>
     </button>
+  );
+}
+
+/**
+ * Pasek metryki: pary etykieta/wartość w pionie. Wspólny dla kokpitu spółki
+ * (kancelaria), profilu osoby (K4) i ekranów „Konto"/„Pomoc" w portalu
+ * (Faza 4) — przeniesiony tutaj z `kokpit.js`, bo `kokpit.js` nie wchodzi
+ * do paczki portalu (`narzedzia/buduj-front.js`).
+ */
+function MetrykaPoz({ etykieta, wartosc, dane, podpowiedz }) {
+  return (
+    <div className="metryka-pion-poz">
+      <div className="metryka-pion-etykieta">{etykieta}</div>
+      <div className={`metryka-pion-wartosc ${dane ? 'dane' : ''}`}>{wartosc || '—'}</div>
+      {podpowiedz && <div className="podstawa-prawna">{podpowiedz}</div>}
+    </div>
   );
 }
 
@@ -473,25 +618,50 @@ function Iskra({ punkty, podpisy }) {
    Etykieta ZAWSZE nad polem, nigdy jako placeholder.
    ═════════════════════════════════════════════════════ */
 
-function Pole({ etykieta, podpowiedz, blad, echo, wymagane, opcjonalne, children }) {
-  // Etykieta musi WSKAZYWAĆ pole, inaczej czytnik ekranu jej nie przeczyta,
-  // a kliknięcie w nią nie ustawia kursora. Identyfikator dostaje wyłącznie
-  // pojedyncze pole formularza — układy złożone (pole plus odznaczenie obok)
-  // zostają bez powiązania, bo nie wiadomo, które z nich etykieta opisuje.
-  const id = useId();
-  const dziecko = React.isValidElement(children)
-    && ['input', 'select', 'textarea'].includes(children.type)
-    && !children.props.id
-    ? React.cloneElement(children, { id })
+/**
+ * Pole formularza — wzorzec GOV.UK Design System (FAZA 1 pkt 3):
+ *   - etykieta nad polem, powiązana z nim (`for`/`id`);
+ *   - oznaczamy pola OPCJONALNE, nie obowiązkowe — gwiazdki nie ma;
+ *   - komunikat błędu POD polem, podpięty przez `aria-describedby`, a pole
+ *     dostaje `aria-invalid` — czytnik ekranu czyta go razem z etykietą;
+ *   - `przyOpuszczeniu` — walidacja po opuszczeniu pola, nie przy każdym
+ *     znaku (fokus przechodzący między częściami tego samego pola, np.
+ *     segmentami daty, nie liczy się jako opuszczenie).
+ *
+ * Identyfikator dostaje pojedyncze pole (`input`/`select`/`textarea`) albo
+ * komponent pola oznaczony `przyjmujeId` (PoleDaty, PoleKwoty, …). `id` z
+ * zewnątrz pozwala podsumowaniu błędów przewinąć do pola.
+ */
+function Pole({ etykieta, podpowiedz, blad, ostrzezenie, echo, opcjonalne, id: idZewnetrzne, przyOpuszczeniu, children }) {
+  const idWlasne = useId();
+  const id = idZewnetrzne || idWlasne;
+  const idBledu = `${id}-blad`;
+  const idOstrzezenia = `${id}-ostrzezenie`;
+  const idPodpowiedzi = `${id}-podpowiedz`;
+  const opis = [blad && idBledu, !blad && ostrzezenie && idOstrzezenia, podpowiedz && idPodpowiedzi]
+    .filter(Boolean).join(' ') || undefined;
+
+  const pojedyncze = React.isValidElement(children)
+    && (['input', 'select', 'textarea'].includes(children.type) || (children.type && children.type.przyjmujeId));
+  const dziecko = pojedyncze
+    ? React.cloneElement(children, {
+      id: children.props.id || id,
+      'aria-describedby': opis,
+      'aria-invalid': blad ? true : undefined,
+    })
     : children;
-  const powiazane = dziecko !== children;
+
+  function opuszczenie(z) {
+    if (!przyOpuszczeniu) return;
+    if (z.relatedTarget && z.currentTarget.contains(z.relatedTarget)) return;
+    przyOpuszczeniu();
+  }
 
   return (
-    <div className="pole">
+    <div className={`pole ${blad ? 'pole-z-bledem' : ''}`} onBlur={przyOpuszczeniu ? opuszczenie : undefined}>
       {etykieta && (
-        <label className="pole-etykieta" htmlFor={powiazane ? id : undefined}>
+        <label className="pole-etykieta" htmlFor={pojedyncze ? (children.props.id || id) : undefined} id={`${id}-etykieta`}>
           {etykieta}
-          {wymagane && <span className="pole-wymagane"> *</span>}
           {/* „(opcjonalnie)" przy etykiecie, a nie w podpowiedzi pod polem:
               o tym, czy pole trzeba wypełnić, decyduje się PATRZĄC na nie,
               zanim się w nie kliknie. */}
@@ -499,9 +669,50 @@ function Pole({ etykieta, podpowiedz, blad, echo, wymagane, opcjonalne, children
         </label>
       )}
       {dziecko}
-      {blad && <div className="pole-blad">{blad}</div>}
+      {blad && <p className="pole-blad" id={idBledu}><span className="sr-only">Błąd: </span>{blad}</p>}
+      {!blad && ostrzezenie && <p className="pole-ostrzezenie" id={idOstrzezenia}>{ostrzezenie}</p>}
       {!blad && echo && <div className="pole-echo">{echo}</div>}
-      {podpowiedz && <div className="pole-podpowiedz">{podpowiedz}</div>}
+      {podpowiedz && <div className="pole-podpowiedz" id={idPodpowiedzi}>{podpowiedz}</div>}
+    </div>
+  );
+}
+
+/**
+ * Podsumowanie błędów u góry formularza (wzorzec GOV.UK): pojawia się przy
+ * próbie przejścia dalej albo zapisu, dostaje fokus, a każdy błąd jest
+ * odnośnikiem, który przewija do pola i ustawia w nim kursor.
+ *
+ * `bledy`: [{ pole: 'id-pola', tresc: 'Wpisz nazwisko' }]
+ */
+function PodsumowanieBledow({ bledy, tytul = 'Popraw, zanim przejdziesz dalej' }) {
+  const ref = useRef(null);
+  const sygnatura = (bledy || []).map((b) => b.tresc).join('|');
+  useEffect(() => {
+    if (sygnatura && ref.current) {
+      ref.current.focus({ preventScroll: true });
+      ref.current.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+  }, [sygnatura]);
+  if (!bledy || bledy.length === 0) return null;
+
+  function przejdz(z, idPola) {
+    z.preventDefault();
+    const el = document.getElementById(idPola);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.focus({ preventScroll: true });
+  }
+
+  return (
+    <div className="podsumowanie-bledow" role="alert" tabIndex={-1} ref={ref}>
+      <h2 className="podsumowanie-bledow-tytul">{tytul}</h2>
+      <ul>
+        {bledy.map((b) => (
+          <li key={`${b.pole}-${b.tresc}`}>
+            {b.pole ? <a href={`#${b.pole}`} onClick={(z) => przejdz(z, b.pole)}>{b.tresc}</a> : b.tresc}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -577,7 +788,7 @@ function Kalendarz({ wartosc, przyWyborze, min, max, przyZamknieciu }) {
  * `wartosc`/`przyZmianie` operują na ISO `RRRR-MM-DD` — segmenty są
  * wyłącznie sposobem wpisywania, nie formatem danych.
  */
-function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFocus, wylaczone = false }) {
+function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFocus, wylaczone = false, id, 'aria-describedby': opis, 'aria-invalid': niepoprawne }) {
   const [dzien, ustawDzien] = useState('');
   const [miesiac, ustawMiesiac] = useState('');
   const [rok, ustawRok] = useState('');
@@ -647,41 +858,28 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
     }
   }
 
-  /** Wklejenie w dowolnym separatorze: 12.03.2026, 12-03-2026, 12/03/2026, 2026-03-12. */
+  /** Wklejenie w dowolnym separatorze: 12.03.2026, 12-03-2026, 12/03/2026, ISO 2026-03-12. */
   function wklej(z) {
     const tekst = (z.clipboardData || window.clipboardData).getData('text').trim();
     if (!tekst) return;
+    const iso = parsujDate(tekst.slice(0, 10)) || parsujDate(tekst);
+    if (!iso) return;
     z.preventDefault();
-    const czesci = tekst.split(/[^\d]+/).filter(Boolean);
-    let d = '';
-    let m = '';
-    let r = '';
-    if (czesci.length === 3) {
-      if (czesci[0].length === 4) { [r, m, d] = czesci; } else { [d, m, r] = czesci; }
-    } else if (czesci.length === 1 && czesci[0].length === 8) {
-      // 12032026 albo 20260312
-      const c = czesci[0];
-      if (Number(c.slice(0, 4)) > 1900) { r = c.slice(0, 4); m = c.slice(4, 6); d = c.slice(6, 8); }
-      else { d = c.slice(0, 2); m = c.slice(2, 4); r = c.slice(4, 8); }
-    } else {
-      return;
-    }
-    d = d.padStart(2, '0').slice(0, 2);
-    m = m.padStart(2, '0').slice(0, 2);
-    r = r.padStart(4, '0').slice(0, 4);
-    ustawDzien(d); ustawMiesiac(m); ustawRok(r);
-    zglos(d, m, r);
+    ustawRok(iso.slice(0, 4)); ustawMiesiac(iso.slice(5, 7)); ustawDzien(iso.slice(8, 10));
+    przyZmianie(iso);
   }
 
-  const slownie = dataSlownie(wartosc);
+  // Data słownie pod polem zniknęła (zasada 0.4 pkt 7): ta sama informacja
+  // dwa razy na ekranie to szum, a format dd.mm.rrrr jest jednoznaczny.
   const dzis = fmt.dzisIso();
 
   return (
     <>
       <div className="pole-daty">
-        <div className={`data-segmenty ${blad ? 'bledne' : ''} ${wylaczone ? 'wylaczone' : ''}`} onPaste={wklej}>
+        <div className={`data-segmenty ${blad || niepoprawne ? 'bledne' : ''} ${wylaczone ? 'wylaczone' : ''}`} onPaste={wklej} role="group">
           <input
-            ref={refDzien} className="data-segment" data-szer="2" inputMode="numeric"
+            ref={refDzien} className="data-segment" data-szer="2" inputMode="numeric" id={id}
+            aria-describedby={opis} aria-invalid={niepoprawne}
             placeholder="DD" value={dzien} autoFocus={autoFocus} disabled={wylaczone}
             onChange={(z) => zmien('d', z.target.value)}
             onKeyDown={(z) => klawisz('d', z)}
@@ -690,7 +888,7 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
           <span className="data-rozdzielacz">.</span>
           <input
             ref={refMiesiac} className="data-segment" data-szer="2" inputMode="numeric"
-            placeholder="MM" value={miesiac} disabled={wylaczone}
+            placeholder="MM" value={miesiac} disabled={wylaczone} aria-invalid={niepoprawne}
             onChange={(z) => zmien('m', z.target.value)}
             onKeyDown={(z) => klawisz('m', z)}
             aria-label="Miesiąc"
@@ -698,7 +896,7 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
           <span className="data-rozdzielacz">.</span>
           <input
             ref={refRok} className="data-segment" data-szer="4" inputMode="numeric"
-            placeholder="RRRR" value={rok} disabled={wylaczone}
+            placeholder="RRRR" value={rok} disabled={wylaczone} aria-invalid={niepoprawne}
             onChange={(z) => zmien('r', z.target.value)}
             onKeyDown={(z) => klawisz('r', z)}
             aria-label="Rok"
@@ -734,10 +932,10 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
           </div>
         )}
       </div>
-      {slownie && !blad && <div className="pole-echo">{slownie}</div>}
     </>
   );
 }
+PoleDaty.przyjmujeId = true;
 
 /**
  * Pole liczbowe (2.6): do prawej, w monie, separator tysięcy na bieżąco,
@@ -746,7 +944,7 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
  * `wartosc`/`przyZmianie` operują na liczbie (albo `null`), nie na tekście
  * z separatorami — separator jest wyłącznie sposobem wyświetlania.
  */
-function PoleLiczbowe({ wartosc, przyZmianie, sufiks, blad, min, max, autoFocus, placeholder }) {
+function PoleLiczbowe({ wartosc, przyZmianie, sufiks, blad, min, max, autoFocus, placeholder, id, 'aria-describedby': opis, 'aria-invalid': niepoprawne }) {
   const [tekst, ustawTekst] = useState('');
 
   useEffect(() => {
@@ -765,58 +963,143 @@ function PoleLiczbowe({ wartosc, przyZmianie, sufiks, blad, min, max, autoFocus,
   }
 
   return (
-    <div className={`pole-liczbowe ${blad ? 'bledne' : ''}`}>
+    <div className={`pole-liczbowe ${blad || niepoprawne ? 'bledne' : ''}`}>
       <input
         type="text" inputMode="numeric" value={tekst} autoFocus={autoFocus} placeholder={placeholder}
+        id={id} aria-describedby={opis} aria-invalid={niepoprawne}
         onChange={(z) => zmien(z.target.value)}
       />
-      {sufiks && <span className="pole-liczbowe-sufiks">{sufiks}</span>}
+      {sufiks && <span className="pole-liczbowe-sufiks" aria-hidden="true">{sufiks}</span>}
     </div>
   );
 }
+PoleLiczbowe.przyjmujeId = true;
 
-/** Kwota w złotych; na zewnątrz GROSZE (reguła domenowa nr 5). */
-function PoleKwoty({ grosze, przyZmianie, blad }) {
-  const [tekst, ustawTekst] = useState('');
+/**
+ * Kwota w złotych; na zewnątrz GROSZE jako liczba całkowita (reguła domenowa
+ * nr 5). Wpisuje się normalnie — „10", „10,5", „1 000,00", przecinek albo
+ * kropka — bez dopisywania zer w trakcie pisania (to nie kasa fiskalna).
+ * Po opuszczeniu pola: „10,00" z sufiksem „zł".
+ *
+ * Więcej niż 2 cyfry po przecinku NIE są zaokrąglane (D-045, Q6): pole
+ * pokazuje komunikat pod sobą, a na zewnątrz zgłasza `null` — błędna
+ * wartość nie ma jak trafić do zapisu.
+ */
+function PoleKwoty({ grosze, przyZmianie, blad, id, autoFocus, 'aria-describedby': opis, 'aria-invalid': niepoprawne }) {
+  const [tekst, ustawTekst] = useState(() => formatujKwote(grosze, { waluta: false }));
+  const [bladWlasny, ustawBladWlasny] = useState(null);
+  const idWlasne = useId();
+  const idBledu = `${id || idWlasne}-blad-kwoty`;
+  // Wartość, którą pole samo zgłosiło — jej powrót z rodzica nie może
+  // przeformatować tekstu w trakcie pisania.
+  const zgloszone = useRef(grosze);
 
   useEffect(() => {
-    if (grosze === null || grosze === undefined || grosze === '') ustawTekst('');
-    else ustawTekst((Number(grosze) / 100).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    if (grosze === zgloszone.current) return;
+    zgloszone.current = grosze;
+    ustawTekst(formatujKwote(grosze, { waluta: false }));
+    ustawBladWlasny(null);
   }, [grosze]);
 
-  function zmien(surowa) {
-    const czyste = surowa.replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
-    if (czyste === '') { ustawTekst(''); przyZmianie(null); return; }
-    ustawTekst(surowa);
-    const zl = Number(czyste);
-    przyZmianie(Number.isFinite(zl) ? Math.round(zl * 100) : null);
+  function zglos(wartosc) {
+    zgloszone.current = wartosc;
+    przyZmianie(wartosc);
+  }
+
+  function zmien(t) {
+    ustawTekst(t);
+    const wynik = parsujKwote(t);
+    if (wynik.blad) return; // komunikat dopiero po opuszczeniu pola
+    ustawBladWlasny(null);
+    zglos(wynik.grosze);
   }
 
   function domknij() {
-    if (grosze === null || grosze === undefined) return;
-    ustawTekst((Number(grosze) / 100).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    const wynik = parsujKwote(tekst);
+    if (wynik.blad) {
+      ustawBladWlasny(wynik.blad);
+      zglos(null);
+      return;
+    }
+    ustawBladWlasny(null);
+    ustawTekst(formatujKwote(wynik.grosze, { waluta: false }));
   }
 
+  const pokazBlad = bladWlasny && !blad;
   return (
-    <div className={`pole-liczbowe ${blad ? 'bledne' : ''}`}>
-      <input type="text" inputMode="decimal" value={tekst} onChange={(z) => zmien(z.target.value)} onBlur={domknij} />
-      <span className="pole-liczbowe-sufiks">zł</span>
+    <>
+      <div className={`pole-liczbowe ${blad || niepoprawne || bladWlasny ? 'bledne' : ''}`}>
+        <input
+          type="text" inputMode="decimal" value={tekst} id={id} autoFocus={autoFocus}
+          aria-describedby={[opis, pokazBlad && idBledu].filter(Boolean).join(' ') || undefined}
+          aria-invalid={niepoprawne || Boolean(bladWlasny) || undefined}
+          onChange={(z) => zmien(z.target.value)} onBlur={domknij}
+        />
+        <span className="pole-liczbowe-sufiks" aria-hidden="true">zł</span>
+      </div>
+      {pokazBlad && <p className="pole-blad" id={idBledu}><span className="sr-only">Błąd: </span>{bladWlasny}</p>}
+    </>
+  );
+}
+PoleKwoty.przyjmujeId = true;
+
+/**
+ * Hasło z przełącznikiem widoczności (B1) — jeden komponent dla logowania,
+ * aktywacji konta i zmiany hasła. Przełącznik nie chowa się za focusem:
+ * osoba wpisująca hasło na telefonie musi widzieć, że nie ma literówki,
+ * zanim je wyśle.
+ */
+function PoleHaslo({ wartosc, przyZmianie, autoComplete, id, autoFocus, blad, 'aria-describedby': opis, 'aria-invalid': niepoprawne }) {
+  const [widoczne, ustawWidoczne] = useState(false);
+  return (
+    <div className="pole-haslo">
+      <input
+        type={widoczne ? 'text' : 'password'}
+        id={id}
+        name={id}
+        value={wartosc}
+        onChange={(z) => przyZmianie(z.target.value)}
+        autoComplete={autoComplete}
+        autoFocus={autoFocus}
+        aria-describedby={opis}
+        aria-invalid={niepoprawne || Boolean(blad) || undefined}
+      />
+      <button
+        type="button"
+        className="pole-haslo-przelacznik"
+        onClick={() => ustawWidoczne((w) => !w)}
+        aria-label={widoczne ? 'Ukryj hasło' : 'Pokaż hasło'}
+        aria-pressed={widoczne}
+        tabIndex={-1}
+      >
+        <Ikona nazwa={widoczne ? 'okoPrzekreslone' : 'oko'} rozmiar={17} />
+      </button>
     </div>
   );
 }
+PoleHaslo.przyjmujeId = true;
 
 /**
- * Wybór z kartoteki (2.6). Podpowiedzi od TRZECIEGO znaku; wynik pokazuje
- * nazwisko, zamaskowany identyfikator i liczbę spółek, w których osoba już
- * występuje (reguła domenowa nr 10 — jeden inwestor wpisywany raz).
+ * Wybór z kartoteki (2.6) — JEDEN komponent wyboru osoby w całej aplikacji
+ * (dawny `WyborOsoby` z ui.js wchłonięty w FAZIE 1).
+ *
+ * Szuka po nazwisku, imieniu, firmie, PESEL, NIP i numerze KRS od drugiego
+ * znaku; wynik pokazuje zamaskowany identyfikator i liczbę spółek, w których
+ * osoba już jest (reguła domenowa nr 10 — jeden inwestor wpisywany raz).
+ * „+ Nowa osoba w kartotece" jest zawsze na końcu listy: nowej osoby nie
+ * zakłada się w innym ekranie.
  */
-function WyborZKartoteki({ wartosc, przyZmianie, placeholder = 'Zacznij pisać nazwisko…', wyklucz = [] }) {
+function WyborZKartoteki({
+  wartosc, przyZmianie, placeholder = 'Nazwisko, firma, PESEL albo KRS…', wyklucz = [], typFiltr = null,
+  id, 'aria-describedby': opis, 'aria-invalid': niepoprawne,
+}) {
   const [szukaj, ustawSzukaj] = useState('');
   const [wyniki, ustawWyniki] = useState([]);
   const [otwarte, ustawOtwarte] = useState(false);
   const [podswietlony, ustawPodswietlony] = useState(0);
   const [wybrana, ustawWybrana] = useState(null);
-  const [modalNowejOsoby, ustawModalNowejOsoby] = useState(false);
+  const [nowaOsoba, ustawNowaOsoba] = useState(false);
+  const idListy = useId();
 
   useEffect(() => {
     if (!wartosc) { ustawWybrana(null); return; }
@@ -827,12 +1110,14 @@ function WyborZKartoteki({ wartosc, przyZmianie, placeholder = 'Zacznij pisać n
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wartosc]);
 
-  // Podpowiedzi dopiero od trzeciego znaku — przy 500 rejestrach lista po
-  // jednej literze jest bezużyteczna, a odpytywanie API kosztowne.
+  // Od drugiego znaku: przy ~500 spółkach lista po jednej literze jest
+  // bezużyteczna, a nazwiska dwuliterowe („Ng", „Li") istnieją.
+  const zapytanie = szukaj.trim();
   useEffect(() => {
-    if (szukaj.trim().length < 3) { ustawWyniki([]); return undefined; }
+    if (zapytanie.length < 2) { ustawWyniki([]); return undefined; }
     const uchwyt = setTimeout(() => {
-      API.get(`/api/psa/osoby?q=${encodeURIComponent(szukaj.trim())}`)
+      const filtr = typFiltr ? `&typ=${encodeURIComponent(typFiltr)}` : '';
+      API.get(`/api/psa/osoby?q=${encodeURIComponent(zapytanie)}${filtr}`)
         .then((o) => {
           ustawWyniki(o.osoby.filter((x) => !wyklucz.includes(x.id)));
           ustawPodswietlony(0);
@@ -841,7 +1126,7 @@ function WyborZKartoteki({ wartosc, przyZmianie, placeholder = 'Zacznij pisać n
     }, 180);
     return () => clearTimeout(uchwyt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [szukaj]);
+  }, [zapytanie, typFiltr, wyklucz.join(',')]);
 
   function wybierz(osoba) {
     przyZmianie(osoba.id);
@@ -850,78 +1135,115 @@ function WyborZKartoteki({ wartosc, przyZmianie, placeholder = 'Zacznij pisać n
     ustawOtwarte(false);
   }
 
+  const pozycji = wyniki.length + 1; // ostatnia: „+ Nowa osoba"
   function klawisz(z) {
-    if (!wyniki.length) return;
-    if (z.key === 'ArrowDown') { z.preventDefault(); ustawPodswietlony((p) => Math.min(p + 1, wyniki.length - 1)); }
+    if (!otwarte || zapytanie.length < 2) return;
+    if (z.key === 'ArrowDown') { z.preventDefault(); ustawPodswietlony((p) => Math.min(p + 1, pozycji - 1)); }
     if (z.key === 'ArrowUp') { z.preventDefault(); ustawPodswietlony((p) => Math.max(p - 1, 0)); }
-    if (z.key === 'Enter') { z.preventDefault(); wybierz(wyniki[podswietlony]); }
+    if (z.key === 'Escape') { ustawOtwarte(false); }
+    if (z.key === 'Enter') {
+      z.preventDefault();
+      if (podswietlony < wyniki.length) wybierz(wyniki[podswietlony]);
+      else { ustawOtwarte(false); ustawNowaOsoba(true); }
+    }
   }
 
   if (wybrana) {
     return (
       <div className="kartoteka-wybrana">
         <span>
-          {wybrana.oznaczenie}
-          {wybrana.jawny_identyfikator && (
-            <span className="dane wyciszony"> · {wybrana.jawny_identyfikator}</span>
-          )}
+          <span className="kartoteka-wybrana-nazwa">{wybrana.oznaczenie}</span>
+          <span className="kartoteka-poz-meta">
+            {wybrana.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
+            {wybrana.jawny_identyfikator ? ` · ${wybrana.jawny_identyfikator}` : ''}
+            {wybrana.aml_status && wybrana.aml_status !== 'wykonane' ? ' · AML niepotwierdzony' : ''}
+          </span>
         </span>
-        <button className="btn btn-maly btn-cichy" onClick={() => { przyZmianie(null); ustawWybrana(null); }}>
-          zmień
+        <button
+          type="button"
+          className="btn btn-maly btn-cichy"
+          id={id}
+          onClick={() => { przyZmianie(null); ustawWybrana(null); }}
+        >
+          Zmień osobę
         </button>
       </div>
     );
   }
 
+  const listaWidoczna = otwarte && zapytanie.length >= 2;
   return (
     <div className="kartoteka">
       <input
         type="search"
+        id={id}
         value={szukaj}
         placeholder={placeholder}
+        role="combobox"
+        aria-expanded={listaWidoczna}
+        aria-controls={idListy}
+        aria-autocomplete="list"
+        aria-describedby={opis}
+        aria-invalid={niepoprawne}
+        autoComplete="off"
         onChange={(z) => { ustawSzukaj(z.target.value); ustawOtwarte(true); }}
         onFocus={() => ustawOtwarte(true)}
+        onBlur={() => setTimeout(() => ustawOtwarte(false), 150)}
         onKeyDown={klawisz}
       />
-      {otwarte && szukaj.trim().length >= 3 && (
-        <div className="kartoteka-lista">
-          {wyniki.length === 0 ? (
+      {listaWidoczna && (
+        <div className="kartoteka-lista" id={idListy} role="listbox">
+          {wyniki.length === 0 && <div className="kartoteka-pusto">Nikt w kartotece nie pasuje do „{zapytanie}”.</div>}
+          {wyniki.map((o, i) => (
             <button
-              className="kartoteka-poz wyciszony"
-              onMouseDown={(z) => { z.preventDefault(); ustawOtwarte(false); ustawModalNowejOsoby(true); }}
+              type="button"
+              key={o.id}
+              role="option"
+              aria-selected={i === podswietlony}
+              className={`kartoteka-poz ${i === podswietlony ? 'podswietlona' : ''}`}
+              onMouseDown={(z) => { z.preventDefault(); wybierz(o); }}
             >
-              Nikt nie pasuje — załóż nową osobę w kartotece.
+              <div>{o.oznaczenie}</div>
+              <div className="kartoteka-poz-meta">
+                {o.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
+                {o.jawny_identyfikator ? ` · ${o.jawny_identyfikator}` : ''}
+                {o.liczba_spolek ? ` · w ${o.liczba_spolek} ${fmt.odmien(o.liczba_spolek, 'spółce', 'spółkach', 'spółkach')}` : ''}
+              </div>
             </button>
-          ) : (
-            wyniki.map((o, i) => (
-              <button
-                key={o.id}
-                className={`kartoteka-poz ${i === podswietlony ? 'podswietlona' : ''}`}
-                onMouseDown={(z) => { z.preventDefault(); wybierz(o); }}
-              >
-                <div>{o.oznaczenie}</div>
-                <div className="kartoteka-poz-meta">
-                  {o.jawny_identyfikator || 'bez identyfikatora'}
-                  {o.liczba_spolek !== undefined && ` · w ${o.liczba_spolek} ${fmt.odmien(o.liczba_spolek, 'spółce', 'spółkach', 'spółkach')}`}
-                </div>
-              </button>
-            ))
-          )}
+          ))}
+          <button
+            type="button"
+            role="option"
+            aria-selected={podswietlony === wyniki.length}
+            className={`kartoteka-poz kartoteka-nowa ${podswietlony === wyniki.length ? 'podswietlona' : ''}`}
+            onMouseDown={(z) => { z.preventDefault(); ustawOtwarte(false); ustawNowaOsoba(true); }}
+          >
+            + Nowa osoba w kartotece
+          </button>
         </div>
       )}
 
-      {modalNowejOsoby && (
-        <FormularzOsoby
-          osoba={{ nazwisko: szukaj.trim() }}
-          przyZamknieciu={() => ustawModalNowejOsoby(false)}
-          przyZapisie={(nowaOsoba) => {
-            ustawModalNowejOsoby(false);
-            wybierz(nowaOsoba);
-          }}
+      {nowaOsoba && (
+        <PanelOsoby
+          osoba={podpowiedzNowejOsoby(zapytanie, typFiltr)}
+          przyZamknieciu={() => ustawNowaOsoba(false)}
+          przyZapisie={(osoba) => { ustawNowaOsoba(false); wybierz(osoba); }}
+          przyWyborzeIstniejacej={(osoba) => { ustawNowaOsoba(false); wybierz(osoba); }}
         />
       )}
     </div>
   );
+}
+WyborZKartoteki.przyjmujeId = true;
+
+/** Wpisany tekst przechodzi do nowej osoby tam, gdzie pasuje (raz wpisane — nigdy więcej). */
+function podpowiedzNowejOsoby(tekst, typFiltr) {
+  const t = String(tekst || '').trim();
+  const osoba = typFiltr ? { typ: typFiltr } : {};
+  if (/^\d{11}$/.test(t)) return { ...osoba, typ: 'fizyczna', pesel: t };
+  if (/^\d{10}$/.test(t)) return { ...osoba, typ: 'prawna', numer_w_rejestrze: t, nazwa_rejestru: 'KRS' };
+  if (!t || /\d/.test(t)) return osoba;
+  return osoba.typ === 'prawna' ? { ...osoba, nazwa: t } : { ...osoba, nazwisko: t };
 }
 
 /* ═════════════════════════════════════════════════════
@@ -1101,15 +1423,8 @@ function useAutozapis(wartosci, zapisz, opcje = {}) {
 
   const serializacja = JSON.stringify(wartosci);
 
-  useEffect(() => {
-    function ostrzezPrzedZamknieciem(e) {
-      if (!niezapisane.current) return;
-      e.preventDefault();
-      e.returnValue = '';
-    }
-    window.addEventListener('beforeunload', ostrzezPrzedZamknieciem);
-    return () => window.removeEventListener('beforeunload', ostrzezPrzedZamknieciem);
-  }, []);
+  // Zamknięcie karty i zmiana ekranu w trakcie zapisu pytają o zgodę.
+  useBlokadaWyjscia(() => wlaczony && niezapisane.current);
 
   useEffect(() => {
     if (!wlaczony) return undefined;
@@ -1226,7 +1541,15 @@ function WierszDodania({ etykieta, przyKliknieciu, wylaczony = false }) {
  * zaproszeniem, a nie drobnym odnośnikiem do wypatrzenia.
  */
 function NawigacjaKreatora({ wstecz, dalej }) {
+  // Wyłączony przycisk zawsze mówi, DLACZEGO jest wyłączony (FAZA 1 pkt 4).
+  // Braki w formularzu nie wyłączają „Dalej" — kliknięcie pokazuje
+  // podsumowanie błędów; wyłączenie zostaje tylko dla blokady prawnej.
+  const idPowodu = useId();
   return (
+    <>
+    {dalej && dalej.wylaczony && dalej.powod && (
+      <p className="nawigacja-powod" id={idPowodu}>{dalej.powod}</p>
+    )}
     <div className="nawigacja-kreatora">
       {wstecz
         ? (
@@ -1242,12 +1565,14 @@ function NawigacjaKreatora({ wstecz, dalej }) {
             className="btn btn-glowny btn-nawigacja"
             onClick={dalej.przy}
             disabled={dalej.wylaczony}
+            aria-describedby={dalej.wylaczony && dalej.powod ? idPowodu : undefined}
           >
             {dalej.etykieta}
           </button>
         )
         : <span />}
     </div>
+    </>
   );
 }
 
@@ -1476,6 +1801,7 @@ window.Pole = Pole;
 window.PoleDaty = PoleDaty;
 window.PoleLiczbowe = PoleLiczbowe;
 window.PoleKwoty = PoleKwoty;
+window.PoleHaslo = PoleHaslo;
 window.Kalendarz = Kalendarz;
 window.WyborZKartoteki = WyborZKartoteki;
 window.PaletaPolecen = PaletaPolecen;

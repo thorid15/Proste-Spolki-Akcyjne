@@ -17,61 +17,29 @@
    fonts.googleapis.com, z którego powstał ten blok.
    ───────────────────────────────────────────────────── */
 
+/* Inter Tight i EB Garamond to fonty ZMIENNE: jeden plik obejmuje wszystkie
+   grubości. Dawniej każda grubość miała osobną regułę i osobny plik — cztery
+   identyczne kopie (te same sumy MD5) pod czterema adresami, więc przeglądarka
+   pobierała ten sam font kilka razy. Teraz jedna reguła na krój i podzbiór
+   z zakresem `font-weight` (FAZA 1 pkt 7). IBM Plex Mono ma dwie grubości
+   w dwóch RÓŻNYCH plikach (font statyczny) — zostaje po staremu. */
 /* latin-ext */
 @font-face {
-  font-family: 'EB Garamond';
+  font-family: 'Inter Tight';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 400 700;
   font-display: swap;
-  src: url(/fonty/eb-garamond-400-latin-ext.woff2) format('woff2');
+  src: url(/fonty/inter-tight-latin-ext.woff2) format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
-/* latin */
 @font-face {
   font-family: 'EB Garamond';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 400 600;
   font-display: swap;
-  src: url(/fonty/eb-garamond-400-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* latin-ext */
-@font-face {
-  font-family: 'EB Garamond';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonty/eb-garamond-500-latin-ext.woff2) format('woff2');
+  src: url(/fonty/eb-garamond-latin-ext.woff2) format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
-/* latin */
-@font-face {
-  font-family: 'EB Garamond';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonty/eb-garamond-500-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* latin-ext */
-@font-face {
-  font-family: 'EB Garamond';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonty/eb-garamond-600-latin-ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'EB Garamond';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonty/eb-garamond-600-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* latin-ext */
 @font-face {
   font-family: 'IBM Plex Mono';
   font-style: normal;
@@ -80,16 +48,6 @@
   src: url(/fonty/ibm-plex-mono-400-latin-ext.woff2) format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
-/* latin */
-@font-face {
-  font-family: 'IBM Plex Mono';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonty/ibm-plex-mono-400-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* latin-ext */
 @font-face {
   font-family: 'IBM Plex Mono';
   font-style: normal;
@@ -100,83 +58,35 @@
 }
 /* latin */
 @font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(/fonty/inter-tight-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url(/fonty/eb-garamond-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonty/ibm-plex-mono-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
   font-family: 'IBM Plex Mono';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
   src: url(/fonty/ibm-plex-mono-500-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* latin-ext */
-@font-face {
-  font-family: 'Inter Tight';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonty/inter-tight-400-latin-ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'Inter Tight';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonty/inter-tight-400-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* latin-ext */
-@font-face {
-  font-family: 'Inter Tight';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonty/inter-tight-500-latin-ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'Inter Tight';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonty/inter-tight-500-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* latin-ext */
-@font-face {
-  font-family: 'Inter Tight';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonty/inter-tight-600-latin-ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'Inter Tight';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonty/inter-tight-600-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* latin-ext */
-@font-face {
-  font-family: 'Inter Tight';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/fonty/inter-tight-700-latin-ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'Inter Tight';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/fonty/inter-tight-700-latin.woff2) format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -210,7 +120,7 @@ em, i, cite, blockquote, address, dfn, var { font-style: normal; }
   /* ── Paleta — mosiężna tabliczka + zieleń druku zabezpieczonego ── */
   --atrament:    #14181C;
   --atrament-2:  #565E68;
-  --atrament-3:  #8A929C;
+  --atrament-3:  #646C76;  /* FAZA 1: z #8A929C (2,93:1 na papierze) do 4,95:1 — WCAG AA dla zwykłego tekstu */
   --tlo-strony:  #EEF0EC;  /* pod pływającym panelem aplikacji */
   --papier:      #F6F7F5;  /* tło obszaru treści */
   --papier-2:    #FBFBFA;  /* subtelne wypełnienia wewnątrz kart */
@@ -229,7 +139,7 @@ em, i, cite, blockquote, address, dfn, var { font-style: normal; }
   --rejestr-cien-4: #6BA88C;
   --rejestr-cien-5: #8FC4AB;
   --rejestr-cien-6: #B5DDC9;
-  --mosiadz:     #A97C3F;
+  --mosiadz:     #8A6330;  /* FAZA 1: z #A97C3F (3,26:1 na mosiadz-tlo) do 4,71:1 */
   --mosiadz-tlo: #F7EFE2;
   --sygnal:      #A32B22;
   --sygnal-tlo:  #F9EBE9;
@@ -397,6 +307,18 @@ body {
 }
 @media (max-width: 640px) {
   .marka-pasek { padding: var(--od-8) var(--od-16); }
+}
+
+/* Ostrzeżenie o wygasającej sesji portalu (FAZA4 pkt 6) — pasek pod marką,
+   przez całą szerokość, ten sam akcent co reszta ostrzeżeń w aplikacji. */
+.pasek-ostrzezenia {
+  grid-column: 1 / -1;
+  padding: var(--od-8) var(--od-24);
+  background: var(--mosiadz-tlo);
+  color: var(--mosiadz);
+  font-size: var(--st-13);
+  text-align: center;
+  border-bottom: 1px solid var(--linia-2);
 }
 
 /* Ekrany publiczne portalu (`.ekran-logowania`) same w sobie maja 100vh —
@@ -871,7 +793,7 @@ body {
 .pole-echo { font-size: var(--st-11); color: var(--rejestr); margin-top: var(--od-4); }
 
 input[type="text"], input[type="email"], input[type="password"], input[type="number"],
-input[type="search"], input[type="date"], input[type="time"], select, textarea {
+input[type="search"], input[type="date"], input[type="time"], input[type="tel"], select, textarea {
   width: 100%;
   padding: var(--od-8) var(--od-12);
   font-family: inherit; font-size: var(--st-15);
@@ -964,6 +886,17 @@ select {
 .pole-liczbowe.bledne { border-color: var(--sygnal); }
 .pole-liczbowe input { border: none; box-shadow: none; text-align: right; font-family: var(--font-dane); background: none; }
 .pole-liczbowe input:focus { box-shadow: none; }
+
+/* Hasło z przełącznikiem widoczności (B1). */
+.pole-haslo { position: relative; }
+.pole-haslo input { padding-right: 40px; }
+.pole-haslo-przelacznik {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: var(--r-sm); color: var(--atrament-3); cursor: pointer;
+}
+.pole-haslo-przelacznik:hover { background: var(--papier); color: var(--atrament); }
+.pole-haslo-przelacznik:focus-visible { outline: 2px solid var(--rejestr); outline-offset: 1px; }
 .pole-liczbowe-sufiks { font-size: var(--st-13); color: var(--atrament-3); padding-left: var(--od-8); white-space: nowrap; }
 
 /* Wybór z kartoteki */
@@ -1564,7 +1497,7 @@ select {
 }
 .stopka-adres { color: var(--atrament-2); }
 .stopka-tresc { color: var(--atrament-2); }
-.stopka-tresc a { color: var(--rejestr); text-decoration: none; }
+.stopka-tresc a { color: var(--rejestr); text-decoration: underline; text-underline-offset: 2px; }
 .stopka-tresc a:hover { text-decoration: underline; }
 
 /* Szerokość, nie wysokość — i dokładnie ćwierć oryginału (498 px), bo
@@ -1958,7 +1891,13 @@ a.stopka-poz:hover span { text-decoration: underline; }
   font-weight: 600;
   color: var(--rejestr);
   margin-bottom: var(--od-8);
+  cursor: pointer;
 }
+/* `<details>` zamknięte domyślnie (P4 — dziś ~20 ekranów przewijania na
+   telefonie): stopka pod listą dokumentów, zwijana, żeby nie zajmowała
+   miejsca, dopóki ktoś faktycznie chce ją przeczytać. */
+.instrukcja-podpisu[open] .instrukcja-podpisu-tytul { margin-bottom: var(--od-8); }
+.instrukcja-podpisu:not([open]) .instrukcja-podpisu-tytul { margin-bottom: 0; }
 .instrukcja-podpisu-lista { margin: 0 0 var(--od-12) var(--od-16); padding: 0; }
 .instrukcja-podpisu-lista li { margin-bottom: var(--od-8); }
 .instrukcja-podpisu-lista li:last-child { margin-bottom: 0; }
@@ -2429,3 +2368,157 @@ a.stopka-poz:hover span { text-decoration: underline; }
 }
 .dok-podpis-linia { display: block; border-top: 1px solid var(--atrament-2); margin-bottom: var(--od-4); }
 .dok-podpis-opis { font-size: var(--st-11); color: var(--atrament-2); }
+
+/* ═════════════════════════════════════════════════════
+   FAZA 1 SESJI FRONTENDOWEJ — fundament
+   ═════════════════════════════════════════════════════ */
+
+/* Tekst tylko dla czytnika ekranu. */
+.sr-only {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.przeskocz-do-tresci { position: absolute; left: var(--od-8); top: -48px; z-index: 300; padding: var(--od-8) var(--od-12); background: var(--karta); border: 2px solid var(--rejestr); border-radius: var(--r-sm); }
+.przeskocz-do-tresci:focus { top: var(--od-8); }
+
+/* Odnośnik w tekście odróżnia się nie tylko kolorem (axe: link-in-text-block). */
+p a, li a, .komunikat a, .pole-podpowiedz a, .podstawa-prawna a, dd a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* h1 dostaje fokus po nawigacji — bez obwódki myszy, z obwódką klawiatury. */
+h1[tabindex="-1"]:focus { outline: none; }
+h1[tabindex="-1"]:focus-visible { outline: none; }
+
+/* ── Szkielet treści zamiast spinnera (pkt 5) ── */
+.szkielet { padding: var(--od-16) var(--od-24); display: flex; flex-direction: column; gap: var(--od-12); min-height: 120px; }
+.szkielet-wiersz {
+  height: 14px; border-radius: var(--r-sm);
+  background: linear-gradient(90deg, var(--linia-2) 0%, var(--papier) 50%, var(--linia-2) 100%);
+  background-size: 200% 100%;
+  animation: szkielet-fala 1.2s ease-out infinite;
+}
+@keyframes szkielet-fala { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* ── Pola: błąd, ostrzeżenie, grupy (pkt 2–3) ── */
+.pole-z-bledem { border-left: 3px solid var(--sygnal); padding-left: var(--od-12); }
+.pole-blad { font-weight: 600; }
+.pole-ostrzezenie { font-size: var(--st-11); color: var(--mosiadz); margin-top: var(--od-4); }
+.pole-z-bledem input, .pole-z-bledem select, .pole-z-bledem textarea { border-color: var(--sygnal); }
+.grupa-pol { border: none; padding: 0; margin: 0 0 var(--od-16); min-width: 0; }
+.grupa-pol-legenda { font-weight: 600; font-size: var(--st-13); margin-bottom: var(--od-8); padding: 0; color: var(--atrament); }
+.siatka-adresu { display: grid; grid-template-columns: minmax(0, 1fr) 7rem 11rem; gap: 0 var(--od-12); }
+.siatka-adresu .pole-etykieta { white-space: nowrap; }
+.siatka-adresu-miasto { grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); }
+.pole-ulamka { display: flex; align-items: center; gap: var(--od-8); max-width: 260px; }
+.formularz-osoby { display: flex; flex-direction: column; }
+.kolizja-kartoteki {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-8); justify-content: space-between;
+  margin: calc(-1 * var(--od-8)) 0 var(--od-16); padding: var(--od-8) var(--od-12);
+  background: var(--mosiadz-tlo); color: var(--atrament); border-radius: var(--r-sm); font-size: var(--st-13);
+}
+
+/* Wybór typu osoby — dwie duże opcje zamiast listy rozwijanej (B11). */
+.wybor-typu-opcje { display: grid; grid-template-columns: 1fr 1fr; gap: var(--od-8); }
+.wybor-typu-opcja {
+  display: flex; gap: var(--od-8); align-items: flex-start; cursor: pointer;
+  padding: var(--od-12); border: 1px solid var(--linia); border-radius: var(--r); background: var(--karta);
+}
+.wybor-typu-opcja.wybrana { border-color: var(--rejestr); background: var(--rejestr-tlo); }
+.wybor-typu-opcja input { margin-top: 3px; accent-color: var(--rejestr); }
+.wybor-typu-etykieta { display: block; font-weight: 600; }
+.wybor-typu-opis { display: block; font-size: var(--st-11); color: var(--atrament-2); margin-top: 2px; }
+
+/* Podsumowanie błędów (wzorzec GOV.UK). */
+.podsumowanie-bledow {
+  border: 3px solid var(--sygnal); border-radius: var(--r); padding: var(--od-16) var(--od-16) var(--od-8);
+  margin-bottom: var(--od-24); background: var(--karta);
+}
+.podsumowanie-bledow:focus { outline: 3px solid var(--mosiadz); outline-offset: 2px; }
+.podsumowanie-bledow-tytul { font-size: var(--st-16, 16px); font-weight: 700; margin: 0 0 var(--od-8); }
+.podsumowanie-bledow ul { margin: 0; padding-left: 0; list-style: none; }
+.podsumowanie-bledow li { margin-bottom: var(--od-8); }
+.podsumowanie-bledow a { color: var(--sygnal); font-weight: 600; text-decoration: underline; }
+
+/* Wybór z kartoteki — pozycja „+ Nowa osoba". */
+.kartoteka-nowa { border-top: 1px solid var(--linia-2); margin-top: var(--od-4); color: var(--rejestr); font-weight: 600; }
+.kartoteka-pusto { padding: var(--od-8) var(--od-12); font-size: var(--st-13); color: var(--atrament-3); }
+.kartoteka-wybrana-nazwa { display: block; font-weight: 600; }
+
+/* Kroki klikalne (0.4 pkt 8). */
+.kroki { list-style: none; padding: 0; }
+.krok-przycisk { all: unset; display: inline-flex; align-items: center; gap: inherit; cursor: pointer; border-radius: var(--r-sm); }
+.krok-przycisk:hover span:last-child { text-decoration: underline; }
+.krok-przycisk:focus-visible { outline: 2px solid var(--rejestr); outline-offset: 2px; }
+
+/* Wyłączony przycisk zawsze mówi, dlaczego (pkt 4). */
+.nawigacja-powod { font-size: var(--st-13); color: var(--atrament-2); text-align: right; margin: var(--od-16) 0 calc(-1 * var(--od-8)); }
+
+/* ── Panel boczny zamiast modala dla długich formularzy (pkt 5) ── */
+.nakladka-panel { justify-content: flex-end; align-items: stretch; padding: 0; }
+.panel-boczny {
+  background: var(--karta); width: min(720px, 100%); height: 100%;
+  display: flex; flex-direction: column; box-shadow: var(--cien-l);
+  animation: panel-wjazd 200ms ease-out;
+}
+.panel-boczny .modal-tytul { display: flex; justify-content: space-between; align-items: center; gap: var(--od-8); margin: 0; padding: var(--od-16) var(--od-24); border-bottom: 1px solid var(--linia-2); }
+.panel-tresc { flex: 1; overflow-y: auto; padding: var(--od-24); }
+.panel-boczny .modal-stopka { position: static; margin: 0; padding: var(--od-16) var(--od-24); }
+@keyframes panel-wjazd { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.modal { animation: modal-wejscie 150ms ease-out; }
+@keyframes modal-wejscie { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ── Przejścia między widokami (View Transitions API, pkt 5) ──
+   Ulepszenie progresywne: przeglądarka bez obsługi zmienia widok od razu. */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; animation-timing-function: ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  .szkielet-wiersz { animation: none; }
+}
+
+/* ── Licznik przy pozycji nawigacji (pkt 9) ── */
+.licznik {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px; margin-left: auto;
+  border-radius: 10px; background: var(--rejestr); color: #fff;
+  font-size: 11px; font-weight: 700; font-family: var(--font-dane); line-height: 1;
+}
+
+/* ── Tabele na wąskim ekranie (pkt 11) ──
+   Poniżej 600 px wiersz tabeli staje się kartą „etykieta: wartość" —
+   żadna kolumna nie znika. Etykiety dopisuje do komórek `rdzen.js`
+   (`data-etykieta` z nagłówka kolumny). */
+@media (max-width: 600px) {
+  .karta.scisla { overflow: visible; }
+  table.tabela, table.tbl { display: block; width: 100% !important; margin: 0 !important; }
+  table.tabela thead, table.tbl thead { display: none; }
+  table.tabela tbody, table.tbl tbody, table.tabela tfoot, table.tbl tfoot { display: block; }
+  table.tabela tr, table.tbl tr {
+    display: block; padding: var(--od-8) var(--od-16); border-bottom: 1px solid var(--linia-2);
+  }
+  table.tabela td, table.tbl td {
+    display: flex; justify-content: space-between; align-items: baseline; gap: var(--od-12);
+    padding: 4px 0 !important; border: none !important; text-align: right; white-space: normal !important;
+    max-width: none !important; overflow: visible !important;
+  }
+  table.tabela td[data-etykieta]::before, table.tbl td[data-etykieta]::before {
+    content: attr(data-etykieta); flex: 0 0 auto; max-width: 45%;
+    text-align: left; color: var(--atrament-3); font-size: var(--st-11); font-weight: 500;
+    font-family: var(--font-ui, inherit); text-transform: none; letter-spacing: 0;
+  }
+  table.tabela td:not([data-etykieta]), table.tbl td:not([data-etykieta]),
+  table.tabela td[data-etykieta=""], table.tbl td[data-etykieta=""] { justify-content: flex-end; }
+  table.tabela td[colspan], table.tbl td[colspan] { display: block; text-align: left; }
+  .siatka-adresu, .siatka-adresu-miasto { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .siatka-adresu > .pole:first-child { grid-column: 1 / -1; }
+  .siatka-adresu.siatka-adresu-miasto { grid-template-columns: 7rem minmax(0, 1fr); }
+  .siatka-adresu.siatka-adresu-miasto > .pole:first-child { grid-column: auto; }
+  .wybor-typu-opcje { grid-template-columns: 1fr; }
+  .panel-tresc { padding: var(--od-16); }
+}
+
+h1.topbar-tytul, h1.brama-tytul { margin: 0; font-weight: inherit; }
+.zdanie-nieodwracalne { font-size: var(--st-13); font-weight: 600; color: var(--atrament); margin: var(--od-16) 0 0; }
+/* Pasek nawigacji na wąskim ekranie przewija się SAM — nie rozpycha strony. */
+.obszar { min-width: 0; }
+@media (max-width: 900px) { .topbar-nawigacja { max-width: 100vw; min-width: 0; position: relative; } }
+/* Tekst dla czytnika w liczniku nie może uciec z przewijanego paska. */
+.licznik { position: relative; }

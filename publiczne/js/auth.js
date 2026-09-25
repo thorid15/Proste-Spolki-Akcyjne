@@ -63,13 +63,13 @@ function EkranLogowania({ przyZalogowaniu }) {
 
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <div className="marka-pasek bez-druku">
+      <div className="marka-pasek bez-druku" role="banner">
         <div className="marka-pasek-nazwa">{(kancelaria || KANCELARIA_ZAPASOWA).nazwa}</div>
       </div>
 
-      <div className="brama">
+      <main className="brama">
         <div className="brama-opis">
-          <div className="brama-tytul">Rejestr akcjonariuszy P.S.A.</div>
+          <h1 className="brama-tytul">Rejestr akcjonariuszy P.S.A.</h1>
           <div className="brama-lead">
             Aplikacja kancelarii do prowadzenia rejestrów akcjonariuszy prostych spółek akcyjnych
             na podstawie art. 300<sup>31</sup> § 1 Kodeksu spółek handlowych.
@@ -103,12 +103,7 @@ function EkranLogowania({ przyZalogowaniu }) {
             />
           </Pole>
           <Pole etykieta="Hasło" wymagane>
-            <input
-              type="password"
-              value={haslo}
-              onChange={(z) => ustawHaslo(z.target.value)}
-              autoComplete="current-password"
-            />
+            <PoleHaslo id="kancelaria-login-haslo" wartosc={haslo} przyZmianie={ustawHaslo} autoComplete="current-password" />
           </Pole>
 
           <button
@@ -120,7 +115,7 @@ function EkranLogowania({ przyZalogowaniu }) {
             {wysylanie ? 'Logowanie…' : 'Zaloguj się'}
           </button>
         </form>
-      </div>
+      </main>
 
       {/* Ta sama szerokość, co `.brama` nad nią. */}
       <StopkaKancelarii kancelaria={kancelaria || KANCELARIA_ZAPASOWA} szerokosc="1080px" />

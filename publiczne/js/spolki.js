@@ -33,9 +33,14 @@ const PUSTA_SPOLKA = {
   // Reprezentant — wszystkie dane w mianowniku, tak jak w dokumencie
   // tożsamości. Pisma nie odmieniają ich przez przypadki, tylko opisują
   // etykietą („imiona rodziców:", „działający jako:").
-  reprezentant_imie_nazwisko: '', reprezentant_rodzice: '',
-  reprezentant_dowod: '', reprezentant_pesel: '', reprezentant_adres: '',
+  reprezentant_imie_nazwisko: '', reprezentant_rodzice: '', reprezentant_pesel: '',
   reprezentant_funkcja: '', reprezentant_reprezentacja: '', reprezentant_email: '',
+  // B2/B3 — dowód i adres ustrukturyzowane (migracja 53); stare
+  // `reprezentant_dowod`/`reprezentant_adres` zostają tylko do odczytu w
+  // piśmie, gdy te pola są jeszcze puste (`kontekst-pisma.js`).
+  reprezentant_dowod_rodzaj: '', reprezentant_dowod_numer: '',
+  reprezentant_kraj: 'Polska', reprezentant_kod_pocztowy: '', reprezentant_miejscowosc: '',
+  reprezentant_ulica: '', reprezentant_nr_domu: '', reprezentant_nr_lokalu: '',
 };
 
 const PUSTA_EMISJA_ZALOZYCIELSKA = {
@@ -174,8 +179,17 @@ function PozycjaZalozycielska({ pozycja, ustawPozycje, usun, mozna_usunac, wyklu
  * (formularz klienta zbiera tożsamość, nie kapitał) — pracownik wpisuje je
  * tu samodzielnie, tak jak przy spółce zakładanej wewnętrznie.
  */
-function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
-  const [krok, ustawKrok] = useState(spolkaIstniejaca ? 2 : 0);
+function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) {
+  const [krok, ustawKrokWewn] = useState(spolkaIstniejaca ? 2 : 0);
+  // Najdalszy osiągnięty krok — do niego pasek kroków jest klikalny (0.4 pkt 8).
+  const [osiagniety, ustawOsiagniety] = useState(spolkaIstniejaca ? 2 : 0);
+  const [pokazBraki, ustawPokazBraki] = useState(false);
+  function ustawKrok(nowy) {
+    const k = typeof nowy === 'function' ? nowy(krok) : nowy;
+    ustawPokazBraki(false);
+    ustawOsiagniety((o) => Math.max(o, k));
+    ustawKrokWewn(k);
+  }
   const [dane, ustawDane] = useState(spolkaIstniejaca ? { ...PUSTA_SPOLKA, ...spolkaIstniejaca } : PUSTA_SPOLKA);
   const [surowyJson, ustawSurowyJson] = useState(null);
   const [pokazJson, ustawPokazJson] = useState(false);
@@ -185,9 +199,24 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
   const [pobranoZKrsBezAde, ustawPobranoZKrsBezAde] = useState(false);
   const [sadZaproponowany, ustawSadZaproponowany] = useState(false);
   const [umowaZalacznik, ustawUmowaZalacznik] = useState(null);
+  // K6 (FAZA 3 sesji frontendowej v2): dane pobrane z KRS pokazują się jako
+  // podsumowanie tylko do odczytu („Czy to Twoja spółka?") — pełny
+  // edytowalny formularz wraca dopiero po „Popraw" albo gdy API zawiodło
+  // (0.4 pkt 2). Dla spółki z przyjętego wniosku (krok 0 nieodwiedzany bez
+  // cofania) i tak nieistotne — startuje jak dotąd.
+  const [trybReczny, ustawTrybReczny] = useState(Boolean(spolkaIstniejaca));
+  const ostatniPobranyKrs = useRef(null);
 
   const [emisja, ustawEmisje] = useState(PUSTA_EMISJA_ZALOZYCIELSKA);
-  const [pozycje, ustawPozycjeState] = useState([{}]);
+  // K2 (FAZA 3 sesji frontendowej v2): osoby z przyjętego wniosku podstawione
+  // od razu — pracownik nie wybiera ich drugi raz z kartoteki, wpisuje tylko
+  // liczbę akcji i cenę (D-053: bez liczby akcji we wniosku, uzupełnia je
+  // kancelaria z umowy spółki).
+  const [pozycje, ustawPozycjeState] = useState(
+    akcjonariuszeWniosku.length > 0
+      ? akcjonariuszeWniosku.map((a) => ({ osoba_id: a.osoba_id }))
+      : [{}]
+  );
   const [zgoda, ustawZgode] = useState(PUSTA_ZGODA_SPOLKI);
 
   // Etap 2.5: data emisji założycielskiej = data zawarcia umowy spółki
@@ -229,8 +258,10 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
       ustawSurowyJson(wynik.surowa || null);
       if (!wynik.znaleziono) {
         ustawKomunikatKrs({ odmiana: 'uwaga', tresc: wynik.komunikat });
+        ustawTrybReczny(true);
       } else if (wynik.dopuszczalna === false) {
         ustawKomunikatKrs({ odmiana: 'blad', tresc: wynik.komunikat });
+        ustawTrybReczny(true);
       } else {
         const { sklad_organu, ...reszta } = wynik.dane;
         const pobrane = Object.fromEntries(
@@ -240,20 +271,38 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
         ustawSkladOrganu(sklad_organu || []);
         ustawPobranoZKrsBezAde(!wynik.dane.adres_edorecze);
         ustawSadZaproponowany(Boolean(wynik.sad_rejestrowy_propozycja));
-        ustawKomunikatKrs({
-          odmiana: (wynik.ostrzezenia || []).length ? 'uwaga' : 'ok',
-          tresc: (wynik.ostrzezenia || []).length
-            ? wynik.ostrzezenia.join(' ')
-            : 'Dane pobrane z rejestru przedsiębiorców. Sprawdź je przed zapisaniem, zwłaszcza sąd rejestrowy — API KRS go nie zwraca, uzupełnij ręcznie.',
-        });
-        ustawPokazJson(true);
+        ustawKomunikatKrs(
+          (wynik.ostrzezenia || []).length
+            ? { odmiana: 'uwaga', tresc: wynik.ostrzezenia.join(' ') }
+            : null
+        );
+        // K6: dane z KRS jako podsumowanie tylko do odczytu — pracownik
+        // sprawdza je jako „Czy to Twoja spółka?" i albo przechodzi dalej,
+        // albo klika „Popraw", żeby wrócić do edytowalnego formularza.
+        ustawTrybReczny(false);
       }
     } catch (e) {
       ustawKomunikatKrs({ odmiana: 'uwaga', tresc: `${e.message} Uzupełnij dane ręcznie.` });
+      ustawTrybReczny(true);
     } finally {
       ustawPobieranie(false);
     }
   }
+
+  // K6: pobranie startuje samo po wpisaniu 10 cyfr — bez osobnego
+  // przycisku (0.4 pkt 2). Nie odpala się drugi raz dla tego samego
+  // numeru (np. gdy pracownik wraca na krok 0 z „Popraw").
+  useEffect(() => {
+    if (spolkaIstniejaca) return undefined;
+    const numer = String(dane.krs || '').replace(/\D/g, '');
+    if (numer.length !== 10 || numer === ostatniPobranyKrs.current) return undefined;
+    const uchwyt = setTimeout(() => {
+      ostatniPobranyKrs.current = numer;
+      pobierzZKrs();
+    }, 400);
+    return () => clearTimeout(uchwyt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dane.krs]);
 
   function ustawPozycje(i, nowa) {
     ustawPozycjeState((p) => p.map((x, j) => (j === i ? nowa : x)));
@@ -294,18 +343,52 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
     (!zgoda.zgoda_termin_wskazania_dni || !zgoda.zgoda_cena_opis.trim() || !zgoda.zgoda_termin_zaplaty_dni);
 
   const mozeDalejZ0 = Boolean(dane.nazwa && dane.nazwa.trim());
-  const mozeDalejZ2 =
-    Boolean(emisja.seria && emisja.data_emisji) &&
-    // Bez tej daty akcje formalnie nie istnieja (art. 300(30) § 2 KSH) - lepiej
-    // zatrzymac tu, na kroku gdzie pole zyje i jest edytowalne, niz dopiero
-    // przy koncowym zapisie po odhaczeniu calej checklisty (patrz pole nizej).
-    Boolean(dane.data_utworzenia_spolki) &&
-    ileAkcji > 0 &&
-    !przekroczonyBilans &&
-    pozycje.length > 0 &&
-    pozycje.every((p) => p.osoba_id && Number(p.ilosc) > 0);
 
-  const wszystkoOdhaczone = CHECKLISTA_OTWARCIA.every((p) => odhaczone[p.kod]);
+  // K2 (FAZA 3 sesji frontendowej v2, D-052): system NIE zaznacza pozycji
+  // checklisty sam, ale BLOKUJE zaznaczenie tych dwóch, które umie
+  // rozstrzygnąć negatywnie — inaczej odznaczenie w całości checklisty (np.
+  // przez skok bezpośrednio na krok „Weryfikacja" pasekiem kroków, z
+  // pominięciem walidacji „Dalej" na kroku 2) kończyło się odrzuceniem
+  // zapisu przez serwer PO kliknięciu „Otwórz rejestr" — ślepy zaułek,
+  // którego ma nie być z konstrukcji. Pozostałe pozycje (np. „jedna_umowa")
+  // wymagają oceny pracownika — system nie ma skąd wziąć tej wiedzy.
+  const BLOKADY_CHECKLISTY = {
+    wpis_krs: !dane.data_utworzenia_spolki
+      ? {
+          powod: 'Brak daty wpisu emisji do KRS — bez niej akcje formalnie nie istnieją (art. 300(30) § 2 KSH).',
+          krok: 2,
+          pole: 'otwarcie-data-krs',
+        }
+      : null,
+    bilans: przekroczonyBilans
+      ? { powod: 'Akcjonariusze obejmują więcej akcji, niż wyemitowano — zmniejsz którąś z pozycji.', krok: 2, pole: null }
+      : null,
+  };
+  const wszystkoOdhaczone = CHECKLISTA_OTWARCIA.every((p) => !BLOKADY_CHECKLISTY[p.kod] && odhaczone[p.kod]);
+
+  /* „Dalej" nie jest wyłączany z powodu braków (FAZA 1 pkt 3, 0.4 pkt 8) —
+     kliknięcie pokazuje podsumowanie braków z odnośnikami do pól. */
+  function brakiKroku(k) {
+    const b = [];
+    if (k === 0 && !mozeDalejZ0) b.push({ pole: 'otwarcie-nazwa', tresc: 'Wpisz firmę (nazwę) spółki.' });
+    if (k === 2) {
+      if (!emisja.seria) b.push({ pole: 'otwarcie-seria', tresc: 'Wpisz oznaczenie serii, np. A.' });
+      if (!(ileAkcji > 0)) b.push({ pole: 'otwarcie-ilosc', tresc: 'Wpisz liczbę akcji w emisji.' });
+      if (!emisja.data_emisji) b.push({ pole: 'otwarcie-data-emisji', tresc: 'Wpisz datę emisji.' });
+      if (!dane.data_utworzenia_spolki) {
+        b.push({ pole: 'otwarcie-data-krs', tresc: 'Wpisz datę wpisu emisji do KRS — bez niej akcje nie istnieją (art. 300(30) § 2 KSH).' });
+      }
+      if (przekroczonyBilans) b.push({ pole: null, tresc: 'Akcjonariusze obejmują więcej akcji, niż wyemitowano — zmniejsz którąś z pozycji.' });
+      if (pozycje.length === 0 || !pozycje.every((p) => p.osoba_id)) b.push({ pole: null, tresc: 'Wybierz z kartoteki każdego akcjonariusza.' });
+      if (!pozycje.every((p) => Number(p.ilosc) > 0)) b.push({ pole: null, tresc: 'Wpisz liczbę akcji przy każdym akcjonariuszu.' });
+    }
+    return b;
+  }
+  const braki = brakiKroku(krok);
+  function dalej() {
+    if (braki.length) { ustawPokazBraki(true); return; }
+    ustawKrok((k) => k + 1);
+  }
 
   async function otworzRejestr() {
     ustawZapisywanie(true);
@@ -316,6 +399,16 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
         const wynikSpolki = await API.post('/api/psa/spolki', dane);
         id = wynikSpolki.spolka.id;
         ustawSpolkaId(id);
+      } else {
+        // Naprawa K2 (FAZA 3 sesji frontendowej v2): spółka istniejąca (z
+        // przyjętego wniosku) startuje kreator od kroku 2 — jeśli pracownik
+        // wróci do kroku 0/1 i uzupełni np. datę uchwały o wyborze albo datę
+        // umowy o prowadzenie rejestru, te zmiany NIE zapisywały się nigdzie
+        // (w odróżnieniu od ścieżki nowej spółki, gdzie `dane` idzie w
+        // całości w POST powyżej) — kokpit potem pokazywał „–" mimo
+        // wypełnionego pola w kreatorze. `wyczysc()` po stronie serwera i tak
+        // filtruje do znanych kolumn spółki.
+        await API.put(`/api/psa/spolki/${id}`, dane);
       }
 
       if (umowaZalacznik) {
@@ -431,34 +524,27 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
         </div>
       </div>
 
-      <Kroki kroki={KROKI_REJESTRACJI} biezacy={krok} />
+      <Kroki kroki={KROKI_REJESTRACJI} biezacy={krok} osiagniety={osiagniety} przyWyborze={ustawKrok} />
       <Komunikat odmiana="blad" tresc={blad} />
+      {pokazBraki && braki.length > 0 && <PodsumowanieBledow bledy={braki} />}
 
       <Karta>
         {krok === 0 && (
           <>
             <Pole
               etykieta="Numer KRS"
-              podpowiedz="Dane pobierzemy z otwartego API rejestru przedsiębiorców; przy niepowodzeniu uzupełnisz je ręcznie — awaria API nie blokuje rejestracji."
+              podpowiedz="Dane pobierzemy same z otwartego API rejestru przedsiębiorców po wpisaniu 10 cyfr; przy niepowodzeniu uzupełnisz je ręcznie — awaria API nie blokuje rejestracji."
             >
-              <div className="row-g">
-                <input type="text" {...pole('krs')} maxLength={10} placeholder="0000123456" />
-                <button
-                  className="btn"
-                  onClick={pobierzZKrs}
-                  disabled={pobieranie || String(dane.krs || '').replace(/\D/g, '').length !== 10}
-                >
-                  {pobieranie ? 'Pobieranie…' : 'Pobierz z KRS'}
-                </button>
-              </div>
+              <input type="text" {...pole('krs')} maxLength={10} placeholder="0000123456" />
+              {pobieranie && <div className="podstawa-prawna">Pobieranie z rejestru przedsiębiorców…</div>}
             </Pole>
 
             {komunikatKrs && <Komunikat odmiana={komunikatKrs.odmiana} tresc={komunikatKrs.tresc} />}
 
             {surowyJson && (
-              <Pole etykieta="Surowa odpowiedź API KRS" podpowiedz="Sprawdź na żywych danych, że mapowanie poniższych pól jest poprawne — zwłaszcza kapitał akcyjny i adres do doręczeń elektronicznych.">
+              <Pole etykieta="Odpowiedź KRS" podpowiedz="Sprawdź na żywych danych, że mapowanie poniższych pól jest poprawne — zwłaszcza kapitał akcyjny i adres do doręczeń elektronicznych.">
                 <button className="btn btn-maly" onClick={() => ustawPokazJson((p) => !p)}>
-                  {pokazJson ? 'Ukryj surowy JSON' : 'Pokaż surowy JSON'}
+                  {pokazJson ? 'Ukryj odpowiedź KRS' : 'Pokaż odpowiedź KRS'}
                 </button>
                 {pokazJson && (
                   <pre className="dane" style={{ maxHeight: 320, overflow: 'auto', padding: 12, background: 'var(--karta)', border: '1px solid var(--linia)', borderRadius: 'var(--r-sm)', marginTop: 8 }}>
@@ -468,87 +554,118 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
               </Pole>
             )}
 
-            <Pole etykieta="Firma (nazwa) spółki" wymagane>
-              <input type="text" {...pole('nazwa')} />
-            </Pole>
-            <Pole
-              etykieta="Forma prawna"
-              podpowiedz="Notariusz nie może prowadzić rejestru akcjonariuszy S.A. ani S.K.A."
-              wymagane
-            >
-              <input type="text" {...pole('forma_prawna')} />
-            </Pole>
-            <Pole
-              etykieta="Organ zarządzający"
-              podpowiedz="P.S.A. może mieć zarząd albo (struktura monistyczna) radę dyrektorów — decyduje umowa spółki. Widoczne na pismach jako adresat po stronie spółki."
-            >
-              <select {...pole('organ_rodzaj')}>
-                <option value="">— nie ustalono —</option>
-                <option value="zarzad">Zarząd</option>
-                <option value="rada_dyrektorow">Rada Dyrektorów</option>
-              </select>
-            </Pole>
-            <div className="siatka-2">
-              <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
-              <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
-              <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
-            </div>
-            <div className="siatka-3">
-              <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
-              <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
-              <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole
-                etykieta="Sąd rejestrowy"
-                podpowiedz={sadZaproponowany ? 'Zaproponowano na podstawie siedziby spółki — sprawdź przed zapisaniem.' : undefined}
-              >
-                <input type="text" {...pole('sad_rejestrowy')} />
-              </Pole>
-              <Pole etykieta="Wydział"><input type="text" {...pole('wydzial')} /></Pole>
-            </div>
-            <div className="siatka-3">
-              <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
-              <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
-              <Pole
-                etykieta="Adres do doręczeń elektronicznych"
-                podpowiedz={pobranoZKrsBezAde ? 'Brak w KRS — uzupełnij ręcznie. ADE często nie jest ujawniony w KRS, tylko w bazie adresów elektronicznych.' : undefined}
-              >
-                <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
-              </Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole etykieta="Data rejestracji w KRS">
-                <PoleDaty wartosc={dane.data_utworzenia_spolki} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_utworzenia_spolki: v }))} />
-              </Pole>
-              <Pole etykieta="Kapitał akcyjny">
-                <PoleKwoty grosze={dane.kapital_akcyjny_grosze} przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))} />
-              </Pole>
-            </div>
-            <Pole
-              etykieta="Data zawarcia umowy spółki"
-              podpowiedz="Data aktu notarialnego zawiązania spółki — przy spółce zakładanej w S24 data podpisania w systemie. Różna od daty rejestracji w KRS powyżej. Uzupełnia „datę emisji” pierwszej emisji w kroku 3."
-            >
-              <PoleDaty
-                wartosc={dane.data_zawarcia_umowy_spolki}
-                przyZmianie={(v) => ustawDane((p) => ({ ...p, data_zawarcia_umowy_spolki: v }))}
-              />
-            </Pole>
-
-            {skladOrganu.length > 0 && (
-              <Pole etykieta="Skład organu reprezentującego" podpowiedz="Wyłącznie informacyjne — rejestr akcjonariuszy nie prowadzi własnej ewidencji osób w organach spółki.">
-                <div className="lista-wierszy">
-                  {skladOrganu.map((o, i) => (
-                    <div key={i} className="wiersz-podtytul">
-                      {[o.imiona, o.nazwisko].filter(Boolean).join(' ')}
-                      {o.funkcja ? ` — ${o.funkcja}` : ''}
-                    </div>
-                  ))}
+            {/* K6: dane pobrane z KRS — podsumowanie tylko do odczytu,
+                „Czy to Twoja spółka?" zamiast formularza do przepisania
+                (0.4 pkt 2). Pełny edytowalny formularz wraca po „Popraw"
+                albo gdy KRS nie odpowiedział / odrzucił numer. */}
+            {!trybReczny && surowyJson ? (
+              <>
+                <div className="card-h">Czy to Twoja spółka?</div>
+                <div className="metryka-pion">
+                  <MetrykaPoz etykieta="Firma (nazwa)" wartosc={dane.nazwa} dane />
+                  <MetrykaPoz etykieta="Adres siedziby" wartosc={formatujAdres(dane)} dane />
+                  <MetrykaPoz etykieta="NIP" wartosc={dane.nip} dane />
+                  <MetrykaPoz etykieta="REGON" wartosc={dane.regon} dane />
+                  <MetrykaPoz
+                    etykieta="Sąd rejestrowy"
+                    wartosc={[dane.sad_rejestrowy, dane.wydzial].filter(Boolean).join(', ') || null}
+                    podpowiedz={sadZaproponowany ? 'Zaproponowany na podstawie siedziby — sprawdź przed zapisaniem.' : undefined}
+                  />
+                  <MetrykaPoz etykieta="Kapitał akcyjny" wartosc={dane.kapital_akcyjny_grosze != null ? fmt.zlote(dane.kapital_akcyjny_grosze) : null} dane />
+                  <MetrykaPoz etykieta="Data rejestracji w KRS" wartosc={fmt.data(dane.data_utworzenia_spolki)} dane />
                 </div>
-              </Pole>
+                {skladOrganu.length > 0 && (
+                  <Pole etykieta="Skład organu reprezentującego" podpowiedz="Wyłącznie informacyjne — rejestr akcjonariuszy nie prowadzi własnej ewidencji osób w organach spółki.">
+                    <div className="lista-wierszy">
+                      {skladOrganu.map((o, i) => (
+                        <div key={i} className="wiersz-podtytul">
+                          {[o.imiona, o.nazwisko].filter(Boolean).join(' ')}
+                          {o.funkcja ? ` — ${o.funkcja}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  </Pole>
+                )}
+                <button className="btn btn-sm" onClick={() => ustawTrybReczny(true)}>Popraw</button>
+              </>
+            ) : (
+              <>
+                <Pole etykieta="Firma (nazwa) spółki" id="otwarcie-nazwa">
+                  <input type="text" {...pole('nazwa')} />
+                </Pole>
+                <Pole
+                  etykieta="Organ zarządzający"
+                  podpowiedz="P.S.A. może mieć zarząd albo (struktura monistyczna) radę dyrektorów — decyduje umowa spółki. Widoczne na pismach jako adresat po stronie spółki."
+                >
+                  <select {...pole('organ_rodzaj')}>
+                    <option value="">— nie ustalono —</option>
+                    <option value="zarzad">Zarząd</option>
+                    <option value="rada_dyrektorow">Rada Dyrektorów</option>
+                  </select>
+                </Pole>
+                <div className="siatka-2">
+                  <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
+                  <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
+                </div>
+                <div className="siatka-2">
+                  <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
+                  <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
+                </div>
+                <div className="siatka-3">
+                  <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
+                  <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
+                  <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
+                </div>
+                <div className="siatka-2">
+                  <Pole
+                    etykieta="Sąd rejestrowy"
+                    podpowiedz={sadZaproponowany ? 'Zaproponowano na podstawie siedziby spółki — sprawdź przed zapisaniem.' : undefined}
+                  >
+                    <input type="text" {...pole('sad_rejestrowy')} />
+                  </Pole>
+                  <Pole etykieta="Wydział"><input type="text" {...pole('wydzial')} /></Pole>
+                </div>
+                <div className="siatka-3">
+                  <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
+                  <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
+                  <Pole
+                    etykieta="Adres do doręczeń elektronicznych"
+                    podpowiedz={pobranoZKrsBezAde ? 'Brak w KRS — uzupełnij ręcznie. ADE często nie jest ujawniony w KRS, tylko w bazie adresów elektronicznych.' : undefined}
+                  >
+                    <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
+                  </Pole>
+                </div>
+                <div className="siatka-2">
+                  <Pole etykieta="Data rejestracji w KRS">
+                    <PoleDaty wartosc={dane.data_utworzenia_spolki} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_utworzenia_spolki: v }))} />
+                  </Pole>
+                  <Pole etykieta="Kapitał akcyjny">
+                    <PoleKwoty grosze={dane.kapital_akcyjny_grosze} przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))} />
+                  </Pole>
+                </div>
+                <Pole
+                  etykieta="Data zawarcia umowy spółki"
+                  podpowiedz="Data aktu notarialnego zawiązania spółki — przy spółce zakładanej w S24 data podpisania w systemie. Różna od daty rejestracji w KRS powyżej. Uzupełnia „datę emisji” pierwszej emisji w kroku 3."
+                >
+                  <PoleDaty
+                    wartosc={dane.data_zawarcia_umowy_spolki}
+                    przyZmianie={(v) => ustawDane((p) => ({ ...p, data_zawarcia_umowy_spolki: v }))}
+                  />
+                </Pole>
+
+                {skladOrganu.length > 0 && (
+                  <Pole etykieta="Skład organu reprezentującego" podpowiedz="Wyłącznie informacyjne — rejestr akcjonariuszy nie prowadzi własnej ewidencji osób w organach spółki.">
+                    <div className="lista-wierszy">
+                      {skladOrganu.map((o, i) => (
+                        <div key={i} className="wiersz-podtytul">
+                          {[o.imiona, o.nazwisko].filter(Boolean).join(' ')}
+                          {o.funkcja ? ` — ${o.funkcja}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  </Pole>
+                )}
+              </>
             )}
           </>
         )}
@@ -611,14 +728,34 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
               <Pole etykieta="Imiona rodziców">
                 <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
               </Pole>
-              <Pole etykieta="Dowód osobisty">
-                <input type="text" {...pole('reprezentant_dowod')} />
+              <Pole
+                etykieta="PESEL"
+                ostrzezenie={walidujPesel(dane.reprezentant_pesel).ostrzezenie}
+              >
+                <input type="text" {...pole('reprezentant_pesel')} maxLength={11} />
               </Pole>
             </div>
-            <div className="siatka-2">
-              <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
-              <Pole etykieta="Adres zamieszkania"><input type="text" {...pole('reprezentant_adres')} /></Pole>
-            </div>
+            <PoleDowod
+              etykieta="Dowód tożsamości"
+              rodzaj={dane.reprezentant_dowod_rodzaj}
+              numer={dane.reprezentant_dowod_numer}
+              przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
+              idPrefiks="spolka-reprezentant"
+              klucze={{ rodzaj: 'reprezentant_dowod_rodzaj', numer: 'reprezentant_dowod_numer' }}
+            />
+            <PoleAdres
+              etykieta="Adres zamieszkania"
+              dane={dane}
+              przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
+              prefiks="reprezentant_"
+              idPrefiks="spolka-reprezentant"
+            />
+            {!dane.reprezentant_kod_pocztowy && !dane.reprezentant_ulica && dane.reprezentant_adres && (
+              <Komunikat
+                odmiana="info"
+                tresc={`Adres wpisany wcześniej, w jednym polu: „${dane.reprezentant_adres}”. Wpisz go ponownie powyżej, żeby pisma mogły go użyć w nowym formacie.`}
+              />
+            )}
             <Pole etykieta="Adres e-mail" podpowiedz="Korespondencja w sprawie umowy o prowadzenie rejestru.">
               <input type="email" {...pole('reprezentant_email')} />
             </Pole>
@@ -709,10 +846,10 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
           <>
             <div className="card-h">Pierwsza emisja</div>
             <div className="siatka-3">
-              <Pole etykieta="Oznaczenie serii" wymagane>
+              <Pole etykieta="Oznaczenie serii" id="otwarcie-seria">
                 <input type="text" value={emisja.seria} onChange={(z) => ustawEmisje((p) => ({ ...p, seria: z.target.value }))} placeholder="A" />
               </Pole>
-              <Pole etykieta="Liczba akcji" wymagane>
+              <Pole etykieta="Liczba akcji" id="otwarcie-ilosc">
                 <PoleLiczbowe sufiks="akcji" wartosc={emisja.ilosc} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, ilosc: v }))} />
               </Pole>
               <Pole etykieta="Numer pierwszej akcji" podpowiedz="Domyślnie 1.">
@@ -722,14 +859,14 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
             <div className="siatka-3">
               <Pole
                 etykieta="Data emisji"
-                wymagane
+                id="otwarcie-data-emisji"
                 podpowiedz="Przy emisji założycielskiej to data zawarcia umowy spółki (krok 1) — uzupełniona automatycznie, można nadpisać."
               >
                 <PoleDaty wartosc={emisja.data_emisji} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, data_emisji: v }))} />
               </Pole>
               <Pole
                 etykieta="Data wpisu emisji do KRS"
-                wymagane
+                id="otwarcie-data-krs"
                 podpowiedz="Emisja założycielska rejestruje się razem ze spółką — to zawsze data rejestracji w KRS z kroku 1. Bez tej daty nie można dokonać wpisu akcji do rejestru akcjonariuszy (art. 300(30) § 2 KSH)."
               >
                 {/* Naprawa (FRONTEND-INWENTARZ.md §8, zlapane w zadaniu (a)):
@@ -805,16 +942,39 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
           <>
             <div className="card-h">Weryfikacja przed otwarciem rejestru</div>
             <div className="checklista">
-              {CHECKLISTA_OTWARCIA.map((p) => (
-                <label key={p.kod} className="chk">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(odhaczone[p.kod])}
-                    onChange={(z) => ustawOdhaczone((o) => ({ ...o, [p.kod]: z.target.checked }))}
-                  />
-                  <span className="chk-tresc">{p.tresc}</span>
-                </label>
-              ))}
+              {CHECKLISTA_OTWARCIA.map((p) => {
+                const blokada = BLOKADY_CHECKLISTY[p.kod];
+                return (
+                  <div key={p.kod}>
+                    <label className="chk">
+                      <input
+                        type="checkbox"
+                        checked={!blokada && Boolean(odhaczone[p.kod])}
+                        disabled={Boolean(blokada)}
+                        onChange={(z) => ustawOdhaczone((o) => ({ ...o, [p.kod]: z.target.checked }))}
+                      />
+                      <span className="chk-tresc">{p.tresc}</span>
+                    </label>
+                    {blokada && (
+                      <p className="nawigacja-powod" style={{ marginLeft: 28 }}>
+                        {blokada.powod}{' '}
+                        <button
+                          type="button"
+                          className="btn-tekstowy"
+                          onClick={() => {
+                            ustawKrok(blokada.krok);
+                            if (blokada.pole) {
+                              setTimeout(() => document.getElementById(blokada.pole)?.focus(), 50);
+                            }
+                          }}
+                        >
+                          Uzupełnij
+                        </button>
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <Komunikat
               odmiana="info"
@@ -823,6 +983,7 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
             {!wszystkoOdhaczone && (
               <div className="podstawa-prawna">Przycisk „Otwórz rejestr” pozostaje nieaktywny do czasu odhaczenia całej checklisty.</div>
             )}
+            <p className="zdanie-nieodwracalne">Otwarcia rejestru nie można cofnąć — możliwe jest tylko sprostowanie.</p>
           </>
         )}
 
@@ -835,11 +996,7 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
           </button>
           <div className="kreator-stopka-prawa">
             {krok < KROKI_REJESTRACJI.length - 1 ? (
-              <button
-                className="btn btn-glowny"
-                disabled={(krok === 0 && !mozeDalejZ0) || (krok === 2 && !mozeDalejZ2)}
-                onClick={() => ustawKrok((k) => k + 1)}
-              >
+              <button className="btn btn-glowny" onClick={dalej}>
                 Dalej
               </button>
             ) : (
@@ -862,16 +1019,22 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
  */
 function EkranOtwarciaRejestru({ spolkaId }) {
   const { dane, ladowanie, blad } = useDane(`/api/psa/spolki/${spolkaId}`);
-  if (ladowanie) return <Spinner />;
+  const wniosek = useDane(`/api/psa/spolki/${spolkaId}/wniosek-akcjonariusze`);
+  if (ladowanie || wniosek.ladowanie) return <Spinner />;
   if (blad || !dane) return <Komunikat odmiana="blad" tresc={blad ? blad.message : 'Nie odnaleziono spółki.'} />;
-  return <EkranNowejSpolki spolkaIstniejaca={dane.spolka} />;
+  return (
+    <EkranNowejSpolki
+      spolkaIstniejaca={dane.spolka}
+      akcjonariuszeWniosku={(wniosek.dane && wniosek.dane.akcjonariusze) || []}
+    />
+  );
 }
 
 function EkranSpolek() {
-  const [szukaj, ustawSzukaj] = useState('');
+  const [szukaj, ustawSzukaj] = useParametrAdresu('q', '');
   const [zapytanie, ustawZapytanie] = useState('');
-  const [status, ustawStatus] = useState('wszystkie');
-  const [strona, ustawStrone] = useState(1);
+  const [status, ustawStatus] = useParametrAdresu('status', 'wszystkie');
+  const [strona, ustawStrone] = useParametrAdresu('strona', 1);
   const { dane, ladowanie } = useDane(`/api/psa/spolki?q=${encodeURIComponent(zapytanie)}`);
 
   useEffect(() => {

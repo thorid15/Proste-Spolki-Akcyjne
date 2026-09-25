@@ -155,6 +155,21 @@ planu — dziś martwe, nieużywane przez bieżący kod. Patrz też `DECYZJE.md`
 | `index.html` | Renderuje powłokę SPA aplikacji kancelaryjnej — React/Babel lokalnie z `/vendor`, wszystkie 24 moduły `publiczne/js/*` w ustalonej kolejności. |
 | `portal.html` | Renderuje osobną SPA portalu klienta — ten sam stack wizualny, tylko 7 modułów JS. |
 
+### `strona/*` — strona publiczna (SEO), bundel statyczny osobny od `serwer.js` (D-063)
+
+| Plik | Opis |
+|---|---|
+| `narzedzia/buduj-strone.js` | Generator: własny, celowo minimalny konwerter Markdown→HTML; strona główna komponowana bezpośrednio jako HTML (zbyt gęsto skomponowana z powtarzalnych bloków na konwerter); tabela opłat/kalkulator z `server/logika/przepisy.js`; cytaty prawne `{{c:klucz}}` → przyciski `popover`. Wyjście: `strona/dist/`. Uruchamiane `npm run buduj-strone`. |
+| `strona/tresc/*.md` | Źródła treści 7 podstron (front-matter `title`/`description`/`podstawa_prawna`, znacznik `<!-- DO WERYFIKACJI -->`). Strona główna NIE ma odpowiednika tu — źródło w generatorze. |
+| `strona/przepisy-cytaty.js` | Brzmienie przepisów do dymków popover — wyłącznie z `PRZEPISY-PSA.md`. |
+| `strona/styl.css`, `strona/js/wzmocnienia.js` | Wspólny CSS i jedyny JS strony (< 3 KB: kalkulator opłat + przyklejone CTA na telefonie) — reszta strony działa bez JavaScriptu. |
+| `strona/makieta/` | Statyczna makieta z Fazy A (`SESJA-PSA-STRONA.md`) — referencyjna, nie budowana/wdrażana. |
+| `strona/dist/` | Wyjście generatora — śledzone w git, przebudowywane idempotentnie. |
+
+Mapa stron (D-064, zastępuje mapę z FAZY 5): `/`, `/jak-zaczac`, `/sprzedaz-akcji`,
+`/przeniesienie-rejestru`, `/oplaty`, `/pytania`, `/kontakt`. Adresy bezwzględne przez
+`BASE_URL_STRONA` (`server/konfiguracja.js`) — domena nierozstrzygnięta (Q2/D-049).
+
 ---
 
 ## 2. Podsystemy

@@ -129,9 +129,18 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
     // Mianownik (etap 2.3 poprawek) - biernik/dopelniacz liczy deklinacja.js.
     reprezentant_imie_nazwisko: 'Łukasz Adrian Szymborski',
     reprezentant_rodzice: 'Paweł i Izabella',
-    reprezentant_dowod: 'DGK 138559',
+    // Dowód i adres ustrukturyzowane od migracji 53 (B2/B3, FAZA 2 sesji
+    // frontendowej) — stare `reprezentant_dowod`/`reprezentant_adres`
+    // zostały tylko do odczytu (`kontekst-pisma.js`), formularz już ich nie
+    // wysyła.
+    reprezentant_dowod_rodzaj: 'dowod_osobisty',
+    reprezentant_dowod_numer: 'DGK 138559',
     reprezentant_pesel: '88081105939',
-    reprezentant_adres: '76-015 Manowo, ulica Kasztanowa nr 17 m. 1',
+    reprezentant_kod_pocztowy: '76-015',
+    reprezentant_miejscowosc: 'Manowo',
+    reprezentant_ulica: 'Kasztanowa',
+    reprezentant_nr_domu: '17',
+    reprezentant_nr_lokalu: '1',
     reprezentant_funkcja: 'Prezes Zarządu',
     reprezentant_reprezentacja: 'uprawnionego do samodzielnej reprezentacji',
   });

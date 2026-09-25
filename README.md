@@ -18,9 +18,17 @@ Portal jest gotowy funkcjonalnie, ale domyślnie **wyłączony** flagą
 ```bash
 npm install
 cp .env.przyklad .env      # uzupełnij dane kancelarii, ADMIN_EMAIL, SESJA_SEKRET, (opcjonalnie) SMTP
-npm start                  # http://localhost:3005
-npm test                   # 154 testy
+npm start                  # http://localhost:3005 (najpierw buduje warstwę klienta)
+npm run dev                # budowanie po każdej zmianie w publiczne/js + serwer z --watch
+npm run buduj              # tylko budowanie: publiczne/js → publiczne/dist (esbuild, D-046)
+npm run buduj-strone       # strona publiczna (SEO) → strona/dist/ — bundel osobny od serwer.js (D-063/D-064)
+npm test
 ```
+
+Warstwa klienta (`publiczne/js/*.js`, JSX) jest kompilowana przy budowaniu do dwóch paczek w
+`publiczne/dist/` (kancelaria, portal) — przeglądarka nie kompiluje już JSX. Zbudowane paczki są w
+repozytorium, więc serwer produkcyjny nie potrzebuje `esbuild`; test `front-js.test.js` pilnuje, żeby
+odpowiadały źródłom — po zmianie w `publiczne/js` uruchom `npm run buduj`.
 
 Migracje wykonują się automatycznie przy starcie i są idempotentne.
 
