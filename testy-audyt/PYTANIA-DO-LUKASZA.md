@@ -320,3 +320,37 @@ na koncie produkcyjnym, czy testowanie zawsze odbywa się na osobnej instancji/b
   plakietka na każdym ekranie jej dotyczącym, wykluczenie z zestawień i eksportów), czy
   wystarczające jest organizacyjne zobowiązanie, że wszelkie testy/demonstracje odbywają się
   wyłącznie na osobnej instalacji, nigdy na koncie z prawdziwymi sprawami klientów?
+
+## P-016 — Kto fizycznie działa za akcjonariusza-osobę prawną przy podpisywaniu oświadczeń
+
+- **Kontekst:** sesja frontendowa v2, FAZA 2, B11 (`frontend-audyt/raporty/b11-osoba-prawna-faza2.md`).
+  Wydrukowane „Żądanie pierwszego wpisu" podpisuje każdy akcjonariusz osobno
+  (`server/logika/dokumenty-wniosku.js:418-419`), a dla akcjonariusza-osoby prawnej linia podpisu
+  pokazuje wyłącznie firmę (`oznaczenie(a)` → `a.nazwa`, `dokumenty-wniosku.js:85`) — bez żadnego
+  pola na imię i nazwisko osoby fizycznej, która w jej imieniu faktycznie złoży podpis (członek
+  zarządu, prokurent, pełnomocnik). `FormularzOsoby` dla `typ === 'prawna'` nie zbiera odpowiednika
+  pól `reprezentant_imie_nazwisko`/`reprezentant_funkcja`/`reprezentant_dowod_*`, które od B2/B3
+  zbiera się dla reprezentanta SPÓŁKI (strony umowy o prowadzenie rejestru).
+- **Dlaczego nie rozstrzygnąłem sam:** to nowe pole w modelu danych akcjonariusza, nie defekt
+  formularza — wymaga decyzji, czy pole ma być per-dokument czy per-akcjonariusz w kartotece.
+- **Pytanie:** czy system powinien zbierać dane osoby fizycznej działającej w imieniu
+  akcjonariusza-osoby prawnej (analogicznie do reprezentanta spółki z B2/B3), i gdzie to pole ma
+  żyć (kartoteka osoby vs. dokument/zdarzenie)?
+
+## P-017 — Czy `beneficjent_rzeczywisty_id` (pojedyncze pole) wystarcza, gdy osoba prawna ma
+więcej niż jednego beneficjenta rzeczywistego
+
+- **Kontekst:** sesja frontendowa v2, FAZA 2, B11 (`frontend-audyt/raporty/b11-osoba-prawna-faza2.md`).
+  `psa_osoby.beneficjent_rzeczywisty_id` to pojedynczy klucz obcy do JEDNEJ osoby fizycznej
+  (`osoby.js:404-411`). Wydrukowane „Oświadczenie o beneficjencie rzeczywistym"
+  (`dokumenty-wniosku.js:326-344`) mówi w liczbie mnogiej: „Wskazuję **osoby fizyczne** będące
+  beneficjentami rzeczywistymi", z jednym zestawem pól do wypełnienia pod tym zdaniem — miejsca na
+  drugiego beneficjenta brak zarówno w schemacie, jak i na wydruku. Ustawa AML dopuszcza więcej niż
+  jednego beneficjenta rzeczywistego jednego podmiotu (np. dwóch wspólników po 50%).
+- **Dlaczego nie rozstrzygnąłem sam:** węższe niż P-001/P-014 (czy identyfikacja ma być
+  wymagana) — dotyczy tego, czy model danych w ogóle POZWALA zapisać więcej niż jednego, niezależnie
+  od odpowiedzi na P-001/P-014.
+- **Pytanie:** czy `beneficjent_rzeczywisty_id` ma zostać polem pojedynczym (praktyka: kancelaria
+  zapisuje „głównego" beneficjenta, resztę opisowo w notatce AML), czy model danych powinien
+  dopuszczać wielu beneficjentów rzeczywistych na jedną osobę prawną (nowa tabela łącząca,
+  analogicznie do współwłasności akcji)?

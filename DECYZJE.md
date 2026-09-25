@@ -798,6 +798,8 @@
 | P-013 | Czy status AML `brak` powinien blokować wpis tak jak `niemozliwe` (patrz D-010)? | AML | otwarte (świadomie nietknięte — patrz uzupełnienie D-010) |
 | P-014 | Czy dezaktualizacja AML i brak beneficjenta rzeczywistego mają blokować wpis? | AML | otwarte (świadomie nietknięte) |
 | P-015 | Czy potrzebny jest mechanizm oznaczania danych jako testowe/demo na produkcji? | operacyjne | **rozstrzygnięte → D-044** (nie, niepotrzebny) |
+| P-016 | Kto fizycznie działa (podpisuje) za akcjonariusza-osobę prawną — brak pola reprezentanta akcjonariusza | AML / dokumenty (sesja frontendowa v2, B11) | otwarte |
+| P-017 | Czy `beneficjent_rzeczywisty_id` (pojedyncze pole) wystarcza przy więcej niż jednym beneficjencie rzeczywistym | AML (sesja frontendowa v2, B11) | otwarte |
 
 Pełny kontekst i warianty odpowiedzi dla każdego: `testy-audyt/PYTANIA-DO-LUKASZA.md`.
 
