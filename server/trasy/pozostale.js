@@ -221,6 +221,36 @@ router.get(
         return (a.termin.dni_pozostale ?? 999) - (b.termin.dni_pozostale ?? 999);
       });
 
+    // Zgłoszenia, wnioski i zawiadomienia „Do zrobienia" (K1) — te SAME
+    // warunki co w `/liczniki` wyżej, żeby liczba przy pozycji menu i wiersz
+    // w sekcji pulpitu zawsze się zgadzały (jedno źródło definicji).
+    const zgloszeniaWiersze = db()
+      .prepare(
+        `SELECT id, nazwa_spolki, email, utworzono FROM psa_zgloszenia
+          WHERE status = 'nowe' ORDER BY utworzono ASC`
+      )
+      .all();
+    const wnioskiWiersze = db()
+      .prepare(
+        `SELECT w.id, w.nazwa, w.status, w.zaktualizowano, w.utworzono, k.email AS konto_email
+           FROM psa_wnioski w JOIN psa_konta k ON k.id = w.konto_id
+          WHERE w.status IN ('zlozony', 'umowa_podpisana')
+          ORDER BY w.zaktualizowano ASC, w.utworzono ASC`
+      )
+      .all();
+    const zawiadomieniaWiersze = db()
+      .prepare(
+        `SELECT sp.spolka_id, s.nazwa AS spolka_nazwa, COUNT(*) AS ile, MIN(sp.zaktualizowano) AS najstarsze
+           FROM psa_sprawy sp
+           JOIN psa_spolki s ON s.id = sp.spolka_id
+          WHERE sp.stan = 'wpisana'
+            AND NOT EXISTS (SELECT 1 FROM psa_wydane_dokumenty w
+                             WHERE w.sprawa_id = sp.id AND w.typ = 'zawiadomienie_wpis')
+          GROUP BY sp.spolka_id
+          ORDER BY najstarsze ASC`
+      )
+      .all();
+
     odp.json({
       spolki,
       liczniki: { ...liczniki, sprawy_w_toku: sprawy.length },
@@ -230,6 +260,9 @@ router.get(
         blad: integralnosc.blad,
       },
       sprawy: { dostepne: true, pozycje: sprawy },
+      zgloszenia: zgloszeniaWiersze,
+      wnioski: wnioskiWiersze,
+      zawiadomienia: zawiadomieniaWiersze,
       dzisiaj: dzis,
     });
   })
