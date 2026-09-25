@@ -113,7 +113,15 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
               dokument: nic nie podpisuje i niczego nie zaświadcza. */}
           <a className="btn" href={`/api/psa/spolki/${spolkaId}/stan.csv?data=${data}`}>Eksport CSV</a>
         </div>
-        <button className="btn btn-glowny" onClick={drukuj}>Drukuj</button>
+        <div className="row-g">
+          {/* K5 (FAZA 3 sesji frontendowej v2): ten sam mechanizm co
+              „Pobierz informację” w portalu (portal.js) — dokument otwiera
+              się jako osobna strona w nowej karcie, „Zapisz jako PDF”
+              robi z niej przeglądarka. Osobno od „Drukuj”, które od razu
+              otwiera okno druku na TEJ samej treści w ramce. */}
+          <a className="btn" href={adres} target="_blank" rel="noopener">Pobierz PDF</a>
+          <button className="btn btn-glowny" onClick={drukuj}>Drukuj</button>
+        </div>
       </div>
 
       {rola === 'akcjonariusz' && (
