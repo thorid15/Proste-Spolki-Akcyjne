@@ -773,6 +773,36 @@
 
 ---
 
+### D-058 — „Stan na dzień" bez godziny; „Wpisano do rejestru" z sekundami przy pozycji (B12)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)
+- Obszar: rejestr / interfejs
+- Decyzja: pole godziny dodane naprawą Z-305/P-011 do widgetu „Stan na dzień" w kokpicie
+  (`kokpit.js`, `EkranKokpitu`) zostaje USUNIĘTE — zgodnie z D-050 zostaje wyłącznie wybór dnia.
+  Serwer nadal przyjmuje `data` z dokładnością do minuty (`RRRR-MM-DDTGG:MM`) — kontrakt API bez
+  zmian, zmiana jest wyłącznie w UI. W zamian przy KAŻDEJ pozycji akcjonariusza w kokpicie oraz w
+  wydrukowanej „Informacji z rejestru" pojawia się etykieta „Wpisano do rejestru: DD.MM.RRRR,
+  HH:MM:SS" — moment SYSTEMOWY (kolumna `psa_zdarzenia.data_wpisu`, ma precyzję co do sekundy od
+  początku, patrz `server/migracje.js:92`), odrębny od daty PRAWNEJ zdarzenia (`data_zdarzenia`)
+  widocznej wyżej w tej samej pozycji.
+- Uzasadnienie: „stan na dzień" z godziną rozwiązywał rzadki przypadek (dwa wpisy tego samego dnia)
+  kosztem złożoności widocznej w KAŻDYM użyciu kokpitu; etykieta przy pozycji daje tę samą
+  precyzję tam, gdzie jest faktycznie potrzebna — przy konkretnym wpisie, nie w globalnym filtrze.
+- Skutek w kodzie: `server/logika/stan.js` (`akcjonariatNaDzien`) śledzi
+  `zdarzenie_najstarszego_nabycia_id` obok `data_najstarszego_nabycia`; `server/widoki.js`
+  (`widokStanu`) dołącza `wpisano_do_rejestru` (z mapy `id zdarzenia → data_wpisu`) do każdej
+  pozycji akcjonariusza; `server/logika/informacja-dokument.js` dodaje wiersz „Wpisano do
+  rejestru" pod opisem pozycji, gdy pole jest ustawione; `publiczne/js/kokpit.js`
+  (`EkranKokpitu`, `TabelaAkcjonariatu`) usuwa `<input type="time">` i renderuje tę samą etykietę.
+  Pole jest `null` dla pozycji bez odnalezionego zdarzenia źródłowego (nie powinno się zdarzyć w
+  normalnym przepływie — zabezpieczenie, nie oczekiwany stan).
+- Sprawdzone (2026-09-25): baza produkcyjna (`dane/kancelaria.db`) jest pusta (0 zdarzeń) — nie ma
+  dziś żadnych historycznych rekordów do porównania pod kątem brakującej precyzji sekund. Do
+  ponownego sprawdzenia, gdy w bazie pojawią się prawdziwe dane historyczne.
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, punkt B12.
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

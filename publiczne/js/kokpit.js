@@ -126,6 +126,14 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
                   akcjonariusz od {fmt.data(a.data_nabycia)}
                   {a.osoba && a.osoba.jawny_identyfikator ? ` · ${a.osoba.jawny_identyfikator}` : ''}
                 </div>
+                {/* D-050/B12: moment SYSTEMOWEGO wpisu (co do sekundy) —
+                    inny od daty prawnej zdarzenia wyżej. Puste dla pozycji
+                    wpisanych przed kolumną `data_wpisu` z sekundami. */}
+                {a.wpisano_do_rejestru && (
+                  <div className="wiersz-podtytul wyciszony">
+                    Wpisano do rejestru: {fmt.dataCzas(a.wpisano_do_rejestru)}
+                  </div>
+                )}
               </td>
               <td>{a.seria}</td>
               <td>{rodzajAkcjiDlaEmisji(emisje, a.emisja_klucz)}</td>
@@ -605,17 +613,15 @@ function EkranKokpitu({ spolkaId }) {
   // NA DZIEŃ). Dawniej wybierało się go playheadem na osi akcji; oś zniknęła,
   // więc została sama data, czyli to, o co naprawdę chodziło.
   //
-  // Naprawa Z-305/P-011: serwer przyjmuje `data` z dokładnością do minuty
-  // (`RRRR-MM-DDTGG:MM`, `czas.poprawnaChwila`) od dawna — rano w rejestrze
-  // może być inny wpis niż wieczorem tego samego dnia, a UI dawał wybrać
-  // wyłącznie sam dzień. Godzina jest polem OSOBNYM i opcjonalnym: pusta
-  // znaczy „cały dzień” (bez zmiany dotychczasowego zachowania).
+  // D-050 (sesja frontendowa v2, B12): pole godziny dodane naprawą Z-305/P-011
+  // usunięte z powrotem — serwer nadal przyjmuje `data` z dokładnością do
+  // minuty, ale w UI to niepotrzebna złożoność (rejestr zmienia się kilka
+  // razy w roku, nie kilka razy dziennie); dokładny moment wpisu widać teraz
+  // przy KAŻDEJ pozycji akcjonariusza i w historii zdarzeń (fmt.dataCzas).
   const [dataDnia, ustawDataDnia] = useState(fmt.dzisIso());
-  const [godzina, ustawGodzine] = useState('');
-  const data = godzina ? `${dataDnia}T${godzina}` : dataDnia;
+  const data = dataDnia;
   function ustawDate(nowaData) {
     ustawDataDnia(nowaData);
-    ustawGodzine('');
   }
   const [szczegolowy, ustawSzczegolowy] = useState(false);
   const [przeliczanie, ustawPrzeliczanie] = useState(null);
@@ -699,13 +705,6 @@ function EkranKokpitu({ spolkaId }) {
           <div className="stan-na-dzien bez-druku">
             <span className="stan-na-dzien-etykieta">Stan na dzień</span>
             <PoleDaty wartosc={dataDnia} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDate(v)} />
-            <input
-              type="time"
-              className="pole-godziny-stanu"
-              value={godzina}
-              title="Godzina (opcjonalnie) — puste znaczy „cały dzień”. Rano w rejestrze może być inny wpis niż wieczorem tego samego dnia."
-              onChange={(z) => ustawGodzine(z.target.value)}
-            />
             {wstecz && (
               <button className="btn btn-maly" onClick={() => ustawDate(fmt.dzisIso())}>Dziś</button>
             )}

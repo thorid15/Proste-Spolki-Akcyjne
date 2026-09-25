@@ -75,6 +75,10 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
     dzienDoFiltrow = dzien;
   }
   const osoby = rejestr.wczytajOsobySpolki(db, spolkaId);
+  // D-050/B12 - moment WPISU (nie data prawna zdarzenia) przy pozycji
+  // akcjonariusza: `data_wpisu` jest systemowa, co do sekundy (patrz
+  // migracje.js:92), `data_zdarzenia`/`data_od` to data NOTARIALNA.
+  const dataWpisuZdarzenia = new Map(wszystkieZdarzenia.map((z) => [z.id, z.data_wpisu]));
 
   const akcjonariat = stanLogika.akcjonariatNaDzien(stan, dzienDoFiltrow);
   const bilans = stanLogika.bilansNaDzien(stan, dzienDoFiltrow);
@@ -129,6 +133,10 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
       // („1/3 akcji nr 96"), bo na wydruku dla sadu skrot bylby nieczytelny.
       czesci_ulamkowe: p.czesci_ulamkowe || [],
       data_nabycia: p.data_najstarszego_nabycia,
+      // D-050/B12 - moment systemowego wpisu (co do sekundy), nie data
+      // prawna zdarzenia wyzej - `null`, gdy zdarzenie zrodlowe jest starsze
+      // niz kolumna `data_wpisu` (patrz raport FAZY 2, sekcja B12).
+      wpisano_do_rejestru: dataWpisuZdarzenia.get(p.zdarzenie_najstarszego_nabycia_id) ?? null,
       // art. 300(33) § 1 pkt 9 KSH - wzmianka o pokryciu akcji.
       pokryta: p.pokryta,
       obciazenia: p.obciazenia.map((o) => ({

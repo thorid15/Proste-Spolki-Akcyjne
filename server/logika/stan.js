@@ -979,6 +979,10 @@ function akcjonariatNaDzien(stan, data) {
         // (regula domenowa 4a: "procent zaokraglany WYLACZNIE przy wyswietlaniu").
         czesci_ulamkowe: [],
         data_najstarszego_nabycia: p.data_od,
+        // Zdarzenie, ktore wpisalo NAJSTARSZY przedzial tej pozycji - do
+        // pokazania dokladnego momentu wpisu (D-050/B12, `psa_zdarzenia.data_wpisu`
+        // ma precyzje co do sekundy, `data_od` jest tylko DATA prawna).
+        zdarzenie_najstarszego_nabycia_id: p.zdarzenie_od_id,
         // art. 300(33) § 1 pkt 9 KSH - wzmianka o pokryciu. Pozycja skleja
         // kilka przedzialow, a te moga byc pokryte roznie, wiec zbieramy
         // WSZYSTKIE napotkane wartosci i skladamy z nich jedna nizej.
@@ -996,7 +1000,10 @@ function akcjonariatNaDzien(stan, data) {
         przedstawiciel_osoba_id: p.przedstawiciel_osoba_id ?? null,
       });
     }
-    if (p.data_od < g.data_najstarszego_nabycia) g.data_najstarszego_nabycia = p.data_od;
+    if (p.data_od < g.data_najstarszego_nabycia) {
+      g.data_najstarszego_nabycia = p.data_od;
+      g.zdarzenie_najstarszego_nabycia_id = p.zdarzenie_od_id;
+    }
   }
 
   // Naprawa Z-057: liczba akcji OGOLEM to liczba FIZYCZNYCH numerow w rekach

@@ -51,6 +51,14 @@ function dataPl(iso) {
   return `${d}.${m}.${r}`;
 }
 
+/** D-050/B12 - moment systemowego wpisu, z sekundami gdy `iso` je niesie. */
+function dataCzasPl(iso) {
+  const dzien = dataPl(iso);
+  if (!dzien) return null;
+  const godzina = String(iso).slice(11, 19);
+  return godzina.length === 8 ? `${dzien}, ${godzina}` : dzien;
+}
+
 function pusty(v) {
   return v === null || v === undefined || String(v).trim() === '';
 }
@@ -508,6 +516,9 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
     else if (osoba && osoba.zamaskowane) opisy.push('adres zamieszkania zasłonięty');
     if (email) opisy.push(`${esc(email)} — zgoda na komunikację elektroniczną`);
     if (a.wspolwlasnosc) opisy.push('akcje we współwłasności ułamkowej');
+    if (a.wpisano_do_rejestru) {
+      opisy.push(`Wpisano do rejestru: ${esc(dataCzasPl(a.wpisano_do_rejestru))}`);
+    }
 
     return [
       `<div class="akcjonariusz-nazwa">${esc(osoba ? osoba.oznaczenie : 'nieznany')}`
