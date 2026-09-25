@@ -58,7 +58,7 @@ function EkranZgloszenWstepnych() {
         />
       )}
       <div className="pasek-narzedzi">
-        <select value={filtrStatus} onChange={(z) => ustawFiltrStatus(z.target.value)}>
+        <select aria-label="Filtruj zgłoszenia wg statusu" value={filtrStatus} onChange={(z) => ustawFiltrStatus(z.target.value)}>
           <option value="">Wszystkie statusy</option>
           <option value="nowe">Nowe</option>
           <option value="zaproszono">Zaproszono</option>

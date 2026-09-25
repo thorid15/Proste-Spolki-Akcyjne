@@ -36,7 +36,7 @@ function EkranWnioski() {
   return (
     <>
       <div className="pasek-narzedzi">
-        <select value={filtrStatus} onChange={(z) => ustawFiltrStatus(z.target.value)}>
+        <select aria-label="Filtruj wnioski wg statusu" value={filtrStatus} onChange={(z) => ustawFiltrStatus(z.target.value)}>
           <option value="">Wszystkie statusy</option>
           {Object.entries(STAN_WNIOSKU).map(([k, v]) => (
             <option key={k} value={k}>{v.etykieta}</option>

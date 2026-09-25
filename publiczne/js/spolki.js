@@ -1060,7 +1060,7 @@ function EkranSpolek() {
           przyZmianie={(v) => { ustawSzukaj(v); ustawStrone(1); }}
           placeholder="Szukaj po nazwie, numerze KRS lub NIP…"
         />
-        <select value={status} onChange={(z) => { ustawStatus(z.target.value); ustawStrone(1); }}>
+        <select aria-label="Filtruj spółki wg statusu" value={status} onChange={(z) => { ustawStatus(z.target.value); ustawStrone(1); }}>
           <option value="wszystkie">Status: wszystkie</option>
           <option value="aktywna">aktywna</option>
           <option value="w_likwidacji">w likwidacji</option>
