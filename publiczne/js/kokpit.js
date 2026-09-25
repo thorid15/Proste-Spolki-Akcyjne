@@ -697,6 +697,25 @@ function EkranKokpitu({ spolkaId }) {
           <div className="naglowek-strony-kontekst">
             Rejestr prowadzi {spolka.organ_prowadzacy || 'Kancelaria Notarialna Łukasz Kozon'} —
             art. 300³¹ § 1 KSH
+            {/* K7 (FAZA 3 sesji frontendowej v2, pkt 2): akcja niemal nigdy
+                nie używana (wyłącznie przy przeniesieniu spółki z innego
+                rejestru) stała dotąd na pierwszym planie, obok „Informacja
+                z rejestru" — tego samego formatu przycisku. Zostaje jako
+                dyskretny odnośnik tekstowy, nie znika (bywa potrzebna raz na
+                spółkę), ale nie konkuruje wzrokowo ze zwykłymi akcjami. */}
+            {!wstecz && dane.liczba_zdarzen === 0 && (
+              <>
+                {' · '}
+                <button
+                  type="button"
+                  className="btn-tekstowy"
+                  onClick={() => idz(`/spolki/${spolkaId}/migracja`)}
+                  title="WYŁĄCZNIE dla spółki przenoszonej z innego rejestru (np. Rejestrów Notarialnych), z datami historycznymi z przeszłości. Nowa spółka (w tym z przyjętego wniosku portalowego) otwiera rejestr przez przycisk „Otwórz rejestr” w kreatorze, nie tędy."
+                >
+                  Migracja z innego rejestru — stan otwarcia
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="naglowek-strony-akcje">
@@ -712,15 +731,6 @@ function EkranKokpitu({ spolkaId }) {
           <button className="btn" onClick={() => idz(`/spolki/${spolkaId}/wydruk/informacja?data=${data}`)}>
             <Ikona nazwa="dokument" rozmiar={16} /> Informacja z rejestru
           </button>
-          {!wstecz && dane.liczba_zdarzen === 0 && (
-            <button
-              className="btn"
-              onClick={() => idz(`/spolki/${spolkaId}/migracja`)}
-              title="WYŁĄCZNIE dla spółki przenoszonej z innego rejestru (np. Rejestrów Notarialnych), z datami historycznymi z przeszłości. Nowa spółka (w tym z przyjętego wniosku portalowego) otwiera rejestr przez przycisk „Otwórz rejestr” w kreatorze, nie tędy."
-            >
-              Migracja z innego rejestru — stan otwarcia
-            </button>
-          )}
         </div>
       </div>
 
