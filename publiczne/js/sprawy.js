@@ -529,9 +529,22 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   // `emisjaPoczatkowa` przychodzi z przejścia EMISJA → OBJĘCIE (kreator.js) —
   // seria jest już wskazana, notariusz uzupełnia tylko, kto ją obejmuje.
   // Zapisany draft ma pierwszeństwo: to stan, do którego ktoś wrócił.
+  // K3 (FAZA 3 sesji frontendowej v2): żądający wpisu jest już wybrany przy
+  // zakładaniu sprawy (kreator.js, krok „Podstawa wpisu") — przy zbyciu
+  // akcji to w praktyce zwykle ten sam człowiek, który w kroku „Co się
+  // zmienia” wybierałby zbywcę z osobnej listy. Podstawiamy go od razu
+  // (0.4 pkt 1 — „raz wpisane, nigdy więcej”), zbywcę wciąż można zmienić —
+  // sprawę mógł założyć pełnomocnik albo osoba trzecia w czyimś imieniu.
   const [dane, ustawDane] = useState(
     (draft && draft.dane) || (emisjaPoczatkowa ? { emisja_zdarzenie_id: emisjaPoczatkowa } : {})
   );
+  useEffect(() => {
+    if (draft || emisjaPoczatkowa) return;
+    if (sprawa.typ_zdarzenia === 'przeniesienie' && sprawa.zadajacy_rola === 'zbywca' && sprawa.zadajacy_osoba_id) {
+      ustawDane((p) => (p.zbywca_osoba_id ? p : { ...p, zbywca_osoba_id: sprawa.zadajacy_osoba_id }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [odhaczone, ustawOdhaczone] = useState({});
   const [notatkaWatpliwosci, ustawNotatkeWatpliwosci] = useState('');
   const [podglad, ustawPodglad] = useState(null);
@@ -665,6 +678,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   const checklista = definicjaTypu ? definicjaTypu.checklista : [];
   const wymagane = checklista.filter((p) => p.wymagana && !p.watpliwosci);
   const wszystkoOdhaczone = wymagane.every((p) => odhaczone[p.kod]);
+  const pozycjaWatpliwosci = checklista.find((p) => p.watpliwosci);
   const sawatpliwosci = checklista.some((p) => p.watpliwosci && odhaczone[p.kod]);
   const mozeWpisac =
     podglad && podglad.dopuszczalne && wszystkoOdhaczone && (!sawatpliwosci || notatkaWatpliwosci.trim());
@@ -714,8 +728,12 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
               <div className="rozdzielacz" />
               <div className="fl">Checklista weryfikacji</div>
               <div className="checklista">
-                {checklista.map((p) => (
-                  <label key={p.kod} className={`chk ${p.watpliwosci ? 'chk-watpliwosci' : ''}`}>
+                {/* K3 (FAZA 3 sesji frontendowej v2): „Zachodzą uzasadnione
+                    wątpliwości…” NIE jest potwierdzeniem jak reszta tej listy —
+                    to zgłoszenie przeszkody. Renderuje się osobno, poniżej,
+                    żeby nie wyglądała jak kolejna pozycja do odhaczenia. */}
+                {checklista.filter((p) => !p.watpliwosci).map((p) => (
+                  <label key={p.kod} className="chk">
                     <input
                       type="checkbox"
                       checked={Boolean(odhaczone[p.kod])}
@@ -723,24 +741,33 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
                     />
                     <span className="chk-tresc">
                       {p.tresc}
-                      {!p.wymagana && !p.watpliwosci && <span className="przyciemnione"> (jeśli dotyczy)</span>}
+                      {!p.wymagana && <span className="przyciemnione"> (jeśli dotyczy)</span>}
                       {p.podstawa && <div className="podstawa-prawna">{p.podstawa}</div>}
-                      {/* Naprawa (FRONTEND-INWENTARZ.md §8): zaznaczenie TEJ
-                          pozycji podmienia caly przycisk pod checklistiem z
-                          "Dokonaj wpisu" na "Wstrzymaj sprawe" - dotad jedynym
-                          sygnalem byl kolor tresci checklisty (chk-watpliwosci)
-                          i zmiana przycisku daleko nizej, latwa do przeoczenia
-                          przy szybkim odhaczaniu calej listy. Komunikat tutaj,
-                          DOKLADNIE przy checkboxie, w chwili jego zaznaczenia. */}
-                      {p.watpliwosci && odhaczone[p.kod] && (
-                        <div className="chk-watpliwosci-uwaga">
-                          Zaznaczenie wstrzyma sprawę do wyjaśnienia — zamiast „Dokonaj wpisu” zobaczysz niżej przycisk „Wstrzymaj sprawę”.
-                        </div>
-                      )}
                     </span>
                   </label>
                 ))}
               </div>
+
+              {pozycjaWatpliwosci && (
+                <div className="komunikat komunikat-uwaga">
+                  <label className="chk chk-watpliwosci">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(odhaczone[pozycjaWatpliwosci.kod])}
+                      onChange={(z) => ustawOdhaczone((o) => ({ ...o, [pozycjaWatpliwosci.kod]: z.target.checked }))}
+                    />
+                    <span className="chk-tresc">
+                      Mam wątpliwości — wstrzymaj wpis
+                      <div className="podstawa-prawna">{pozycjaWatpliwosci.tresc}{pozycjaWatpliwosci.podstawa ? ` (${pozycjaWatpliwosci.podstawa})` : ''}</div>
+                    </span>
+                  </label>
+                  {odhaczone[pozycjaWatpliwosci.kod] && (
+                    <div className="chk-watpliwosci-uwaga">
+                      Zaznaczenie wstrzyma sprawę do wyjaśnienia — zamiast „Dokonaj wpisu” zobaczysz niżej przycisk „Wstrzymaj sprawę”.
+                    </div>
+                  )}
+                </div>
+              )}
 
               {sawatpliwosci && (
                 <Pole etykieta="Notatka o uzasadnionych wątpliwościach" wymagane podpowiedz="Wymagana. Sprawa zostanie wstrzymana do wyjaśnienia.">

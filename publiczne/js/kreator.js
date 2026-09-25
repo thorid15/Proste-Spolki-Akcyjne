@@ -16,6 +16,21 @@
 
 const KROKI_ZDARZENIA = ['Co się stało', 'Podstawa', 'Co się zmienia', 'Weryfikacja i podgląd'];
 
+/**
+ * K3 (FAZA 3 sesji frontendowej v2): zmiana serii/emisji zerowała zbywcę
+ * BEZWARUNKOWO — nawet gdy ten sam człowiek ma akcje też w nowo wybranej
+ * serii. Przy „przeniesieniu” zbywca bywa już znany z samej sprawy (żądający
+ * w roli „zbywca akcji”, podstawiony w sprawy.js) — zerowanie go od nowa
+ * kazało wybierać tę samą osobę drugi raz z rozwijanej listy (0.4 pkt 1).
+ */
+function zbywcaNadalWSerii(spolka, emisjaKlucz, zbywcaOsobaId) {
+  if (!zbywcaOsobaId) return null;
+  const nadalMa = spolka.akcjonariusze.some(
+    (a) => a.emisja_klucz === Number(emisjaKlucz) && Number(a.osoba_id) === Number(zbywcaOsobaId)
+  );
+  return nadalMa ? zbywcaOsobaId : null;
+}
+
 const NAZWY_GRUP = { akcje: 'Akcje', obciazenia: 'Obciążenia i zajęcia', prawa: 'Prawa i ograniczenia', dane: 'Dane', inne: 'Inne' };
 
 /* Rodzaje dokumentu będącego podstawą wpisu (art. 300(34) § 4 KSH) — jeden
@@ -407,7 +422,7 @@ function KrokPrzeniesienie({ dane, ustawDane, spolka }) {
         emisje={spolka.emisje}
         bilans={spolka.bilans}
         wartosc={dane.emisja_zdarzenie_id}
-        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k, zbywca_osoba_id: null })}
+        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k, zbywca_osoba_id: zbywcaNadalWSerii(spolka, k, dane.zbywca_osoba_id) })}
       />
 
       {dane.emisja_zdarzenie_id && (
@@ -1019,7 +1034,7 @@ function KrokPrzeniesienieUlamka({ dane, ustawDane, spolka }) {
         emisje={spolka.emisje}
         bilans={spolka.bilans}
         wartosc={dane.emisja_zdarzenie_id}
-        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k, zbywca_osoba_id: null })}
+        przyZmianie={(k) => ustawDane({ ...dane, emisja_zdarzenie_id: k, zbywca_osoba_id: zbywcaNadalWSerii(spolka, k, dane.zbywca_osoba_id) })}
       />
 
       {dane.emisja_zdarzenie_id && (
@@ -1450,12 +1465,11 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawy
                       <button
                         key={t.kod}
                         className={`kafelek-wyboru ${typ === t.kod ? 'wybrany' : ''}`}
-                        onClick={() => ustawTyp(t.kod)}
+                        onClick={() => { ustawTyp(t.kod); ustawKrok(1); }}
                       >
                         <Ikona nazwa={IKONY_ZDARZEN[t.kod] || 'zdarzenie'} rozmiar={20} />
                         <span className="kafelek-wyboru-tytul">{t.opis_zdarzeniem}</span>
                         <span className="kafelek-wyboru-opis">{t.podpowiedz || t.nazwa}</span>
-                        <span className="kafelek-wyboru-kategoria"><Pigulka>{nazwaGrupy}</Pigulka></span>
                       </button>
                     ))}
                   </div>
@@ -1595,17 +1609,15 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawy
           >
             {krok === 0 ? 'Anuluj' : 'Wstecz'}
           </button>
-          <div className="kreator-stopka-prawa">
-            {krok < 1 ? (
-              <button className="btn btn-glowny" disabled={!mozeDalej} onClick={() => ustawKrok((k) => k + 1)}>
-                Dalej
-              </button>
-            ) : (
+          {/* Krok 0 (wybór typu) nie ma już własnego „Dalej" — kliknięcie
+              kafelka przechodzi dalej samo (K3, FAZA 3 sesji frontendowej v2). */}
+          {krok >= 1 && (
+            <div className="kreator-stopka-prawa">
               <button className="btn btn-glowny btn-lg" disabled={!mozeDalej || zapisywanie} onClick={zalozSprawe}>
                 {zapisywanie ? 'Zakładanie sprawy…' : 'Załóż sprawę i przejdź dalej'}
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </Karta>
     </>
