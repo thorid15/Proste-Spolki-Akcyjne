@@ -517,6 +517,28 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
     ? 'Wpisz PESEL albo — gdy akcjonariusz go nie ma — datę urodzenia.'
     : null;
 
+  // K4 (FAZA 3 sesji frontendowej v2): dopasowanie do kartoteki było wyłącznie
+  // ręczne (WyborZKartoteki niżej) — ten sam wzorzec kolizji identyfikatora
+  // co w PanelOsoby (D-042), tu jako PROPOZYCJA jednym kliknięciem, bo tu nie
+  // ma ryzyka założenia duplikatu (pozycja bez dopasowania i tak zakłada
+  // nową osobę dopiero przy przyjęciu wniosku, nie od razu).
+  const [sugestia, ustawSugestie] = useState(null);
+  const identyfikatorDopasowania = pozycja.typ === 'prawna' ? pozycja.numer_w_rejestrze : pozycja.pesel;
+  useEffect(() => {
+    ustawSugestie(null);
+    if (pozycja.osoba_id || !identyfikatorDopasowania) return undefined;
+    const klucz = pozycja.typ === 'prawna' ? 'numer_w_rejestrze' : 'pesel';
+    let aktualne = true;
+    API.get(`/api/psa/osoby?q=${encodeURIComponent(identyfikatorDopasowania)}`)
+      .then((o) => {
+        if (!aktualne) return;
+        const trafienie = o.osoby.find((x) => String(x[klucz] || '') === String(identyfikatorDopasowania));
+        if (trafienie) ustawSugestie(trafienie);
+      })
+      .catch(() => {});
+    return () => { aktualne = false; };
+  }, [pozycja.osoba_id, identyfikatorDopasowania, pozycja.typ]);
+
   return (
     <>
       <KrokNaglowek tytul={nazwaPozycji(pozycja)} opis={identyfikatorPozycji(pozycja)} />
@@ -590,6 +612,19 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
           <option value="edoreczen">Adres do doręczeń elektronicznych</option>
         </select>
       </Pole>
+
+      {!zablokowane && sugestia && (
+        <div className="kolizja-kartoteki" role="status">
+          <span>W kartotece jest już <strong>{sugestia.oznaczenie}</strong> z tym numerem.</span>
+          <button
+            type="button"
+            className="btn btn-maly"
+            onClick={() => ustawZweryfikowano(pozycja.zweryfikowano ? 1 : 0, sugestia.id)}
+          >
+            Dopasuj
+          </button>
+        </div>
+      )}
 
       {!zablokowane && (
         <Pole

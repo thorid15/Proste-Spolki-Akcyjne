@@ -323,7 +323,12 @@ function Aplikacja() {
       return <EkranSprawy sprawaId={id} emisjaPoczatkowa={zapytanie.get('emisja') || undefined} />;
     }
 
-    if (segmenty[0] === 'osoby') return <EkranOsob />;
+    if (segmenty[0] === 'osoby') {
+      if (segmenty.length === 1) return <EkranOsob />;
+      const id = Number(segmenty[1]);
+      if (!Number.isInteger(id)) return <NieZnaleziono />;
+      return <EkranProfiluOsoby osobaId={id} />;
+    }
     if (segmenty[0] === 'zgloszenia') return <EkranZgloszenWstepnych />;
     if (segmenty[0] === 'zawiadomienia') return <EkranZawiadomien />;
     if (segmenty[0] === 'wnioski') {

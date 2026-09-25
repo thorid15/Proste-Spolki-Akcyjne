@@ -444,6 +444,20 @@ function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej
   );
 }
 
+/**
+ * K4 (FAZA 3 sesji frontendowej v2): dwie różne osoby o tym samym imieniu
+ * i nazwisku wyglądają na liście identycznie — `oznaczenie` samo nie
+ * odróżnia „Jan Kowalski” od „Jan Kowalski”. Maskujemy identyfikator
+ * (ostatnie cyfry widoczne, reszta zasłonięta) — kartoteka i tak pokazuje
+ * pełny numer po otwarciu profilu, tu chodzi wyłącznie o odróżnienie
+ * wiersza, nie o jego identyfikację.
+ */
+function maskujIdentyfikator(tekst) {
+  const cyfry = String(tekst || '').replace(/\D/g, '');
+  if (cyfry.length < 4) return null;
+  return `${'•'.repeat(cyfry.length - 4)}${cyfry.slice(-4)}`;
+}
+
 function EkranOsob() {
   const [szukaj, ustawSzukaj] = useParametrAdresu('q', '');
   const [zapytanie, ustawZapytanie] = useState('');
@@ -456,6 +470,8 @@ function EkranOsob() {
   }, [szukaj]);
 
   const osoby = (dane && dane.osoby) || [];
+  const liczbaWgOznaczenia = new Map();
+  for (const o of osoby) liczbaWgOznaczenia.set(o.oznaczenie, (liczbaWgOznaczenia.get(o.oznaczenie) || 0) + 1);
 
   return (
     <>
@@ -500,27 +516,41 @@ function EkranOsob() {
               </tr>
             </thead>
             <tbody>
-              {osoby.map((o) => (
-                <tr key={o.id}>
-                  <td style={{ fontWeight: 500 }}>{o.oznaczenie}</td>
-                  <td className="wyciszony">
-                    {o.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
-                  </td>
-                  <td className="kol-dane">{o.jawny_identyfikator || '—'}</td>
-                  <td>
-                    <div className="row-g" style={{ gap: 8 }}>
-                      <StatusAml status={o.aml_status} />
-                      <ZnacznikPrzegladuAml wymaga={o.wymaga_przegladu_aml} />
-                    </div>
-                  </td>
-                  <td className="do-prawej">{o.liczba_spolek || 0}</td>
-                  <td className="do-prawej">
-                    <button className="btn btn-maly" onClick={() => ustawFormularz(o)}>
-                      Otwórz
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {osoby.map((o) => {
+                const zduplikowane = liczbaWgOznaczenia.get(o.oznaczenie) > 1;
+                const identyfikatorRozrozniajacy = zduplikowane
+                  ? maskujIdentyfikator(o.typ === 'prawna' ? o.numer_w_rejestrze : o.pesel)
+                  : null;
+                return (
+                  <tr key={o.id}>
+                    <td style={{ fontWeight: 500 }}>
+                      {o.oznaczenie}
+                      {zduplikowane && (
+                        <div className="wiersz-podtytul">
+                          {[o.data_urodzenia ? fmt.data(o.data_urodzenia) : null, identyfikatorRozrozniajacy]
+                            .filter(Boolean).join(' · ') || 'brak dodatkowych danych do odróżnienia'}
+                        </div>
+                      )}
+                    </td>
+                    <td className="wyciszony">
+                      {o.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
+                    </td>
+                    <td className="kol-dane">{o.jawny_identyfikator || '—'}</td>
+                    <td>
+                      <div className="row-g" style={{ gap: 8 }}>
+                        <StatusAml status={o.aml_status} />
+                        <ZnacznikPrzegladuAml wymaga={o.wymaga_przegladu_aml} />
+                      </div>
+                    </td>
+                    <td className="do-prawej">{o.liczba_spolek || 0}</td>
+                    <td className="do-prawej">
+                      <button className="btn btn-maly" onClick={() => idz(`/osoby/${o.id}`)}>
+                        Otwórz
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </Karta>
@@ -540,5 +570,135 @@ function EkranOsob() {
   );
 }
 
+/**
+ * K4 (FAZA 3 sesji frontendowej v2): „Otwórz” z listy prowadzi tutaj —
+ * pełny profil osoby, nie panel edycji. Dane, spółki (z liczbą akcji
+ * i odnośnikiem do kokpitu) i sprawy, w których osoba jest żądającą.
+ * Edycja zostaje tym samym `PanelOsoby`, otwieranym stąd.
+ */
+function EkranProfiluOsoby({ osobaId }) {
+  const { dane, ladowanie, blad, odswiez } = useDane(`/api/psa/osoby/${osobaId}`);
+  const spolki = useDane(`/api/psa/osoby/${osobaId}/spolki`);
+  const sprawy = useDane(`/api/psa/osoby/${osobaId}/sprawy`);
+  const [edycja, ustawEdycje] = useState(false);
+
+  if (ladowanie) return <Spinner />;
+  if (blad || !dane) {
+    return <Komunikat odmiana="blad" tresc={blad ? blad.message : 'Nie odnaleziono osoby w kartotece.'} />;
+  }
+  const osoba = dane.osoba;
+
+  return (
+    <>
+      <div className="okruszki">
+        <button onClick={() => idz('/osoby')}>Kartoteka osób</button> → {osoba.oznaczenie}
+      </div>
+
+      <NaglowekStrony
+        tytul={osoba.oznaczenie}
+        kontekst={osoba.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
+        akcje={<button className="btn btn-glowny" onClick={() => ustawEdycje(true)}>Edytuj dane</button>}
+      />
+
+      <div className="siatka-tresc">
+        <div style={{ minWidth: 0 }}>
+          <Karta scisla tytul="Spółki" akcje={<span className="male drugorzedny">{(spolki.dane && spolki.dane.spolki.length) || 0}</span>}>
+            {spolki.ladowanie ? (
+              <Spinner />
+            ) : !spolki.dane || spolki.dane.spolki.length === 0 ? (
+              <Pusto tytul="Bez akcji" opis="Ta osoba nie jest dziś akcjonariuszem żadnej spółki." />
+            ) : (
+              <table className="tabela">
+                <thead>
+                  <tr>
+                    <th>Spółka</th>
+                    <th className="do-prawej">Akcje</th>
+                    <th>Akcjonariusz od</th>
+                    <th className="kol-strzalka" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {spolki.dane.spolki.map((s) => (
+                    <tr key={s.id} className="klikalna" onClick={() => idz(`/spolki/${s.id}`)}>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{s.nazwa}</div>
+                        <div className="wiersz-podtytul">{s.krs ? `KRS ${s.krs}` : 'bez numeru KRS'}</div>
+                      </td>
+                      <td className="do-prawej">{fmt.liczba(s.ilosc_akcji)}</td>
+                      <td className="kol-dane wyciszony">{fmt.data(s.akcjonariusz_od)}</td>
+                      <td className="kol-strzalka"><Ikona nazwa="strzalkaPrawo" rozmiar={15} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Karta>
+
+          <Karta scisla tytul="Sprawy" akcje={<span className="male drugorzedny">{(sprawy.dane && sprawy.dane.sprawy.length) || 0}</span>}>
+            {sprawy.ladowanie ? (
+              <Spinner />
+            ) : !sprawy.dane || sprawy.dane.sprawy.length === 0 ? (
+              <Pusto tytul="Bez spraw" opis="Ta osoba nie żądała jeszcze żadnego wpisu." />
+            ) : (
+              <div className="lista-wierszy">
+                {sprawy.dane.sprawy.map((s) => (
+                  <WierszListy
+                    key={s.id}
+                    ikona="sprawy"
+                    tytul={s.typ_zdarzenia}
+                    podtytul={s.spolka_nazwa}
+                    przyKlik={() => idz(`/sprawy/${s.id}`)}
+                    prawo={<Pigulka>{s.stan}</Pigulka>}
+                    data={fmt.data(s.data_wplywu)}
+                  />
+                ))}
+              </div>
+            )}
+          </Karta>
+        </div>
+
+        <aside className="siatka-tresc-prawa bez-druku">
+          <Karta tytul="Dane">
+            <div className="metryka-pion">
+              {osoba.typ === 'prawna' ? (
+                <MetrykaPoz etykieta="Numer w rejestrze" wartosc={osoba.numer_w_rejestrze} dane />
+              ) : (
+                <>
+                  <MetrykaPoz etykieta="PESEL" wartosc={osoba.pesel} dane />
+                  <MetrykaPoz etykieta="Data urodzenia" wartosc={fmt.data(osoba.data_urodzenia)} dane />
+                </>
+              )}
+              <MetrykaPoz etykieta="Adres" wartosc={formatujAdres(osoba)} />
+              <MetrykaPoz etykieta="E-mail" wartosc={osoba.email} dane />
+              <MetrykaPoz etykieta="Telefon" wartosc={osoba.telefon} dane />
+            </div>
+          </Karta>
+          <Karta tytul="AML">
+            <div className="metryka-pion">
+              <div className="metryka-pion-poz">
+                <div className="metryka-pion-etykieta">Status</div>
+                <StatusAml status={osoba.aml_status} />
+              </div>
+              <MetrykaPoz etykieta="Data weryfikacji" wartosc={fmt.data(osoba.aml_data)} dane />
+            </div>
+          </Karta>
+        </aside>
+      </div>
+
+      {edycja && (
+        <PanelOsoby
+          osoba={osoba}
+          przyZamknieciu={() => ustawEdycje(false)}
+          przyZapisie={() => {
+            ustawEdycje(false);
+            odswiez();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 window.PanelOsoby = PanelOsoby;
 window.EkranOsob = EkranOsob;
+window.EkranProfiluOsoby = EkranProfiluOsoby;

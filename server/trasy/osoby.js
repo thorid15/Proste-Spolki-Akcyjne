@@ -353,6 +353,31 @@ router.get(
 );
 
 /**
+ * K4 (FAZA 3 sesji frontendowej v2): sprawy tej osoby jako żądającej wpisu —
+ * do profilu osoby w kartotece (widok „Otwórz" nie jest już panelem
+ * edycyjnym, tylko pełnym profilem, sekcja 1).
+ */
+router.get(
+  '/:id/sprawy',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    if (!db().prepare('SELECT id FROM psa_osoby WHERE id = ?').get(id)) {
+      throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
+    }
+    const wiersze = db()
+      .prepare(
+        `SELECT sp.id, sp.spolka_id, s.nazwa AS spolka_nazwa, sp.typ_zdarzenia, sp.stan, sp.data_wplywu
+           FROM psa_sprawy sp
+           JOIN psa_spolki s ON s.id = sp.spolka_id
+          WHERE sp.zadajacy_osoba_id = ?
+          ORDER BY sp.data_wplywu DESC`
+      )
+      .all(id);
+    odp.json({ sprawy: wiersze });
+  })
+);
+
+/**
  * Naprawa Z-006/P-004 — zaproszenie akcjonariusza do portalu, akcja przy
  * osobie w kartotece, wykonywana przez pracownika. Adres e-mail podaje
  * pracownik przy wysylce (kanal OPERACYJNY konta - odrebny od e-maila w
