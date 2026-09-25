@@ -112,12 +112,14 @@ const PUNKTY_ZGLOSZENIA = [
    SESJA PORTALOWA
    ───────────────────────────────────────────────────── */
 function usePortalSesja() {
-  const [stan, ustawStan] = useState({ ladowanie: true, zalogowany: false, konto: null });
+  const [stan, ustawStan] = useState({ ladowanie: true, zalogowany: false, konto: null, sesjaWygasa: null });
 
   const odswiez = useCallback(() => {
     return API.get('/api/psa/portal/whoami')
-      .then((d) => ustawStan({ ladowanie: false, zalogowany: d.zalogowany, konto: d.konto }))
-      .catch(() => ustawStan({ ladowanie: false, zalogowany: false, konto: null }));
+      .then((d) => ustawStan({
+        ladowanie: false, zalogowany: d.zalogowany, konto: d.konto, sesjaWygasa: d.sesja_wygasa,
+      }))
+      .catch(() => ustawStan({ ladowanie: false, zalogowany: false, konto: null, sesjaWygasa: null }));
   }, []);
 
   useEffect(() => {
@@ -125,6 +127,35 @@ function usePortalSesja() {
   }, [odswiez]);
 
   return { ...stan, odswiez };
+}
+
+/**
+ * Ostrzeżenie 5 minut przed wygaśnięciem sesji portalu (FAZA4 pkt 6, sesja
+ * 8h). Sam upływ czasu wylogowuje przy najbliższym zapytaniu do API (token
+ * przestaje być ważny) — to ostrzeżenie tylko informuje wcześniej, żeby
+ * klient zdążył dokończyć to, co robi; szkic wniosku i tak nie ginie
+ * (zapis automatyczny po każdym polu, 0.4 pkt 4).
+ */
+const OSTRZEZENIE_PRZED_WYGASNIECIEM_MS = 5 * 60 * 1000;
+
+function OstrzezenieWygasajacejSesji({ sesjaWygasa }) {
+  const [pokaz, ustawPokaz] = useState(false);
+
+  useEffect(() => {
+    if (!sesjaWygasa) { ustawPokaz(false); return undefined; }
+    const sprawdz = () => ustawPokaz(sesjaWygasa - Date.now() <= OSTRZEZENIE_PRZED_WYGASNIECIEM_MS);
+    sprawdz();
+    const id = setInterval(sprawdz, 15000);
+    return () => clearInterval(id);
+  }, [sesjaWygasa]);
+
+  if (!pokaz) return null;
+  return (
+    <div className="pasek-ostrzezenia bez-druku" role="status">
+      Za chwilę zostaniesz wylogowany/-a — sesja kończy się po 8 godzinach od zalogowania. Zaloguj się
+      ponownie, żeby kontynuować; wypełniany wniosek jest już zapisany.
+    </div>
+  );
 }
 
 function EkranLoginPortal({ przyZalogowaniu }) {
@@ -577,7 +608,7 @@ const ETYKIETA_ROLI_KONTA = {
   wnioskodawca: 'konto wnioskodawcy',
 };
 
-function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
+function PortalLayout({ sciezka, waski, konto, sesjaWygasa, przyWylogowaniu, children }) {
   const [wylogowywanie, ustawWylogowywanie] = useState(false);
   const kancelaria = useKancelaria();
   // Licznik naleznosci odswieza sie przy kazdej zmianie ekranu — po zaplacie
@@ -613,6 +644,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
       <div className="marka-pasek bez-druku" role="banner">
         <div className="marka-pasek-nazwa">{kancelaria.nazwa}</div>
       </div>
+      <OstrzezenieWygasajacejSesji sesjaWygasa={sesjaWygasa} />
       <SzynaPortalu sciezka={sciezka} rola={konto.rola} liczniki={liczniki} />
       <NawigacjaPortaluWaska sciezka={sciezka} rola={konto.rola} liczniki={liczniki} />
       <div className="obszar">
@@ -2130,6 +2162,7 @@ function AplikacjaPortalZSesja({ segmenty, sciezka, zapytanie }) {
       sciezka={sciezka === '/' ? '/' : `/${segmenty[0]}`}
       waski={waski}
       konto={sesja.konto}
+      sesjaWygasa={sesja.sesjaWygasa}
       przyWylogowaniu={() => sesja.odswiez()}
     >
       {ekran()}

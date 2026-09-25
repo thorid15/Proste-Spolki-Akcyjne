@@ -175,7 +175,11 @@ router.post(
 router.get(
   '/whoami',
   asy((zad, odp) => {
-    odp.json({ zalogowany: Boolean(zad.konto), konto: widokKonta(zad.konto) });
+    odp.json({
+      zalogowany: Boolean(zad.konto),
+      konto: widokKonta(zad.konto),
+      sesja_wygasa: zad.konto ? zad.sesjaWygasa : null,
+    });
   })
 );
 

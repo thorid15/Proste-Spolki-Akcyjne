@@ -114,7 +114,13 @@ function wczytajSesje(zad, odp, dalej) {
     const payload = sesja.odczytaj(tokenKonta);
     if (payload && payload.typ === 'konto' && !tokenUniewazniony(payload.jti)) {
       const wiersz = db().prepare('SELECT * FROM psa_konta WHERE id = ?').get(payload.id);
-      if (wiersz && wiersz.aktywne && wiersz.tokeny_wersja === payload.wersja) zad.konto = wiersz;
+      if (wiersz && wiersz.aktywne && wiersz.tokeny_wersja === payload.wersja) {
+        zad.konto = wiersz;
+        // FAZA4 pkt6 — ostrzeżenie 5 minut przed wygaśnięciem sesji portalu
+        // (8h): front porównuje ten znacznik z zegarem klienta, patrz
+        // `usePortalSesja`/`GET /whoami`.
+        zad.sesjaWygasa = payload.exp;
+      }
     }
   }
 

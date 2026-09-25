@@ -309,6 +309,18 @@ body {
   .marka-pasek { padding: var(--od-8) var(--od-16); }
 }
 
+/* Ostrzeżenie o wygasającej sesji portalu (FAZA4 pkt 6) — pasek pod marką,
+   przez całą szerokość, ten sam akcent co reszta ostrzeżeń w aplikacji. */
+.pasek-ostrzezenia {
+  grid-column: 1 / -1;
+  padding: var(--od-8) var(--od-24);
+  background: var(--mosiadz-tlo);
+  color: var(--mosiadz);
+  font-size: var(--st-13);
+  text-align: center;
+  border-bottom: 1px solid var(--linia-2);
+}
+
 /* Ekrany publiczne portalu (`.ekran-logowania`) same w sobie maja 100vh —
    w ramie z naglowkiem kancelarii ta wysokosc musi ustapic, inaczej dol
    ekranu lezy pod zagieciem. */
