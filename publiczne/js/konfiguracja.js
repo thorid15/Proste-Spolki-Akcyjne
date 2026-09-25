@@ -3,8 +3,19 @@
    Front NIE powiela stawek ani terminów — wszystko wczytywane z API, żeby
    zmiana prawa po stronie serwera od razu znalazła odbicie tutaj. */
 
+/* K8 (FAZA 3 sesji frontendowej v2): ekran był jedną długą kolumną czterech
+   kart, ostatnia (katalog typów zdarzeń) z ~19 wierszami — trzeba było
+   przewijać, żeby dotrzeć do terminów czy dostępu do danych. Cztery karty
+   nie zmieniły treści, tylko podział na zakładki. */
+const ZAKLADKI_STAWEK = [
+  { kod: 'taksa', nazwa: 'Taksa i terminy' },
+  { kod: 'dostep', nazwa: 'Dostęp do danych' },
+  { kod: 'typy', nazwa: 'Katalog typów zdarzeń' },
+];
+
 function EkranStawek() {
   const { dane, ladowanie } = useDane('/api/psa/meta');
+  const [zakladka, ustawZakladke] = useParametrAdresu('zakladka', 'taksa');
   if (ladowanie) return <Spinner />;
   if (!dane) return null;
 
@@ -28,6 +39,10 @@ function EkranStawek() {
         </div>
       </div>
 
+      <Zakladki zakladki={ZAKLADKI_STAWEK} biezaca={zakladka} przyZmianie={ustawZakladke} />
+
+      {zakladka === 'taksa' && (
+        <>
       <Karta scisla tytul="Taksa notarialna">
         <table className="tabela">
           <thead>
@@ -62,43 +77,45 @@ function EkranStawek() {
         </div>
       </Karta>
 
-      <div className="siatka-2">
-        <Karta tytul="Terminy ustawowe">
-          <dl className="pary">
-            <Para etykieta="Wpis na żądanie">
-              {dane.terminy.WPIS_DNI} dni — {dane.podstawy.TRYB_WPISU}
-            </Para>
-            <Para etykieta="Wpis po usunięciu przeszkody">
-              {dane.terminy.WPIS_PO_USUNIECIU_PRZESZKODY_DNI} dni od dnia usunięcia
-            </Para>
-            <Para etykieta="Wypowiedzenie umowy przez notariusza">
-              min. {dane.terminy.WYPOWIEDZENIE_MIESIACE} miesiące, tylko z ważnych powodów
-            </Para>
-            <Para etykieta="Zawiadomienie sądu o rozwiązaniu umowy">
-              {dane.terminy.ZAWIADOMIENIE_SADU_DNI} dni od wygaśnięcia albo rozwiązania umowy
-            </Para>
-            <Para etykieta="Zgłoszenie zmiany danych przez zarząd">
-              {dane.terminy.ZGLOSZENIE_ZMIANY_PRZEZ_ZARZAD_DNI} dni od zdarzenia
-            </Para>
-          </dl>
-          <div className="podstawa-prawna odstep-g">
-            Termin 7 dni zamrożony w stanie „wstrzymana” — po wznowieniu biegnie od nowa w pełnym wymiarze.
-          </div>
+      <Karta tytul="Terminy ustawowe">
+        <dl className="pary">
+          <Para etykieta="Wpis na żądanie">
+            {dane.terminy.WPIS_DNI} dni — {dane.podstawy.TRYB_WPISU}
+          </Para>
+          <Para etykieta="Wpis po usunięciu przeszkody">
+            {dane.terminy.WPIS_PO_USUNIECIU_PRZESZKODY_DNI} dni od dnia usunięcia
+          </Para>
+          <Para etykieta="Wypowiedzenie umowy przez notariusza">
+            min. {dane.terminy.WYPOWIEDZENIE_MIESIACE} miesiące, tylko z ważnych powodów
+          </Para>
+          <Para etykieta="Zawiadomienie sądu o rozwiązaniu umowy">
+            {dane.terminy.ZAWIADOMIENIE_SADU_DNI} dni od wygaśnięcia albo rozwiązania umowy
+          </Para>
+          <Para etykieta="Zgłoszenie zmiany danych przez zarząd">
+            {dane.terminy.ZGLOSZENIE_ZMIANY_PRZEZ_ZARZAD_DNI} dni od zdarzenia
+          </Para>
+        </dl>
+        <div className="podstawa-prawna odstep-g">
+          Termin 7 dni zamrożony w stanie „wstrzymana” — po wznowieniu biegnie od nowa w pełnym wymiarze.
+        </div>
 
-          <div className="rozdzielacz" />
+        <div className="rozdzielacz" />
 
-          <dl className="pary">
-            <Para etykieta="Cel wewnętrzny kancelarii">
-              {dane.cel_wewnetrzny.WPIS_DNI} dni kalendarzowe od wpływu żądania
-            </Para>
-          </dl>
-          <div className="podstawa-prawna">
-            Nie jest terminem ustawowym. Art. 300(34) § 1 KSH nakazuje działać „niezwłocznie”, a siedem
-            dni tylko domyka ten obowiązek od góry — cel wyprzedza termin ustawowy i to on uruchamia
-            wyróżnienie w kolejce. Jego przekroczenie nie narusza ustawy.
-          </div>
-        </Karta>
+        <dl className="pary">
+          <Para etykieta="Cel wewnętrzny kancelarii">
+            {dane.cel_wewnetrzny.WPIS_DNI} dni kalendarzowe od wpływu żądania
+          </Para>
+        </dl>
+        <div className="podstawa-prawna">
+          Nie jest terminem ustawowym. Art. 300(34) § 1 KSH nakazuje działać „niezwłocznie”, a siedem
+          dni tylko domyka ten obowiązek od góry — cel wyprzedza termin ustawowy i to on uruchamia
+          wyróżnienie w kolejce. Jego przekroczenie nie narusza ustawy.
+        </div>
+      </Karta>
+        </>
+      )}
 
+      {zakladka === 'dostep' && (
         <Karta tytul="Dostęp do danych rejestru">
           <dl className="pary">
             <Para etykieta="Maskowane pozostałym akcjonariuszom">
@@ -111,8 +128,9 @@ function EkranStawek() {
             uprawniony — także w podglądzie rejestru w portalu klienta.
           </div>
         </Karta>
-      </div>
+      )}
 
+      {zakladka === 'typy' && (
       <Karta tytul="Katalog typów zdarzeń" scisla>
         <table className="tabela">
           <thead>
@@ -154,6 +172,7 @@ function EkranStawek() {
           </tbody>
         </table>
       </Karta>
+      )}
     </>
   );
 }
