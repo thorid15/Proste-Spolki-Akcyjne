@@ -187,6 +187,11 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'DELETE /wniosek/dokumenty/:id/podpis',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
+    // B9: zgloszenie nieprawidlowosci we wpisie. `GET` (wlasna lista) dziala
+    // WYLACZNIE po `konto.id` z sesji; `POST` niesie `spolka_id` w ciele —
+    // chroniony automatycznie przez `wymagajDostepuDoSpolkiWCiele` wyzej.
+    'GET /zgloszenia-nieprawidlowosci',
+    'POST /zgloszenie-nieprawidlowosci',
     // Informacja z rejestru jest ODPLATNA: `zamow` nalicza i oddaje link do
     // zaplaty, `wydaj` tworzy dokument z JUZ oplaconego zamowienia. Numer
     // oplaty w URL-u nie wystarcza — zapytanie idzie razem ze spolkami konta.

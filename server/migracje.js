@@ -2140,6 +2140,53 @@ const MIGRACJE = [
       ALTER TABLE psa_wydane_dokumenty ADD COLUMN otwarto_w_portalu TEXT;
     `,
   },
+
+  {
+    wersja: 55,
+    nazwa: 'zgloszenia nieprawidlowosci we wpisie (B9, FAZA 2 sesji frontendowej)',
+    sql: `
+      -- Odrebne od psa_sprawy: to NIE jest zadanie wpisu (art. 300(34) § 1
+      -- KSH) - klient zglasza, ze WCZESNIEJSZY wpis jest bledny albo
+      -- niezgodny z dokumentem, nie ze cos sie zdarzylo i trzeba to wpisac.
+      -- Bez wlasnego "stanu" wpisu i terminu ustawowego 7 dni (te pojecia
+      -- nie maja tu zastosowania) - pracownik wylacznie KWALIFIKUJE
+      -- zgloszenie: jako sprostowanie (dokonuje go przez zwykly kreator
+      -- zdarzenia, typ "sprostowanie"), jako w istocie zadanie NOWEGO wpisu
+      -- (klient pomylil sciezki - kieruje go do wlasciwej), albo jako
+      -- "brak nieprawidlowosci" (rejestr jest poprawny).
+      --
+      -- Podstawa: obowiazek prowadzenia rejestru w sposob zapewniajacy
+      -- bezpieczenstwo i integralnosc danych (art. 300(31) § 4 KSH), prawo
+      -- do sprostowania danych osobowych (art. 16 RODO).
+      CREATE TABLE psa_zgloszenia_nieprawidlowosci (
+        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+        spolka_id             INTEGER NOT NULL REFERENCES psa_spolki(id),
+        konto_id              INTEGER NOT NULL REFERENCES psa_konta(id),
+        -- Wypelnione, gdy zgloszenie przyszlo z odnosnika PRZY KONKRETNYM
+        -- wpisie (widok "Rejestr" spolki) - puste przy ogolnym "Coś się nie
+        -- zgadza?" pod calym rejestrem.
+        zdarzenie_id          INTEGER REFERENCES psa_zdarzenia(id),
+        czego_dotyczy         TEXT NOT NULL
+                                CHECK (czego_dotyczy IN ('blad_w_danych','niezgodny_z_dokumentem','inne')),
+        opis                  TEXT NOT NULL,
+        zalacznik_sciezka     TEXT,
+        zalacznik_nazwa_pliku TEXT,
+        zalacznik_mime        TEXT,
+        zalacznik_rozmiar     INTEGER,
+        stan                  TEXT NOT NULL DEFAULT 'nowe' CHECK (stan IN ('nowe','zakwalifikowane')),
+        kwalifikacja          TEXT
+                                CHECK (kwalifikacja IN ('sprostowanie','zadanie_wpisu','brak_nieprawidlowosci')),
+        notatka_kancelarii    TEXT,
+        autor_kwalifikacji    TEXT,
+        utworzono             TEXT NOT NULL,
+        zaktualizowano        TEXT
+      );
+      CREATE INDEX IF NOT EXISTS psa_ix_zgloszenia_nieprawidlowosci_spolka
+        ON psa_zgloszenia_nieprawidlowosci (spolka_id, stan);
+      CREATE INDEX IF NOT EXISTS psa_ix_zgloszenia_nieprawidlowosci_konto
+        ON psa_zgloszenia_nieprawidlowosci (konto_id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

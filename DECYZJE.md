@@ -741,6 +741,38 @@
 
 ---
 
+### D-057 — Zgłoszenie nieprawidłowości we wpisie: nowa tabela, odrębna od `psa_sprawy` (B9)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)
+- Obszar: portal / rejestr
+- Decyzja: klient sygnalizujący, że ISTNIEJĄCY wpis w rejestrze jest błędny lub niezgodny z
+  dokumentem, robi to osobnym formularzem portalu (`POST /api/psa/portal/zgloszenie-nieprawidlowosci`,
+  ekran `EkranZgloszenieBleduPortal`) — odrębnym od „Poproś o nowy wpis” (żądanie art. 300³⁴ § 1 KSH,
+  `POST /api/psa/portal/zgloszenia` → `psa_sprawy`). Dane trafiają do nowej tabeli
+  `psa_zgloszenia_nieprawidlowosci` (migracja 55). Pracownik kancelarii wyłącznie KWALIFIKUJE
+  zgłoszenie (`POST /api/psa/zgloszenia-nieprawidlowosci/:id/kwalifikuj`, sekcja w `kokpit.js` przy
+  spółce) jedną z trzech wartości: `sprostowanie` / `zadanie_wpisu` / `brak_nieprawidlowosci`. Sama
+  kwalifikacja NIE zakłada sprawy ani nie dokonuje sprostowania automatycznie — to świadoma, osobna
+  czynność pracownika zwykłym kreatorem zdarzenia (K3), tak jak przy każdym innym wpisie do
+  niezmienialnego rejestru (art. 300³¹ § 4 KSH).
+- Uzasadnienie: `psa_sprawy` ma własne ograniczenia CHECK i semantykę 7-dniowego zegara ustawowego
+  dopasowaną do żądań NOWEGO wpisu — nie pasuje do przepływu czysto triażowego (klient zgłasza
+  wątpliwość, kancelaria ocenia, bez terminu ustawowego). Nowa, mała tabela jest tańsza niż
+  przeciążanie `psa_sprawy` warunkowym polem „typ”.
+- Odrzucono: rozszerzenie `psa_sprawy` o nowy `typ_sprawy` — wymagałoby rozplątania CHECK-ów i
+  logiki terminów dla przypadku, który terminu ustawowego nie ma.
+- Zakres pominięty świadomie: załączniki (upload skanu do zgłoszenia) — kolumny w schemacie
+  zarezerwowane, endpoint uploadu nie zbudowany w tej sesji.
+- Etykiety przycisków „Poproś o nowy wpis” / „Zgłoś błąd we wpisie” są DOMYŚLNE robocze — do
+  akceptacji Łukasza (patrz raport FAZY 2, sekcja B9).
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, punkt B9 (`komponenty-formularze-b1b12-raport.md`).
+- Skutek w kodzie: migracja 55 (`psa_zgloszenia_nieprawidlowosci`); `server/trasy/portal.js` (POST
+  zgłoszenia + GET listy klienta), `server/trasy/zgloszenia-nieprawidlowosci.js` (nowy plik, trasy
+  kancelaryjne); `publiczne/js/portal.js` (formularz + link w rejestrze + tabela „Moje zgłoszenia”);
+  `publiczne/js/kokpit.js` (sekcja „Zgłoszenia nieprawidłowości z portalu” + modal kwalifikacji).
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

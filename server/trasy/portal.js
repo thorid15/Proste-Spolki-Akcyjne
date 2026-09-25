@@ -1887,6 +1887,93 @@ router.post(
 );
 
 // ─────────────────────────────────────────────────────────────
+// Zgloszenie NIEPRAWIDLOWOSCI we wpisie (B9) — odrebne od `/zadania`
+// wyzej: to NIE jest zadanie NOWEGO wpisu (art. 300(34) § 1 KSH), tylko
+// sygnal, ze WCZESNIEJSZY wpis jest bledny albo niezgodny z dokumentem.
+// Bez oplaty przy skladaniu, bez wlasnego "stanu wpisu" — pracownik
+// wylacznie KWALIFIKUJE zgloszenie (sprostowanie / w istocie zadanie wpisu
+// / brak nieprawidlowosci), patrz `server/trasy/zgloszenia-nieprawidlowosci.js`
+// po stronie kancelarii.
+// ─────────────────────────────────────────────────────────────
+
+function widokZgloszeniaNieprawidlowosci(w) {
+  return {
+    id: w.id,
+    spolka_id: w.spolka_id,
+    spolka_nazwa: w.spolka_nazwa,
+    zdarzenie_id: w.zdarzenie_id,
+    czego_dotyczy: w.czego_dotyczy,
+    opis: w.opis,
+    stan: w.stan,
+    kwalifikacja: w.kwalifikacja,
+    notatka_kancelarii: w.notatka_kancelarii,
+    utworzono: w.utworzono,
+    zaktualizowano: w.zaktualizowano,
+  };
+}
+
+const CZEGO_DOTYCZY_ZGLOSZENIA = ['blad_w_danych', 'niezgodny_z_dokumentem', 'inne'];
+
+router.get(
+  '/zgloszenia-nieprawidlowosci',
+  asy((zad, odp) => {
+    const wiersze = db()
+      .prepare(
+        `SELECT z.*, s.nazwa AS spolka_nazwa
+           FROM psa_zgloszenia_nieprawidlowosci z
+           JOIN psa_spolki s ON s.id = z.spolka_id
+          WHERE z.konto_id = ?
+          ORDER BY z.utworzono DESC`
+      )
+      .all(zad.konto.id);
+    odp.json({ zgloszenia: wiersze.map(widokZgloszeniaNieprawidlowosci) });
+  })
+);
+
+router.post(
+  '/zgloszenie-nieprawidlowosci',
+  asy((zad, odp) => {
+    const cialo = zad.body || {};
+    // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolkiWCiele` wyzej.
+    const spolkaId = Number(cialo.spolka_id);
+    if (!Number.isInteger(spolkaId)) throw bledneZadanie('Wskaż spółkę, której dotyczy zgłoszenie.');
+    const czegoDotyczy = String(cialo.czego_dotyczy || '');
+    if (!CZEGO_DOTYCZY_ZGLOSZENIA.includes(czegoDotyczy)) {
+      throw bledneZadanie('Wybierz, czego dotyczy zgłoszenie.');
+    }
+    const opis = String(cialo.opis || '').trim();
+    if (!opis) throw bledneZadanie('Opisz, na czym polega nieprawidłowość.');
+    let zdarzenieId = null;
+    if (cialo.zdarzenie_id != null && cialo.zdarzenie_id !== '') {
+      zdarzenieId = Number(cialo.zdarzenie_id);
+      const zdarzenie = db()
+        .prepare('SELECT id FROM psa_zdarzenia WHERE id = ? AND spolka_id = ?')
+        .get(zdarzenieId, spolkaId);
+      if (!zdarzenie) throw bledneZadanie('Nie odnaleziono wpisu, którego dotyczy zgłoszenie.');
+    }
+
+    const teraz = czas.terazIso();
+    const wynik = db()
+      .prepare(
+        `INSERT INTO psa_zgloszenia_nieprawidlowosci
+           (spolka_id, konto_id, zdarzenie_id, czego_dotyczy, opis, stan, utworzono)
+         VALUES (@spolka_id, @konto_id, @zdarzenie_id, @czego_dotyczy, @opis, 'nowe', @utworzono)`
+      )
+      .run({
+        spolka_id: spolkaId, konto_id: zad.konto.id, zdarzenie_id: zdarzenieId,
+        czego_dotyczy: czegoDotyczy, opis, utworzono: teraz,
+      });
+    const zapisane = db()
+      .prepare(
+        `SELECT z.*, s.nazwa AS spolka_nazwa FROM psa_zgloszenia_nieprawidlowosci z
+           JOIN psa_spolki s ON s.id = z.spolka_id WHERE z.id = ?`
+      )
+      .get(wynik.lastInsertRowid);
+    odp.status(201).json({ zgloszenie: widokZgloszeniaNieprawidlowosci(zapisane) });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
 // Platnosci klienta
 // ─────────────────────────────────────────────────────────────
 

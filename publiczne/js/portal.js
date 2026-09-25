@@ -633,6 +633,7 @@ function opisEkranuPortalu(sciezka) {
   if (sciezka.startsWith('/wniosek')) return { tytul: 'Wniosek o prowadzenie rejestru' };
   if (sciezka.startsWith('/sprawy')) return { tytul: 'Moje zgłoszenia' };
   if (sciezka.startsWith('/platnosci')) return { tytul: 'Płatności' };
+  if (sciezka.startsWith('/zgloszenie-bledu')) return { tytul: 'Zgłoś błąd we wpisie' };
   if (sciezka.startsWith('/zgloszenie')) return { tytul: 'Zgłoszenie zmiany w rejestrze' };
   if (sciezka.startsWith('/informacja')) return { tytul: 'Informacja z rejestru' };
   if (sciezka.startsWith('/rejestr')) return { tytul: 'Rejestr akcjonariuszy' };
@@ -866,7 +867,7 @@ function EkranMoje() {
 
             <div className="row-g">
               <button className="btn btn-glowny" onClick={() => idz(`/rejestr/${spolkaId}`)}>Zobacz rejestr</button>
-              <button className="btn" onClick={() => idz(`/zgloszenie/${spolkaId}`)}>Zgłoś zmianę</button>
+              <button className="btn" onClick={() => idz(`/zgloszenie/${spolkaId}`)}>Poproś o nowy wpis</button>
               <button className="btn" onClick={() => idz(`/informacja/${spolkaId}`)}>Informacja z rejestru</button>
             </div>
           </Karta>
@@ -909,11 +910,12 @@ function EkranRejestrPortal({ spolkaId }) {
                   <th>Numery</th>
                   <th className="prawo">Udział</th>
                   <th>Obciążenia</th>
+                  <th><span className="sr-only">Zgłoszenie błędu</span></th>
                 </tr>
               </thead>
               <tbody>
                 {dane.akcjonariusze.length === 0 && (
-                  <tr><td colSpan={6} className="przyciemnione">Brak wpisanych akcjonariuszy.</td></tr>
+                  <tr><td colSpan={7} className="przyciemnione">Brak wpisanych akcjonariuszy.</td></tr>
                 )}
                 {dane.akcjonariusze.map((a, i) => (
                   <tr key={i}>
@@ -926,11 +928,30 @@ function EkranRejestrPortal({ spolkaId }) {
                     <td className="mono">{a.numery}</td>
                     <td className="prawo">{fmt.procent(a.procent)}</td>
                     <td>{a.obciazenia.length > 0 ? <Pigulka odmiana="sygnal">{a.obciazenia.length}</Pigulka> : '—'}</td>
+                    <td>
+                      {/* B9 — dyskretny odnośnik przy KONKRETNYM wpisie, z
+                          wypełnionym odwołaniem do pozycji (seria, numery). */}
+                      <a
+                        href={`#/zgloszenie-bledu/${spolkaId}`}
+                        className="male wyciszony"
+                        onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}?odwolanie=${encodeURIComponent(`${a.osoba ? a.osoba.oznaczenie : 'nieznany'}, seria ${a.seria}, nr ${a.numery}`)}`); }}
+                      >
+                        Zgłoś błąd
+                      </a>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </Karta>
+
+          {/* B9 — ogólny odnośnik pod rejestrem, nie tylko przy pozycji:
+              „coś się nie zgadza" bywa np. w danych spółki, nie akcjonariusza. */}
+          <div className="podpowiedz" style={{ textAlign: 'center' }}>
+            <a href={`#/zgloszenie-bledu/${spolkaId}`} onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}`); }}>
+              Coś się nie zgadza?
+            </a>
+          </div>
 
           {dane.emisje.length > 0 && (
             <Karta tight tytul="Emisje">
@@ -1075,7 +1096,7 @@ function EkranZgloszeniePortal({ spolkaId }) {
   return (
     <div className="pion" style={{ gap: 16 }}>
       <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz('/')}>← Wróć</button>
-      <Karta tytul="Zgłoś zmianę w rejestrze">
+      <Karta tytul="Poproś o nowy wpis w rejestrze">
         <Komunikat odmiana="blad" tresc={blad} />
 
         <Pole etykieta="Czego dotyczy zgłoszenie" wymagane>
@@ -1148,6 +1169,96 @@ function EkranZgloszeniePortal({ spolkaId }) {
 }
 
 /* ─────────────────────────────────────────────────────
+   ZGŁOSZENIE BŁĘDU WE WPISIE (B9) — odrębne od „Poproś o nowy wpis"
+   wyżej: to sygnał, że WCZEŚNIEJSZY wpis jest błędny albo niezgodny
+   z dokumentem, nie że coś się wydarzyło i trzeba to wpisać.
+   ───────────────────────────────────────────────────── */
+const CZEGO_DOTYCZY_BLEDU = [
+  ['blad_w_danych', 'Błąd w danych (literówka, zła data, zły numer)'],
+  ['niezgodny_z_dokumentem', 'Wpis niezgodny z dokumentem, na podstawie którego powstał'],
+  ['inne', 'Inne'],
+];
+
+function EkranZgloszenieBleduPortal({ spolkaId, odwolanie }) {
+  const [czegoDotyczy, ustawCzegoDotyczy] = useState('');
+  const [opis, ustawOpis] = useState(odwolanie ? `Dotyczy: ${odwolanie}. ` : '');
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const [gotowe, ustawGotowe] = useState(false);
+
+  const mozeZlozyc = Boolean(czegoDotyczy) && opis.trim().length > 0;
+
+  async function zglos() {
+    if (!mozeZlozyc) return;
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      await API.post('/api/psa/portal/zgloszenie-nieprawidlowosci', {
+        spolka_id: spolkaId, czego_dotyczy: czegoDotyczy, opis: opis.trim(),
+      });
+      ustawGotowe(true);
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się złożyć zgłoszenia.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
+  if (gotowe) {
+    return (
+      <Karta>
+        <Pusto
+          tytul="Zgłoszenie zapisane"
+          opis="Kancelaria sprawdzi wpis i zdecyduje, czy potrzebne jest sprostowanie. Wynik zobaczysz w zakładce „Moje zgłoszenia”."
+          akcja={<button className="btn btn-glowny" onClick={() => idz('/sprawy')}>Moje zgłoszenia</button>}
+        />
+      </Karta>
+    );
+  }
+
+  return (
+    <div className="pion" style={{ gap: 16 }}>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => idz(`/rejestr/${spolkaId}`)}>← Wróć do rejestru</button>
+      <Karta tytul="Zgłoś błąd we wpisie">
+        <Komunikat odmiana="blad" tresc={blad} />
+        <Komunikat
+          odmiana="info"
+          tresc={
+            <>
+              To zgłoszenie jest dla wpisu, który już istnieje w rejestrze, a wygląda na błędny —
+              np. literówka w nazwisku albo data niezgodna z dokumentem. Jeśli chcesz zgłosić, że coś
+              się ZMIENIŁO (np. akcjonariusz ma nowy adres, sprzedał akcje) — to nie jest
+              nieprawidłowość, tylko nowy wpis do zrobienia: {' '}
+              <a href={`#/zgloszenie/${spolkaId}`} onClick={(z) => { z.preventDefault(); idz(`/zgloszenie/${spolkaId}`); }}>
+                przejdź do „Poproś o nowy wpis”
+              </a>.
+            </>
+          }
+        />
+
+        <Pole etykieta="Czego dotyczy" wymagane>
+          <select value={czegoDotyczy} onChange={(z) => ustawCzegoDotyczy(z.target.value)}>
+            <option value="">— wybierz —</option>
+            {CZEGO_DOTYCZY_BLEDU.map(([kod, nazwa]) => (
+              <option key={kod} value={kod}>{nazwa}</option>
+            ))}
+          </select>
+        </Pole>
+        <Pole etykieta="Opisz, na czym polega błąd" wymagane>
+          <textarea rows={4} value={opis} onChange={(z) => ustawOpis(z.target.value)} />
+        </Pole>
+
+        <Komunikat odmiana="info" tresc="Zgłoszenie jest bezpłatne. Ewentualne sprostowanie ustali i wykona kancelaria." />
+
+        <button className="btn btn-glowny" disabled={wysylanie || !mozeZlozyc} onClick={zglos} style={{ marginTop: 8 }}>
+          {wysylanie ? 'Wysyłanie…' : 'Zgłoś błąd'}
+        </button>
+      </Karta>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
    STATUS ZGŁOSZEŃ
    ───────────────────────────────────────────────────── */
 const ZNACZNIK_STANU = {
@@ -1165,46 +1276,93 @@ function kolorPaskaTerminuPortal(termin) {
   return 'transparent';
 }
 
-function EkranSprawyPortal() {
-  const { dane, ladowanie } = useDane('/api/psa/portal/zadania');
-  if (ladowanie) return <Spinner />;
-  if (!dane) return null;
+const ETYKIETA_CZEGO_DOTYCZY_BLEDU = Object.fromEntries(CZEGO_DOTYCZY_BLEDU);
+const ETYKIETA_KWALIFIKACJI_BLEDU = {
+  sprostowanie: 'kancelaria dokona sprostowania',
+  zadanie_wpisu: 'to było żądanie nowego wpisu — przekierowane',
+  brak_nieprawidlowosci: 'kancelaria nie stwierdziła nieprawidłowości',
+};
 
-  if (dane.sprawy.length === 0) {
-    return <Pusto tytul="Brak zgłoszeń" opis="Nie złożono jeszcze żadnego zgłoszenia przez portal." />;
-  }
+/** B9 — status zgłoszeń błędu we wpisie, osobna tabela: inne kolumny (bez terminu ustawowego). */
+function TabelaZgloszenNieprawidlowosci() {
+  const { dane, ladowanie } = useDane('/api/psa/portal/zgloszenia-nieprawidlowosci');
+  if (ladowanie || !dane || dane.zgloszenia.length === 0) return null;
 
   return (
-    <Karta tight tytul="Moje zgłoszenia">
+    <Karta tight tytul="Zgłoszenia błędu we wpisie">
       <table className="tbl">
         <thead>
-          <tr>
-            <th className="wiersz-kolejki-pasek-glowka" />
-            <th>Spółka</th><th>Rodzaj</th><th>Zgłoszono</th><th>Stan</th><th>Termin</th>
-          </tr>
+          <tr><th>Spółka</th><th>Czego dotyczy</th><th>Zgłoszono</th><th>Stan</th></tr>
         </thead>
         <tbody>
-          {dane.sprawy.map((s) => (
-            <tr key={s.id}>
-              <td
-                className="wiersz-kolejki-pasek"
-                style={{ background: kolorPaskaTerminuPortal(s.termin) }}
-                aria-hidden="true"
-              />
-              <td>{s.spolka_nazwa}</td>
-              <td>{s.typ_nazwa}</td>
-              <td>{fmt.dataCzas(s.data_wplywu)}</td>
-              <td><Pigulka odmiana={ZNACZNIK_STANU[s.stan] || 'neutralna'}>{s.stan}</Pigulka></td>
-              <td className="przyciemnione">
-                {s.stan === 'wpisana' || s.stan === 'odmowa' || s.stan === 'anulowana'
-                  ? '—'
-                  : s.termin && s.termin.dni_pozostale != null ? `${s.termin.dni_pozostale} dni` : '—'}
+          {dane.zgloszenia.map((z) => (
+            <tr key={z.id}>
+              <td>{z.spolka_nazwa}</td>
+              <td>{ETYKIETA_CZEGO_DOTYCZY_BLEDU[z.czego_dotyczy] || z.czego_dotyczy}</td>
+              <td>{fmt.dataCzas(z.utworzono)}</td>
+              <td>
+                {z.stan === 'zakwalifikowane' ? (
+                  <Pigulka odmiana="rejestr">{ETYKIETA_KWALIFIKACJI_BLEDU[z.kwalifikacja] || z.kwalifikacja}</Pigulka>
+                ) : (
+                  <Pigulka odmiana="mosiadz">czeka na kancelarię</Pigulka>
+                )}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
     </Karta>
+  );
+}
+
+function EkranSprawyPortal() {
+  const { dane, ladowanie } = useDane('/api/psa/portal/zadania');
+  if (ladowanie) return <Spinner />;
+  if (!dane) return null;
+
+  if (dane.sprawy.length === 0) {
+    return (
+      <div className="pion" style={{ gap: 16 }}>
+        <Pusto tytul="Brak zgłoszeń" opis="Nie złożono jeszcze żadnego zgłoszenia przez portal." />
+        <TabelaZgloszenNieprawidlowosci />
+      </div>
+    );
+  }
+
+  return (
+    <div className="pion" style={{ gap: 16 }}>
+      <Karta tight tytul="Moje zgłoszenia">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th className="wiersz-kolejki-pasek-glowka" />
+              <th>Spółka</th><th>Rodzaj</th><th>Zgłoszono</th><th>Stan</th><th>Termin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dane.sprawy.map((s) => (
+              <tr key={s.id}>
+                <td
+                  className="wiersz-kolejki-pasek"
+                  style={{ background: kolorPaskaTerminuPortal(s.termin) }}
+                  aria-hidden="true"
+                />
+                <td>{s.spolka_nazwa}</td>
+                <td>{s.typ_nazwa}</td>
+                <td>{fmt.dataCzas(s.data_wplywu)}</td>
+                <td><Pigulka odmiana={ZNACZNIK_STANU[s.stan] || 'neutralna'}>{s.stan}</Pigulka></td>
+                <td className="przyciemnione">
+                  {s.stan === 'wpisana' || s.stan === 'odmowa' || s.stan === 'anulowana'
+                    ? '—'
+                    : s.termin && s.termin.dni_pozostale != null ? `${s.termin.dni_pozostale} dni` : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Karta>
+      <TabelaZgloszenNieprawidlowosci />
+    </div>
   );
 }
 
@@ -1441,7 +1599,7 @@ function EkranPlatnosciPortal() {
    ───────────────────────────────────────────────────── */
 function AplikacjaPortal() {
   const trasa = useTrasa();
-  const { segmenty, sciezka } = trasa;
+  const { segmenty, sciezka, zapytanie } = trasa;
 
   // Regulamin i polityka prywatności — odnośniki do nich stoją w stopce,
   // którą widać także pod ekranem logowania, więc muszą działać bez sesji.
@@ -1482,13 +1640,13 @@ function AplikacjaPortal() {
     );
   }
 
-  return <AplikacjaPortalZSesja segmenty={segmenty} sciezka={sciezka} />;
+  return <AplikacjaPortalZSesja segmenty={segmenty} sciezka={sciezka} zapytanie={zapytanie} />;
 }
 
 /** Adresy, pod którymi zalogowane konto ma co zobaczyć (pusty = strona główna). */
-const EKRANY_KONTA = ['', 'wniosek', 'sprawy', 'rejestr', 'zgloszenie', 'informacja'];
+const EKRANY_KONTA = ['', 'wniosek', 'sprawy', 'rejestr', 'zgloszenie', 'zgloszenie-bledu', 'informacja'];
 
-function AplikacjaPortalZSesja({ segmenty, sciezka }) {
+function AplikacjaPortalZSesja({ segmenty, sciezka, zapytanie }) {
   const sesja = usePortalSesja();
 
   if (sesja.ladowanie) return <Spinner />;
@@ -1541,6 +1699,9 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
     if (segmenty[0] === 'sprawy') return <EkranSprawyPortal />;
     if (segmenty[0] === 'rejestr' && segmenty[1]) return <EkranRejestrPortal spolkaId={Number(segmenty[1])} />;
     if (segmenty[0] === 'zgloszenie' && segmenty[1]) return <EkranZgloszeniePortal spolkaId={Number(segmenty[1])} />;
+    if (segmenty[0] === 'zgloszenie-bledu' && segmenty[1]) {
+      return <EkranZgloszenieBleduPortal spolkaId={Number(segmenty[1])} odwolanie={zapytanie.get('odwolanie') || ''} />;
+    }
     if (segmenty[0] === 'informacja' && segmenty[1]) return <EkranInformacjaPortal spolkaId={Number(segmenty[1])} />;
     if (segmenty[0] === 'platnosci') return <EkranPlatnosciPortal />;
     return (

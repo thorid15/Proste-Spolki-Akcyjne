@@ -753,3 +753,56 @@ test('B8: wnioskodawca (jeszcze bez żadnej spółki) nie może użyć "Dodaj sp
   const [status, wynik] = await zapytaj('POST', '/api/psa/portal/wniosek/nowy', {}, ciastko);
   assert.equal(status, 400, JSON.stringify(wynik));
 });
+
+test('B9: zgłoszenie nieprawidłowości — odrębne od żądania wpisu, kancelaria kwalifikuje', async () => {
+  const email = 'b9-zgloszenie@example.pl';
+  const { wniosekId, ciastkoKlienta } = await wnioskGotowyDoWeryfikacji(email);
+  const [, dane] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
+  await zapytaj(
+    'POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${dane.akcjonariusze[0].id}/zweryfikuj`,
+    { zweryfikowano: true }, ciastkoPracownik
+  );
+  const [, przyjecie] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, undefined, ciastkoPracownik);
+  const spolkaId = przyjecie.spolka_id;
+
+  // Cudza spółka jest odrzucana (D3) — konto klienta nie zgłasza dla obcej spółki.
+  const [statusObca] = await zapytaj(
+    'POST', '/api/psa/portal/zgloszenie-nieprawidlowosci',
+    { spolka_id: 999999, czego_dotyczy: 'inne', opis: 'test' }, ciastkoKlienta
+  );
+  assert.equal(statusObca, 404);
+
+  const [statusZgloszenia, zgloszenie] = await zapytaj(
+    'POST', '/api/psa/portal/zgloszenie-nieprawidlowosci',
+    { spolka_id: spolkaId, czego_dotyczy: 'blad_w_danych', opis: 'Literówka w nazwisku akcjonariusza.' }, ciastkoKlienta
+  );
+  assert.equal(statusZgloszenia, 201, JSON.stringify(zgloszenie));
+  assert.equal(zgloszenie.zgloszenie.stan, 'nowe');
+
+  // Klient widzi je w swojej liście, ze stanem "czeka na kancelarię".
+  const [, mojeZgloszenia] = await zapytaj('GET', '/api/psa/portal/zgloszenia-nieprawidlowosci', undefined, ciastkoKlienta);
+  assert.equal(mojeZgloszenia.zgloszenia.length, 1);
+  assert.equal(mojeZgloszenia.zgloszenia[0].stan, 'nowe');
+
+  // Kancelaria widzi je w kolejce i kwalifikuje jako sprostowanie.
+  const [, kolejka] = await zapytaj('GET', '/api/psa/zgloszenia-nieprawidlowosci', undefined, ciastkoPracownik);
+  const wKolejce = kolejka.zgloszenia.find((z) => z.id === zgloszenie.zgloszenie.id);
+  assert.ok(wKolejce);
+  assert.equal(wKolejce.konto_email, email);
+
+  const [statusKwalifikacji, poKwalifikacji] = await zapytaj(
+    'POST', `/api/psa/zgloszenia-nieprawidlowosci/${zgloszenie.zgloszenie.id}/kwalifikuj`,
+    { kwalifikacja: 'sprostowanie', notatka: 'Poprawię nazwisko sprostowaniem.' }, ciastkoPracownik
+  );
+  assert.equal(statusKwalifikacji, 200);
+  assert.equal(poKwalifikacji.zgloszenie.stan, 'zakwalifikowane');
+  assert.equal(poKwalifikacji.zgloszenie.kwalifikacja, 'sprostowanie');
+
+  // Klient widzi wynik.
+  const [, mojePoKwalifikacji] = await zapytaj('GET', '/api/psa/portal/zgloszenia-nieprawidlowosci', undefined, ciastkoKlienta);
+  assert.equal(mojePoKwalifikacji.zgloszenia[0].kwalifikacja, 'sprostowanie');
+
+  // Zgłoszenie NIE zakłada sprawy/wpisu — pozostaje osobne od psa_sprawy.
+  const sprawy = db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy WHERE spolka_id = ?').get(spolkaId);
+  assert.equal(sprawy.n, 0, 'kwalifikacja jako sprostowanie NIE zakłada automatycznie sprawy — robi to pracownik w kreatorze');
+});

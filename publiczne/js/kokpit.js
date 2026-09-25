@@ -217,6 +217,78 @@ function ModalSprostowania({ zdarzenie, przyZamknieciu, przyZapisie }) {
 }
 
 /* ═════════════════════════════════════════════════════
+   ZGŁOSZENIA NIEPRAWIDŁOWOŚCI Z PORTALU (B9) — klient sygnalizuje, że
+   ISTNIEJĄCY wpis jest błędny; pracownik wyłącznie KWALIFIKUJE zgłoszenie
+   (samo zakwalifikowanie nie zakłada sprostowania ani sprawy — to
+   świadoma, osobna czynność w zwykłym kreatorze zdarzenia).
+   ═════════════════════════════════════════════════════ */
+const CZEGO_DOTYCZY_ZGLOSZENIA_ETYKIETY = {
+  blad_w_danych: 'Błąd w danych (literówka, zła data, zły numer)',
+  niezgodny_z_dokumentem: 'Wpis niezgodny z dokumentem, na podstawie którego powstał',
+  inne: 'Inne',
+};
+
+function ModalKwalifikacjaZgloszenia({ zgloszenie, przyZamknieciu, przyZapisie }) {
+  const [kwalifikacja, ustawKwalifikacje] = useState('');
+  const [notatka, ustawNotatke] = useState('');
+  const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+
+  async function zapisz() {
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    try {
+      await API.post(`/api/psa/zgloszenia-nieprawidlowosci/${zgloszenie.id}/kwalifikuj`, {
+        kwalifikacja, notatka,
+      });
+      przyZapisie();
+    } catch (e) {
+      ustawBlad(e.message);
+      ustawZapisywanie(false);
+    }
+  }
+
+  return (
+    <Modal
+      tytul="Kwalifikacja zgłoszenia nieprawidłowości"
+      przyZamknieciu={przyZamknieciu}
+      szerokosc={560}
+      stopka={
+        <>
+          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          <button className="btn btn-glowny" disabled={!kwalifikacja || zapisywanie} onClick={zapisz}>
+            {zapisywanie ? 'Zapisywanie…' : 'Zapisz kwalifikację'}
+          </button>
+        </>
+      }
+    >
+      <Komunikat odmiana="blad" tresc={blad} />
+      <Pole etykieta="Czego dotyczy">
+        {CZEGO_DOTYCZY_ZGLOSZENIA_ETYKIETY[zgloszenie.czego_dotyczy] || zgloszenie.czego_dotyczy}
+      </Pole>
+      <Pole etykieta="Opis klienta">{zgloszenie.opis}</Pole>
+      <Pole etykieta="Kwalifikacja" wymagane>
+        <select value={kwalifikacja} onChange={(z) => ustawKwalifikacje(z.target.value)}>
+          <option value="">— wybierz —</option>
+          <option value="sprostowanie">Sprostowanie — dokonam go w kreatorze zdarzenia</option>
+          <option value="zadanie_wpisu">To żądanie nowego wpisu, nie błąd</option>
+          <option value="brak_nieprawidlowosci">Rejestr jest poprawny — brak nieprawidłowości</option>
+        </select>
+      </Pole>
+      <Pole etykieta="Notatka (opcjonalnie)">
+        <textarea rows={3} value={notatka} onChange={(z) => ustawNotatke(z.target.value)} />
+      </Pole>
+      {kwalifikacja === 'sprostowanie' && (
+        <Komunikat
+          odmiana="info"
+          tresc="Kwalifikacja NIE dokonuje sprostowania automatycznie — po zapisaniu wykonaj je zwykłym kreatorem zdarzenia (przycisk „Sprostuj” przy zdarzeniu w historii)."
+        />
+      )}
+    </Modal>
+  );
+}
+
+/* ═════════════════════════════════════════════════════
    METRYKA REJESTRU (prawa, przyklejona kolumna — 2 „Plan projektu")
    ═════════════════════════════════════════════════════ */
 
@@ -549,6 +621,7 @@ function EkranKokpitu({ spolkaId }) {
   const [przeliczanie, ustawPrzeliczanie] = useState(null);
   const [sprostowanie, ustawSprostowanie] = useState(null);
   const [dodawanieAkcjonariusza, ustawDodawanieAkcjonariusza] = useState(false);
+  const [kwalifikowanieZgloszenia, ustawKwalifikowanieZgloszenia] = useState(null);
 
   const wstecz = data !== fmt.dzisIso();
 
@@ -558,6 +631,10 @@ function EkranKokpitu({ spolkaId }) {
   );
   const wszystkieZdarzenia = useDane(`/api/psa/spolki/${spolkaId}/zdarzenia`);
   const akta = useDane(`/api/psa/spolki/${spolkaId}/akta`);
+  const zgloszeniaNieprawidlowosci = useDane(
+    `/api/psa/zgloszenia-nieprawidlowosci?spolka_id=${spolkaId}&stan=nowe`,
+    [spolkaId]
+  );
 
   /** Etap 5.1: skok miedzy zdarzeniem prostowanym a prostujacym - link dziala w OBIE strony. */
   function skoczDoZdarzenia(id) {
@@ -971,6 +1048,36 @@ function EkranKokpitu({ spolkaId }) {
             </div>
           </Sekcja>
 
+          {/* ─── 5b. ZGŁOSZENIA NIEPRAWIDŁOWOŚCI Z PORTALU (B9) ─────────── */}
+          {zgloszeniaNieprawidlowosci.dane && zgloszeniaNieprawidlowosci.dane.zgloszenia.length > 0 && (
+            <Sekcja
+              tytul="Zgłoszenia nieprawidłowości z portalu"
+              licznik={zgloszeniaNieprawidlowosci.dane.zgloszenia.length}
+            >
+              <div style={{ padding: '20px 24px' }}>
+                <table className="tbl">
+                  <thead>
+                    <tr><th>Zgłoszono</th><th>Czego dotyczy</th><th>Opis</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {zgloszeniaNieprawidlowosci.dane.zgloszenia.map((z) => (
+                      <tr key={z.id}>
+                        <td className="wyciszony">{fmt.dataCzas(z.utworzono)}</td>
+                        <td>{CZEGO_DOTYCZY_ZGLOSZENIA_ETYKIETY[z.czego_dotyczy] || z.czego_dotyczy}</td>
+                        <td className="zawijaj">{z.opis}</td>
+                        <td>
+                          <button className="btn btn-maly" onClick={() => ustawKwalifikowanieZgloszenia(z)}>
+                            Kwalifikuj
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Sekcja>
+          )}
+
           {/* ─── 6. DOKUMENTY ─────────────────────────────────────────── */}
           <Sekcja tytul="Dokumenty" licznik={akta.ladowanie ? undefined : dokumentyAkt.length}>
             <ZawartoscAkt dokumenty={dokumentyAkt} ladowanie={akta.ladowanie} spolkaId={spolkaId} />
@@ -1061,6 +1168,17 @@ function EkranKokpitu({ spolkaId }) {
           przyZapisie={() => {
             ustawSprostowanie(null);
             odswiez();
+          }}
+        />
+      )}
+
+      {kwalifikowanieZgloszenia && (
+        <ModalKwalifikacjaZgloszenia
+          zgloszenie={kwalifikowanieZgloszenia}
+          przyZamknieciu={() => ustawKwalifikowanieZgloszenia(null)}
+          przyZapisie={() => {
+            ustawKwalifikowanieZgloszenia(null);
+            zgloszeniaNieprawidlowosci.odswiez();
           }}
         />
       )}
