@@ -1657,15 +1657,8 @@ function EkranInformacjaPortal({ spolkaId }) {
           <PoleDaty wartosc={data} przyZmianie={(v) => v && ustawData(v)} />
         </Pole>
 
-        {stawka != null && (
-          <Komunikat
-            odmiana="info"
-            tresc={`Informacja z rejestru jest odpłatna — ${fmt.zlote(stawka)}. Dokument pobierzesz po opłaceniu.`}
-          />
-        )}
-
         <button className="btn btn-glowny" onClick={zamow} disabled={pracuje}>
-          {pracuje ? 'Przygotowywanie…' : 'Zamów informację'}
+          {pracuje ? 'Przygotowywanie…' : stawka != null ? `Zapłać ${fmt.zlote(stawka)}` : 'Zamów informację'}
         </button>
 
         {gotowa && gotowa.rodzaj === 'platnosc' && (
@@ -1717,6 +1710,31 @@ function EkranPlatnosciPortal({ spolkaId } = {}) {
   const { dane, ladowanie, blad, odswiez } = useDane('/api/psa/portal/oplaty');
   const [wysylanie, ustawWysylanie] = useState(null);
   const [bladPlatnosci, ustawBladPlatnosci] = useState(null);
+
+  // Powrót z operatora płatności (`?zwrot=1` w adresie powrotu, patrz
+  // `server/trasy/portal.js`) NIE jest dowodem zapłaty — źródłem prawdy
+  // jest powiadomienie ITN, asynchroniczne względem tego powrotu. Zamiast
+  // zgadywać z samego faktu powrotu, odpytujemy stan co 3 s przez maks. 30 s.
+  const { zapytanie } = useTrasa();
+  const czekaNaPotwierdzenie = zapytanie.get('zwrot') === '1';
+  const [nadalCzeka, ustawNadalCzeka] = useState(czekaNaPotwierdzenie);
+  useEffect(() => {
+    if (!czekaNaPotwierdzenie) return undefined;
+    let probby = 0;
+    const id = setInterval(() => {
+      probby += 1;
+      odswiez();
+      if (probby >= 10) { ustawNadalCzeka(false); clearInterval(id); }
+    }, 3000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [czekaNaPotwierdzenie]);
+  useEffect(() => {
+    if (czekaNaPotwierdzenie && dane && dane.oplaty.some((o) => o.status === 'oplacona')) {
+      ustawNadalCzeka(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dane]);
 
   if (ladowanie) return <Spinner />;
   if (blad) return <Komunikat odmiana="blad" tresc={blad.message} />;
@@ -1790,6 +1808,13 @@ function EkranPlatnosciPortal({ spolkaId } = {}) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
+      {nadalCzeka && (
+        <Komunikat
+          odmiana="info"
+          tytul="Czekamy na potwierdzenie od operatora płatności"
+          tresc="Płatność jest przetwarzana — status uzupełni się automatycznie, gdy operator ją potwierdzi. Nie trzeba odświeżać strony."
+        />
+      )}
       <Komunikat odmiana="blad" tresc={bladPlatnosci} />
 
       {!dane.platnosci_wlaczone && doZaplaty.length > 0 && (

@@ -2174,7 +2174,7 @@ router.post(
       wynik = await platnosci.przygotujZaplate(db(), {
         oplataId: oplata.id,
         urlPowiadomienia: adresPowiadomienia(),
-        urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/platnosci`,
+        urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/spolka/${oplata.spolka_id}?zakladka=oplaty&zwrot=1`,
       });
     } catch (e) {
       throw bledneZadanie(e.message);
@@ -2242,7 +2242,7 @@ router.post(
         const wznowiona = await platnosci.przygotujZaplate(db(), {
           oplataId: wToku.id,
           urlPowiadomienia: adresPowiadomienia(),
-          urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/platnosci`,
+          urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/spolka/${spolkaId}?zakladka=oplaty&zwrot=1`,
         });
         return odp.json({ oplata_id: wToku.id, oplacona: false, link: wznowiona.platnosc.link, platnosci_wlaczone: true });
       } catch (e) {
@@ -2270,7 +2270,7 @@ router.post(
       wynik = await platnosci.przygotujZaplate(db(), {
         oplataId: oplata.id,
         urlPowiadomienia: adresPowiadomienia(),
-        urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/platnosci`,
+        urlPowrotu: konfiguracja.TPAY.url_powrotu || `${konfiguracja.URL_PORTALU}#/spolka/${spolkaId}?zakladka=oplaty&zwrot=1`,
       });
     } catch (e) {
       return odp.json({ oplata_id: oplata.id, oplacona: false, link: null, blad_platnosci: e.message });
