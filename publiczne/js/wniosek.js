@@ -537,6 +537,21 @@ function EkranWniosku() {
       .finally(() => ustawLadowanie(false));
   }, []);
 
+  // D-062/P2: konto ze zgłoszenia ma KRS podstawione już przy założeniu
+  // wniosku (server: wczytajLubZalozWniosek) — pobieramy resztę danych spółki
+  // automatycznie, tym samym mechanizmem co ręczne wpisanie numeru, żeby
+  // klient nie musiał klikać przycisku dla numeru, który już podaliśmy sami.
+  const autoPobranoKrs = useRef(false);
+  useEffect(() => {
+    if (autoPobranoKrs.current || !dane) return;
+    const numer = String(dane.krs || '').replace(/\D/g, '');
+    if (numer.length === 10 && !dane.nazwa) {
+      autoPobranoKrs.current = true;
+      pobierzZKrs();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dane]);
+
   // Przejście między krokami przewija na górę. Bez tego dłuższy krok
   // zostawia następny zaczęty w połowie — z niewidocznym nagłówkiem.
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [krok, otwartyAkcjonariusz]);

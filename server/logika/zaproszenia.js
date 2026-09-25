@@ -88,12 +88,14 @@ async function wyslij(db, { zgloszenieId, email, autor }) {
       .run(token, tokenWygasa, istniejace.id);
     kontoId = istniejace.id;
   } else {
+    // D-062/P2: zapamietujemy, z ktorego zgloszenia konto powstalo - pierwszy
+    // wniosek tego konta podstawia z niego KRS/nazwe (wczytajLubZalozWniosek).
     const wynik = db
       .prepare(
-        `INSERT INTO psa_konta (email, rola, aktywne, token_aktywacji, token_wygasa, utworzono)
-         VALUES (?, 'wnioskodawca', 0, ?, ?, ?)`
+        `INSERT INTO psa_konta (email, rola, aktywne, token_aktywacji, token_wygasa, zgloszenie_id, utworzono)
+         VALUES (?, 'wnioskodawca', 0, ?, ?, ?, ?)`
       )
-      .run(adres, token, tokenWygasa, czas.terazIso());
+      .run(adres, token, tokenWygasa, zgloszenieId || null, czas.terazIso());
     kontoId = Number(wynik.lastInsertRowid);
   }
 

@@ -816,6 +816,33 @@
 
 ---
 
+### D-062 — Zgłoszenie → wniosek: KRS podstawiany z powiązanego zgłoszenia (P2)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 4)
+- Obszar: portal
+- Decyzja: konto powstałe z publicznego formularza zgłoszenia (`psa_zgloszenia`, KRS wymagany —
+  D-047) dostaje nową kolumnę `psa_konta.zgloszenie_id`, ustawianą raz, przy założeniu konta w
+  `server/logika/zaproszenia.js: wyslij()`. Pierwszy pusty wniosek tego konta
+  (`wczytajLubZalozWniosek`, `server/trasy/portal.js`) podstawia z powiązanego zgłoszenia `krs` i
+  `nazwa_spolki` — klient nie wpisuje numeru KRS drugi raz (0.4 pkt 1). Front (`EkranWniosku`,
+  `publiczne/js/wniosek.js`) uruchamia automatyczne pobranie z KRS od razu po wczytaniu wniosku,
+  jeśli `krs` jest już wypełnione, a `nazwa` jeszcze nie — ten sam mechanizm co ręczne wpisanie
+  numeru, bez osobnego przycisku.
+- Zakres tej zmiany: wyłącznie KRS + nazwa. Pełne przeniesienie składu organu do wyboru
+  reprezentanta z listy (część P2 dotycząca reprezentanta) **nie zostało zrobione w tej sesji** —
+  krok „Reprezentant" nadal wymaga ręcznego wpisania imienia i nazwiska nawet po udanym pobraniu
+  z KRS; `krs.js` już zwraca skład organu (użyty w kancelarii, K6), więc podłączenie tego samego
+  wyboru w portalu jest gotowe do zrobienia w kolejnej sesji, bez zmian schematu.
+- Konta założone inną drogą niż zgłoszenie (np. bezpośrednio przez pracownika) mają
+  `zgloszenie_id IS NULL` — wniosek zakłada się wtedy pusty, jak dotychczas.
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, FAZA 4 — P2.
+- Skutek w kodzie: migracja 56 (`psa_konta.zgloszenie_id`); `server/logika/zaproszenia.js`
+  (`wyslij()` przyjmuje i zapisuje `zgloszenieId`); `server/trasy/zgloszenia.js` (przekazuje
+  `zgloszenieId` do `wyslij()`); `server/trasy/portal.js` (`wczytajLubZalozWniosek` podstawia
+  krs/nazwa); `publiczne/js/wniosek.js` (auto-pobranie z KRS przy wczytaniu).
+
+---
+
 ### D-057 — Zgłoszenie nieprawidłowości we wpisie: nowa tabela, odrębna od `psa_sprawy` (B9)
 
 - Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)

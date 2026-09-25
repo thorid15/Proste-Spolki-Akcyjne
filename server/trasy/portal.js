@@ -566,9 +566,26 @@ function wczytajLubZalozWniosek(zad) {
   const otwarty = wczytajOtwartyWniosekKonta(zad.konto.id);
   if (otwarty) return otwarty;
   if (zad.konto.rola !== 'wnioskodawca') return null;
+
+  // D-062/P2: konto powstale ze zgloszenia (D-047 — KRS tam wymagany) ma juz
+  // ten numer w bazie — pierwszy wniosek konta zaczyna z nim, zamiast pytac
+  // o niego drugi raz (0.4 pkt 1). Konta zalozone inna droga (zgloszenie_id
+  // puste) dostaja wniosek calkiem pusty, jak dotad.
+  let krs = null;
+  let nazwa = null;
+  if (zad.konto.zgloszenie_id) {
+    const zgloszenie = db()
+      .prepare('SELECT krs, nazwa_spolki FROM psa_zgloszenia WHERE id = ?')
+      .get(zad.konto.zgloszenie_id);
+    if (zgloszenie) {
+      krs = zgloszenie.krs || null;
+      nazwa = zgloszenie.nazwa_spolki || null;
+    }
+  }
+
   const wynik = db()
-    .prepare('INSERT INTO psa_wnioski (konto_id, utworzono) VALUES (?, ?)')
-    .run(zad.konto.id, czas.terazIso());
+    .prepare('INSERT INTO psa_wnioski (konto_id, krs, nazwa, utworzono) VALUES (?, ?, ?, ?)')
+    .run(zad.konto.id, krs, nazwa, czas.terazIso());
   return db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wynik.lastInsertRowid);
 }
 

@@ -2187,6 +2187,23 @@ const MIGRACJE = [
         ON psa_zgloszenia_nieprawidlowosci (konto_id);
     `,
   },
+
+  {
+    wersja: 56,
+    nazwa: 'powiazanie zgloszenie -> konto -> wniosek (P2, FAZA 4 sesji frontendowej)',
+    sql: `
+      -- D-055/P2: wniosek zakladal sie dotad calkiem pusty
+      -- (wczytajLubZalozWniosek w server/trasy/portal.js), a klient wpisywal
+      -- numer KRS DRUGI RAZ, mimo ze podal go juz w publicznym formularzu
+      -- zgloszenia (psa_zgloszenia.krs) - naruszenie zasady "raz wpisane,
+      -- nigdy wiecej" (0.4 pkt 1 sesji frontendowej v2). Kolumna wskazuje
+      -- zgloszenie, z ktorego dane konto powstalo (server/logika/zaproszenia.js),
+      -- zeby przy pierwszym zalozeniu wniosku dalo sie podstawic KRS/nazwe
+      -- bez pytania o nie ponownie. NULL dla kont zalozonych inna droga
+      -- (np. bezposrednio przez pracownika, bez zgloszenia).
+      ALTER TABLE psa_konta ADD COLUMN zgloszenie_id INTEGER REFERENCES psa_zgloszenia(id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
