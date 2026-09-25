@@ -51,3 +51,5 @@ function parsujPesel(pesel) {
 
   return { data_urodzenia: dataIso, plec, poprawnaSumaKontrolna };
 }
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { parsujPesel };

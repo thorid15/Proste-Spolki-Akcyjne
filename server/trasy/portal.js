@@ -559,7 +559,7 @@ router.get(
 const POLA_AKCJONARIUSZA_WNIOSKU = [
   'typ', 'nazwisko', 'imie', 'nazwa', 'pesel', 'data_urodzenia', 'plec',
   'nip', 'regon', 'numer_w_rejestrze', 'nazwa_rejestru',
-  'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu', 'nr_lokalu',
+  'kraj', 'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu', 'nr_lokalu',
   'adres_doreczen', 'adres_edoreczen', 'email', 'telefon', 'zgoda_email',
   // Art. 300(33) § 1 pkt 2-5 KSH - patrz logika/akcjonariusz.js.
   ...akcjonariuszLogika.POLA_USTAWOWE,
@@ -579,6 +579,9 @@ function wyczyscAkcjonariuszaWniosku(cialo) {
     }
     const v = cialo[pole];
     wynik[pole] = v === '' || v === null ? null : String(v).trim();
+    // Kolumna NOT NULL z domyslna 'Polska' (migracja 52) - puste pole kraju
+    // znaczy to samo, co domyslna wartosc w formularzu.
+    if (pole === 'kraj' && !wynik[pole]) wynik[pole] = 'Polska';
   }
   return akcjonariuszLogika.znormalizuj(wynik);
 }

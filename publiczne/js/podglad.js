@@ -42,6 +42,20 @@ function EkranPodgladu() {
   const [zakladka, ustawZakladke] = useState('przeglad');
   const [fraza, ustawFraze] = useState('');
   const [strona, ustawStrone] = useState(2);
+  const [panel, ustawPanel] = useState(false);
+  const [adresPl, ustawAdresPl] = useState({ kraj: 'Polska', ulica: 'Bolesława Leśmiana', nr_domu: '3', nr_lokalu: 'U10', kod_pocztowy: '80-280', miejscowosc: 'Gdańsk' });
+  const [adresZagr, ustawAdresZagr] = useState({ kraj: 'Niemcy', ulica: 'Invalidenstraße', nr_domu: '', kod_pocztowy: '10115', miejscowosc: 'Berlin' });
+  const [tozsamosc1, ustawTozsamosc1] = useState({ pesel: '44051401359', bez_pesel: 0 });
+  const [tozsamosc2, ustawTozsamosc2] = useState({ pesel: '44051401358', bez_pesel: 0 });
+  const [tozsamosc3, ustawTozsamosc3] = useState({ pesel: '', bez_pesel: 1, data_urodzenia: '' });
+  const [dowod, ustawDowod] = useState({ dowod_rodzaj: 'dowod_osobisty', dowod_numer: 'ABC123456' });
+  const [kwotaPusta, ustawKwotePusta] = useState(null);
+  const [kwotaMala, ustawKwoteMala] = useState(null);
+  const [typOsoby, ustawTypOsoby] = useState('fizyczna');
+  const [trybFormularza, ustawTrybFormularza] = useState('portal');
+  const [osobaFormularza, ustawOsobeFormularza] = useState(PUSTA_OSOBA_FORMULARZA);
+  const walidacjaOsoby = useWalidacjaOsoby(osobaFormularza, { tryb: trybFormularza });
+  const [krokKreatora, ustawKrokKreatora] = useState(2);
 
   return (
     <>
@@ -107,12 +121,12 @@ function EkranPodgladu() {
 
       <BlokPodgladu
         tytul="Pola"
-        opis="Etykieta zawsze nad polem. Data segmentowa z potwierdzeniem słownym. Liczby w monie, do prawej, z sufiksem w polu."
+        opis="Etykieta zawsze nad polem, oznaczamy pola opcjonalne (nie obowiązkowe). Błąd pod polem, podpięty przez aria-describedby. Data segmentowa (wkleja też ISO). Liczby w monie, do prawej, z sufiksem w polu."
       >
         <Karta>
           <div className="siatka-2">
             <div>
-              <Pole etykieta="Data zdarzenia" wymagane podpowiedz="Data z dokumentu.">
+              <Pole etykieta="Data zdarzenia" podpowiedz="Data z dokumentu.">
                 <PoleDaty wartosc={data1} przyZmianie={ustawData1} skroty max={fmt.dzisIso()} />
               </Pole>
 
@@ -123,7 +137,7 @@ function EkranPodgladu() {
                 <PoleDaty wartosc={data2} przyZmianie={ustawData2} blad />
               </Pole>
 
-              <Pole etykieta="Liczba akcji" wymagane>
+              <Pole etykieta="Liczba akcji">
                 <PoleLiczbowe wartosc={ilosc} przyZmianie={ustawIlosc} sufiks="akcji" min={1} />
               </Pole>
 
@@ -154,7 +168,7 @@ function EkranPodgladu() {
                 </select>
               </Pole>
 
-              <Pole etykieta="Wybór z kartoteki" podpowiedz="Podpowiedzi od trzeciego znaku.">
+              <Pole etykieta="Wybór z kartoteki" podpowiedz="Nazwisko, firma, PESEL, NIP albo KRS — od drugiego znaku. Na końcu listy „+ Nowa osoba”.">
                 <WyborZKartoteki wartosc={osoba} przyZmianie={ustawOsobe} />
               </Pole>
             </div>
@@ -171,6 +185,126 @@ function EkranPodgladu() {
               <div className="podstawa-prawna">art. 300³⁴ § 1 KSH</div>
             </span>
           </label>
+        </Karta>
+      </BlokPodgladu>
+
+      <BlokPodgladu
+        tytul="Kwota — stany"
+        opis="Wpisuje się normalnie (10 · 10,5 · 1 000,00, przecinek albo kropka). Po opuszczeniu pola: 10,00. Więcej niż 2 cyfry po przecinku — komunikat, nie zaokrąglenie (D-045). Na zewnątrz grosze."
+      >
+        <Karta>
+          <div className="siatka-3">
+            <Pole etykieta="Pusta" opcjonalne><PoleKwoty grosze={kwotaPusta} przyZmianie={ustawKwotePusta} /></Pole>
+            <Pole etykieta="Wypełniona" echo={`w groszach: ${kwota}`}><PoleKwoty grosze={kwota} przyZmianie={ustawKwota} /></Pole>
+            <Pole etykieta="Wpisz 0,001 i wyjdź z pola" echo={`w groszach: ${kwotaMala === null ? 'brak' : kwotaMala}`}><PoleKwoty grosze={kwotaMala} przyZmianie={ustawKwoteMala} /></Pole>
+          </div>
+        </Karta>
+      </BlokPodgladu>
+
+      <BlokPodgladu
+        tytul="Pola wspólne: adres, tożsamość, dokument, typ osoby"
+        opis="Te same komponenty w kartotece, kreatorze i we wniosku klienta (FAZA 1 pkt 2)."
+      >
+        <Karta>
+          <div className="siatka-2">
+            <PoleAdres etykieta="Adres — Polska (maska 00-000)" dane={adresPl} przyZmianie={(l) => ustawAdresPl((p) => ({ ...p, ...l }))} idPrefiks="podglad-pl" />
+            <PoleAdres
+              etykieta="Adres zagraniczny, z błędem"
+              dane={adresZagr}
+              przyZmianie={(l) => ustawAdresZagr((p) => ({ ...p, ...l }))}
+              idPrefiks="podglad-de"
+              bledy={{ nr_domu: 'Wpisz numer domu.' }}
+            />
+          </div>
+          <p className="podstawa-prawna">Jeden formatter do widoków i pism: „{formatujAdres(adresPl)}” · „{formatujAdres(adresZagr)}”</p>
+          <div className="rozdzielacz" />
+          <div className="siatka-3">
+            <PoleTozsamosc dane={tozsamosc1} przyZmianie={(l) => ustawTozsamosc1((p) => ({ ...p, ...l }))} idPrefiks="podglad-t1" />
+            <PoleTozsamosc dane={tozsamosc2} przyZmianie={(l) => ustawTozsamosc2((p) => ({ ...p, ...l }))} idPrefiks="podglad-t2" />
+            <PoleTozsamosc
+              dane={tozsamosc3} przyZmianie={(l) => ustawTozsamosc3((p) => ({ ...p, ...l }))} idPrefiks="podglad-t3"
+              bledy={{ data_urodzenia: 'Wpisz datę urodzenia — bez numeru PESEL jest obowiązkowa.' }}
+            />
+          </div>
+          <div className="rozdzielacz" />
+          <div className="siatka-2">
+            <PoleDowod rodzaj={dowod.dowod_rodzaj} numer={dowod.dowod_numer} przyZmianie={(l) => ustawDowod((p) => ({ ...p, ...l }))} idPrefiks="podglad" />
+            <WyborTypuOsoby wartosc={typOsoby} przyZmianie={ustawTypOsoby} pytanie="Kto jest akcjonariuszem?" />
+          </div>
+        </Karta>
+      </BlokPodgladu>
+
+      <BlokPodgladu
+        tytul="Walidacja (wzorzec GOV.UK)"
+        opis="Po opuszczeniu pola, nie przy każdym znaku. Przy próbie przejścia dalej — podsumowanie u góry z odnośnikami do pól."
+      >
+        <Karta>
+          <PodsumowanieBledow
+            tytul="Popraw, zanim przejdziesz dalej"
+            bledy={[
+              { pole: 'podglad-blad-nazwisko', tresc: 'Wpisz nazwisko.' },
+              { pole: 'podglad-t3-data_urodzenia', tresc: 'Wpisz datę urodzenia — bez numeru PESEL jest obowiązkowa.' },
+            ]}
+          />
+          <div className="siatka-3">
+            <Pole etykieta="Nazwisko" id="podglad-blad-nazwisko" blad="Wpisz nazwisko."><input type="text" /></Pole>
+            <Pole etykieta="PESEL" ostrzezenie="Suma kontrolna numeru PESEL się nie zgadza — sprawdź numer z dokumentem."><input type="text" defaultValue="44051401358" /></Pole>
+            <Pole etykieta="Telefon" opcjonalne><input type="tel" /></Pole>
+          </div>
+        </Karta>
+      </BlokPodgladu>
+
+      <BlokPodgladu
+        tytul="Formularz osoby — wspólny dla kartoteki i portalu"
+        opis="Jeden FormularzOsoby; tryb decyduje o polach zależnych od roli. Kancelaria dokłada pod nim AML i notatki (panel boczny kartoteki)."
+      >
+        <Karta>
+          <div className="rzad" style={{ marginBottom: 'var(--od-16)' }}>
+            <Zakladki
+              zakladki={[{ kod: 'portal', nazwa: 'Portal klienta' }, { kod: 'kancelaria', nazwa: 'Kancelaria' }]}
+              biezaca={trybFormularza}
+              przyZmianie={ustawTrybFormularza}
+            />
+            <button type="button" className="btn btn-maly" onClick={walidacjaOsoby.pokazWszystkie}>Pokaż wszystkie błędy</button>
+            <button type="button" className="btn btn-maly" onClick={() => ustawPanel(true)}>Otwórz panel boczny kartoteki</button>
+          </div>
+          {walidacjaOsoby.pokazywaneWszystkie && (
+            <PodsumowanieBledow bledy={listaBledowOsoby(walidacjaOsoby.widoczne, 'podglad-osoba')} />
+          )}
+          <FormularzOsoby
+            dane={osobaFormularza}
+            przyZmianie={(l) => ustawOsobeFormularza((p) => ({ ...p, ...l }))}
+            tryb={trybFormularza}
+            bledy={walidacjaOsoby.widoczne}
+            przyOpuszczeniu={walidacjaOsoby.dotknij}
+            idPrefiks="podglad-osoba"
+          />
+        </Karta>
+      </BlokPodgladu>
+
+      <BlokPodgladu tytul="Statusy, liczniki, ładowanie" opis="Wszystko na Pigulce. Licznik = sprawy wymagające działania. Szkielet zamiast spinnera.">
+        <Karta>
+          <div className="rzad" style={{ flexWrap: 'wrap', marginBottom: 'var(--od-16)' }}>
+            {Object.keys(NAZWY_STATUSU).map((st) => <StatusSpolki key={st} status={st} />)}
+            <StatusAml status="brak" /><StatusAml status="wykonane" /><StatusAml status="niemozliwe" />
+            <ZnacznikPrzegladuAml wymaga />
+          </div>
+          <div className="rzad" style={{ marginBottom: 'var(--od-16)' }}>
+            <span className="szyna-poz" style={{ maxWidth: 220 }}>Wnioski <Licznik wartosc={3} opis="wniosków do weryfikacji" /></span>
+            <span className="szyna-poz" style={{ maxWidth: 220 }}>Zgłoszenia <Licznik wartosc={0} /></span>
+          </div>
+          <Wyniki bledy={['Zbywca nie ma tylu akcji w tej serii.']} ostrzezenia={['Akcjonariusz nie ma potwierdzonej procedury AML.']} />
+          <Spinner />
+        </Karta>
+      </BlokPodgladu>
+
+      <BlokPodgladu tytul="Kreator: kroki klikalne i przyciski" opis="Wstecz zawsze, do przodu do kroków już ukończonych. Wyłączony przycisk mówi, dlaczego. Etykieta = skutek.">
+        <Karta>
+          <Kroki kroki={['Spółka', 'Umowa', 'Pierwsza emisja', 'Weryfikacja']} biezacy={krokKreatora} osiagniety={3} przyWyborze={ustawKrokKreatora} />
+          <NawigacjaKreatora
+            wstecz={{ etykieta: 'Wstecz', przy: () => ustawKrokKreatora((k) => Math.max(0, k - 1)) }}
+            dalej={{ etykieta: 'Otwórz rejestr', wylaczony: true, powod: 'Brakuje daty wpisu emisji do KRS — uzupełnij ją w kroku „Pierwsza emisja”.' }}
+          />
         </Karta>
       </BlokPodgladu>
 
@@ -396,13 +530,14 @@ function EkranPodgladu() {
             odmiana="info"
             tresc="Rejestr jest niezmienialny — sprostowanie jest nowym zdarzeniem wskazującym zdarzenie prostowane."
           />
-          <Pole etykieta="Uzasadnienie" wymagane>
+          <Pole etykieta="Uzasadnienie">
             <textarea autoFocus />
           </Pole>
         </Modal>
       )}
 
       {paleta && <PaletaPolecen przyZamknieciu={() => ustawPaleta(false)} />}
+      {panel && <PanelOsoby przyZamknieciu={() => ustawPanel(false)} przyZapisie={() => ustawPanel(false)} />}
     </>
   );
 }

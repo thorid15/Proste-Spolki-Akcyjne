@@ -43,7 +43,7 @@ function PozycjaKreatora({
   return (
     <div className="pozycja">
       <Pole etykieta={etykietaOsoby} wymagane>
-        <WyborOsoby
+        <WyborZKartoteki
           wartosc={pozycja[kluczOsoby]}
           wyklucz={wyklucz}
           przyZmianie={(id) => ustawPozycje({ ...pozycja, [kluczOsoby]: id })}
@@ -695,10 +695,10 @@ function KrokObciazenie({ dane, ustawDane, spolka }) {
             </select>
           </Pole>
           <Pole etykieta="Akcjonariusz, którego akcje są obciążane" wymagane>
-            <WyborOsoby wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id })} />
+            <WyborZKartoteki wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id })} />
           </Pole>
           <Pole etykieta="Zastawnik / użytkownik" wymagane>
-            <WyborOsoby
+            <WyborZKartoteki
               wartosc={dane.osoba_id}
               wyklucz={dane.akcjonariusz_osoba_id ? [Number(dane.akcjonariusz_osoba_id)] : []}
               przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })}
@@ -764,10 +764,10 @@ function KrokZajecie({ dane, ustawDane, spolka }) {
       {dane.emisja_zdarzenie_id && (
         <>
           <Pole etykieta="Organ egzekucyjny" podpowiedz="Komornik sądowy albo administracyjny organ egzekucyjny — z kartoteki.">
-            <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
+            <WyborZKartoteki wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
           </Pole>
           <Pole etykieta="Akcjonariusz (dłużnik)" podpowiedz="Jeśli znany — numery dobiorą się automatycznie z jego pakietu.">
-            <WyborOsoby wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id, zakresy_tekst: '' })} />
+            <WyborZKartoteki wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id, zakresy_tekst: '' })} />
           </Pole>
           {dane.akcjonariusz_osoba_id ? (
             <Pole etykieta="Liczba akcji objętych zajęciem" wymagane>
@@ -850,7 +850,7 @@ function KrokUprawnienie({ dane, ustawDane, spolka }) {
       )}
       {dane.zakres === 'akcjonariusz' && (
         <Pole etykieta="Akcjonariusz" wymagane>
-          <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
+          <WyborZKartoteki wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
         </Pole>
       )}
       <Pole etykieta="Tytuł"><input type="text" {...pole('tytul')} /></Pole>
@@ -936,7 +936,7 @@ function KrokZmianaDanychAkcjonariusza({ dane, ustawDane }) {
   return (
     <>
       <Pole etykieta="Akcjonariusz" wymagane>
-        <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id, po: {} })} />
+        <WyborZKartoteki wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id, po: {} })} />
       </Pole>
       {osoba && (
         <>
@@ -963,7 +963,7 @@ function KrokZobowiazanie({ dane, ustawDane, spolka }) {
   return (
     <>
       <Pole etykieta="Akcjonariusz składający oświadczenie" wymagane>
-        <WyborOsoby wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id })} />
+        <WyborZKartoteki wartosc={dane.akcjonariusz_osoba_id} przyZmianie={(id) => ustawDane({ ...dane, akcjonariusz_osoba_id: id })} />
       </Pole>
       <Pole etykieta="Rodzaj zobowiązania">
         <select value={dane.rodzaj || 'przeniesienie'} onChange={(z) => ustawDane({ ...dane, rodzaj: z.target.value })}>
@@ -1076,7 +1076,7 @@ function KrokPrzeniesienieUlamka({ dane, ustawDane, spolka }) {
           </Pole>
 
           <Pole etykieta="Nabywca" wymagane>
-            <WyborOsoby
+            <WyborZKartoteki
               wartosc={dane.nabywca_osoba_id}
               przyZmianie={(id) => ustawDane({ ...dane, nabywca_osoba_id: id })}
               wyklucz={[Number(dane.zbywca_osoba_id)].filter(Boolean)}
@@ -1116,7 +1116,7 @@ function KrokPrzedstawiciel({ dane, ustawDane, spolka }) {
             <input type="number" min="1" value={dane.nr ?? ''} onChange={(z) => ustawDane({ ...dane, nr: z.target.value })} />
           </Pole>
           <Pole etykieta="Wspólny przedstawiciel" podpowiedz="Musi być jednym ze współuprawnionych z tej akcji. Zostaw puste, by usunąć wskazanie.">
-            <WyborOsoby
+            <WyborZKartoteki
               wartosc={dane.przedstawiciel_osoba_id}
               przyZmianie={(id) => ustawDane({ ...dane, przedstawiciel_osoba_id: id })}
             />
@@ -1144,7 +1144,7 @@ function KrokPokrycieAkcji({ dane, ustawDane, spolka }) {
       {dane.emisja_zdarzenie_id && (
         <>
           <Pole etykieta="Akcjonariusz" wymagane>
-            <WyborOsoby wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
+            <WyborZKartoteki wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })} />
           </Pole>
           <Pole etykieta="Wzmianka o pokryciu" wymagane>
             <select value={dane.pokryta || ''} onChange={(z) => ustawDane({ ...dane, pokryta: z.target.value })}>
@@ -1493,7 +1493,7 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawy
                   wymagane
                   podpowiedz="Spółka albo inna osoba mająca interes prawny — art. 300(34) § 1 KSH. Kogoś spoza kartoteki najpierw się do niej dopisuje."
                 >
-                  <WyborOsoby wartosc={zadajacyOsobaId} przyZmianie={ustawZadajacegoOsobaId} />
+                  <WyborZKartoteki wartosc={zadajacyOsobaId} przyZmianie={ustawZadajacegoOsobaId} />
                 </Pole>
                 <Pole
                   etykieta="W jakim charakterze"

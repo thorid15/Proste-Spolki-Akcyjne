@@ -19,22 +19,8 @@
 
 const KROKI_WNIOSKU = ['Spółka', 'Reprezentant', 'Akcjonariusze', 'Podsumowanie'];
 
-const PUSTY_AKCJONARIUSZ_WNIOSKU = {
-  typ: 'fizyczna',
-  nazwisko: '', imie: '', nazwa: '',
-  pesel: '', bez_pesel: 0, data_urodzenia: '', plec: '',
-  nip: '', regon: '', numer_w_rejestrze: '', nazwa_rejestru: 'KRS',
-  kod_pocztowy: '', miejscowosc: '', ulica: '', nr_domu: '', nr_lokalu: '',
-  adres_doreczen: '', adres_edoreczen: '', email: '', telefon: '',
-  // Art. 300(33) § 1 pkt 3 KSH — do rejestru wchodzi JEDEN adres, wskazany
-  // świadomie, a nie wszystkie wypełnione naraz.
-  rodzaj_adresu_rejestrowego: 'zamieszkania',
-  // Art. 300(33) § 1 pkt 4 KSH — zgoda dotyczy adresu E-MAIL i jest
-  // oświadczeniem samego akcjonariusza, nie zarządu (stąd trzy stany).
-  zgoda_email_status: 'brak',
-  // Art. 300(33) § 1 pkt 5 KSH — współwłasność akcji.
-  wspolwlasnosc: 'brak', wspolwlasciciele: '', udzial_licznik: '', udzial_mianownik: '',
-};
+/* Jeden zestaw pól osoby dla wniosku i kartoteki — formularz-osoby.js. */
+const PUSTY_AKCJONARIUSZ_WNIOSKU = PUSTA_OSOBA_FORMULARZA;
 
 const OPIS_ADRESU_REJESTROWEGO = {
   zamieszkania: 'adres zamieszkania / siedziby',
@@ -122,7 +108,7 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie }) {
       <div className="dokument-pozycja-podpis">
         {podpisany ? (
           <>
-            <Znacznik odmiana="zielony">podpisany</Znacznik>
+            <Pigulka odmiana="rejestr">podpisany</Pigulka>
             <a
               className="dokument-pozycja-skan"
               href={`/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`}
@@ -174,11 +160,7 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie }) {
 
 /** Adres zamieszkania albo siedziby złożony z pól formularza — jedną linią. */
 function adresAkcjonariusza(a) {
-  const linia = [
-    [a.kod_pocztowy, a.miejscowosc].filter(Boolean).join(' ').trim(),
-    [a.ulica, a.nr_domu, a.nr_lokalu && `m. ${a.nr_lokalu}`].filter(Boolean).join(' ').trim(),
-  ].filter(Boolean).join(', ');
-  return linia || null;
+  return formatujAdres(a) || null;
 }
 
 /**
@@ -299,10 +281,12 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
   // nadpisałoby nimi wartości domyślne — dlatego wartości puste odpadają
   // przed scaleniem. Bez tego świeża pozycja gubiła np. „KRS” w polu
   // „Nazwa rejestru” i wracała potem jako brak ustawowy.
-  const [dane, ustawDane] = useState({
-    ...PUSTY_AKCJONARIUSZ_WNIOSKU,
-    ...Object.fromEntries(Object.entries(pozycja).filter(([, v]) => v !== null && v !== undefined)),
-  });
+  const [dane, ustawDane] = useState(() => osobaDoFormularza(pozycja, PUSTY_AKCJONARIUSZ_WNIOSKU));
+  const idPrefiks = `akcjonariusz-${pozycja.id}`;
+  // B4: reguła „PESEL albo data urodzenia" i pozostałe braki ustawowe
+  // pokazują się PRZY POLACH — po ich opuszczeniu albo przy „Gotowe" — a
+  // nie dopiero na podsumowaniu wniosku.
+  const walidacja = useWalidacjaOsoby(dane, { tryb: 'portal' });
   const [usuwanie, ustawUsuwanie] = useState(false);
   const [zamykanie, ustawZamykanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
@@ -311,31 +295,6 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
     (wartosci) => API.put(`/api/psa/portal/wniosek/akcjonariusze/${pozycja.id}`, wartosci),
     { wlaczony: edytowalne, przyZapisie: (w) => przyZapisie(w.akcjonariusz) }
   );
-
-  const pole = (klucz) => ({
-    value: dane[klucz] ?? '',
-    onChange: (z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value })),
-    disabled: !edytowalne,
-    // Autouzupełnianie przeglądarki podstawiało tu WŁASNE dane właściciela
-    // komputera (w kancelarii: nazwę i adres kancelarii), nadpisując to, co
-    // klient wpisał — i taka nazwa szła potem do umowy. Formularz rejestru
-    // opisuje cudze dane, więc książka adresowa przeglądarki nie ma tu czego
-    // szukać.
-    autoComplete: 'off',
-  });
-
-  // Autouzupelnienie daty urodzenia i plci z numeru PESEL — jednorazowe,
-  // uzupelnia wylacznie puste pola, wiec nie nadpisuje niczyjej poprawki.
-  const pesel = dane.typ === 'fizyczna' ? parsujPesel(dane.pesel) : null;
-  useEffect(() => {
-    if (!pesel) return;
-    ustawDane((p) => ({
-      ...p,
-      data_urodzenia: p.data_urodzenia || pesel.data_urodzenia,
-      plec: p.plec || pesel.plec,
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dane.pesel]);
 
   async function usun() {
     if (!window.confirm('Usunąć tego akcjonariusza z wniosku?')) return;
@@ -357,6 +316,10 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
    */
   async function zamknij() {
     if (!edytowalne) { przyZamknieciu(); return; }
+    if (!walidacja.czyPoprawne) {
+      walidacja.pokazWszystkie();
+      return;
+    }
     ustawZamykanie(true);
     ustawBlad(null);
     try {
@@ -369,8 +332,7 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
     }
   }
 
-  const bezPesel = Boolean(Number(dane.bez_pesel));
-  const osobaFizyczna = dane.typ === 'fizyczna';
+  const osobaFizyczna = dane.typ !== 'prawna';
   // Dopóki pozycja nie ma nazwiska ani firmy, nagłówek nie udaje, że kogoś
   // opisuje: „osoba bez nazwiska" nad pustym formularzem brzmi jak zarzut.
   const nazwany = String(osobaFizyczna ? dane.nazwisko : dane.nazwa || '').trim() !== '';
@@ -391,167 +353,19 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
         />
       )}
 
-      <Pole etykieta="Rodzaj podmiotu">
-        <select
-          value={dane.typ}
-          onChange={(z) => ustawDane((p) => ({ ...p, typ: z.target.value }))}
-          disabled={!edytowalne}
-        >
-          <option value="fizyczna">Osoba fizyczna</option>
-          <option value="prawna">Osoba prawna lub jednostka organizacyjna</option>
-        </select>
-      </Pole>
-
-      {osobaFizyczna ? (
-        <>
-          <div className="siatka-2">
-            <Pole etykieta="Imię"><input type="text" {...pole('imie')} /></Pole>
-            <Pole etykieta="Nazwisko" wymagane><input type="text" {...pole('nazwisko')} /></Pole>
-          </div>
-          <div className="siatka-2">
-            {!bezPesel && (
-              <Pole etykieta="PESEL">
-                <input type="text" {...pole('pesel')} maxLength={11} placeholder="11 cyfr" />
-              </Pole>
-            )}
-            <Pole etykieta="Data urodzenia" wymagane={bezPesel}>
-              <PoleDaty
-                wartosc={dane.data_urodzenia || ''}
-                przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))}
-                wylaczone={!edytowalne}
-              />
-            </Pole>
-          </div>
-          <label className="chk">
-            <input
-              type="checkbox"
-              checked={bezPesel}
-              onChange={(z) =>
-                ustawDane((p) => ({
-                  ...p,
-                  bez_pesel: z.target.checked ? 1 : 0,
-                  // Deklaracja braku PESEL-u i wpisany numer wykluczają się —
-                  // serwer odrzuciłby taki zapis, więc czyścimy pole od razu.
-                  pesel: z.target.checked ? '' : p.pesel,
-                }))
-              }
-              disabled={!edytowalne}
-            />
-            <span className="chk-tresc">Akcjonariusz nie posiada numeru PESEL</span>
-          </label>
-          {pesel && !pesel.poprawnaSumaKontrolna && (
-            <Komunikat
-              odmiana="uwaga"
-              tresc="Suma kontrolna numeru PESEL się nie zgadza — sprawdź numer. Zapis nie jest blokowany."
-            />
-          )}
-        </>
-      ) : (
-        <>
-          <Pole etykieta="Firma (nazwa)" wymagane><input type="text" {...pole('nazwa')} /></Pole>
-          <div className="siatka-2">
-            <Pole etykieta="Numer we właściwym rejestrze">
-              <input type="text" {...pole('numer_w_rejestrze')} placeholder="0000123456" />
-            </Pole>
-            <Pole etykieta="Nazwa rejestru"><input type="text" {...pole('nazwa_rejestru')} /></Pole>
-          </div>
-          <div className="siatka-2">
-            <Pole etykieta="NIP" opcjonalne><input type="text" {...pole('nip')} /></Pole>
-            <Pole etykieta="REGON" opcjonalne><input type="text" {...pole('regon')} /></Pole>
-          </div>
-        </>
+      {walidacja.pokazywaneWszystkie && (
+        <PodsumowanieBledow bledy={listaBledowOsoby(walidacja.widoczne, idPrefiks)} tytul="Uzupełnij dane akcjonariusza" />
       )}
 
-      <div className="siatka-2">
-        <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} placeholder="00-000" /></Pole>
-        <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
-      </div>
-      <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
-      <div className="siatka-2">
-        <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
-        <Pole etykieta="Nr lokalu" opcjonalne><input type="text" {...pole('nr_lokalu')} /></Pole>
-      </div>
-
-      <div className="siatka-2">
-        <Pole etykieta="Adres e-mail" wymagane podpowiedz="Potrzebny do zaproszenia akcjonariusza do portalu po otwarciu rejestru — niezależny od zgody na komunikację elektroniczną poniżej.">
-          <input type="text" {...pole('email')} placeholder="przyklad@example.com" />
-        </Pole>
-        <Pole etykieta="Numer telefonu" opcjonalne><input type="text" {...pole('telefon')} /></Pole>
-      </div>
-
-      <Przelacznik
-        wlaczony={Boolean(dane.zgoda_email_status) && dane.zgoda_email_status !== 'brak'}
-        wylaczony={!edytowalne || dane.zgoda_email_status === 'potwierdzona'}
-        przyZmianie={(v) =>
-          ustawDane((p) => ({ ...p, zgoda_email_status: v ? 'zadeklarowana' : 'brak' }))
-        }
-        etykieta="Akcjonariusz wyraża zgodę na komunikację elektroniczną"
-        opis="Przygotujemy oświadczenie do podpisu. Dopiero podpisane oświadczenie wprowadza adres e-mail do treści rejestru."
+      <FormularzOsoby
+        dane={dane}
+        przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
+        tryb="portal"
+        bledy={walidacja.widoczne}
+        przyOpuszczeniu={walidacja.dotknij}
+        idPrefiks={idPrefiks}
+        edytowalne={edytowalne}
       />
-      {dane.zgoda_email_status === 'potwierdzona' && (
-        <Komunikat odmiana="ok" tresc="Zgoda potwierdzona podpisanym oświadczeniem akcjonariusza." />
-      )}
-      {dane.zgoda_email_status && dane.zgoda_email_status !== 'brak' && !dane.email && (
-        <Komunikat odmiana="uwaga" tresc="Zaznaczono zgodę, ale nie podano adresu e-mail." />
-      )}
-
-      <Przelacznik
-        wlaczony={Boolean(dane.wspolwlasnosc) && dane.wspolwlasnosc !== 'brak'}
-        wylaczony={!edytowalne}
-        przyZmianie={(v) =>
-          ustawDane((p) => ({
-            ...p,
-            wspolwlasnosc: v ? 'laczna' : 'brak',
-            wspolwlasciciele: v ? p.wspolwlasciciele : '',
-            udzial_licznik: v ? p.udzial_licznik : '',
-            udzial_mianownik: v ? p.udzial_mianownik : '',
-          }))
-        }
-        etykieta="Akcje należą do kilku osób wspólnie"
-        opis="Przy współwłasności rejestr wymienia pozostałych współwłaścicieli, a przy współwłasności ułamkowej także wielkość udziału."
-        dzieci={
-          <>
-            <Pole etykieta="Rodzaj współwłasności">
-              <select
-                value={dane.wspolwlasnosc && dane.wspolwlasnosc !== 'brak' ? dane.wspolwlasnosc : 'laczna'}
-                onChange={(z) => ustawDane((p) => ({ ...p, wspolwlasnosc: z.target.value }))}
-                disabled={!edytowalne}
-              >
-                <option value="laczna">Współwłasność łączna (np. małżeńska)</option>
-                <option value="ulamkowa">Współwłasność w częściach ułamkowych</option>
-              </select>
-            </Pole>
-            <Pole etykieta="Pozostali współwłaściciele" wymagane podpowiedz="Imiona i nazwiska albo firmy (nazwy), oddzielone przecinkami.">
-              <input type="text" {...pole('wspolwlasciciele')} />
-            </Pole>
-            {dane.wspolwlasnosc === 'ulamkowa' && (
-              <div className="siatka-2">
-                <Pole etykieta="Udział — licznik" wymagane>
-                  <input type="number" min="1" {...pole('udzial_licznik')} />
-                </Pole>
-                <Pole etykieta="Udział — mianownik" wymagane>
-                  <input type="number" min="1" {...pole('udzial_mianownik')} />
-                </Pole>
-              </div>
-            )}
-          </>
-        }
-      />
-
-      <ZwijanaSekcja
-        tytul="Inne adresy do doręczeń"
-        wypelniona={Boolean(dane.adres_doreczen || dane.adres_edoreczen)}
-      >
-        <Pole
-          etykieta="Inny adres do doręczeń"
-          podpowiedz="Jeśli korespondencja ma iść gdzie indziej niż na adres zamieszkania albo siedziby."
-        >
-          <input type="text" {...pole('adres_doreczen')} />
-        </Pole>
-        <Pole etykieta="Adres do doręczeń elektronicznych" podpowiedz="Skrzynka e-Doręczeń, jeśli akcjonariusz ją posiada.">
-          <input type="text" {...pole('adres_edoreczen')} placeholder="AE:PL-…" />
-        </Pole>
-      </ZwijanaSekcja>
 
       <NawigacjaKreatora
         wstecz={{ etykieta: 'Wróć do listy', przy: przyZamknieciu }}
@@ -631,7 +445,7 @@ function PoleDowoduReprezentanta({ wniosek, edytowalne, przyZmianie }) {
             <a className="lista-plikow-nazwa" href="/api/psa/portal/wniosek/dowod" target="_blank" rel="noopener">
               {wniosek.dowod_nazwa_pliku}
             </a>
-            <Znacznik odmiana="zielony">wgrany</Znacznik>
+            <Pigulka odmiana="rejestr">wgrany</Pigulka>
             {edytowalne && (
               <button type="button" className="btn-tekstowy" onClick={usun} disabled={wysylanie}>
                 {wysylanie ? 'Usuwanie…' : 'usuń'}

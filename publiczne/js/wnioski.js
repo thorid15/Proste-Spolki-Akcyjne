@@ -14,22 +14,22 @@
    literówka klienta wędrowała wprost do umowy. */
 
 const STAN_WNIOSKU = {
-  w_przygotowaniu: { etykieta: 'w przygotowaniu', znacznik: 'neutralny' },
+  w_przygotowaniu: { etykieta: 'w przygotowaniu', znacznik: 'neutralna' },
   zlozony: { etykieta: 'złożony — do sprawdzenia', znacznik: 'mosiadz' },
-  do_uzupelnienia: { etykieta: 'odesłany do uzupełnienia', znacznik: 'bordo' },
-  umowa_wygenerowana: { etykieta: 'dokumenty u klienta', znacznik: 'neutralny' },
-  umowa_podpisana: { etykieta: 'podpisane — do przyjęcia', znacznik: 'zielony' },
-  przyjety: { etykieta: 'przyjęty', znacznik: 'zielony' },
-  odrzucony: { etykieta: 'odrzucony', znacznik: 'bordo' },
+  do_uzupelnienia: { etykieta: 'odesłany do uzupełnienia', znacznik: 'sygnal' },
+  umowa_wygenerowana: { etykieta: 'dokumenty u klienta', znacznik: 'neutralna' },
+  umowa_podpisana: { etykieta: 'podpisane — do przyjęcia', znacznik: 'rejestr' },
+  przyjety: { etykieta: 'przyjęty', znacznik: 'rejestr' },
+  odrzucony: { etykieta: 'odrzucony', znacznik: 'sygnal' },
 };
 
 function ZnacznikWniosku({ status }) {
-  const s = STAN_WNIOSKU[status] || { etykieta: status, znacznik: 'neutralny' };
-  return <Znacznik odmiana={s.znacznik}>{s.etykieta}</Znacznik>;
+  const s = STAN_WNIOSKU[status] || { etykieta: status, znacznik: 'neutralna' };
+  return <Pigulka odmiana={s.znacznik}>{s.etykieta}</Pigulka>;
 }
 
 function EkranWnioski() {
-  const [filtrStatus, ustawFiltrStatus] = useState('');
+  const [filtrStatus, ustawFiltrStatus] = useParametrAdresu('status', '');
   const { dane, ladowanie } = useDane(`/api/psa/wnioski${filtrStatus ? `?status=${filtrStatus}` : ''}`, [filtrStatus]);
   const wnioski = (dane && dane.wnioski) || [];
 
@@ -554,7 +554,7 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
           etykieta="Dopasowanie do kartoteki wspólnej"
           podpowiedz="Puste = przy przyjęciu wniosku powstanie nowa osoba w kartotece."
         >
-          <WyborOsoby
+          <WyborZKartoteki
             wartosc={pozycja.osoba_id}
             przyZmianie={(id) => ustawZweryfikowano(1, id)}
             typFiltr={pozycja.typ}
@@ -1152,15 +1152,15 @@ function PozycjaDokumentuKancelarii({ wniosekId, dokument, dlaKogo, przyOtwarciu
 
       <div className="dokument-pozycja-podpis">
         {dokument.udostepniono
-          ? <Znacznik odmiana="neutralny">u klienta</Znacznik>
-          : <Znacznik odmiana="mosiadz">nieudostępniony</Znacznik>}
+          ? <Pigulka odmiana="neutralna">u klienta</Pigulka>
+          : <Pigulka odmiana="mosiadz">nieudostępniony</Pigulka>}
         {/* Jeden znacznik na stan sprawdzenia, nie trzy: „sprawdzony" mówi, że
             ktoś dokument przeczytał, „podpis potwierdzony" — że sprawdził też
             odesłany skan. Ślad po poprawce treści zostaje osobno. */}
-        {stan && <Znacznik odmiana="zielony">{stan}</Znacznik>}
-        {dokument.zmodyfikowano && <Znacznik odmiana="mosiadz">treść poprawiona</Znacznik>}
+        {stan && <Pigulka odmiana="rejestr">{stan}</Pigulka>}
+        {dokument.zmodyfikowano && <Pigulka odmiana="mosiadz">treść poprawiona</Pigulka>}
         {dokument.brakujace.length > 0 && (
-          <Znacznik odmiana="bordo">{opisPustychMiejsc(dokument.brakujace.length)}</Znacznik>
+          <Pigulka odmiana="sygnal">{opisPustychMiejsc(dokument.brakujace.length)}</Pigulka>
         )}
         {podpisany ? (
           <a
@@ -1486,7 +1486,7 @@ const ZAKLADKI_WNIOSKU = [
 
 function EkranWniosekSzczegoly({ wniosekId }) {
   const { dane, ladowanie, odswiez } = useDane(`/api/psa/wnioski/${wniosekId}`);
-  const [zakladka, ustawZakladke] = useState('spolka');
+  const [zakladka, ustawZakladke] = useParametrAdresu('zakladka', 'spolka');
   // Lista dokumentów zmienia się częściej niż reszta wniosku (wystawienie,
   // poprawka treści, udostępnienie), więc żyje osobno — inaczej każda z tych
   // czynności ciągnęłaby ze sobą ponowne odpytanie KRS.

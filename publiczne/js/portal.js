@@ -37,7 +37,7 @@ function useKancelaria() {
 function OpisPortalu({ tytul, lead, punkty }) {
   return (
     <div className="brama-opis">
-      <div className="brama-tytul">{tytul}</div>
+      <h1 className="brama-tytul">{tytul}</h1>
       <div className="brama-lead">{lead}</div>
       <div className="brama-punkty">
         {punkty.map((p) => (
@@ -59,13 +59,13 @@ function RamaPubliczna({ opis, children }) {
   const kancelaria = useKancelaria();
   return (
     <div className="pion" style={{ minHeight: '100vh' }}>
-      <div className="marka-pasek bez-druku">
+      <div className="marka-pasek bez-druku" role="banner">
         <div className="marka-pasek-nazwa">{kancelaria.nazwa}</div>
       </div>
-      <div className="brama rama-publiczna-tresc">
+      <main className="brama rama-publiczna-tresc">
         {opis}
         <div className="brama-karta">{children}</div>
-      </div>
+      </main>
       {/* Ta sama szerokość, co `.brama` nad nią. */}
       <StopkaKancelarii kancelaria={kancelaria} szerokosc="1080px" />
     </div>
@@ -556,21 +556,21 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
   // jeden miał nawigację w pionie, a drugi rząd przycisków w belce.
   return (
     <div className="powloka">
-      <div className="marka-pasek bez-druku">
+      <div className="marka-pasek bez-druku" role="banner">
         <div className="marka-pasek-nazwa">{kancelaria.nazwa}</div>
       </div>
       <SzynaPortalu sciezka={sciezka} rola={konto.rola} doZaplaty={doZaplaty} />
       <NawigacjaPortaluWaska sciezka={sciezka} rola={konto.rola} doZaplaty={doZaplaty} />
       <div className="obszar">
-        <header className="topbar bez-druku">
+        <div className="topbar bez-druku" role="region" aria-label="Tytuł ekranu">
           <div>
-            <div className="topbar-tytul">{opisEkranuPortalu(sciezka).tytul}</div>
+            <h1 className="topbar-tytul">{opisEkranuPortalu(sciezka).tytul}</h1>
             <div className="topbar-podtytul">
               {konto.email} · {ETYKIETA_ROLI_KONTA[konto.rola] || konto.rola}
             </div>
           </div>
           <button className="btn btn-sm" onClick={wyloguj} disabled={wylogowywanie}>Wyloguj się</button>
-        </header>
+        </div>
         <main className={`tresc ${waski ? 'tresc-waska' : ''}`}>{children}</main>
         {/* Wąskie widoki portalu (wniosek, zgłoszenie) mają treść na 880 px —
             stopka idzie za nimi, zamiast rozpychać się na pełne 1240 px. */}
@@ -584,7 +584,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
 function NawigacjaPortaluWaska({ sciezka, rola, doZaplaty }) {
   const aktywna = (poz) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
   return (
-    <nav className="topbar-nawigacja bez-druku">
+    <nav className="topbar-nawigacja bez-druku" aria-label="Nawigacja główna">
       {kartyNawigacji(rola).map((poz) => (
         <button
           key={poz.sciezka}
@@ -826,7 +826,7 @@ function EkranRejestrPortal({ spolkaId }) {
                     <td className="prawo">{fmt.liczba(a.ilosc)}</td>
                     <td className="mono">{a.numery}</td>
                     <td className="prawo">{fmt.procent(a.procent)}</td>
-                    <td>{a.obciazenia.length > 0 ? <Znacznik odmiana="bordo">{a.obciazenia.length}</Znacznik> : '—'}</td>
+                    <td>{a.obciazenia.length > 0 ? <Pigulka odmiana="sygnal">{a.obciazenia.length}</Pigulka> : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1052,8 +1052,8 @@ function EkranZgloszeniePortal({ spolkaId }) {
    STATUS ZGŁOSZEŃ
    ───────────────────────────────────────────────────── */
 const ZNACZNIK_STANU = {
-  nowa: 'neutralny', weryfikacja: 'lupek', wstrzymana: 'oliwka',
-  wpisana: 'zielony', odmowa: 'bordo', anulowana: 'neutralny',
+  nowa: 'neutralna', weryfikacja: 'neutralna', wstrzymana: 'mosiadz',
+  wpisana: 'rejestr', odmowa: 'sygnal', anulowana: 'neutralna',
 };
 
 /* Ten sam pasek starzenia co w kolejce spraw kancelarii (faza 3.1) —
@@ -1095,7 +1095,7 @@ function EkranSprawyPortal() {
               <td>{s.spolka_nazwa}</td>
               <td>{s.typ_nazwa}</td>
               <td>{fmt.dataCzas(s.data_wplywu)}</td>
-              <td><Znacznik odmiana={ZNACZNIK_STANU[s.stan] || 'neutralny'}>{s.stan}</Znacznik></td>
+              <td><Pigulka odmiana={ZNACZNIK_STANU[s.stan] || 'neutralna'}>{s.stan}</Pigulka></td>
               <td className="przyciemnione">
                 {s.stan === 'wpisana' || s.stan === 'odmowa' || s.stan === 'anulowana'
                   ? '—'
@@ -1221,8 +1221,8 @@ function EkranInformacjaPortal({ spolkaId }) {
 
 const OPIS_STATUSU_OPLATY = {
   naliczona: { odmiana: undefined, tekst: 'do zapłaty' },
-  zafakturowana: { odmiana: 'oliwka', tekst: 'na fakturze' },
-  oplacona: { odmiana: 'zielony', tekst: 'opłacona' },
+  zafakturowana: { odmiana: 'mosiadz', tekst: 'na fakturze' },
+  oplacona: { odmiana: 'rejestr', tekst: 'opłacona' },
 };
 
 /**
@@ -1286,7 +1286,7 @@ function EkranPlatnosciPortal() {
           </div>
         </div>
         <div className="pozycja-platnosci-kwota">{fmt.zlote(o.kwota_grosze)}</div>
-        <Znacznik odmiana={status.odmiana}>{status.tekst}</Znacznik>
+        <Pigulka odmiana={status.odmiana}>{status.tekst}</Pigulka>
         <div className="pozycja-platnosci-akcja">
           {o.status !== 'oplacona' && dane.platnosci_wlaczone && (
             <button className="btn btn-glowny btn-maly" disabled={wysylanie === o.id} onClick={() => zaplac(o)}>

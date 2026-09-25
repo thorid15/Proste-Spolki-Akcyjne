@@ -7,8 +7,8 @@
    wskazać, z którego BRZMIENIA wzoru powstało pismo sprzed roku. */
 
 function ZnacznikPoprawnosci({ szablon }) {
-  if (szablon.poprawny) return <Znacznik odmiana="zielony">gotowy</Znacznik>;
-  return <Znacznik odmiana="bordo">wymaga poprawy</Znacznik>;
+  if (szablon.poprawny) return <Pigulka odmiana="rejestr">gotowy</Pigulka>;
+  return <Pigulka odmiana="sygnal">wymaga poprawy</Pigulka>;
 }
 
 function ListaKluczy({ szablon }) {

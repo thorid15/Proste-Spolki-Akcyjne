@@ -134,7 +134,7 @@ function EkranStawek() {
                   </span>
                 </td>
                 <td className="zawijaj wyciszony">{t.opis_zdarzeniem}</td>
-                <td>{t.odplatne ? 'tak' : <Znacznik odmiana="zielony">wolny od opłat</Znacznik>}</td>
+                <td>{t.odplatne ? 'tak' : <Pigulka odmiana="rejestr">wolny od opłat</Pigulka>}</td>
                 <td>
                   {t.wymaga_powiadomienia === true
                     ? `tak — ${t.kogo_powiadomic || 'zainteresowanego'}`
@@ -144,9 +144,9 @@ function EkranStawek() {
                 </td>
                 <td>
                   {dane.typy_w_kreatorze.includes(t.kod) ? (
-                    <Znacznik odmiana="zielony">w kreatorze</Znacznik>
+                    <Pigulka odmiana="rejestr">w kreatorze</Pigulka>
                   ) : (
-                    <Znacznik odmiana="neutralny">przez edycję danych spółki</Znacznik>
+                    <Pigulka odmiana="neutralna">przez edycję danych spółki</Pigulka>
                   )}
                 </td>
               </tr>

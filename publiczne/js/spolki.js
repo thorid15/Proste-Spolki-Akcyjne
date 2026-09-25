@@ -175,7 +175,16 @@ function PozycjaZalozycielska({ pozycja, ustawPozycje, usun, mozna_usunac, wyklu
  * tu samodzielnie, tak jak przy spółce zakładanej wewnętrznie.
  */
 function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
-  const [krok, ustawKrok] = useState(spolkaIstniejaca ? 2 : 0);
+  const [krok, ustawKrokWewn] = useState(spolkaIstniejaca ? 2 : 0);
+  // Najdalszy osiągnięty krok — do niego pasek kroków jest klikalny (0.4 pkt 8).
+  const [osiagniety, ustawOsiagniety] = useState(spolkaIstniejaca ? 2 : 0);
+  const [pokazBraki, ustawPokazBraki] = useState(false);
+  function ustawKrok(nowy) {
+    const k = typeof nowy === 'function' ? nowy(krok) : nowy;
+    ustawPokazBraki(false);
+    ustawOsiagniety((o) => Math.max(o, k));
+    ustawKrokWewn(k);
+  }
   const [dane, ustawDane] = useState(spolkaIstniejaca ? { ...PUSTA_SPOLKA, ...spolkaIstniejaca } : PUSTA_SPOLKA);
   const [surowyJson, ustawSurowyJson] = useState(null);
   const [pokazJson, ustawPokazJson] = useState(false);
@@ -294,18 +303,31 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
     (!zgoda.zgoda_termin_wskazania_dni || !zgoda.zgoda_cena_opis.trim() || !zgoda.zgoda_termin_zaplaty_dni);
 
   const mozeDalejZ0 = Boolean(dane.nazwa && dane.nazwa.trim());
-  const mozeDalejZ2 =
-    Boolean(emisja.seria && emisja.data_emisji) &&
-    // Bez tej daty akcje formalnie nie istnieja (art. 300(30) § 2 KSH) - lepiej
-    // zatrzymac tu, na kroku gdzie pole zyje i jest edytowalne, niz dopiero
-    // przy koncowym zapisie po odhaczeniu calej checklisty (patrz pole nizej).
-    Boolean(dane.data_utworzenia_spolki) &&
-    ileAkcji > 0 &&
-    !przekroczonyBilans &&
-    pozycje.length > 0 &&
-    pozycje.every((p) => p.osoba_id && Number(p.ilosc) > 0);
-
   const wszystkoOdhaczone = CHECKLISTA_OTWARCIA.every((p) => odhaczone[p.kod]);
+
+  /* „Dalej" nie jest wyłączany z powodu braków (FAZA 1 pkt 3, 0.4 pkt 8) —
+     kliknięcie pokazuje podsumowanie braków z odnośnikami do pól. */
+  function brakiKroku(k) {
+    const b = [];
+    if (k === 0 && !mozeDalejZ0) b.push({ pole: 'otwarcie-nazwa', tresc: 'Wpisz firmę (nazwę) spółki.' });
+    if (k === 2) {
+      if (!emisja.seria) b.push({ pole: 'otwarcie-seria', tresc: 'Wpisz oznaczenie serii, np. A.' });
+      if (!(ileAkcji > 0)) b.push({ pole: 'otwarcie-ilosc', tresc: 'Wpisz liczbę akcji w emisji.' });
+      if (!emisja.data_emisji) b.push({ pole: 'otwarcie-data-emisji', tresc: 'Wpisz datę emisji.' });
+      if (!dane.data_utworzenia_spolki) {
+        b.push({ pole: 'otwarcie-data-krs', tresc: 'Wpisz datę wpisu emisji do KRS — bez niej akcje nie istnieją (art. 300(30) § 2 KSH).' });
+      }
+      if (przekroczonyBilans) b.push({ pole: null, tresc: 'Akcjonariusze obejmują więcej akcji, niż wyemitowano — zmniejsz którąś z pozycji.' });
+      if (pozycje.length === 0 || !pozycje.every((p) => p.osoba_id)) b.push({ pole: null, tresc: 'Wybierz z kartoteki każdego akcjonariusza.' });
+      if (!pozycje.every((p) => Number(p.ilosc) > 0)) b.push({ pole: null, tresc: 'Wpisz liczbę akcji przy każdym akcjonariuszu.' });
+    }
+    return b;
+  }
+  const braki = brakiKroku(krok);
+  function dalej() {
+    if (braki.length) { ustawPokazBraki(true); return; }
+    ustawKrok((k) => k + 1);
+  }
 
   async function otworzRejestr() {
     ustawZapisywanie(true);
@@ -431,8 +453,9 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
         </div>
       </div>
 
-      <Kroki kroki={KROKI_REJESTRACJI} biezacy={krok} />
+      <Kroki kroki={KROKI_REJESTRACJI} biezacy={krok} osiagniety={osiagniety} przyWyborze={ustawKrok} />
       <Komunikat odmiana="blad" tresc={blad} />
+      {pokazBraki && braki.length > 0 && <PodsumowanieBledow bledy={braki} />}
 
       <Karta>
         {krok === 0 && (
@@ -468,7 +491,7 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
               </Pole>
             )}
 
-            <Pole etykieta="Firma (nazwa) spółki" wymagane>
+            <Pole etykieta="Firma (nazwa) spółki" id="otwarcie-nazwa">
               <input type="text" {...pole('nazwa')} />
             </Pole>
             <Pole
@@ -709,10 +732,10 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
           <>
             <div className="card-h">Pierwsza emisja</div>
             <div className="siatka-3">
-              <Pole etykieta="Oznaczenie serii" wymagane>
+              <Pole etykieta="Oznaczenie serii" id="otwarcie-seria">
                 <input type="text" value={emisja.seria} onChange={(z) => ustawEmisje((p) => ({ ...p, seria: z.target.value }))} placeholder="A" />
               </Pole>
-              <Pole etykieta="Liczba akcji" wymagane>
+              <Pole etykieta="Liczba akcji" id="otwarcie-ilosc">
                 <PoleLiczbowe sufiks="akcji" wartosc={emisja.ilosc} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, ilosc: v }))} />
               </Pole>
               <Pole etykieta="Numer pierwszej akcji" podpowiedz="Domyślnie 1.">
@@ -722,14 +745,14 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
             <div className="siatka-3">
               <Pole
                 etykieta="Data emisji"
-                wymagane
+                id="otwarcie-data-emisji"
                 podpowiedz="Przy emisji założycielskiej to data zawarcia umowy spółki (krok 1) — uzupełniona automatycznie, można nadpisać."
               >
                 <PoleDaty wartosc={emisja.data_emisji} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, data_emisji: v }))} />
               </Pole>
               <Pole
                 etykieta="Data wpisu emisji do KRS"
-                wymagane
+                id="otwarcie-data-krs"
                 podpowiedz="Emisja założycielska rejestruje się razem ze spółką — to zawsze data rejestracji w KRS z kroku 1. Bez tej daty nie można dokonać wpisu akcji do rejestru akcjonariuszy (art. 300(30) § 2 KSH)."
               >
                 {/* Naprawa (FRONTEND-INWENTARZ.md §8, zlapane w zadaniu (a)):
@@ -823,6 +846,7 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
             {!wszystkoOdhaczone && (
               <div className="podstawa-prawna">Przycisk „Otwórz rejestr” pozostaje nieaktywny do czasu odhaczenia całej checklisty.</div>
             )}
+            <p className="zdanie-nieodwracalne">Otwarcia rejestru nie można cofnąć — możliwe jest tylko sprostowanie.</p>
           </>
         )}
 
@@ -835,11 +859,7 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
           </button>
           <div className="kreator-stopka-prawa">
             {krok < KROKI_REJESTRACJI.length - 1 ? (
-              <button
-                className="btn btn-glowny"
-                disabled={(krok === 0 && !mozeDalejZ0) || (krok === 2 && !mozeDalejZ2)}
-                onClick={() => ustawKrok((k) => k + 1)}
-              >
+              <button className="btn btn-glowny" onClick={dalej}>
                 Dalej
               </button>
             ) : (
@@ -868,10 +888,10 @@ function EkranOtwarciaRejestru({ spolkaId }) {
 }
 
 function EkranSpolek() {
-  const [szukaj, ustawSzukaj] = useState('');
+  const [szukaj, ustawSzukaj] = useParametrAdresu('q', '');
   const [zapytanie, ustawZapytanie] = useState('');
-  const [status, ustawStatus] = useState('wszystkie');
-  const [strona, ustawStrone] = useState(1);
+  const [status, ustawStatus] = useParametrAdresu('status', 'wszystkie');
+  const [strona, ustawStrone] = useParametrAdresu('strona', 1);
   const { dane, ladowanie } = useDane(`/api/psa/spolki?q=${encodeURIComponent(zapytanie)}`);
 
   useEffect(() => {

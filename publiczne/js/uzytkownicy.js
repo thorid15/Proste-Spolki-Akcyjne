@@ -141,7 +141,7 @@ function EkranUzytkownikow() {
                 </td>
                 <td className="przyciemnione">{u.ostatnie_logowanie ? fmt.dataCzas(u.ostatnie_logowanie) : '— nigdy —'}</td>
                 <td>
-                  <Znacznik odmiana={u.aktywny ? 'zielony' : 'neutralny'}>{u.aktywny ? 'aktywny' : 'zablokowany'}</Znacznik>
+                  <Pigulka odmiana={u.aktywny ? 'rejestr' : 'neutralna'}>{u.aktywny ? 'aktywny' : 'zablokowany'}</Pigulka>
                 </td>
                 <td>
                   <div className="row-g">

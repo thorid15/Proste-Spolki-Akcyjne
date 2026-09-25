@@ -6,8 +6,10 @@
   "main": "serwer.js",
   "type": "commonjs",
   "scripts": {
+    "buduj": "node narzedzia/buduj-front.js",
+    "prestart": "node narzedzia/buduj-front.js",
     "start": "node serwer.js",
-    "dev": "node --watch serwer.js",
+    "dev": "node narzedzia/buduj-front.js --dev",
     "test": "node --test \"testy/*.test.js\"",
     "scenariusz": "node narzedzia/scenariusz-e2e.js",
     "dokumentacja": "node narzedzia/dokumentacja-baza.js && node narzedzia/dokumentacja-endpointy.js"
@@ -22,5 +24,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }

@@ -651,6 +651,77 @@
 - Skutek w kodzie: brak na razie — dotyczy FAZY 5.
 - **Decyzja otwarta:** Q2 pozostaje w „Decyzje otwarte” niżej do czasu odpowiedzi.
 
+### D-050 — „Stan na” w interfejsie tylko jako dzień
+- Data: 2026-09-25 (sesja frontendowa v2, przed FAZĄ 1)
+- Obszar: rejestr / interfejs
+- Decyzja: kokpit spółki pokazuje „stan na” wyłącznie z dokładnością do **dnia** (stan na koniec
+  dnia). Pole godziny znika z UI. Zastępuje D-043 w warstwie interfejsu; mechanizm API „stan na
+  chwilę” z D-032 zostaje bez zmian.
+- Uzasadnienie: decyzja Łukasza — pracownikowi potrzebny jest stan na dzień; chwila wpisu co do
+  sekundy jest pokazywana przy pozycji akcjonariusza (B12), nie w filtrze kokpitu.
+- Odrzucono: utrzymanie pola godziny z D-043.
+- Źródło: Łukasz, przed sesją frontendową v2 (`SESJA-PSA-FRONTEND.md` v2 § 0.5).
+- Skutek w kodzie: FAZA 2 (B12) — `publiczne/js/kokpit.js`. Zamyka P-011 w części UI.
+
+### D-051 — Menu kancelarii bez scalania; pulpit z sekcją „Do zrobienia”
+- Data: 2026-09-25 (sesja frontendowa v2, przed FAZĄ 1)
+- Obszar: interfejs kancelarii
+- Decyzja: pozycje menu Kolejka spraw, Zgłoszenia, Wnioski i Zawiadomienia zostają osobne. Pulpit
+  zamiast kafli statystyk dostaje sekcję „Do zrobienia” zasilaną tą samą definicją co liczniki w
+  nawigacji.
+- Uzasadnienie: decyzja Łukasza.
+- Odrzucono: scalenie czterech pozycji w jedną skrzynkę spraw.
+- Źródło: Łukasz, przed sesją frontendową v2.
+- Skutek w kodzie: FAZA 1 pkt 9 (wspólny `Licznik`), FAZA 3 (K1).
+
+### D-052 — Checklisty weryfikacyjne zaznacza wyłącznie człowiek
+- Data: 2026-09-25 (sesja frontendowa v2, przed FAZĄ 1)
+- Obszar: rejestr / weryfikacja
+- Decyzja: system nigdy sam nie zaznacza pozycji checklisty (otwarcie rejestru, weryfikacja wpisu,
+  podpisy). Może jedynie **zablokować** zaznaczenie pozycji, która na pewno nie jest spełniona — z
+  przyczyną i odnośnikiem „Uzupełnij” do pola, które to naprawia.
+- Uzasadnienie: decyzja Łukasza — automatyzujemy wpisywanie danych, nie ocenę prawną.
+- Odrzucono: automatyczne zaznaczanie pozycji rozstrzygalnych przez system.
+- Źródło: Łukasz, przed sesją frontendową v2.
+- Skutek w kodzie: FAZA 3 (K2, K3).
+
+### D-053 — Wniosek w portalu bez liczby akcji i serii
+- Data: 2026-09-25 (sesja frontendowa v2, przed FAZĄ 1)
+- Obszar: portal / wniosek
+- Decyzja: portal nie zbiera liczby akcji ani serii. Kreator otwarcia rejestru podstawia z wniosku
+  osoby; akcjonariat założycielski (liczby akcji, serie) wpisuje kancelaria z umowy spółki.
+- Uzasadnienie: decyzja Łukasza — źródłem akcjonariatu założycielskiego jest umowa spółki, nie
+  deklaracja klienta.
+- Odrzucono: pola liczby akcji i serii we wniosku klienta.
+- Źródło: Łukasz, przed sesją frontendową v2.
+- Skutek w kodzie: brak zmiany w portalu; FAZA 3 (K2) — podstawienie osób w kreatorze otwarcia.
+
+### D-054 — Dokumenty do podpisu: mechanizm bez zmian
+- Data: 2026-09-25 (sesja frontendowa v2, przed FAZĄ 1)
+- Obszar: portal / kancelaria / dokumenty
+- Decyzja: pobranie, wgranie skanu i potwierdzenie podpisu zostają dokument po dokumencie — w
+  portalu i w kancelarii. Dozwolone wyłącznie zmiany wizualne.
+- Uzasadnienie: decyzja Łukasza — każdy podpis sprawdzany osobno.
+- Odrzucono: zbiorcze „potwierdź wszystkie podpisy” (propozycja z FAZY 0).
+- Źródło: Łukasz, przed sesją frontendową v2.
+- Skutek w kodzie: FAZA 4 (P4) — tylko wygląd listy.
+
+### D-055 — Kraj w adresie akcjonariusza z wniosku; wyszukiwarka kartoteki po numerze KRS
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 1 pkt 1–2)
+- Obszar: portal / kartoteka / schemat
+- Decyzja: (1) `psa_wnioski_akcjonariusze` dostaje kolumnę `kraj TEXT NOT NULL DEFAULT 'Polska'`
+  (migracja 52), przyjmowaną przez `PUT/POST /api/psa/portal/wniosek/akcjonariusze` i przenoszoną do
+  kartoteki przy przyjęciu wniosku (przez `POLA_OSOBY`). Puste pole = „Polska”. (2) `GET
+  /api/psa/osoby?q=` szuka także po `numer_w_rejestrze`; ostrzeżenie o duplikacie przy zapisie osoby
+  (D-042) obejmuje oprócz PESEL i NIP także numer w rejestrze.
+- Uzasadnienie: wspólny `FormularzOsoby` (portal + kancelaria) zbiera kraj w obu miejscach — bez
+  kolumny zagraniczny adres akcjonariusza ginął przy przyjęciu wniosku (B11). Wybór z kartoteki ma
+  znajdować osobę prawną po KRS tak jak fizyczną po PESEL.
+- Odrzucono: ukrycie pola „Kraj” w portalu do FAZY 2 (zostawiałoby lukę B11 w nowym formularzu).
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, FAZA 1 pkt 1–2, B11.
+- Skutek w kodzie: `server/migracje.js` (52), `server/trasy/portal.js`, `server/trasy/osoby.js`,
+  `publiczne/js/formularz-osoby.js`, `pola.js`.
+
 ---
 
 ## Decyzje otwarte
@@ -673,7 +744,7 @@
 | P-008 | Czy martwy w UI endpoint `/naliczenie-roczne` ma zostać usunięty, zabezpieczony, czy zostać bez zmian? | opłaty | otwarte |
 | P-009 | Czy dziennik dostępu ma objąć też zwykłe odczyty portalowe? | dziennik dostępu | **rozstrzygnięte → D-041** (tak, objęto); okres retencji nadal otwarty |
 | P-010 | Jak naprawić rozjazd pól PEP przy przejęciu wniosku; czy dokumenty RODO/PEP mają powstawać też dla akcjonariuszy dochodzących po założeniu spółki? | AML / dane osobowe | **częściowo → D-041** (mapowanie PEP naprawione); rozszerzenie RODO/PEP (Z-153) nadal otwarte |
-| P-011 | Czy „stan na” z dokładnością do minuty ma wrócić do UI (patrz D-032); czy `TZ` serwera ma być programowo wymuszony? | rejestr / interfejs | **rozstrzygnięte → D-042, D-043** (oba warianty wdrożone, do potwierdzenia przez Łukasza) |
+| P-011 | Czy „stan na” z dokładnością do minuty ma wrócić do UI (patrz D-032); czy `TZ` serwera ma być programowo wymuszony? | rejestr / interfejs | **rozstrzygnięte → D-042, D-050** (UI: tylko dzień — D-050 zastępuje D-043; `TZ` — D-042) |
 | P-012 | Czy zdalna identyfikacja akcjonariusza (dane + opcjonalny skan wgrywany przez pracownika) spełnia wymogi AML? | AML | częściowo — mechanizm samodzielnego wgrywania skanu przez akcjonariusza dodany (D-041); ocena PRAWNA wymogów AML nadal otwarta |
 | P-013 | Czy status AML `brak` powinien blokować wpis tak jak `niemozliwe` (patrz D-010)? | AML | otwarte (świadomie nietknięte — patrz uzupełnienie D-010) |
 | P-014 | Czy dezaktualizacja AML i brak beneficjenta rzeczywistego mają blokować wpis? | AML | otwarte (świadomie nietknięte) |
@@ -716,6 +787,8 @@ Pełny kontekst i warianty odpowiedzi dla każdego: `testy-audyt/PYTANIA-DO-LUKA
 
 ### Z sesji frontendowej (`SESJA-PSA-FRONTEND.md`, STOP po FAZIE 0, 2026-09-20)
 
+- **Q6 — cena emisyjna poniżej 1 grosza** (z D-045). Do czasu odpowiedzi `PoleKwoty` odrzuca więcej
+  niż 2 cyfry po przecinku komunikatem przy polu; schemat bez zmian. Warianty A/B/C — raport FAZY 1.
 - **Q2 — domena strony publicznej.** Jedyne z pytań Q1-Q5 bez odpowiedzi — Łukasz zapytany, wraca do
   tematu później. Warianty: (A) podstrony `notariusz.gdansk.pl` (WordPress), (B) subdomena
   obsługiwana przez tę aplikację, (C) osobna domena. Do czasu decyzji: strony FAZY 5 budowane z

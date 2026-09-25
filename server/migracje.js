@@ -2065,6 +2065,20 @@ const MIGRACJE = [
         ON psa_sprawy (klucz_idempotencji) WHERE klucz_idempotencji IS NOT NULL;
     `,
   },
+
+  {
+    wersja: 52,
+    nazwa: 'kraj w adresie akcjonariusza z wniosku (FAZA 1 sesji frontendowej, B11, D-055)',
+    sql: `
+      -- Kartoteka (psa_osoby) ma kraj od poczatku, wniosek klienta go nie mial:
+      -- akcjonariusz z zagranicznym adresem trafial do kartoteki jako
+      -- mieszkajacy w Polsce. Wspolny formularz osoby (publiczne/js/
+      -- formularz-osoby.js) zbiera kraj w obu miejscach; przyjecie wniosku
+      -- przepisuje go do kartoteki razem z reszta POLA_OSOBY. Istniejace
+      -- wiersze dostaja 'Polska' - tak jak dotad byly traktowane.
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN kraj TEXT NOT NULL DEFAULT 'Polska';
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */

@@ -154,7 +154,7 @@ function ostrzezeniaOsoby(dane) {
  */
 function ostrzezeniaKolizji(dane, id = null) {
   const ostrzezenia = [];
-  for (const pole of ['pesel', 'nip']) {
+  for (const pole of ['pesel', 'nip', 'numer_w_rejestrze']) {
     const wartosc = dane[pole];
     if (!wartosc) continue;
     const kolizja = db()
@@ -166,8 +166,9 @@ function ostrzezeniaKolizji(dane, id = null) {
       .all(wartosc, id);
     if (kolizja.length === 0) continue;
     const nazwy = kolizja.map((o) => `„${maskowanie.oznaczenieOsoby(o)}” (#${o.id})`).join(', ');
+    const nazwaPola = pole === 'numer_w_rejestrze' ? 'Numer w rejestrze' : pole.toUpperCase();
     ostrzezenia.push(
-      `${pole.toUpperCase()} „${wartosc}” jest już w kartotece pod inną pozycją: ${nazwy}. ` +
+      `${nazwaPola} „${wartosc}” jest już w kartotece pod inną pozycją: ${nazwy}. ` +
         'Jeśli to ta sama osoba, kartoteka ma mieć jeden rekord, nie dwa — sprawdź przed zapisaniem.'
     );
   }
@@ -217,10 +218,13 @@ router.get(
 
     if (szukaj) {
       warunki.push(
-        '(nazwisko LIKE ? OR imie LIKE ? OR nazwa LIKE ? OR pesel LIKE ? OR nip LIKE ? OR email LIKE ?)'
+        '(nazwisko LIKE ? OR imie LIKE ? OR nazwa LIKE ? OR pesel LIKE ? OR nip LIKE ? OR email LIKE ?'
+          + ' OR numer_w_rejestrze LIKE ?)'
       );
+      // Numer KRS (`numer_w_rejestrze`) od FAZY 1 sesji frontendowej — wybór z
+      // kartoteki szuka osoby prawnej tak samo jak fizycznej po PESEL.
       const wzorzec = `%${szukaj}%`;
-      parametry.push(wzorzec, wzorzec, wzorzec, wzorzec, wzorzec, wzorzec);
+      parametry.push(wzorzec, wzorzec, wzorzec, wzorzec, wzorzec, wzorzec, wzorzec);
     }
     if (zad.query.typ) {
       warunki.push('typ = ?');

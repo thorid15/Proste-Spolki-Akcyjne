@@ -2,10 +2,10 @@
    Wyłącznie lead do oceny: kancelaria odrzuca albo (etap 3B) zaprasza do
    właściwego wniosku o prowadzenie rejestru. */
 
-const ZNACZNIK_STANU_ZGLOSZENIA = { nowe: 'neutralny', zaproszono: 'zielony', odrzucone: 'bordo' };
+const ZNACZNIK_STANU_ZGLOSZENIA = { nowe: 'neutralna', zaproszono: 'rejestr', odrzucone: 'sygnal' };
 
 function EkranZgloszenWstepnych() {
-  const [filtrStatus, ustawFiltrStatus] = useState('');
+  const [filtrStatus, ustawFiltrStatus] = useParametrAdresu('status', '');
   const { dane, ladowanie, odswiez } = useDane(
     `/api/psa/zgloszenia${filtrStatus ? `?status=${filtrStatus}` : ''}`,
     [filtrStatus]
@@ -99,7 +99,7 @@ function EkranZgloszenWstepnych() {
                   <td className="kol-dane">{z.krs || '—'}</td>
                   <td>{z.nazwa_spolki || '—'}</td>
                   <td style={{ maxWidth: 280 }}>{z.opis || '—'}</td>
-                  <td><Znacznik odmiana={ZNACZNIK_STANU_ZGLOSZENIA[z.status] || 'neutralny'}>{z.status}</Znacznik></td>
+                  <td><Pigulka odmiana={ZNACZNIK_STANU_ZGLOSZENIA[z.status] || 'neutralna'}>{z.status}</Pigulka></td>
                   <td className="do-prawej">
                     {z.status === 'nowe' && (
                       <div className="row-g" style={{ justifyContent: 'flex-end' }}>

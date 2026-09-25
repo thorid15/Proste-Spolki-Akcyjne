@@ -10,8 +10,8 @@ const NAZWY_STANU_SPRAWY = {
   wpisana: 'wpisana', odmowa: 'odmowa', anulowana: 'anulowana',
 };
 const ODMIANY_STANU_SPRAWY = {
-  nowa: 'neutralny', weryfikacja: 'lupek', wstrzymana: 'oliwka',
-  wpisana: 'zielony', odmowa: 'bordo', anulowana: 'neutralny',
+  nowa: 'neutralna', weryfikacja: 'neutralna', wstrzymana: 'mosiadz',
+  wpisana: 'rejestr', odmowa: 'sygnal', anulowana: 'neutralna',
 };
 
 /* Charakter żądającego (art. 300(34) § 1 KSH) — lustro słownika z
@@ -43,19 +43,19 @@ const PRZYCZYNA_ODMOWY_WYMAGA_OPISU = 'inna';
 
 /** Widok sprawy — pełniejszy niż pigułka w kolejce: nazywa oba zegary wprost. */
 function ZnacznikTerminu({ termin }) {
-  if (termin.zamrozony) return <Znacznik odmiana="oliwka">termin zawieszony</Znacznik>;
-  if (termin.po_terminie) return <Znacznik odmiana="bordo">po terminie ustawowym</Znacznik>;
+  if (termin.zamrozony) return <Pigulka odmiana="mosiadz">termin zawieszony</Pigulka>;
+  if (termin.po_terminie) return <Pigulka odmiana="sygnal">po terminie ustawowym</Pigulka>;
   if (termin.po_celu) {
     return (
-      <Znacznik odmiana="oliwka">
+      <Pigulka odmiana="mosiadz">
         po celu wewnętrznym · do terminu ustawowego {termin.dni_pozostale} dz.
-      </Znacznik>
+      </Pigulka>
     );
   }
   return (
-    <Znacznik odmiana="neutralny">
+    <Pigulka odmiana="neutralna">
       do celu {termin.dni_do_celu} dz. · do terminu ustawowego {termin.dni_pozostale} dz.
-    </Znacznik>
+    </Pigulka>
   );
 }
 
@@ -67,8 +67,8 @@ function ZnacznikTerminu({ termin }) {
    KOLEJKA
    ───────────────────────────────────────────────────── */
 function EkranKolejkiSpraw({ spolkaId }) {
-  const [pokazZakonczone, ustawPokazZakonczone] = useState(false);
-  const [szukaj, ustawSzukaj] = useState('');
+  const [pokazZakonczone, ustawPokazZakonczone] = useParametrAdresu('zakonczone', false);
+  const [szukaj, ustawSzukaj] = useParametrAdresu('q', '');
   const parametry = new URLSearchParams();
   if (pokazZakonczone) parametry.set('stan', 'wpisana,odmowa,anulowana');
   if (spolkaId) parametry.set('spolka_id', spolkaId);
@@ -494,7 +494,7 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
       <div className="siatka-2">
         <div>
           <Pole etykieta="Wyślij powiadomienie">
-            <WyborOsoby wartosc={osobaId} przyZmianie={ustawOsobeId} />
+            <WyborZKartoteki wartosc={osobaId} przyZmianie={ustawOsobeId} />
           </Pole>
           <button className="btn btn-sm" disabled={!osobaId || wysylanie} onClick={wyslij}>
             {wysylanie ? 'Wysyłanie…' : 'Wyślij powiadomienie'}
@@ -753,6 +753,9 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
                   Przycisk „Dokonaj wpisu” pozostaje nieaktywny do czasu odhaczenia całej checklisty.
                 </div>
               )}
+              {!sawatpliwosci && (
+                <p className="zdanie-nieodwracalne">Wpisu nie można cofnąć — możliwe jest tylko sprostowanie.</p>
+              )}
             </>
           )}
         </>
@@ -994,7 +997,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
             {sprawa.zadajacy_rola ? ` (${OPISY_ROL_ZADAJACEGO[sprawa.zadajacy_rola] || sprawa.zadajacy_rola})` : ''}
           </div>
           <div className="row-g" style={{ marginTop: 8 }}>
-            <Znacznik odmiana={ODMIANY_STANU_SPRAWY[sprawa.stan]}>{NAZWY_STANU_SPRAWY[sprawa.stan]}</Znacznik>
+            <Pigulka odmiana={ODMIANY_STANU_SPRAWY[sprawa.stan]}>{NAZWY_STANU_SPRAWY[sprawa.stan]}</Pigulka>
             {!zakonczona && !wlasnieWpisano && <ZnacznikTerminu termin={sprawa.termin} />}
             {/* Z-202/P-014: sygnal, nie blokada - sprawa idzie dalej normalnie. */}
             <ZnacznikPrzegladuAml wymaga={sprawa.zadajacy_wymaga_przegladu_aml} />

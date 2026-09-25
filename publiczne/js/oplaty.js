@@ -12,10 +12,10 @@ const TYP_ETYKIETA = {
 };
 
 const STATUS_ZNACZNIK = {
-  naliczona: 'neutralny',
-  zafakturowana: 'lupek',
-  oplacona: 'zielony',
-  anulowana: 'bordo',
+  naliczona: 'neutralna',
+  zafakturowana: 'neutralna',
+  oplacona: 'rejestr',
+  anulowana: 'sygnal',
 };
 
 const STATUS_ETYKIETA = {
@@ -209,13 +209,13 @@ function WierszOplatyKancelarii({ oplata, przyZmianie }) {
         </div>
       </td>
       <td>
-        <Znacznik odmiana={STATUS_ZNACZNIK[oplata.status]}>{STATUS_ETYKIETA[oplata.status]}</Znacznik>
+        <Pigulka odmiana={STATUS_ZNACZNIK[oplata.status]}>{STATUS_ETYKIETA[oplata.status]}</Pigulka>
         {oplata.oplacona_online && <div className="male przyciemnione">online</div>}
       </td>
       <td>
         {oplata.faktura_wystawiono ? (
           <span className="male">
-            <Znacznik odmiana="zielony">wystawiona</Znacznik>
+            <Pigulka odmiana="rejestr">wystawiona</Pigulka>
             {oplata.faktura_numer ? ` ${oplata.faktura_numer}` : ''}
             <button className="btn-tekstowy" disabled={pracuje} onClick={() => ustawFakture(false)}>cofnij</button>
           </span>

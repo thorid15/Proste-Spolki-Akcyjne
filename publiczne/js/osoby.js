@@ -6,7 +6,7 @@ const PUSTA_OSOBA = {
   typ: 'fizyczna',
   nazwisko: '', imie: '', nazwa: '', plec: '',
   pesel: '', data_urodzenia: '',
-  nip: '', regon: '', numer_w_rejestrze: '', nazwa_rejestru: 'KRS',
+  nip: '', regon: '', numer_w_rejestrze: '', nazwa_rejestru: '',
   kraj: 'Polska', kod_pocztowy: '', miejscowosc: '', ulica: '', nr_domu: '', nr_lokalu: '',
   adres_doreczen: '', adres_edoreczen: '', email: '', telefon: '',
   zgoda_email: 0, aml_status: 'brak', aml_data: '', aml_notatka: '', uwagi: '',
@@ -161,17 +161,35 @@ function SekcjaZaproszeniaPortal({ osobaId, emailPodpowiedz }) {
   );
 }
 
-function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
-  const [dane, ustawDane] = useState({ ...PUSTA_OSOBA, ...(osoba || {}) });
+/**
+ * Kartoteka: dane osoby w PANELU BOCZNYM (formularz dłuższy niż 4 pola nie
+ * jest modalem — FAZA 1 pkt 5). Pola wspólne z wnioskiem klienta renderuje
+ * `FormularzOsoby` (formularz-osoby.js); tu dochodzą wyłącznie dane
+ * kancelarii: AML, PEP, beneficjent, notatki wewnętrzne.
+ *
+ * `przyWyborzeIstniejacej` — gdy panel otwiera wybór z kartoteki, a wpisany
+ * PESEL / NIP / KRS należy już do kogoś, można wybrać tę osobę zamiast
+ * zakładać drugą (reguła domenowa nr 10, D-042).
+ */
+function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej }) {
+  const [dane, ustawDane] = useState(() => osobaDoFormularza(osoba, PUSTA_OSOBA));
   const [blad, ustawBlad] = useState(null);
   const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [brakiPokazane, ustawBrakiPokazane] = useState(false);
   const edycja = Boolean(osoba && osoba.id);
+  const walidacja = useWalidacjaOsoby(dane, { tryb: 'kancelaria' });
+  const idPrefiks = 'kartoteka';
+  const poczatkowe = useRef(JSON.stringify(dane));
+  const zmienione = () => JSON.stringify(dane) !== poczatkowe.current;
+  useBlokadaWyjscia(() => zmienione() && !zapisywanie);
+  function anuluj() {
+    if (zmienione() && !window.confirm('Zamknąć bez zapisania wprowadzonych danych?')) return;
+    przyZamknieciu();
+  }
 
   // Etap 3.1: procedura AML (skan/PEP/beneficjent) jest wlaczana PER SPOLKA,
   // a osoba (kartoteka wspolna) moze byc akcjonariuszem w kilku - wybor
   // "kontekstu" decyduje, ktorej spolki przelacznik gate'uje ten formularz.
-  // Nowa osoba (bez id) nie ma jeszcze zadnej spolki do wyboru - zostaje przy
-  // domyslnym, oszczednym zakresie (dane z dokumentu, bez pliku).
   const [spolkiOsoby, ustawSpolkiOsoby] = useState([]);
   const [kontekstSpolkaId, ustawKontekstSpolkaId] = useState(null);
   useEffect(() => {
@@ -187,26 +205,50 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
   const kontekstSpolka = spolkiOsoby.find((s) => s.id === kontekstSpolkaId) || null;
   const stosujeAml = Boolean(kontekstSpolka && Number(kontekstSpolka.stosuje_procedure_aml));
 
+  const zmien = (latka) => ustawDane((p) => ({ ...p, ...latka }));
   const pole = (klucz) => ({
     value: dane[klucz] ?? '',
-    onChange: (z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value })),
+    onChange: (z) => zmien({ [klucz]: z.target.value }),
   });
 
-  // Etap 2.8: autouzupelnienie daty urodzenia i plci z PESEL, JEDNORAZOWE
-  // (jak przy dacie emisji zalozycielskiej, etap 2.5) - uzupelnia tylko puste
-  // pola, wiec reczna korekta uzytkownika nigdy nie jest nadpisywana.
-  const pesel = parsujPesel(dane.pesel);
+  // Ten sam PESEL / NIP / numer KRS już w kartotece — pokazujemy to PRZY
+  // polu, z możliwością wybrania istniejącej osoby (D-042: ostrzeżenie, nie
+  // blokada — ta sama osoba bywa w wielu spółkach, ale ma mieć jeden rekord).
+  const [kolizje, ustawKolizje] = useState({});
+  const identyfikatory = { pesel: dane.typ !== 'prawna' ? dane.pesel : '', nip: dane.typ === 'prawna' ? dane.nip : '', numer_w_rejestrze: dane.typ === 'prawna' ? dane.numer_w_rejestrze : '' };
+  const sygnaturaId = JSON.stringify(identyfikatory);
   useEffect(() => {
-    if (!pesel) return;
-    ustawDane((p) => ({
-      ...p,
-      data_urodzenia: p.data_urodzenia || pesel.data_urodzenia,
-      plec: p.plec || pesel.plec,
-    }));
+    const uchwyt = setTimeout(() => {
+      const wynik = {};
+      const zapytania = Object.entries(identyfikatory)
+        .filter(([k, v]) => v && (k === 'pesel' ? /^\d{11}$/.test(v) : String(v).replace(/\D/g, '').length >= 9))
+        .map(([k, v]) => API.get(`/api/psa/osoby?q=${encodeURIComponent(v)}`)
+          .then((o) => {
+            const inna = o.osoby.find((x) => String(x[k] || '') === String(v) && (!edycja || x.id !== osoba.id));
+            if (inna) wynik[k] = inna;
+          })
+          .catch(() => {}));
+      Promise.all(zapytania).then(() => ustawKolizje(wynik));
+    }, 300);
+    return () => clearTimeout(uchwyt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dane.pesel]);
+  }, [sygnaturaId]);
 
-  async function zapisz() {
+  const ostrzezeniaIdentyfikatora = Object.fromEntries(Object.entries(kolizje).map(([k, inna]) => [k, (
+    <div className="kolizja-kartoteki" role="status" key={k}>
+      <span>W kartotece jest już <strong>{inna.oznaczenie}</strong> z tym numerem.</span>
+      {przyWyborzeIstniejacej
+        ? <button type="button" className="btn btn-maly" onClick={() => przyWyborzeIstniejacej(inna)}>Wybierz tę osobę</button>
+        : <a href={`#/osoby/${inna.id}`} onClick={przyZamknieciu}>Otwórz jej dane</a>}
+    </div>
+  )]));
+
+  async function zapisz(mimoBrakow = false) {
+    if (!walidacja.czyPoprawne && !mimoBrakow) {
+      walidacja.pokazWszystkie();
+      ustawBrakiPokazane(true);
+      return;
+    }
     ustawZapisywanie(true);
     ustawBlad(null);
     try {
@@ -221,184 +263,46 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
     }
   }
 
+  const listaBledow = listaBledowOsoby(walidacja.widoczne, idPrefiks);
   return (
     <Modal
+      panel
       tytul={edycja ? 'Dane osoby' : 'Nowa osoba w kartotece'}
-      przyZamknieciu={przyZamknieciu}
-      szerokosc={640}
+      przyZamknieciu={anuluj}
       stopka={
         <>
-          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-          <button className="btn btn-glowny" onClick={zapisz} disabled={zapisywanie}>
-            {zapisywanie ? 'Zapisywanie…' : 'Zapisz'}
+          <button type="button" className="btn" onClick={anuluj}>Anuluj</button>
+          <button type="button" className="btn btn-glowny" onClick={() => zapisz(false)} disabled={zapisywanie}>
+            {zapisywanie ? 'Zapisywanie…' : edycja ? 'Zapisz zmiany' : 'Dodaj do kartoteki'}
           </button>
         </>
       }
     >
+      {brakiPokazane && listaBledow.length > 0 && (
+        <>
+          <PodsumowanieBledow bledy={listaBledow} tytul="Brakuje danych potrzebnych do wpisu" />
+          <p className="male wyciszony" style={{ marginTop: 'calc(-1 * var(--od-8))' }}>
+            Osobę można zapisać także bez kompletu — braki wrócą jako przeszkoda przy wpisie.{' '}
+            <button type="button" className="btn-tekstowy" onClick={() => zapisz(true)} disabled={zapisywanie}>
+              Zapisz mimo braków
+            </button>
+          </p>
+        </>
+      )}
       <Komunikat odmiana="blad" tresc={blad} />
 
-      <Pole etykieta="Rodzaj podmiotu" wymagane>
-        <select {...pole('typ')}>
-          <option value="fizyczna">Osoba fizyczna</option>
-          <option value="prawna">Osoba prawna lub jednostka organizacyjna</option>
-        </select>
-      </Pole>
-
-      {dane.typ === 'fizyczna' ? (
-        <>
-          <div className="siatka-2">
-            <Pole etykieta="Nazwisko" wymagane><input type="text" {...pole('nazwisko')} /></Pole>
-            <Pole etykieta="Imię"><input type="text" {...pole('imie')} /></Pole>
-          </div>
-          <div className="siatka-2">
-            <Pole
-              etykieta="PESEL"
-              podpowiedz={
-                !Number(dane.bez_pesel)
-                  ? 'Data urodzenia i płeć uzupełnią się automatycznie po wpisaniu 11 cyfr — można je potem nadpisać.'
-                  : null
-              }
-            >
-              <div className="pole-z-odznaczeniem">
-                {!Number(dane.bez_pesel) && <input type="text" {...pole('pesel')} maxLength={11} />}
-                <label className="chk chk-w-linii">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(Number(dane.bez_pesel))}
-                    onChange={(z) =>
-                      ustawDane((p) => ({
-                        ...p,
-                        bez_pesel: z.target.checked ? 1 : 0,
-                        pesel: z.target.checked ? '' : p.pesel,
-                      }))
-                    }
-                  />
-                  <span className="chk-tresc">Nie posiada</span>
-                </label>
-              </div>
-            </Pole>
-            <Pole etykieta="Data urodzenia" wymagane={Boolean(Number(dane.bez_pesel))}>
-              <PoleDaty wartosc={dane.data_urodzenia || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_urodzenia: v }))} />
-            </Pole>
-          </div>
-          {pesel && !pesel.poprawnaSumaKontrolna && (
-            <Komunikat
-              odmiana="uwaga"
-              tresc="Suma kontrolna numeru PESEL się nie zgadza — sprawdź numer. Data urodzenia i płeć uzupełniły się mimo to na podstawie samych cyfr; zapis nie jest blokowany."
-            />
-          )}
-          <Pole
-            etykieta="Płeć"
-            podpowiedz="Uzupełnia się automatycznie z numeru PESEL. Dana pomocnicza — pisma jej nie używają."
-          >
-            <select {...pole('plec')}>
-              <option value="">— nie podano —</option>
-              <option value="mezczyzna">mężczyzna</option>
-              <option value="kobieta">kobieta</option>
-            </select>
-          </Pole>
-          <Komunikat
-            odmiana="info"
-            tresc="Treść rejestru to nazwisko, imię oraz PESEL ALBO data urodzenia, a także adres (art. 300(33) § 1 pkt 2 i 3 KSH). PESEL, data urodzenia i adres zamieszkania są maskowane wobec pozostałych akcjonariuszy."
-          />
-        </>
-      ) : (
-        <>
-          <Pole etykieta="Nazwa" wymagane><input type="text" {...pole('nazwa')} /></Pole>
-          <div className="siatka-2">
-            <Pole etykieta="Numer we właściwym rejestrze">
-              <input type="text" {...pole('numer_w_rejestrze')} />
-            </Pole>
-            <Pole etykieta="Nazwa rejestru" podpowiedz="KRS, rejestr zagraniczny, inny — dane pomocnicze do identyfikacji podmiotu.">
-              <input type="text" {...pole('nazwa_rejestru')} />
-            </Pole>
-          </div>
-          <div className="siatka-2">
-            <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
-            <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
-          </div>
-        </>
-      )}
+      <FormularzOsoby
+        dane={dane}
+        przyZmianie={zmien}
+        tryb="kancelaria"
+        bledy={walidacja.widoczne}
+        przyOpuszczeniu={walidacja.dotknij}
+        idPrefiks={idPrefiks}
+        ostrzezeniaIdentyfikatora={ostrzezeniaIdentyfikatora}
+      />
 
       <div className="rozdzielacz" />
-
-      <div className="siatka-2">
-        <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
-        <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
-      </div>
-      <div className="siatka-3">
-        <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
-        <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
-        <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
-      </div>
-      <div className="siatka-2">
-        <Pole etykieta="Inny adres do doręczeń" podpowiedz="Jeśli osoba go posiada.">
-          <input type="text" {...pole('adres_doreczen')} />
-        </Pole>
-        <Pole etykieta="Adres do doręczeń elektronicznych" podpowiedz="Jeśli osoba go posiada.">
-          <input type="text" {...pole('adres_edoreczen')} placeholder="AE:PL-…" />
-        </Pole>
-      </div>
-      <Pole
-        etykieta="Adres wpisywany do rejestru"
-        wymagane
-        podpowiedz="Art. 300(33) § 1 pkt 3 KSH daje wybór jednego z trzech — wskaż, który jest tym z ustawy."
-      >
-        <select {...pole('rodzaj_adresu_rejestrowego')}>
-          <option value="zamieszkania">Adres zamieszkania albo siedziby</option>
-          <option value="doreczen">Inny adres do doręczeń</option>
-          <option value="edoreczen">Adres do doręczeń elektronicznych</option>
-        </select>
-      </Pole>
-
-      <div className="rozdzielacz" />
-
-      <div className="siatka-2">
-        <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
-        <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
-      </div>
-      <Pole
-        etykieta="Zgoda na komunikację elektroniczną"
-        podpowiedz="Art. 300(33) § 1 pkt 4 KSH — adres e-mail wchodzi do rejestru dopiero po zgodzie SAMEGO akcjonariusza. Zarząd może ją zadeklarować we wniosku, potwierdza ją podpisane oświadczenie."
-      >
-        <select {...pole('zgoda_email_status')}>
-          <option value="brak">Brak — adres e-mail nie wchodzi do rejestru</option>
-          <option value="zadeklarowana">Zadeklarowana przez spółkę — czeka na oświadczenie</option>
-          <option value="potwierdzona">Potwierdzona oświadczeniem akcjonariusza</option>
-        </select>
-      </Pole>
-
-      <div className="rozdzielacz" />
-
-      <Pole
-        etykieta="Współwłasność akcji"
-        podpowiedz="Art. 300(33) § 1 pkt 5 KSH — wypełnij tylko, gdy akcje należą do kilku osób wspólnie."
-      >
-        <select {...pole('wspolwlasnosc')}>
-          <option value="brak">Brak</option>
-          <option value="laczna">Współwłasność łączna</option>
-          <option value="ulamkowa">Współwłasność w częściach ułamkowych</option>
-        </select>
-      </Pole>
-      {dane.wspolwlasnosc && dane.wspolwlasnosc !== 'brak' && (
-        <>
-          <Pole etykieta="Pozostali współwłaściciele" wymagane>
-            <input type="text" {...pole('wspolwlasciciele')} />
-          </Pole>
-          {dane.wspolwlasnosc === 'ulamkowa' && (
-            <div className="siatka-2">
-              <Pole etykieta="Udział — licznik" wymagane>
-                <input type="number" min="1" {...pole('udzial_licznik')} />
-              </Pole>
-              <Pole etykieta="Udział — mianownik" wymagane>
-                <input type="number" min="1" {...pole('udzial_mianownik')} />
-              </Pole>
-            </div>
-          )}
-        </>
-      )}
-
-      <div className="rozdzielacz" />
+      <h3 className="grupa-pol-legenda">Dane kancelarii — nie trafiają do portalu ani na wydruki dla klienta</h3>
 
       <div className="siatka-2">
         <Pole
@@ -412,12 +316,12 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
           </select>
         </Pole>
         <Pole etykieta="Data weryfikacji AML">
-          <PoleDaty wartosc={dane.aml_data || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, aml_data: v }))} />
+          <PoleDaty wartosc={dane.aml_data || ''} przyZmianie={(v) => zmien({ aml_data: v })} />
         </Pole>
       </div>
       <div className="siatka-2">
         <Pole etykieta="Data ostatniego przeglądu AML" podpowiedz="Przegląd okresowy co 12 miesięcy — nie blokuje wpisu, jest tylko przypomnieniem.">
-          <PoleDaty wartosc={dane.aml_data_przegladu || ''} przyZmianie={(v) => ustawDane((p) => ({ ...p, aml_data_przegladu: v }))} />
+          <PoleDaty wartosc={dane.aml_data_przegladu || ''} przyZmianie={(v) => zmien({ aml_data_przegladu: v })} />
         </Pole>
         <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 8 }}>
           <ZnacznikPrzegladuAml wymaga={edycja && osoba.wymaga_przegladu_aml} />
@@ -440,7 +344,7 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
           value={dane.pep || 'nieustalono'}
           onChange={(z) => {
             const v = z.target.value;
-            ustawDane((p) => ({ ...p, pep: v, pep_opis: ['tak', 'rodzina', 'wspolpracownik'].includes(v) ? p.pep_opis : '' }));
+            zmien({ pep: v, pep_opis: ['tak', 'rodzina', 'wspolpracownik'].includes(v) ? dane.pep_opis : '' });
           }}
         >
           <option value="nieustalono">Nieustalono</option>
@@ -500,9 +404,9 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
               etykieta="Beneficjent rzeczywisty"
               podpowiedz="Osoba fizyczna sprawująca kontrolę nad podmiotem (art. 2 ust. 2 pkt 1 ustawy AML)."
             >
-              <WyborOsoby
+              <WyborZKartoteki
                 wartosc={dane.beneficjent_rzeczywisty_id}
-                przyZmianie={(id) => ustawDane((p) => ({ ...p, beneficjent_rzeczywisty_id: id }))}
+                przyZmianie={(id) => zmien({ beneficjent_rzeczywisty_id: id })}
                 typFiltr="fizyczna"
                 wyklucz={edycja ? [osoba.id] : []}
                 placeholder="Szukaj osoby fizycznej w kartotece…"
@@ -524,7 +428,7 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
             <Pole etykieta="Data oświadczenia PEP">
               <PoleDaty
                 wartosc={dane.pep_oswiadczenie_data || ''}
-                przyZmianie={(v) => ustawDane((p) => ({ ...p, pep_oswiadczenie_data: v }))}
+                przyZmianie={(v) => zmien({ pep_oswiadczenie_data: v })}
               />
             </Pole>
           </div>
@@ -541,7 +445,7 @@ function FormularzOsoby({ osoba, przyZamknieciu, przyZapisie }) {
 }
 
 function EkranOsob() {
-  const [szukaj, ustawSzukaj] = useState('');
+  const [szukaj, ustawSzukaj] = useParametrAdresu('q', '');
   const [zapytanie, ustawZapytanie] = useState('');
   const [formularz, ustawFormularz] = useState(null);
   const { dane, ladowanie, odswiez } = useDane(`/api/psa/osoby?q=${encodeURIComponent(zapytanie)}`);
@@ -623,7 +527,7 @@ function EkranOsob() {
       )}
 
       {formularz && (
-        <FormularzOsoby
+        <PanelOsoby
           osoba={formularz.id ? formularz : null}
           przyZamknieciu={() => ustawFormularz(null)}
           przyZapisie={() => {
@@ -636,5 +540,5 @@ function EkranOsob() {
   );
 }
 
-window.FormularzOsoby = FormularzOsoby;
+window.PanelOsoby = PanelOsoby;
 window.EkranOsob = EkranOsob;

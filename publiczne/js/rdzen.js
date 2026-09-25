@@ -131,14 +131,148 @@ function biezacaTrasa() {
   };
 }
 
+/* Pozycja przewinięcia każdej odwiedzonej strony — „wstecz" wraca w to samo
+   miejsce listy (FAZA 1 pkt 5). W sessionStorage są wyłącznie liczby i
+   adresy ekranów, żadne dane osobowe. */
+const KLUCZ_PRZEWINIEC = 'psa-przewiniecia';
+function zapamietanePrzewiniecia() {
+  try { return JSON.parse(sessionStorage.getItem(KLUCZ_PRZEWINIEC) || '{}'); } catch { return {}; }
+}
+function zapamietajPrzewiniecie(hash, y) {
+  try {
+    const p = zapamietanePrzewiniecia();
+    p[hash] = y;
+    sessionStorage.setItem(KLUCZ_PRZEWINIEC, JSON.stringify(p));
+  } catch { /* prywatne okno — bez pamięci przewinięcia */ }
+}
+
+/** Przywraca przewinięcie, gdy treść (wczytywana z API) urośnie na tyle, żeby było dokąd. */
+function przewinDo(y) {
+  const koniec = Date.now() + 1500;
+  (function proba() {
+    if (document.documentElement.scrollHeight - window.innerHeight >= y || Date.now() > koniec) {
+      window.scrollTo(0, y);
+      return;
+    }
+    requestAnimationFrame(proba);
+  }());
+}
+
+/** Po zmianie ekranu fokus trafia na jego nagłówek — czytnik ekranu ogłasza nowy widok. */
+function ustawFokusNaNaglowku() {
+  const h1 = document.querySelector('main h1, h1');
+  if (!h1) return;
+  if (!h1.hasAttribute('tabindex')) h1.setAttribute('tabindex', '-1');
+  h1.focus({ preventScroll: true });
+}
+
+const ruchOgraniczony = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * Router. Jeden słuchacz `hashchange` na aplikację (powłoka kancelarii albo
+ * portalu). Zmiana widoku idzie przez View Transitions API, gdy przeglądarka
+ * je ma — bez niego widok zmienia się natychmiast.
+ */
+/* Niezapisane zmiany (FAZA 1 pkt 5): formularz rejestruje funkcję, która
+   mówi, czy ma coś niezapisanego — zmiana ekranu pyta wtedy o zgodę. */
+const BLOKADY_WYJSCIA = new Set();
+function useBlokadaWyjscia(czyNiezapisane) {
+  const ref = useRef(czyNiezapisane);
+  ref.current = czyNiezapisane;
+  useEffect(() => {
+    const f = () => ref.current();
+    BLOKADY_WYJSCIA.add(f);
+    const przyZamknieciu = (z) => { if (f()) { z.preventDefault(); z.returnValue = ''; } };
+    window.addEventListener('beforeunload', przyZamknieciu);
+    return () => { BLOKADY_WYJSCIA.delete(f); window.removeEventListener('beforeunload', przyZamknieciu); };
+  }, []);
+}
+
 function useTrasa() {
   const [trasa, ustawTrase] = useState(biezacaTrasa);
+  const poprzednia = useRef(trasa.sciezka);
   useEffect(() => {
-    const przy = () => ustawTrase(biezacaTrasa());
+    let wstecz = false;
+    let cofanie = false;
+    const przyPopstate = () => { wstecz = true; };
+    const przy = (z) => {
+      if (cofanie) { cofanie = false; wstecz = false; return; }
+      const nowa = biezacaTrasa();
+      const zmianaEkranu = nowa.sciezka !== poprzednia.current;
+      if (zmianaEkranu && [...BLOKADY_WYJSCIA].some((f) => f())
+          && !window.confirm('Masz niezapisane zmiany. Opuścić ten ekran bez zapisania?')) {
+        cofanie = true;
+        wstecz = false;
+        window.location.replace(z.oldURL);
+        return;
+      }
+      if (z && z.oldURL) zapamietajPrzewiniecie(new URL(z.oldURL).hash || '#/', window.scrollY);
+      poprzednia.current = nowa.sciezka;
+      const cel = wstecz ? zapamietanePrzewiniecia()[window.location.hash || '#/'] : 0;
+      wstecz = false;
+      const zastosuj = () => ReactDOM.flushSync(() => ustawTrase(nowa));
+      const poZmianie = () => {
+        // Zmiana samego zapytania (filtr, zakładka w adresie) nie przewija
+        // strony i nie zabiera fokusu z pola filtra.
+        if (!zmianaEkranu) return;
+        if (cel) przewinDo(cel); else window.scrollTo(0, 0);
+        setTimeout(ustawFokusNaNaglowku, 0);
+      };
+      if (zmianaEkranu && document.startViewTransition && !ruchOgraniczony()) {
+        const przejscie = document.startViewTransition(zastosuj);
+        przejscie.updateCallbackDone.then(poZmianie, poZmianie);
+      } else {
+        zastosuj();
+        poZmianie();
+      }
+    };
+    window.addEventListener('popstate', przyPopstate);
     window.addEventListener('hashchange', przy);
-    return () => window.removeEventListener('hashchange', przy);
+    return () => {
+      window.removeEventListener('popstate', przyPopstate);
+      window.removeEventListener('hashchange', przy);
+    };
   }, []);
   return trasa;
+}
+
+/**
+ * Tabele na telefonie (FAZA 1 pkt 11): poniżej 600 px wiersz jest kartą
+ * „etykieta: wartość" (rejestr.css). Etykiety bierzemy z nagłówka kolumny
+ * i dopisujemy komórkom jako `data-etykieta` — dla każdej tabeli w
+ * aplikacji, także tych dorysowanych później, bez zmieniania ekranów.
+ */
+function oznaczKomorkiTabel(korzen) {
+  for (const tabela of korzen.querySelectorAll('table.tabela, table.tbl')) {
+    const naglowki = [];
+    for (const th of tabela.querySelectorAll('thead th')) {
+      const etykieta = th.textContent.trim();
+      for (let i = 0; i < (th.colSpan || 1); i += 1) naglowki.push(etykieta);
+    }
+    if (!naglowki.length) continue;
+    for (const wiersz of tabela.querySelectorAll('tbody tr, tfoot tr')) {
+      let kolumna = 0;
+      for (const td of wiersz.children) {
+        const etykieta = naglowki[kolumna] || '';
+        if (td.getAttribute('data-etykieta') !== etykieta) td.setAttribute('data-etykieta', etykieta);
+        kolumna += td.colSpan || 1;
+      }
+    }
+  }
+}
+function obserwujTabele() {
+  const korzen = document.getElementById('korzen');
+  if (!korzen || !window.MutationObserver) return;
+  let zaplanowane = false;
+  new MutationObserver(() => {
+    if (zaplanowane) return;
+    zaplanowane = true;
+    requestAnimationFrame(() => { zaplanowane = false; oznaczKomorkiTabel(korzen); });
+  }).observe(korzen, { childList: true, subtree: true });
+}
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', obserwujTabele);
+  else obserwujTabele();
 }
 
 /* ─────────────────────────────────────────────────────
@@ -169,6 +303,54 @@ function useDane(sciezka, zaleznosci = []) {
   return { ...stan, odswiez: () => odswiez((x) => x + 1) };
 }
 
+/**
+ * Stan ekranu w adresie (FAZA 1 pkt 5): filtr, wyszukiwanie, zakładka,
+ * strona listy. Zmiana zastępuje bieżący wpis historii (bez zaśmiecania
+ * „wstecz" każdą literą), a powrót na ekran przywraca stan z adresu.
+ * Wartość domyślna nie trafia do adresu.
+ */
+function useParametrAdresu(klucz, domyslna = '') {
+  const [wartosc, ustawWartosc] = useState(() => {
+    const z = biezacaTrasa().zapytanie.get(klucz);
+    if (z === null) return domyslna;
+    return typeof domyslna === 'number' ? Number(z) : typeof domyslna === 'boolean' ? z === '1' : z;
+  });
+  const ustaw = useCallback((nowa) => {
+    ustawWartosc((poprzednia) => {
+      const v = typeof nowa === 'function' ? nowa(poprzednia) : nowa;
+      const { sciezka, zapytanie } = biezacaTrasa();
+      if (v === domyslna || v === '' || v === null || v === undefined) zapytanie.delete(klucz);
+      else zapytanie.set(klucz, typeof v === 'boolean' ? (v ? '1' : '0') : String(v));
+      const tekst = zapytanie.toString();
+      window.history.replaceState(window.history.state, '', `#${sciezka}${tekst ? `?${tekst}` : ''}`);
+      return v;
+    });
+  }, [klucz, domyslna]);
+  return [wartosc, ustaw];
+}
+
+/**
+ * Dane odświeżane także bez nawigacji: przy powrocie do karty przeglądarki
+ * (`visibilitychange`) i co `coIleMs` (domyślnie 60 s) — dla liczników
+ * „wymaga działania" (FAZA 1 pkt 9). Karta w tle nie odpytuje serwera.
+ */
+function useOdswiezaneDane(sciezka, zaleznosci = [], coIleMs = 60000) {
+  const wynik = useDane(sciezka, zaleznosci);
+  const odswiez = useRef(wynik.odswiez);
+  odswiez.current = wynik.odswiez;
+  useEffect(() => {
+    if (!sciezka) return undefined;
+    const przyWidocznosci = () => { if (document.visibilityState === 'visible') odswiez.current(); };
+    const czasomierz = setInterval(() => { if (document.visibilityState === 'visible') odswiez.current(); }, coIleMs);
+    document.addEventListener('visibilitychange', przyWidocznosci);
+    return () => {
+      clearInterval(czasomierz);
+      document.removeEventListener('visibilitychange', przyWidocznosci);
+    };
+  }, [sciezka, coIleMs]);
+  return wynik;
+}
+
 /** Wywołanie klawisza Escape — kreator pyta, zanim się zamknie. */
 function useEscape(obsluga) {
   useEffect(() => {
@@ -185,5 +367,8 @@ window.BladApi = BladApi;
 window.fmt = { zlote, liczba, procent, data, dataCzas, odmien, AKCJE, dzisIso };
 window.idz = idz;
 window.useTrasa = useTrasa;
+window.useParametrAdresu = useParametrAdresu;
+window.useBlokadaWyjscia = useBlokadaWyjscia;
 window.useDane = useDane;
+window.useOdswiezaneDane = useOdswiezaneDane;
 window.useEscape = useEscape;
