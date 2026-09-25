@@ -39,6 +39,7 @@ const KOLUMNY_WIDOKU = `id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id, k
         sprawdzono, sprawdzil,
         podpis_nazwa_pliku, podpis_rozmiar, podpis_wgrano,
         podpis_potwierdzono, podpis_potwierdzil, podpis_hash,
+        otwarto_w_portalu,
         (tresc_bloki IS NOT NULL) AS edytowalny`;
 
 function katalogWniosku(wniosekId) {
@@ -91,6 +92,21 @@ function dokument(wniosekId, dokumentId) {
   return db()
     .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
     .get(Number(dokumentId), Number(wniosekId));
+}
+
+/**
+ * Ślad pierwszego otwarcia dokumentu przez KLIENTA w portalu (B6). Ustawia
+ * się RAZ — kolejne pobrania tego samego pliku nic nie zmieniają, więc
+ * moment w bazie mówi wyłącznie „kiedy klient zobaczył to po raz pierwszy”,
+ * przydatne też jako ślad doręczenia (WDROZENIE-PSA.md § 1).
+ */
+function oznaczOtwarte(wniosekId, dokumentId) {
+  db()
+    .prepare(
+      `UPDATE psa_wnioski_dokumenty SET otwarto_w_portalu = ?
+        WHERE id = ? AND wniosek_id = ? AND otwarto_w_portalu IS NULL`
+    )
+    .run(czas.terazIso(), Number(dokumentId), Number(wniosekId));
 }
 
 /** Treść dokumentu do edytora — bloki, nie plik. */
@@ -328,6 +344,7 @@ module.exports = {
   katalogWniosku,
   lista,
   dokument,
+  oznaczOtwarte,
   tresc,
   wystaw,
   zapiszTresc,

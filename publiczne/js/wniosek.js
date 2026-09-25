@@ -100,6 +100,9 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie }) {
         >
           {etykietaDokumentu(dokument.nazwa_pliku)}
         </a>
+        {/* B6 — dokument, którego klient jeszcze nie otworzył (kolumna
+            ustawia się przy pierwszym pobraniu, `pakiet-wniosku.js`). */}
+        {!dokument.otwarto_w_portalu && <Pigulka odmiana="mosiadz">nowy</Pigulka>}
         <span className="dokument-pozycja-rozmiar">
           {Math.max(1, Math.round((dokument.rozmiar || 0) / 1024))} kB
         </span>
@@ -499,6 +502,13 @@ function EkranWniosku() {
   // rozjazdu reguł po obu stronach.
   const [brakiZSerwera, ustawBrakiZSerwera] = useState([]);
   const [dokumenty, ustawDokumenty] = useState([]);
+  // B8 — „Użyj danych reprezentanta z poprzedniego wniosku" (kopia, nie
+  // powiązanie): tylko konto „spolka" może mieć wcześniejszy, zamknięty
+  // wniosek — wnioskodawca wypełnia pierwszy i jedyny.
+  const { dane: listaWnioskow } = useDane('/api/psa/portal/wnioski');
+  const poprzedniWniosek = dane && listaWnioskow
+    ? (listaWnioskow.wnioski || []).find((w) => w.id !== dane.id && w.reprezentant_imie_nazwisko)
+    : null;
 
   useEffect(() => {
     Promise.all([
@@ -806,6 +816,40 @@ function EkranWniosku() {
               opis="Osoba, która w imieniu spółki podpisze umowę o prowadzenie rejestru."
             />
 
+            {poprzedniWniosek && wniosekEdytowalny && !dane.reprezentant_imie_nazwisko && (
+              <Komunikat
+                odmiana="info"
+                tresc={
+                  <span className="rzad-rozdzielony">
+                    <span>Te same dane reprezentanta jak w „{poprzedniWniosek.nazwa || 'poprzednim wniosku'}"?</span>
+                    <button
+                      type="button"
+                      className="btn btn-maly"
+                      onClick={() => ustawDane((p) => ({
+                        ...p,
+                        reprezentant_imie_nazwisko: poprzedniWniosek.reprezentant_imie_nazwisko,
+                        reprezentant_funkcja: poprzedniWniosek.reprezentant_funkcja,
+                        reprezentant_reprezentacja: poprzedniWniosek.reprezentant_reprezentacja,
+                        reprezentant_rodzice: poprzedniWniosek.reprezentant_rodzice,
+                        reprezentant_pesel: poprzedniWniosek.reprezentant_pesel,
+                        reprezentant_dowod_rodzaj: poprzedniWniosek.reprezentant_dowod_rodzaj,
+                        reprezentant_dowod_numer: poprzedniWniosek.reprezentant_dowod_numer,
+                        reprezentant_kraj: poprzedniWniosek.reprezentant_kraj,
+                        reprezentant_kod_pocztowy: poprzedniWniosek.reprezentant_kod_pocztowy,
+                        reprezentant_miejscowosc: poprzedniWniosek.reprezentant_miejscowosc,
+                        reprezentant_ulica: poprzedniWniosek.reprezentant_ulica,
+                        reprezentant_nr_domu: poprzedniWniosek.reprezentant_nr_domu,
+                        reprezentant_nr_lokalu: poprzedniWniosek.reprezentant_nr_lokalu,
+                        reprezentant_email: poprzedniWniosek.reprezentant_email,
+                      }))}
+                    >
+                      Użyj danych reprezentanta z poprzedniego wniosku
+                    </button>
+                  </span>
+                }
+              />
+            )}
+
             <div className="siatka-2">
               <Pole etykieta="Imię i nazwisko">
                 <input type="text" {...pole('reprezentant_imie_nazwisko')} placeholder="np. Jan Kowalski" />
@@ -820,16 +864,38 @@ function EkranWniosku() {
             >
               <input type="text" {...pole('reprezentant_reprezentacja')} placeholder="np. jednoosobowo" />
             </Pole>
-            <div className="siatka-2">
-              <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
-              <Pole etykieta="Dowód osobisty"><input type="text" {...pole('reprezentant_dowod')} placeholder="ABC 123456" /></Pole>
-            </div>
+            <Pole
+              etykieta="PESEL"
+              ostrzezenie={dane && walidujPesel(dane.reprezentant_pesel).ostrzezenie}
+            >
+              <input type="text" {...pole('reprezentant_pesel')} maxLength={11} />
+            </Pole>
+            <PoleDowod
+              etykieta="Dowód tożsamości"
+              rodzaj={dane && dane.reprezentant_dowod_rodzaj}
+              numer={dane && dane.reprezentant_dowod_numer}
+              przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
+              edytowalne={wniosekEdytowalny}
+              idPrefiks="wniosek-reprezentant"
+              klucze={{ rodzaj: 'reprezentant_dowod_rodzaj', numer: 'reprezentant_dowod_numer' }}
+            />
             <Pole etykieta="Imiona rodziców">
               <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
             </Pole>
-            <Pole etykieta="Adres zamieszkania">
-              <input type="text" {...pole('reprezentant_adres')} />
-            </Pole>
+            <PoleAdres
+              etykieta="Adres zamieszkania"
+              dane={dane || {}}
+              przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
+              prefiks="reprezentant_"
+              edytowalne={wniosekEdytowalny}
+              idPrefiks="wniosek-reprezentant"
+            />
+            {dane && !dane.reprezentant_kod_pocztowy && !dane.reprezentant_ulica && dane.reprezentant_adres && (
+              <Komunikat
+                odmiana="info"
+                tresc={`Adres wpisany wcześniej, w jednym polu: „${dane.reprezentant_adres}”. Wpisz go ponownie powyżej, żeby pisma mogły go użyć w nowym formacie.`}
+              />
+            )}
             <Pole
               etykieta="Adres e-mail"
               podpowiedz="Na ten adres trafi projekt umowy do podpisu i korespondencja w sprawie jej zawarcia."

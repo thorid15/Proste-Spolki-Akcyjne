@@ -448,8 +448,11 @@ const POLA_WNIOSKU = [
   'telefon', 'email', 'www', 'organ_rodzaj', 'data_utworzenia_spolki',
   'adres_edorecze', 'kapital_akcyjny_grosze', 'data_zawarcia_umowy_spolki',
   'reprezentant_imie_nazwisko', 'reprezentant_funkcja', 'reprezentant_reprezentacja',
-  'reprezentant_rodzice', 'reprezentant_dowod', 'reprezentant_pesel', 'reprezentant_adres',
-  'reprezentant_email',
+  'reprezentant_rodzice', 'reprezentant_pesel', 'reprezentant_email',
+  // B2/B3 (FAZA 2, migracja 53) — patrz komentarz w server/trasy/spolki.js.
+  'reprezentant_dowod_rodzaj', 'reprezentant_dowod_numer',
+  'reprezentant_kraj', 'reprezentant_kod_pocztowy', 'reprezentant_miejscowosc',
+  'reprezentant_ulica', 'reprezentant_nr_domu', 'reprezentant_nr_lokalu',
 ];
 
 function wyczyscWniosek(cialo) {
@@ -484,30 +487,117 @@ function sprawdzDaneWniosku(dane) {
   }
 }
 
+/**
+ * B8 (FAZA 2 sesji frontendowej): konto roli „spolka" prowadzi już
+ * przynajmniej jedną spółkę, ale może mieć RÓWNOLEGLE otwarty wniosek o
+ * KOLEJNĄ (patrz `POST /wniosek/nowy` i `psa_konta_spolki` — jeden klient,
+ * wiele spółek, D-037). Bramka więc puszcza obie role; auto-zakładanie
+ * wniosku (`wczytajLubZalozWniosek`) zostaje wyłącznie dla „wnioskodawcy" —
+ * konto „spolka" dostaje pusty wniosek WYŁĄCZNIE po świadomym kliknięciu
+ * „Dodaj spółkę", nigdy przy samym wejściu na zakładkę.
+ */
 function wymagajWnioskodawcy(zad, odp, dalej) {
-  if (zad.konto.rola !== 'wnioskodawca') {
+  if (!['wnioskodawca', 'spolka'].includes(zad.konto.rola)) {
     return dalej(brakUprawnien('Ta operacja jest dostępna wyłącznie dla wniosków o prowadzenie rejestru.'));
   }
   dalej();
 }
 
-/** Wczytuje wniosek biezacego konta, zakladajac pusty przy pierwszym uzyciu. */
-function wczytajLubZalozWniosek(kontoId) {
-  let wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(kontoId);
-  if (!wniosek) {
+/**
+ * Otwarty (edytowalny) wniosek konta — jedyny, bo `POST /wniosek/nowy`
+ * odmawia założenia drugiego, dopóki poprzedni jest w toku (patrz niżej).
+ * Bez tego filtra `WHERE konto_id = ?` bez `ORDER BY`/warunku statusu
+ * trafiałby, dla konta „spolka", na jego STARY, już przyjęty wniosek
+ * pierwszej spółki — przypadkowo, bo SQLite nie gwarantuje kolejności bez
+ * `ORDER BY`.
+ */
+function wczytajOtwartyWniosekKonta(kontoId) {
+  // „Otwarty" = jeszcze nie zamknięty (art. 300³² § 1 KSH: umowa ZAWARTA
+  // dopiero wpisem) — nie tylko dwa pierwsze statusy. Klient wraca do TEGO
+  // SAMEGO wniosku przez całą resztę ścieżki (złożony, dokumenty
+  // wygenerowane, umowa podpisana), więc filtr musi obejmować wszystkie
+  // stany oprócz dwóch KOŃCOWYCH — dokładnie jak w `GET /moje`.
+  return db()
+    .prepare(
+      `SELECT * FROM psa_wnioski WHERE konto_id = ? AND status NOT IN ('przyjety', 'odrzucony')
+        ORDER BY id DESC LIMIT 1`
+    )
+    .get(kontoId);
+}
+
+/**
+ * Wczytuje otwarty wniosek konta, zakładając pusty przy pierwszym użyciu —
+ * WYŁĄCZNIE dla „wnioskodawcy" (jeszcze nie ma żadnej spółki, więc pierwsze
+ * dotknięcie zakładki ma sens jako początek jedynego wniosku, jaki może
+ * mieć). Konto „spolka" zakłada nowy wniosek jawnie, przez `POST
+ * /wniosek/nowy` — inaczej samo wejście na zakładkę „Wniosek" cicho
+ * zakładałoby drugą spółkę, której nikt nie poprosił.
+ */
+function wczytajLubZalozWniosek(zad) {
+  const otwarty = wczytajOtwartyWniosekKonta(zad.konto.id);
+  if (otwarty) return otwarty;
+  if (zad.konto.rola !== 'wnioskodawca') return null;
+  const wynik = db()
+    .prepare('INSERT INTO psa_wnioski (konto_id, utworzono) VALUES (?, ?)')
+    .run(zad.konto.id, czas.terazIso());
+  return db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wynik.lastInsertRowid);
+}
+
+/**
+ * Lista wniosków konta z ich statusami (B8) — konto „spolka" widzi tu
+ * historię (przyjęte, odrzucone) obok ewentualnego wniosku w toku; konto
+ * „wnioskodawca" ma tu zawsze najwyżej jeden wiersz.
+ */
+router.get(
+  '/wnioski',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wnioski = db()
+      .prepare(
+        `SELECT id, status, nazwa, krs, reprezentant_imie_nazwisko, reprezentant_funkcja,
+                reprezentant_reprezentacja, reprezentant_rodzice, reprezentant_pesel,
+                reprezentant_dowod_rodzaj, reprezentant_dowod_numer, reprezentant_kraj,
+                reprezentant_kod_pocztowy, reprezentant_miejscowosc, reprezentant_ulica,
+                reprezentant_nr_domu, reprezentant_nr_lokalu, reprezentant_email,
+                utworzono, zaktualizowano
+           FROM psa_wnioski WHERE konto_id = ? ORDER BY id DESC`
+      )
+      .all(zad.konto.id);
+    odp.json({ wnioski });
+  })
+);
+
+/**
+ * Nowy wniosek dla konta, które już prowadzi (przynajmniej) jedną spółkę
+ * (B8 — „Dodaj spółkę"). Zalogowany klient nie wraca do publicznego
+ * formularza zgłoszenia: od razu dostaje pusty wniosek i kreator z
+ * pobraniem danych z KRS, tak jak przy pierwszym wniosku.
+ */
+router.post(
+  '/wniosek/nowy',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    if (zad.konto.rola !== 'spolka') {
+      throw bledneZadanie('To konto ma już otwarty wniosek — kontynuuj go w zakładce „Wniosek".');
+    }
+    const otwarty = wczytajOtwartyWniosekKonta(zad.konto.id);
+    if (otwarty) {
+      throw bledneZadanie('Masz już wniosek w toku — dokończ go, zanim dodasz kolejną spółkę.');
+    }
     const wynik = db()
       .prepare('INSERT INTO psa_wnioski (konto_id, utworzono) VALUES (?, ?)')
-      .run(kontoId, czas.terazIso());
-    wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wynik.lastInsertRowid);
-  }
-  return wniosek;
-}
+      .run(zad.konto.id, czas.terazIso());
+    odp.status(201).json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wynik.lastInsertRowid) });
+  })
+);
 
 router.get(
   '/wniosek',
   wymagajWnioskodawcy,
   asy((zad, odp) => {
-    odp.json({ wniosek: wczytajLubZalozWniosek(zad.konto.id) });
+    const wniosek = wczytajLubZalozWniosek(zad);
+    if (!wniosek) throw nieZnaleziono('Brak otwartego wniosku — zacznij od „Dodaj spółkę".');
+    odp.json({ wniosek });
   })
 );
 
@@ -515,7 +605,8 @@ router.put(
   '/wniosek',
   wymagajWnioskodawcy,
   asy((zad, odp) => {
-    const biezacy = wczytajLubZalozWniosek(zad.konto.id);
+    const biezacy = wczytajLubZalozWniosek(zad);
+    if (!biezacy) throw nieZnaleziono('Brak otwartego wniosku — zacznij od „Dodaj spółkę".');
     if (!['w_przygotowaniu', 'do_uzupelnienia'].includes(biezacy.status)) {
       throw bledneZadanie(`Wniosek ma status „${biezacy.status}” — nie można go już edytować.`);
     }
@@ -620,7 +711,7 @@ function sprawdzAkcjonariuszaWniosku(dane) {
  * bo tylko wtedy ma sens dopisywac do niego akcjonariuszy.
  */
 function wymagajWniosku(zad, odp, dalej) {
-  const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+  const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
   if (!wniosek) return dalej(nieZnaleziono('Najpierw otwórz formularz wniosku (krok „Spółka i umowa”), żeby go założyć.'));
   if (!['w_przygotowaniu', 'do_uzupelnienia'].includes(wniosek.status)) {
     return dalej(bledneZadanie(`Wniosek ma już status „${wniosek.status}” — nie można go edytować.`));
@@ -639,7 +730,7 @@ router.get(
   '/wniosek/akcjonariusze',
   wymagajWnioskodawcy,
   asy((zad, odp) => {
-    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
     if (!wniosek) return odp.json({ akcjonariusze: [] });
     const wiersze = db()
       .prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ? ORDER BY kolejnosc, id')
@@ -791,7 +882,7 @@ router.get(
   '/wniosek/dokumenty',
   wymagajWnioskodawcy,
   asy((zad, odp) => {
-    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
     if (!wniosek) return odp.json({ dokumenty: [] });
     odp.json({ dokumenty: wczytajDokumentyWniosku(wniosek.id) });
   })
@@ -801,12 +892,14 @@ router.get(
   '/wniosek/dokumenty/:id',
   wymagajWnioskodawcy,
   asy((zad, odp) => {
-    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
     if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
     const dokument = db()
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
       .get(Number(zad.params.id), wniosek.id);
     if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+    // B6 — ślad pierwszego otwarcia (i sygnał dla licznika w nawigacji).
+    pakietWniosku.oznaczOtwarte(wniosek.id, dokument.id);
     wyslijPlikDokumentu(odp, dokument.sciezka, dokument.nazwa_pliku);
   })
 );
@@ -815,7 +908,7 @@ router.get(
   '/wniosek/umowa-projekt',
   wymagajWnioskodawcy,
   asy((zad, odp) => {
-    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
     if (!wniosek || !wniosek.umowa_projekt_sciezka) throw nieZnaleziono('Projekt umowy nie został jeszcze wygenerowany.');
 
     const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.umowa_projekt_sciezka);
@@ -900,7 +993,7 @@ const STATUSY_PRZYJMUJACE_PODPISY = new Set(['umowa_wygenerowana']);
 
 /** Wstrzykuje wniosek do `zad` PRZED multerem - potrzebny do wyznaczenia katalogu docelowego. */
 function zaladujWlasnyWniosekDoUploadu(zad, odp, dalej) {
-  const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+  const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
   if (!wniosek) return dalej(nieZnaleziono('Najpierw złóż wniosek.'));
   if (!STATUSY_PRZYJMUJACE_PODPISY.has(wniosek.status)) {
     return dalej(bledneZadanie(`Wniosek ma status „${wniosek.status}” — w tym momencie nie oczekujemy podpisanych dokumentów.`));
@@ -965,7 +1058,7 @@ router.post(
   '/wniosek/odeslij',
   wymagajWnioskodawcy,
   asy((zad, odp) => {
-    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
     if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
     if (wniosek.status !== 'umowa_wygenerowana') {
       throw bledneZadanie(`Wniosek ma status „${wniosek.status}” — nie ma w tym momencie czego odsyłać.`);
@@ -1013,7 +1106,7 @@ router.post(
 const STATUSY_EDYCJI_WNIOSKU = new Set(['w_przygotowaniu', 'do_uzupelnienia']);
 
 function zaladujWniosekDoEdycji(zad, odp, dalej) {
-  const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+  const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
   if (!wniosek) return dalej(nieZnaleziono('Najpierw rozpocznij wniosek.'));
   if (!STATUSY_EDYCJI_WNIOSKU.has(wniosek.status)) {
     return dalej(bledneZadanie(`Wniosek ma status „${wniosek.status}” — nie można już zmieniać jego danych.`));
@@ -1082,7 +1175,7 @@ router.get(
   '/wniosek/dowod',
   wymagajWnioskodawcy,
   asy((zad, odp) => {
-    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
     if (!wniosek || !wniosek.dowod_sciezka) throw nieZnaleziono('Nie przesłano jeszcze dokumentu tożsamości.');
     wyslijPlikDokumentu(odp, wniosek.dowod_sciezka, wniosek.dowod_nazwa_pliku);
   })
@@ -1123,7 +1216,7 @@ router.get(
   '/wniosek/dokumenty/:id/podpis',
   wymagajWnioskodawcy,
   asy((zad, odp) => {
-    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
     if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
     const dokument = db()
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
@@ -1142,7 +1235,7 @@ router.delete(
   '/wniosek/dokumenty/:id/podpis',
   wymagajWnioskodawcy,
   asy((zad, odp) => {
-    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
     if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
     if (!STATUSY_PRZYJMUJACE_PODPISY.has(wniosek.status)) {
       throw bledneZadanie(`Wniosek ma status „${wniosek.status}” — nie można już zmieniać przesłanych dokumentów.`);
@@ -1222,7 +1315,7 @@ router.get(
   '/wniosek/umowa-podpisana',
   wymagajWnioskodawcy,
   asy((zad, odp) => {
-    const wniosek = db().prepare('SELECT * FROM psa_wnioski WHERE konto_id = ?').get(zad.konto.id);
+    const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
     if (!wniosek || !wniosek.umowa_podpisana_sciezka) throw nieZnaleziono('Nie odnaleziono przesłanej umowy.');
 
     const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, wniosek.umowa_podpisana_sciezka);

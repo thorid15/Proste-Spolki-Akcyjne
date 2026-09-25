@@ -874,6 +874,17 @@ select {
 .pole-liczbowe.bledne { border-color: var(--sygnal); }
 .pole-liczbowe input { border: none; box-shadow: none; text-align: right; font-family: var(--font-dane); background: none; }
 .pole-liczbowe input:focus { box-shadow: none; }
+
+/* Hasło z przełącznikiem widoczności (B1). */
+.pole-haslo { position: relative; }
+.pole-haslo input { padding-right: 40px; }
+.pole-haslo-przelacznik {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: var(--r-sm); color: var(--atrament-3); cursor: pointer;
+}
+.pole-haslo-przelacznik:hover { background: var(--papier); color: var(--atrament); }
+.pole-haslo-przelacznik:focus-visible { outline: 2px solid var(--rejestr); outline-offset: 1px; }
 .pole-liczbowe-sufiks { font-size: var(--st-13); color: var(--atrament-3); padding-left: var(--od-8); white-space: nowrap; }
 
 /* Wybór z kartoteki */

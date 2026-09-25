@@ -23,10 +23,10 @@ test('hasla: zweryfikuj zwraca false zamiast rzucac, gdy brak hasha', async () =
   assert.equal(await hasla.zweryfikuj('cokolwiek', null), false);
 });
 
-test('hasla: ocenSile odrzuca za krotkie, bez litery, bez cyfry', () => {
-  assert.equal(hasla.ocenSile('krotkie1').ok, false);
-  assert.equal(hasla.ocenSile('12345678901234').ok, false);
-  assert.equal(hasla.ocenSile('samelitery').ok, false);
+test('hasla: ocenSile odrzuca za krotkie; dlugie haslo bez litery/cyfry jest OK (bez wymogow skladu, B1)', () => {
+  assert.equal(hasla.ocenSile('krotkiehasl').ok, false);
+  assert.equal(hasla.ocenSile('123456789012').ok, true);
+  assert.equal(hasla.ocenSile('samesamelitery').ok, true);
   assert.equal(hasla.ocenSile('PoprawneHaslo1').ok, true);
 });
 

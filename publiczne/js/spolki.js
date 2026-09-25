@@ -33,9 +33,14 @@ const PUSTA_SPOLKA = {
   // Reprezentant — wszystkie dane w mianowniku, tak jak w dokumencie
   // tożsamości. Pisma nie odmieniają ich przez przypadki, tylko opisują
   // etykietą („imiona rodziców:", „działający jako:").
-  reprezentant_imie_nazwisko: '', reprezentant_rodzice: '',
-  reprezentant_dowod: '', reprezentant_pesel: '', reprezentant_adres: '',
+  reprezentant_imie_nazwisko: '', reprezentant_rodzice: '', reprezentant_pesel: '',
   reprezentant_funkcja: '', reprezentant_reprezentacja: '', reprezentant_email: '',
+  // B2/B3 — dowód i adres ustrukturyzowane (migracja 53); stare
+  // `reprezentant_dowod`/`reprezentant_adres` zostają tylko do odczytu w
+  // piśmie, gdy te pola są jeszcze puste (`kontekst-pisma.js`).
+  reprezentant_dowod_rodzaj: '', reprezentant_dowod_numer: '',
+  reprezentant_kraj: 'Polska', reprezentant_kod_pocztowy: '', reprezentant_miejscowosc: '',
+  reprezentant_ulica: '', reprezentant_nr_domu: '', reprezentant_nr_lokalu: '',
 };
 
 const PUSTA_EMISJA_ZALOZYCIELSKA = {
@@ -634,14 +639,34 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
               <Pole etykieta="Imiona rodziców">
                 <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
               </Pole>
-              <Pole etykieta="Dowód osobisty">
-                <input type="text" {...pole('reprezentant_dowod')} />
+              <Pole
+                etykieta="PESEL"
+                ostrzezenie={walidujPesel(dane.reprezentant_pesel).ostrzezenie}
+              >
+                <input type="text" {...pole('reprezentant_pesel')} maxLength={11} />
               </Pole>
             </div>
-            <div className="siatka-2">
-              <Pole etykieta="PESEL"><input type="text" {...pole('reprezentant_pesel')} maxLength={11} /></Pole>
-              <Pole etykieta="Adres zamieszkania"><input type="text" {...pole('reprezentant_adres')} /></Pole>
-            </div>
+            <PoleDowod
+              etykieta="Dowód tożsamości"
+              rodzaj={dane.reprezentant_dowod_rodzaj}
+              numer={dane.reprezentant_dowod_numer}
+              przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
+              idPrefiks="spolka-reprezentant"
+              klucze={{ rodzaj: 'reprezentant_dowod_rodzaj', numer: 'reprezentant_dowod_numer' }}
+            />
+            <PoleAdres
+              etykieta="Adres zamieszkania"
+              dane={dane}
+              przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
+              prefiks="reprezentant_"
+              idPrefiks="spolka-reprezentant"
+            />
+            {!dane.reprezentant_kod_pocztowy && !dane.reprezentant_ulica && dane.reprezentant_adres && (
+              <Komunikat
+                odmiana="info"
+                tresc={`Adres wpisany wcześniej, w jednym polu: „${dane.reprezentant_adres}”. Wpisz go ponownie powyżej, żeby pisma mogły go użyć w nowym formacie.`}
+              />
+            )}
             <Pole etykieta="Adres e-mail" podpowiedz="Korespondencja w sprawie umowy o prowadzenie rejestru.">
               <input type="email" {...pole('reprezentant_email')} />
             </Pole>

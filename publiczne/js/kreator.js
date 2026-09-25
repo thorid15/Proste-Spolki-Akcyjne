@@ -51,11 +51,11 @@ function PozycjaKreatora({
       </Pole>
 
       <Pole etykieta="Liczba akcji" wymagane>
-        <input
-          type="number"
-          min="1"
-          value={pozycja.ilosc ?? ''}
-          onChange={(z) => ustawPozycje({ ...pozycja, ilosc: z.target.value })}
+        <PoleLiczbowe
+          sufiks="akcji"
+          min={1}
+          wartosc={pozycja.ilosc === '' || pozycja.ilosc === undefined ? null : Number(pozycja.ilosc)}
+          przyZmianie={(v) => ustawPozycje({ ...pozycja, ilosc: v ?? '' })}
         />
       </Pole>
 
@@ -285,7 +285,11 @@ function KrokEmisja({ dane, ustawDane, spolka }) {
           <input type="text" {...pole('seria')} placeholder="A" />
         </Pole>
         <Pole etykieta="Liczba akcji" wymagane>
-          <input type="number" min="1" {...pole('ilosc')} />
+          <PoleLiczbowe
+            sufiks="akcji" min={1}
+            wartosc={dane.ilosc === '' || dane.ilosc === undefined ? null : Number(dane.ilosc)}
+            przyZmianie={(v) => ustawDane({ ...dane, ilosc: v ?? '' })}
+          />
         </Pole>
       </div>
       <div className="siatka-2">
@@ -293,15 +297,25 @@ function KrokEmisja({ dane, ustawDane, spolka }) {
           etykieta="Numer pierwszej akcji"
           podpowiedz="Domyślnie 1. Numeracja biegnie osobno w każdej serii."
         >
-          <input type="number" min="1" {...pole('nr_pierwszy')} placeholder="1" />
+          <PoleLiczbowe
+            min={1} placeholder="1"
+            wartosc={dane.nr_pierwszy === '' || dane.nr_pierwszy === undefined ? null : Number(dane.nr_pierwszy)}
+            przyZmianie={(v) => ustawDane({ ...dane, nr_pierwszy: v ?? '' })}
+          />
         </Pole>
-        <Pole etykieta="Cena emisyjna jednej akcji (zł)">
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={dane.cena_zl ?? ''}
-            onChange={(z) => ustawDane({ ...dane, cena_zl: z.target.value })}
+        <Pole
+          etykieta="Cena emisyjna jednej akcji"
+          podpowiedz="P.S.A. nie ma wartości nominalnej akcji — cena poniżej 1 grosza jest dopuszczalna, ale nie da się jej dziś zapisać z większą precyzją niż grosz (D-056)."
+        >
+          {/* Naprawa B7: dawny <input type="number" step="0.01"> pozwalał
+              wpisać dowolną liczbę miejsc po przecinku i CICHO zaokrąglał
+              (0,015 zł -> 2 grosze, 0,0001 zł -> 0), bez ostrzeżenia — bo
+              nie korzystał z gotowego `PoleKwoty` (ui-rejestr.js), które od
+              FAZY 1 tego nie robi (D-045): więcej niż 2 miejsca po przecinku
+              to komunikat przy polu, nie cichy błąd w wystawionej cenie. */}
+          <PoleKwoty
+            grosze={dane.cena_emisyjna_grosze ?? null}
+            przyZmianie={(v) => ustawDane({ ...dane, cena_emisyjna_grosze: v })}
           />
         </Pole>
       </div>
@@ -1189,13 +1203,13 @@ const KROKI_TRESCI = {
 /** Zamienia stan formularza (`dane`) na treść żądania do API, per typ. */
 function zbudujDaneZdarzenia(typ, dane) {
   const wynik = { ...dane, podstawa_opis: dane.podstawa_opis || null };
-  delete wynik.cena_zl;
 
   if (typ === 'emisja') {
     wynik.ilosc = Number(dane.ilosc);
     wynik.nr_pierwszy = dane.nr_pierwszy ? Number(dane.nr_pierwszy) : 1;
-    wynik.cena_emisyjna_grosze =
-      dane.cena_zl === '' || dane.cena_zl === undefined ? null : Math.round(Number(dane.cena_zl) * 100);
+    // `PoleKwoty` przechowuje już grosze jako liczbę całkowitą (albo `null`)
+    // — bez pośredniego pola w złotych i bez zaokrąglania tutaj (B7, D-056).
+    wynik.cena_emisyjna_grosze = dane.cena_emisyjna_grosze ?? null;
   }
   if (dane.pozycje) wynik.pozycje = przygotujPozycje(dane.pozycje);
   if (['obciazenie', 'zajecie'].includes(typ)) {

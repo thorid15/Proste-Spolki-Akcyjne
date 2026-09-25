@@ -182,6 +182,42 @@ function spolkaKlucze(spolka) {
   };
 }
 
+const RODZAJE_DOWODU_ETYKIETY = { dowod_osobisty: 'dowód osobisty', paszport: 'paszport' };
+
+/**
+ * Dowód tożsamości reprezentanta jednym ciągiem dla pisma (B2, FAZA 2 —
+ * migracja 53 rozbiła dotychczasowe jedno pole tekstowe na rodzaj i numer).
+ * Rekordy sprzed migracji (albo jeszcze nieprzepisane przez nowy formularz)
+ * mają wyłącznie stare `reprezentant_dowod` — to pole zostaje jako
+ * odczytywany dalej fallback, dopóki ktoś nie wypełni nowych kolumn.
+ */
+function reprezentantDowodPelny(spolka) {
+  if (!spolka) return null;
+  if (spolka.reprezentant_dowod_numer) {
+    const rodzaj = RODZAJE_DOWODU_ETYKIETY[spolka.reprezentant_dowod_rodzaj];
+    return rodzaj ? `${rodzaj} ${spolka.reprezentant_dowod_numer}` : spolka.reprezentant_dowod_numer;
+  }
+  return spolka.reprezentant_dowod || null;
+}
+
+/**
+ * Adres reprezentanta jednym ciągiem (B3, FAZA 2 — migracja 53 dodała
+ * kolumny analogiczne do adresu akcjonariusza/spółki). Ten sam fallback co
+ * przy dowodzie: stare `reprezentant_adres` zostaje, dopóki nie zastąpią go
+ * nowe, ustrukturyzowane pola.
+ */
+function reprezentantAdresPelny(spolka) {
+  if (!spolka) return null;
+  const strukturalny = adresPelny({
+    kod_pocztowy: spolka.reprezentant_kod_pocztowy,
+    miejscowosc: spolka.reprezentant_miejscowosc,
+    ulica: spolka.reprezentant_ulica,
+    nr_domu: spolka.reprezentant_nr_domu,
+    nr_lokalu: spolka.reprezentant_nr_lokalu,
+  });
+  return strukturalny || spolka.reprezentant_adres || null;
+}
+
 /**
  * `reprezentant_*` — osoba podpisująca w imieniu SPÓŁKI umowę o prowadzenie
  * rejestru (wzór 01).
@@ -197,9 +233,9 @@ function reprezentantKlucze(spolka) {
     reprezentant_imie_nazwisko: spolka.reprezentant_imie_nazwisko || null,
     reprezentant_funkcja: spolka.reprezentant_funkcja || null,
     reprezentant_rodzice: spolka.reprezentant_rodzice || null,
-    reprezentant_dowod: spolka.reprezentant_dowod || null,
+    reprezentant_dowod: reprezentantDowodPelny(spolka),
     reprezentant_pesel: spolka.reprezentant_pesel || null,
-    reprezentant_adres: spolka.reprezentant_adres || null,
+    reprezentant_adres: reprezentantAdresPelny(spolka),
     reprezentant_email: spolka.reprezentant_email || null,
     reprezentant_reprezentacja: spolka.reprezentant_reprezentacja || null,
   };

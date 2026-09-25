@@ -103,12 +103,7 @@ function EkranLogowania({ przyZalogowaniu }) {
             />
           </Pole>
           <Pole etykieta="Hasło" wymagane>
-            <input
-              type="password"
-              value={haslo}
-              onChange={(z) => ustawHaslo(z.target.value)}
-              autoComplete="current-password"
-            />
+            <PoleHaslo id="kancelaria-login-haslo" wartosc={haslo} przyZmianie={ustawHaslo} autoComplete="current-password" />
           </Pole>
 
           <button

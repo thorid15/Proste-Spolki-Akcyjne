@@ -53,9 +53,15 @@ const POLA_SPOLKI = [
   // Reprezentant - wszystkie dane w MIANOWNIKU. Pisma nie odmieniaja ich
   // przez przypadki, tylko opisuja etykieta ("imiona rodzicow:", "dzialajacy
   // jako:"), wiec zadne pole korekty odmiany nie jest potrzebne.
-  'reprezentant_imie_nazwisko', 'reprezentant_rodzice', 'reprezentant_dowod',
-  'reprezentant_pesel', 'reprezentant_adres', 'reprezentant_funkcja', 'reprezentant_reprezentacja',
-  'reprezentant_email',
+  'reprezentant_imie_nazwisko', 'reprezentant_rodzice', 'reprezentant_pesel',
+  'reprezentant_funkcja', 'reprezentant_reprezentacja', 'reprezentant_email',
+  // B2/B3 (FAZA 2, migracja 53) — dowód i adres ustrukturyzowane. Stare
+  // `reprezentant_dowod`/`reprezentant_adres` NIE są już w tej liście: nie
+  // da się ich nadpisać z formularza, zostają tylko do odczytu w piśmie
+  // (`server/logika/kontekst-pisma.js`), dopóki nie zastąpią ich te pola.
+  'reprezentant_dowod_rodzaj', 'reprezentant_dowod_numer',
+  'reprezentant_kraj', 'reprezentant_kod_pocztowy', 'reprezentant_miejscowosc',
+  'reprezentant_ulica', 'reprezentant_nr_domu', 'reprezentant_nr_lokalu',
   // Etap 2.2 poprawek: umowa jako fakt juz zaistnialy (data zawarcia to juz
   // istniejace 'data_umowy'). Zalacznik NIE jest tu - ma dedykowany
   // endpoint uploadu, zeby nie przyjmowac dowolnej sciezki z ciala JSON.

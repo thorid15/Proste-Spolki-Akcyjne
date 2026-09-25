@@ -134,6 +134,13 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'GET /wniosek',
     'PUT /wniosek',
     'GET /wniosek/z-krs/:numer',
+    // B8 (FAZA 2 sesji frontendowej): konto „spolka" moze zalozyc KOLEJNY
+    // wniosek (druga spolka u tej samej kancelarii) i widziec liste
+    // wszystkich swoich wnioskow. Oba dzialaja WYLACZNIE po konto_id
+    // z sesji (`wczytajOtwartyWniosekKonta`/`INSERT ... konto_id`) - zaden
+    // URL nie przyjmuje cudzego identyfikatora wniosku ani spolki.
+    'GET /wnioski',
+    'POST /wniosek/nowy',
     // Etap 3D: akcjonariusze proponowani we wniosku - dostep przez konto_id
     // z sesji (posrednio, jak `wczytajSpraweDlaKonta`), zaden identyfikator
     // spolki nie wystepuje - spolka jeszcze nie istnieje.

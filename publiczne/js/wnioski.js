@@ -133,9 +133,7 @@ const GRUPY_POL_SPOLKI = [
       ['reprezentant_imie_nazwisko', 'Imię i nazwisko'],
       ['reprezentant_funkcja', 'Funkcja'],
       ['reprezentant_pesel', 'PESEL'],
-      ['reprezentant_dowod', 'Dowód osobisty'],
       ['reprezentant_rodzice', 'Imiona rodziców'],
-      ['reprezentant_adres', 'Adres zamieszkania'],
       ['reprezentant_email', 'E-mail'],
     ],
   },
@@ -347,6 +345,35 @@ function KrokDaneSpolki({ wniosek, krs, zablokowane, odswiez }) {
                   </Pole>
                 ))}
               </div>
+              {/* Dowód i adres reprezentanta są od migracji 53 ustrukturyzowane
+                  (B2/B3) — nie pasują do generycznej siatki pól tekstowych
+                  wyżej (rodzaj dowodu ma zamknięty katalog, adres kilka
+                  kolumn), więc mają własne komponenty. */}
+              {grupa.tytul === 'Reprezentant podpisujący umowę' && (
+                <>
+                  <PoleDowod
+                    etykieta="Dowód tożsamości"
+                    rodzaj={dane.reprezentant_dowod_rodzaj}
+                    numer={dane.reprezentant_dowod_numer}
+                    przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
+                    idPrefiks="korekta-reprezentant"
+                    klucze={{ rodzaj: 'reprezentant_dowod_rodzaj', numer: 'reprezentant_dowod_numer' }}
+                  />
+                  <PoleAdres
+                    etykieta="Adres zamieszkania"
+                    dane={dane}
+                    przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
+                    prefiks="reprezentant_"
+                    idPrefiks="korekta-reprezentant"
+                  />
+                  {!dane.reprezentant_kod_pocztowy && !dane.reprezentant_ulica && dane.reprezentant_adres && (
+                    <Komunikat
+                      odmiana="info"
+                      tresc={`Adres wpisany wcześniej, w jednym polu: „${dane.reprezentant_adres}”. Wpisz go ponownie powyżej, żeby pisma mogły go użyć w nowym formacie.`}
+                    />
+                  )}
+                </>
+              )}
               {/* Skan dowodu stoi przy danych reprezentanta, bo tam się go
                   sprawdza: pisownia nazwiska i PESEL w umowie mają zgadzać
                   się z dokumentem, który przysłał klient. */}
@@ -484,6 +511,12 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
     autoComplete: 'off',
   });
 
+  // B4 — ta sama reguła, co po stronie serwera (server/logika/akcjonariusz.js
+  // `ostrzezenia()`), tylko przypięta wprost do dwóch pól, których dotyczy.
+  const bladPeselDaty = dane.typ !== 'prawna' && !String(dane.pesel || '').trim() && !String(dane.data_urodzenia || '').trim()
+    ? 'Wpisz PESEL albo — gdy akcjonariusz go nie ma — datę urodzenia.'
+    : null;
+
   return (
     <>
       <KrokNaglowek tytul={nazwaPozycji(pozycja)} opis={identyfikatorPozycji(pozycja)} />
@@ -500,6 +533,11 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
       {braki && braki.length > 0 && (
         <Komunikat odmiana="uwaga" tytul="Braki wobec art. 300³³ § 1 KSH" lista={braki} />
       )}
+
+      {/* B4: reguła „PESEL albo data urodzenia" — dziś jedyny błąd wobec
+          art. 300³³ § 1 KSH widoczny WYŁĄCZNIE w banerze wyżej — powtórzona
+          też PRZY POLACH, których dotyczy (wzorzec z FAZY 1 pkt 3), zamiast
+          zmuszać do skojarzenia zdania z bannera z wierszem siatki niżej. */}
 
       <div className="podsumowanie-cechy" style={{ marginBottom: 'var(--od-16)' }}>
         <span>{pozycja.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}</span>
@@ -525,7 +563,11 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
 
       <div className="siatka-2">
         {POLA_KOREKTY_AKCJONARIUSZA.map(([klucz, etykieta]) => (
-          <Pole key={klucz} etykieta={etykieta}>
+          <Pole
+            key={klucz}
+            etykieta={etykieta}
+            blad={(klucz === 'pesel' || klucz === 'data_urodzenia') ? bladPeselDaty : undefined}
+          >
             <input type="text" {...pole(klucz)} />
           </Pole>
         ))}

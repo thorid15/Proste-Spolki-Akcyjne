@@ -89,6 +89,8 @@ const SCIEZKI_IKON = {
   telefon: 'M5 4h4l1 4-2 1.5a10 10 0 0 0 6.5 6.5L16 14l4 1v4h-2A13 13 0 0 1 5 6z',
   pinezka: 'M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
   globus: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3.4 9h17.2M3.4 15h17.2M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
+  oko: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
+  okoPrzekreslone: 'M3 3l18 18M9.9 9.9a3 3 0 0 0 4.2 4.2M6.5 6.7C4 8.3 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.5 4.5-1.2M10.6 5.1c.5-.1.9-.1 1.4-.1 6.4 0 10 7 10 7-.5.9-1.3 2.1-2.5 3.2',
 };
 
 /**
@@ -1025,6 +1027,42 @@ function PoleKwoty({ grosze, przyZmianie, blad, id, autoFocus, 'aria-describedby
 PoleKwoty.przyjmujeId = true;
 
 /**
+ * Hasło z przełącznikiem widoczności (B1) — jeden komponent dla logowania,
+ * aktywacji konta i zmiany hasła. Przełącznik nie chowa się za focusem:
+ * osoba wpisująca hasło na telefonie musi widzieć, że nie ma literówki,
+ * zanim je wyśle.
+ */
+function PoleHaslo({ wartosc, przyZmianie, autoComplete, id, autoFocus, blad, 'aria-describedby': opis, 'aria-invalid': niepoprawne }) {
+  const [widoczne, ustawWidoczne] = useState(false);
+  return (
+    <div className="pole-haslo">
+      <input
+        type={widoczne ? 'text' : 'password'}
+        id={id}
+        name={id}
+        value={wartosc}
+        onChange={(z) => przyZmianie(z.target.value)}
+        autoComplete={autoComplete}
+        autoFocus={autoFocus}
+        aria-describedby={opis}
+        aria-invalid={niepoprawne || Boolean(blad) || undefined}
+      />
+      <button
+        type="button"
+        className="pole-haslo-przelacznik"
+        onClick={() => ustawWidoczne((w) => !w)}
+        aria-label={widoczne ? 'Ukryj hasło' : 'Pokaż hasło'}
+        aria-pressed={widoczne}
+        tabIndex={-1}
+      >
+        <Ikona nazwa={widoczne ? 'okoPrzekreslone' : 'oko'} rozmiar={17} />
+      </button>
+    </div>
+  );
+}
+PoleHaslo.przyjmujeId = true;
+
+/**
  * Wybór z kartoteki (2.6) — JEDEN komponent wyboru osoby w całej aplikacji
  * (dawny `WyborOsoby` z ui.js wchłonięty w FAZIE 1).
  *
@@ -1746,6 +1784,7 @@ window.Pole = Pole;
 window.PoleDaty = PoleDaty;
 window.PoleLiczbowe = PoleLiczbowe;
 window.PoleKwoty = PoleKwoty;
+window.PoleHaslo = PoleHaslo;
 window.Kalendarz = Kalendarz;
 window.WyborZKartoteki = WyborZKartoteki;
 window.PaletaPolecen = PaletaPolecen;

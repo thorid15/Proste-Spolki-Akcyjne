@@ -722,6 +722,23 @@
 - Skutek w kodzie: `server/migracje.js` (52), `server/trasy/portal.js`, `server/trasy/osoby.js`,
   `publiczne/js/formularz-osoby.js`, `pola.js`.
 
+### D-056 — Cena emisyjna poniżej 1 grosza: niemożliwa do zapisania (wariant C, odpowiedź Q6)
+- Data: 2026-09-25 (sesja frontendowa v2, po FAZIE 1 STOP)
+- Obszar: rejestr / interfejs
+- Decyzja: pole „cena za akcję” zostaje przy 2 miejscach po przecinku (wariant C z FAZY 1 STOP).
+  Cena poniżej 1 grosza za akcję jest świadomie niemożliwa do zapisania w tym polu — schemat i
+  `PoleKwoty` (`publiczne/js/ui-rejestr.js`) bez zmian względem stanu z końca FAZY 1: więcej niż
+  2 cyfry po przecinku dają komunikat przy polu, nie ciche zaokrąglenie (D-045).
+- Uzasadnienie: odpowiedź Łukasza na Q6 — najprostszy z trzech wariantów, bez zmiany schematu
+  (ułamki, kolumna łącznej ceny emisji). Przy emisji z ceną poniżej grosza za akcję kancelaria opisuje
+  cenę w polu tekstowym podstawy emisji, tak jak dziś.
+- Odrzucono: wariant A (cena za akcję jako ułamek licznik/mianownik w groszach) i wariant B (cena za
+  akcję do 2 miejsc, a poniżej 0,01 zł formularz zbiera łączną cenę emisji) — oba wymagały zmiany
+  schematu bez wyraźnej potrzeby dziś.
+- Źródło: użytkownik (STOP po FAZIE 1), `frontend-audyt/raporty/faza1-raport.md` §3.
+- Skutek w kodzie: brak — B7 (FAZA 2) podłącza `kreator.js` do już gotowego `PoleKwoty` na tych
+  samych zasadach.
+
 ---
 
 ## Decyzje otwarte
@@ -787,8 +804,6 @@ Pełny kontekst i warianty odpowiedzi dla każdego: `testy-audyt/PYTANIA-DO-LUKA
 
 ### Z sesji frontendowej (`SESJA-PSA-FRONTEND.md`, STOP po FAZIE 0, 2026-09-20)
 
-- **Q6 — cena emisyjna poniżej 1 grosza** (z D-045). Do czasu odpowiedzi `PoleKwoty` odrzuca więcej
-  niż 2 cyfry po przecinku komunikatem przy polu; schemat bez zmian. Warianty A/B/C — raport FAZY 1.
 - **Q2 — domena strony publicznej.** Jedyne z pytań Q1-Q5 bez odpowiedzi — Łukasz zapytany, wraca do
   tematu później. Warianty: (A) podstrony `notariusz.gdansk.pl` (WordPress), (B) subdomena
   obsługiwana przez tę aplikację, (C) osobna domena. Do czasu decyzji: strony FAZY 5 budowane z

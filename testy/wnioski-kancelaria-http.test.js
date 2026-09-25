@@ -607,3 +607,149 @@ test('GET /api/psa/liczniki: licznik "wnioski" obejmuje status "zlozony", nie ty
   const [, poDrugimWniosku] = await zapytaj('GET', '/api/psa/liczniki', undefined, ciastkoPracownik);
   assert.equal(poDrugimWniosku.liczniki.wnioski, bazowy + 1, '"do_uzupelnienia" czeka na klienta, nie podbija licznika');
 });
+
+test('B5 E2E: złożenie wniosku przez PRAWDZIWY endpoint portalu podbija licznik kancelarii', async () => {
+  // W odróżnieniu od testu wyżej (status wstawiony wprost do bazy), tu
+  // przechodzimy CAŁĄ ścieżkę klienta — logowanie portalowe i
+  // `POST /wniosek/zloz` — żeby sprawdzić też, że sama trasa portalu
+  // faktycznie ustawia status "zlozony" (nie tylko, że SQL licznika go
+  // liczy, gdyby ktoś go tam wstawił). Licznik w app.js odświeża się przy
+  // KAŻDEJ nawigacji i co 60 s (`useOdswiezaneDane`, FAZA 1 pkt 9) —
+  // odpytanie API tu jest jego dokładnym odpowiednikiem bez czekania.
+  const email = 'b5-e2e@example-test.pl';
+  const haslo = 'HasloWnioskodawcyE2E1';
+  const hash = await hasla.hashuj(haslo);
+  const kontoId = db()
+    .prepare(`INSERT INTO psa_konta (email, hash_hasla, rola, aktywne, utworzono) VALUES (?, ?, 'wnioskodawca', 1, ?)`)
+    .run(email, hash, new Date().toISOString()).lastInsertRowid;
+  db()
+    .prepare(`INSERT INTO psa_wnioski (konto_id, status, nazwa, kraj, utworzono) VALUES (?, 'w_przygotowaniu', 'B5 E2E P.S.A.', 'Polska', ?)`)
+    .run(kontoId, new Date().toISOString());
+  const wniosekId = db().prepare('SELECT id FROM psa_wnioski WHERE konto_id = ?').get(kontoId).id;
+  db()
+    .prepare(
+      `INSERT INTO psa_wnioski_akcjonariusze (wniosek_id, kolejnosc, typ, imie, nazwisko, pesel, kod_pocztowy, miejscowosc, ulica, kraj, email, rodzaj_adresu_rejestrowego, utworzono)
+       VALUES (@wniosek_id, 0, @typ, @imie, @nazwisko, @pesel, @kod_pocztowy, @miejscowosc, @ulica, 'Polska', @email, 'zamieszkania', @utworzono)`
+    )
+    .run({ ...AKCJONARIUSZ_PELNY, wniosek_id: wniosekId, utworzono: new Date().toISOString() });
+
+  const odpLogin = await fetch(`${baza}/api/psa/portal/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, haslo }),
+  });
+  assert.equal(odpLogin.status, 200, 'logowanie portalowe klienta z testu B5 nie powiodło się');
+  const ciastkoKlienta = ciasteczkoZOdpowiedzi(odpLogin);
+
+  const [, przed] = await zapytaj('GET', '/api/psa/liczniki', undefined, ciastkoPracownik);
+  const bazowy = przed.liczniki.wnioski;
+
+  const [statusZlozenia, wynikZlozenia] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', {}, ciastkoKlienta);
+  assert.equal(statusZlozenia, 200, JSON.stringify(wynikZlozenia));
+  assert.equal(wynikZlozenia.wniosek.status, 'zlozony');
+
+  const [, po] = await zapytaj('GET', '/api/psa/liczniki', undefined, ciastkoPracownik);
+  assert.equal(po.liczniki.wnioski, bazowy + 1, 'złożenie wniosku prawdziwym endpointem portalu musi podbić licznik kancelarii natychmiast');
+});
+
+test('B6: pobranie dokumentu przez klienta ustawia ślad pierwszego otwarcia (otwarto_w_portalu)', async () => {
+  const { wniosekId, ciastkoKlienta } = await wnioskGotowyDoWeryfikacji('b6-otwarcie@example.pl');
+  const [, przed] = await zapytaj('GET', '/api/psa/portal/wniosek/dokumenty', undefined, ciastkoKlienta);
+  assert.ok(przed.dokumenty.length > 0, 'komplet dokumentów jest wystawiony');
+  assert.ok(
+    przed.dokumenty.every((d) => !d.otwarto_w_portalu),
+    'przed pierwszym pobraniem żaden dokument nie jest oznaczony jako otwarty'
+  );
+  const pierwszy = przed.dokumenty[0];
+
+  const odpPobrania = await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${pierwszy.id}`, {
+    headers: { Cookie: ciastkoKlienta },
+  });
+  assert.equal(odpPobrania.status, 200);
+
+  const [, po] = await zapytaj('GET', '/api/psa/portal/wniosek/dokumenty', undefined, ciastkoKlienta);
+  const otwarty = po.dokumenty.find((d) => d.id === pierwszy.id);
+  assert.ok(otwarty.otwarto_w_portalu, 'dokument pobrany przez klienta jest oznaczony jako otwarty');
+  const inny = po.dokumenty.find((d) => d.id !== pierwszy.id);
+  if (inny) assert.ok(!inny.otwarto_w_portalu, 'dokumenty nieotwarte zostają nieotwarte');
+
+  // Ślad ustawia się RAZ — kolejne pobranie tego samego pliku nie zmienia chwili.
+  const chwilaPierwsza = otwarty.otwarto_w_portalu;
+  await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${pierwszy.id}`, { headers: { Cookie: ciastkoKlienta } });
+  const [, poDrugimPobraniu] = await zapytaj('GET', '/api/psa/portal/wniosek/dokumenty', undefined, ciastkoKlienta);
+  assert.equal(
+    poDrugimPobraniu.dokumenty.find((d) => d.id === pierwszy.id).otwarto_w_portalu,
+    chwilaPierwsza,
+    'drugie pobranie nie przesuwa chwili pierwszego otwarcia'
+  );
+});
+
+test('B8: konto "spolka" po przyjęciu wniosku zakłada KOLEJNY wniosek o drugą spółkę', async () => {
+  const email = 'b8-druga-spolka@example.pl';
+  const { wniosekId, ciastkoKlienta } = await wnioskGotowyDoWeryfikacji(email, {
+    dodatkowePola: { nazwa: 'Pierwsza B8 P.S.A.', krs: '0001112201' },
+  });
+  const [, dane] = await zapytaj('GET', `/api/psa/wnioski/${wniosekId}`, undefined, ciastkoPracownik);
+  await zapytaj(
+    'POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${dane.akcjonariusze[0].id}/zweryfikuj`,
+    { zweryfikowano: true }, ciastkoPracownik
+  );
+  const [, przyjecie] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, undefined, ciastkoPracownik);
+  assert.equal(przyjecie.wniosek.status, 'przyjety');
+  assert.ok(przyjecie.konto_przepiete, 'konto wnioskodawcy przepięte na rolę spółki przy pierwszym wniosku');
+
+  // Przed "Dodaj spółkę": konto ma jedno powiązanie (pierwsza spółka).
+  const [, mojePrzed] = await zapytaj('GET', '/api/psa/portal/moje', undefined, ciastkoKlienta);
+  assert.equal(mojePrzed.rola, 'spolka');
+  assert.equal(mojePrzed.spolki.length, 1);
+  assert.equal(mojePrzed.wniosek, null, 'bez wniosku w toku, dopoki nikt nie kliknie "Dodaj spółkę"');
+
+  // "Dodaj spółkę" — nowy wniosek, konto zostaje w roli "spolka".
+  const [statusNowy, nowy] = await zapytaj('POST', '/api/psa/portal/wniosek/nowy', {}, ciastkoKlienta);
+  assert.equal(statusNowy, 201, JSON.stringify(nowy));
+  assert.equal(nowy.wniosek.status, 'w_przygotowaniu');
+  assert.notEqual(nowy.wniosek.id, wniosekId, 'to NOWY wiersz, nie ten sam co pierwsza spółka');
+
+  // GET /wniosek (l. pojedyncza — "aktywny" wniosek) trafia w NOWY, nie w stary/przyjęty.
+  const [, aktywny] = await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastkoKlienta);
+  assert.equal(aktywny.wniosek.id, nowy.wniosek.id);
+
+  // GET /wnioski (l. mnoga) — obie spółki, z ich statusami.
+  const [, lista] = await zapytaj('GET', '/api/psa/portal/wnioski', undefined, ciastkoKlienta);
+  assert.equal(lista.wnioski.length, 2);
+  const statusy = lista.wnioski.map((w) => w.status).sort();
+  assert.deepEqual(statusy, ['przyjety', 'w_przygotowaniu']);
+  const stary = lista.wnioski.find((w) => w.id === wniosekId);
+  assert.equal(stary.reprezentant_imie_nazwisko, 'Jan Kowalski', 'dane reprezentanta z pierwszego wniosku dostępne do skopiowania');
+
+  // Drugi "Dodaj spółkę" naraz jest odrzucany — dokończ, zanim zaczniesz kolejny.
+  const [statusDrugi, drugi] = await zapytaj('POST', '/api/psa/portal/wniosek/nowy', {}, ciastkoKlienta);
+  assert.equal(statusDrugi, 400, JSON.stringify(drugi));
+
+  // Nowy wniosek jest edytowalny — PUT nie odbija się o stary, przyjęty wiersz.
+  const [statusPut, poPut] = await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Druga B8 P.S.A.' }, ciastkoKlienta);
+  assert.equal(statusPut, 200, JSON.stringify(poPut));
+  assert.equal(poPut.wniosek.id, nowy.wniosek.id);
+  assert.equal(poPut.wniosek.nazwa, 'Druga B8 P.S.A.');
+
+  // "Moje spółki" widzi teraz wniosek w toku obok istniejącej spółki.
+  const [, mojePo] = await zapytaj('GET', '/api/psa/portal/moje', undefined, ciastkoKlienta);
+  assert.equal(mojePo.spolki.length, 1);
+  assert.ok(mojePo.wniosek, 'wniosek o drugą spółkę widoczny jako "w toku"');
+  assert.equal(mojePo.wniosek.id, nowy.wniosek.id);
+});
+
+test('B8: wnioskodawca (jeszcze bez żadnej spółki) nie może użyć "Dodaj spółkę"', async () => {
+  const hash = await hasla.hashuj('HasloWnioskodawcyB8');
+  db()
+    .prepare(`INSERT INTO psa_konta (email, hash_hasla, rola, aktywne, utworzono) VALUES (?, ?, 'wnioskodawca', 1, ?)`)
+    .run('b8-wnioskodawca@example.pl', hash, new Date().toISOString());
+  const odpLogin = await fetch(`${baza}/api/psa/portal/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'b8-wnioskodawca@example.pl', haslo: 'HasloWnioskodawcyB8' }),
+  });
+  const ciastko = ciasteczkoZOdpowiedzi(odpLogin);
+  const [status, wynik] = await zapytaj('POST', '/api/psa/portal/wniosek/nowy', {}, ciastko);
+  assert.equal(status, 400, JSON.stringify(wynik));
+});

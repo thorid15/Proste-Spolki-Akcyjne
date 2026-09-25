@@ -19,19 +19,18 @@ function zweryfikuj(haslo, hash) {
 }
 
 /**
- * Minimalna polityka silnego hasla - sekcja 11 nie precyzuje wymogow,
- * przyjmujemy rozsadne minimum: dlugosc + litera + cyfra.
+ * Minimalna polityka silnego hasla (naprawa B1, FAZA 2 sesji frontendowej).
+ * Dlugosc bez wymogow skladu (litera+cyfra) - taki wymog nie zwieksza
+ * realnej sily hasla (NIST SP 800-63B), a jedynie zniecheca do hasel
+ * wygenerowanych przez menedzera hasel (np. same znaki specjalne i cyfry
+ * bez litery, albo odwrotnie), ktore sa silniejsze niz cokolwiek spelniajace
+ * wymog skladu. Dlugosc 12 zamiast 10 - jedyny parametr, ktory realnie
+ * zwieksza entropie.
  */
 function ocenSile(haslo) {
   const tekst = String(haslo || '');
-  if (tekst.length < 10) {
-    return { ok: false, powod: 'Hasło musi mieć co najmniej 10 znaków.' };
-  }
-  if (!/[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(tekst)) {
-    return { ok: false, powod: 'Hasło musi zawierać co najmniej jedną literę.' };
-  }
-  if (!/[0-9]/.test(tekst)) {
-    return { ok: false, powod: 'Hasło musi zawierać co najmniej jedną cyfrę.' };
+  if (tekst.length < 12) {
+    return { ok: false, powod: 'Hasło musi mieć co najmniej 12 znaków.' };
   }
   return { ok: true, powod: null };
 }

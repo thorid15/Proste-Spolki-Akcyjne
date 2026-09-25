@@ -159,7 +159,7 @@ function EkranLoginPortal({ przyZalogowaniu }) {
         <input type="email" autoFocus value={email} onChange={(z) => ustawEmail(z.target.value)} autoComplete="username" />
       </Pole>
       <Pole etykieta="Hasło" wymagane>
-        <input type="password" value={haslo} onChange={(z) => ustawHaslo(z.target.value)} autoComplete="current-password" />
+        <PoleHaslo id="portal-login-haslo" wartosc={haslo} przyZmianie={ustawHaslo} autoComplete="current-password" />
       </Pole>
 
       <button
@@ -350,13 +350,25 @@ function EkranAktywacjaKonta({ token }) {
       <div className="brama-karta-tytul">Aktywacja konta</div>
       <div className="brama-karta-podtytul">{email}</div>
 
+      {/* Pole widoczne wyłącznie dla menedżera haseł (B1): bez inputu
+          `autoComplete="username"` powiązanego z formularzem hasła
+          przeglądarka nie wie, z jakim kontem skojarzyć zapisane hasło —
+          e-mail jako sam tekst (bez inputu) tej roli nie spełnia. Pole jest
+          tylko do odczytu i pomijane w kolejności Tab (nie ma czego w nim
+          poprawiać — adres pochodzi z zaproszenia). */}
+      <input
+        type="email" value={email || ''} readOnly tabIndex={-1}
+        autoComplete="username" name="email" aria-hidden="true"
+        style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+      />
+
       <Komunikat odmiana="blad" tresc={blad} />
 
-      <Pole etykieta="Hasło" wymagane podpowiedz="Co najmniej 10 znaków, litera i cyfra.">
-        <input type="password" autoFocus value={haslo} onChange={(z) => ustawHaslo(z.target.value)} autoComplete="new-password" />
+      <Pole etykieta="Hasło" wymagane podpowiedz="Co najmniej 12 znaków — bez wymogu wielkich liter czy cyfr.">
+        <PoleHaslo id="haslo-nowe" autoFocus wartosc={haslo} przyZmianie={ustawHaslo} autoComplete="new-password" />
       </Pole>
       <Pole etykieta="Powtórz hasło" wymagane>
-        <input type="password" value={powtorzHaslo} onChange={(z) => ustawPowtorzHaslo(z.target.value)} autoComplete="new-password" />
+        <PoleHaslo id="haslo-powtorz" wartosc={powtorzHaslo} przyZmianie={ustawPowtorzHaslo} autoComplete="new-password" />
       </Pole>
 
       <button
@@ -483,7 +495,7 @@ function EkranKlauzulaRodo({ przyAkceptacji }) {
 function kartyNawigacji(rola) {
   if (rola === 'wnioskodawca') {
     return [
-      { sciezka: '/wniosek', nazwa: 'Wniosek', ikona: 'dokument' },
+      { sciezka: '/wniosek', nazwa: 'Wniosek', ikona: 'dokument', licznik: true },
       { sciezka: '/', nazwa: 'Moja spółka', ikona: 'spolki' },
       { sciezka: '/sprawy', nazwa: 'Moje zgłoszenia', ikona: 'sprawy' },
       { sciezka: '/platnosci', nazwa: 'Płatności', ikona: 'oplaty', licznik: true },
@@ -496,7 +508,7 @@ function kartyNawigacji(rola) {
   ];
 }
 
-function SzynaPortalu({ sciezka, rola, doZaplaty }) {
+function SzynaPortalu({ sciezka, rola, liczniki }) {
   const aktywna = (poz) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
   return (
     <nav className="szyna bez-druku">
@@ -516,15 +528,21 @@ function SzynaPortalu({ sciezka, rola, doZaplaty }) {
           >
             <Ikona nazwa={poz.ikona} rozmiar={17} />
             <span className="szyna-poz-etykieta">{poz.nazwa}</span>
-            {poz.licznik && doZaplaty > 0 && (
-              <span className="szyna-licznik" title="należności do zapłaty">{doZaplaty}</span>
-            )}
+            {poz.licznik && <Licznik wartosc={liczniki[poz.sciezka]} opis={OPIS_LICZNIKA_PORTALU[poz.sciezka]} />}
           </button>
         ))}
       </div>
     </nav>
   );
 }
+
+/* B6/B5-portal: jeden znacznik dla „coś czeka na Ciebie" — należności
+   niezapłacone i dokumenty jeszcze nieotwarte, ta sama Pigułka co w
+   kancelarii (FAZA 1 pkt 9). */
+const OPIS_LICZNIKA_PORTALU = {
+  '/platnosci': 'należności do zapłaty',
+  '/wniosek': 'nowych dokumentów do zobaczenia',
+};
 
 const ETYKIETA_ROLI_KONTA = {
   spolka: 'konto spółki',
@@ -540,6 +558,16 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
   // klient wraca na inna sciezke i znacznik ma zniknac od razu.
   const { dane: rozliczenia } = useDane('/api/psa/portal/oplaty', [sciezka]);
   const doZaplaty = rozliczenia ? rozliczenia.oplaty.filter((o) => o.status !== 'oplacona').length : 0;
+  // B6 — dokument nowy (jeszcze nieotwarty przez klienta) w komplecie do
+  // podpisu wniosku. Tylko wnioskodawca ma zakładkę „Wniosek" w nawigacji.
+  const { dane: dokumentyWniosku } = useOdswiezaneDane(
+    konto.rola === 'wnioskodawca' ? '/api/psa/portal/wniosek/dokumenty' : null,
+    [sciezka]
+  );
+  const nowychDokumentow = dokumentyWniosku
+    ? dokumentyWniosku.dokumenty.filter((d) => !d.otwarto_w_portalu).length
+    : 0;
+  const liczniki = { '/platnosci': doZaplaty, '/wniosek': nowychDokumentow };
 
   async function wyloguj() {
     ustawWylogowywanie(true);
@@ -559,8 +587,8 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
       <div className="marka-pasek bez-druku" role="banner">
         <div className="marka-pasek-nazwa">{kancelaria.nazwa}</div>
       </div>
-      <SzynaPortalu sciezka={sciezka} rola={konto.rola} doZaplaty={doZaplaty} />
-      <NawigacjaPortaluWaska sciezka={sciezka} rola={konto.rola} doZaplaty={doZaplaty} />
+      <SzynaPortalu sciezka={sciezka} rola={konto.rola} liczniki={liczniki} />
+      <NawigacjaPortaluWaska sciezka={sciezka} rola={konto.rola} liczniki={liczniki} />
       <div className="obszar">
         <div className="topbar bez-druku" role="region" aria-label="Tytuł ekranu">
           <div>
@@ -581,7 +609,7 @@ function PortalLayout({ sciezka, waski, konto, przyWylogowaniu, children }) {
 }
 
 /** Nawigacja na wąskim ekranie — szyna się chowa, zostaje jeden rząd. */
-function NawigacjaPortaluWaska({ sciezka, rola, doZaplaty }) {
+function NawigacjaPortaluWaska({ sciezka, rola, liczniki }) {
   const aktywna = (poz) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
   return (
     <nav className="topbar-nawigacja bez-druku" aria-label="Nawigacja główna">
@@ -593,7 +621,7 @@ function NawigacjaPortaluWaska({ sciezka, rola, doZaplaty }) {
         >
           <Ikona nazwa={poz.ikona} rozmiar={16} />
           <span>{poz.nazwa}</span>
-          {poz.licznik && doZaplaty > 0 && <span className="szyna-licznik">{doZaplaty}</span>}
+          {poz.licznik && <Licznik wartosc={liczniki[poz.sciezka]} opis={OPIS_LICZNIKA_PORTALU[poz.sciezka]} />}
         </button>
       ))}
     </nav>
@@ -689,6 +717,62 @@ function StanWniosku({ wniosek }) {
   );
 }
 
+/**
+ * „Dodaj spółkę" (B8) — nowy wniosek zakłada się jednym kliknięciem, bez
+ * przechodzenia przez publiczny formularz zgłoszenia: to konto już jest
+ * zweryfikowanym klientem kancelarii. Gdy wniosek o kolejną spółkę jest już
+ * w toku, przycisk zamienia się w „Kontynuuj wniosek" — jedna czynność do
+ * końca (0.4 pkt 5), bez ryzyka próby założenia drugiego naraz.
+ */
+function PrzyciskDodajSpolke({ wniosekWToku }) {
+  const [zakladanie, ustawZakladanie] = useState(null);
+
+  async function dodaj() {
+    ustawZakladanie(null);
+    try {
+      await API.post('/api/psa/portal/wniosek/nowy', {});
+      idz('/wniosek');
+    } catch (e) {
+      ustawZakladanie(e instanceof BladApi ? e.message : 'Nie udało się założyć nowego wniosku.');
+    }
+  }
+
+  if (wniosekWToku) {
+    return (
+      <Karta tytul="Wniosek o kolejną spółkę">
+        <div className="rzad-rozdzielony">
+          <div>
+            <div style={{ fontWeight: 600 }}>{wniosekWToku.nazwa || 'Nowa spółka — dane niewypełnione'}</div>
+            <div className="podpowiedz">{(STAN_WNIOSKU_ETYKIETA[wniosekWToku.status] || wniosekWToku.status)}</div>
+          </div>
+          <button className="btn btn-glowny" onClick={() => idz('/wniosek')}>Kontynuuj wniosek</button>
+        </div>
+      </Karta>
+    );
+  }
+
+  return (
+    <Karta>
+      <div className="rzad-rozdzielony">
+        <div>
+          <div style={{ fontWeight: 600 }}>Prowadzisz u nas kolejną prostą spółkę akcyjną?</div>
+          <div className="podpowiedz">Dodajesz ją bez ponownego wypełniania zgłoszenia — od razu wniosek z pobraniem danych z KRS.</div>
+        </div>
+        <button className="btn btn-glowny" onClick={dodaj}>+ Dodaj spółkę</button>
+      </div>
+      <Komunikat odmiana="blad" tresc={zakladanie} />
+    </Karta>
+  );
+}
+
+const STAN_WNIOSKU_ETYKIETA = {
+  w_przygotowaniu: 'wypełnianie w toku',
+  do_uzupelnienia: 'kancelaria prosi o uzupełnienie',
+  zlozony: 'złożony — czeka na weryfikację',
+  umowa_wygenerowana: 'dokumenty czekają na podpis',
+  umowa_podpisana: 'podpisany — czeka na przyjęcie',
+};
+
 /* ─────────────────────────────────────────────────────
    MOJE SPÓŁKI / AKCJE
    ───────────────────────────────────────────────────── */
@@ -707,12 +791,27 @@ function EkranMoje() {
   // pustej listy pokazujemy, na czym stoi wniosek i co dzieje się dalej.
   if (dane.rola === 'wnioskodawca') return <StanWniosku wniosek={dane.wniosek} />;
 
+  // B8 — „Dodaj spółkę": konto „spolka" prowadzi już przynajmniej jedną
+  // spółkę i może dodać kolejną, bez wracania do publicznego formularza
+  // zgłoszenia. Jeśli wniosek o drugą spółkę jest już w toku, przycisk
+  // prowadzi wprost do niego zamiast zakładać kolejny (serwer i tak by go
+  // odrzucił — patrz `POST /wniosek/nowy`).
+  const przyciskDodajSpolke = dane.rola === 'spolka' && (
+    <PrzyciskDodajSpolke wniosekWToku={dane.wniosek} />
+  );
+
   if (dane.spolki.length === 0) {
-    return <Pusto tytul="Brak powiązanych spółek" opis="To konto nie jest jeszcze powiązane z żadną spółką w rejestrze." />;
+    return (
+      <div className="pion" style={{ gap: 16 }}>
+        <Pusto tytul="Brak powiązanych spółek" opis="To konto nie jest jeszcze powiązane z żadną spółką w rejestrze." />
+        {przyciskDodajSpolke}
+      </div>
+    );
   }
 
   return (
     <div className="pion" style={{ gap: 16 }}>
+      {przyciskDodajSpolke}
       {doZaplaty.length > 0 && (
         <Komunikat
           odmiana="uwaga"
@@ -1430,11 +1529,13 @@ function AplikacjaPortalZSesja({ segmenty, sciezka }) {
     // „Moje spółki" i „Moje zgłoszenia" zmieniały adres, a ekran zostawał
     // ten sam — przyciski wyglądały na zepsute. Teraz nawigacja działa dla
     // każdej roli, a formularz ma własny adres.
-    // Formularz wniosku należy WYŁĄCZNIE do konta wnioskodawcy. Po przyjęciu
-    // wniosku konto przechodzi w rolę „spolka" i ekran nie ma już czego
-    // pokazać — pod tym adresem zostawałby martwy kreator z zamkniętą edycją.
+    // Formularz wniosku należy do konta wnioskodawcy — i, od B8, do konta
+    // „spolka" z otwartym wnioskiem o KOLEJNĄ spółkę („Dodaj spółkę").
+    // Bez otwartego wniosku (rola „spolka", nic w toku) pod tym adresem
+    // zostawałby martwy kreator — wraca na „Moje spółki", skąd zaczyna się
+    // nowy wniosek świadomym kliknięciem.
     if (segmenty[0] === 'wniosek') {
-      return sesja.konto.rola === 'wnioskodawca' ? <EkranWniosku /> : <EkranMoje />;
+      return ['wnioskodawca', 'spolka'].includes(sesja.konto.rola) ? <EkranWniosku /> : <EkranMoje />;
     }
     if (segmenty.length === 0) return <EkranMoje />;
     if (segmenty[0] === 'sprawy') return <EkranSprawyPortal />;

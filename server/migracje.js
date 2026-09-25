@@ -2079,6 +2079,67 @@ const MIGRACJE = [
       ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN kraj TEXT NOT NULL DEFAULT 'Polska';
     `,
   },
+
+  {
+    wersja: 53,
+    nazwa: 'reprezentant: dowod (rodzaj+numer) i adres ustrukturyzowany (FAZA 2 sesji frontendowej, B2/B3)',
+    sql: `
+      -- Reprezentant mial dotad dwa pola tekstowe bez struktury:
+      -- reprezentant_dowod ("DGK 138559", bez rozroznienia dowod/paszport) i
+      -- reprezentant_adres ("76-015 Manowo, ulica Kasztanowa nr 17 m. 1",
+      -- jeden ciag znakow) - w odroznieniu od akcjonariusza i psa_osoby,
+      -- gdzie te same dane sa rozbite na kolumny. Nowe kolumny obok starych;
+      -- stare NIE sa usuwane ani migrowane automatycznie do struktury (adresu
+      -- tekstowego nie da sie bezpiecznie sparsowac na ulica/nr/kod) -
+      -- server/logika/kontekst-pisma.js woli nowe, ustrukturyzowane pola,
+      -- gdy sa wypelnione, w przeciwnym razie czyta stary tekst (kontrakt:
+      -- stare pole zostaje TYLKO DO ODCZYTU, dopoki ktos nie przepisze go
+      -- przez nowy formularz PoleAdres/PoleDowod).
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_dowod_rodzaj TEXT
+        CHECK (reprezentant_dowod_rodzaj IS NULL OR reprezentant_dowod_rodzaj IN ('dowod_osobisty','paszport'));
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_dowod_numer TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_kraj TEXT NOT NULL DEFAULT 'Polska';
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_kod_pocztowy TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_miejscowosc TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_ulica TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_nr_domu TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_nr_lokalu TEXT;
+
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_dowod_rodzaj TEXT
+        CHECK (reprezentant_dowod_rodzaj IS NULL OR reprezentant_dowod_rodzaj IN ('dowod_osobisty','paszport'));
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_dowod_numer TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_kraj TEXT NOT NULL DEFAULT 'Polska';
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_kod_pocztowy TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_miejscowosc TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_ulica TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_nr_domu TEXT;
+      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_nr_lokalu TEXT;
+
+      -- Dotychczasowy tekst dowodu przenosi sie do _numer - rodzaj zostaje
+      -- pusty i oznaczony w UI "do uzupelnienia" (brak wiarygodnego sposobu
+      -- odgadniecia dowod/paszport z samego numeru).
+      UPDATE psa_spolki SET reprezentant_dowod_numer = reprezentant_dowod
+        WHERE reprezentant_dowod IS NOT NULL AND TRIM(reprezentant_dowod) != '';
+      UPDATE psa_wnioski SET reprezentant_dowod_numer = reprezentant_dowod
+        WHERE reprezentant_dowod IS NOT NULL AND TRIM(reprezentant_dowod) != '';
+    `,
+  },
+
+  {
+    wersja: 54,
+    nazwa: 'slad pierwszego otwarcia dokumentu w portalu (B6, FAZA 2 sesji frontendowej)',
+    sql: `
+      -- Portal nie mial dotad zadnego sposobu odroznienia dokumentu, ktorego
+      -- klient jeszcze nie widzial, od tego, ktory juz otworzyl - stad brak
+      -- licznika "coś nowego czeka" (FRONTEND-INWENTARZ.md B6). Kolumna
+      -- ustawia sie RAZ, przy pierwszym pobraniu pliku przez klienta
+      -- (server/logika/pakiet-wniosku.js: oznaczOtwarte) - jednoczesnie
+      -- slad doreczenia (WDROZENIE-PSA.md § 1): moment, w ktorym dokument
+      -- na pewno dotarl do adresata, a nie tylko zostal wystawiony.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN otwarto_w_portalu TEXT;
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN otwarto_w_portalu TEXT;
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
