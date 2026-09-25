@@ -1879,7 +1879,13 @@ a.stopka-poz:hover span { text-decoration: underline; }
   font-weight: 600;
   color: var(--rejestr);
   margin-bottom: var(--od-8);
+  cursor: pointer;
 }
+/* `<details>` zamknięte domyślnie (P4 — dziś ~20 ekranów przewijania na
+   telefonie): stopka pod listą dokumentów, zwijana, żeby nie zajmowała
+   miejsca, dopóki ktoś faktycznie chce ją przeczytać. */
+.instrukcja-podpisu[open] .instrukcja-podpisu-tytul { margin-bottom: var(--od-8); }
+.instrukcja-podpisu:not([open]) .instrukcja-podpisu-tytul { margin-bottom: 0; }
 .instrukcja-podpisu-lista { margin: 0 0 var(--od-12) var(--od-16); padding: 0; }
 .instrukcja-podpisu-lista li { margin-bottom: var(--od-8); }
 .instrukcja-podpisu-lista li:last-child { margin-bottom: 0; }

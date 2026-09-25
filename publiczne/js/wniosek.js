@@ -1162,8 +1162,8 @@ function EkranWniosku() {
                   )}
                 </div>
 
-                <div className="instrukcja-podpisu">
-                  <div className="instrukcja-podpisu-tytul">Jak podpisać dokumenty</div>
+                <details className="instrukcja-podpisu">
+                  <summary className="instrukcja-podpisu-tytul">Jak podpisać dokumenty</summary>
                   <ul className="instrukcja-podpisu-lista">
                     <li>
                       <strong>Podpisem własnoręcznym</strong> — wydrukuj dokument, podpisz go odręcznie,
@@ -1179,7 +1179,7 @@ function EkranWniosku() {
                       dokument podpisany w ten sposób również przyjmujemy.
                     </li>
                   </ul>
-                </div>
+                </details>
               </>
             )}
 
