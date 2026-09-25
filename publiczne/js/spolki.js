@@ -179,7 +179,7 @@ function PozycjaZalozycielska({ pozycja, ustawPozycje, usun, mozna_usunac, wyklu
  * (formularz klienta zbiera tożsamość, nie kapitał) — pracownik wpisuje je
  * tu samodzielnie, tak jak przy spółce zakładanej wewnętrznie.
  */
-function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
+function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) {
   const [krok, ustawKrokWewn] = useState(spolkaIstniejaca ? 2 : 0);
   // Najdalszy osiągnięty krok — do niego pasek kroków jest klikalny (0.4 pkt 8).
   const [osiagniety, ustawOsiagniety] = useState(spolkaIstniejaca ? 2 : 0);
@@ -201,7 +201,15 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
   const [umowaZalacznik, ustawUmowaZalacznik] = useState(null);
 
   const [emisja, ustawEmisje] = useState(PUSTA_EMISJA_ZALOZYCIELSKA);
-  const [pozycje, ustawPozycjeState] = useState([{}]);
+  // K2 (FAZA 3 sesji frontendowej v2): osoby z przyjętego wniosku podstawione
+  // od razu — pracownik nie wybiera ich drugi raz z kartoteki, wpisuje tylko
+  // liczbę akcji i cenę (D-053: bez liczby akcji we wniosku, uzupełnia je
+  // kancelaria z umowy spółki).
+  const [pozycje, ustawPozycjeState] = useState(
+    akcjonariuszeWniosku.length > 0
+      ? akcjonariuszeWniosku.map((a) => ({ osoba_id: a.osoba_id }))
+      : [{}]
+  );
   const [zgoda, ustawZgode] = useState(PUSTA_ZGODA_SPOLKI);
 
   // Etap 2.5: data emisji założycielskiej = data zawarcia umowy spółki
@@ -308,7 +316,28 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
     (!zgoda.zgoda_termin_wskazania_dni || !zgoda.zgoda_cena_opis.trim() || !zgoda.zgoda_termin_zaplaty_dni);
 
   const mozeDalejZ0 = Boolean(dane.nazwa && dane.nazwa.trim());
-  const wszystkoOdhaczone = CHECKLISTA_OTWARCIA.every((p) => odhaczone[p.kod]);
+
+  // K2 (FAZA 3 sesji frontendowej v2, D-052): system NIE zaznacza pozycji
+  // checklisty sam, ale BLOKUJE zaznaczenie tych dwóch, które umie
+  // rozstrzygnąć negatywnie — inaczej odznaczenie w całości checklisty (np.
+  // przez skok bezpośrednio na krok „Weryfikacja" pasekiem kroków, z
+  // pominięciem walidacji „Dalej" na kroku 2) kończyło się odrzuceniem
+  // zapisu przez serwer PO kliknięciu „Otwórz rejestr" — ślepy zaułek,
+  // którego ma nie być z konstrukcji. Pozostałe pozycje (np. „jedna_umowa")
+  // wymagają oceny pracownika — system nie ma skąd wziąć tej wiedzy.
+  const BLOKADY_CHECKLISTY = {
+    wpis_krs: !dane.data_utworzenia_spolki
+      ? {
+          powod: 'Brak daty wpisu emisji do KRS — bez niej akcje formalnie nie istnieją (art. 300(30) § 2 KSH).',
+          krok: 2,
+          pole: 'otwarcie-data-krs',
+        }
+      : null,
+    bilans: przekroczonyBilans
+      ? { powod: 'Akcjonariusze obejmują więcej akcji, niż wyemitowano — zmniejsz którąś z pozycji.', krok: 2, pole: null }
+      : null,
+  };
+  const wszystkoOdhaczone = CHECKLISTA_OTWARCIA.every((p) => !BLOKADY_CHECKLISTY[p.kod] && odhaczone[p.kod]);
 
   /* „Dalej" nie jest wyłączany z powodu braków (FAZA 1 pkt 3, 0.4 pkt 8) —
      kliknięcie pokazuje podsumowanie braków z odnośnikami do pól. */
@@ -343,6 +372,16 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
         const wynikSpolki = await API.post('/api/psa/spolki', dane);
         id = wynikSpolki.spolka.id;
         ustawSpolkaId(id);
+      } else {
+        // Naprawa K2 (FAZA 3 sesji frontendowej v2): spółka istniejąca (z
+        // przyjętego wniosku) startuje kreator od kroku 2 — jeśli pracownik
+        // wróci do kroku 0/1 i uzupełni np. datę uchwały o wyborze albo datę
+        // umowy o prowadzenie rejestru, te zmiany NIE zapisywały się nigdzie
+        // (w odróżnieniu od ścieżki nowej spółki, gdzie `dane` idzie w
+        // całości w POST powyżej) — kokpit potem pokazywał „–" mimo
+        // wypełnionego pola w kreatorze. `wyczysc()` po stronie serwera i tak
+        // filtruje do znanych kolumn spółki.
+        await API.put(`/api/psa/spolki/${id}`, dane);
       }
 
       if (umowaZalacznik) {
@@ -853,16 +892,39 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
           <>
             <div className="card-h">Weryfikacja przed otwarciem rejestru</div>
             <div className="checklista">
-              {CHECKLISTA_OTWARCIA.map((p) => (
-                <label key={p.kod} className="chk">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(odhaczone[p.kod])}
-                    onChange={(z) => ustawOdhaczone((o) => ({ ...o, [p.kod]: z.target.checked }))}
-                  />
-                  <span className="chk-tresc">{p.tresc}</span>
-                </label>
-              ))}
+              {CHECKLISTA_OTWARCIA.map((p) => {
+                const blokada = BLOKADY_CHECKLISTY[p.kod];
+                return (
+                  <div key={p.kod}>
+                    <label className="chk">
+                      <input
+                        type="checkbox"
+                        checked={!blokada && Boolean(odhaczone[p.kod])}
+                        disabled={Boolean(blokada)}
+                        onChange={(z) => ustawOdhaczone((o) => ({ ...o, [p.kod]: z.target.checked }))}
+                      />
+                      <span className="chk-tresc">{p.tresc}</span>
+                    </label>
+                    {blokada && (
+                      <p className="nawigacja-powod" style={{ marginLeft: 28 }}>
+                        {blokada.powod}{' '}
+                        <button
+                          type="button"
+                          className="btn-tekstowy"
+                          onClick={() => {
+                            ustawKrok(blokada.krok);
+                            if (blokada.pole) {
+                              setTimeout(() => document.getElementById(blokada.pole)?.focus(), 50);
+                            }
+                          }}
+                        >
+                          Uzupełnij
+                        </button>
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <Komunikat
               odmiana="info"
@@ -907,9 +969,15 @@ function EkranNowejSpolki({ spolkaIstniejaca } = {}) {
  */
 function EkranOtwarciaRejestru({ spolkaId }) {
   const { dane, ladowanie, blad } = useDane(`/api/psa/spolki/${spolkaId}`);
-  if (ladowanie) return <Spinner />;
+  const wniosek = useDane(`/api/psa/spolki/${spolkaId}/wniosek-akcjonariusze`);
+  if (ladowanie || wniosek.ladowanie) return <Spinner />;
   if (blad || !dane) return <Komunikat odmiana="blad" tresc={blad ? blad.message : 'Nie odnaleziono spółki.'} />;
-  return <EkranNowejSpolki spolkaIstniejaca={dane.spolka} />;
+  return (
+    <EkranNowejSpolki
+      spolkaIstniejaca={dane.spolka}
+      akcjonariuszeWniosku={(wniosek.dane && wniosek.dane.akcjonariusze) || []}
+    />
+  );
 }
 
 function EkranSpolek() {

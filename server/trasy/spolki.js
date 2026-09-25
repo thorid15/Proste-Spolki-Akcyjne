@@ -353,6 +353,37 @@ router.get(
 );
 
 /**
+ * K2 (FAZA 3 sesji frontendowej v2): akcjonariusze przyjętego wniosku, z
+ * którego ta spółka powstała — kreator otwarcia rejestru (krok „Pierwsza
+ * emisja") podstawia ich jako pozycje objęcia, żeby pracownik nie wybierał
+ * ich drugi raz z kartoteki (0.4 pkt 1 — „raz wpisane, nigdy więcej"; te
+ * same osoby zostały tam już założone/dopasowane przy `POST
+ * /wnioski/:id/przyjmij`). Bez liczby akcji ani ceny (D-053) — to wpisuje
+ * kancelaria z umowy spółki.
+ */
+router.get(
+  '/:id/wniosek-akcjonariusze',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const wniosek = db()
+      .prepare(`SELECT id FROM psa_wnioski WHERE spolka_id = ? AND status = 'przyjety' ORDER BY id DESC LIMIT 1`)
+      .get(id);
+    if (!wniosek) return odp.json({ akcjonariusze: [] });
+    const maskowanie = require('../logika/maskowanie');
+    const wiersze = db()
+      .prepare(
+        `SELECT o.* FROM psa_wnioski_akcjonariusze a
+           JOIN psa_osoby o ON o.id = a.osoba_id
+          WHERE a.wniosek_id = ? AND a.osoba_id IS NOT NULL`
+      )
+      .all(wniosek.id);
+    odp.json({
+      akcjonariusze: wiersze.map((o) => ({ osoba_id: o.id, oznaczenie: maskowanie.oznaczenieOsoby(o) })),
+    });
+  })
+);
+
+/**
  * Kokpit spolki - jeden ekran: stan na dzis + historia + liczniki.
  * `?data=` przyjmuje `RRRR-MM-DD` (koniec dnia) albo `RRRR-MM-DDTGG:MM[:SS]`
  * (dokladnosc do minuty, po `data_wpisu` - sekcja 2.3 sesji interfejsowej).
