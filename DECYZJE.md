@@ -741,6 +741,81 @@
 
 ---
 
+### D-059 — Reprezentant: dowód (rodzaj+numer) i adres ustrukturyzowany, stare pola tylko do odczytu (B2/B3)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)
+- Obszar: rejestr / dokumenty
+- Decyzja: reprezentant spółki (osoba, która podpisała umowę o prowadzenie rejestru) miał dotąd
+  dwa pola tekstowe bez struktury: `reprezentant_dowod` (jeden ciąg, np. „DGK 138559", bez
+  rozróżnienia dowód/paszport) i `reprezentant_adres` (jeden ciąg). Migracja 53 dodaje kolumny
+  ustrukturyzowane — `reprezentant_dowod_rodzaj`/`reprezentant_dowod_numer` oraz
+  `reprezentant_kod_pocztowy`/`reprezentant_miejscowosc`/`reprezentant_ulica`/`reprezentant_nr_domu`/
+  `reprezentant_nr_lokalu` — na `psa_spolki` i `psa_wnioski`, analogicznie do akcjonariusza i
+  `psa_osoby`. Formularze (`spolki.js`, `wniosek.js`, `wnioski.js`) używają odtąd dedykowanych
+  komponentów `PoleDowod`/`PoleAdres` z jawnym `klucze` zamiast generycznych pól tekstowych.
+- Uzasadnienie: spójność z resztą formularza osoby (reprezentant był jedynym miejscem bez
+  struktury dowodu/adresu) — dokumenty generowane dla reprezentanta (umowa, uchwała) czytają teraz
+  pola ustrukturyzowane wprost, bez parsowania wolnego tekstu.
+- Migracja: stare kolumny (`reprezentant_dowod`, `reprezentant_adres`) NIE są usuwane ani
+  migrowane automatycznie do struktury — tekstu adresu nie da się bezpiecznie rozbić na
+  ulica/nr/kod. Istniejący `reprezentant_dowod` jest przepisywany do `reprezentant_dowod_numer`
+  (rodzaj zostaje pusty, oznaczony w UI „do uzupełnienia"). `server/logika/kontekst-pisma.js`
+  (`reprezentantDowodPelny`/`reprezentantAdresPelny`) czyta nowe pola, gdy są wypełnione, w
+  przeciwnym razie stary tekst — stare pole zostaje kontraktowo TYLKO DO ODCZYTU, dopóki ktoś nie
+  przepisze go przez nowy formularz.
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, punkty B2+B3.
+- Skutek w kodzie: migracja 53; `server/logika/kontekst-pisma.js`; `publiczne/js/spolki.js`,
+  `wniosek.js`, `wnioski.js` (pola `PoleDowod`/`PoleAdres` z jawnym `klucze`).
+
+---
+
+### D-060 — Ślad pierwszego otwarcia dokumentu w portalu jako dowód doręczenia (B6)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)
+- Obszar: portal
+- Decyzja: kolumna `otwarto_w_portalu` (migracja 54, `psa_wnioski_dokumenty` i
+  `psa_wydane_dokumenty`) ustawia się RAZ, przy pierwszym pobraniu pliku przez klienta
+  (`server/logika/pakiet-wniosku.js: oznaczOtwarte`). Portal pokazuje plakietkę „nowy" przy
+  dokumencie, którego klient jeszcze nie otworzył (`PozycjaDokumentu`, `publiczne/js/wniosek.js`),
+  a `PortalLayout` (`portal.js`) liczy nieotwarte dokumenty do licznika w nawigacji.
+- Uzasadnienie: dwa cele jednym polem — licznik „coś nowego czeka" (brak którego był luką z FAZY 0,
+  punkt B6) I jednocześnie ślad doręczenia: moment, w którym dokument NA PEWNO dotarł do adresata,
+  a nie tylko został wystawiony przez kancelarię.
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, punkt B6; `FRONTEND-INWENTARZ.md` B6.
+- Skutek w kodzie: migracja 54; `server/logika/pakiet-wniosku.js`; `publiczne/js/wniosek.js`
+  (plakietka „nowy"); `publiczne/js/portal.js` (`PortalLayout`, `SzynaPortalu`, liczniki).
+
+---
+
+### D-061 — Portal: „Dodaj spółkę" jako nowy wniosek na już zalogowanym koncie (B8)
+
+- Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)
+- Obszar: portal
+- Decyzja: konto w roli `spolka` (przyjęte, prowadzi już ≥1 spółkę) może samodzielnie założyć
+  KOLEJNY wniosek o drugą spółkę przyciskiem „Dodaj spółkę" (`PrzyciskDodajSpolke`,
+  `publiczne/js/portal.js`) — bez pośrednictwa kancelarii. Backend: nowy `POST
+  /api/psa/portal/wniosek/nowy` (odmawia, gdy konto jest w roli `wnioskodawca` bez żadnej spółki, i
+  gdy konto ma już otwarty wniosek w toku) oraz nowy `GET /api/psa/portal/wnioski` (liczba mnoga —
+  lista wszystkich wniosków konta z ich statusami, do „Użyj danych reprezentanta z poprzedniego
+  wniosku" i etykiet stanu w „Moje spółki").
+- Odrzucono: zmianę kształtu odpowiedzi istniejącego `GET /portal/wniosek` (liczba pojedyncza,
+  dziś zwraca jeden obiekt) na listę/tablicę — literalne brzmienie specyfikacji sesji sugerowało tę
+  zmianę, ale wymagałaby przepisania ~15 istniejących konsumentów tej trasy (dokumenty, podpisy,
+  weryfikacja) pod nowy kontrakt bez wyraźnej korzyści — nowy endpoint w liczbie mnogiej osiąga ten
+  sam cel funkcjonalny przy niższym ryzyku regresji.
+- Wykorzystana infrastruktura: model wielu spółek na jedno konto (`psa_konta_spolki`,
+  D-037) i endpoint `/moje` już poprawnie filtrowały po `status NOT IN ('przyjety', 'odrzucony')` —
+  ten sam warunek zastosowano w nowym `wczytajOtwartyWniosekKonta()`, używanym też przez
+  wszystkie dotychczasowe trasy `PUT/GET /wniosek*` (wcześniej szukały wyłącznie po `konto_id` bez
+  rozróżnienia, KTÓRY z wielu wniosków konta jest „bieżący").
+- Źródło: `SESJA-PSA-FRONTEND.md` v2, punkt B8.
+- Skutek w kodzie: `server/trasy/portal.js` (`wymagajWnioskodawcy`, `wczytajOtwartyWniosekKonta`,
+  `wczytajLubZalozWniosek`, `GET /wnioski`, `POST /wniosek/nowy`); `publiczne/js/portal.js`
+  (`PrzyciskDodajSpolke`, `STAN_WNIOSKU_ETYKIETA`, routing `wniosek` gated po roli);
+  `publiczne/js/wniosek.js` (podpowiedź danych reprezentanta z poprzedniego wniosku).
+
+---
+
 ### D-057 — Zgłoszenie nieprawidłowości we wpisie: nowa tabela, odrębna od `psa_sprawy` (B9)
 
 - Data: 2026-09-25 (sesja frontendowa v2, FAZA 2)
