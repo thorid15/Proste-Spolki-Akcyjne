@@ -436,6 +436,31 @@ router.post(
 );
 
 // ─────────────────────────────────────────────────────────────
+// Zmiana hasla konta portalowego (ekran „Konto" — Faza 4 pkt 1). Wzorzec
+// identyczny jak `POST /api/psa/auth/zmiana-hasla` dla pracownikow: haslo
+// obecne + nowe, unieważnienie wszystkich tokenow tego konta po zmianie.
+// ─────────────────────────────────────────────────────────────
+
+router.post(
+  '/zmiana-hasla',
+  asy(async (zad, odp) => {
+    const { haslo_obecne, haslo_nowe } = zad.body || {};
+    if (!haslo_obecne || !haslo_nowe) throw bledneZadanie('Podaj obecne i nowe hasło.');
+
+    const pasuje = await hasla.zweryfikuj(haslo_obecne, zad.konto.hash_hasla);
+    if (!pasuje) throw bledneZadanie('Obecne hasło jest nieprawidłowe.');
+
+    const ocena = hasla.ocenSile(haslo_nowe);
+    if (!ocena.ok) throw bledneZadanie(ocena.powod);
+
+    const nowyHash = await hasla.hashuj(haslo_nowe);
+    db().prepare('UPDATE psa_konta SET hash_hasla = ? WHERE id = ?').run(nowyHash, zad.konto.id);
+    autoryzacja.uniewaznijWszystkieTokeny('konto', zad.konto.id);
+    odp.json({ ok: true });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
 // Wniosek o prowadzenie rejestru (etap 3C) - dane spolki i reprezentanta,
 // zbierane PRZED istnieniem spolki w systemie (psa_spolki powstaje dopiero,
 // gdy kancelaria przyjmie wniosek - etap 3F). Wylacznie rola 'wnioskodawca' -
@@ -1447,6 +1472,68 @@ router.get(
     });
 
     odp.json(stan);
+  })
+);
+
+/**
+ * Zakładka „Dokumenty" widoku spółki (Faza 4 pkt 1) — zawiadomienia
+ * o wpisie/odmowie, wydane informacje z rejestru i umowa o prowadzenie
+ * rejestru, wysłane kanałem „portal" (`psa_wydane_dokumenty.kanal`).
+ * Dokumenty bez `odbiorca_osoba_id` sa adresowane do spółki (widzi je rola
+ * „spolka"); z odbiorcą — wyłącznie ten akcjonariusz.
+ */
+router.get(
+  '/spolka/:spolkaId/dokumenty',
+  asy((zad, odp) => {
+    const spolkaId = Number(zad.params.spolkaId);
+    const wiersze = db()
+      .prepare(
+        `SELECT id, typ, sciezka_plik, wyslano, utworzono, odbiorca_osoba_id
+           FROM psa_wydane_dokumenty
+          WHERE spolka_id = ? AND kanal = 'portal'
+            AND (odbiorca_osoba_id IS NULL OR odbiorca_osoba_id = ?)
+          ORDER BY id DESC`
+      )
+      .all(spolkaId, zad.konto.osoba_id ?? -1);
+    odp.json({
+      dokumenty: wiersze.map((d) => ({
+        id: d.id,
+        typ: d.typ,
+        data: d.wyslano || d.utworzono,
+        pobierz: d.sciezka_plik ? `/api/psa/portal/spolka/${spolkaId}/dokumenty/${d.id}/plik` : null,
+      })),
+    });
+  })
+);
+
+router.get(
+  '/spolka/:spolkaId/dokumenty/:id/plik',
+  asy((zad, odp) => {
+    const spolkaId = Number(zad.params.spolkaId);
+    const dokument = db()
+      .prepare(
+        `SELECT * FROM psa_wydane_dokumenty
+          WHERE id = ? AND spolka_id = ? AND kanal = 'portal'
+            AND (odbiorca_osoba_id IS NULL OR odbiorca_osoba_id = ?)`
+      )
+      .get(Number(zad.params.id), spolkaId, zad.konto.osoba_id ?? -1);
+    if (!dokument || !dokument.sciezka_plik) throw nieZnaleziono('Nie odnaleziono pliku.');
+
+    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, dokument.sciezka_plik);
+    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
+      throw nieZnaleziono('Plik nie jest już dostępny.');
+    }
+
+    dziennikDostepu.zapisz(db(), {
+      kto: `Portal — ${zad.konto.email}`, typKto: 'portal', spolkaId, osobaId: zad.konto.osoba_id,
+      akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU, opis: `wydany dokument #${dokument.id} (${dokument.typ})`,
+    });
+    odp.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+    odp.setHeader('Content-Disposition', `attachment; filename="${path.basename(pelnaSciezka).replace(/^[^-]+-/, '')}"`);
+    odp.sendFile(pelnaSciezka);
   })
 );
 

@@ -428,16 +428,6 @@ function MetrykaBoczna({ spolka, dane, spolkaId, odswiez }) {
   );
 }
 
-function MetrykaPoz({ etykieta, wartosc, dane, podpowiedz }) {
-  return (
-    <div className="metryka-pion-poz">
-      <div className="metryka-pion-etykieta">{etykieta}</div>
-      <div className={`metryka-pion-wartosc ${dane ? 'dane' : ''}`}>{wartosc || '—'}</div>
-      {podpowiedz && <div className="podstawa-prawna">{podpowiedz}</div>}
-    </div>
-  );
-}
-
 /* ═════════════════════════════════════════════════════
    WPISY: KAŻDY REJESTR MA SWÓJ PRZYCISK
    ═════════════════════════════════════════════════════ */

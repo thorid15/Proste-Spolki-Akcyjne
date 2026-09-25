@@ -91,6 +91,7 @@ const SCIEZKI_IKON = {
   globus: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3.4 9h17.2M3.4 15h17.2M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
   oko: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
   okoPrzekreslone: 'M3 3l18 18M9.9 9.9a3 3 0 0 0 4.2 4.2M6.5 6.7C4 8.3 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.5 4.5-1.2M10.6 5.1c.5-.1.9-.1 1.4-.1 6.4 0 10 7 10 7-.5.9-1.3 2.1-2.5 3.2',
+  pomoc: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.2 9a2.8 2.8 0 1 1 3.8 2.6c-.8.3-1 .9-1 1.7v.3M12 16.5v.01',
 };
 
 /**
@@ -448,6 +449,22 @@ function WierszListy({ ikona, tytul, podtytul, prawo, data, przyKlik }) {
         {data && <span className="wiersz-data">{data}</span>}
       </span>
     </button>
+  );
+}
+
+/**
+ * Pasek metryki: pary etykieta/wartość w pionie. Wspólny dla kokpitu spółki
+ * (kancelaria), profilu osoby (K4) i ekranów „Konto"/„Pomoc" w portalu
+ * (Faza 4) — przeniesiony tutaj z `kokpit.js`, bo `kokpit.js` nie wchodzi
+ * do paczki portalu (`narzedzia/buduj-front.js`).
+ */
+function MetrykaPoz({ etykieta, wartosc, dane, podpowiedz }) {
+  return (
+    <div className="metryka-pion-poz">
+      <div className="metryka-pion-etykieta">{etykieta}</div>
+      <div className={`metryka-pion-wartosc ${dane ? 'dane' : ''}`}>{wartosc || '—'}</div>
+      {podpowiedz && <div className="podstawa-prawna">{podpowiedz}</div>}
+    </div>
   );
 }
 

@@ -102,6 +102,11 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'GET /informacja/:id',
     'GET /moje',
     'GET /rejestr/:spolkaId',
+    // Faza 4 pkt 1 — zakładka „Dokumenty" widoku spółki. Chronione przez
+    // `router.param('spolkaId', ...)` (jak `GET /rejestr/:spolkaId` wyżej)
+    // + filtr `odbiorca_osoba_id` w samym zapytaniu SQL (patrz handler).
+    'GET /spolka/:spolkaId/dokumenty',
+    'GET /spolka/:spolkaId/dokumenty/:id/plik',
     'GET /whoami',
     'GET /zadania',
     'POST /login',
@@ -197,6 +202,10 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     // oplaty w URL-u nie wystarcza — zapytanie idzie razem ze spolkami konta.
     'POST /informacja/zamow',
     'POST /informacja/:oplataId/wydaj',
+    // Faza 4 pkt 1 — ekran „Konto": zmiana hasła, dziala WYLACZNIE na
+    // hasle konta z sesji (`zad.konto.hash_hasla`), wzorzec identyczny
+    // jak `POST /api/psa/auth/zmiana-hasla` dla pracownikow.
+    'POST /zmiana-hasla',
   ].sort();
 
   assert.deepEqual(
