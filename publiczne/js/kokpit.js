@@ -105,7 +105,29 @@ function rodzajAkcjiDlaEmisji(emisje, emisjaKlucz) {
   return NAZWY_RODZAJU_AKCJI_KOKPIT[rodzaj] || 'zwykła';
 }
 
-function TabelaAkcjonariatu({ akcjonariusze, razem, emisje, lacznie = [] }) {
+/* D-P1: czynności uruchamiane wprost z wiersza — kreator dostaje serię,
+   osobę i zakres numerów (do zawężenia). */
+const CZYNNOSCI_WIERSZA = [
+  ['przeniesienie', 'Zbycie'],
+  ['obciazenie', 'Obciążenie'],
+  ['umorzenie', 'Umorzenie'],
+];
+
+function CzynnosciWiersza({ spolkaId, pozycja }) {
+  const adres = (typ) => {
+    const q = new URLSearchParams({ typ, emisja: String(pozycja.emisja_klucz), osoba: String(pozycja.osoba_id), zakres: pozycja.numery });
+    return `/spolki/${spolkaId}/zdarzenie?${q.toString()}`;
+  };
+  return (
+    <div className="rzad bez-druku" style={{ gap: 4, flexWrap: 'wrap' }}>
+      {CZYNNOSCI_WIERSZA.map(([typ, nazwa]) => (
+        <button key={typ} className="btn btn-maly" onClick={() => idz(adres(typ))}>{nazwa}</button>
+      ))}
+    </div>
+  );
+}
+
+function TabelaAkcjonariatu({ akcjonariusze, razem, emisje, lacznie = [], spolkaId, czynnosci = false }) {
   const lacznieWgOsoby = new Map(lacznie.map((l) => [l.osoba_id, l]));
   if (akcjonariusze.length === 0) {
     return (
@@ -128,6 +150,7 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje, lacznie = [] }) {
           <th className="do-prawej">% akcji</th>
           <th>Pokrycie</th>
           <th>Obciążenia</th>
+          {czynnosci && <th className="bez-druku"><span className="sr-only">Czynności</span></th>}
         </tr>
       </thead>
       <tbody>
@@ -170,6 +193,7 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje, lacznie = [] }) {
                   </div>
                 )}
               </td>
+              {czynnosci && <td><CzynnosciWiersza spolkaId={spolkaId} pozycja={a} /></td>}
             </tr>
             {sumaOsoby && (
               <tr className="wiersz-lacznie">
@@ -180,6 +204,7 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje, lacznie = [] }) {
                 <td className="do-prawej" style={{ fontWeight: 600 }}>{fmt.procent(sumaOsoby.procent)}</td>
                 <td />
                 <td />
+                {czynnosci && <td />}
               </tr>
             )}
             </React.Fragment>
@@ -194,9 +219,84 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje, lacznie = [] }) {
           <td className="do-prawej">100%</td>
           <td />
           <td />
+          {czynnosci && <td />}
         </tr>
       </tfoot>
     </table>
+  );
+}
+
+/* ═════════════════════════════════════════════════════
+   SPROSTOWANIE EMISJI (D-P3)
+   ═════════════════════════════════════════════════════ */
+
+const KOMUNIKAT_EMISJA_OBJETA =
+  'Akcje tej emisji zostały już objęte — seria, numeracja i liczba akcji nie mogą być prostowane. ' +
+  'Jeżeli liczba akcji ma się zmniejszyć, dokonaj umorzenia; jeżeli zwiększyć — wpisz nową emisję.';
+
+function ModalSprostowaniaEmisji({ emisja, objeta, przyZamknieciu, przyZapisie }) {
+  const [dane, ustawDane] = useState({
+    seria: emisja.seria, nr_pierwszy: emisja.nr_pierwszy, ilosc: emisja.ilosc,
+    tytul: emisja.tytul || '', opis: emisja.opis || '', uwagi: emisja.uwagi || '',
+  });
+  const [uzasadnienie, ustawUzasadnienie] = useState('');
+  const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const zmien = (pole) => (z) => ustawDane((d) => ({ ...d, [pole]: z.target.value }));
+
+  async function zapisz() {
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    try {
+      await API.post(`/api/psa/zdarzenia/${emisja.klucz}/sprostuj`, {
+        uzasadnienie,
+        zamiast: {
+          typ: 'emisja',
+          dane: {
+            seria: dane.seria, nr_pierwszy: Number(dane.nr_pierwszy), ilosc: Number(dane.ilosc),
+            tytul: dane.tytul || null, opis: dane.opis || null, uwagi: dane.uwagi || null,
+            podstawa_prawna: emisja.podstawa_prawna || null,
+            cena_emisyjna_grosze: emisja.cena_emisyjna_grosze ?? null, waluta: emisja.waluta,
+            data_emisji: emisja.data_emisji || null, data_wpisu_krs: emisja.data_wpisu_krs || null,
+            rodzaj_akcji: emisja.rodzaj_akcji, obowiazki_wobec_spolki: emisja.obowiazki_wobec_spolki || null,
+          },
+        },
+      });
+      przyZapisie();
+    } catch (e) {
+      ustawBlad(e.message);
+      ustawZapisywanie(false);
+    }
+  }
+
+  return (
+    <Modal
+      tytul={`Sprostowanie emisji serii ${emisja.seria}`}
+      przyZamknieciu={przyZamknieciu}
+      szerokosc={600}
+      stopka={
+        <>
+          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          <button className="btn btn-glowny" disabled={!uzasadnienie.trim() || zapisywanie} onClick={zapisz}>
+            {zapisywanie ? 'Zapisywanie…' : 'Zapisz sprostowanie'}
+          </button>
+        </>
+      }
+    >
+      {objeta && <Komunikat odmiana="uwaga" tresc={KOMUNIKAT_EMISJA_OBJETA} />}
+      <Komunikat odmiana="blad" tresc={blad} />
+      <div className="siatka-2">
+        <Pole etykieta="Seria"><input type="text" value={dane.seria} disabled={objeta} onChange={zmien('seria')} /></Pole>
+        <Pole etykieta="Numer pierwszej akcji"><input type="number" min="1" value={dane.nr_pierwszy} disabled={objeta} onChange={zmien('nr_pierwszy')} /></Pole>
+        <Pole etykieta="Liczba akcji"><input type="number" min="1" value={dane.ilosc} disabled={objeta} onChange={zmien('ilosc')} /></Pole>
+      </div>
+      <Pole etykieta="Tytuł emisji"><input type="text" value={dane.tytul} onChange={zmien('tytul')} /></Pole>
+      <Pole etykieta="Opis (drukowany na informacji z rejestru)"><textarea value={dane.opis} onChange={zmien('opis')} /></Pole>
+      <Pole etykieta="Uwagi (wewnętrzne)"><textarea value={dane.uwagi} onChange={zmien('uwagi')} /></Pole>
+      <Pole etykieta="Uzasadnienie sprostowania" wymagane>
+        <textarea value={uzasadnienie} onChange={(z) => ustawUzasadnienie(z.target.value)} />
+      </Pole>
+    </Modal>
   );
 }
 
@@ -721,6 +821,7 @@ function EkranKokpitu({ spolkaId }) {
 
   const wstecz = data !== fmt.dzisIso();
   const [przekazywanie, ustawPrzekazywanie] = useState(false);
+  const [prostowanaEmisja, ustawProstowanaEmisje] = useState(null);
 
   const { dane, ladowanie, blad, odswiez } = useDane(
     `/api/psa/spolki/${spolkaId}?data=${encodeURIComponent(data)}`,
@@ -899,6 +1000,8 @@ function EkranKokpitu({ spolkaId }) {
                 razem={dane.razem_akcji}
                 emisje={emisje}
                 lacznie={dane.akcjonariusze_lacznie || []}
+                spolkaId={spolkaId}
+                czynnosci={!tylkoOdczyt}
               />
               {!tylkoOdczyt && (
                 <DalszeWpisy tytul="Dalsze wpisy:">
@@ -945,6 +1048,7 @@ function EkranKokpitu({ spolkaId }) {
                           obejmować — pusty nagłówek zabierał miejsce ośmiu
                           kolumnom, które zawsze mają treść. */}
                       {!tylkoOdczyt && nieobjete > 0 && <th />}
+                      {!tylkoOdczyt && <th />}
                     </tr>
                   </thead>
                   <tbody>
@@ -972,6 +1076,16 @@ function EkranKokpitu({ spolkaId }) {
                                   Kto obejmuje
                                 </PrzyciskWpisu>
                               ) : null}
+                            </td>
+                          )}
+                          {!tylkoOdczyt && (
+                            <td className="do-prawej bez-druku">
+                              <button
+                                className="btn btn-maly"
+                                onClick={() => ustawProstowanaEmisje({ emisja: e, objeta: e.ilosc - (b.nieobjete || 0) > 0 })}
+                              >
+                                Sprostuj
+                              </button>
                             </td>
                           )}
                         </tr>
@@ -1281,6 +1395,18 @@ function EkranKokpitu({ spolkaId }) {
           nieobjete={nieobjete}
           sanAkcjonariusze={akcjonariusze.length > 0}
           przyZamknieciu={() => ustawDodawanieAkcjonariusza(false)}
+        />
+      )}
+
+      {prostowanaEmisja && (
+        <ModalSprostowaniaEmisji
+          emisja={prostowanaEmisja.emisja}
+          objeta={prostowanaEmisja.objeta}
+          przyZamknieciu={() => ustawProstowanaEmisje(null)}
+          przyZapisie={() => {
+            ustawProstowanaEmisje(null);
+            odswiez();
+          }}
         />
       )}
 

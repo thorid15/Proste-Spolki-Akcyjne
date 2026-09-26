@@ -569,13 +569,23 @@ function KrokUmorzenie({ dane, ustawDane, spolka }) {
                   ))}
                 </select>
               </Pole>
-              <Pole etykieta="Liczba akcji" wymagane>
+              <Pole etykieta="Liczba akcji" wymagane={!p.zakresy_tekst}>
                 <input
                   type="number"
                   min="1"
                   value={p.ilosc ?? ''}
                   onChange={(z) =>
                     ustawPozycje(pozycje.map((x, j) => (j === i ? { ...x, ilosc: z.target.value } : x)))
+                  }
+                />
+              </Pole>
+              {/* D-P1: zakres z wiersza kokpitu — do zawężenia; pusty = numery przydziela aplikacja. */}
+              <Pole etykieta="Numery akcji" podpowiedz="Opcjonalnie, np. „1-100, 150”.">
+                <input
+                  type="text"
+                  value={p.zakresy_tekst ?? ''}
+                  onChange={(z) =>
+                    ustawPozycje(pozycje.map((x, j) => (j === i ? { ...x, zakresy_tekst: z.target.value } : x)))
                   }
                 />
               </Pole>
@@ -736,8 +746,12 @@ function KrokObciazenie({ dane, ustawDane, spolka }) {
               przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id })}
             />
           </Pole>
-          <Pole etykieta="Liczba akcji" wymagane>
+          <Pole etykieta="Liczba akcji" wymagane={!dane.zakresy_tekst}>
             <input type="number" min="1" {...pole('ilosc')} />
+          </Pole>
+          {/* D-P1: zakres z wiersza kokpitu — do zawężenia; pusty = numery przydziela aplikacja. */}
+          <Pole etykieta="Numery akcji" podpowiedz="Opcjonalnie, np. „1-100, 150”.">
+            <input type="text" {...pole('zakresy_tekst')} />
           </Pole>
           <label className="chk">
             <input type="checkbox" checked={dane.blokuje_rozporzadzanie !== false} onChange={(z) => ustawDane({ ...dane, blokuje_rozporzadzanie: z.target.checked })} />
@@ -1311,7 +1325,7 @@ function TabelaPorownania({ tytul, tabela, odniesienie, wariant }) {
  * z gotowym typem i wskazaną serią, więc notariusz nie zakłada sprawy
  * „od zera" i nie szuka emisji, którą przed chwilą wpisał.
  */
-function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawySprawy }) {
+function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy, zPodstawySprawy }) {
   // Typ podany z zewnątrz jest już wybrany — krok „Co się stało" nie ma
   // wtedy nic do zapytania, więc zaczynamy od „Podstawy".
   const [krok, ustawKrok] = useState(typPoczatkowy ? 1 : 0);
@@ -1408,7 +1422,13 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, zPodstawy
 
       // Wskazana emisja jedzie dalej w adresie — krok „Co się zmienia"
       // otworzy się z wybraną serią (sprawy.js: KreatorSprawy).
-      idz(emisjaPoczatkowa ? `/sprawy/${sprawaId}?emisja=${emisjaPoczatkowa}` : `/sprawy/${sprawaId}`);
+      // D-P1: seria, osoba i zakres z wiersza kokpitu jadą dalej do kreatora.
+      const wypelnienie = new URLSearchParams();
+      if (emisjaPoczatkowa) wypelnienie.set('emisja', emisjaPoczatkowa);
+      if (osobaPoczatkowa) wypelnienie.set('osoba', osobaPoczatkowa);
+      if (zakresPoczatkowy) wypelnienie.set('zakres', zakresPoczatkowy);
+      const q = wypelnienie.toString();
+      idz(q ? `/sprawy/${sprawaId}?${q}` : `/sprawy/${sprawaId}`);
     } catch (e) {
       ustawBlad(e.message);
       ustawZapisywanie(false);

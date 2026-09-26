@@ -522,7 +522,23 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
 /* ─────────────────────────────────────────────────────
    KROKI 3–4 OSADZONE — wspólne dla nowej i wznawianej sprawy
    ───────────────────────────────────────────────────── */
-function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano, emisjaPoczatkowa }) {
+/**
+ * D-P1 — dane startowe kreatora uruchomionego z wiersza akcjonariusza albo
+ * zakresu akcji w kokpicie: seria, osoba (zbywca / akcjonariusz) i zakres
+ * numerów, który w kreatorze można zawęzić.
+ */
+function daneStartowe(typ, emisja, osoba, zakres) {
+  if (!emisja) return {};
+  const baza = { emisja_zdarzenie_id: Number(emisja) };
+  const osobaId = osoba ? Number(osoba) : null;
+  const zakresy = zakres ? { zakresy_tekst: zakres.replace(/–/g, '-') } : {};
+  if (typ === 'przeniesienie' && osobaId) return { ...baza, zbywca_osoba_id: osobaId, pozycje: [{ ...zakresy }] };
+  if (typ === 'umorzenie' && osobaId) return { ...baza, pozycje: [{ osoba_id: osobaId, ...zakresy }] };
+  if (typ === 'obciazenie' && osobaId) return { ...baza, akcjonariusz_osoba_id: osobaId, ...zakresy };
+  return baza;
+}
+
+function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy }) {
   const draft = sprawa.dane_wejsciowe_json ? JSON.parse(sprawa.dane_wejsciowe_json) : null;
 
   const [krok, ustawKrok] = useState(2);
@@ -536,7 +552,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   // (0.4 pkt 1 — „raz wpisane, nigdy więcej”), zbywcę wciąż można zmienić —
   // sprawę mógł założyć pełnomocnik albo osoba trzecia w czyimś imieniu.
   const [dane, ustawDane] = useState(
-    (draft && draft.dane) || (emisjaPoczatkowa ? { emisja_zdarzenie_id: emisjaPoczatkowa } : {})
+    (draft && draft.dane) || daneStartowe(sprawa.typ_zdarzenia, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy)
   );
   useEffect(() => {
     if (draft || emisjaPoczatkowa) return;
@@ -1002,7 +1018,7 @@ function PodstawaWpisu({ sprawa, typy, odswiez }) {
 /* ─────────────────────────────────────────────────────
    EKRAN SPRAWY
    ───────────────────────────────────────────────────── */
-function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
+function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy }) {
   const { dane, ladowanie, blad, odswiez } = useDane(`/api/psa/sprawy/${sprawaId}`);
   const meta = useDane('/api/psa/meta');
   // Ustawiane od razu po udanym wpisie (patrz KreatorSprawy) - ukrywa akcje
@@ -1123,6 +1139,8 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
             odswiezSprawe={odswiez}
             naWpisano={() => ustawWlasnieWpisano(true)}
             emisjaPoczatkowa={emisjaPoczatkowa}
+            osobaPoczatkowa={osobaPoczatkowa}
+            zakresPoczatkowy={zakresPoczatkowy}
           />
       )}
       {sprawa.stan === 'wstrzymana' && (

@@ -297,6 +297,8 @@ function Aplikacja() {
             spolkaId={id}
             typPoczatkowy={zapytanie.get('typ') || undefined}
             emisjaPoczatkowa={zapytanie.get('emisja') || undefined}
+            osobaPoczatkowa={zapytanie.get('osoba') || undefined}
+            zakresPoczatkowy={zapytanie.get('zakres') || undefined}
             zPodstawySprawy={zapytanie.get('zpodstawy') || undefined}
           />
         );
@@ -320,7 +322,14 @@ function Aplikacja() {
       }
       const id = Number(segmenty[1]);
       if (!Number.isInteger(id)) return <NieZnaleziono />;
-      return <EkranSprawy sprawaId={id} emisjaPoczatkowa={zapytanie.get('emisja') || undefined} />;
+      return (
+        <EkranSprawy
+          sprawaId={id}
+          emisjaPoczatkowa={zapytanie.get('emisja') || undefined}
+          osobaPoczatkowa={zapytanie.get('osoba') || undefined}
+          zakresPoczatkowy={zapytanie.get('zakres') || undefined}
+        />
+      );
     }
 
     if (segmenty[0] === 'osoby') {

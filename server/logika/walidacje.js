@@ -133,6 +133,39 @@ function sprawdzDataWpisuKrsEmisji(stanPrzed, propozycja, spolka, dzisiaj, bledy
   }
 }
 
+/**
+ * D-P3: po objeciu choc jednej akcji emisji jej serii, numeracji ani liczby
+ * akcji nie prostuje sie - zmniejszenie liczby akcji to umorzenie, a
+ * zwiekszenie - nowa emisja. Pola opisowe (tytul, opis, uwagi i pozostale)
+ * mozna prostowac nadal. Wycofanie calej emisji tez jest wtedy zablokowane.
+ */
+const KOMUNIKAT_EMISJA_OBJETA =
+  'Akcje tej emisji zostały już objęte — seria, numeracja i liczba akcji nie mogą być prostowane. ' +
+  'Jeżeli liczba akcji ma się zmniejszyć, dokonaj umorzenia; jeżeli zwiększyć — wpisz nową emisję. ' +
+  'Pola opisowe (tytuł, opis, uwagi) można prostować.';
+
+function sprawdzSprostowanieEmisji(zdarzenia, stanPrzed, propozycja, bledy) {
+  if (propozycja.typ !== 'sprostowanie' || propozycja.zdarzenie_prostowane_id == null) return;
+  const id = Number(propozycja.zdarzenie_prostowane_id);
+  const pierwotne = zdarzenia.find((z) => Number(z.id) === id);
+  if (!pierwotne || pierwotne.typ !== 'emisja') return;
+  const objeta = stanPrzed.przedzialy.some(
+    (p) => Number(p.emisja_klucz) === id && p.kategoria !== K.NIEOBJETA
+  );
+  if (!objeta) return;
+
+  const zamiast = (propozycja.dane || {}).zamiast;
+  if (!zamiast) {
+    bledy.push(KOMUNIKAT_EMISJA_OBJETA);
+    return;
+  }
+  const przed = pierwotne.dane || JSON.parse(pierwotne.dane_json || '{}');
+  const zmienione = ['seria', 'nr_pierwszy', 'ilosc'].filter(
+    (pole) => String(zamiast[pole] ?? '') !== String(przed[pole] ?? (pole === 'nr_pierwszy' ? 1 : ''))
+  );
+  if (zamiast.typ !== 'emisja' || zmienione.length > 0) bledy.push(KOMUNIKAT_EMISJA_OBJETA);
+}
+
 function sprawdzObciazenia(stanPrzed, propozycja, bledy) {
   // Zajecie jest z urzedu (art. 300(34) § 2 KSH) - nie jest "rozporzadzeniem"
   // akcja, wiec nie blokuje go istniejace obciazenie. Kilku wierzycieli moze
@@ -785,6 +818,7 @@ function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map() } = {})
     perTyp(stanPrzed, propozycja, { osoby }, bledy, ostrzezenia);
   }
 
+  sprawdzSprostowanieEmisji(zdarzenia, stanPrzed, propozycja, bledy);
   sprawdzObciazenia(stanPrzed, propozycja, bledy);
   sprawdzOgraniczenia(stanPrzed, propozycja, bledy, ostrzezenia);
   sprawdzPokrycie(stanPrzed, propozycja, bledy);

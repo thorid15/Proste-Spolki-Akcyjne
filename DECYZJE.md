@@ -1108,6 +1108,32 @@
 
 ---
 
+### D-071 — Przepływ wprowadzania danych (D-P1, D-P2, D-P3)
+
+- Data: 2026-09-26 (etap 5)
+- Obszar: interfejs kancelarii / walidacja
+- Decyzja:
+  - **D-P1** — przy każdym wierszu akcjonariusza (także w widoku szczegółowym, per zakres) przyciski
+    „Zbycie / Obciążenie / Umorzenie”. Parametry `emisja`, `osoba`, `zakres` przechodzą przez
+    założenie sprawy do kreatora (`daneStartowe` w `publiczne/js/sprawy.js`): wypełnione są seria,
+    zbywca albo akcjonariusz i zakres numerów, który można zawęzić (umorzenie i obciążenie dostały
+    pole „Numery akcji”; przeniesienie korzysta z istniejącego trybu ręcznego zakresu).
+  - **D-P2** — było już zrealizowane: `WyborZKartoteki` (jeden komponent w całej aplikacji)
+    wyszukuje w `psa_osoby` i ma „+ Nowa osoba w kartotece” w tym samym oknie; po zapisie osoba jest
+    od razu wybrana. Używany dla nabywcy, obejmującego, zastawnika/użytkownika, przedstawiciela.
+  - **D-P3** — po objęciu choć jednej akcji emisji sprostowanie serii, numeru pierwszej akcji albo
+    liczby akcji (i wycofanie całej emisji) jest odrzucane w `walidacje.js`
+    (`sprawdzSprostowanieEmisji`) z komunikatem kierującym do umorzenia albo nowej emisji; pola
+    opisowe przechodzą. W kokpicie przycisk „Sprostuj” przy emisji otwiera okno z tymi trzema polami
+    zablokowanymi i tym samym komunikatem.
+  - Podglądu „przed/po” nie rozbudowujemy. Walidacja „nabywca ≠ zbywca” bez zmian (obejmuje
+    wszystkie tytuły przejścia oraz przeniesienie ułamka — `ETAP-0-RAPORT.md`, B9).
+- Testy: `testy/d-p3-blokada-emisji.test.js`; UI sprawdzone w przeglądarce (Playwright):
+  wypełnienie kreatora dla trzech czynności, okna sprostowania emisji i przekazania, brak błędów JS.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-P1, D-P2, D-P3).
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w
