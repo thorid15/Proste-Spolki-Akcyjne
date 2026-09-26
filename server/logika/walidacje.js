@@ -59,11 +59,8 @@ function sprawdzSpolke(spolka, bledy) {
     bledy.push('Nie odnaleziono spółki, której dotyczy zdarzenie.');
     return;
   }
-  if (przepisy.STATUSY_SPOLKI_BLOKUJACE_WPIS.includes(spolka.status)) {
-    bledy.push(
-      `Spółka ma status „${spolka.status}” — do rejestru wykreślonej spółki nie dokonuje się wpisów.`
-    );
-  }
+  const blokada = przepisy.blokadaWpisu(spolka);
+  if (blokada) bledy.push(blokada);
 }
 
 /**

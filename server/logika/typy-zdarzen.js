@@ -295,6 +295,23 @@ const TYPY = [
     dokumenty: [],
   },
   {
+    // D-31: przekazanie prowadzenia rejestru innemu podmiotowi - tylko
+    // ewidencja; po wpisie rejestr jest tylko do odczytu.
+    kod: 'przekazanie_rejestru',
+    nazwa: 'Przekazanie rejestru',
+    opis_zdarzeniem: 'Prowadzenie rejestru przejął inny podmiot',
+    podpowiedz: 'Notariusz, izba notarialna albo dom maklerski — na podstawie nowej umowy spółki.',
+    symbol: '→',
+    grupa: 'dane',
+    sprint: 1,
+    kreator: false,
+    odplatne: false,
+    wymaga_powiadomienia: false,
+    podstawa_prawna: PODSTAWY.KATALOG_DANYCH,
+    checklista: [],
+    dokumenty: [],
+  },
+  {
     kod: 'uprawnienie',
     nazwa: 'Uprawnienie, przywilej albo obowiązek',
     opis_zdarzeniem: 'Ustanowiono, zmieniono albo wykreślono uprawnienie akcjonariusza',

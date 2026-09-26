@@ -401,6 +401,36 @@ const STATUSY_SPOLKI = {
 /** Statusy spolki blokujace jakikolwiek nowy wpis do rejestru. */
 const STATUSY_SPOLKI_BLOKUJACE_WPIS = [STATUSY_SPOLKI.WYKRESLONA];
 
+/**
+ * D-31: odbiorcy przekazania rejestru - notariusz, izba notarialna albo
+ * podmiot uprawniony do prowadzenia rachunkow papierow wartosciowych
+ * (art. 300(31) § 1 pkt 1 KSH).
+ */
+const ODBIORCY_PRZEKAZANIA = {
+  notariusz: 'notariusz',
+  izba_notarialna: 'izba notarialna',
+  podmiot_rachunki: 'podmiot uprawniony do prowadzenia rachunków papierów wartościowych',
+};
+
+/**
+ * Czy do rejestru spolki wolno dokonac wpisu. `null` = wolno; tekst = powod
+ * odmowy. Jedno miejsce dla wszystkich tras zapisu (walidacja wpisu, zapis
+ * zdarzenia, zakladanie spraw w kancelarii i w portalu, zmiana danych).
+ */
+function blokadaWpisu(spolka) {
+  if (!spolka) return 'Nie odnaleziono spółki.';
+  if (STATUSY_SPOLKI_BLOKUJACE_WPIS.includes(spolka.status)) {
+    return `Spółka ma status „${spolka.status}” — do rejestru wykreślonej spółki nie dokonuje się wpisów.`;
+  }
+  if (spolka.przekazanie_data) {
+    return (
+      `Prowadzenie rejestru przekazano z dniem ${spolka.przekazanie_data} ` +
+      `(${spolka.przekazanie_odbiorca_nazwa || 'inny podmiot'}) — rejestr jest tylko do odczytu.`
+    );
+  }
+  return null;
+}
+
 const STATUSY_EMISJI = {
   AKTYWNA: 'aktywna',
   W_UMARZANIU: 'w_umarzaniu',
@@ -866,6 +896,8 @@ module.exports = {
   TERMIN_PRZEGLADU_AML_MIESIECY,
   STATUSY_SPOLKI,
   STATUSY_SPOLKI_BLOKUJACE_WPIS,
+  ODBIORCY_PRZEKAZANIA,
+  blokadaWpisu,
   STATUSY_EMISJI,
   STANY_SPRAWY,
   ZRODLA_SPRAWY,

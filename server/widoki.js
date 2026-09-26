@@ -296,6 +296,8 @@ function podsumujZdarzenie(z, osoby) {
       return `Umorzenie ${suma(d.pozycje)} akcji serii ${d.seria}${
         d.tryb ? ` (${d.tryb})` : ''
       }.`;
+    case 'przekazanie_rejestru':
+      return `Przekazanie prowadzenia rejestru: ${d.odbiorca_nazwa || 'inny podmiot'} z dniem ${d.data_przekazania || '—'}.`;
     case 'zmiana_danych_spolki':
       return `Zmiana danych spółki: ${(d.zmienione_pola || []).join(', ') || 'bez wskazania pól'}.`;
     case 'obciazenie':

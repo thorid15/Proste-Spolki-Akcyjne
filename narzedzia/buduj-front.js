@@ -39,13 +39,13 @@ const WYJSCIE = path.join(KATALOG, 'dist');
 /** Kolejność ma znaczenie: późniejszy plik korzysta z nazw wcześniejszych. */
 const PACZKI = {
   'kancelaria.js': [
-    'rdzen.js', 'formaty.js', 'ui-rejestr.js', 'pola.js', 'prawne.js', 'pesel.js', 'formularz-osoby.js',
+    'rdzen.js', 'formaty.js', 'ui-rejestr.js', 'kraje.js', 'pola.js', 'prawne.js', 'pesel.js', 'formularz-osoby.js',
     'podglad.js', 'pulpit.js', 'osoby.js', 'zgloszenia.js', 'wnioski.js', 'zawiadomienia.js', 'spolki.js',
     'dokumenty-na-zadanie.js', 'kokpit.js', 'kreator.js', 'sprawy.js', 'wydruk.js', 'konfiguracja.js',
     'szablony.js', 'auth.js', 'uzytkownicy.js', 'oplaty.js', 'migracja.js', 'app.js',
   ],
   'portal.js': [
-    'rdzen.js', 'formaty.js', 'ui-rejestr.js', 'pola.js', 'prawne.js', 'pesel.js', 'formularz-osoby.js',
+    'rdzen.js', 'formaty.js', 'ui-rejestr.js', 'kraje.js', 'pola.js', 'prawne.js', 'pesel.js', 'formularz-osoby.js',
     'wniosek.js', 'portal.js',
   ],
 };

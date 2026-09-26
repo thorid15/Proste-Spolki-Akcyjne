@@ -172,9 +172,8 @@ router.post(
     const spolkaId = Number(cialo.spolka_id);
     const spolka = rejestr.wczytajSpolke(db(), spolkaId);
     if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
-    if (przepisy.STATUSY_SPOLKI_BLOKUJACE_WPIS.includes(spolka.status)) {
-      throw bledneZadanie(`Spółka ma status „${spolka.status}” — nie można założyć nowej sprawy.`);
-    }
+    const blokada = przepisy.blokadaWpisu(spolka);
+    if (blokada) throw bledneZadanie(`${blokada} Nie można założyć nowej sprawy.`);
 
     const typZdarzenia = String(cialo.typ_zdarzenia || '');
     if (!typyZdarzen.dostepneWKreatorze().some((t) => t.kod === typZdarzenia)) {

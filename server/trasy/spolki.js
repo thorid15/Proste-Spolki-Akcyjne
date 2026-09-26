@@ -416,6 +416,8 @@ router.put(
     const kto = autor(zad);
     const biezaca = rejestr.wczytajSpolke(db(), id);
     if (!biezaca) throw nieZnaleziono('Nie odnaleziono spółki.');
+    // D-31: rejestr przekazany jest tylko do odczytu - takze dane spolki.
+    if (biezaca.przekazanie_data) throw bledneZadanie(przepisy.blokadaWpisu(biezaca));
 
     const dane = wyczysc(zad.body || {});
     sprawdzDaneSpolki({ ...biezaca, ...dane }, { wymaganaNazwa: true });
@@ -643,6 +645,78 @@ router.get(
     const id = Number(zad.params.id);
     if (!rejestr.wczytajSpolke(db(), id)) throw nieZnaleziono('Nie odnaleziono spółki.');
     odp.json({ zdarzenia: widoki.widokZdarzen(db(), id) });
+  })
+);
+
+/**
+ * D-31 - przekazanie prowadzenia rejestru innemu podmiotowi (art. 300(32)
+ * § 2 KSH: nowa umowa spolki). Wylacznie ewidencja: zdarzenie w lancuchu +
+ * odbicie w `psa_spolki`; od tej chwili kazdy wpis jest odrzucany, a podglad
+ * i informacja z rejestru pozostaja dostepne. Pakietu eksportu nie budujemy.
+ */
+router.post(
+  '/:id/przekazanie',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const kto = autor(zad);
+    const spolka = rejestr.wczytajSpolke(db(), id);
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const blokada = przepisy.blokadaWpisu(spolka);
+    if (blokada) throw bledneZadanie(blokada);
+
+    const c = zad.body || {};
+    const dataPrzekazania = String(c.data_przekazania || '');
+    if (!czas.poprawnaData(dataPrzekazania)) {
+      throw bledneZadanie('Data przekazania musi mieć format RRRR-MM-DD.');
+    }
+    if (dataPrzekazania > czas.dzisIso()) {
+      throw bledneZadanie('Przekazanie ewidencjonuje się po fakcie — data nie może być z przyszłości.');
+    }
+    const typOdbiorcy = String(c.odbiorca_typ || '');
+    if (!Object.prototype.hasOwnProperty.call(przepisy.ODBIORCY_PRZEKAZANIA, typOdbiorcy)) {
+      throw bledneZadanie(
+        `Typ odbiorcy musi być jednym z: ${Object.keys(przepisy.ODBIORCY_PRZEKAZANIA).join(', ')}.`
+      );
+    }
+    const nazwa = String(c.odbiorca_nazwa || '').trim();
+    const podstawa = String(c.podstawa || '').trim();
+    if (!nazwa) throw bledneZadanie('Podaj nazwę odbiorcy (notariusz, izba, podmiot).');
+    if (!podstawa) {
+      throw bledneZadanie('Podaj podstawę przekazania (np. „nowa umowa o prowadzenie rejestru z dnia …”).');
+    }
+    const identyfikator = String(c.odbiorca_identyfikator || '').trim() || null;
+
+    const zdarzenie = db().transaction(() => {
+      const z = rejestr.zapiszZdarzenie(db(), {
+        spolka_id: id,
+        typ: 'przekazanie_rejestru',
+        autor: kto,
+        dane: {
+          data_przekazania: dataPrzekazania,
+          odbiorca_typ: typOdbiorcy,
+          odbiorca_nazwa: nazwa,
+          odbiorca_identyfikator: identyfikator,
+          podstawa,
+        },
+      });
+      db()
+        .prepare(
+          `UPDATE psa_spolki
+              SET przekazanie_data = @data, przekazanie_odbiorca_typ = @typ,
+                  przekazanie_odbiorca_nazwa = @nazwa, przekazanie_odbiorca_identyfikator = @identyfikator,
+                  przekazanie_podstawa = @podstawa,
+                  data_zakonczenia_umowy = COALESCE(data_zakonczenia_umowy, @data),
+                  zaktualizowano = @teraz
+            WHERE id = @id`
+        )
+        .run({ data: dataPrzekazania, typ: typOdbiorcy, nazwa, identyfikator, podstawa, teraz: czas.terazIso(), id });
+      return z;
+    }).immediate();
+
+    odp.status(201).json({
+      spolka: rejestr.wczytajSpolke(db(), id),
+      zdarzenie: { id: zdarzenie.id, typ: zdarzenie.typ, data_wpisu: zdarzenie.data_wpisu },
+    });
   })
 );
 

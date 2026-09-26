@@ -201,6 +201,78 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje, lacznie = [] }) {
 }
 
 /* ═════════════════════════════════════════════════════
+   PRZEKAZANIE REJESTRU (D-31) — tylko ewidencja
+   ═════════════════════════════════════════════════════ */
+
+const ODBIORCY_PRZEKAZANIA = [
+  ['notariusz', 'Notariusz'],
+  ['izba_notarialna', 'Izba notarialna'],
+  ['podmiot_rachunki', 'Podmiot prowadzący rachunki papierów wartościowych (art. 300³¹ § 1 pkt 1 KSH)'],
+];
+
+function ModalPrzekazania({ spolkaId, przyZamknieciu, przyZapisie }) {
+  const [dane, ustawDane] = useState({
+    data_przekazania: fmt.dzisIso(), odbiorca_typ: 'notariusz', odbiorca_nazwa: '',
+    odbiorca_identyfikator: '', podstawa: '',
+  });
+  const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const zmien = (pole) => (z) => ustawDane((d) => ({ ...d, [pole]: z.target.value }));
+
+  async function zapisz() {
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    try {
+      await API.post(`/api/psa/spolki/${spolkaId}/przekazanie`, dane);
+      przyZapisie();
+    } catch (e) {
+      ustawBlad(e.message);
+      ustawZapisywanie(false);
+    }
+  }
+
+  const gotowe = dane.data_przekazania && dane.odbiorca_nazwa.trim() && dane.podstawa.trim();
+  return (
+    <Modal
+      tytul="Przekazanie prowadzenia rejestru"
+      przyZamknieciu={przyZamknieciu}
+      szerokosc={600}
+      stopka={
+        <>
+          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          <button className="btn btn-glowny" disabled={!gotowe || zapisywanie} onClick={zapisz}>
+            {zapisywanie ? 'Zapisywanie…' : 'Zapisz przekazanie'}
+          </button>
+        </>
+      }
+    >
+      <Komunikat odmiana="uwaga" tresc={
+        'Po zapisaniu przekazania rejestr tej spółki jest tylko do odczytu: nie przyjmie żadnego wpisu ' +
+        'ani zmiany danych. Podgląd i informacja z rejestru pozostają dostępne. Czynności nie da się cofnąć.'
+      } />
+      <Komunikat odmiana="blad" tresc={blad} />
+      <Pole etykieta="Data przekazania" wymagane>
+        <PoleDaty wartosc={dane.data_przekazania} max={fmt.dzisIso()} przyZmianie={(v) => ustawDane((d) => ({ ...d, data_przekazania: v }))} />
+      </Pole>
+      <Pole etykieta="Odbiorca" wymagane>
+        <select value={dane.odbiorca_typ} onChange={zmien('odbiorca_typ')}>
+          {ODBIORCY_PRZEKAZANIA.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+        </select>
+      </Pole>
+      <Pole etykieta="Nazwa odbiorcy" wymagane podpowiedz="Np. „Notariusz Jan Kowalski, Kancelaria Notarialna w Gdańsku”.">
+        <input type="text" value={dane.odbiorca_nazwa} onChange={zmien('odbiorca_nazwa')} />
+      </Pole>
+      <Pole etykieta="Identyfikator odbiorcy" podpowiedz="Np. numer Rep. N, NIP albo KRS podmiotu.">
+        <input type="text" value={dane.odbiorca_identyfikator} onChange={zmien('odbiorca_identyfikator')} />
+      </Pole>
+      <Pole etykieta="Podstawa" wymagane podpowiedz="Np. „nowa umowa o prowadzenie rejestru z dnia … (art. 300³² § 2 KSH)”.">
+        <textarea value={dane.podstawa} onChange={zmien('podstawa')} />
+      </Pole>
+    </Modal>
+  );
+}
+
+/* ═════════════════════════════════════════════════════
    SPROSTOWANIE
    ═════════════════════════════════════════════════════ */
 
@@ -648,6 +720,7 @@ function EkranKokpitu({ spolkaId }) {
   const [kwalifikowanieZgloszenia, ustawKwalifikowanieZgloszenia] = useState(null);
 
   const wstecz = data !== fmt.dzisIso();
+  const [przekazywanie, ustawPrzekazywanie] = useState(false);
 
   const { dane, ladowanie, blad, odswiez } = useDane(
     `/api/psa/spolki/${spolkaId}?data=${encodeURIComponent(data)}`,
@@ -691,6 +764,9 @@ function EkranKokpitu({ spolkaId }) {
   const zdarzeniaPozostale = zdarzenia.filter((z) => !TYPY_WE_WLASNYCH_REJESTRACH.includes(z.typ));
   const dokumentyAkt = akta.dane ? akta.dane.dokumenty : [];
   const liczbaAkcjonariuszy = new Set(akcjonariusze.map((a) => a.osoba_id)).size;
+  // D-31: rejestr przekazany innemu podmiotowi — tylko odczyt, jak widok archiwalny.
+  const przekazany = Boolean(spolka.przekazanie_data);
+  const tylkoOdczyt = wstecz || przekazany;
 
   return (
     <>
@@ -711,6 +787,11 @@ function EkranKokpitu({ spolkaId }) {
                 Stan na {fmt.dataCzas(data)}
               </span>
             )}
+            {przekazany && (
+              <span className="pigulka-archiwalna" title={spolka.przekazanie_podstawa || ''}>
+                Rejestr przekazany {fmt.data(spolka.przekazanie_data)} — {spolka.przekazanie_odbiorca_nazwa}
+              </span>
+            )}
           </div>
           <div className="naglowek-strony-kontekst">
             Rejestr prowadzi {spolka.organ_prowadzacy || 'Kancelaria Notarialna Łukasz Kozon'} —
@@ -721,7 +802,7 @@ function EkranKokpitu({ spolkaId }) {
                 z rejestru" — tego samego formatu przycisku. Zostaje jako
                 dyskretny odnośnik tekstowy, nie znika (bywa potrzebna raz na
                 spółkę), ale nie konkuruje wzrokowo ze zwykłymi akcjami. */}
-            {!wstecz && dane.liczba_zdarzen === 0 && (
+            {!tylkoOdczyt && dane.liczba_zdarzen === 0 && (
               <>
                 {' · '}
                 <button
@@ -749,6 +830,11 @@ function EkranKokpitu({ spolkaId }) {
           <button className="btn" onClick={() => idz(`/spolki/${spolkaId}/wydruk/informacja?data=${data}`)}>
             <Ikona nazwa="dokument" rozmiar={16} /> Informacja z rejestru
           </button>
+          {!tylkoOdczyt && (
+            <button className="btn-tekstowy" onClick={() => ustawPrzekazywanie(true)}>
+              Przekazanie rejestru…
+            </button>
+          )}
         </div>
       </div>
 
@@ -799,7 +885,7 @@ function EkranKokpitu({ spolkaId }) {
                     Szczegółowy
                   </button>
                 </div>
-                {!wstecz && (
+                {!tylkoOdczyt && (
                   <button className="btn btn-maly btn-glowny" onClick={() => ustawDodawanieAkcjonariusza(true)}>
                     <Ikona nazwa="plus" rozmiar={14} /> Dodaj akcjonariusza
                   </button>
@@ -814,7 +900,7 @@ function EkranKokpitu({ spolkaId }) {
                 emisje={emisje}
                 lacznie={dane.akcjonariusze_lacznie || []}
               />
-              {!wstecz && (
+              {!tylkoOdczyt && (
                 <DalszeWpisy tytul="Dalsze wpisy:">
                   <PrzyciskWpisu spolkaId={spolkaId} typ="przeniesienie">Przeniesienie akcji</PrzyciskWpisu>
                   <PrzyciskWpisu spolkaId={spolkaId} typ="zmiana_danych_akcjonariusza">
@@ -833,7 +919,7 @@ function EkranKokpitu({ spolkaId }) {
             tytul="Rejestr akcji"
             licznik={emisje.length}
             akcje={
-              !wstecz && (
+              !tylkoOdczyt && (
                 <PrzyciskWpisu spolkaId={spolkaId} typ="emisja" glowny>Nowa emisja</PrzyciskWpisu>
               )
             }
@@ -858,7 +944,7 @@ function EkranKokpitu({ spolkaId }) {
                       {/* Kolumna akcji pojawia się TYLKO wtedy, gdy jest co
                           obejmować — pusty nagłówek zabierał miejsce ośmiu
                           kolumnom, które zawsze mają treść. */}
-                      {!wstecz && nieobjete > 0 && <th />}
+                      {!tylkoOdczyt && nieobjete > 0 && <th />}
                     </tr>
                   </thead>
                   <tbody>
@@ -879,7 +965,7 @@ function EkranKokpitu({ spolkaId }) {
                           {/* Emisja bez objęcia to akcje, których nikt nie ma —
                               wskazanie obejmującego zaczyna się przy tym wierszu,
                               z już wybraną serią. */}
-                          {!wstecz && nieobjete > 0 && (
+                          {!tylkoOdczyt && nieobjete > 0 && (
                             <td className="do-prawej bez-druku">
                               {b.nieobjete ? (
                                 <PrzyciskWpisu spolkaId={spolkaId} typ="objecie" emisja={e.klucz} glowny>
@@ -894,7 +980,7 @@ function EkranKokpitu({ spolkaId }) {
                   </tbody>
                 </table>
               )}
-              {!wstecz && (
+              {!tylkoOdczyt && (
                 <DalszeWpisy tytul="Dalsze wpisy:">
                   <PrzyciskWpisu spolkaId={spolkaId} typ="umorzenie">Umorzenie akcji</PrzyciskWpisu>
                   <PrzyciskWpisu spolkaId={spolkaId} typ="uniewaznienie">Unieważnienie przez sąd</PrzyciskWpisu>
@@ -910,7 +996,7 @@ function EkranKokpitu({ spolkaId }) {
             tytul="Rejestr uprawnień, przywilejów i obowiązków"
             licznik={uprawnienia.length + ograniczenia.length}
             akcje={
-              !wstecz && (
+              !tylkoOdczyt && (
                 <PrzyciskWpisu spolkaId={spolkaId} typ="uprawnienie" glowny>Wpisz uprawnienie</PrzyciskWpisu>
               )
             }
@@ -970,7 +1056,7 @@ function EkranKokpitu({ spolkaId }) {
                 )}
               </div>
 
-              {!wstecz && (
+              {!tylkoOdczyt && (
                 <DalszeWpisy tytul="Dalsze wpisy:">
                   <PrzyciskWpisu spolkaId={spolkaId} typ="ograniczenie">Ograniczenie w rozporządzaniu</PrzyciskWpisu>
                   <PrzyciskWpisu spolkaId={spolkaId} typ="zobowiazanie">
@@ -986,7 +1072,7 @@ function EkranKokpitu({ spolkaId }) {
             tytul="Rejestr zajęć, zastawów, użytkowania"
             licznik={obciazenia.length}
             akcje={
-              !wstecz && (
+              !tylkoOdczyt && (
                 <PrzyciskWpisu spolkaId={spolkaId} typ="obciazenie" glowny>Zastaw lub użytkowanie</PrzyciskWpisu>
               )
             }
@@ -1020,7 +1106,7 @@ function EkranKokpitu({ spolkaId }) {
                   </tbody>
                 </table>
               )}
-              {!wstecz && (
+              {!tylkoOdczyt && (
                 <DalszeWpisy tytul="Dalsze wpisy:">
                   {/* Zajęcie idzie Z URZĘDU — bez żądania i bez opłaty
                       (art. 300(34) § 2 KSH), dlatego stoi obok, a nie
@@ -1045,7 +1131,7 @@ function EkranKokpitu({ spolkaId }) {
             tytul="Rejestr zdarzeń"
             licznik={zdarzeniaPozostale.length}
             akcje={
-              !wstecz && (
+              !tylkoOdczyt && (
                 <PrzyciskWpisu spolkaId={spolkaId} typ="zdarzenie_inne" glowny>Odnotuj zdarzenie</PrzyciskWpisu>
               )
             }
@@ -1116,7 +1202,7 @@ function EkranKokpitu({ spolkaId }) {
             tytul="Historia zdarzeń"
             licznik={dane.liczba_zdarzen}
             akcje={
-              !wstecz && (
+              !tylkoOdczyt && (
                 <button className="btn btn-maly" onClick={przelicz} title="Odbudowa stanu ze zdarzeń">
                   Przelicz stan
                 </button>
@@ -1138,7 +1224,7 @@ function EkranKokpitu({ spolkaId }) {
                         <div className="zdarzenie-data">
                           {fmt.dataCzas(z.data_wpisu)} · zdarzenie #{z.id}
                         </div>
-                        {!wstecz && z.typ !== 'sprostowanie' && !z.sprostowane_przez_id && (
+                        {!tylkoOdczyt && z.typ !== 'sprostowanie' && !z.sprostowane_przez_id && (
                           <button className="btn btn-maly bez-druku" onClick={() => ustawSprostowanie(z)}>
                             Sprostuj
                           </button>
@@ -1186,6 +1272,17 @@ function EkranKokpitu({ spolkaId }) {
           nieobjete={nieobjete}
           sanAkcjonariusze={akcjonariusze.length > 0}
           przyZamknieciu={() => ustawDodawanieAkcjonariusza(false)}
+        />
+      )}
+
+      {przekazywanie && (
+        <ModalPrzekazania
+          spolkaId={spolkaId}
+          przyZamknieciu={() => ustawPrzekazywanie(false)}
+          przyZapisie={() => {
+            ustawPrzekazywanie(false);
+            odswiez();
+          }}
         />
       )}
 

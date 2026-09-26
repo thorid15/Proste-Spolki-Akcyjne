@@ -96,6 +96,11 @@ function wczytajOsobySpolki(db, spolkaId) {
  * migracji (wtedy `dane.migracja_krn` - objete skrotem - to oznacza).
  */
 function zapiszZdarzenie(db, zdarzenie) {
+  // D-31: ostatnia zapora - nic nie trafia do rejestru wykreslonej spolki
+  // ani rejestru przekazanego innemu podmiotowi.
+  const blokada = przepisy.blokadaWpisu(wczytajSpolke(db, zdarzenie.spolka_id));
+  if (blokada) throw new BladWalidacji([blokada]);
+
   const poprzednie = db
     .prepare('SELECT id, hash FROM psa_zdarzenia ORDER BY id DESC LIMIT 1')
     .get();

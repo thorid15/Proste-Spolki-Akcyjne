@@ -26,6 +26,37 @@ const SPRINT_KREATORA = typyZdarzen.SPRINT_KREATORA;
 const router = express.Router();
 
 /**
+ * D-34 — raport wartosci kraju, ktorych nie rozpoznano w slowniku ISO
+ * (kod NULL przy niepustej nazwie). Do recznej poprawy - aplikacja nie
+ * zgaduje kraju z niepewnej nazwy.
+ */
+const POLA_KRAJU = [
+  ['psa_spolki', 'kraj', 'kraj_kod', 'nazwa', 'spółka'],
+  ['psa_spolki', 'reprezentant_kraj', 'reprezentant_kraj_kod', 'nazwa', 'spółka — reprezentant'],
+  ['psa_osoby', 'kraj', 'kraj_kod', "COALESCE(nazwa, trim(COALESCE(imie, '') || ' ' || COALESCE(nazwisko, '')))", 'osoba'],
+  ['psa_wnioski', 'kraj', 'kraj_kod', 'nazwa', 'wniosek — spółka'],
+  ['psa_wnioski', 'reprezentant_kraj', 'reprezentant_kraj_kod', 'nazwa', 'wniosek — reprezentant'],
+  ['psa_wnioski_akcjonariusze', 'kraj', 'kraj_kod', "COALESCE(nazwa, trim(COALESCE(imie, '') || ' ' || COALESCE(nazwisko, '')))", 'wniosek — akcjonariusz'],
+];
+
+router.get(
+  '/kraje/do-poprawy',
+  wymagajPracownika,
+  asy((zad, odp) => {
+    const pozycje = POLA_KRAJU.flatMap(([tabela, pole, kod, nazwa, rodzaj]) =>
+      db()
+        .prepare(
+          `SELECT id, ${nazwa} AS nazwa, ${pole} AS wartosc FROM ${tabela}
+            WHERE ${kod} IS NULL AND ${pole} IS NOT NULL AND trim(${pole}) != ''`
+        )
+        .all()
+        .map((w) => ({ rodzaj, tabela, pole, ...w }))
+    );
+    odp.json({ pozycje });
+  })
+);
+
+/**
  * Ustawienia kancelarii — metryka i stawki. Wartosci pochodza z bazy, a gdy
  * czegos tam nie ustawiono — z `.env`; pole `z_bazy` mowi, ktore to.
  */

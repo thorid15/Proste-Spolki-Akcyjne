@@ -1048,6 +1048,46 @@
 
 ---
 
+### D-068 — Przekazanie rejestru: tylko ewidencja, potem rejestr tylko do odczytu (D-31)
+
+- Data: 2026-09-26 (etap 4)
+- Obszar: rejestr / dane spółki
+- Decyzja: `POST /api/psa/spolki/:id/przekazanie` zapisuje zdarzenie `przekazanie_rejestru` (data
+  przekazania, typ odbiorcy: notariusz / izba notarialna / podmiot z art. 300³¹ § 1 pkt 1 KSH,
+  nazwa, identyfikator, podstawa — np. nowa umowa, art. 300³² § 2 KSH) i jego odbicie w
+  `psa_spolki.przekazanie_*` (migracja 58); pusta `data_zakonczenia_umowy` dostaje datę
+  przekazania. Od tej chwili każdy wpis jest odrzucany — jedna funkcja
+  `przepisy.blokadaWpisu(spolka)` sprawdzana w walidacji wpisu, w `rejestr.zapiszZdarzenie`
+  (ostatnia zapora), przy zakładaniu spraw (kancelaria i portal) i przy zmianie danych spółki.
+  Podgląd, historia i informacja z rejestru pozostają dostępne. Kokpit: pigułka „Rejestr
+  przekazany”, przyciski akcji ukryte jak w widoku archiwalnym, okno ewidencji przekazania.
+  Pakietu eksportu nie budujemy.
+- Testy: `testy/d-31-przekazanie-http.test.js`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-31).
+
+---
+
+### D-069 — Kraje: słownik ISO 3166-1 alfa-2, kod zapisuje baza (D-34)
+
+- Data: 2026-09-26 (etap 4)
+- Obszar: model danych / adresy
+- Decyzja: słownik `psa_kraje` (249 kodów, polskie nazwy z ICU, `server/dane/kraje.json`) i
+  kolumny `*kraj_kod` przy sześciu polach kraju (spółka, reprezentant spółki, osoba, wniosek,
+  reprezentant we wniosku, akcjonariusz we wniosku) — migracja 59. Kod ustawiają wyzwalacze bazy
+  przy KAŻDYM zapisie, więc obejmują wszystkie ścieżki (kreator, portal, przyjęcie wniosku, import
+  z KRS) bez zmian w trasach: dokładne dopasowanie kodu albo nazwy polskiej lub angielskiej (bez
+  wielkości liter) → kod, a pole tekstowe dostaje polską nazwę ze słownika (formatowanie adresów i
+  pisma bez zmian). Wartość nierozpoznana zostaje, kod = NULL, trafia do raportu
+  `GET /api/psa/kraje/do-poprawy` (karta „Kraje do poprawy” w konfiguracji) — bez zgadywania.
+  Kolumny tekstowe zostają (odwracalność). W interfejsie pole kraju to lista wyboru ze słownika
+  (`publiczne/js/kraje.js`, generowany z JSON; zgodność pilnowana testem).
+- Uwaga: SQLite porównuje wielkość liter tylko w ASCII — „WŁOCHY” wielkimi literami nie zostanie
+  rozpoznane i trafi do raportu (bezpieczny kierunek błędu).
+- Testy: `testy/d-34-kraje.test.js`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-34).
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

@@ -13,6 +13,34 @@ const ZAKLADKI_STAWEK = [
   { kod: 'typy', nazwa: 'Katalog typów zdarzeń' },
 ];
 
+/** D-34 — wartości kraju spoza słownika ISO (np. z danych sprzed słownika): do ręcznej poprawy. */
+function KrajeDoPoprawy() {
+  const { dane } = useDane('/api/psa/kraje/do-poprawy');
+  const pozycje = dane ? dane.pozycje : [];
+  return (
+    <Karta tytul="Kraje do poprawy">
+      {pozycje.length === 0 ? (
+        <div className="wyciszony">Wszystkie kraje w adresach są rozpoznane w słowniku ISO 3166-1.</div>
+      ) : (
+        <table className="tabela">
+          <thead><tr><th>Gdzie</th><th>Kto</th><th>Wpisana wartość</th></tr></thead>
+          <tbody>
+            {pozycje.map((p) => (
+              <tr key={`${p.tabela}-${p.pole}-${p.id}`}>
+                <td>{p.rodzaj}</td><td>{p.nazwa || `#${p.id}`}</td><td>{p.wartosc}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="podstawa-prawna odstep-g">
+        Aplikacja nie zgaduje kraju z nazwy spoza słownika — wybierz właściwy kraj w danych osoby,
+        spółki albo wniosku.
+      </div>
+    </Karta>
+  );
+}
+
 function EkranStawek() {
   const { dane, ladowanie } = useDane('/api/psa/meta');
   const [zakladka, ustawZakladke] = useParametrAdresu('zakladka', 'taksa');
@@ -129,6 +157,7 @@ function EkranStawek() {
           </div>
         </Karta>
       )}
+      {zakladka === 'dostep' && <KrajeDoPoprawy />}
 
       {zakladka === 'typy' && (
       <Karta tytul="Katalog typów zdarzeń" scisla>

@@ -1769,9 +1769,8 @@ router.post(
     const spolkaId = Number(cialo.spolka_id);
     const spolka = rejestr.wczytajSpolke(db(), spolkaId);
     if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
-    if (przepisy.STATUSY_SPOLKI_BLOKUJACE_WPIS.includes(spolka.status)) {
-      throw bledneZadanie(`Spółka ma status „${spolka.status}” — nie można zgłosić nowej sprawy.`);
-    }
+    const blokada = przepisy.blokadaWpisu(spolka);
+    if (blokada) throw bledneZadanie(`${blokada} Nie można zgłosić nowej sprawy.`);
 
     const typZdarzenia = String(cialo.typ_zdarzenia || '');
     // Celowo NIE bramkujemy sprintem 5: ulamkowe czesci akcji, wspolny

@@ -2228,7 +2228,84 @@ const MIGRACJE = [
         ON psa_zdarzenia (spolka_id, data_wpisu, id);
     `,
   },
+  {
+    wersja: 58,
+    nazwa: 'D-31: ewidencja przekazania rejestru innemu podmiotowi',
+    sql: `
+      -- Przekazanie prowadzenia rejestru (art. 300(32) § 2 KSH - nowa umowa
+      -- spolki z innym podmiotem). Tylko ewidencja; zrodlem prawdy jest
+      -- zdarzenie „przekazanie_rejestru” w lancuchu, kolumny to jego odbicie
+      -- do szybkiej blokady wpisow. NULL = rejestr prowadzimy my.
+      ALTER TABLE psa_spolki ADD COLUMN przekazanie_data TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN przekazanie_odbiorca_typ TEXT
+        CHECK (przekazanie_odbiorca_typ IS NULL OR przekazanie_odbiorca_typ IN
+               ('notariusz','izba_notarialna','podmiot_rachunki'));
+      ALTER TABLE psa_spolki ADD COLUMN przekazanie_odbiorca_nazwa TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN przekazanie_odbiorca_identyfikator TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN przekazanie_podstawa TEXT;
+    `,
+  },
+  {
+    wersja: 59,
+    nazwa: 'D-34: slownik krajow ISO 3166-1 alfa-2 i kody krajow w adresach',
+    sql: sqlSlownikaKrajow(),
+  },
 ];
+
+/**
+ * D-34 - slownik krajow i kody krajow w adresach. Kod ISO 3166-1 alfa-2
+ * (`*_kraj_kod`) jest zrodlem prawdy; kolumna tekstowa `*kraj` zostaje
+ * (odwracalnosc, formatowanie adresow i pisma) i dostaje polska nazwe ze
+ * slownika. Jedno miejsce dla WSZYSTKICH sciezek zapisu - wyzwalacze:
+ * wartosc rozpoznana dokladnie (kod, nazwa polska albo angielska, bez
+ * wielkosci liter) dostaje kod; nierozpoznana zostaje jak jest, z kodem
+ * NULL, i trafia do raportu do recznej poprawy - nie zgadujemy.
+ */
+function sqlSlownikaKrajow() {
+  const kraje = require('./dane/kraje.json');
+  const q = (t) => `'${String(t).replace(/'/g, "''")}'`;
+  const wiersze = kraje
+    .map((k) => `(${q(k.kod)}, ${q(k.nazwa)}, ${q(k.nazwa.toLocaleLowerCase('pl'))}, ${q(k.nazwa_en.toLowerCase())})`)
+    .join(',\n        ');
+  const kolumny = [
+    ['psa_spolki', 'kraj', 'kraj_kod'],
+    ['psa_spolki', 'reprezentant_kraj', 'reprezentant_kraj_kod'],
+    ['psa_osoby', 'kraj', 'kraj_kod'],
+    ['psa_wnioski', 'kraj', 'kraj_kod'],
+    ['psa_wnioski', 'reprezentant_kraj', 'reprezentant_kraj_kod'],
+    ['psa_wnioski_akcjonariusze', 'kraj', 'kraj_kod'],
+  ];
+  const kodDla = (w) => `(SELECT kod FROM psa_kraje
+          WHERE kod = upper(trim(${w})) OR nazwa_klucz = lower(trim(${w})) OR nazwa_en_klucz = lower(trim(${w})))`;
+  const czesci = kolumny.map(([tabela, pole, kod]) => {
+    const ustaw = `UPDATE ${tabela}
+          SET ${kod} = ${kodDla(`NEW.${pole}`)},
+              ${pole} = COALESCE((SELECT nazwa FROM psa_kraje WHERE kod = ${kodDla(`NEW.${pole}`)}), NEW.${pole})
+        WHERE id = NEW.id;`;
+    return `
+      ALTER TABLE ${tabela} ADD COLUMN ${kod} TEXT REFERENCES psa_kraje(kod);
+      CREATE TRIGGER ${tabela}_${pole}_kod_ins AFTER INSERT ON ${tabela}
+      BEGIN
+        ${ustaw}
+      END;
+      CREATE TRIGGER ${tabela}_${pole}_kod_upd AFTER UPDATE OF ${pole} ON ${tabela}
+      BEGIN
+        ${ustaw}
+      END;
+      UPDATE ${tabela} SET ${pole} = ${pole};`;
+  });
+  return `
+      CREATE TABLE IF NOT EXISTS psa_kraje (
+        kod             TEXT PRIMARY KEY CHECK (length(kod) = 2),
+        nazwa           TEXT NOT NULL,
+        nazwa_klucz     TEXT NOT NULL,
+        nazwa_en_klucz  TEXT NOT NULL
+      );
+      INSERT INTO psa_kraje (kod, nazwa, nazwa_klucz, nazwa_en_klucz) VALUES
+        ${wiersze};
+      ${czesci.join('\n')}
+  `;
+}
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
 const SQL_TABELA_WERSJI = `
