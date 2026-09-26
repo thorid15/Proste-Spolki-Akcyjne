@@ -977,6 +977,69 @@
 
 ---
 
+### D-065 — Strona publiczna wdrożona 1:1 z zatwierdzonego projektu (SESJA-PSA-STRONA.md wersja 5); stawki potwierdzone; gwarancja ceny 3 lata
+
+- Data: 2026-09-26 (sesja `SESJA-PSA-STRONA.md`, wersja 5 — „wdrożenie zatwierdzonego projektu")
+- Obszar: strona publiczna (SEO)
+- Decyzja: poprzednia wersja strony (D-064, projektowana i budowana przez Claude) zastąpiona w
+  całości projektem zaprojektowanym poza tą sesją i zatwierdzonym przez Łukasza —
+  `projekt-strony/nowa-strona.html`, plik źródłowy, którego treści, kolorów, układu i animacji nie
+  wolno zmieniać poza techniką wdrożenia (wydzielenie CSS/JS, podstawienie `{{BASE_URL}}`, kwot i
+  danych kancelarii). Mapa stron zredukowana do jednej strony głównej (sekcje: Opłaty, Jak działa
+  portal, Informacja z rejestru, Pytania) plus `/regulamin` i `/polityka-prywatnosci` — reszta
+  podstron z D-064 (`/jak-zaczac`, `/sprzedaz-akcji`, `/przeniesienie-rejestru`, `/oplaty`,
+  `/pytania`, `/kontakt`) usunięta. Żadna z nich nie była nigdy opublikowana pod realną domeną
+  (bundel D-063 nigdy nie wyszedł poza to repozytorium), więc — zgodnie z warunkiem „jeśli był
+  opublikowany" w dokumencie sesji — **bez przekierowań 301**; dodanie stron-przekierowań byłoby
+  też sprzeczne z wprost zabronionym w tym samym dokumencie dodawaniem nowych podstron.
+- **Stawki potwierdzone przez Łukasza 26.09.2026** (1200/100/50 zł netto — te same liczby co
+  dotychczasowe stawki maksymalne w `przepisy.js`, teraz jako stawki DOCELOWE, nie „maksymalne do
+  potwierdzenia"): `STAWKI_DO_WERYFIKACJI` w `server/logika/przepisy.js` ustawione na `false`.
+  Strona pobiera kwoty wyłącznie z `STAWKI_GROSZE`/`obliczBrutto` — zweryfikowane w tej sesji
+  zmianą stawki i odbudową strony (kwota faktycznie się zmieniła we wszystkich 9 miejscach:
+  3× karta ceny, 3× netto, 3× JSON-LD/FAQ — potem przywrócono oryginał).
+- **Gwarancja ceny — 3 lata od podpisania umowy, wszystkie opłaty** (decyzja Łukasza z tego
+  samego dnia). To deklaracja handlowa na stronie (sekcja „Opłaty"), nie mechanizm w kodzie —
+  `psa_oplaty`/`server/oplaty.js` nadal liczą wg aktualnej stawki z `przepisy.js` w chwili
+  naliczenia; jeśli w przyszłości stawki się zmienią, dotrzymanie tej gwarancji dla umów
+  zawartych wcześniej jest procesem po stronie kancelarii (np. osobna stawka umowna), nie czymś,
+  co ten moduł dziś automatyzuje. Odnotowane, żeby przy ewentualnej zmianie stawek ktoś o tym
+  pamiętał.
+- **Dane kancelarii w tym repozytorium — przez `.env` (gitignored), nie na sztywno w kodzie.**
+  W tym środowisku audytowym `KANCELARIA_ULICA`/`KANCELARIA_KOD`/`KANCELARIA_MIASTO`/
+  `KANCELARIA_EMAIL` były puste (przykładowy `.env.przyklad` ich nie ustawia) — dodany lokalny,
+  nieśledzony `.env` z rzeczywistym adresem i e-mailem z zatwierdzonego projektu, żeby build w tej
+  sesji odzwierciedlał to, co zobaczy produkcja. W realnym wdrożeniu te wartości muszą być
+  ustawione we właściwym `.env` serwera — inaczej strona zbuduje się z pustym adresem w stopce
+  i JSON-LD (generator NIE ma literalnego fallbacku na te dane — jedyne źródło to
+  `ustawienia.kancelaria(db())`, zgodnie z pkt 8 dokumentu sesji).
+- Regulamin i polityka prywatności: treść przeniesiona z `publiczne/js/prawne.js` (jedyne źródło
+  tych tekstów, bez zmian merytorycznych) na statyczny HTML w ramie wizualnej nowego projektu
+  (nagłówek/stopka/typografia — pkt 1 dokumentu sesji). Do polityki prywatności dodana nowa
+  sekcja „8. Pliki cookies" (pkt 11 dokumentu sesji) z nazwą ciasteczka portalu
+  (`psa_sesja_portal`, `server/pomocnicze/autoryzacja.js`), celem i czasem przechowywania
+  (8 godzin, `server/logika/sesja.js`, `TTL_PORTAL_MS`) oraz stwierdzeniem, że strona publiczna
+  ciasteczek nie zapisuje — zweryfikowane żywo (Playwright, `document.cookie`/`localStorage`/
+  `sessionStorage` puste na wszystkich 3 stronach). Treść oznaczona
+  `<!-- DO WERYFIKACJI -->` do akceptacji Łukasza.
+- Zaślepki (zrzut portalu w hero, przykładowa informacja z rejestru) — zostawione bez zmian,
+  zgodnie z pkt 10 dokumentu sesji. Obraz Open Graph (`obrazy/og-rejestr.png`, 1200×630)
+  wygenerowany ze zrzutu sekcji hero — zawiera więc dziś tę samą widoczną zaślepkę; do
+  regeneracji, gdy zaślepka zniknie, przed publikacją produkcyjną.
+- Odrzucono: literalne wpisanie adresu/e-maila kancelarii i kwot bezpośrednio w generatorze jako
+  fallback dla pustego `.env` — złamałoby zasadę „jedno źródło" (pkt 6 i 8 dokumentu sesji) i
+  ukryłoby brak realnej konfiguracji zamiast go ujawnić.
+- Skutek w kodzie: `narzedzia/buduj-strone.js` (przepisany od zera — wydziela CSS/JS z
+  `projekt-strony/nowa-strona.html`, podstawia kwoty/dane/BASE_URL, generuje 2 podstrony prawne),
+  `projekt-strony/*` (nowy — źródło prawdy: `nowa-strona.html`, `notariat.png`, `og-rejestr.png`),
+  `server/logika/przepisy.js` (`STAWKI_DO_WERYFIKACJI = false`), usunięte:
+  `strona/tresc/*.md`, `strona/przepisy-cytaty.js`, `strona/makieta/`, `strona/js/`,
+  `strona/styl.css` (cały poprzedni, wieloplikowy generator z D-064).
+- Źródło: `SESJA-PSA-STRONA.md` wersja 5, `publiczne/js/prawne.js`, `server/pomocnicze/
+  autoryzacja.js`, `server/logika/sesja.js`.
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

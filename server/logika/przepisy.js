@@ -115,7 +115,9 @@ const STAWKI_GROSZE = {
   /** informacja z rejestru: 50 zl. */
   INFORMACJA: 5000,
 };
-const STAWKI_DO_WERYFIKACJI = true;
+// Potwierdzone przez Łukasza 26.09.2026 (SESJA-PSA-STRONA.md wersja 5, pkt 7 i D-065) —
+// stawki poniżej NIE są już "do weryfikacji", są docelowe.
+const STAWKI_DO_WERYFIKACJI = false;
 
 /** Stawki maksymalne z rozporzadzenia - do porownania w UI konfiguracji. */
 const STAWKI_MAKSYMALNE_GROSZE = {

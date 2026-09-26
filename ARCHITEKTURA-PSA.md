@@ -155,20 +155,22 @@ planu — dziś martwe, nieużywane przez bieżący kod. Patrz też `DECYZJE.md`
 | `index.html` | Renderuje powłokę SPA aplikacji kancelaryjnej — React/Babel lokalnie z `/vendor`, wszystkie 24 moduły `publiczne/js/*` w ustalonej kolejności. |
 | `portal.html` | Renderuje osobną SPA portalu klienta — ten sam stack wizualny, tylko 7 modułów JS. |
 
-### `strona/*` — strona publiczna (SEO), bundel statyczny osobny od `serwer.js` (D-063)
+### `strona/*` — strona publiczna (SEO), bundel statyczny osobny od `serwer.js` (D-063/D-065)
+
+Wdrożenie 1:1 zatwierdzonego przez Łukasza projektu (`SESJA-PSA-STRONA.md` wersja 5,
+26.09.2026) — jedna strona główna (sekcje: Opłaty, Jak działa portal, Informacja z rejestru,
+Pytania) plus dwie podstrony prawne. Zastąpiło poprzedni, wieloplikowy generator z D-064.
 
 | Plik | Opis |
 |---|---|
-| `narzedzia/buduj-strone.js` | Generator: własny, celowo minimalny konwerter Markdown→HTML; strona główna komponowana bezpośrednio jako HTML (zbyt gęsto skomponowana z powtarzalnych bloków na konwerter); tabela opłat/kalkulator z `server/logika/przepisy.js`; cytaty prawne `{{c:klucz}}` → przyciski `popover`. Wyjście: `strona/dist/`. Uruchamiane `npm run buduj-strone`. |
-| `strona/tresc/*.md` | Źródła treści 7 podstron (front-matter `title`/`description`/`podstawa_prawna`, znacznik `<!-- DO WERYFIKACJI -->`). Strona główna NIE ma odpowiednika tu — źródło w generatorze. |
-| `strona/przepisy-cytaty.js` | Brzmienie przepisów do dymków popover — wyłącznie z `PRZEPISY-PSA.md`. |
-| `strona/styl.css`, `strona/js/wzmocnienia.js` | Wspólny CSS i jedyny JS strony (< 3 KB: kalkulator opłat + przyklejone CTA na telefonie) — reszta strony działa bez JavaScriptu. |
-| `strona/makieta/` | Statyczna makieta z Fazy A (`SESJA-PSA-STRONA.md`) — referencyjna, nie budowana/wdrażana. |
-| `strona/dist/` | Wyjście generatora — śledzone w git, przebudowywane idempotentnie. |
+| `projekt-strony/nowa-strona.html` | **Źródło prawdy** — zatwierdzony projekt, bez zmian poza tym, co wymaga wdrożenia. Nie edytować ręcznie treści/stylu/animacji. |
+| `projekt-strony/notariat.png`, `projekt-strony/og-rejestr.png` | Obrazy: znak Notariatu (stopka) i wygenerowany zrzut sekcji hero 1200×630 (Open Graph). |
+| `narzedzia/buduj-strone.js` | Generator: wydziela CSS/JS z projektu do osobnych plików, podstawia `{{BASE_URL}}`, kwoty (jedyne źródło: `server/logika/przepisy.js`, `STAWKI_GROSZE`) i dane kancelarii (jedyne źródło: `ustawienia.kancelaria(db())`), generuje `regulamin.html`/`polityka-prywatnosci.html` w tej samej ramie wizualnej (treść z `publiczne/js/prawne.js`, jedyne źródło tych tekstów). Wyjście: `strona/dist/`. Uruchamiane `npm run buduj-strone`. |
+| `strona/dist/` | Wyjście generatora — śledzone w git, przebudowywane idempotentnie: `index.html`, `regulamin.html`, `polityka-prywatnosci.html`, `strona.css`, `strona.js` (defer — nawigacja/menu/animacje), `wczesnie.js` (bez defer — wykrycie `prefers-reduced-motion` przed pierwszym renderem), `fonty/`, `obrazy/`, `sitemap.xml`, `robots.txt`. |
 
-Mapa stron (D-064, zastępuje mapę z FAZY 5): `/`, `/jak-zaczac`, `/sprzedaz-akcji`,
-`/przeniesienie-rejestru`, `/oplaty`, `/pytania`, `/kontakt`. Adresy bezwzględne przez
-`BASE_URL_STRONA` (`server/konfiguracja.js`) — domena nierozstrzygnięta (Q2/D-049).
+Trzy strony: `/`, `/regulamin`, `/polityka-prywatnosci`. Adresy bezwzględne przez
+`BASE_URL_STRONA` (`server/konfiguracja.js`) — domena nierozstrzygnięta (Q2/D-049). Strona nie
+zapisuje żadnych ciasteczek ani danych w przeglądarce (zweryfikowane w tej sesji).
 
 ---
 
