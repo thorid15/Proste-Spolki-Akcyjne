@@ -68,6 +68,36 @@ wstecznymi. Ekran migracji jest dostępny wyłącznie, dopóki rejestr jest pust
   zaczyna się od stanu otwarcia; poprzednia historia zostaje u poprzednika i to
   on odpowiada za jej udostępnianie.
 
+## 3a. Przejęcie z rejestru KRN (rejestry-notarialne.pl) — reguły (D-R08)
+
+Zakres danych KRN opisuje `docs/krn/Inwentaryzacja_Rejestr_PSA.md`. Stan otwarcia wprowadza się
+ekranem **Migracja — stan otwarcia** (wyłącznie w rejestrze bez zwykłych wpisów):
+
+1. **Uprawnienia, przywileje, obowiązki z kilkoma rodzajami naraz** (w KRN maska bitowa, np. U+O)
+   rozbijamy na osobne wpisy — po jednym na rodzaj.
+2. **Treść postanowienia** zapisaną w KRN w „Komentarzu do statusu” przenosimy do pola `tresc`
+   (w KRN komentarz nie drukuje się na raporcie — u nas treść drukuje się na informacji).
+3. **Ograniczenia rozporządzania** zapisane w KRN w „Uwagach notariusza” spółki (np. prawo
+   pierwszeństwa, zgoda spółki) wprowadzamy jako wpis „Ograniczenie” (`psa_ograniczenia`),
+   nie do `uwagi`.
+4. **Pokrycie akcji** zapisane w KRN w „Uwagach” wprowadzamy wpisem „Pokrycie akcji wkładem”
+   (`pokrycie_akcji`).
+5. **Data wpisu = data rejestracji w KRN** (kolumna DR, z godziną, jeżeli KRN ją podaje) — pole
+   „Data rejestracji w KRN” na ekranie migracji; zapisuje się jako `data_wpisu` zdarzenia, a
+   znacznik `migracja_krn` w treści zdarzenia (objęty skrótem) pokazuje, skąd pochodzi. Daty
+   zdarzenia nie ma (D-R01). Wpisy migracyjne wprowadza się chronologicznie — aplikacja odrzuci
+   wpis wcześniejszy niż poprzedni.
+6. **Transze KRN** tego samego akcjonariusza w tej samej serii wprowadzamy jako osobne objęcia
+   (z ręcznym zakresem numerów), każdą z jej datą rejestracji w KRN. Zakresy z tym samym dniem
+   wpisu łączą się same (D-R03); transze z różnymi datami zachowują własne daty.
+7. **Charlie Unicorn AI PSA — migracja wstrzymana do decyzji notariusza.** W KRN akcjonariusz
+   ID 21995 nie ma akcji, a w transakcji z 25.09.2026 (akcje nr 890–989) nabywca jest zarazem
+   zbywcą — prawdopodobnie wybrano niewłaściwą osobę. Przed migracją stan trzeba wyjaśnić ze
+   spółką.
+8. **Numeracja serii od numeru innego niż 1** (w KRN numeracja bywa ciągła między seriami, np.
+   AN 1–25, AZ 26–100) — w emisji podaje się „Numer pierwszej akcji”; przechodzi przez emisję,
+   objęcie, przeniesienie i informację z rejestru (test `testy/d-r08-krn-numeracja.test.js`).
+
 ## 4. Czego aplikacja jeszcze nie robi
 
 Zapisane świadomie, do decyzji na później:

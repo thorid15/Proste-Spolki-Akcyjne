@@ -19,6 +19,30 @@ Kolumna **Decyzja** jest pusta — do uzupełnienia przez Łukasza (T = wprowadz
 
 ---
 
+## Rozstrzygnięcia (26.09.2026) i stan wdrożenia
+
+Decyzje notariusza: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md`; odpowiedzi na pytania etapu 0:
+`docs/krn/ETAP-0-RAPORT.md`. Wszystkie pozycje wdrożone na gałęzi `claude/serene-cray-y373cf`.
+
+| ID | Decyzja | Wdrożenie (`DECYZJE.md`) |
+|---|---|---|
+| R-01 | T — stan zawsze od chwili wpisu; data zdarzenia usunięta (także z łańcucha skrótów) | D-065 |
+| R-02 | T — „Data zarejestrowania emisji” = data wpisu do KRS; data spółki = data rejestracji w KRS | D-066 |
+| R-03 | T — zakresy z datą wpisu każdego z nich, scalanie tylko w obrębie dnia wpisu | D-066, D-067 |
+| R-04 | T — cena emisyjna z walutą i opis emisji; **bez** podstawy prawnej | D-066 |
+| R-05 | T — opis spółki i emisji drukowany na informacji | D-066 |
+| R-06 | T — wiersz „Łącznie” dla osoby z kilkoma seriami; liczby głosów **nigdzie** (poza uchwałą, wzór 03) | D-066, D-067 |
+| R-07 | T — „Sporządzono …, godz. gg:mm”; dla dnia bieżącego stan z godziną | D-066 |
+| R-08 | T — reguły przejęcia z KRN | `PRZEJECIE-REJESTRU.md` §3a |
+| 3.1 organ / przekazanie | T — tylko ewidencja przekazania, potem rejestr tylko do odczytu | D-068 |
+| 3.1 zastępca | T — osoba działająca przy wpisie, tylko audyt | D-070 |
+| 3.4 kraje | T — słownik ISO 3166-1 alfa-2 | D-069 |
+| 3.5 blokada emisji | T — po objęciu seria/numeracja/liczba akcji zablokowane | D-071 |
+| Przepływ | T — czynności z wiersza; wybór/dodanie osoby w jednym oknie (już było) | D-071 |
+| Nie przejmujemy | status „w przygotowaniu”, priorytet zdarzeń, wymagany tel./e-mail, dane kontaktowe na informacji, komunikat D+1 | — |
+
+---
+
 ## 0. Wniosek ogólny
 
 KRN to w praktyce **ewidencja formularzowa** (6 rejestrów zależnych, edycja wpisów przez

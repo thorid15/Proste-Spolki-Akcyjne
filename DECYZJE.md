@@ -1134,6 +1134,23 @@
 
 ---
 
+### D-072 — Dokumentacja po porównaniu z KRN i reguły przejęcia z KRN (D-R08, etap 6)
+
+- Data: 2026-09-26 (etap 6)
+- Obszar: dokumentacja
+- Decyzja: `CLAUDE-PSA.md` — nowa reguła domenowa 6 (chwila wpisu jedyną osią czasu), model danych
+  (`psa_zdarzenia` bez daty zdarzenia, `przekazanie_*`, `*kraj_kod`, `psa_kraje`,
+  `psa_osoby_dzialajace`, znaczenie `data_utworzenia_spolki`), typ `przekazanie_rejestru`, nowe
+  walidacje blokujące. `PRZEJECIE-REJESTRU.md` §3a — reguły D-R08 pkt 1–8, w tym wstrzymanie
+  migracji Charlie Unicorn AI PSA do decyzji notariusza. `docs/krn/POROWNANIE-KRN-PSA.md` —
+  tabela rozstrzygnięć. Test scenariusza KRN z numeracją AN 1–25 / AZ 26–100:
+  `testy/d-r08-krn-numeracja.test.js`.
+- Otwarte: weryfikacja cytatów art. 300³⁵ § 1¹ i art. 300³² § 3 KSH (Dz.U. 2026 poz. 176) —
+  notariusz odłożył ją na później (`ETAP-0-RAPORT.md`, A7).
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (etap 6, D-R08).
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w
