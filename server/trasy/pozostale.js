@@ -170,7 +170,7 @@ router.get(
                 (SELECT COALESCE(SUM(sa.ilosc), 0) FROM psa_stan_akcji sa
                   WHERE sa.spolka_id = s.id AND sa.data_do IS NULL
                     AND sa.kategoria = 'nieobjeta')     AS akcje_nieobjete,
-                (SELECT MAX(z.data_zdarzenia) FROM psa_zdarzenia z
+                (SELECT MAX(z.data_wpisu) FROM psa_zdarzenia z
                   WHERE z.spolka_id = s.id)             AS ostatnie_zdarzenie
            FROM psa_spolki s
           ORDER BY ostatnie_zdarzenie DESC NULLS LAST, s.nazwa COLLATE NOCASE`

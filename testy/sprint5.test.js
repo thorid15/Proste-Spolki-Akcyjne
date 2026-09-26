@@ -245,7 +245,7 @@ test('blokada: emisji bez data_wpisu_krs w ogole sie nie zapisuje (art. 300(30) 
 
   assert.throws(() => {
     rejestr.dokonajWpisu(db, {
-      spolkaId: spolka, typ: 'emisja', data_zdarzenia: '2026-01-01',
+      spolkaId: spolka, typ: 'emisja', teraz: '2026-01-01',
       wejscie: { seria: 'A', ilosc: 10 }, autor: 'Test',
     });
   }, /daty wpisu do KRS/);
@@ -258,7 +258,7 @@ test('Z-012/P-006: emisja zalozycielska musi miec date wpisu do KRS rowna dacie 
     zdarzenia: [],
     spolka,
     dzisiaj: '2026-12-31',
-    propozycja: { typ: 'emisja', data_zdarzenia: '2026-03-10', dane: { seria: 'A', ilosc: 100, nr_pierwszy: 1, data_wpisu_krs: '2026-03-15' } },
+    propozycja: { typ: 'emisja', chwila: '2026-03-10', dane: { seria: 'A', ilosc: 100, nr_pierwszy: 1, data_wpisu_krs: '2026-03-15' } },
   });
   assert.equal(zla.dopuszczalne, false);
   assert.ok(zla.bledy.some((b) => /założycielska.*równą dacie rejestracji/.test(b)), zla.bledy.join(' | '));
@@ -267,7 +267,7 @@ test('Z-012/P-006: emisja zalozycielska musi miec date wpisu do KRS rowna dacie 
     zdarzenia: [],
     spolka,
     dzisiaj: '2026-12-31',
-    propozycja: { typ: 'emisja', data_zdarzenia: '2026-03-10', dane: { seria: 'A', ilosc: 100, nr_pierwszy: 1, data_wpisu_krs: '2026-03-10' } },
+    propozycja: { typ: 'emisja', chwila: '2026-03-10', dane: { seria: 'A', ilosc: 100, nr_pierwszy: 1, data_wpisu_krs: '2026-03-10' } },
   });
   assert.equal(dobra.dopuszczalne, true, dobra.bledy.join(' | '));
 });
@@ -280,7 +280,7 @@ test('Z-012/P-006: kolejna emisja (podwyzszenie) musi miec date wpisu PO dacie r
     zdarzenia,
     spolka,
     dzisiaj: '2026-12-31',
-    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-03-01' } },
+    propozycja: { typ: 'emisja', chwila: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-03-01' } },
   });
   assert.equal(przed.dopuszczalne, false);
   assert.ok(przed.bledy.some((b) => /musi być późniejsza/.test(b)), przed.bledy.join(' | '));
@@ -289,7 +289,7 @@ test('Z-012/P-006: kolejna emisja (podwyzszenie) musi miec date wpisu PO dacie r
     zdarzenia,
     spolka,
     dzisiaj: '2026-12-31',
-    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-03-10' } },
+    propozycja: { typ: 'emisja', chwila: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-03-10' } },
   });
   assert.equal(rowno.dopuszczalne, false, 'rowna dacie rejestracji spolki tez jest za wczesnie dla KOLEJNEJ emisji');
 
@@ -297,7 +297,7 @@ test('Z-012/P-006: kolejna emisja (podwyzszenie) musi miec date wpisu PO dacie r
     zdarzenia,
     spolka,
     dzisiaj: '2026-12-31',
-    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-05-01' } },
+    propozycja: { typ: 'emisja', chwila: '2026-05-01', dane: { seria: 'B', ilosc: 50, nr_pierwszy: 101, data_wpisu_krs: '2026-05-01' } },
   });
   assert.equal(po.dopuszczalne, true, po.bledy.join(' | '));
 });
@@ -307,7 +307,7 @@ test('Z-012/P-006: data wpisu emisji do KRS z przyszlosci jest odrzucona', () =>
     zdarzenia: [],
     spolka: { id: 1, status: 'aktywna' },
     dzisiaj: '2026-06-01',
-    propozycja: { typ: 'emisja', data_zdarzenia: '2026-05-01', dane: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-07-01' } },
+    propozycja: { typ: 'emisja', chwila: '2026-05-01', dane: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-07-01' } },
   });
   assert.equal(wynik.dopuszczalne, false);
   assert.ok(wynik.bledy.some((b) => /z przyszłości/.test(b)), wynik.bledy.join(' | '));
@@ -326,7 +326,7 @@ test('blokada: objecie akcji jest odrzucane, gdy emisja nie ma data_wpisu_krs (w
     dzisiaj: '2026-02-01',
     propozycja: {
       typ: 'objecie',
-      data_zdarzenia: '2026-01-02',
+      chwila: '2026-01-02',
       dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: 7, zakresy: [{ nr_od: 1, nr_do: 10 }] }] },
     },
   });
@@ -344,7 +344,7 @@ test('sprostowanie emisji poprawia date wpisu do KRS, objecie dziala dalej', () 
   const osoba = dodajOsobe(db);
 
   const emisja = rejestr.dokonajWpisu(db, {
-    spolkaId: spolka, typ: 'emisja', data_zdarzenia: '2026-01-01',
+    spolkaId: spolka, typ: 'emisja', teraz: '2026-01-06',
     wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-05' }, autor: 'Test',
   });
   // Zla data wpisu do KRS prostuje sie zdarzeniem, nie edycja — dziennik jest
@@ -354,10 +354,11 @@ test('sprostowanie emisji poprawia date wpisu do KRS, objecie dziala dalej', () 
     uzasadnienie: 'Sąd zarejestrował emisję w innej dacie',
     zamiast: { typ: 'emisja', dane: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-01' } },
     autor: 'Test',
+    teraz: '2026-01-07',
   });
 
   const objecie = rejestr.dokonajWpisu(db, {
-    spolkaId: spolka, typ: 'objecie', data_zdarzenia: '2026-01-02',
+    spolkaId: spolka, typ: 'objecie', teraz: '2026-01-08',
     wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: osoba, ilosc: 10 }] },
     autor: 'Test',
   });
@@ -371,11 +372,11 @@ test('blokada: zbycie ulamka akcji nie w pelni pokrytej bez zgody spolki jest od
   const nabywca = dodajOsobe(db, { nazwisko: 'Nabywca' });
 
   const emisja = rejestr.dokonajWpisu(db, {
-    spolkaId: spolka, typ: 'emisja', data_zdarzenia: '2026-01-01',
+    spolkaId: spolka, typ: 'emisja', teraz: '2026-01-01',
     wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-01' }, autor: 'Test',
   });
   rejestr.dokonajWpisu(db, {
-    spolkaId: spolka, typ: 'objecie', data_zdarzenia: '2026-01-02',
+    spolkaId: spolka, typ: 'objecie', teraz: '2026-01-02',
     wejscie: {
       emisja_zdarzenie_id: emisja.zdarzenie.id,
       pozycje: [{ osoba_id: zbywca, ilosc: 10, pokryta: 'nie' }],
@@ -385,7 +386,7 @@ test('blokada: zbycie ulamka akcji nie w pelni pokrytej bez zgody spolki jest od
 
   assert.throws(() => {
     rejestr.dokonajWpisu(db, {
-      spolkaId: spolka, typ: 'przeniesienie_ulamka', data_zdarzenia: '2026-01-03',
+      spolkaId: spolka, typ: 'przeniesienie_ulamka', teraz: '2026-01-03',
       wejscie: {
         emisja_zdarzenie_id: emisja.zdarzenie.id, nr: 3,
         zbywca_osoba_id: zbywca, nabywca_osoba_id: nabywca,
@@ -397,7 +398,7 @@ test('blokada: zbycie ulamka akcji nie w pelni pokrytej bez zgody spolki jest od
 
   // Ze zgoda spolki - przechodzi.
   const wpisZgoda = rejestr.dokonajWpisu(db, {
-    spolkaId: spolka, typ: 'przeniesienie_ulamka', data_zdarzenia: '2026-01-03',
+    spolkaId: spolka, typ: 'przeniesienie_ulamka', teraz: '2026-01-03',
     wejscie: {
       emisja_zdarzenie_id: emisja.zdarzenie.id, nr: 3,
       zbywca_osoba_id: zbywca, nabywca_osoba_id: nabywca,
@@ -417,11 +418,11 @@ test('Z-054: blokada zbycia niepokrytych CALYCH akcji dziala przy KAZDYM kolejny
   const c = dodajOsobe(db, { nazwisko: 'Cieslak' });
 
   const emisja = rejestr.dokonajWpisu(db, {
-    spolkaId: spolka, typ: 'emisja', data_zdarzenia: '2026-01-01',
+    spolkaId: spolka, typ: 'emisja', teraz: '2026-01-01',
     wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-01' }, autor: 'Test',
   });
   rejestr.dokonajWpisu(db, {
-    spolkaId: spolka, typ: 'objecie', data_zdarzenia: '2026-01-02',
+    spolkaId: spolka, typ: 'objecie', teraz: '2026-01-02',
     wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: a, ilosc: 10, pokryta: 'nie' }] },
     autor: 'Test',
   });
@@ -429,7 +430,7 @@ test('Z-054: blokada zbycia niepokrytych CALYCH akcji dziala przy KAZDYM kolejny
   // Pierwsze zbycie niepokrytych akcji bez zgody spolki - odrzucone.
   assert.throws(() => {
     rejestr.dokonajWpisu(db, {
-      spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-03',
+      spolkaId: spolka, typ: 'przeniesienie', teraz: '2026-01-03',
       wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: a, pozycje: [{ nabywca_osoba_id: b, ilosc: 10 }] },
       autor: 'Test',
     });
@@ -438,7 +439,7 @@ test('Z-054: blokada zbycia niepokrytych CALYCH akcji dziala przy KAZDYM kolejny
   // Ze zgoda - przechodzi. Wzmianka o pokryciu MUSI przejsc na nabywce B
   // niezmieniona ('nie'), nie zzerowac sie do null ("nieustalone").
   rejestr.dokonajWpisu(db, {
-    spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-03',
+    spolkaId: spolka, typ: 'przeniesienie', teraz: '2026-01-03',
     wejscie: {
       emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: a,
       pozycje: [{ nabywca_osoba_id: b, ilosc: 10 }], zgoda_spolki_niepelne_pokrycie: true,
@@ -456,7 +457,7 @@ test('Z-054: blokada zbycia niepokrytych CALYCH akcji dziala przy KAZDYM kolejny
   // `pokryta: undefined` przy pierwszym przeniesieniu i zerowal go do null.
   assert.throws(() => {
     rejestr.dokonajWpisu(db, {
-      spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-04',
+      spolkaId: spolka, typ: 'przeniesienie', teraz: '2026-01-04',
       wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: b, pozycje: [{ nabywca_osoba_id: c, ilosc: 10 }] },
       autor: 'Test',
     });
@@ -464,7 +465,7 @@ test('Z-054: blokada zbycia niepokrytych CALYCH akcji dziala przy KAZDYM kolejny
 
   // Ze zgoda spolki drugie zbycie tez przechodzi.
   const wpisDrugi = rejestr.dokonajWpisu(db, {
-    spolkaId: spolka, typ: 'przeniesienie', data_zdarzenia: '2026-01-04',
+    spolkaId: spolka, typ: 'przeniesienie', teraz: '2026-01-04',
     wejscie: {
       emisja_zdarzenie_id: emisja.zdarzenie.id, zbywca_osoba_id: b,
       pozycje: [{ nabywca_osoba_id: c, ilosc: 10 }], zgoda_spolki_niepelne_pokrycie: true,
@@ -557,7 +558,7 @@ test('Z-203: ostrzezenie AML rozroznia nabywce-osobe prawna od fizycznej w tresc
     dzisiaj: '2026-02-01',
     propozycja: {
       typ: 'objecie',
-      data_zdarzenia: '2026-01-02',
+      chwila: '2026-01-02',
       dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: 7, zakresy: [{ nr_od: 1, nr_do: 10 }] }] },
     },
   });
@@ -574,7 +575,7 @@ test('Z-203: ostrzezenie AML rozroznia nabywce-osobe prawna od fizycznej w tresc
     dzisiaj: '2026-02-01',
     propozycja: {
       typ: 'objecie',
-      data_zdarzenia: '2026-01-02',
+      chwila: '2026-01-02',
       dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: 8, zakresy: [{ nr_od: 1, nr_do: 10 }] }] },
     },
   });

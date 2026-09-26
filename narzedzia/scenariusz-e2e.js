@@ -389,7 +389,6 @@ async function main() {
       {
         typ: 'emisja',
         klucz_tymczasowy: 'emisja-1',
-        data_zdarzenia: DZIS,
         dane: {
           seria: 'A',
           nr_pierwszy: 1,
@@ -401,7 +400,6 @@ async function main() {
       },
       {
         typ: 'objecie',
-        data_zdarzenia: DZIS,
         dane: {
           emisja_zdarzenie_id: { __odwolanie_do_partii: 'emisja-1' },
           pozycje: [
@@ -454,7 +452,6 @@ async function main() {
     pozycje: [{ nabywca_osoba_id: osoby[1], ilosc: 100 }],
   };
   const podglad = await zapytaj(kancelaria, 'POST', `/api/psa/sprawy/${sprawa.sprawa.id}/podglad`, {
-    data_zdarzenia: DZIS,
     dane: wejscie,
   });
   if (!podglad.dopuszczalne) {
@@ -467,7 +464,6 @@ async function main() {
   // uzna komplet wpisów przy danej spółce za gotowy.
   krok('kancelaria', 'Dokonuje wpisu');
   const wpis = await zapytaj(kancelaria, 'POST', `/api/psa/sprawy/${sprawa.sprawa.id}/wpisz`, {
-    data_zdarzenia: DZIS,
     dane: wejscie,
   });
   info(`wpisano zdarzenie #${wpis.zdarzenie.id} (${wpis.zdarzenie.typ}), skrót ${wpis.zdarzenie.hash_skrocony}`);

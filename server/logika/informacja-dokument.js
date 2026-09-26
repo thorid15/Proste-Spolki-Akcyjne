@@ -31,6 +31,7 @@
  * § 1(1) KSH jest juz w `stan` zastosowane — tu tylko ukladamy strone.
  */
 
+const czas = require('../pomocnicze/czas');
 const u = require('./ulamki');
 
 const ZASLONA = '—';
@@ -47,7 +48,7 @@ function esc(tekst) {
 
 function dataPl(iso) {
   if (!iso) return null;
-  const [r, m, d] = String(iso).slice(0, 10).split('-');
+  const [r, m, d] = String(czas.dzienLokalny(iso)).split('-');
   return `${d}.${m}.${r}`;
 }
 
@@ -55,8 +56,8 @@ function dataPl(iso) {
 function dataCzasPl(iso) {
   const dzien = dataPl(iso);
   if (!dzien) return null;
-  const godzina = String(iso).slice(11, 19);
-  return godzina.length === 8 ? `${dzien}, ${godzina}` : dzien;
+  const godzina = czas.godzinaLokalna(iso, { sekundy: true });
+  return godzina ? `${dzien}, ${godzina}` : dzien;
 }
 
 function pusty(v) {

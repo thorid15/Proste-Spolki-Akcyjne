@@ -6,6 +6,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const czas = require('../server/pomocnicze/czas');
 
 const { bazaTestowa, dodajSpolke, dodajOsobe, wpis } = require('./pomoc');
 const rejestr = require('../server/rejestr');
@@ -187,7 +188,7 @@ test('data nabycia pozostalej czesci pakietu nie zmienia sie po czesciowym zbyci
        WHERE spolka_id = ? AND osoba_id = ? AND data_do IS NULL`
     )
     .get(spolka, a);
-  assert.equal(reszta.data_od, '2026-01-10', 'zbywca posiada resztę od dnia objęcia, nie od dnia zbycia');
+  assert.equal(czas.dzienLokalny(reszta.data_od), '2026-01-10', 'zbywca posiada resztę od dnia objęcia, nie od dnia zbycia');
 });
 
 test('dwie pozycje nie moga siegac po te same akcje', () => {

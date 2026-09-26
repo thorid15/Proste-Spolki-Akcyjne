@@ -45,39 +45,37 @@ function osobaDlaRoli(osoba, rola, odbiorcaOsobaId) {
  *                       Domyslnie dzisiaj (data-only).
  * @param {string} rola  `przepisy.ROLE_ODBIORCY`; domyslnie kancelaria
  *
- * Dwie odrebne semantyki, bo mieszaja dwa rozne pojecia czasu w rejestrze
- * (regula domenowa 6): format daty porownuje po `data_zdarzenia` (kiedy
- * czynnosc prawnie zaszla - pozwala np. na wpis z data historyczna wczesniej
- * niz dzisiaj). Format z godzina porownuje po `data_wpisu` (kiedy WPIS trafil
- * do rejestru) - odroznia dwa wpisy z tego samego dnia po kolejnosci
- * rzeczywistego wprowadzenia, nie po deklarowanej dacie zdarzenia.
+ * D-R01 - jedna semantyka: stan rejestru to wynik zdarzen WPISANYCH do
+ * wskazanej chwili (art. 300(37) § 1 i art. 300(38) § 1 KSH). Dzien D =
+ * koniec dnia D (23:59:59 czasu kancelarii), a dla dnia biezacego - chwila
+ * sporzadzenia. Wpis dokonany pozniej (takze sprostowanie) nie zmienia
+ * stanu na dzien wczesniejszy, wiec informacja na dzien D jest zawsze taka
+ * sama, niezaleznie od tego, kiedy ja wygenerowano.
  */
 function widokStanu(db, spolkaId, data, opcje = {}) {
   const rola = opcje.rola || ROLE.KANCELARIA;
   const odbiorcaOsobaId = opcje.odbiorcaOsobaId ?? null;
   const surowaData = String(data || czas.dzisIso());
-  const zChwila = surowaData.includes('T');
-  const dzien = surowaData.slice(0, 10);
+  const dzisiaj = czas.dzisIso();
+  const biezacy = surowaData === dzisiaj || !data;
+  const chwilaStanu = biezacy
+    ? czas.terazUtc()
+    : czas.poprawnaData(surowaData)
+      ? czas.koniecDniaUtc(surowaData)
+      : czas.chwilaUtc(surowaData);
+  const dzien = czas.dzienLokalny(chwilaStanu);
 
   const spolka = rejestr.wczytajSpolke(db, spolkaId);
   if (!spolka) return null;
 
   const wszystkieZdarzenia = rejestr.wczytajZdarzenia(db, spolkaId);
-  let stan;
-  let dzienDoFiltrow;
-  if (zChwila) {
-    const chwila = new Date(surowaData).getTime();
-    const doChwili = wszystkieZdarzenia.filter((z) => new Date(z.data_wpisu).getTime() <= chwila);
-    stan = stanLogika.odtworzStan(doChwili);
-    dzienDoFiltrow = null; // stan juz ograniczony do wpisow sprzed `chwila` - bez drugiego filtra po dacie
-  } else {
-    stan = stanLogika.odtworzStan(wszystkieZdarzenia);
-    dzienDoFiltrow = dzien;
-  }
+  const stan = stanLogika.odtworzStan(
+    wszystkieZdarzenia.filter((z) => String(z.data_wpisu) <= chwilaStanu)
+  );
+  const dzienDoFiltrow = null; // stan juz ograniczony do wpisow sprzed chwili - bez drugiego filtra
   const osoby = rejestr.wczytajOsobySpolki(db, spolkaId);
-  // D-050/B12 - moment WPISU (nie data prawna zdarzenia) przy pozycji
-  // akcjonariusza: `data_wpisu` jest systemowa, co do sekundy (patrz
-  // migracje.js:92), `data_zdarzenia`/`data_od` to data NOTARIALNA.
+  // D-050/B12, D-R01 - moment WPISU przy pozycji akcjonariusza
+  // (`data_wpisu`, systemowa, UTC co do sekundy).
   const dataWpisuZdarzenia = new Map(wszystkieZdarzenia.map((z) => [z.id, z.data_wpisu]));
 
   const akcjonariat = stanLogika.akcjonariatNaDzien(stan, dzienDoFiltrow);
@@ -88,6 +86,9 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
 
   return {
     data: dzien,
+    // D-R07: dla dnia biezacego informacja podaje takze godzine stanu.
+    chwila_stanu: chwilaStanu,
+    stan_biezacy: biezacy,
     rola,
     spolka: spolkaDlaRoli(spolka, rola),
 
@@ -218,7 +219,6 @@ function widokZdarzen(db, spolkaId, { limit = null } = {}) {
   return wycinek.map((z) => ({
     id: z.id,
     typ: z.typ,
-    data_zdarzenia: z.data_zdarzenia,
     data_wpisu: z.data_wpisu,
     autor: z.autor,
     uzasadnienie: z.uzasadnienie,

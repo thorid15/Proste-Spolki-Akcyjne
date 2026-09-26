@@ -176,7 +176,7 @@ test('Z-009/P-005: zmiana danych umowy (data_umowy, umowe_zawarl) PRZED otwarcie
   await zapytaj(
     'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`,
     {
-      zdarzenia: [{ typ: 'emisja', data_zdarzenia: '2026-03-05', dane: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-03-05' } }],
+      zdarzenia: [{ typ: 'emisja', dane: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-03-05' } }],
       checklista: CHECKLISTA_PELNA,
     },
     { Cookie: ciastkoSesji }
@@ -202,7 +202,7 @@ test('POST /:id/otworz-rejestr bez sesji zwraca 401', async () => {
 });
 
 test('POST /:id/otworz-rejestr dla nieistniejącej spółki zwraca 404', async () => {
-  const [status] = await zapytaj('POST', '/api/psa/spolki/999999/otworz-rejestr', { zdarzenia: [{ typ: 'emisja', data_zdarzenia: '2026-01-01', dane: {} }] }, { Cookie: ciastkoSesji });
+  const [status] = await zapytaj('POST', '/api/psa/spolki/999999/otworz-rejestr', { zdarzenia: [{ typ: 'emisja', dane: {} }] }, { Cookie: ciastkoSesji });
   assert.equal(status, 404);
 });
 
@@ -225,7 +225,7 @@ test('POST /:id/otworz-rejestr: niekompletna checklista zwraca 400 (naprawa Z-20
 
   const [status, dane] = await zapytaj(
     'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`,
-    { zdarzenia: [{ typ: 'emisja', data_zdarzenia: '2026-01-10', dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' } }], checklista: { ...CHECKLISTA_PELNA, aml: false } },
+    { zdarzenia: [{ typ: 'emisja', dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' } }], checklista: { ...CHECKLISTA_PELNA, aml: false } },
     { Cookie: ciastkoSesji }
   );
   assert.equal(status, 400);
@@ -233,7 +233,7 @@ test('POST /:id/otworz-rejestr: niekompletna checklista zwraca 400 (naprawa Z-20
 
   const [statusBrak] = await zapytaj(
     'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`,
-    { zdarzenia: [{ typ: 'emisja', data_zdarzenia: '2026-01-10', dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' } }] },
+    { zdarzenia: [{ typ: 'emisja', dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' } }] },
     { Cookie: ciastkoSesji }
   );
   assert.equal(statusBrak, 400, 'brak checklisty w ogole tez jest odrzucany');
@@ -260,12 +260,10 @@ test('POST /:id/otworz-rejestr zapisuje emisję + objęcie atomowo w jednym wywo
         {
           typ: 'emisja',
           klucz_tymczasowy: 'emisja-A',
-          data_zdarzenia: '2026-01-10',
           dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
         },
         {
           typ: 'objecie',
-          data_zdarzenia: '2026-01-10',
           dane: {
             emisja_zdarzenie_id: { __odwolanie_do_partii: 'emisja-A' },
             pozycje: [{ osoba_id: osobaOdp.osoba.id, ilosc: 100 }],
@@ -307,12 +305,10 @@ test('POST /:id/otworz-rejestr: cena emisyjna jest per pozycja akcjonariatu, nie
         {
           typ: 'emisja',
           klucz_tymczasowy: 'emisja-A',
-          data_zdarzenia: '2026-01-10',
           dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
         },
         {
           typ: 'objecie',
-          data_zdarzenia: '2026-01-10',
           dane: {
             emisja_zdarzenie_id: { __odwolanie_do_partii: 'emisja-A' },
             pozycje: [
@@ -351,12 +347,10 @@ test('POST /:id/otworz-rejestr: nieudane drugie zdarzenie cofa całą partię, �
         {
           typ: 'emisja',
           klucz_tymczasowy: 'emisja-A',
-          data_zdarzenia: '2026-01-10',
           dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
         },
         {
           typ: 'objecie',
-          data_zdarzenia: '2026-01-10',
           // Odwolanie do nieistniejacego klucza - cala partia ma sie cofnac.
           dane: {
             emisja_zdarzenie_id: { __odwolanie_do_partii: 'literowka' },

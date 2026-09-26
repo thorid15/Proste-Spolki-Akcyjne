@@ -2204,6 +2204,30 @@ const MIGRACJE = [
       ALTER TABLE psa_konta ADD COLUMN zgloszenie_id INTEGER REFERENCES psa_zgloszenia(id);
     `,
   },
+  {
+    wersja: 57,
+    nazwa: 'D-R01: chwila wpisu jedyna osia czasu - usuniecie data_zdarzenia z lancucha',
+    // Kolumna wchodzila do skrotu zdarzenia (`lancuch.skrot`). Po jej usunieciu
+    // skroty zapisanych zdarzen przestalyby sie zgadzac, a zdarzen append-only
+    // nie wolno przepisywac (art. 300(31) § 4 KSH) - migracja wykonuje sie
+    // WYLACZNIE na pustym rejestrze (decyzja notariusza z 26.09.2026: brak
+    // spolek w produkcji). Baze z zapisanymi zdarzeniami trzeba zalozyc od nowa.
+    warunek(db) {
+      const ile = db.prepare('SELECT COUNT(*) AS ile FROM psa_zdarzenia').get().ile;
+      if (ile > 0) {
+        throw new Error(
+          `Migracja 57 (D-R01) wymaga pustej tabeli psa_zdarzenia, a zawiera ona ${ile} zdarzen. ` +
+            'Usun baze i uruchom aplikacje ponownie - skrotow lancucha nie przeliczamy.'
+        );
+      }
+    },
+    sql: `
+      DROP INDEX IF EXISTS psa_ix_zdarzenia_spolka;
+      ALTER TABLE psa_zdarzenia DROP COLUMN data_zdarzenia;
+      CREATE INDEX IF NOT EXISTS psa_ix_zdarzenia_spolka
+        ON psa_zdarzenia (spolka_id, data_wpisu, id);
+    `,
+  },
 ];
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
@@ -2231,6 +2255,7 @@ function uruchom(db) {
     if (wykonane.has(migracja.wersja)) continue;
 
     const transakcja = db.transaction(() => {
+      if (typeof migracja.warunek === 'function') migracja.warunek(db);
       db.exec(migracja.sql);
       db.prepare('INSERT INTO psa_migracje (wersja, nazwa, wykonano) VALUES (?, ?, ?)').run(
         migracja.wersja,

@@ -123,17 +123,9 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
               <td>
                 <div style={{ fontWeight: 500 }}>{a.osoba ? a.osoba.oznaczenie : `osoba #${a.osoba_id}`}</div>
                 <div className="wiersz-podtytul">
-                  akcjonariusz od {fmt.data(a.data_nabycia)}
+                  akcjonariusz od {fmt.dataCzas(a.wpisano_do_rejestru || a.data_nabycia)}
                   {a.osoba && a.osoba.jawny_identyfikator ? ` · ${a.osoba.jawny_identyfikator}` : ''}
                 </div>
-                {/* D-050/B12: moment SYSTEMOWEGO wpisu (co do sekundy) —
-                    inny od daty prawnej zdarzenia wyżej. Puste dla pozycji
-                    wpisanych przed kolumną `data_wpisu` z sekundami. */}
-                {a.wpisano_do_rejestru && (
-                  <div className="wiersz-podtytul wyciszony">
-                    Wpisano do rejestru: {fmt.dataCzas(a.wpisano_do_rejestru)}
-                  </div>
-                )}
               </td>
               <td>{a.seria}</td>
               <td>{rodzajAkcjiDlaEmisji(emisje, a.emisja_klucz)}</td>
@@ -1031,14 +1023,14 @@ function EkranKokpitu({ spolkaId }) {
               ) : (
                 <table className="tabela">
                   <thead>
-                    <tr><th>Data</th><th>Zdarzenie</th><th>Wpisano</th></tr>
+                    <tr><th>Wpisano</th><th>Zdarzenie</th><th>Autor</th></tr>
                   </thead>
                   <tbody>
                     {zdarzeniaPozostale.map((z) => (
                       <tr key={z.id}>
-                        <td className="wyciszony">{fmt.data(z.data_zdarzenia)}</td>
+                        <td className="wyciszony">{fmt.dataCzas(z.data_wpisu)}</td>
                         <td className="zawijaj">{z.podsumowanie || `Zdarzenie typu „${z.typ}”.`}</td>
-                        <td className="wyciszony">{fmt.dataCzas(z.data_wpisu)} · {z.autor}</td>
+                        <td className="wyciszony">{z.autor}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1107,7 +1099,7 @@ function EkranKokpitu({ spolkaId }) {
                     >
                       <div className="rzad-rozdzielony">
                         <div className="zdarzenie-data">
-                          {fmt.data(z.data_zdarzenia)} · zdarzenie #{z.id}
+                          {fmt.dataCzas(z.data_wpisu)} · zdarzenie #{z.id}
                         </div>
                         {!wstecz && z.typ !== 'sprostowanie' && !z.sprostowane_przez_id && (
                           <button className="btn btn-maly bez-druku" onClick={() => ustawSprostowanie(z)}>

@@ -205,7 +205,7 @@ router.get(
                   WHERE sa.spolka_id = s.id AND sa.data_do IS NULL
                     AND sa.kategoria = 'akcjonariusz')                 AS liczba_akcji,
                 (SELECT COUNT(*) FROM psa_emisje e WHERE e.spolka_id = s.id) AS liczba_emisji,
-                (SELECT MAX(z.data_zdarzenia) FROM psa_zdarzenia z
+                (SELECT MAX(z.data_wpisu) FROM psa_zdarzenia z
                   WHERE z.spolka_id = s.id)                            AS ostatnie_zdarzenie,
                 (SELECT COUNT(*) FROM psa_zdarzenia z WHERE z.spolka_id = s.id) AS liczba_zdarzen
            FROM psa_spolki s
@@ -452,7 +452,6 @@ router.put(
       return rejestr.zapiszZdarzenie(db(), {
         spolka_id: id,
         typ: 'zmiana_danych_spolki',
-        data_zdarzenia: czas.dzisIso(),
         autor: kto,
         dane: {
           przed: Object.fromEntries(doZdarzenia.map((p) => [p, biezaca[p] ?? null])),
@@ -652,7 +651,8 @@ router.post(
   '/:id/zdarzenia/podglad',
   asy((zad, odp) => {
     const id = Number(zad.params.id);
-    const { typ, data_zdarzenia, dane } = zad.body || {};
+    rejestr.odrzucRecznaDate(zad.body);
+    const { typ, dane, migracja_krn: migracjaKrn } = zad.body || {};
     if (!typ) throw bledneZadanie('Nie wskazano typu zdarzenia.');
 
     let podglad;
@@ -660,8 +660,8 @@ router.post(
       podglad = rejestr.przygotujPodglad(db(), {
         spolkaId: id,
         typ,
-        data_zdarzenia,
         wejscie: dane || {},
+        migracja_krn: migracjaKrn || null,
       });
     } catch (e) {
       // Blad kreatora (np. brak pokrycia) tez jest wynikiem podgladu -
@@ -679,15 +679,14 @@ router.post(
       throw e;
     }
 
-    const data = data_zdarzenia || czas.dzisIso();
     odp.json({
       dopuszczalne: podglad.dopuszczalne,
       bledy: podglad.bledy,
       ostrzezenia: podglad.ostrzezenia,
       dane: podglad.dane,
       typ: typyZdarzen.typ(typ),
-      przed: tabelaAkcjonariatu(podglad.stanPrzed, data, podglad.osoby, db(), id),
-      po: podglad.stanPo ? tabelaAkcjonariatu(podglad.stanPo, data, podglad.osoby, db(), id) : null,
+      przed: tabelaAkcjonariatu(podglad.stanPrzed, podglad.osoby, db(), id),
+      po: podglad.stanPo ? tabelaAkcjonariatu(podglad.stanPo, podglad.osoby, db(), id) : null,
     });
   })
 );
@@ -702,16 +701,14 @@ router.post(
   asy((zad, odp) => {
     const id = Number(zad.params.id);
     const kto = autor(zad);
-    const { typ, data_zdarzenia, dane, uzasadnienie } = zad.body || {};
+    rejestr.odrzucRecznaDate(zad.body);
+    const { typ, dane, uzasadnienie, migracja_krn: migracjaKrn } = zad.body || {};
     if (!typ) throw bledneZadanie('Nie wskazano typu zdarzenia.');
-    if (!czas.poprawnaData(data_zdarzenia)) {
-      throw bledneZadanie('Data zdarzenia musi mieć format RRRR-MM-DD.');
-    }
 
     const wynik = rejestr.dokonajWpisu(db(), {
       spolkaId: id,
       typ,
-      data_zdarzenia,
+      migracja_krn: migracjaKrn || null,
       wejscie: dane || {},
       autor: kto,
       uzasadnienie: uzasadnienie || null,
@@ -721,7 +718,6 @@ router.post(
       zdarzenie: {
         id: wynik.zdarzenie.id,
         typ: wynik.zdarzenie.typ,
-        data_zdarzenia: wynik.zdarzenie.data_zdarzenia,
         data_wpisu: wynik.zdarzenie.data_wpisu,
         autor: wynik.zdarzenie.autor,
         hash_skrocony: wynik.zdarzenie.hash.slice(0, 12),
@@ -789,16 +785,13 @@ router.post(
     }
     for (const z of zdarzenia) {
       if (!z || !z.typ) throw bledneZadanie('Każde zdarzenie otwarcia rejestru musi mieć typ.');
-      if (!czas.poprawnaData(z.data_zdarzenia)) {
-        throw bledneZadanie('Data każdego zdarzenia musi mieć format RRRR-MM-DD.');
-      }
+      rejestr.odrzucRecznaDate(z);
     }
 
     const dzis = czas.dzisIso();
     const wyniki = rejestr.otworzRejestr(db(), id, {
       zdarzenia,
       autor: kto,
-      dzisiaj: dzis,
     });
 
     // Rok prowadzenia biegnie od dnia, w ktorym rejestr faktycznie rusza
@@ -818,7 +811,7 @@ router.post(
       zdarzenia: wyniki.map((w) => ({
         id: w.zdarzenie.id,
         typ: w.zdarzenie.typ,
-        data_zdarzenia: w.zdarzenie.data_zdarzenia,
+        data_wpisu: w.zdarzenie.data_wpisu,
         hash_skrocony: w.zdarzenie.hash.slice(0, 12),
       })),
       oplata_prowadzenia: prowadzenie.utworzono ? prowadzenie.oplata : null,
@@ -846,16 +839,16 @@ router.post(
 );
 
 /** Tabela akcjonariatu do porownania przed/po w kreatorze. */
-function tabelaAkcjonariatu(stan, data, osoby, baza, spolkaId) {
+function tabelaAkcjonariatu(stan, osoby, baza, spolkaId) {
   const stanLogika = require('../logika/stan');
   const maskowanie = require('../logika/maskowanie');
   const n = require('../logika/numery');
 
   const wszystkieOsoby = new Map([...rejestr.wczytajOsobySpolki(baza, spolkaId), ...osoby]);
-  const wynik = stanLogika.akcjonariatNaDzien(stan, data);
+  const wynik = stanLogika.akcjonariatNaDzien(stan, null);
   return {
     razem_akcji: wynik.razem_akcji,
-    bilans: stanLogika.bilansNaDzien(stan, data),
+    bilans: stanLogika.bilansNaDzien(stan, null),
     pozycje: wynik.pozycje.map((p) => ({
       osoba_id: p.osoba_id,
       oznaczenie: maskowanie.oznaczenieOsoby(wszystkieOsoby.get(p.osoba_id)),

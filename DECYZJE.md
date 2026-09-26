@@ -977,6 +977,38 @@
 
 ---
 
+### D-065 — Chwila wpisu jedyną osią czasu rejestru; data zdarzenia usunięta (D-R01)
+
+- Data: 2026-09-26 (aktualizacja po porównaniu z rejestrem KRN, etap 1)
+- Obszar: rejestr / model danych / łańcuch skrótów
+- Decyzja (notariusz, `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md`, D-R01; odpowiedzi w
+  `docs/krn/ETAP-0-RAPORT.md`): stan rejestru liczy się wyłącznie od chwili wpisu, dla każdego
+  rodzaju wpisu (art. 300³⁷ § 1; dla przypadków z § 2 — art. 300³⁸ § 1 KSH). Kolumna
+  `psa_zdarzenia.data_zdarzenia` usunięta z tabeli i ze skrótu (`lancuch.skrot`). `data_wpisu`
+  nadaje system (UTC, `RRRR-MM-DDTGG:MM:SSZ`); żadna trasa nie przyjmuje daty wpisu ani dawnej
+  daty zdarzenia (`rejestr.odrzucRecznaDate` → odmowa). Jedyny wyjątek: stan otwarcia z KRN
+  (`migracja_krn.data_rejestracji`, zapisane w treści zdarzenia, więc w skrócie), dopuszczalny tylko
+  w rejestrze bez zwykłych wpisów. „Stan na dzień D” = zdarzenia wpisane do 23:59:59 dnia D
+  (Europe/Warsaw); dla dnia bieżącego — do chwili sporządzenia. Sprostowanie działa od chwili
+  swojego wpisu (A5), więc informacja na dzień wcześniejszy nie zmienia się.
+- Uzasadnienie: nabycie akcji następuje z chwilą wpisu; informacja na dzień D ma być taka sama
+  niezależnie od chwili jej wygenerowania. W produkcji nie ma spółek (potwierdzenie notariusza
+  z 26.09.2026), więc usunięcie kolumny z łańcucha nie narusza żadnego zapisanego skrótu.
+- Skutek w kodzie: migracja 57 (`DROP COLUMN`, wykonuje się tylko na pustej tabeli zdarzeń —
+  hook `warunek` w `server/migracje.js`); `server/pomocnicze/czas.js` (`terazUtc`, `chwilaUtc`,
+  `koniecDniaUtc`, `dzienLokalny`, `godzinaLokalna`); `server/logika/stan.js` (kolejność i
+  przedziały po `data_wpisu`); `server/widoki.js` (jedna semantyka „stanu na”, pola
+  `chwila_stanu`, `stan_biezacy`); `server/logika/walidacje.js` (`sprawdzChwile` zamiast
+  `sprawdzDate`/`sprawdzChronologie`); `server/rejestr.js`, trasy, zawiadomienia i dokumenty
+  (prezentacja w strefie kancelarii); UI bez pola „Data zdarzenia”, emisja dostała pole „Data
+  emisji” (atrybut emisji, nie zdarzenia), migracja zbiera datę i godzinę rejestracji w KRN.
+  `psa_sprawy.dokument_data` (data dokumentu-podstawy) zostaje (A4). Pozostałe znaczniki czasu
+  poza rejestrem (np. `data_wplywu`, `utworzono`) bez zmian — dotyczą obsługi spraw, nie stanu
+  rejestru. Testy: `testy/d-r01-chwila-wpisu.test.js`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-R01), `docs/krn/ETAP-0-RAPORT.md`.
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

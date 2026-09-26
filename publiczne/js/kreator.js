@@ -346,6 +346,9 @@ function KrokEmisja({ dane, ustawDane, spolka }) {
         <Pole etykieta="Data wpisu emisji do KRS" wymagane>
           <PoleDaty wartosc={dane.data_wpisu_krs || ''} przyZmianie={(v) => ustawDane({ ...dane, data_wpisu_krs: v })} />
         </Pole>
+        <Pole etykieta="Data emisji" podpowiedz="Data umowy spółki albo uchwały o emisji — widoczna tylko w aplikacji.">
+          <PoleDaty wartosc={dane.data_emisji || ''} max={fmt.dzisIso()} przyZmianie={(v) => ustawDane({ ...dane, data_emisji: v })} />
+        </Pole>
       </div>
       <Pole etykieta="Tytuł emisji"><input type="text" {...pole('tytul')} placeholder="Emisja założycielska" /></Pole>
       <Pole etykieta="Podstawa prawna emisji" podpowiedz="Np. umowa spółki, uchwała walnego zgromadzenia z dnia…">

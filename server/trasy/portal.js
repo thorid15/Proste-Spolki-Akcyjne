@@ -1393,7 +1393,7 @@ router.get(
           WHERE spolka_id = ? AND data_do IS NULL AND kategoria = 'akcjonariusz'`
       );
       const ostatnieZdarzenie = db().prepare(
-        'SELECT MAX(data_zdarzenia) AS data FROM psa_zdarzenia WHERE spolka_id = ?'
+        'SELECT MAX(data_wpisu) AS data FROM psa_zdarzenia WHERE spolka_id = ?'
       );
 
       const spolki = spolkiKonta(konto)

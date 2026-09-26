@@ -21,11 +21,9 @@ const typyZdarzen = require('./typy-zdarzen');
 
 const K = przepisy.KATEGORIE_AKCJI;
 
-const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+const czas = require('../pomocnicze/czas');
 
-function dzisiajIso(dzisiaj) {
-  return String(dzisiaj || new Date().toISOString().slice(0, 10)).slice(0, 10);
-}
+const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Wszystkie zakresy dotkniete zdarzeniem, per emisja.
@@ -68,19 +66,31 @@ function sprawdzSpolke(spolka, bledy) {
   }
 }
 
-function sprawdzDate(propozycja, dzisiaj, bledy) {
-  const data = String(propozycja.data_zdarzenia || '');
-  if (!DATA_ISO.test(data)) {
-    bledy.push('Data zdarzenia musi być podana w formacie RRRR-MM-DD.');
+/**
+ * D-R01: chwila wpisu nadaje system. Wpis nie moze wyprzedzac ostatniego
+ * wpisu spolki (rejestr prowadzi sie chronologicznie; znaczenie ma tylko
+ * dla migracji z KRN, gdzie chwila jest historyczna) ani lezec w przyszlosci.
+ */
+function sprawdzChwile(zdarzenia, propozycja, bledy) {
+  const chwila = String(propozycja.chwila || '');
+  if (!chwila) {
+    bledy.push('Brak chwili wpisu — nadaje ją system w momencie zatwierdzenia wpisu.');
     return;
   }
-  if (Number.isNaN(Date.parse(`${data}T00:00:00Z`))) {
-    bledy.push(`Data zdarzenia „${data}” nie jest poprawną datą.`);
-    return;
+  // Zwykly wpis dostaje chwile „teraz”; data z zewnatrz trafia tu wylacznie
+  // przy migracji z KRN - i tylko ona moze byc bledna w przyszlosc.
+  const migracja = propozycja.dane && propozycja.dane.migracja_krn;
+  if (migracja && chwila > czas.terazUtc()) {
+    bledy.push('Data rejestracji w KRN nie może leżeć w przyszłości.');
   }
-  if (data > dzisiaj) {
+  const ostatnia = zdarzenia.reduce(
+    (max, z) => (z.data_wpisu && String(z.data_wpisu) > max ? String(z.data_wpisu) : max),
+    ''
+  );
+  if (ostatnia && chwila < ostatnia) {
     bledy.push(
-      `Data zdarzenia (${data}) jest z przyszłości — rejestr odzwierciedla zdarzenia, które już zaszły.`
+      `Wpis nie może poprzedzać ostatniego wpisu w rejestrze tej spółki (${czas.dzienLokalny(ostatnia)}, ` +
+        `godz. ${czas.godzinaLokalna(ostatnia)}) — rejestr prowadzi się chronologicznie.`
     );
   }
 }
@@ -126,30 +136,14 @@ function sprawdzDataWpisuKrsEmisji(stanPrzed, propozycja, spolka, dzisiaj, bledy
   }
 }
 
-function sprawdzChronologie(stanPrzed, propozycja, bledy) {
-  const data = String(propozycja.data_zdarzenia || '');
-  if (!DATA_ISO.test(data)) return;
-  for (const [emisjaKlucz, zakresy] of dotknieteZakresy(propozycja.dane)) {
-    const ostatnia = stanLogika.ostatniaDataNaAkcjach(stanPrzed, emisjaKlucz, zakresy);
-    if (ostatnia && data < ostatnia) {
-      bledy.push(
-        `Data zdarzenia (${data}) jest wcześniejsza niż ostatnie zdarzenie na akcjach ` +
-          `${n.opisz(zakresy)} (${ostatnia}). Rejestr prowadzi się chronologicznie — ` +
-          `wcześniejszy stan prostuje się zdarzeniem „sprostowanie”.`
-      );
-    }
-  }
-}
-
 function sprawdzObciazenia(stanPrzed, propozycja, bledy) {
   // Zajecie jest z urzedu (art. 300(34) § 2 KSH) - nie jest "rozporzadzeniem"
   // akcja, wiec nie blokuje go istniejace obciazenie. Kilku wierzycieli moze
   // legalnie zajac te same akcje po kolei.
   if (propozycja.typ === 'zajecie') return;
-  const data = String(propozycja.data_zdarzenia || '');
   for (const [emisjaKlucz, zakresy] of dotknieteZakresy(propozycja.dane)) {
     const blokujace = stanLogika
-      .obciazeniaNaDzien(stanPrzed, data)
+      .obciazeniaNaDzien(stanPrzed, null)
       .filter((o) => o.emisja_klucz === emisjaKlucz && o.blokuje_rozporzadzanie === 1);
     for (const o of blokujace) {
       const kolizja = n.przeciecie(o.zakresy, zakresy);
@@ -432,8 +426,8 @@ const PER_TYP = {
       const cudze = n.roznica(n.roznica(brakujace, nieobjete), umorzone);
       if (cudze.length > 0) {
         bledy.push(
-          `Zbywca nie posiada akcji ${n.opisz(cudze)} serii ${emisja.seria} na dzień ` +
-            `${propozycja.data_zdarzenia}. Posiada: ${n.opisz(pakiet) || 'brak akcji w tej serii'}.`
+          `Zbywca nie posiada akcji ${n.opisz(cudze)} serii ${emisja.seria}. ` +
+            `Posiada: ${n.opisz(pakiet) || 'brak akcji w tej serii'}.`
         );
       }
     }
@@ -464,7 +458,7 @@ const PER_TYP = {
         bledy.push(
           p.osoba_id == null
             ? `Akcje ${n.opisz(brakujace)} serii ${emisja.seria} nie są nieobjęte — nie można ich umorzyć w tym trybie.`
-            : `Akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria} na dzień ${propozycja.data_zdarzenia}.`
+            : `Akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria}.`
         );
       }
     }
@@ -494,7 +488,7 @@ const PER_TYP = {
         bledy.push(
           p.osoba_id == null
             ? `Akcje ${n.opisz(brakujace)} serii ${emisja.seria} nie są nieobjęte — nie można ich unieważnić w tym trybie.`
-            : `Akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria} na dzień ${propozycja.data_zdarzenia}.`
+            : `Akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria}.`
         );
       }
     }
@@ -518,7 +512,7 @@ const PER_TYP = {
     const brakujace = n.roznica(zadane, pakiet);
     if (brakujace.length > 0) {
       bledy.push(
-        `Akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria} na dzień ${propozycja.data_zdarzenia}.`
+        `Akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria}.`
       );
     }
   },
@@ -570,8 +564,7 @@ const PER_TYP = {
       const brakujace = n.roznica(zadane, pakiet);
       if (brakujace.length > 0) {
         bledy.push(
-          `Wskazany akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria} ` +
-            `na dzień ${propozycja.data_zdarzenia}.`
+          `Wskazany akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria}.`
         );
       }
     } else {
@@ -678,8 +671,8 @@ const PER_TYP = {
     const zbywcaMa = stanLogika.ulamekOsobyNaNumerze(stanPrzed, emisja.klucz, zbywcaId, nr);
     if (!u.mniejszyRowny(czesc, zbywcaMa)) {
       bledy.push(
-        `Zbywca posiada ${u.opisz(zbywcaMa)} akcji nr ${nr} serii ${emisja.seria} na dzień ` +
-          `${propozycja.data_zdarzenia} — nie może zbyć ${u.opisz(czesc)}.`
+        `Zbywca posiada ${u.opisz(zbywcaMa)} akcji nr ${nr} serii ${emisja.seria} ` +
+          `— nie może zbyć ${u.opisz(czesc)}.`
       );
     }
   },
@@ -747,16 +740,17 @@ function sprawdzRozlacznoscPozycji(pozycje, bledy) {
  * Sprawdza propozycje zdarzenia wobec stanu rejestru.
  *
  * @param {object[]} zdarzenia  dotychczasowe zdarzenia spolki
- * @param {object}   propozycja { typ, data_zdarzenia, dane }
+ * @param {object}   propozycja { typ, chwila, dane } - `chwila` = UTC wpisu (D-R01)
  * @param {object}   spolka     rekord `psa_spolki`
  * @param {Map}      osoby      id -> rekord `psa_osoby`
- * @param {string}   dzisiaj    data biezaca (RRRR-MM-DD), wstrzykiwana w testach
  * @returns {{ dopuszczalne, bledy, ostrzezenia, stanPrzed, stanPo }}
  */
-function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map(), dzisiaj } = {}) {
+function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map() } = {}) {
   const bledy = [];
   const ostrzezenia = [];
-  const dzis = dzisiajIso(dzisiaj);
+  // Dzien wpisu w strefie kancelarii - odniesienie dla dat dziennych
+  // (np. data wpisu emisji do KRS nie moze byc z przyszlosci).
+  const dzis = czas.dzienLokalny(propozycja && propozycja.chwila) || czas.dzisIso();
 
   if (!propozycja || !propozycja.typ) {
     return { dopuszczalne: false, bledy: ['Nie wskazano typu zdarzenia.'], ostrzezenia, stanPrzed: null, stanPo: null };
@@ -785,7 +779,7 @@ function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map(), dzisia
   }
 
   sprawdzSpolke(spolka, bledy);
-  sprawdzDate(propozycja, dzis, bledy);
+  sprawdzChwile(zdarzenia, propozycja, bledy);
   sprawdzDataWpisuKrsEmisji(stanPrzed, propozycja, spolka, dzis, bledy);
   sprawdzOsoby(propozycja, osoby, bledy);
 
@@ -794,7 +788,6 @@ function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map(), dzisia
     perTyp(stanPrzed, propozycja, { osoby }, bledy, ostrzezenia);
   }
 
-  sprawdzChronologie(stanPrzed, propozycja, bledy);
   sprawdzObciazenia(stanPrzed, propozycja, bledy);
   sprawdzOgraniczenia(stanPrzed, propozycja, bledy, ostrzezenia);
   sprawdzPokrycie(stanPrzed, propozycja, bledy);
@@ -810,7 +803,7 @@ function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map(), dzisia
     {
       id: nastepneId,
       typ: propozycja.typ,
-      data_zdarzenia: propozycja.data_zdarzenia,
+      data_wpisu: propozycja.chwila,
       dane: propozycja.dane || {},
       zdarzenie_prostowane_id: propozycja.zdarzenie_prostowane_id ?? null,
     },
@@ -826,7 +819,7 @@ function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map(), dzisia
 
   // Informacyjnie: akcje wyemitowane, a wciaz nieobjete (art. 300(31) § 3 KSH).
   if (stanPo) {
-    for (const seria of stanLogika.bilansNaDzien(stanPo, dzis)) {
+    for (const seria of stanLogika.bilansNaDzien(stanPo, null)) {
       if (seria.nieobjete > 0) {
         ostrzezenia.push(
           `Seria ${seria.seria}: ${seria.nieobjete} akcji pozostaje nieobjętych ` +

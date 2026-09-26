@@ -165,11 +165,11 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
 
   // ── 3. Otwarcie rejestru: emisja 100 akcji serii A, w całości u Kowalskiego ─
   const [, emisjaOdp] = await zapytaj('POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'emisja', data_zdarzenia: '2026-01-10',
+    typ: 'emisja',
     dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
   });
   await zapytaj('POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'objecie', data_zdarzenia: '2026-01-10',
+    typ: 'objecie',
     dane: { emisja_zdarzenie_id: emisjaOdp.zdarzenie.id, pozycje: [{ osoba_id: kowalski.id, ilosc: 100 }] },
   });
 
@@ -222,7 +222,6 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
   // jest brakiem. Wywołujemy go PRZED wystawieniem wzoru 04, bo ono opisuje
   // TREŚĆ żądanego wpisu, którą notariusz już zna z kroku podglądu kreatora.
   await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/podglad`, {
-    data_zdarzenia: '2026-02-10',
     dane: { emisja_zdarzenie_id: emisjaOdp.zdarzenie.id, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
   });
 
@@ -250,7 +249,6 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
   await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'wznow' });
 
   const [st07, wpisOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {
-    data_zdarzenia: '2026-02-25',
     dane: { emisja_zdarzenie_id: emisjaOdp.zdarzenie.id, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
   });
   assert.equal(st07, 201, JSON.stringify(wpisOdp));
@@ -274,7 +272,6 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
   const sprawa2Id = sprawa2Odp.sprawa.id;
   await zapytaj('PATCH', `/api/psa/sprawy/${sprawa2Id}`, { akcja: 'weryfikuj' });
   await zapytaj('POST', `/api/psa/sprawy/${sprawa2Id}/podglad`, {
-    data_zdarzenia: '2026-03-05',
     dane: { emisja_zdarzenie_id: emisjaOdp.zdarzenie.id, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 1 }] },
   });
   const [st09, odmOdp] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawa2Id}`, {

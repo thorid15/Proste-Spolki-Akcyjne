@@ -526,7 +526,6 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   const draft = sprawa.dane_wejsciowe_json ? JSON.parse(sprawa.dane_wejsciowe_json) : null;
 
   const [krok, ustawKrok] = useState(2);
-  const [dataZdarzenia, ustawDateZdarzenia] = useState((draft && draft.data_zdarzenia) || sprawa.data_wplywu.slice(0, 10));
   // `emisjaPoczatkowa` przychodzi z przejścia EMISJA → OBJĘCIE (kreator.js) —
   // seria jest już wskazana, notariusz uzupełnia tylko, kto ją obejmuje.
   // Zapisany draft ma pierwszeństwo: to stan, do którego ktoś wrócił.
@@ -563,7 +562,6 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
     ustawBladLokalny(null);
     try {
       const odpowiedz = await API.post(`/api/psa/sprawy/${sprawa.id}/podglad`, {
-        data_zdarzenia: dataZdarzenia,
         dane: budujDane(),
       });
       ustawPodglad(odpowiedz);
@@ -580,7 +578,6 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
     ustawBladLokalny(null);
     try {
       const odpowiedz = await API.post(`/api/psa/sprawy/${sprawa.id}/wpisz`, {
-        data_zdarzenia: dataZdarzenia,
         dane: budujDane(),
       });
       ustawWynik(odpowiedz);
@@ -692,9 +689,10 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
       {krok === 2 && (
         <>
           <div className="card-h">Co się zmienia</div>
-          <Pole etykieta="Data zdarzenia" wymagane podpowiedz="Data z dokumentu.">
-            <PoleDaty wartosc={dataZdarzenia} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDateZdarzenia(v)} skroty />
-          </Pole>
+          <p className="podstawa-prawna">
+            Datę i godzinę wpisu nadaje system w chwili zatwierdzenia — od niej liczy się stan
+            rejestru (art. 300³⁷ § 1 i art. 300³⁸ § 1 KSH).
+          </p>
           {KrokTresci ? (
             <KrokTresci dane={dane} ustawDane={ustawDane} spolka={spolka} />
           ) : (

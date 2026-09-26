@@ -123,7 +123,7 @@ async function wydajIWyslij(db, { wzorTyp, dane, sprawaId, spolkaId, odbiorcaOso
 
 /** art. 300(34) § 7 KSH — niezwłoczne powiadomienie żądającego i spółki o wpisie. */
 async function poWpisie(db, { sprawa, zdarzenie, spolka, osoby, podsumowanie, autor }) {
-  const stanNaDzien = widoki.widokStanu(db, spolka.id, zdarzenie.data_zdarzenia, {
+  const stanNaDzien = widoki.widokStanu(db, spolka.id, zdarzenie.data_wpisu, {
     rola: przepisy.ROLE_ODBIORCY.KANCELARIA,
   });
   const akcjonariusze = stanNaDzien ? stanNaDzien.akcjonariusze : [];
@@ -178,7 +178,7 @@ async function poWpisie(db, { sprawa, zdarzenie, spolka, osoby, podsumowanie, au
     const wykazHtml = dokTresc.wykazAkcjonariuszy({
       kancelaria: ustawienia.kancelaria(db),
       spolka: stanNaDzien.spolka,
-      data: zdarzenie.data_zdarzenia,
+      data: czas.dzienLokalny(zdarzenie.data_wpisu),
       stan: stanNaDzien,
       powod: przepisy.PODSTAWY.LISTA_AKCJONARIUSZY_KRS,
     });

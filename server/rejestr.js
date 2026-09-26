@@ -46,7 +46,7 @@ function wczytajZdarzenia(db, spolkaId) {
     .prepare(
       `SELECT * FROM psa_zdarzenia
        WHERE spolka_id = ?
-       ORDER BY data_zdarzenia ASC, id ASC`
+       ORDER BY data_wpisu ASC, id ASC`
     )
     .all(spolkaId);
   return wiersze.map((z) => ({ ...z, dane: JSON.parse(z.dane_json) }));
@@ -89,6 +89,11 @@ function wczytajOsobySpolki(db, spolkaId) {
  * wykluczony. `hash` liczymy PRZED wstawieniem, bo rekordu zdarzenia nie
  * wolno pozniej aktualizowac (wyzwalacz append-only i tak by na to nie
  * pozwolil).
+ *
+ * D-R01: `data_wpisu` nadaje system (UTC, co do sekundy) - nie ma jej w
+ * zadnym wejsciu API. `zdarzenie.chwila` to wewnetrzny parametr: zegar
+ * wstrzykiwany w testach albo historyczna data rejestracji z KRN przy
+ * migracji (wtedy `dane.migracja_krn` - objete skrotem - to oznacza).
  */
 function zapiszZdarzenie(db, zdarzenie) {
   const poprzednie = db
@@ -102,8 +107,7 @@ function zapiszZdarzenie(db, zdarzenie) {
     id,
     spolka_id: Number(zdarzenie.spolka_id),
     typ: String(zdarzenie.typ),
-    data_zdarzenia: String(zdarzenie.data_zdarzenia),
-    data_wpisu: zdarzenie.data_wpisu || czas.terazIso(),
+    data_wpisu: zdarzenie.chwila ? czas.chwilaUtc(zdarzenie.chwila) : czas.terazUtc(),
     autor: lancuch.oczysc(zdarzenie.autor),
     sprawa_id: zdarzenie.sprawa_id ?? null,
     dane_json: lancuch.kanonicznyJson(zdarzenie.dane ?? {}),
@@ -115,10 +119,10 @@ function zapiszZdarzenie(db, zdarzenie) {
 
   db.prepare(
     `INSERT INTO psa_zdarzenia
-       (id, spolka_id, typ, data_zdarzenia, data_wpisu, autor, sprawa_id, dane_json,
+       (id, spolka_id, typ, data_wpisu, autor, sprawa_id, dane_json,
         zdarzenie_prostowane_id, uzasadnienie, hash_poprzedni, hash)
      VALUES
-       (@id, @spolka_id, @typ, @data_zdarzenia, @data_wpisu, @autor, @sprawa_id, @dane_json,
+       (@id, @spolka_id, @typ, @data_wpisu, @autor, @sprawa_id, @dane_json,
         @zdarzenie_prostowane_id, @uzasadnienie, @hash_poprzedni, @hash)`
   ).run(rekord);
 
@@ -344,11 +348,62 @@ function zmaterializuj(db, spolkaId) {
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * D-R01 - chwila, z ktora zostanie dokonany wpis (UTC). Zawsze „teraz”;
+ * `teraz` to wylacznie zegar wstrzykiwany w testach (trasy HTTP go nie
+ * przekazuja), `migracjaKrn.data_rejestracji` - historyczna data rejestracji
+ * w rejestrze KRN przy przejeciu rejestru (jedyny wyjatek, D-R08 pkt 5).
+ */
+function chwilaWpisu({ teraz, migracjaKrn } = {}) {
+  if (migracjaKrn) {
+    const zrodlo = migracjaKrn.data_rejestracji;
+    if (!czas.poprawnaDataAlboChwila(zrodlo)) {
+      throw new BladWalidacji([
+        'Migracja z KRN wymaga daty (i godziny) rejestracji wpisu w KRN w formacie RRRR-MM-DD albo RRRR-MM-DDTGG:MM.',
+      ]);
+    }
+    return czas.chwilaUtc(zrodlo);
+  }
+  return teraz ? czas.chwilaUtc(teraz) : czas.terazUtc();
+}
+
+/**
+ * D-R01: chwili wpisu nie da sie podac z zewnatrz ani antydatowac. Kazda
+ * trasa zapisu przepuszcza cialo zadania przez te funkcje - pole z data
+ * wpisu (albo dawna data zdarzenia) konczy sie odmowa, a nie cichym
+ * zignorowaniem, zeby klient nie mial zludzenia, ze data zostala przyjeta.
+ */
+const POLA_DATY_ZAKAZANE = ['data_wpisu', 'chwila', 'teraz', 'data_zdarzenia'];
+function odrzucRecznaDate(cialo) {
+  const podane = POLA_DATY_ZAKAZANE.filter((k) => cialo && Object.prototype.hasOwnProperty.call(cialo, k));
+  if (podane.length > 0) {
+    throw new BladWalidacji([
+      'Datę i godzinę wpisu nadaje system w chwili zatwierdzenia wpisu — nie można jej podać ani zmienić ' +
+        `(pole: ${podane.join(', ')}).`,
+    ]);
+  }
+}
+
+/**
+ * Wpis migracyjny (historyczna data z KRN) wolno dopisac wylacznie do
+ * rejestru, ktory zawiera same wpisy migracyjne - po pierwszym zwyklym
+ * wpisie historii nie da sie juz „dosypac” (PRZEJECIE-REJESTRU.md, krok 9).
+ */
+function sprawdzMigracjeKrn(db, spolkaId) {
+  const zwykle = wczytajZdarzenia(db, spolkaId).filter((z) => !(z.dane && z.dane.migracja_krn));
+  if (zwykle.length > 0) {
+    throw new BladWalidacji([
+      'Stan otwarcia z KRN można wprowadzić wyłącznie do rejestru, w którym nie dokonano jeszcze zwykłego wpisu.',
+    ]);
+  }
+}
+
+/**
  * Buduje tresc zdarzenia i sprawdza je wobec stanu rejestru - BEZ zapisu.
  * Zasila krok 4 kreatora (tabela przed/po, ostrzezenia, lista dokumentow).
  */
-function przygotujPodglad(db, { spolkaId, typ, data_zdarzenia, wejscie, dzisiaj }) {
+function przygotujPodglad(db, { spolkaId, typ, wejscie, teraz, migracja_krn: migracjaKrn }) {
   const spolka = wczytajSpolke(db, spolkaId);
+  const chwila = chwilaWpisu({ teraz, migracjaKrn });
   if (!spolka) throw new BladWalidacji(['Nie odnaleziono spółki.']);
 
   const zdarzenia = wczytajZdarzenia(db, spolkaId);
@@ -362,21 +417,17 @@ function przygotujPodglad(db, { spolkaId, typ, data_zdarzenia, wejscie, dzisiaj 
     ...kreator.dodatkoweOsobyZReferencji(stanPrzed, typ, wejscie || {}),
   ]);
 
-  const dane = kreator.przygotuj(
-    stanPrzed,
-    { typ, data_zdarzenia, dane: wejscie },
-    { osoby, spolka }
-  );
+  const przygotowane = kreator.przygotuj(stanPrzed, { typ, dane: wejscie }, { osoby, spolka });
+  const dane = migracjaKrn ? { ...przygotowane, migracja_krn: migracjaKrn } : przygotowane;
 
   const wynik = walidacje.sprawdz({
     zdarzenia,
-    propozycja: { typ, data_zdarzenia, dane },
+    propozycja: { typ, chwila, dane },
     spolka,
     osoby,
-    dzisiaj,
   });
 
-  return { spolka, dane, osoby, zdarzenia, ...wynik };
+  return { spolka, dane, osoby, zdarzenia, chwila, ...wynik };
 }
 
 /**
@@ -388,6 +439,7 @@ function przygotujPodglad(db, { spolkaId, typ, data_zdarzenia, wejscie, dzisiaj 
  * ten wpis oraz aktualizacje stanu sprawy).
  */
 function _wykonajWpis(db, zlecenie) {
+  if (zlecenie.migracja_krn) sprawdzMigracjeKrn(db, zlecenie.spolkaId);
   const podglad = przygotujPodglad(db, zlecenie);
   if (!podglad.dopuszczalne) {
     throw new BladWalidacji(podglad.bledy, podglad.ostrzezenia);
@@ -396,7 +448,7 @@ function _wykonajWpis(db, zlecenie) {
   const zdarzenie = zapiszZdarzenie(db, {
     spolka_id: zlecenie.spolkaId,
     typ: zlecenie.typ,
-    data_zdarzenia: zlecenie.data_zdarzenia,
+    chwila: podglad.chwila,
     autor: zlecenie.autor,
     sprawa_id: zlecenie.sprawa_id ?? null,
     dane: podglad.dane,
@@ -487,7 +539,7 @@ function podstawKluczePartii(wartosc, idPartii) {
  * prawdziwego ID przez `{ __odwolanie_do_partii: 'emisja-A' }` gdziekolwiek
  * w `dane` (patrz `podstawKluczePartii`).
  */
-function otworzRejestr(db, spolkaId, { zdarzenia, autor, dzisiaj }) {
+function otworzRejestr(db, spolkaId, { zdarzenia, autor, teraz }) {
   const transakcja = db.transaction(() => {
     const idPartii = new Map();
     const zapisane = [];
@@ -495,9 +547,8 @@ function otworzRejestr(db, spolkaId, { zdarzenia, autor, dzisiaj }) {
       const wynik = _wykonajWpis(db, {
         spolkaId,
         typ: z.typ,
-        data_zdarzenia: z.data_zdarzenia,
         wejscie: podstawKluczePartii(z.dane, idPartii),
-        dzisiaj,
+        teraz,
         autor,
       });
       if (z.klucz_tymczasowy) idPartii.set(z.klucz_tymczasowy, wynik.zdarzenie.id);
@@ -519,7 +570,7 @@ function otworzRejestr(db, spolkaId, { zdarzenia, autor, dzisiaj }) {
  * jest powodem do cofniecia juz dokonanego, wazneg wpisu (art. 300(34) § 7
  * KSH nakazuje powiadomienie jako obowiazek NASTEPCZY wobec wpisu).
  */
-function dokonajWpisuSprawy(db, { sprawaId, data_zdarzenia, wejscie, autor }) {
+function dokonajWpisuSprawy(db, { sprawaId, wejscie, autor, teraz }) {
   const transakcja = db.transaction(() => {
     const sprawa = db.prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
     if (!sprawa) throw new BladWalidacji(['Nie odnaleziono sprawy.']);
@@ -532,9 +583,9 @@ function dokonajWpisuSprawy(db, { sprawaId, data_zdarzenia, wejscie, autor }) {
     const wynik = _wykonajWpis(db, {
       spolkaId: sprawa.spolka_id,
       typ: sprawa.typ_zdarzenia,
-      data_zdarzenia,
       wejscie,
       autor,
+      teraz,
       sprawa_id: sprawaId,
     });
 
@@ -591,7 +642,7 @@ function dokonajWpisuSprawy(db, { sprawaId, data_zdarzenia, wejscie, autor }) {
  * korekty). `zamiast` (opcjonalne) niesie skorygowana tresc - patrz
  * `kreator.przygotujSprostowanie`.
  */
-function dokonajSprostowania(db, { zdarzeniePierwotneId, uzasadnienie, zamiast, autor, data_zdarzenia }) {
+function dokonajSprostowania(db, { zdarzeniePierwotneId, uzasadnienie, zamiast, autor, teraz }) {
   const transakcja = db.transaction(() => {
     const pierwotne = db.prepare('SELECT * FROM psa_zdarzenia WHERE id = ?').get(zdarzeniePierwotneId);
     if (!pierwotne) throw new BladWalidacji(['Nie odnaleziono zdarzenia do sprostowania.']);
@@ -611,7 +662,7 @@ function dokonajSprostowania(db, { zdarzeniePierwotneId, uzasadnienie, zamiast, 
     const spolkaId = pierwotne.spolka_id;
     const spolka = wczytajSpolke(db, spolkaId);
     const zdarzenia = wczytajZdarzenia(db, spolkaId);
-    const dataZd = data_zdarzenia || pierwotne.data_zdarzenia;
+    const chwila = chwilaWpisu({ teraz });
 
     const osoby = wczytajOsoby(
       db,
@@ -619,13 +670,13 @@ function dokonajSprostowania(db, { zdarzeniePierwotneId, uzasadnienie, zamiast, 
     );
 
     const { dane } = kreator.przygotujSprostowanie(
-      { zdarzenia, zdarzeniePierwotneId, data_zdarzenia: dataZd, uzasadnienie, zamiast },
+      { zdarzenia, zdarzeniePierwotneId, uzasadnienie, zamiast },
       { osoby }
     );
 
     const propozycja = {
       typ: 'sprostowanie',
-      data_zdarzenia: dataZd,
+      chwila,
       dane,
       zdarzenie_prostowane_id: zdarzeniePierwotneId,
     };
@@ -637,7 +688,7 @@ function dokonajSprostowania(db, { zdarzeniePierwotneId, uzasadnienie, zamiast, 
     const zdarzenie = zapiszZdarzenie(db, {
       spolka_id: spolkaId,
       typ: 'sprostowanie',
-      data_zdarzenia: dataZd,
+      chwila,
       autor,
       dane,
       zdarzenie_prostowane_id: zdarzeniePierwotneId,
@@ -670,6 +721,7 @@ function zweryfikujIntegralnosc(db) {
 }
 
 module.exports = {
+  odrzucRecznaDate,
   BladWalidacji,
   wczytajSpolke,
   wczytajZdarzenia,

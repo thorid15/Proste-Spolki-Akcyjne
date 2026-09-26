@@ -14,7 +14,11 @@ function EkranMigracji({ spolkaId }) {
   const { dane: spolkaPoczatkowa, ladowanie } = useDane(`/api/psa/spolki/${spolkaId}`);
   const [spolkaRobocza, ustawSpolkeRobocza] = useState(null);
   const [krok, ustawKrok] = useState(1);
-  const [dataZdarzenia, ustawDateZdarzenia] = useState(fmt.dzisIso());
+  // D-R01/D-R08 pkt 5: jedyny wyjątek od systemowej daty wpisu — przy
+  // przejęciu rejestru z KRN datą wpisu jest historyczna data rejestracji
+  // w KRN (kolumna DR), z godziną, jeżeli KRN ją podaje.
+  const [dataKrn, ustawDateKrn] = useState('');
+  const [godzinaKrn, ustawGodzineKrn] = useState('');
   const [daneEmisja, ustawDaneEmisja] = useState({});
   const [daneObjecie, ustawDaneObjecie] = useState({});
   const [zapisywanie, ustawZapisywanie] = useState(false);
@@ -33,7 +37,7 @@ function EkranMigracji({ spolkaId }) {
     try {
       const podglad = await API.post(`/api/psa/spolki/${spolkaId}/zdarzenia/podglad`, {
         typ,
-        data_zdarzenia: dataZdarzenia,
+        migracja_krn: { data_rejestracji: godzinaKrn ? `${dataKrn}T${godzinaKrn}` : dataKrn },
         dane,
       });
       if (!podglad.dopuszczalne) {
@@ -42,7 +46,7 @@ function EkranMigracji({ spolkaId }) {
       }
       const wynik = await API.post(`/api/psa/spolki/${spolkaId}/zdarzenia`, {
         typ,
-        data_zdarzenia: dataZdarzenia,
+        migracja_krn: { data_rejestracji: godzinaKrn ? `${dataKrn}T${godzinaKrn}` : dataKrn },
         dane,
       });
       const swieza = await API.get(`/api/psa/spolki/${spolkaId}`);
@@ -95,7 +99,7 @@ function EkranMigracji({ spolkaId }) {
         <Komunikat
           odmiana="ok"
           tytul="Stan otwarcia wprowadzony"
-          tresc={`Zapisano ${zdarzeniaZapisane.length} zdarzenia z datą ${fmt.data(dataZdarzenia)}. Rejestr spółki „${spolkaRobocza.spolka.nazwa}” jest gotowy do dalszego prowadzenia na bieżąco.`}
+          tresc={`Zapisano ${zdarzeniaZapisane.length} zdarzenia z datą rejestracji w KRN ${fmt.data(dataKrn)}${godzinaKrn ? `, godz. ${godzinaKrn}` : ''}. Rejestr spółki „${spolkaRobocza.spolka.nazwa}” jest gotowy do dalszego prowadzenia na bieżąco.`}
         />
         <div className="kreator-stopka">
           <button className="btn" onClick={() => { ustawKrok(1); ustawDaneEmisja({}); ustawZdarzeniaZapisane([]); }}>
@@ -129,13 +133,16 @@ function EkranMigracji({ spolkaId }) {
 
       <Komunikat
         odmiana="uwaga"
-        tresc="Wprowadź najpierw emisję (pulę wyemitowanych akcji), potem przypisz je aktualnym akcjonariuszom w kroku „Objęcie”. Datę wpisz zgodnie z danymi źródłowymi — nie musi to być dzisiejsza data."
+        tresc="Wprowadź najpierw emisję (pulę wyemitowanych akcji), potem przypisz je aktualnym akcjonariuszom w kroku „Objęcie”. Jako datę wpisu podaj datę i godzinę rejestracji z KRN (kolumna DR) — stan otwarcia można wprowadzać tylko do rejestru bez zwykłych wpisów."
       />
       <Komunikat odmiana="blad" tresc={blad} />
 
       <Karta tytul={krok === 1 ? '1. Emisja — pula wyemitowanych akcji' : '2. Objęcie — kto obecnie posiada akcje'}>
-        <Pole etykieta="Data zdarzenia (historyczna)" wymagane>
-          <PoleDaty wartosc={dataZdarzenia} przyZmianie={(v) => v && ustawDateZdarzenia(v)} />
+        <Pole etykieta="Data rejestracji w KRN (data wpisu)" wymagane>
+          <PoleDaty wartosc={dataKrn} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDateKrn(v)} />
+        </Pole>
+        <Pole etykieta="Godzina rejestracji w KRN" podpowiedz="Jeżeli KRN ją podaje (GG:MM).">
+          <input type="time" value={godzinaKrn} onChange={(e) => ustawGodzineKrn(e.target.value)} />
         </Pole>
 
         {krok === 1 && <KrokEmisja dane={daneEmisja} ustawDane={ustawDaneEmisja} />}
@@ -148,7 +155,7 @@ function EkranMigracji({ spolkaId }) {
           <button
             className="btn btn-glowny"
             onClick={krok === 1 ? zapiszEmisje : zapiszObjecie}
-            disabled={zapisywanie || !dataZdarzenia}
+            disabled={zapisywanie || !dataKrn}
           >
             {zapisywanie ? 'Zapisywanie…' : krok === 1 ? 'Zapisz emisję i przejdź dalej' : 'Zapisz objęcie i zakończ'}
           </button>

@@ -49,8 +49,11 @@ function tekst(wartosc, nazwaPola, { wymagane = true, maks = 500 } = {}) {
   return v || null;
 }
 
-/** Zakresy zablokowane obciazeniem na dany dzien, w obrebie jednej emisji. */
-function zakresyZablokowane(stan, emisjaKlucz, data) {
+/**
+ * Zakresy zablokowane obciazeniem w obrebie jednej emisji. D-R01: wpis
+ * dzieje sie zawsze „teraz”, wiec liczy sie stan biezacy (`data = null`).
+ */
+function zakresyZablokowane(stan, emisjaKlucz, data = null) {
   return n.normalizuj(
     stanLogika
       .obciazeniaNaDzien(stan, data)
@@ -130,6 +133,9 @@ const PRZYGOTOWANIA = {
       // pozniej, sprostowaniem tego zdarzenia emisji.
       data_wpisu_krs: tekst(we.data_wpisu_krs, 'data wpisu do KRS', { wymagane: false, maks: 10 }),
       rodzaj_akcji: rodzajAkcji,
+      // D-R01: data emisji (umowy/uchwaly) to atrybut emisji, nie data
+      // zdarzenia rejestrowego - bez niej przyjmujemy dzien wpisu.
+      data_emisji: tekst(we.data_emisji, 'data emisji', { wymagane: false, maks: 10 }),
       obowiazki_wobec_spolki: tekst(we.obowiazki_wobec_spolki, 'obowiązki wobec spółki', {
         wymagane: false,
         maks: 2000,
@@ -139,8 +145,7 @@ const PRZYGOTOWANIA = {
 
   objecie(stan, we, kontekst) {
     const emisja = wymagajEmisji(stan, we);
-    const data = kontekst.data_zdarzenia;
-    const zablokowane = zakresyZablokowane(stan, emisja.klucz, data);
+    const zablokowane = zakresyZablokowane(stan, emisja.klucz);
     const pulaRef = { wartosc: stanLogika.pula(stan, emisja.klucz, K.NIEOBJETA, null) };
 
     const pozycje = wymagajPozycji(we).map((p) => {
@@ -193,9 +198,8 @@ const PRZYGOTOWANIA = {
 
   przeniesienie(stan, we, kontekst) {
     const emisja = wymagajEmisji(stan, we);
-    const data = kontekst.data_zdarzenia;
     const zbywcaId = liczbaCalkowita(we.zbywca_osoba_id, 'zbywca');
-    const zablokowane = zakresyZablokowane(stan, emisja.klucz, data);
+    const zablokowane = zakresyZablokowane(stan, emisja.klucz);
     const pulaRef = { wartosc: stanLogika.pula(stan, emisja.klucz, K.AKCJONARIUSZ, zbywcaId) };
 
     const pozycje = wymagajPozycji(we).map((p) => {
@@ -233,8 +237,7 @@ const PRZYGOTOWANIA = {
 
   umorzenie(stan, we, kontekst) {
     const emisja = wymagajEmisji(stan, we);
-    const data = kontekst.data_zdarzenia;
-    const zablokowane = zakresyZablokowane(stan, emisja.klucz, data);
+    const zablokowane = zakresyZablokowane(stan, emisja.klucz);
 
     const pozycje = wymagajPozycji(we).map((p) => {
       const zNieobjetych = p.osoba_id == null || p.osoba_id === '';
@@ -279,8 +282,7 @@ const PRZYGOTOWANIA = {
    */
   uniewaznienie(stan, we, kontekst) {
     const emisja = wymagajEmisji(stan, we);
-    const data = kontekst.data_zdarzenia;
-    const zablokowane = zakresyZablokowane(stan, emisja.klucz, data);
+    const zablokowane = zakresyZablokowane(stan, emisja.klucz);
 
     const pozycje = wymagajPozycji(we).map((p) => {
       const zNieobjetych = p.osoba_id == null || p.osoba_id === '';
@@ -402,7 +404,6 @@ const PRZYGOTOWANIA = {
 
   obciazenie(stan, we, kontekst) {
     const emisja = wymagajEmisji(stan, we);
-    const data = kontekst.data_zdarzenia;
     const akcjonariuszId = liczbaCalkowita(we.akcjonariusz_osoba_id, 'akcjonariusz, którego akcje są obciążane');
     const zastawnikId = liczbaCalkowita(we.osoba_id, 'zastawnik lub użytkownik');
     const typObciazenia = tekst(we.typ_obciazenia, 'rodzaj obciążenia', { wymagane: false, maks: 20 }) || 'zastaw';
@@ -414,7 +415,7 @@ const PRZYGOTOWANIA = {
         `Umowa spółki zakazuje przyznawania prawa głosu zastawnikowi lub użytkownikowi (${przepisy.PODSTAWY.ZAKAZ_GLOSU_ZASTAWNIKA}).`
       );
     }
-    const zablokowane = zakresyZablokowane(stan, emisja.klucz, data);
+    const zablokowane = zakresyZablokowane(stan, emisja.klucz);
     const pulaRef = { wartosc: stanLogika.pula(stan, emisja.klucz, K.AKCJONARIUSZ, akcjonariuszId) };
     const zakresy = przydzielPozycje(
       pulaRef,
@@ -749,7 +750,7 @@ function wymagajPozycji(we) {
  * Buduje tresc zdarzenia na podstawie stanu rejestru i wejscia z kreatora.
  * Rzuca BladKreatora z komunikatem po polsku - nadaje sie prosto do UI.
  */
-function przygotuj(stan, { typ, data_zdarzenia, dane }, kontekst = {}) {
+function przygotuj(stan, { typ, dane }, kontekst = {}) {
   const budowniczy = PRZYGOTOWANIA[typ];
   if (!budowniczy) {
     throw new BladKreatora(
@@ -757,7 +758,6 @@ function przygotuj(stan, { typ, data_zdarzenia, dane }, kontekst = {}) {
     );
   }
   return budowniczy(stan, dane || {}, {
-    data_zdarzenia,
     osoby: kontekst.osoby instanceof Map ? kontekst.osoby : new Map(),
     spolka: kontekst.spolka || null,
   });
@@ -816,7 +816,7 @@ function dodatkoweOsobyZReferencji(stan, typ, we = {}) {
  * zdarzen w trakcie samego liczenia tresci; stan sprzed niego jest naturalna
  * baza do pytania "jak to zdarzenie powinno bylo wygladac", bez tego problemu.
  */
-function przygotujSprostowanie({ zdarzenia, zdarzeniePierwotneId, data_zdarzenia, uzasadnienie, zamiast }, kontekst = {}) {
+function przygotujSprostowanie({ zdarzenia, zdarzeniePierwotneId, uzasadnienie, zamiast }, kontekst = {}) {
   const uzas = tekst(uzasadnienie, 'uzasadnienie sprostowania', { maks: 2000 });
 
   if (!zamiast || !zamiast.typ) {
@@ -832,7 +832,6 @@ function przygotujSprostowanie({ zdarzenia, zdarzeniePierwotneId, data_zdarzenia
   const stanPrzedPierwotnym = stanLogika.odtworzStan(przedPierwotnym);
 
   const tresc = PRZYGOTOWANIA[zamiast.typ](stanPrzedPierwotnym, zamiast.dane || {}, {
-    data_zdarzenia,
     osoby: kontekst.osoby instanceof Map ? kontekst.osoby : new Map(),
   });
 

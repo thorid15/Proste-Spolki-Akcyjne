@@ -334,13 +334,13 @@ router.post(
     const sprawa = wczytajSprawe(id);
     if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
 
-    const { data_zdarzenia, dane } = zad.body || {};
+    rejestr.odrzucRecznaDate(zad.body);
+    const { dane } = zad.body || {};
     let podglad;
     try {
       podglad = rejestr.przygotujPodglad(db(), {
         spolkaId: sprawa.spolka_id,
         typ: sprawa.typ_zdarzenia,
-        data_zdarzenia,
         wejscie: dane || {},
       });
     } catch (e) {
@@ -354,7 +354,7 @@ router.post(
     // cofnac bez utraty danych".
     db()
       .prepare('UPDATE psa_sprawy SET dane_wejsciowe_json = ?, zaktualizowano = ? WHERE id = ?')
-      .run(JSON.stringify({ data_zdarzenia, dane }), czas.terazIso(), id);
+      .run(JSON.stringify({ dane }), czas.terazIso(), id);
 
     odp.json({
       dopuszczalne: podglad.dopuszczalne,
@@ -379,11 +379,11 @@ router.post(
     const sprawa = wczytajSprawe(id);
     if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
 
-    const { data_zdarzenia, dane } = zad.body || {};
+    rejestr.odrzucRecznaDate(zad.body);
+    const { dane } = zad.body || {};
 
     const { wynik, oplata } = rejestr.dokonajWpisuSprawy(db(), {
       sprawaId: id,
-      data_zdarzenia,
       wejscie: dane || {},
       autor: kto,
     });
@@ -400,7 +400,6 @@ router.post(
       zdarzenie: {
         id: wynik.zdarzenie.id,
         typ: wynik.zdarzenie.typ,
-        data_zdarzenia: wynik.zdarzenie.data_zdarzenia,
         data_wpisu: wynik.zdarzenie.data_wpisu,
         hash_skrocony: wynik.zdarzenie.hash.slice(0, 12),
       },

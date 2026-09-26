@@ -421,14 +421,13 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
         }
       }
 
-      const dataOtwarcia = emisja.data_emisji || dane.data_umowy;
       const zdarzenia = [
         {
           typ: 'emisja',
           klucz_tymczasowy: 'emisja-1',
-          data_zdarzenia: emisja.data_emisji,
           dane: {
             seria: emisja.seria,
+            data_emisji: emisja.data_emisji || null,
             nr_pierwszy: emisja.nr_pierwszy || 1,
             ilosc: ileAkcji,
             // Bez wspolnej ceny emisyjnej - patrz cena_emisyjna_grosze przy
@@ -445,7 +444,6 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
         },
         {
           typ: 'objecie',
-          data_zdarzenia: dataOtwarcia,
           dane: {
             emisja_zdarzenie_id: { __odwolanie_do_partii: 'emisja-1' },
             pozycje: pozycje.map((p) => ({
@@ -463,7 +461,6 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
       if (zgoda.wymaga_zgody_spolki || zgoda.prawo_pierwszenstwa) {
         zdarzenia.push({
           typ: 'ograniczenie',
-          data_zdarzenia: dataOtwarcia,
           dane: {
             zakres: 'wszystkie',
             wymaga_zgody_spolki: zgoda.wymaga_zgody_spolki,
@@ -481,8 +478,7 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
         if (p.uprawnienia_szczegolne && p.uprawnienia_szczegolne.trim()) {
           zdarzenia.push({
             typ: 'uprawnienie',
-            data_zdarzenia: dataOtwarcia,
-            dane: {
+              dane: {
               rodzaj: 'uprawnienie',
               zakres: 'akcjonariusz',
               osoba_id: p.osoba_id,
