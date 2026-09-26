@@ -40,22 +40,42 @@ function zakresyNakladajaSie(a, b) {
 function opiszZakres(z) {
   return z.nr_od === z.nr_do ? String(z.nr_od) : `${z.nr_od}–${z.nr_do}`;
 }
+/* D-R03: widok szczegółowy — wiersz na grupę zakresów z JEDNĄ datą wpisu
+   (zakresy scalone tylko w obrębie tego samego dnia), a nie na zakres
+   z datą najstarszej transzy pozycji. */
 function rozbijNaSzczegoly(akcjonariusze) {
   const wiersze = [];
   for (const a of akcjonariusze) {
-    for (const z of a.zakresy) {
-      const ilosc = z.nr_do - z.nr_od + 1;
+    const grupy = a.grupy_wpisu && a.grupy_wpisu.length
+      ? a.grupy_wpisu
+      : a.zakresy.map((z) => ({ zakresy: [z], numery: opiszZakres(z), data_wpisu: null }));
+    for (const g of grupy) {
+      const ilosc = g.zakresy.reduce((suma, z) => suma + z.nr_do - z.nr_od + 1, 0);
       wiersze.push({
         ...a,
-        zakresy: [z],
+        zakresy: g.zakresy,
+        grupy_wpisu: [g],
         ilosc,
-        numery: opiszZakres(z),
+        numery: g.numery,
         procent: a.ilosc ? (a.procent * ilosc) / a.ilosc : a.procent,
-        obciazenia: a.obciazenia.filter((o) => parsujNumery(o.numery).some((zo) => zakresyNakladajaSie(zo, z))),
+        obciazenia: a.obciazenia.filter((o) =>
+          parsujNumery(o.numery).some((zo) => g.zakresy.some((z) => zakresyNakladajaSie(zo, z)))),
       });
     }
   }
   return wiersze;
+}
+
+/** Numery z datą wpisu każdej grupy zakresów (D-R03) — jak na informacji z rejestru. */
+function NumeryZDatami({ pozycja }) {
+  const grupy = pozycja.grupy_wpisu || [];
+  if (grupy.length === 0) return pozycja.numery;
+  return grupy.map((g, i) => (
+    <div key={i} className="grupa-wpisu">
+      {g.numery}
+      {g.data_wpisu && <span className="wyciszony"> (wpis {fmt.data(g.data_wpisu)})</span>}
+    </div>
+  ));
 }
 
 /* Naprawa Z-058: pokrycie i rodzaj akcji (art. 300(33) § 1 pkt 4 i 9 KSH) sa
@@ -85,7 +105,8 @@ function rodzajAkcjiDlaEmisji(emisje, emisjaKlucz) {
   return NAZWY_RODZAJU_AKCJI_KOKPIT[rodzaj] || 'zwykła';
 }
 
-function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
+function TabelaAkcjonariatu({ akcjonariusze, razem, emisje, lacznie = [] }) {
+  const lacznieWgOsoby = new Map(lacznie.map((l) => [l.osoba_id, l]));
   if (akcjonariusze.length === 0) {
     return (
       <Pusto
@@ -115,22 +136,25 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
           // do przewijania z osi akcji nadajemy TYLKO pierwszemu.
           const pierwszaDlaPozycji =
             akcjonariusze.findIndex((x) => x.osoba_id === a.osoba_id && x.emisja_klucz === a.emisja_klucz) === i;
+          // D-R06: „Łącznie” zamyka osobę z kilkoma seriami (wiersze osoby
+          // przychodzą z serwera obok siebie).
+          const nastepny = akcjonariusze[i + 1];
+          const sumaOsoby = (!nastepny || nastepny.osoba_id !== a.osoba_id) ? lacznieWgOsoby.get(a.osoba_id) : null;
           return (
+            <React.Fragment key={`${a.osoba_id}-${a.emisja_klucz}-${i}`}>
             <tr
-              key={`${a.osoba_id}-${a.emisja_klucz}-${i}`}
               id={pierwszaDlaPozycji ? `akcjonariusz-${a.osoba_id}-${a.emisja_klucz}` : undefined}
             >
               <td>
                 <div style={{ fontWeight: 500 }}>{a.osoba ? a.osoba.oznaczenie : `osoba #${a.osoba_id}`}</div>
                 <div className="wiersz-podtytul">
-                  akcjonariusz od {fmt.dataCzas(a.wpisano_do_rejestru || a.data_nabycia)}
-                  {a.osoba && a.osoba.jawny_identyfikator ? ` · ${a.osoba.jawny_identyfikator}` : ''}
+                  {a.osoba && a.osoba.jawny_identyfikator ? a.osoba.jawny_identyfikator : ''}
                 </div>
               </td>
               <td>{a.seria}</td>
               <td>{rodzajAkcjiDlaEmisji(emisje, a.emisja_klucz)}</td>
               <td className="do-prawej" style={{ fontWeight: 600 }}>{fmt.liczba(a.ilosc)}</td>
-              <td className="kol-dane">{a.numery}</td>
+              <td className="kol-dane"><NumeryZDatami pozycja={a} /></td>
               <td className="do-prawej">{fmt.procent(a.procent)}</td>
               <td>{opiszPokrycieKokpit(a.pokryta)}</td>
               <td>
@@ -147,6 +171,18 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
                 )}
               </td>
             </tr>
+            {sumaOsoby && (
+              <tr className="wiersz-lacznie">
+                <td className="wyciszony">Łącznie</td>
+                <td colSpan={2} className="wyciszony">serie {sumaOsoby.serie.join(', ')}</td>
+                <td className="do-prawej" style={{ fontWeight: 600 }}>{fmt.liczba(sumaOsoby.ilosc)}</td>
+                <td />
+                <td className="do-prawej" style={{ fontWeight: 600 }}>{fmt.procent(sumaOsoby.procent)}</td>
+                <td />
+                <td />
+              </tr>
+            )}
+            </React.Fragment>
           );
         })}
       </tbody>
@@ -776,6 +812,7 @@ function EkranKokpitu({ spolkaId }) {
                 akcjonariusze={szczegolowy ? rozbijNaSzczegoly(akcjonariusze) : akcjonariusze}
                 razem={dane.razem_akcji}
                 emisje={emisje}
+                lacznie={dane.akcjonariusze_lacznie || []}
               />
               {!wstecz && (
                 <DalszeWpisy tytul="Dalsze wpisy:">

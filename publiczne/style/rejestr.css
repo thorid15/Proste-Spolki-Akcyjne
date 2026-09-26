@@ -981,6 +981,9 @@ select {
 .tabela tr.usuwany td { background: var(--sygnal-tlo); text-decoration: line-through; color: var(--atrament-2); }
 .tabela tr.zmieniony td { background: var(--mosiadz-tlo); }
 .tabela tfoot td { font-weight: 600; border-top: 1px solid var(--atrament); border-bottom: none; }
+/* D-R06: wiersz „Łącznie” osoby z kilkoma seriami */
+.tabela tr.wiersz-lacznie td { border-top: 1px dashed var(--linia, #c9c4b8); background: var(--paper-2, transparent); }
+.grupa-wpisu { white-space: nowrap; }
 
 /* Stronicowanie */
 .stronicowanie {

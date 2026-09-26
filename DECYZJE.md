@@ -1032,6 +1032,22 @@
 
 ---
 
+### D-067 — Kokpit i portal: zakresy z datą wpisu, wiersz „Łącznie” (D-R03/R06, etap 3)
+
+- Data: 2026-09-26 (etap 3)
+- Obszar: interfejs kancelarii i portal klienta
+- Decyzja: kolumna numerów w kokpicie i w podglądzie rejestru w portalu pokazuje każdą grupę
+  zakresów z jej datą wpisu (te same `grupy_wpisu`, co informacja z rejestru). Widok szczegółowy
+  kokpitu ma wiersz na grupę zakresów z jedną datą wpisu (dawniej: wiersz na zakres z datą
+  najstarszej transzy). Osoba z kilkoma seriami ma wiersz „Łącznie” (akcje, udział) w obu widokach
+  kokpitu i w portalu. Podtytuł „akcjonariusz od …” usunięty — daty stoją przy numerach. Liczba
+  głosów nie jest nigdzie wyświetlana (sprawdzone: kokpit, portal, informacja, eksporty).
+- Skutek w kodzie: `publiczne/js/kokpit.js` (`rozbijNaSzczegoly`, `NumeryZDatami`,
+  `TabelaAkcjonariatu`), `publiczne/js/portal.js`, `publiczne/style/rejestr.css`, `publiczne/dist/*`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-R03/R06, etap 3).
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w
