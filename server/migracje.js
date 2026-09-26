@@ -2250,6 +2250,25 @@ const MIGRACJE = [
     nazwa: 'D-34: slownik krajow ISO 3166-1 alfa-2 i kody krajow w adresach',
     sql: sqlSlownikaKrajow(),
   },
+  {
+    wersja: 60,
+    nazwa: 'D-Z: osoba dzialajaca przy wpisie (notariusz albo zastepca notarialny)',
+    sql: `
+      -- Tylko do audytu: kto dzialal przy wpisie, niezaleznie od pracownika-
+      -- autora. Przy zdarzeniu zapisujemy KOPIE danych (dane_json.dzialajacy,
+      -- objeta skrotem), wiec pozniejsza zmiana slownika nie zmienia historii.
+      CREATE TABLE IF NOT EXISTS psa_osoby_dzialajace (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        imie       TEXT NOT NULL,
+        nazwisko   TEXT NOT NULL,
+        funkcja    TEXT NOT NULL CHECK (funkcja IN ('notariusz','zastepca_notarialny')),
+        aktywny    INTEGER NOT NULL DEFAULT 1 CHECK (aktywny IN (0,1)),
+        utworzono  TEXT NOT NULL
+      );
+      ALTER TABLE psa_uzytkownicy ADD COLUMN osoba_dzialajaca_id INTEGER
+        REFERENCES psa_osoby_dzialajace(id);
+    `,
+  },
 ];
 
 /**

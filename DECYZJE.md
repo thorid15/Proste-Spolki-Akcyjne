@@ -1088,6 +1088,26 @@
 
 ---
 
+### D-070 — Osoba działająca przy wpisie: tylko audyt (D-Z)
+
+- Data: 2026-09-26 (etap 4)
+- Obszar: rejestr / audyt
+- Decyzja: słownik `psa_osoby_dzialajace` (imię, nazwisko, funkcja: notariusz / zastępca
+  notarialny, aktywny) i domyślna osoba pracownika `psa_uzytkownicy.osoba_dzialajaca_id`
+  (migracja 60). Przy KAŻDYM wpisie (sprawa, wpis bezpośredni, otwarcie rejestru, sprostowanie,
+  zmiana danych spółki, przekazanie) zapisujemy kopię danych osoby w `dane_json.dzialajacy`
+  (objęte skrótem — późniejsza zmiana słownika nie zmienia historii), niezależnie od autora-
+  pracownika. Ustalanie (`server/logika/osoba-dzialajaca.js`): wskazana w żądaniu
+  (`dzialajacy_id`) → domyślna pracownika → jedyny aktywny notariusz → notariusz z danych
+  kancelarii, gdy słownik jest pusty; niejednoznaczność = odmowa, nie domysł. Nie drukujemy jej na
+  żadnym dokumencie ani nie pokazujemy w portalu; widoczna tylko w historii zdarzeń kokpitu.
+  Zarządzanie: ekran „Użytkownicy” (słownik + domyślna osoba pracownika); wybór przy wpisie w
+  kreatorze sprawy.
+- Testy: `testy/d-z-osoba-dzialajaca.test.js`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-Z).
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

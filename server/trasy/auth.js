@@ -24,6 +24,8 @@ function widokUzytkownika(u) {
     email: u.email,
     rola: u.rola,
     aktywny: Boolean(u.aktywny),
+    // D-Z: domyslna osoba dzialajaca przy wpisach tego pracownika.
+    osoba_dzialajaca_id: u.osoba_dzialajaca_id ?? null,
     ostatnie_logowanie: u.ostatnie_logowanie,
     utworzono: u.utworzono,
   };
@@ -166,7 +168,7 @@ router.patch(
     const docelowy = db().prepare('SELECT * FROM psa_uzytkownicy WHERE id = ?').get(id);
     if (!docelowy) throw nieZnaleziono('Nie odnaleziono użytkownika.');
 
-    const { aktywny, rola } = zad.body || {};
+    const { aktywny, rola, osoba_dzialajaca_id: osobaDzialajacaId } = zad.body || {};
     if (aktywny !== undefined && id === zad.uzytkownik.id && !aktywny) {
       throw bledneZadanie('Nie możesz dezaktywować własnego konta.');
     }
@@ -177,6 +179,13 @@ router.patch(
     const zmiany = {};
     if (aktywny !== undefined) zmiany.aktywny = aktywny ? 1 : 0;
     if (rola !== undefined) zmiany.rola = rola;
+    if (osobaDzialajacaId !== undefined) {
+      if (osobaDzialajacaId !== null
+        && !db().prepare('SELECT id FROM psa_osoby_dzialajace WHERE id = ? AND aktywny = 1').get(Number(osobaDzialajacaId))) {
+        throw bledneZadanie('Wskazana osoba działająca nie istnieje albo jest nieaktywna.');
+      }
+      zmiany.osoba_dzialajaca_id = osobaDzialajacaId === null ? null : Number(osobaDzialajacaId);
+    }
     if (Object.keys(zmiany).length === 0) throw bledneZadanie('Nie wskazano zmian.');
 
     db()
@@ -241,4 +250,57 @@ async function zapewnijAdmina(baza, adminEmail) {
 }
 
 module.exports = router;
+// ─────────────────────────────────────────────────────────────
+// D-Z: osoby dzialajace przy wpisach (notariusz, zastepca notarialny)
+// ─────────────────────────────────────────────────────────────
+
+const FUNKCJE_DZIALAJACYCH = ['notariusz', 'zastepca_notarialny'];
+
+router.get(
+  '/osoby-dzialajace',
+  autoryzacja.wymagajPracownika,
+  asy((zad, odp) => {
+    const osoby = db().prepare('SELECT * FROM psa_osoby_dzialajace ORDER BY aktywny DESC, nazwisko, imie').all();
+    odp.json({
+      osoby: osoby.map((o) => ({ ...o, aktywny: Boolean(o.aktywny) })),
+      moja_domyslna_id: zad.uzytkownik.osoba_dzialajaca_id ?? null,
+    });
+  })
+);
+
+router.post(
+  '/osoby-dzialajace',
+  autoryzacja.wymagajAdmina,
+  asy((zad, odp) => {
+    const { imie, nazwisko, funkcja } = zad.body || {};
+    if (!String(imie || '').trim() || !String(nazwisko || '').trim()) {
+      throw bledneZadanie('Podaj imię i nazwisko osoby działającej.');
+    }
+    if (!FUNKCJE_DZIALAJACYCH.includes(funkcja)) {
+      throw bledneZadanie('Funkcja musi być „notariusz” albo „zastepca_notarialny”.');
+    }
+    const wynik = db()
+      .prepare('INSERT INTO psa_osoby_dzialajace (imie, nazwisko, funkcja, aktywny, utworzono) VALUES (?, ?, ?, 1, ?)')
+      .run(String(imie).trim(), String(nazwisko).trim(), funkcja, czas.terazIso());
+    odp.status(201).json({ osoba: db().prepare('SELECT * FROM psa_osoby_dzialajace WHERE id = ?').get(wynik.lastInsertRowid) });
+  })
+);
+
+router.patch(
+  '/osoby-dzialajace/:id',
+  autoryzacja.wymagajAdmina,
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    if (!db().prepare('SELECT id FROM psa_osoby_dzialajace WHERE id = ?').get(id)) {
+      throw nieZnaleziono('Nie odnaleziono osoby działającej.');
+    }
+    const { aktywny } = zad.body || {};
+    if (aktywny === undefined) throw bledneZadanie('Nie wskazano zmian.');
+    // Dane osoby sie nie zmieniaja - wpisy trzymaja ich kopie; zmienic
+    // mozna tylko to, czy osoba jest do wyboru przy nowych wpisach.
+    db().prepare('UPDATE psa_osoby_dzialajace SET aktywny = ? WHERE id = ?').run(aktywny ? 1 : 0, id);
+    odp.json({ osoba: db().prepare('SELECT * FROM psa_osoby_dzialajace WHERE id = ?').get(id) });
+  })
+);
+
 module.exports.zapewnijAdmina = zapewnijAdmina;

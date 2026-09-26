@@ -1153,7 +1153,16 @@ function EkranKokpitu({ spolkaId }) {
                       <tr key={z.id}>
                         <td className="wyciszony">{fmt.dataCzas(z.data_wpisu)}</td>
                         <td className="zawijaj">{z.podsumowanie || `Zdarzenie typu „${z.typ}”.`}</td>
-                        <td className="wyciszony">{z.autor}</td>
+                        <td className="wyciszony">
+                          {z.autor}
+                          {/* D-Z: osoba działająca — audyt, widoczny tylko w kancelarii. */}
+                          {z.dane && z.dane.dzialajacy && (
+                            <div className="wiersz-podtytul">
+                              działał(a): {z.dane.dzialajacy.imie} {z.dane.dzialajacy.nazwisko}
+                              {z.dane.dzialajacy.funkcja === 'zastepca_notarialny' ? ' (zastępca notarialny)' : ' (notariusz)'}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

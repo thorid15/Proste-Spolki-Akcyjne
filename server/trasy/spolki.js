@@ -15,6 +15,7 @@ const rejestr = require('../rejestr');
 const widoki = require('../widoki');
 const oplaty = require('../oplaty');
 const przepisy = require('../logika/przepisy');
+const osobaDzialajaca = require('../logika/osoba-dzialajaca');
 const u = require('../logika/ulamki');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const wzoryDysk = require('../logika/wzory-dysk');
@@ -455,6 +456,7 @@ router.put(
         spolka_id: id,
         typ: 'zmiana_danych_spolki',
         autor: kto,
+        dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
         dane: {
           przed: Object.fromEntries(doZdarzenia.map((p) => [p, biezaca[p] ?? null])),
           po: Object.fromEntries(doZdarzenia.map((p) => [p, dane[p] ?? null])),
@@ -691,6 +693,7 @@ router.post(
         spolka_id: id,
         typ: 'przekazanie_rejestru',
         autor: kto,
+        dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
         dane: {
           data_przekazania: dataPrzekazania,
           odbiorca_typ: typOdbiorcy,
@@ -785,6 +788,7 @@ router.post(
       migracja_krn: migracjaKrn || null,
       wejscie: dane || {},
       autor: kto,
+      dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
       uzasadnienie: uzasadnienie || null,
     });
 
@@ -866,6 +870,7 @@ router.post(
     const wyniki = rejestr.otworzRejestr(db(), id, {
       zdarzenia,
       autor: kto,
+      dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
     });
 
     // Rok prowadzenia biegnie od dnia, w ktorym rejestr faktycznie rusza

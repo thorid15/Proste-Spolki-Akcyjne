@@ -551,6 +551,11 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   const [ladowaniePodgladu, ustawLadowaniePodgladu] = useState(false);
   const [zapisywanie, ustawZapisywanie] = useState(false);
   const [wynik, ustawWynik] = useState(null);
+  // D-Z: osoba działająca przy wpisie (audyt) — domyślnie ta przypisana pracownikowi.
+  const dzialajace = useDane('/api/psa/auth/osoby-dzialajace');
+  const [dzialajacyId, ustawDzialajacyId] = useState(null);
+  const listaDzialajacych = dzialajace.dane ? dzialajace.dane.osoby.filter((o) => o.aktywny) : [];
+  const wybranyDzialajacy = dzialajacyId ?? (dzialajace.dane ? dzialajace.dane.moja_domyslna_id : null);
   const [bladLokalny, ustawBladLokalny] = useState(null);
 
   function budujDane() {
@@ -579,6 +584,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
     try {
       const odpowiedz = await API.post(`/api/psa/sprawy/${sprawa.id}/wpisz`, {
         dane: budujDane(),
+        ...(wybranyDzialajacy ? { dzialajacy_id: wybranyDzialajacy } : {}),
       });
       ustawWynik(odpowiedz);
       // Sprawa jest juz „wpisana” w bazie - ukrywamy w rodzicu akcje i panel
@@ -778,6 +784,18 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
                 <div className="podstawa-prawna">
                   Przycisk „Dokonaj wpisu” pozostaje nieaktywny do czasu odhaczenia całej checklisty.
                 </div>
+              )}
+              {!sawatpliwosci && listaDzialajacych.length > 0 && (
+                <Pole etykieta="Osoba działająca przy wpisie" podpowiedz="Tylko do audytu — nie trafia na dokumenty.">
+                  <select value={wybranyDzialajacy ?? ''} onChange={(z) => ustawDzialajacyId(z.target.value === '' ? null : Number(z.target.value))}>
+                    <option value="">— ustal automatycznie —</option>
+                    {listaDzialajacych.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.imie} {o.nazwisko} ({o.funkcja === 'notariusz' ? 'notariusz' : 'zastępca notarialny'})
+                      </option>
+                    ))}
+                  </select>
+                </Pole>
               )}
               {!sawatpliwosci && (
                 <p className="zdanie-nieodwracalne">Wpisu nie można cofnąć — możliwe jest tylko sprostowanie.</p>

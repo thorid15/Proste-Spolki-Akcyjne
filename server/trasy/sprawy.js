@@ -28,6 +28,7 @@ const zawiadomienia = require('../zawiadomienia');
 const terminy = require('../logika/terminy');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const przepisy = require('../logika/przepisy');
+const osobaDzialajaca = require('../logika/osoba-dzialajaca');
 const aml = require('../logika/aml');
 const maskowanie = require('../logika/maskowanie');
 const konfiguracja = require('../konfiguracja');
@@ -385,6 +386,7 @@ router.post(
       sprawaId: id,
       wejscie: dane || {},
       autor: kto,
+      dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
     });
 
     // Zawiadomienie o wpisie (art. 300(34) § 7 KSH) NIE idzie stad automatem.

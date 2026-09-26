@@ -115,7 +115,11 @@ function zapiszZdarzenie(db, zdarzenie) {
     data_wpisu: zdarzenie.chwila ? czas.chwilaUtc(zdarzenie.chwila) : czas.terazUtc(),
     autor: lancuch.oczysc(zdarzenie.autor),
     sprawa_id: zdarzenie.sprawa_id ?? null,
-    dane_json: lancuch.kanonicznyJson(zdarzenie.dane ?? {}),
+    // D-Z: osoba dzialajaca (notariusz / zastepca) - kopia w tresci
+    // zdarzenia, objeta skrotem; wylacznie do audytu.
+    dane_json: lancuch.kanonicznyJson(
+      zdarzenie.dzialajacy ? { ...(zdarzenie.dane ?? {}), dzialajacy: zdarzenie.dzialajacy } : zdarzenie.dane ?? {}
+    ),
     zdarzenie_prostowane_id: zdarzenie.zdarzenie_prostowane_id ?? null,
     uzasadnienie: zdarzenie.uzasadnienie ?? null,
     hash_poprzedni: hashPoprzedni,
@@ -455,6 +459,7 @@ function _wykonajWpis(db, zlecenie) {
     typ: zlecenie.typ,
     chwila: podglad.chwila,
     autor: zlecenie.autor,
+    dzialajacy: zlecenie.dzialajacy ?? null,
     sprawa_id: zlecenie.sprawa_id ?? null,
     dane: podglad.dane,
     zdarzenie_prostowane_id: zlecenie.zdarzenie_prostowane_id ?? null,
@@ -544,7 +549,7 @@ function podstawKluczePartii(wartosc, idPartii) {
  * prawdziwego ID przez `{ __odwolanie_do_partii: 'emisja-A' }` gdziekolwiek
  * w `dane` (patrz `podstawKluczePartii`).
  */
-function otworzRejestr(db, spolkaId, { zdarzenia, autor, teraz }) {
+function otworzRejestr(db, spolkaId, { zdarzenia, autor, teraz, dzialajacy }) {
   const transakcja = db.transaction(() => {
     const idPartii = new Map();
     const zapisane = [];
@@ -555,6 +560,7 @@ function otworzRejestr(db, spolkaId, { zdarzenia, autor, teraz }) {
         wejscie: podstawKluczePartii(z.dane, idPartii),
         teraz,
         autor,
+        dzialajacy,
       });
       if (z.klucz_tymczasowy) idPartii.set(z.klucz_tymczasowy, wynik.zdarzenie.id);
       zapisane.push(wynik);
@@ -575,7 +581,7 @@ function otworzRejestr(db, spolkaId, { zdarzenia, autor, teraz }) {
  * jest powodem do cofniecia juz dokonanego, wazneg wpisu (art. 300(34) § 7
  * KSH nakazuje powiadomienie jako obowiazek NASTEPCZY wobec wpisu).
  */
-function dokonajWpisuSprawy(db, { sprawaId, wejscie, autor, teraz }) {
+function dokonajWpisuSprawy(db, { sprawaId, wejscie, autor, teraz, dzialajacy }) {
   const transakcja = db.transaction(() => {
     const sprawa = db.prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
     if (!sprawa) throw new BladWalidacji(['Nie odnaleziono sprawy.']);
@@ -591,6 +597,7 @@ function dokonajWpisuSprawy(db, { sprawaId, wejscie, autor, teraz }) {
       wejscie,
       autor,
       teraz,
+      dzialajacy,
       sprawa_id: sprawaId,
     });
 
@@ -647,7 +654,7 @@ function dokonajWpisuSprawy(db, { sprawaId, wejscie, autor, teraz }) {
  * korekty). `zamiast` (opcjonalne) niesie skorygowana tresc - patrz
  * `kreator.przygotujSprostowanie`.
  */
-function dokonajSprostowania(db, { zdarzeniePierwotneId, uzasadnienie, zamiast, autor, teraz }) {
+function dokonajSprostowania(db, { zdarzeniePierwotneId, uzasadnienie, zamiast, autor, teraz, dzialajacy }) {
   const transakcja = db.transaction(() => {
     const pierwotne = db.prepare('SELECT * FROM psa_zdarzenia WHERE id = ?').get(zdarzeniePierwotneId);
     if (!pierwotne) throw new BladWalidacji(['Nie odnaleziono zdarzenia do sprostowania.']);
@@ -695,6 +702,7 @@ function dokonajSprostowania(db, { zdarzeniePierwotneId, uzasadnienie, zamiast, 
       typ: 'sprostowanie',
       chwila,
       autor,
+      dzialajacy: dzialajacy ?? null,
       dane,
       zdarzenie_prostowane_id: zdarzeniePierwotneId,
       uzasadnienie,

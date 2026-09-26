@@ -14,6 +14,7 @@ const { db } = require('../baza');
 const rejestr = require('../rejestr');
 const widoki = require('../widoki');
 const typyZdarzen = require('../logika/typy-zdarzen');
+const osobaDzialajaca = require('../logika/osoba-dzialajaca');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 
 const router = express.Router();
@@ -66,6 +67,7 @@ router.post(
       uzasadnienie,
       zamiast: zamiast || null,
       autor: kto,
+      dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
     });
 
     odp.status(201).json({
