@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rejestr akcjonariuszy P.S.A. — notariusz Łukasz Kozon, Gdańsk</title>
+<meta name="description" content="Rejestr akcjonariuszy prostej spółki akcyjnej prowadzony przez notariusza. Wniosek, dokumenty i wpisy online, wpis do 7 dni, stawki gwarantowane przez 3 lata.">
+<meta name="theme-color" content="#1F4D3D">
+<!-- WDROŻENIE: {{BASE_URL}} zastępuje budowanie adresem strony (D-049). -->
+<link rel="canonical" href="{{BASE_URL}}/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pl_PL">
+<meta property="og:title" content="Rejestr akcjonariuszy P.S.A. — Kancelaria Notarialna Łukasz Kozon">
+<meta property="og:description" content="Rejestr akcjonariuszy prostej spółki akcyjnej prowadzony przez notariusza. Wniosek, dokumenty i wpisy online.">
+<meta property="og:url" content="{{BASE_URL}}/">
+<meta property="og:image" content="{{BASE_URL}}/obrazy/og-rejestr.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+ {"@type":"Notary","@id":"{{BASE_URL}}/#kancelaria","name":"Kancelaria Notarialna Łukasz Kozon","url":"https://notariusz.gdansk.pl/","email":"biuro@notariusz.gdansk.pl",
+  "address":{"@type":"PostalAddress","streetAddress":"ul. Bolesława Leśmiana 3/U10","postalCode":"80-280","addressLocality":"Gdańsk","addressCountry":"PL"}},
+ {"@type":"Service","name":"Prowadzenie rejestru akcjonariuszy prostej spółki akcyjnej","serviceType":"Rejestr akcjonariuszy P.S.A.","url":"{{BASE_URL}}/","areaServed":"PL","provider":{"@id":"{{BASE_URL}}/#kancelaria"},
+  "offers":[
+   {"@type":"Offer","name":"Prowadzenie rejestru — za każdy rozpoczęty rok","price":"1476.00","priceCurrency":"PLN"},
+   {"@type":"Offer","name":"Wpis w rejestrze","price":"123.00","priceCurrency":"PLN"},
+   {"@type":"Offer","name":"Informacja z rejestru","price":"61.50","priceCurrency":"PLN"}]}
+]}
+</script>
+<link rel="preload" href="fonty/eb-garamond-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonty/inter-tight-latin.woff2" as="font" type="font/woff2" crossorigin>
+<script>(function(){try{if(window.matchMedia&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserver' in window){document.documentElement.classList.add('anim');}}catch(e){}})();</script>
+<style>
+@font-face{font-family:"EB Garamond";font-style:normal;font-weight:400 800;font-display:swap;src:url("fonty/eb-garamond-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"EB Garamond";font-style:normal;font-weight:400 800;font-display:swap;src:url("fonty/eb-garamond-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Inter Tight";font-style:normal;font-weight:100 900;font-display:swap;src:url("fonty/inter-tight-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Inter Tight";font-style:normal;font-weight:100 900;font-display:swap;src:url("fonty/inter-tight-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:400;font-display:swap;src:url("fonty/ibm-plex-mono-400-latin.woff2") format("woff2")}
+
+:root{
+  --papier:#F6F7F5; --papier-2:#EFF2EE; --karta:#FFFFFF;
+  --atrament:#14181C; --atrament-2:#4F5761; --atrament-3:#6A727C;
+  --linia:#E3E6E1; --linia-2:#EEF0EC;
+  --rejestr:#1F4D3D; --rejestr-2:#2E6B54; --rejestr-3:#4A8A6E; --rejestr-tlo:#E6EEE8;
+  --mosiadz:#8A6330; --mosiadz-2:#C9A56A; --mosiadz-tlo:#F7F0E3; --mosiadz-linia:#EADCC2;
+  --f-display:"EB Garamond","Iowan Old Style","Palatino Linotype",Georgia,serif;
+  --f-ui:"Inter Tight",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  --f-dane:"IBM Plex Mono",ui-monospace,"SF Mono",Consolas,monospace;
+  --szer:1200px; --margines:clamp(16px,4vw,40px);
+  --ease:cubic-bezier(.22,.72,.18,1);
+  --cien-1:0 1px 2px rgba(20,24,28,.05),0 10px 28px -14px rgba(20,40,32,.22);
+  --cien:0 2px 6px rgba(20,24,28,.04),0 24px 48px -24px rgba(20,48,36,.25);
+  color-scheme:light;
+  interpolate-size:allow-keywords;
+}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:88px}
+body{margin:0;background:var(--papier);color:var(--atrament);font:400 1.0625rem/1.6 var(--f-ui);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:clip}
+img,svg{display:block;max-width:100%}
+a{color:inherit}
+p{margin:0}
+h1,h2,h3{margin:0;font-family:var(--f-display);font-weight:500;letter-spacing:-.015em;line-height:1.08;text-wrap:balance}
+h1{font-size:clamp(2.5rem,4.8vw,4rem);line-height:1.04}
+h2{font-size:clamp(2rem,3.2vw,2.75rem)}
+sup{font-size:.68em;line-height:0;vertical-align:.52em;letter-spacing:0}
+:focus-visible{outline:3px solid var(--mosiadz-2);outline-offset:3px}
+.wrap{max-width:var(--szer);margin-inline:auto;padding-inline:var(--margines)}
+.art{font-size:.8125rem;color:var(--atrament-3);white-space:nowrap}
+.przeskok{position:absolute;left:12px;top:-60px;z-index:100;background:var(--rejestr);color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none;font-weight:600}
+.przeskok:focus{top:12px}
+.ik{width:18px;height:18px}
+.ik *{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+/* Przyciski */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5em;height:48px;padding:0 22px;border-radius:10px;border:1px solid transparent;font:600 .9375rem/1 var(--f-ui);text-decoration:none;white-space:nowrap;cursor:pointer;transition:background-color .2s,border-color .2s,color .2s}
+.btn svg{transition:transform .25s var(--ease)}
+.btn:hover svg{transform:translateX(3px)}
+.btn--glowny{background:var(--rejestr);color:#fff}
+.btn--glowny:hover{background:var(--rejestr-2)}
+.btn--jasny{background:transparent;color:var(--atrament);border-color:#C9CFC6}
+.btn--jasny:hover{border-color:var(--atrament)}
+.btn--bialy{background:#fff;color:var(--rejestr)}
+.btn--bialy:hover{background:#E9F1EC}
+.btn--obrys{border-color:rgba(255,255,255,.45);color:#fff}
+.btn--obrys:hover{border-color:#fff}
+.btn--maly{height:40px;padding:0 16px;font-size:.875rem}
+
+/* Nawigacja */
+.nav{position:sticky;top:0;z-index:50;background:rgba(246,247,245,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-bottom:1px solid transparent;transition:border-color .3s}
+.nav--przewiniety,.nav--menu{border-bottom-color:var(--linia)}
+.nav__in{display:flex;align-items:center;gap:24px;height:76px}
+.marka{display:grid;min-width:0;text-decoration:none;color:var(--atrament);line-height:1.2}
+.marka strong{font:500 1.1875rem/1.2 var(--f-display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.marka span{font-size:.75rem;color:var(--atrament-2);letter-spacing:.02em}
+.nav__linki{display:flex;gap:2px;margin-left:auto}
+.nav__linki a{padding:8px 12px;border-radius:8px;color:var(--atrament-2);font-size:.9375rem;font-weight:500;text-decoration:none;transition:color .2s}
+.nav__linki a:hover{color:var(--atrament)}
+.nav__akcje{display:flex;align-items:center;gap:6px}
+.nav__zaloguj{padding:8px 12px;color:var(--atrament);font-size:.9375rem;font-weight:600;text-decoration:none}
+.nav__zaloguj:hover{text-decoration:underline;text-underline-offset:4px}
+.nav__menu{display:none;flex:none;align-items:center;justify-content:center;width:44px;height:44px;border-radius:10px;border:1px solid var(--linia);background:var(--karta);color:var(--atrament);cursor:pointer}
+.menu{border-top:1px solid var(--linia)}
+.menu__lista{display:grid;padding-block:6px 20px}
+.menu__lista a{padding:14px 0;border-bottom:1px solid var(--linia-2);font-size:1.0625rem;font-weight:500;text-decoration:none}
+
+/* Hero */
+.hero{padding-block:clamp(40px,7vw,104px) clamp(64px,8vw,120px)}
+.hero__in{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:clamp(40px,6vw,88px);align-items:center}
+.hero__tekst{display:grid;gap:28px}
+.hero h1{font-size:clamp(2.125rem,4.4vw,3.625rem);line-height:1.06}
+.hero h1 span{display:block}
+.hero__lead{max-width:30rem;font-size:clamp(1.0625rem,1.35vw,1.1875rem);line-height:1.6;color:var(--atrament-2)}
+.hero__cta{display:flex;flex-wrap:wrap;gap:12px}
+.wejscie{animation:wejscie .8s var(--ease) both;animation-delay:calc(var(--d,0) * 100ms + 50ms)}
+@keyframes wejscie{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* Zaślepki do uzupełnienia */
+.ramka{background:var(--karta);border:1px solid var(--linia);border-radius:14px;box-shadow:var(--cien);overflow:hidden}
+.ramka__pasek{display:flex;align-items:center;gap:6px;height:34px;padding-inline:14px;background:var(--rejestr)}
+.ramka__pasek i{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3)}
+.zaslepka{display:grid;align-content:center;justify-items:center;gap:6px;margin:14px;padding:24px;text-align:center;border:1.5px dashed #C9CFC6;border-radius:8px;background:var(--papier);color:var(--atrament-2);font-size:.9375rem}
+.zaslepka strong{color:var(--atrament);font-weight:600}
+.zaslepka small{font-size:.8125rem;color:var(--atrament-3)}
+.zaslepka--portal{aspect-ratio:16/10}
+.zaslepka--dokument{aspect-ratio:1/1.3}
+
+/* Sekcje */
+.sekcja{padding-block:clamp(72px,9vw,128px)}
+.sekcja--biala{background:var(--karta)}
+.glowa{display:grid;gap:16px;max-width:44rem;margin-bottom:clamp(32px,4vw,52px)}
+.glowa p{font-size:clamp(1.0625rem,1.3vw,1.1875rem);color:var(--atrament-2)}
+.anim [data-reveal]:not(.in){opacity:0}
+.anim [data-reveal].in{animation:pokaz .8s var(--ease) backwards;animation-delay:calc(var(--d,0) * 100ms)}
+@keyframes pokaz{from{opacity:0;transform:translateY(20px)}}
+
+/* Opłaty */
+.ceny{display:grid;grid-template-columns:minmax(0,1.3fr) repeat(2,minmax(0,1fr));gap:20px}
+.cena{position:relative;display:flex;flex-direction:column;padding:30px;background:var(--karta);border:1px solid var(--linia);border-radius:22px;transition:transform .35s var(--ease),box-shadow .35s var(--ease)}
+.cena:hover{transform:translateY(-4px);box-shadow:var(--cien-1)}
+.cena__nazwa{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.cena h3{font:600 1.0625rem/1.3 var(--f-ui);letter-spacing:0}
+.cena__kwota{margin-top:22px;font:500 clamp(2.75rem,4.2vw,3.5rem)/1 var(--f-display);letter-spacing:-.025em;font-variant-numeric:lining-nums tabular-nums;white-space:nowrap}
+.cena__kwota small{margin-left:6px;font:600 1.125rem/1 var(--f-ui);letter-spacing:0;color:var(--atrament-2)}
+.cena__okres{margin-top:8px;font-size:.9375rem;color:var(--atrament-2)}
+.cena__netto{margin-top:20px;padding-top:14px;border-top:1px dashed var(--linia);font:400 .8125rem/1.4 var(--f-dane);color:var(--atrament-3)}
+.cena__opis{margin-top:14px;font-size:.9375rem;color:var(--atrament-2)}
+.cena__opis a{color:var(--rejestr-2);font-weight:600;text-underline-offset:3px}
+.cena--glowna{color:#fff;border-color:transparent;background:radial-gradient(120% 90% at 100% 0%,rgba(143,196,171,.3),rgba(143,196,171,0) 60%),var(--rejestr);box-shadow:0 30px 60px -30px rgba(20,56,42,.7)}
+.cena--glowna .cena__kwota small,.cena--glowna .cena__okres{color:rgba(255,255,255,.78)}
+.cena--glowna .cena__netto{color:rgba(255,255,255,.7);border-top-color:rgba(255,255,255,.22)}
+.plakietka{display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:999px;background:rgba(201,165,106,.2);border:1px solid rgba(201,165,106,.5);color:#F3DDB2;font:600 .6875rem/1 var(--f-ui);letter-spacing:.04em;white-space:nowrap}
+.lista{display:grid;gap:9px;margin:18px 0 0;padding:0;list-style:none;font-size:.9375rem}
+.lista li{display:flex;align-items:flex-start;gap:10px}
+.lista .ik{flex:none;width:18px;height:18px;margin-top:2px;color:var(--mosiadz-2)}
+.gwarancja{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(24px,5vw,64px);align-items:center;margin-top:20px;padding:clamp(24px,4vw,40px);background:var(--mosiadz-tlo);border:1px solid var(--mosiadz-linia);border-radius:14px}
+.gwarancja h3{font-size:clamp(1.5rem,2.3vw,1.875rem)}
+.gwarancja p{margin-top:12px;color:var(--atrament-2)}
+.lata{display:grid;gap:10px}
+.lata__opis{display:flex;justify-content:space-between;gap:12px;font-size:.8125rem;font-weight:600;color:var(--mosiadz)}
+.lata__pasy{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.rok{display:grid;gap:8px;font-size:.8125rem;color:var(--atrament-2)}
+.rok__pas{height:8px;overflow:hidden;border-radius:4px;background:rgba(201,165,106,.25)}
+.rok__pas i{display:block;height:100%;border-radius:inherit;background:var(--mosiadz-2);transform-origin:left}
+.anim .gwarancja .rok__pas i{transition:transform .8s var(--ease) calc(var(--i) * 300ms + 400ms)}
+.anim .gwarancja:not(.in) .rok__pas i{transform:scaleX(0)}
+
+/* Portal */
+.kroki{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:32px;margin:0;padding:0;list-style:none}
+.krok{position:relative;display:grid;gap:10px;align-content:start;padding-top:20px}
+.krok::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:var(--rejestr);transform-origin:left}
+.anim .kroki .krok::before{transition:transform .9s var(--ease) calc(var(--i) * 220ms + 150ms)}
+.anim .kroki:not(.in) .krok::before{transform:scaleX(0)}
+.krok__nr{font:500 2.5rem/1 var(--f-display);color:var(--rejestr)}
+.krok h3{font:600 1.125rem/1.3 var(--f-ui);letter-spacing:0}
+.krok p{font-size:.9375rem;color:var(--atrament-2)}
+.funkcje{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;margin-top:clamp(48px,6vw,80px);overflow:hidden;background:var(--linia);border:1px solid var(--linia);border-radius:22px}
+.funkcja{display:grid;gap:10px;align-content:start;padding:28px 28px 30px;background:var(--karta);transition:background-color .3s}
+.funkcja:hover{background:#FAFBF9}
+.funkcja__ikona{display:grid;place-items:center;width:42px;height:42px;margin-bottom:6px;border-radius:12px;background:var(--rejestr-tlo);color:var(--rejestr);transition:transform .35s var(--ease)}
+.funkcja:hover .funkcja__ikona{transform:translateY(-2px) rotate(-4deg)}
+.funkcja h3{font:600 1.0625rem/1.3 var(--f-ui);letter-spacing:0}
+.funkcja p{font-size:.9375rem;color:var(--atrament-2)}
+
+/* Informacja z rejestru */
+.informacja{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.85fr);gap:clamp(40px,6vw,88px);align-items:center}
+.informacja__tekst{display:grid;gap:18px}
+.informacja__tekst>p{color:var(--atrament-2)}
+.zawartosc{margin:6px 0 0;padding:0;list-style:none;border-top:1px solid var(--linia)}
+.zawartosc li{display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--linia);font-size:.9375rem}
+.zawartosc li::before{content:"";flex:none;width:6px;height:6px;margin-top:.62em;border-radius:50%;background:var(--mosiadz-2)}
+
+/* Pytania */
+.pytania{display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.25fr);gap:clamp(32px,6vw,88px);align-items:start}
+.pytania__glowa{position:sticky;top:120px;display:grid;gap:16px}
+.pytania__glowa p{color:var(--atrament-2)}
+.pytania__glowa a{color:var(--rejestr-2);font-weight:600;text-underline-offset:3px}
+.faq{border-top:1px solid var(--linia)}
+.faq details{border-bottom:1px solid var(--linia)}
+.faq summary{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:22px 0;list-style:none;cursor:pointer;font:500 clamp(1.1875rem,1.6vw,1.3125rem)/1.3 var(--f-display)}
+.faq summary::-webkit-details-marker{display:none}
+.faq__znak{flex:none;color:var(--rejestr);transition:transform .35s var(--ease)}
+.faq details[open] .faq__znak{transform:rotate(45deg)}
+.faq__odp{padding:0 40px 24px 0;color:var(--atrament-2)}
+.faq details::details-content{block-size:0;overflow:clip;transition:block-size .4s var(--ease),content-visibility .4s allow-discrete}
+.faq details[open]::details-content{block-size:auto}
+
+/* Wezwanie końcowe */
+.cta{background:var(--rejestr);color:#fff;padding-block:clamp(64px,8vw,104px)}
+.cta__in{display:grid;grid-template-columns:minmax(0,1.4fr) auto;gap:32px 48px;align-items:end}
+.cta h2{color:#fff;max-width:18ch}
+.cta p{max-width:36rem;margin-top:14px;color:rgba(255,255,255,.82)}
+.cta__przyciski{display:flex;flex-wrap:wrap;gap:12px}
+
+/* Stopka */
+.stopka{padding-block:52px 36px;font-size:.875rem;color:var(--atrament-2)}
+.stopka__siatka{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:32px}
+.stopka__marka{display:grid;gap:12px;align-content:start}
+.stopka__marka img{width:112px;height:auto}
+.stopka__nazwa{font:500 1.125rem/1.25 var(--f-display);color:var(--atrament)}
+.stopka__tyt{margin-bottom:14px;font-size:.75rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--atrament-3)}
+.stopka ul{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.stopka a{text-decoration:none;color:var(--atrament-2);transition:color .2s}
+.stopka a:hover{color:var(--rejestr)}
+.stopka__dol{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;margin-top:40px;padding-top:20px;border-top:1px solid var(--linia);font-size:.8125rem;color:var(--atrament-3)}
+
+@media (max-width:980px){
+  .hero__in,.informacja,.pytania{grid-template-columns:1fr}
+  .pytania__glowa{position:static}
+  .gwarancja{grid-template-columns:1fr}
+  .ceny{grid-template-columns:1fr 1fr}
+  .cena--glowna{grid-column:1/-1}
+  .kroki{grid-template-columns:1fr 1fr;row-gap:40px}
+  .cta__in{grid-template-columns:1fr;align-items:start}
+}
+@media (max-width:900px){
+  .nav__linki,.nav__zaloguj{display:none}
+  .nav__akcje{margin-left:auto}
+  .nav__menu{display:inline-flex}
+  .funkcje{grid-template-columns:1fr 1fr}
+}
+@media (max-width:760px){
+  .stopka__siatka{grid-template-columns:1fr 1fr}
+  .stopka__marka{grid-column:1/-1}
+}
+@media (max-width:600px){
+  .kroki{grid-template-columns:1fr;row-gap:32px}
+  .ceny,.funkcje{grid-template-columns:1fr}
+  .faq__odp{padding-right:0}
+  .hero__cta .btn{flex:1 1 auto}
+}
+@media (max-width:420px){
+  .marka span{display:none}
+  .marka strong{font-size:1rem;line-height:1.15;white-space:normal}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<a class="przeskok" href="#tresc">Przejdź do treści</a>
+
+<header class="nav" id="nav">
+  <div class="wrap nav__in">
+    <a class="marka" href="#tresc">
+      <strong>Kancelaria Notarialna Łukasz Kozon</strong>
+      <span>Rejestr akcjonariuszy P.S.A.</span>
+    </a>
+    <nav class="nav__linki" aria-label="Sekcje strony">
+      <a href="#oplaty">Opłaty</a>
+      <a href="#portal">Jak to działa</a>
+      <a href="#informacja">Informacja z rejestru</a>
+      <a href="#pytania">Pytania</a>
+    </nav>
+    <div class="nav__akcje">
+      <a class="nav__zaloguj" href="portal.html">Zaloguj się</a>
+      <a class="btn btn--glowny btn--maly" href="portal.html#/zglos-sie">Złóż wniosek</a>
+    </div>
+    <button class="nav__menu" id="przycisk-menu" type="button" aria-expanded="false" aria-controls="menu-mobilne" aria-label="Menu">
+      <svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 7h13M3.5 13h13"/></svg>
+    </button>
+  </div>
+  <div class="menu" id="menu-mobilne" hidden>
+    <nav class="wrap menu__lista" aria-label="Menu">
+      <a href="#oplaty">Opłaty</a>
+      <a href="#portal">Jak to działa</a>
+      <a href="#informacja">Informacja z rejestru</a>
+      <a href="#pytania">Pytania</a>
+      <a href="portal.html">Zaloguj się do portalu</a>
+    </nav>
+  </div>
+</header>
+
+<main id="tresc">
+
+  <section class="hero">
+    <div class="wrap hero__in">
+      <div class="hero__tekst">
+        <h1 class="wejscie" style="--d:0"><span>Rejestr akcjonariuszy</span> <span>prostej spółki akcyjnej</span></h1>
+        <p class="hero__lead wejscie" style="--d:1">Prowadzi go notariusz, a wszystkie sprawy załatwisz online: wniosek, podpisy, wpisy i informacje z rejestru.</p>
+        <div class="hero__cta wejscie" style="--d:2">
+          <a class="btn btn--glowny" href="portal.html#/zglos-sie">Złóż wniosek
+            <svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 5l5 5-5 5"/></svg></a>
+          <a class="btn btn--jasny" href="#oplaty">Zobacz opłaty</a>
+        </div>
+      </div>
+      <!-- DO UZUPEŁNIENIA: zrzut ekranu portalu klienta po zakończeniu aplikacji (WebP/AVIF, z width i height). -->
+      <div class="ramka wejscie" style="--d:2">
+        <div class="ramka__pasek" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="zaslepka zaslepka--portal">
+          <strong>Zrzut ekranu portalu klienta</strong>
+          <small>do uzupełnienia po zakończeniu aplikacji</small>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sekcja sekcja--biala" id="oplaty" aria-labelledby="oplaty-tytul">
+    <div class="wrap">
+      <div class="glowa" data-reveal>
+        <h2 id="oplaty-tytul">Opłaty</h2>
+        <p>Trzy stawki, bez dodatkowych opłat za korzystanie z portalu. Kwoty brutto zawierają 23% VAT.</p>
+      </div>
+      <div class="ceny">
+        <article class="cena cena--glowna" data-reveal>
+          <div class="cena__nazwa"><h3>Prowadzenie rejestru</h3><span class="plakietka">cena gwarantowana 3 lata</span></div>
+          <div class="cena__kwota">1&nbsp;476,00<small>zł</small></div>
+          <p class="cena__okres">brutto za każdy rozpoczęty rok</p>
+          <ul class="lista">
+            <li><svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10.5l3.2 3.2L15 7"/></svg>rejestr prowadzony elektronicznie przez notariusza</li>
+            <li><svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10.5l3.2 3.2L15 7"/></svg>portal dla spółki i akcjonariuszy</li>
+            <li><svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10.5l3.2 3.2L15 7"/></svg>zawiadomienia e-mail i pełna historia zmian</li>
+          </ul>
+          <p class="cena__netto">1&nbsp;200,00 zł netto + 23% VAT</p>
+        </article>
+        <article class="cena" data-reveal style="--d:1">
+          <h3>Wpis w rejestrze</h3>
+          <div class="cena__kwota">123,00<small>zł</small></div>
+          <p class="cena__okres">brutto za wpis</p>
+          <p class="cena__opis">Na przykład zbycie akcji albo emisja nowych akcji.</p>
+          <p class="cena__netto">100,00 zł netto + 23% VAT</p>
+        </article>
+        <article class="cena" data-reveal style="--d:2">
+          <h3>Informacja z rejestru</h3>
+          <div class="cena__kwota">61,50<small>zł</small></div>
+          <p class="cena__okres">brutto za dokument</p>
+          <p class="cena__opis">Stan rejestru na wybrany dzień. <a href="#informacja">Zobacz, co zawiera</a></p>
+          <p class="cena__netto">50,00 zł netto + 23% VAT</p>
+        </article>
+      </div>
+      <div class="gwarancja" data-reveal>
+        <div>
+          <h3>Stawki gwarantowane przez 3 lata</h3>
+          <p>Stawki z umowy o prowadzenie rejestru nie zmieniają się przez 3 lata od dnia jej podpisania. Gwarancja obejmuje wszystkie opłaty: prowadzenie rejestru, wpisy i informacje z rejestru.</p>
+        </div>
+        <div class="lata">
+          <div class="lata__opis"><span>Podpisanie umowy</span><span>3 lata bez zmiany stawek</span></div>
+          <div class="lata__pasy">
+            <div class="rok"><span class="rok__pas" aria-hidden="true"><i style="--i:0"></i></span>1. rok</div>
+            <div class="rok"><span class="rok__pas" aria-hidden="true"><i style="--i:1"></i></span>2. rok</div>
+            <div class="rok"><span class="rok__pas" aria-hidden="true"><i style="--i:2"></i></span>3. rok</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sekcja" id="portal" aria-labelledby="portal-tytul">
+    <div class="wrap">
+      <div class="glowa" data-reveal>
+        <h2 id="portal-tytul">Jak działa portal</h2>
+        <p>W portalu spółka, akcjonariusze i kancelaria wymieniają dokumenty i informacje. Wszystko odbywa się online, a wpisu dokonujemy najpóźniej w ciągu 7 dni od otrzymania żądania.</p>
+      </div>
+      <ol class="kroki" data-reveal>
+        <li class="krok" style="--i:0"><span class="krok__nr">1</span><h3>Wniosek</h3><p>Po wpisaniu numeru KRS dane spółki pobierają się z rejestru. Wystarczy dodać akcjonariuszy.</p></li>
+        <li class="krok" style="--i:1"><span class="krok__nr">2</span><h3>Dokumenty</h3><p>Umowę o prowadzenie rejestru i uchwałę przygotowuje kancelaria. Podpisuje się je odręcznie (skan), podpisem kwalifikowanym, zaufanym albo osobistym.</p></li>
+        <li class="krok" style="--i:2"><span class="krok__nr">3</span><h3>Otwarcie rejestru</h3><p>Kancelaria wpisuje akcjonariat założycielski. Od tej chwili spółka i akcjonariusze widzą rejestr w portalu.</p></li>
+        <li class="krok" style="--i:3"><span class="krok__nr">4</span><h3>Zmiany</h3><p>Zmianę, na przykład sprzedaż akcji, zgłasza się w portalu razem z dokumentem. Wpisu dokonujemy najpóźniej w ciągu 7 dni.</p></li>
+      </ol>
+      <div class="funkcje">
+        <article class="funkcja" data-reveal>
+          <span class="funkcja__ikona"><svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V4M6 8l4-4 4 4M4 13v2.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V13"/></svg></span>
+          <h3>Przesyłanie dokumentów</h3>
+          <p>Umowę zbycia, uchwałę czy skan podpisu dodajesz jako plik. Bez poczty i kuriera.</p>
+        </article>
+        <article class="funkcja" data-reveal style="--d:1">
+          <span class="funkcja__ikona"><svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><circle cx="7.5" cy="7" r="2.8"/><path d="M2.5 16c.6-2.6 2.6-4 5-4s4.4 1.4 5 4"/><circle cx="14" cy="7.8" r="2.2"/><path d="M14 12c1.9 0 3.3 1.1 3.8 3.2"/></svg></span>
+          <h3>Dostęp dla akcjonariuszy</h3>
+          <p>Akcjonariusze mogą mieć własny wgląd w rejestr. Dane innych osób widzą częściowo zasłonięte.</p>
+        </article>
+        <article class="funkcja" data-reveal style="--d:2">
+          <span class="funkcja__ikona"><svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 13.5V9a5 5 0 0 1 10 0v4.5l1.5 1.5h-13z"/><path d="M8.3 17a1.8 1.8 0 0 0 3.4 0"/></svg></span>
+          <h3>Powiadomienia e-mail</h3>
+          <p>O dokumentach do podpisu i o dokonanych wpisach informujemy e-mailem.</p>
+        </article>
+        <article class="funkcja" data-reveal>
+          <span class="funkcja__ikona"><svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 2.8h6l3.5 3.5v10.4a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V3.3a.5.5 0 0 1 .5-.5z"/><path d="M11.5 2.8v3.5H15M7.5 10h5M7.5 13h5"/></svg></span>
+          <h3>Informacja z rejestru</h3>
+          <p>Na wybrany dzień. Zamawiasz i opłacasz online, pobierasz po potwierdzeniu płatności.</p>
+        </article>
+        <article class="funkcja" data-reveal style="--d:1">
+          <span class="funkcja__ikona"><svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M2.5 8.5h15M5.5 12.5h3"/></svg></span>
+          <h3>Płatności online</h3>
+          <p>Opłaty regulujesz w portalu albo przelewem na podstawie faktury.</p>
+        </article>
+        <article class="funkcja" data-reveal style="--d:2">
+          <span class="funkcja__ikona"><svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.8l6 2.4v4.3c0 3.7-2.5 6.3-6 7.7-3.5-1.4-6-4-6-7.7V5.2z"/><path d="M7.3 10l1.9 1.9 3.6-3.8"/></svg></span>
+          <h3>Pełna historia</h3>
+          <p>Wpisów nie da się wymazać. Każda zmiana zostaje w historii rejestru.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="sekcja sekcja--biala" id="informacja" aria-labelledby="informacja-tytul">
+    <div class="wrap informacja">
+      <div class="informacja__tekst" data-reveal>
+        <h2 id="informacja-tytul">Informacja z rejestru</h2>
+        <p>Informacja z rejestru pokazuje stan rejestru na wybrany dzień. Może jej zażądać spółka i każdy akcjonariusz <span class="art">(art. 300<sup>35</sup> §&nbsp;3 KSH)</span>. Zamawia się ją w portalu za 61,50&nbsp;zł brutto.</p>
+        <ul class="zawartosc">
+          <li>dane spółki i datę otwarcia rejestru</li>
+          <li>emisje i serie akcji</li>
+          <li>akcjonariuszy z numerami akcji, ich liczbą i udziałem</li>
+          <li>obciążenia i ograniczenia akcji, jeśli zostały wpisane</li>
+        </ul>
+      </div>
+      <!-- DO UZUPEŁNIENIA: przykładowa informacja z rejestru według ostatecznego wzoru z aplikacji (server/logika/informacja-dokument.js). -->
+      <div class="ramka" data-reveal style="--d:1">
+        <div class="zaslepka zaslepka--dokument">
+          <strong>Przykładowa informacja z rejestru</strong>
+          <small>do uzupełnienia według ostatecznego wzoru z aplikacji</small>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sekcja" id="pytania" aria-labelledby="pytania-tytul">
+    <div class="wrap pytania">
+      <div class="pytania__glowa" data-reveal>
+        <h2 id="pytania-tytul">Pytania i odpowiedzi</h2>
+        <p>Nie ma tu Twojego pytania? Napisz do kancelarii: <a href="mailto:biuro@notariusz.gdansk.pl">biuro@notariusz.gdansk.pl</a></p>
+      </div>
+      <div class="faq" data-reveal style="--d:1">
+        <details>
+          <summary>Czy muszę przyjść do kancelarii?<svg class="ik faq__znak" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg></summary>
+          <div class="faq__odp"><p>Nie. Wszystko załatwisz przez portal: złożysz wniosek, pobierzesz przygotowane przez nas dokumenty i odeślesz je podpisane. Możesz podpisać je odręcznie i przesłać skan albo użyć podpisu kwalifikowanego, zaufanego lub osobistego. Tą samą drogą zgłaszasz później zmiany w akcjonariacie i zamawiasz informacje z rejestru.</p></div>
+        </details>
+        <details>
+          <summary>Ile kosztuje prowadzenie rejestru?<svg class="ik faq__znak" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg></summary>
+          <div class="faq__odp"><p>Prowadzenie rejestru kosztuje 1&nbsp;476,00&nbsp;zł brutto za każdy rozpoczęty rok. Poza tym płacisz tylko za czynności, z których korzystasz: 123,00&nbsp;zł brutto za każdy wpis, na przykład po sprzedaży akcji, i 61,50&nbsp;zł brutto za informację z rejestru. Wszystkie stawki z umowy o prowadzenie rejestru nie zmieniają się przez 3 lata od dnia jej podpisania.</p></div>
+        </details>
+        <details>
+          <summary>Jak szybko dokonujecie wpisu?<svg class="ik faq__znak" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg></summary>
+          <div class="faq__odp"><p>Wpisu dokonujemy niezwłocznie, najpóźniej w ciągu 7 dni od otrzymania żądania. Jeżeli przed wpisem trzeba usunąć przeszkodę, termin 7 dni liczymy od jej usunięcia <span class="art">(art. 300<sup>34</sup> §&nbsp;1 KSH)</span>. O dokonanym wpisie albo o przyczynach, dla których nie mógł zostać dokonany, zawiadamiamy spółkę i osobę, która złożyła żądanie <span class="art">(art. 300<sup>34</sup> §&nbsp;7 KSH)</span>.</p></div>
+        </details>
+        <details>
+          <summary>Jak sprzedać akcje P.S.A.?<svg class="ik faq__znak" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg></summary>
+          <div class="faq__odp"><p>Umowę sprzedaży akcji trzeba zawrzeć co najmniej w formie dokumentowej, inaczej jest nieważna <span class="art">(art. 300<sup>36</sup> §&nbsp;4 KSH)</span>. Akt notarialny nie jest potrzebny: wystarczy dokument, z którego wynika, kto złożył oświadczenie, na przykład umowa podpisana odręcznie i zeskanowana albo podpisana elektronicznie. Kupujący staje się akcjonariuszem dopiero z chwilą wpisu do rejestru <span class="art">(art. 300<sup>37</sup> §&nbsp;1 KSH)</span>, dlatego po podpisaniu umowy złóż w portalu żądanie wpisu i dołącz do niego umowę.</p></div>
+        </details>
+        <details>
+          <summary>Czy możemy przenieść do Was rejestr od innego podmiotu?<svg class="ik faq__znak" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg></summary>
+          <div class="faq__odp"><p>Tak. Akcjonariusze podejmują uchwałę o wyborze naszej kancelarii <span class="art">(art. 300<sup>31</sup> §&nbsp;5 KSH)</span>, a spółka zawiera z nami umowę o prowadzenie rejestru. Dotychczasową umowę spółka może rozwiązać dopiero po zawarciu nowej, dzięki czemu rejestr ani przez chwilę nie zostaje bez podmiotu, który go prowadzi <span class="art">(art. 300<sup>32</sup> §&nbsp;2 KSH)</span>. Po przejęciu rejestr jest dostępny w portalu dla spółki i akcjonariuszy.</p></div>
+        </details>
+        <details>
+          <summary>Kto może prowadzić rejestr akcjonariuszy P.S.A.?<svg class="ik faq__znak" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg></summary>
+          <div class="faq__odp"><p>Rejestr akcjonariuszy prostej spółki akcyjnej może prowadzić notariusz prowadzący kancelarię notarialną w Polsce albo podmiot uprawniony do prowadzenia rachunków papierów wartościowych, na przykład dom maklerski <span class="art">(art. 300<sup>31</sup> §&nbsp;1 KSH)</span>. O wyborze decydują akcjonariusze w drodze uchwały <span class="art">(art. 300<sup>31</sup> §&nbsp;5 KSH)</span>.</p></div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta" aria-labelledby="cta-tytul">
+    <div class="wrap cta__in">
+      <div data-reveal>
+        <h2 id="cta-tytul">Złóż wniosek o prowadzenie rejestru</h2>
+        <p>Wniosek składa się w portalu. Dane spółki pobieramy z KRS, a dokumenty do podpisu przygotowuje kancelaria.</p>
+      </div>
+      <div class="cta__przyciski" data-reveal style="--d:1">
+        <a class="btn btn--bialy" href="portal.html#/zglos-sie">Złóż wniosek
+          <svg class="ik" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 5l5 5-5 5"/></svg></a>
+        <a class="btn btn--obrys" href="portal.html">Zaloguj się</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="stopka">
+  <div class="wrap">
+    <div class="stopka__siatka">
+      <div class="stopka__marka">
+        <img src="notariat.png" width="112" height="49" alt="Notariat Rzeczypospolitej">
+        <p class="stopka__nazwa">Kancelaria Notarialna Łukasz Kozon</p>
+        <p>ul. Bolesława Leśmiana 3/U10<br>80-280 Gdańsk<br><a href="mailto:biuro@notariusz.gdansk.pl">biuro@notariusz.gdansk.pl</a></p>
+      </div>
+      <div>
+        <p class="stopka__tyt">Strona</p>
+        <ul>
+          <li><a href="#oplaty">Opłaty</a></li>
+          <li><a href="#portal">Jak to działa</a></li>
+          <li><a href="#informacja">Informacja z rejestru</a></li>
+          <li><a href="#pytania">Pytania</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="stopka__tyt">Portal</p>
+        <ul>
+          <li><a href="portal.html#/zglos-sie">Złóż wniosek</a></li>
+          <li><a href="portal.html">Zaloguj się</a></li>
+          <li><a href="regulamin.html">Regulamin portalu</a></li>
+          <li><a href="polityka-prywatnosci.html">Polityka prywatności i cookies</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="stopka__dol">
+      <span>Rejestr akcjonariuszy prostych spółek akcyjnych prowadzi Kancelaria Notarialna Łukasz Kozon (art. 300<sup>31</sup> §&nbsp;1 KSH).</span>
+      <span>© 2026</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+  var d = document, ruch = d.documentElement.classList.contains('anim');
+
+  var nav = d.getElementById('nav');
+  function przewiniecie() { nav.classList.toggle('nav--przewiniety', window.scrollY > 8); }
+  przewiniecie();
+  window.addEventListener('scroll', przewiniecie, { passive: true });
+
+  var przycisk = d.getElementById('przycisk-menu'), menu = d.getElementById('menu-mobilne');
+  function ustawMenu(otwarte) {
+    przycisk.setAttribute('aria-expanded', String(otwarte));
+    menu.hidden = !otwarte;
+    nav.classList.toggle('nav--menu', otwarte);
+  }
+  przycisk.addEventListener('click', function () { ustawMenu(menu.hidden); });
+  menu.addEventListener('click', function (e) { if (e.target.closest('a')) ustawMenu(false); });
+  d.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menu.hidden) { ustawMenu(false); przycisk.focus(); } });
+
+  if (ruch) {
+    var obserwator = new IntersectionObserver(function (wpisy) {
+      wpisy.forEach(function (w) { if (w.isIntersecting) { w.target.classList.add('in'); obserwator.unobserve(w.target); } });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.15 });
+    d.querySelectorAll('[data-reveal]').forEach(function (el) { obserwator.observe(el); });
+  }
+})();
+</script>
+</body>
+</html>
