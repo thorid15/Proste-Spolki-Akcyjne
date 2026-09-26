@@ -283,3 +283,11 @@ zdarzenia.
 6. A6 — głosy zostają wyłącznie na uchwale o wyborze (wzór 03)?
 7. A7 — weryfikacja Dz.U. 2026 poz. 176 po Pana stronie albo odblokowanie ISAP.
 8. Plan etapów 1–6 — akceptacja.
+
+### Odpowiedzi notariusza (2026-09-26)
+- **Brak spółek w produkcji** — A3 bezprzedmiotowe; kolizja A1 (mieszane formaty w łańcuchu) znika.
+- **A2 → wariant (c):** kolumnę `data_zdarzenia` usuwamy z `psa_zdarzenia` i ze skrótu
+  (`lancuch.skrot`). Migracja przebudowuje tabelę łańcucha; przy niepustej tabeli migracja
+  przerywa się z komunikatem (bazę deweloperską trzeba odtworzyć), bez przeliczania hashy.
+- **A4:** `dokument_data` zostaje.
+- Otwarte: A1 (UTC — skoro brak danych, wdrażamy zgodnie z D-R01), A5, A6, A7, akceptacja planu.
