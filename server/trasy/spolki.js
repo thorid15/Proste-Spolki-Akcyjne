@@ -877,8 +877,8 @@ const WZORY_NA_ZADANIE = {
   '10': { nazwa: 'Klauzula do umowy zbycia akcji', typ: 'klauzula_zbycia' },
 };
 
-function stanAkcjonariatuNaDzis(spolkaId, dzis) {
-  const widok = widoki.widokStanu(db(), spolkaId, dzis, { rola: przepisy.ROLE_ODBIORCY.KANCELARIA });
+function stanAkcjonariatuNaDzis(spolkaId, dzis, { zGlosami = false } = {}) {
+  const widok = widoki.widokStanu(db(), spolkaId, dzis, { rola: przepisy.ROLE_ODBIORCY.KANCELARIA, zGlosami });
   return widok || { akcjonariusze: [], razem_akcji: 0 };
 }
 
@@ -891,7 +891,8 @@ function budujKontekstNaZadanie(kod, spolka, cialo) {
     case '02':
       return kontekstPisma.informacjaRodo({ spolka });
     case '03': {
-      const stan = stanAkcjonariatuNaDzis(spolka.id, dzis);
+      // D-R06/A6: liczba glosow - wylacznie na uchwale o wyborze notariusza.
+      const stan = stanAkcjonariatuNaDzis(spolka.id, dzis, { zGlosami: true });
       return kontekstPisma.uchwalaWyboru({ spolka, akcjonariusze: stan.akcjonariusze, uchwala: cialo.uchwala || {}, dzis });
     }
     case '08': {

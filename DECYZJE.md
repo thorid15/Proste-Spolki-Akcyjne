@@ -1009,6 +1009,29 @@
 
 ---
 
+### D-066 — Treść informacji z rejestru po porównaniu z KRN (D-R02–D-R07)
+
+- Data: 2026-09-26 (etap 2)
+- Obszar: informacja z rejestru / widok stanu
+- Decyzja: w tabeli emisji wyłącznie „Data zarejestrowania emisji” (`data_wpisu_krs`, art. 300³³
+  § 1 pkt 3 KSH), cena emisyjna z walutą emisji i opis emisji; bez podstawy prawnej i bez daty
+  emisji (ta zostaje na ekranie). W sekcji „Spółka” opis spółki. „Data zarejestrowania spółki” =
+  `data_utworzenia_spolki`, która przechowuje datę rejestracji w KRS (import `dataRejestracjiWKRS`)
+  — D-R02a spełnione bez zmian. Wiersz akcjonariusza = osoba + seria; w kolumnie „Numery i data
+  wpisu” zakresy z datą wpisu każdego z nich, scalane tylko w obrębie tego samego dnia wpisu
+  (np. `1–889, 990 (wpis 12.08.2026); 890–989 (wpis 25.09.2026)`); wiersze osoby obok siebie i
+  wiersz „Łącznie” (akcje, udział) dla osoby z kilkoma seriami. Osobny wiersz „Wpisano do rejestru”
+  usunięty (powtarzałby datę wpisu). Liczba głosów nie występuje w żadnej odpowiedzi API ani
+  dokumencie — wyjątek: uchwała o wyborze notariusza (wzór 03) prosi o nią opcją `zGlosami` (A6).
+  Stopka: „Sporządzono dd.mm.rrrr, godz. gg:mm”; dla dnia bieżącego „Stan na dd.mm.rrrr, godz. gg:mm”.
+- Skutek w kodzie: `server/logika/stan.js` (`grupy_wpisu`, kolejność wierszy wg osoby),
+  `server/widoki.js` (`grupy_wpisu`, `akcjonariusze_lacznie`, `glosy` tylko z `zGlosami`),
+  `server/logika/informacja-dokument.js`, `server/trasy/spolki.js` (wzór 03). Testy:
+  `testy/etap2-informacja.test.js`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-R02, D-R02a, D-R03/R06, D-R04/R05, D-R06, D-R07).
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

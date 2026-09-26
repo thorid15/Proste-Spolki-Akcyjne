@@ -997,11 +997,17 @@ function akcjonariatNaDzien(stan, data) {
         // kilka przedzialow, a te moga byc pokryte roznie, wiec zbieramy
         // WSZYSTKIE napotkane wartosci i skladamy z nich jedna nizej.
         pokrycia: new Set(),
+        wpisy: new Map(),
       });
     }
     const g = grupy.get(klucz);
     g.pokrycia.add(p.pokryta || null);
     g.zakresy.push({ nr_od: p.nr_od, nr_do: p.nr_do });
+    // D-R03: dzien wpisu kazdego zakresu (strefa kancelarii) - zakresy
+    // scalamy tylko w obrebie tego samego dnia wpisu.
+    const dzien = czas.dzienLokalny(p.data_od);
+    if (!g.wpisy.has(dzien)) g.wpisy.set(dzien, []);
+    g.wpisy.get(dzien).push({ nr_od: p.nr_od, nr_do: p.nr_do });
     if ((p.czesc_licznik ?? 1) !== (p.czesc_mianownik ?? 1)) {
       g.czesci_ulamkowe.push({
         nr: p.nr_od,
@@ -1024,8 +1030,11 @@ function akcjonariatNaDzien(stan, data) {
   const razemZakresy = n.normalizuj(przedzialy.map((p) => ({ nr_od: p.nr_od, nr_do: p.nr_do })));
   const razem = n.ilosc(razemZakresy);
 
-  const pozycje = [...grupy.values()].map(({ pokrycia, ...g }) => {
+  const pozycje = [...grupy.values()].map(({ pokrycia, wpisy, ...g }) => {
     const zakresy = n.normalizuj(g.zakresy);
+    const grupyWpisu = [...wpisy.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([dzien, z]) => ({ dzien_wpisu: dzien, zakresy: n.normalizuj(z) }));
     // Jedna wartosc dla calej pozycji tylko wtedy, gdy wszystkie przedzialy
     // sa zgodne. `null` znaczy NIEUSTALONE, a nie „niepokryte": brak uchwaly
     // zarzadu z art. 300(9) § 2 KSH to nie to samo, co stwierdzenie, ze
@@ -1081,6 +1090,7 @@ function akcjonariatNaDzien(stan, data) {
       // ani przechowywania), do formatowania „X 1/3" zamiast lossy decimala.
       udzial_ulamek: udzial,
       glosy,
+      grupy_wpisu: grupyWpisu,
       wymaga_przedstawiciela: wymagaPrzedstawiciela,
       wspolwlasnosc: g.czesci_ulamkowe.length > 0,
       pokryta,
@@ -1092,7 +1102,17 @@ function akcjonariatNaDzien(stan, data) {
     p.procent = razem === 0 ? 0 : (p.ilosc / razem) * 100;
   }
 
-  pozycje.sort((a, b) => b.ilosc - a.ilosc || String(a.seria).localeCompare(String(b.seria), 'pl'));
+  // D-R06: wiersze tej samej osoby obok siebie (wiersz „Lacznie” zamyka
+  // osobe z kilkoma seriami) - osoby wg lacznej liczby akcji, w obrebie
+  // osoby wg serii.
+  const razemOsoby = new Map();
+  for (const p of pozycje) razemOsoby.set(p.osoba_id, (razemOsoby.get(p.osoba_id) || 0) + p.ilosc);
+  pozycje.sort(
+    (a, b) =>
+      razemOsoby.get(b.osoba_id) - razemOsoby.get(a.osoba_id) ||
+      Number(a.osoba_id) - Number(b.osoba_id) ||
+      String(a.seria).localeCompare(String(b.seria), 'pl')
+  );
   return { pozycje, razem_akcji: razem };
 }
 

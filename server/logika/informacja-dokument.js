@@ -52,14 +52,6 @@ function dataPl(iso) {
   return `${d}.${m}.${r}`;
 }
 
-/** D-050/B12 - moment systemowego wpisu, z sekundami gdy `iso` je niesie. */
-function dataCzasPl(iso) {
-  const dzien = dataPl(iso);
-  if (!dzien) return null;
-  const godzina = czas.godzinaLokalna(iso, { sekundy: true });
-  return godzina ? `${dzien}, ${godzina}` : dzien;
-}
-
 function pusty(v) {
   return v === null || v === undefined || String(v).trim() === '';
 }
@@ -88,6 +80,29 @@ function liczbaAkcji(ilosc, udzialUlamek) {
   const cale = Math.floor(udzialUlamek.licznik / udzialUlamek.mianownik);
   const reszta = u.skroc({ licznik: udzialUlamek.licznik - cale * udzialUlamek.mianownik, mianownik: udzialUlamek.mianownik });
   return cale > 0 ? `${liczba(cale)} i ${u.opisz(reszta)}` : u.opisz(reszta);
+}
+
+/** Cena emisyjna z waluta emisji (kwoty w groszach - regula domenowa 5). */
+function cenaEmisyjna(grosze, waluta) {
+  if (grosze === null || grosze === undefined) return null;
+  const zl = Math.floor(Number(grosze) / 100);
+  const gr = String(Math.abs(Number(grosze)) % 100).padStart(2, '0');
+  return `${liczba(zl)},${gr} ${waluta || 'PLN'}`;
+}
+
+/**
+ * D-R03: numery akcji z data wpisu kazdego zakresu, np.
+ * „1–889, 990 (wpis 12.08.2026); 890–989 (wpis 25.09.2026)”. Zakresy
+ * scalone sa wylacznie w obrebie tego samego dnia wpisu.
+ */
+function numeryZDatami(pozycja) {
+  const grupy = pozycja.grupy_wpisu || [];
+  if (grupy.length === 0) return `<span class="numery">${esc(pozycja.numery)}</span>`;
+  return grupy
+    .map((g) =>
+      `<span class="grupa-wpisu"><span class="numery">${esc(g.numery)}</span> ` +
+        `<span class="data-wpisu">(wpis ${esc(dataPl(g.data_wpisu))})</span></span>`)
+    .join('');
 }
 
 /* ── Slowniki ─────────────────────────────────────────────── */
@@ -312,6 +327,12 @@ tbody tr { break-inside: avoid; }
   white-space: nowrap;
 }
 
+/* D-R06: wiersz „Łącznie” zamyka osobę z kilkoma seriami. */
+tr.lacznie td { border-top: 0.5pt solid var(--atrament-3); font-weight: 600; font-size: 9pt; }
+tr.lacznie td:first-child { font-weight: 500; color: var(--atrament-2); }
+.grupa-wpisu { display: block; white-space: nowrap; }
+.grupa-wpisu .data-wpisu { font-family: inherit; color: var(--atrament-2); font-size: 8pt; }
+
 /* ── Podsumowanie akcjonariatu ── */
 .suma {
   display: flex;
@@ -440,13 +461,18 @@ function tabela(kolumny, wiersze) {
       return `<th${klasaNaglowka}>${esc(nazwa)}</th>`;
     })
     .join('');
+  // Wiersz to tablica komorek albo `{ klasa, komorki }` (np. wiersz „Łącznie”).
   const cialo = wiersze
-    .map((w) => `<tr>${w
+    .map((wiersz) => {
+      const w = Array.isArray(wiersz) ? wiersz : wiersz.komorki;
+      const klasaWiersza = Array.isArray(wiersz) || !wiersz.klasa ? '' : ` class="${wiersz.klasa}"`;
+      return `<tr${klasaWiersza}>${w
       .map((komorka, i) => {
         const klasa = kolumny[i][1];
         return `<td${klasa ? ` class="${klasa}"` : ''}>${komorka}</td>`;
       })
-      .join('')}</tr>`)
+      .join('')}</tr>`;
+    })
     .join('');
   return `<table><thead><tr>${glowa}</tr></thead><tbody>${cialo}</tbody></table>`;
 }
@@ -517,35 +543,59 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
     else if (osoba && osoba.zamaskowane) opisy.push('adres zamieszkania zasłonięty');
     if (email) opisy.push(`${esc(email)} — zgoda na komunikację elektroniczną`);
     if (a.wspolwlasnosc) opisy.push('akcje we współwłasności ułamkowej');
-    if (a.wpisano_do_rejestru) {
-      opisy.push(`Wpisano do rejestru: ${esc(dataCzasPl(a.wpisano_do_rejestru))}`);
-    }
 
     return [
       `<div class="akcjonariusz-nazwa">${esc(osoba ? osoba.oznaczenie : 'nieznany')}`
         + `${obciazona ? ' <span class="znacznik">obciążone</span>' : ''}</div>`
         + opisy.map((o) => `<div class="akcjonariusz-wiersz">${o}</div>`).join(''),
       esc(a.seria || ZASLONA),
-      `<span class="numery">${esc(a.numery)}</span>`,
+      numeryZDatami(a),
       liczbaAkcji(a.ilosc, a.udzial_ulamek),
       procent(a.procent),
       esc(NAZWY_POKRYCIA[a.pokryta] || NAZWY_POKRYCIA.nieustalone),
     ];
   });
 
+  // D-R06: wiersz „Łącznie” po ostatniej serii osoby z kilkoma seriami
+  // (widok podaje wiersze tej samej osoby obok siebie).
+  const lacznieWgOsoby = new Map((stan.akcjonariusze_lacznie || []).map((l) => [l.osoba_id, l]));
+  const wierszeZLacznie = [];
+  stan.akcjonariusze.forEach((a, i) => {
+    wierszeZLacznie.push(wierszeAkcjonariuszy[i]);
+    const nastepny = stan.akcjonariusze[i + 1];
+    const l = lacznieWgOsoby.get(a.osoba_id);
+    if (l && (!nastepny || nastepny.osoba_id !== a.osoba_id)) {
+      wierszeZLacznie.push({
+        klasa: 'lacznie',
+        komorki: [
+          `Łącznie (serie ${esc(l.serie.join(', '))})`,
+          '',
+          '',
+          liczbaAkcji(l.ilosc, l.udzial_ulamek),
+          procent(l.procent),
+          '',
+        ],
+      });
+    }
+  });
+
   // ── art. 300(33) § 1 pkt 3–4: emisje ──
   const bilansWgKlucza = new Map((stan.bilans || []).map((b) => [b.emisja_klucz, b]));
   const wierszeEmisji = (stan.emisje || []).map((e) => {
     const b = bilansWgKlucza.get(e.klucz) || {};
+    // D-R02: tylko data zarejestrowania emisji (art. 300(33) § 1 pkt 3 KSH);
+    // D-R04/R05: cena emisyjna z waluta i opis emisji; bez podstawy prawnej.
     return [
       `<strong>${esc(e.seria)}</strong>`
-        + (pusty(e.tytul) ? '' : `<div class="akcjonariusz-wiersz">${esc(e.tytul)}</div>`),
+        + (pusty(e.tytul) ? '' : `<div class="akcjonariusz-wiersz">${esc(e.tytul)}</div>`)
+        + (pusty(e.opis) ? '' : `<div class="akcjonariusz-wiersz">${esc(e.opis)}</div>`),
       esc(NAZWY_RODZAJU_AKCJI[e.rodzaj_akcji] || e.rodzaj_akcji || 'zwykła'),
       `<span class="numery">${esc(e.zakres)}</span>`,
       liczba(e.ilosc),
       liczba(b.umorzone || 0),
       b.w_obrocie == null ? ZASLONA : liczba(b.w_obrocie),
-      dataPl(e.data_emisji) || ZASLONA,
+      esc(cenaEmisyjna(e.cena_emisyjna_grosze, e.waluta) || ZASLONA),
+      dataPl(e.data_wpisu_krs) || ZASLONA,
     ];
   });
 
@@ -567,6 +617,8 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
         ['NIP', spolka.nip, 'numery'],
         ['REGON', spolka.regon, 'numery'],
         ['Data zarejestrowania spółki', dataPl(spolka.data_utworzenia_spolki)],
+        // D-R05: opis spolki (pole „drukowany na raporcie”).
+        ['Opis', spolka.opis],
     ]),
       }),
 
@@ -583,7 +635,8 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
       tytul: 'Emisje i serie akcji',
       wnetrze: tabela(
         [['Seria'], ['Rodzaj akcji'], ['Numery', 'numery'], ['Wyemitowane', 'do-prawej'],
-         ['Umorzone', 'do-prawej'], ['Istniejące', 'do-prawej'], ['Data emisji']],
+         ['Umorzone', 'do-prawej'], ['Istniejące', 'do-prawej'], ['Cena emisyjna', 'do-prawej'],
+         ['Data zarejestrowania emisji']],
         wierszeEmisji
     ),
       pusto: 'Rejestr nie wykazuje emisji akcji.',
@@ -593,9 +646,9 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
       tytul: 'Akcjonariusze',
       wnetrze: wierszeAkcjonariuszy.length
         ? tabela(
-          [['Akcjonariusz'], ['Seria'], ['Numery', 'numery'], ['Akcje', 'do-prawej'],
+          [['Akcjonariusz'], ['Seria'], ['Numery i data wpisu'], ['Akcje', 'do-prawej'],
            ['Udział', 'do-prawej'], ['Pokrycie']],
-          wierszeAkcjonariuszy
+          wierszeZLacznie
         ) + `
         <div class="suma">
           <span>Akcje przypisane akcjonariuszom: <strong>${esc(liczba(stan.razem_akcji))}</strong></span>
@@ -669,9 +722,14 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
     </p>
   </div>` : ''}`;
 
+  // D-R07: sporzadzenie z godzina; dla dnia biezacego stan podajemy takze
+  // z godzina (to stan na chwile sporzadzenia, nie na koniec dnia).
   const sporzadzonoOpis = sporzadzono
-    ? `Sporządzono ${esc(String(sporzadzono).slice(0, 10).split('-').reverse().join('.'))}`
+    ? `Sporządzono ${esc(dataPl(sporzadzono))}, godz. ${esc(czas.godzinaLokalna(sporzadzono) || '—')}`
     : null;
+  const stanNaOpis = stan.stan_biezacy && stan.chwila_stanu
+    ? `${dataPl(stan.chwila_stanu)}, godz. ${czas.godzinaLokalna(stan.chwila_stanu)}`
+    : dataPl(data);
 
   return `<!doctype html>
 <html lang="pl">
@@ -721,8 +779,8 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
       }</div>
     </div>
     <div>
-      <div class="metryka-etykieta">Stan na dzień</div>
-      <div class="metryka-wartosc"><strong>${esc(dataPl(data))}</strong></div>
+      <div class="metryka-etykieta">Stan na</div>
+      <div class="metryka-wartosc"><strong>${esc(stanNaOpis)}</strong></div>
     </div>
     <div>
       <div class="metryka-etykieta">Odbiorca informacji</div>
@@ -733,7 +791,7 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
   ${tresc}
 
   <footer class="stopka-arkusza">
-    <span>${esc(spolka.nazwa)} — stan na ${esc(dataPl(data))}</span>
+    <span>${esc(spolka.nazwa)} — stan na ${esc(stanNaOpis)}</span>
     ${sporzadzonoOpis ? `<span>${sporzadzonoOpis}</span>` : ''}
   </footer>
 </article>

@@ -14,6 +14,7 @@ const maskowanie = require('./logika/maskowanie');
 const przepisy = require('./logika/przepisy');
 const rejestr = require('./rejestr');
 const n = require('./logika/numery');
+const u = require('./logika/ulamki');
 const czas = require('./pomocnicze/czas');
 
 const ROLE = przepisy.ROLE_ODBIORCY;
@@ -125,8 +126,16 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
       // Ulamek dokladny (Z-057) - do formatowania "X i N/D" zamiast lossy
       // decimala, gdy pozycja obejmuje ulamkowo wspoluprawniony numer.
       udzial_ulamek: p.udzial_ulamek,
-      glosy: p.glosy,
+      // D-R06: liczby glosow nie pokazujemy nigdzie - wyjatek to uchwala o
+      // wyborze notariusza (wzor 03), ktora prosi o nie jawnie (`zGlosami`).
+      ...(opcje.zGlosami ? { glosy: p.glosy } : {}),
       wymaga_przedstawiciela: p.wymaga_przedstawiciela,
+      // D-R03: zakresy numerow z data wpisu kazdego z nich.
+      grupy_wpisu: p.grupy_wpisu.map((g) => ({
+        data_wpisu: g.dzien_wpisu,
+        zakresy: g.zakresy,
+        numery: n.opisz(g.zakresy),
+      })),
       zakresy: p.zakresy,
       numery: n.opisz(p.zakresy),
       procent: p.procent,
@@ -151,6 +160,9 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
     })),
 
     razem_akcji: akcjonariat.razem_akcji,
+
+    // D-R06: wiersz „Łącznie” dla osoby z więcej niż jedną serią.
+    akcjonariusze_lacznie: lacznieNaOsobe(akcjonariat.pozycje),
 
     obciazenia: obciazenia.map((o) => ({
       klucz: o.klucz,
@@ -193,6 +205,30 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
 
     niezgodnosci: stanLogika.sprawdzBilans(stan),
   };
+}
+
+/**
+ * Sumy na osobe przez wszystkie serie - tylko dla osob z kilkoma seriami.
+ * Udzial sumujemy na ulamkach (regula domenowa 4a), procent z tych samych
+ * wartosci, co w wierszach.
+ */
+function lacznieNaOsobe(pozycje) {
+  const wynik = new Map();
+  for (const p of pozycje) {
+    const w = wynik.get(p.osoba_id) || {
+      osoba_id: p.osoba_id,
+      serie: [],
+      udzial_ulamek: { licznik: 0, mianownik: 1 },
+      procent: 0,
+    };
+    w.serie.push(p.seria);
+    w.udzial_ulamek = u.suma(w.udzial_ulamek, p.udzial_ulamek || { licznik: p.ilosc, mianownik: 1 });
+    w.procent += p.procent;
+    wynik.set(p.osoba_id, w);
+  }
+  return [...wynik.values()]
+    .filter((w) => w.serie.length > 1)
+    .map((w) => ({ ...w, ilosc: w.udzial_ulamek.licznik / w.udzial_ulamek.mianownik }));
 }
 
 /** Historia zdarzen spolki - os czasu w kokpicie. */
