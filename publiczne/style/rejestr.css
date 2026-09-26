@@ -1391,7 +1391,9 @@ select {
   padding: 0;
   border: none;
   background: none;
-  color: var(--rejestr-3);
+  /* --rejestr-3 jest dla akcentow na CIEMNYM tle (4,07:1 - ponizej WCAG AA
+     na bialym); ten przycisk stoi na --karta/--papier, wiec --rejestr-2. */
+  color: var(--rejestr-2);
   font-size: var(--st-11);
   cursor: pointer;
 }

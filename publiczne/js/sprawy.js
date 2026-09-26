@@ -97,6 +97,7 @@ function EkranKolejkiSpraw({ spolkaId }) {
       <div className="pasek-narzedzi">
         <Szukajka wartosc={szukaj} przyZmianie={ustawSzukaj} placeholder="Szukaj po spółce albo rodzaju zdarzenia…" />
         <select
+          aria-label="Filtruj sprawy wg stanu"
           value={pokazZakonczone ? 'zakonczone' : 'wtoku'}
           onChange={(z) => ustawPokazZakonczone(z.target.value === 'zakonczone')}
         >
