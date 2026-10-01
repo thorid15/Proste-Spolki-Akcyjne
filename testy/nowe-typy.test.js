@@ -8,6 +8,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const czas = require('../server/pomocnicze/czas');
 
 const { bazaTestowa, dodajSpolke, dodajOsobe, wpis } = require('./pomoc');
 const rejestr = require('../server/rejestr');
@@ -197,7 +198,7 @@ test('uprawnienie: ustanowienie i wykreslenie', () => {
 
   stan = stanBiezacy(db, spolka);
   assert.equal(stan.uprawnienia.filter((u) => u.status === 'aktywne').length, 0);
-  assert.equal(stan.uprawnienia[0].data_wykreslenia, '2026-03-01');
+  assert.equal(czas.dzienLokalny(stan.uprawnienia[0].data_wykreslenia), '2026-03-01');
 });
 
 test('uprawnienie wymaga tytulu albo tresci', () => {
@@ -367,7 +368,6 @@ test('sprostowanie z tresc zamiast koryguje bledna emisje', () => {
     uzasadnienie: 'Błędna liczba akcji — powinno być 90, nie 100.',
     zamiast: { typ: 'emisja', dane: { seria: 'A', ilosc: 90 } },
     autor: 'Test',
-    data_zdarzenia: '2026-01-10',
   });
 
   const stan = stanBiezacy(db, spolka);

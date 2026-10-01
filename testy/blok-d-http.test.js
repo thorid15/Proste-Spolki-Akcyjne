@@ -236,11 +236,11 @@ async function przygotujDwieSpolki() {
     .run(czas.terazIso()).lastInsertRowid;
 
   const emisja = rejestr.dokonajWpisu(db(), {
-    spolkaId: Number(spolkaAId), typ: 'emisja', data_zdarzenia: '2026-01-10',
+    spolkaId: Number(spolkaAId), typ: 'emisja',
     wejscie: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
   });
   rejestr.dokonajWpisu(db(), {
-    spolkaId: Number(spolkaAId), typ: 'objecie', data_zdarzenia: '2026-01-10',
+    spolkaId: Number(spolkaAId), typ: 'objecie',
     wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: Number(osobaAId), ilosc: 100 }] }, autor: 'Test',
   });
 
@@ -369,11 +369,11 @@ test('D4: odczyt rejestru przez role "spolka" (dane niezamaskowane) zostawia JED
       .run(czas.terazIso()).lastInsertRowid
   );
   const emisja = rejestr.dokonajWpisu(db(), {
-    spolkaId, typ: 'emisja', data_zdarzenia: '2026-01-10',
+    spolkaId, typ: 'emisja',
     wejscie: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
   });
   rejestr.dokonajWpisu(db(), {
-    spolkaId, typ: 'objecie', data_zdarzenia: '2026-01-10',
+    spolkaId, typ: 'objecie',
     wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: osobaId, ilosc: 100 }] }, autor: 'Test',
   });
 
@@ -419,11 +419,11 @@ test('D4: odczyt rejestru przez role "akcjonariusz" (dane w pelni zamaskowane) n
     .prepare(`INSERT INTO psa_osoby (typ, nazwisko, imie, pesel, aml_status, utworzono) VALUES ('fizyczna', 'Drugi', 'Adam', '85030512345', 'wykonane', ?)`)
     .run(czas.terazIso()).lastInsertRowid;
   const emisja = rejestr.dokonajWpisu(db(), {
-    spolkaId: spolkaAId, typ: 'emisja', data_zdarzenia: '2026-02-10',
+    spolkaId: spolkaAId, typ: 'emisja',
     wejscie: { seria: 'B', ilosc: 50, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
   });
   rejestr.dokonajWpisu(db(), {
-    spolkaId: spolkaAId, typ: 'objecie', data_zdarzenia: '2026-02-10',
+    spolkaId: spolkaAId, typ: 'objecie',
     wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: Number(drugiId), ilosc: 50 }] }, autor: 'Test',
   });
 

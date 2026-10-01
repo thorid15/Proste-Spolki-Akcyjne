@@ -24,6 +24,7 @@
 const n = require('./numery');
 const u = require('./ulamki');
 const przepisy = require('./przepisy');
+const czas = require('../pomocnicze/czas');
 
 const K = przepisy.KATEGORIE_AKCJI;
 
@@ -39,14 +40,14 @@ class BladStanu extends Error {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Zdarzenia stosujemy w kolejnosci (data_zdarzenia, id). `id` rosnie z data
- * wpisu, wiec przy tej samej dacie zdarzenia decyduje kolejnosc wpisania.
- * Walidacja nie dopuszcza zdarzenia z data wczesniejsza niz ostatnie
- * zdarzenie na tych samych akcjach, wiec porzadek jest spojny.
+ * D-R01: zdarzenia stosujemy w kolejnosci (data_wpisu, id). Chwila wpisu
+ * jest jedyna osia czasu rejestru (art. 300(37) § 1 i art. 300(38) § 1 KSH);
+ * `id` rozstrzyga wpisy z ta sama sekunda. Walidacja nie dopuszcza wpisu
+ * wczesniejszego niz ostatni wpis spolki, wiec porzadek jest spojny.
  */
 function porownajZdarzenia(a, b) {
-  const da = String(a.data_zdarzenia || '');
-  const db = String(b.data_zdarzenia || '');
+  const da = String(a.data_wpisu || '');
+  const db = String(b.data_wpisu || '');
   if (da !== db) return da < db ? -1 : 1;
   return Number(a.id) - Number(b.id);
 }
@@ -364,7 +365,7 @@ const HANDLERY = {
       ilosc: Number(d.ilosc),
       cena_emisyjna_grosze: d.cena_emisyjna_grosze == null ? null : Number(d.cena_emisyjna_grosze),
       waluta: d.waluta || przepisy.WALUTA_DOMYSLNA,
-      data_emisji: d.data_emisji || zdarzenie.data_zdarzenia,
+      data_emisji: d.data_emisji || czas.dzienLokalny(zdarzenie.data_wpisu),
       status: przepisy.STATUSY_EMISJI.AKTYWNA,
       opis: d.opis || null,
       uwagi: d.uwagi || null,
@@ -381,7 +382,7 @@ const HANDLERY = {
       kategoria: K.NIEOBJETA,
       osobaId: null,
       zakresy: zakres,
-      data: zdarzenie.data_zdarzenia,
+      data: zdarzenie.data_wpisu,
       zdarzenieId: Number(zdarzenie.id),
     });
   },
@@ -396,7 +397,7 @@ const HANDLERY = {
         doKategorii: K.AKCJONARIUSZ,
         doOsoby: Number(poz.osoba_id),
         zakresy: poz.zakresy,
-        data: zdarzenie.data_zdarzenia,
+        data: zdarzenie.data_wpisu,
         zdarzenieId: Number(zdarzenie.id),
         tytul: 'objęcie akcji',
         // art. 300(33) § 1 pkt 9 KSH - wzmianka o pokryciu; NULL (nieustalone)
@@ -417,7 +418,7 @@ const HANDLERY = {
         doKategorii: K.AKCJONARIUSZ,
         doOsoby: Number(poz.nabywca_osoba_id),
         zakresy: poz.zakresy,
-        data: zdarzenie.data_zdarzenia,
+        data: zdarzenie.data_wpisu,
         zdarzenieId: Number(zdarzenie.id),
         tytul: d.tytul_prawny || 'przeniesienie akcji',
       });
@@ -435,7 +436,7 @@ const HANDLERY = {
         doKategorii: K.UMORZONA,
         doOsoby: null,
         zakresy: poz.zakresy,
-        data: zdarzenie.data_zdarzenia,
+        data: zdarzenie.data_wpisu,
         zdarzenieId: Number(zdarzenie.id),
         tytul: 'umorzenie',
       });
@@ -467,7 +468,7 @@ const HANDLERY = {
         doKategorii: K.UNIEWAZNIONA,
         doOsoby: null,
         zakresy: poz.zakresy,
-        data: zdarzenie.data_zdarzenia,
+        data: zdarzenie.data_wpisu,
         zdarzenieId: Number(zdarzenie.id),
         tytul: 'unieważnienie orzeczeniem sądu',
       });
@@ -513,7 +514,7 @@ const HANDLERY = {
       kategoria: K.AKCJONARIUSZ,
       osobaId: zbywcaId,
       zakresy: [{ nr_od: nr, nr_do: nr }],
-      data: zdarzenie.data_zdarzenia,
+      data: zdarzenie.data_wpisu,
       zdarzenieId: Number(zdarzenie.id),
     });
     const zostajeZbywcy = u.roznica(zbywcaMa, czesc);
@@ -523,7 +524,7 @@ const HANDLERY = {
         kategoria: K.AKCJONARIUSZ,
         osobaId: zbywcaId,
         zakresy: [{ nr_od: nr, nr_do: nr }],
-        data: zdarzenie.data_zdarzenia,
+        data: zdarzenie.data_wpisu,
         zdarzenieId: Number(zdarzenie.id),
         tytul: 'pozostała część po przeniesieniu ułamka',
         czesc: zostajeZbywcy,
@@ -538,7 +539,7 @@ const HANDLERY = {
         kategoria: K.AKCJONARIUSZ,
         osobaId: nabywcaId,
         zakresy: [{ nr_od: nr, nr_do: nr }],
-        data: zdarzenie.data_zdarzenia,
+        data: zdarzenie.data_wpisu,
         zdarzenieId: Number(zdarzenie.id),
       });
     }
@@ -547,7 +548,7 @@ const HANDLERY = {
       kategoria: K.AKCJONARIUSZ,
       osobaId: nabywcaId,
       zakresy: [{ nr_od: nr, nr_do: nr }],
-      data: zdarzenie.data_zdarzenia,
+      data: zdarzenie.data_wpisu,
       zdarzenieId: Number(zdarzenie.id),
       tytul: d.tytul_prawny || 'przeniesienie ułamkowej części akcji',
       czesc: u.suma(nabywcaMialJuz, czesc),
@@ -609,7 +610,7 @@ const HANDLERY = {
       blokuje_rozporzadzanie: d.blokuje_rozporzadzanie ? 1 : 0,
       opis: d.opis || null,
       zdarzenie_ustanowienia_id: Number(zdarzenie.id),
-      data_od: zdarzenie.data_zdarzenia,
+      data_od: zdarzenie.data_wpisu,
       zdarzenie_wykreslenia_id: null,
       data_do: null,
     });
@@ -630,7 +631,7 @@ const HANDLERY = {
       blokuje_rozporzadzanie: 1,
       opis: d.opis || null,
       zdarzenie_ustanowienia_id: Number(zdarzenie.id),
-      data_od: zdarzenie.data_zdarzenia,
+      data_od: zdarzenie.data_wpisu,
       zdarzenie_wykreslenia_id: null,
       data_do: null,
     });
@@ -672,7 +673,7 @@ const HANDLERY = {
       const cel = stan.uprawnienia.find((u) => u.klucz === Number(d.wykresla_zdarzenie_id));
       if (cel) {
         cel.status = 'wykreslone';
-        cel.data_wykreslenia = zdarzenie.data_zdarzenia;
+        cel.data_wykreslenia = zdarzenie.data_wpisu;
       }
       return;
     }
@@ -684,7 +685,7 @@ const HANDLERY = {
       osoba_id: d.osoba_id == null ? null : Number(d.osoba_id),
       tytul: d.tytul || null,
       tresc: d.tresc || null,
-      data_ustanowienia: zdarzenie.data_zdarzenia,
+      data_ustanowienia: zdarzenie.data_wpisu,
       zdarzenie_id: Number(zdarzenie.id),
       status: 'aktywne',
       data_wykreslenia: null,
@@ -696,7 +697,7 @@ const HANDLERY = {
       const cel = stan.ograniczenia.find((o) => o.klucz === Number(d.wykresla_zdarzenie_id));
       if (cel) {
         cel.status = 'wykreslone';
-        cel.data_wykreslenia = zdarzenie.data_zdarzenia;
+        cel.data_wykreslenia = zdarzenie.data_wpisu;
       }
       return;
     }
@@ -727,7 +728,7 @@ function zamknijObciazenie(stan, zdarzenie, d) {
       `Zdarzenie #${zdarzenie.id} wykreśla obciążenie, którego nie ma w rejestrze (zdarzenie #${klucz}).`
     );
   }
-  cel.data_do = zdarzenie.data_zdarzenia;
+  cel.data_do = zdarzenie.data_wpisu;
   cel.zdarzenie_wykreslenia_id = Number(zdarzenie.id);
 }
 
@@ -740,6 +741,7 @@ function zamknijObciazenie(stan, zdarzenie, d) {
 const TYPY_BEZ_SKUTKU = new Set([
   'zmiana_danych_akcjonariusza',
   'zmiana_danych_spolki',
+  'przekazanie_rejestru',
   'zobowiazanie',
   'zdarzenie_inne',
 ]);
@@ -758,8 +760,7 @@ const TYPY_BEZ_SKUTKU = new Set([
  *      `klucz: Number(zdarzenie.id)`), musi zostac STABILNY - pozniejsze
  *      zdarzenia (np. `objecie`) odwoluja sie do niego przez ID PIERWOTNEGO
  *      zdarzenia, nie sprostowania;
- *   2. zdarzenia miedzy oryginalem a sprostowaniem (ktore czesto ma pozniejszy
- *      ID przy tej samej `data_zdarzenia`) musza "widziec" juz skorygowana
+ *   2. zdarzenia miedzy oryginalem a sprostowaniem musza "widziec" juz skorygowana
  *      strukture, inaczej korekta przychodzi za pozno w kolejnosci przetwarzania.
  * Sprostowanie BEZ `zamiast` jest pelnym wycofaniem zdarzenia pierwotnego
  * (nie ma czym go zastapic). Nic nie jest kasowane - wszystkie zdarzenia
@@ -932,23 +933,33 @@ function sprawdzBilans(stan) {
 // Widoki stanu
 // ─────────────────────────────────────────────────────────────
 
-/** Przedzialy obowiazujace na dzien `data` (YYYY-MM-DD). */
-function przedzialyNaDzien(stan, data) {
-  // `data === null` - bez filtra po dacie: bierzemy doslownie to, co jest
-  // otwarte w `stan` (uzywane przy „stan na" z dokladnoscia do minuty -
-  // sekcja 2.3 SESJA-PSA-5-INTERFEJS.md - gdzie `stan` juz jest zbudowany
-  // WYLACZNIE ze zdarzen wpisanych do zadanej chwili, wiec dodatkowy filtr
-  // po `data_zdarzenia` bylby drugim, kolidujacym wymiarem czasu).
-  if (data === null) return otwarte(stan);
-  const d = String(data).slice(0, 10);
-  return stan.przedzialy.filter((p) => p.data_od <= d && (p.data_do === null || p.data_do > d));
+/**
+ * Granica czasu filtra (D-R01): `RRRR-MM-DD` = koniec tego dnia (23:59:59
+ * czasu kancelarii), chwila = ta chwila; wynik w UTC, porownywalny tekstowo
+ * z `data_od`/`data_do` (znaczniki `data_wpisu`).
+ */
+function granica(data) {
+  const t = String(data);
+  return czas.poprawnaData(t) ? czas.koniecDniaUtc(t) : czas.chwilaUtc(t);
 }
 
-/** Obciazenia obowiazujace na dzien `data` (`null` = bez filtra, patrz `przedzialyNaDzien`). */
+/**
+ * Przedzialy obowiazujace na dzien albo chwile `data`. `null` - bez filtra:
+ * to, co jest otwarte w `stan`. Widoki (`widoki.widokStanu`) odtwarzaja stan
+ * WYLACZNIE ze zdarzen wpisanych do zadanej chwili i wolaja z `null`, zeby
+ * informacja na dzien D nie zalezala od tego, kiedy ja sporzadzono.
+ */
+function przedzialyNaDzien(stan, data) {
+  if (data === null || data === undefined) return otwarte(stan);
+  const g = granica(data);
+  return stan.przedzialy.filter((p) => p.data_od <= g && (p.data_do === null || p.data_do > g));
+}
+
+/** Obciazenia obowiazujace na dzien albo chwile `data` (`null` = bez filtra). */
 function obciazeniaNaDzien(stan, data) {
-  if (data === null) return stan.obciazenia.filter((o) => o.data_do === null);
-  const d = String(data).slice(0, 10);
-  return stan.obciazenia.filter((o) => o.data_od <= d && (o.data_do === null || o.data_do > d));
+  if (data === null || data === undefined) return stan.obciazenia.filter((o) => o.data_do === null);
+  const g = granica(data);
+  return stan.obciazenia.filter((o) => o.data_od <= g && (o.data_do === null || o.data_do > g));
 }
 
 /**
@@ -987,11 +998,17 @@ function akcjonariatNaDzien(stan, data) {
         // kilka przedzialow, a te moga byc pokryte roznie, wiec zbieramy
         // WSZYSTKIE napotkane wartosci i skladamy z nich jedna nizej.
         pokrycia: new Set(),
+        wpisy: new Map(),
       });
     }
     const g = grupy.get(klucz);
     g.pokrycia.add(p.pokryta || null);
     g.zakresy.push({ nr_od: p.nr_od, nr_do: p.nr_do });
+    // D-R03: dzien wpisu kazdego zakresu (strefa kancelarii) - zakresy
+    // scalamy tylko w obrebie tego samego dnia wpisu.
+    const dzien = czas.dzienLokalny(p.data_od);
+    if (!g.wpisy.has(dzien)) g.wpisy.set(dzien, []);
+    g.wpisy.get(dzien).push({ nr_od: p.nr_od, nr_do: p.nr_do });
     if ((p.czesc_licznik ?? 1) !== (p.czesc_mianownik ?? 1)) {
       g.czesci_ulamkowe.push({
         nr: p.nr_od,
@@ -1014,8 +1031,11 @@ function akcjonariatNaDzien(stan, data) {
   const razemZakresy = n.normalizuj(przedzialy.map((p) => ({ nr_od: p.nr_od, nr_do: p.nr_do })));
   const razem = n.ilosc(razemZakresy);
 
-  const pozycje = [...grupy.values()].map(({ pokrycia, ...g }) => {
+  const pozycje = [...grupy.values()].map(({ pokrycia, wpisy, ...g }) => {
     const zakresy = n.normalizuj(g.zakresy);
+    const grupyWpisu = [...wpisy.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([dzien, z]) => ({ dzien_wpisu: dzien, zakresy: n.normalizuj(z) }));
     // Jedna wartosc dla calej pozycji tylko wtedy, gdy wszystkie przedzialy
     // sa zgodne. `null` znaczy NIEUSTALONE, a nie „niepokryte": brak uchwaly
     // zarzadu z art. 300(9) § 2 KSH to nie to samo, co stwierdzenie, ze
@@ -1071,6 +1091,7 @@ function akcjonariatNaDzien(stan, data) {
       // ani przechowywania), do formatowania „X 1/3" zamiast lossy decimala.
       udzial_ulamek: udzial,
       glosy,
+      grupy_wpisu: grupyWpisu,
       wymaga_przedstawiciela: wymagaPrzedstawiciela,
       wspolwlasnosc: g.czesci_ulamkowe.length > 0,
       pokryta,
@@ -1082,7 +1103,17 @@ function akcjonariatNaDzien(stan, data) {
     p.procent = razem === 0 ? 0 : (p.ilosc / razem) * 100;
   }
 
-  pozycje.sort((a, b) => b.ilosc - a.ilosc || String(a.seria).localeCompare(String(b.seria), 'pl'));
+  // D-R06: wiersze tej samej osoby obok siebie (wiersz „Lacznie” zamyka
+  // osobe z kilkoma seriami) - osoby wg lacznej liczby akcji, w obrebie
+  // osoby wg serii.
+  const razemOsoby = new Map();
+  for (const p of pozycje) razemOsoby.set(p.osoba_id, (razemOsoby.get(p.osoba_id) || 0) + p.ilosc);
+  pozycje.sort(
+    (a, b) =>
+      razemOsoby.get(b.osoba_id) - razemOsoby.get(a.osoba_id) ||
+      Number(a.osoba_id) - Number(b.osoba_id) ||
+      String(a.seria).localeCompare(String(b.seria), 'pl')
+  );
   return { pozycje, razem_akcji: razem };
 }
 
@@ -1121,21 +1152,6 @@ function bilansNaDzien(stan, data) {
   });
 }
 
-/** Data ostatniego zdarzenia dotykajacego wskazanych akcji - kontrola chronologii. */
-function ostatniaDataNaAkcjach(stan, emisjaKlucz, zakresy) {
-  let max = null;
-  const dotyka = (p) =>
-    p.emisja_klucz === emisjaKlucz &&
-    n.nakladaja([{ nr_od: p.nr_od, nr_do: p.nr_do }], zakresy);
-  for (const p of stan.przedzialy) {
-    if (!dotyka(p)) continue;
-    for (const d of [p.data_od, p.data_do]) {
-      if (d && (max === null || d > max)) max = d;
-    }
-  }
-  return max;
-}
-
 module.exports = {
   BladStanu,
   odtworzStan,
@@ -1144,7 +1160,6 @@ module.exports = {
   obciazeniaNaDzien,
   akcjonariatNaDzien,
   bilansNaDzien,
-  ostatniaDataNaAkcjach,
   pula,
   ulamekOsobyNaNumerze,
   otwarte,

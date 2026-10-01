@@ -13,6 +13,7 @@
  * notatki AML, dane kontaktowe innych akcjonariuszy, hashe lancucha.
  */
 
+const czas = require('../pomocnicze/czas');
 const u = require('./ulamki');
 
 function esc(tekst) {
@@ -27,7 +28,7 @@ function esc(tekst) {
 
 function dataPl(iso) {
   if (!iso) return '—';
-  const [r, m, d] = String(iso).slice(0, 10).split('-');
+  const [r, m, d] = String(czas.dzienLokalny(iso)).split('-');
   return `${d}.${m}.${r}`;
 }
 
@@ -121,10 +122,8 @@ function zawiadomienieWpis({ kancelaria, spolka, zdarzenie, typZdarzenie, podsum
     <table style="width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px;">
       <tr><td style="padding: 4px 0; color: ${ATRAMENT_2}; width: 160px;">Rodzaj zdarzenia</td>
           <td style="padding: 4px 0;">${esc(typZdarzenie.nazwa)}</td></tr>
-      <tr><td style="padding: 4px 0; color: ${ATRAMENT_2};">Data zdarzenia</td>
-          <td style="padding: 4px 0;">${dataPl(zdarzenie.data_zdarzenia)}</td></tr>
       <tr><td style="padding: 4px 0; color: ${ATRAMENT_2};">Data i godzina wpisu</td>
-          <td style="padding: 4px 0;">${esc(zdarzenie.data_wpisu)}</td></tr>
+          <td style="padding: 4px 0;">${dataPl(zdarzenie.data_wpisu)}, godz. ${esc(czas.godzinaLokalna(zdarzenie.data_wpisu) || '—')}</td></tr>
     </table>
     <p>${esc(podsumowanie || 'Treść wpisu opisana jest w rejestrze akcjonariuszy spółki.')}</p>
     <p style="margin-top: 24px;">Z poważaniem,<br>${esc(kancelaria.nazwa)}</p>

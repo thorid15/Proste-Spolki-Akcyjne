@@ -101,11 +101,11 @@ async function przygotujSpolke() {
   });
 
   const [, emisja] = await zapytaj('POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'emisja', data_zdarzenia: '2026-01-10',
+    typ: 'emisja',
     dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
   });
   await zapytaj('POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'objecie', data_zdarzenia: '2026-01-10',
+    typ: 'objecie',
     dane: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: kowalski.osoba.id, ilosc: 100 }] },
   });
 
@@ -237,14 +237,20 @@ test('pelny cykl sprawy: nowa → weryfikacja → wpisana, z zawiadomieniem bez 
   assert.equal(stWer, 200);
 
   const [stPod, podgladOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/podglad`, {
-    data_zdarzenia: '2026-02-01',
     dane: { emisja_zdarzenie_id: emisjaZdarzenieId, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
   });
   assert.equal(stPod, 200);
   assert.equal(podgladOdp.dopuszczalne, true);
 
+  // D-R01: daty wpisu nie da sie podac ani antydatowac - backend odmawia.
+  const [stAntydata, antydata] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {
+    data_wpisu: '2020-01-01T10:00:00Z',
+    dane: { emisja_zdarzenie_id: emisjaZdarzenieId, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
+  });
+  assert.ok(stAntydata >= 400 && stAntydata < 500, `oczekiwano odmowy, jest ${stAntydata}`);
+  assert.match(JSON.stringify(antydata), /nadaje system/);
+
   const [stWpis, wpisOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {
-    data_zdarzenia: '2026-02-01',
     dane: { emisja_zdarzenie_id: emisjaZdarzenieId, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
   });
   assert.equal(stWpis, 201);
@@ -294,7 +300,6 @@ test('nie mozna dokonac wpisu przed przejsciem sprawy do weryfikacji', async () 
     spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'email', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
   });
   const [status, odp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/wpisz`, {
-    data_zdarzenia: '2026-02-01',
     dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: kowalski.id, ilosc: 10 }] },
   });
   assert.equal(status, 422);
@@ -367,7 +372,6 @@ test('zajecie (z urzedu) zaklada sprawe od razu w weryfikacji, bez zadajacego', 
   assert.equal(sprawaOdp.sprawa.stan, 'weryfikacja', 'z urzedu pomija fazę „nowa”');
 
   const [stWpis, wpisOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/wpisz`, {
-    data_zdarzenia: '2026-02-01',
     dane: {
       emisja_zdarzenie_id: emisjaZdarzenieId,
       akcjonariusz_osoba_id: kowalski.id,
@@ -407,7 +411,6 @@ test('AML jako bramka: niemozliwe blokuje wpis takze w workflow sprawy', async (
   await zapytaj('PATCH', `/api/psa/sprawy/${sprawaOdp.sprawa.id}`, { akcja: 'weryfikuj' });
 
   const [status, odp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/wpisz`, {
-    data_zdarzenia: '2026-02-01',
     dane: {
       emisja_zdarzenie_id: emisjaZdarzenieId, zbywca_osoba_id: kowalski.id,
       pozycje: [{ nabywca_osoba_id: podejrzany.osoba.id, ilosc: 10 }],

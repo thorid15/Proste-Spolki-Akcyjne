@@ -81,7 +81,7 @@ function posrednikBledow(blad, zad, odp, dalej) {
       ostrzezenia: blad.ostrzezenia || [],
     });
   }
-  if (['BladZakresu', 'BladKreatora', 'BladStanu', 'BladTerminu'].includes(blad.name)) {
+  if (['BladZakresu', 'BladKreatora', 'BladStanu', 'BladTerminu', 'BladOsobyDzialajacej'].includes(blad.name)) {
     return odp.status(422).json({ blad: blad.message, bledy: [blad.message] });
   }
   if (blad.code === 'SQLITE_CONSTRAINT_UNIQUE') {

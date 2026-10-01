@@ -125,7 +125,6 @@ test('wpis odplatny przez sprawe nalicza oplate typu wpis', async () => {
   await zapytaj(ciastkoAdmina, 'PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'weryfikuj' });
 
   const [status, wpisOdp] = await zapytaj(ciastkoAdmina, 'POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {
-    data_zdarzenia: '2026-02-01',
     dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-02-05' },
   });
   assert.equal(status, 201);
@@ -141,10 +140,10 @@ test('wpis odplatny przez sprawe nalicza oplate typu wpis', async () => {
 test('zajecie z urzedu (wolne od oplat) NIE nalicza oplaty', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
   const emisja = await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'emisja', data_zdarzenia: '2026-01-01', dane: { seria: 'A', ilosc: 50, data_wpisu_krs: '2026-01-01' },
+    typ: 'emisja', dane: { seria: 'A', ilosc: 50, data_wpisu_krs: '2026-01-01' },
   });
   await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'objecie', data_zdarzenia: '2026-01-01',
+    typ: 'objecie',
     dane: { emisja_zdarzenie_id: emisja[1].zdarzenie.id, pozycje: [{ osoba_id: kowalski.id, ilosc: 50 }] },
   });
 
@@ -156,7 +155,6 @@ test('zajecie z urzedu (wolne od oplat) NIE nalicza oplaty', async () => {
     spolka_id: spolkaId, typ_zdarzenia: 'zajecie', zrodlo: 'z_urzedu',
   });
   const [status, wpisOdp] = await zapytaj(ciastkoAdmina, 'POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/wpisz`, {
-    data_zdarzenia: '2026-02-01',
     dane: { emisja_zdarzenie_id: emisja[1].zdarzenie.id, akcjonariusz_osoba_id: kowalski.id, osoba_id: komornik.osoba.id, ilosc: 10 },
   });
   assert.equal(status, 201);
@@ -169,7 +167,7 @@ test('zajecie z urzedu (wolne od oplat) NIE nalicza oplaty', async () => {
 test('migracja "stan otwarcia" (sciezka bezposrednia) NIE nalicza oplaty', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
   await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'emisja', data_zdarzenia: '2020-01-01', dane: { seria: 'A', ilosc: 100 },
+    typ: 'emisja', dane: { seria: 'A', ilosc: 100 },
   });
   const [, listaOdp] = await zapytaj(ciastkoAdmina, 'GET', `/api/psa/oplaty?spolka_id=${spolkaId}`);
   assert.equal(listaOdp.oplaty.length, 0, 'wpis historyczny spoza workflow spraw nie jest odpłatny');
@@ -190,11 +188,11 @@ test('Z-108/P-007: otworz-rejestr nalicza 1200 zl (prowadzenie) + 100 zl (wpis) 
   const cialo = {
     zdarzenia: [
       {
-        typ: 'emisja', klucz_tymczasowy: 'emisja-A', data_zdarzenia: '2026-01-10',
+        typ: 'emisja', klucz_tymczasowy: 'emisja-A',
         dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
       },
       {
-        typ: 'objecie', data_zdarzenia: '2026-01-10',
+        typ: 'objecie',
         dane: { emisja_zdarzenie_id: { __odwolanie_do_partii: 'emisja-A' }, pozycje: [{ osoba_id: osobaOdp.osoba.id, ilosc: 100 }] },
       },
     ],
@@ -257,10 +255,10 @@ test('eksport CSV zwraca text/csv z naglowkiem BOM (Excel PL) i poprawna trescia
 test('portal: zamowienie informacji z rejestru nalicza oplate', async () => {
   const { spolkaId, kowalski } = await przygotujSpolke();
   const emisja = await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'emisja', data_zdarzenia: '2026-01-01', dane: { seria: 'A', ilosc: 20, data_wpisu_krs: '2026-01-01' },
+    typ: 'emisja', dane: { seria: 'A', ilosc: 20, data_wpisu_krs: '2026-01-01' },
   });
   await zapytaj(ciastkoAdmina, 'POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'objecie', data_zdarzenia: '2026-01-01',
+    typ: 'objecie',
     dane: { emisja_zdarzenie_id: emisja[1].zdarzenie.id, pozycje: [{ osoba_id: kowalski.id, ilosc: 20 }] },
   });
 

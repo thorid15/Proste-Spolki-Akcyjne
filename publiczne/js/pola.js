@@ -54,7 +54,7 @@ function PoleAdres({ etykieta = 'Adres', dane, przyZmianie, prefiks = '', bledy,
   const nrDomu = p('nr_domu');
   const nrLokalu = p('nr_lokalu');
   const miejscowosc = p('miejscowosc');
-  const krajPole = p('kraj', { list: 'lista-krajow' });
+  const krajPole = p('kraj');
 
   return (
     <fieldset className="grupa-pol">
@@ -73,14 +73,17 @@ function PoleAdres({ etykieta = 'Adres', dane, przyZmianie, prefiks = '', bledy,
         <Pole etykieta="Kod pocztowy" {...kod.pole}><input type="text" {...kod.wejscie} /></Pole>
         <Pole etykieta="Miejscowość" {...miejscowosc.pole}><input type="text" {...miejscowosc.wejscie} /></Pole>
       </div>
+      {/* D-34: wybór ze słownika ISO 3166-1 (kod zapisuje baza). Wartość
+          spoza słownika (dane sprzed D-34) zostaje widoczna jako osobna
+          opcja — do ręcznej poprawy, nie zgadujemy. */}
       <Pole etykieta="Kraj" {...krajPole.pole}>
-        <input type="text" {...krajPole.wejscie} value={kraj ?? KRAJ_DOMYSLNY} />
+        <select {...krajPole.wejscie} value={kraj ?? KRAJ_DOMYSLNY}>
+          {kraj && !KRAJE.some(([, n]) => n === kraj) && (
+            <option value={kraj}>{kraj} (spoza słownika — wybierz właściwy kraj)</option>
+          )}
+          {KRAJE.map(([kod, nazwa]) => <option key={kod} value={nazwa}>{nazwa}</option>)}
+        </select>
       </Pole>
-      <datalist id="lista-krajow">
-        {['Polska', 'Niemcy', 'Wielka Brytania', 'Stany Zjednoczone', 'Ukraina', 'Czechy', 'Holandia',
-          'Francja', 'Szwecja', 'Norwegia', 'Irlandia', 'Hiszpania', 'Włochy', 'Litwa', 'Cypr', 'Luksemburg']
-          .map((k) => <option key={k} value={k} />)}
-      </datalist>
     </fieldset>
   );
 }

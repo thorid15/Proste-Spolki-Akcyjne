@@ -14,6 +14,7 @@ const { db } = require('../baza');
 const rejestr = require('../rejestr');
 const widoki = require('../widoki');
 const typyZdarzen = require('../logika/typy-zdarzen');
+const osobaDzialajaca = require('../logika/osoba-dzialajaca');
 const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 
 const router = express.Router();
@@ -55,7 +56,8 @@ router.post(
   asy((zad, odp) => {
     const id = Number(zad.params.id);
     const kto = autor(zad);
-    const { uzasadnienie, zamiast, data_zdarzenia } = zad.body || {};
+    rejestr.odrzucRecznaDate(zad.body);
+    const { uzasadnienie, zamiast } = zad.body || {};
     if (!uzasadnienie || !String(uzasadnienie).trim()) {
       throw bledneZadanie('Sprostowanie wymaga uzasadnienia.');
     }
@@ -65,14 +67,13 @@ router.post(
       uzasadnienie,
       zamiast: zamiast || null,
       autor: kto,
-      data_zdarzenia,
+      dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
     });
 
     odp.status(201).json({
       zdarzenie: {
         id: wynik.zdarzenie.id,
         typ: wynik.zdarzenie.typ,
-        data_zdarzenia: wynik.zdarzenie.data_zdarzenia,
         data_wpisu: wynik.zdarzenie.data_wpisu,
         hash_skrocony: wynik.zdarzenie.hash.slice(0, 12),
       },

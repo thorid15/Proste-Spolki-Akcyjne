@@ -174,7 +174,7 @@ test('lancuch skrotow jest ciagly i wykrywa podmiane tresci', () => {
   // Symulujemy ingerencje z pominieciem aplikacji: zdejmujemy wyzwalacz
   // append-only i podmieniamy tresc zdarzenia prosto w bazie.
   db.exec('DROP TRIGGER psa_zdarzenia_bez_update');
-  db.prepare("UPDATE psa_zdarzenia SET data_zdarzenia = '2020-01-01' WHERE id = 1").run();
+  db.prepare("UPDATE psa_zdarzenia SET data_wpisu = '2020-01-01T10:00:00Z' WHERE id = 1").run();
 
   const poIngerencji = rejestr.zweryfikujIntegralnosc(db);
   assert.equal(poIngerencji.ok, false);
@@ -238,36 +238,76 @@ test('nie da sie przeniesc akcji, ktore nie zostaly objete', () => {
   );
 });
 
-test('data zdarzenia z przyszlosci jest odrzucana', () => {
-  const { db, spolka, kowalski, wisniewski, emisjaId } = scenariusz();
+test('D-R01: data rejestracji z KRN z przyszlosci jest odrzucana (migracja)', () => {
+  const db = bazaTestowa();
+  const spolka = dodajSpolke(db);
   assert.throws(
     () =>
-      wpis(
-        db,
-        spolka,
-        'przeniesienie',
-        '2027-01-01',
-        {
-          emisja_zdarzenie_id: emisjaId,
-          zbywca_osoba_id: kowalski,
-          pozycje: [{ nabywca_osoba_id: wisniewski, ilosc: 10 }],
-        },
-        { dzisiaj: '2026-06-01' }
-      ),
-    /z przyszłości/
+      rejestr.dokonajWpisu(db, {
+        spolkaId: spolka,
+        typ: 'emisja',
+        migracja_krn: { data_rejestracji: '2099-01-01T10:00' },
+        wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-01' },
+        autor: 'Test',
+      }),
+    /nie może leżeć w przyszłości/
   );
 });
 
-test('data wczesniejsza niz ostatnie zdarzenie na tych akcjach jest odrzucana', () => {
+test('D-R01: wpis nie moze poprzedzac ostatniego wpisu spolki', () => {
   const { db, spolka, kowalski, wisniewski, emisjaId } = scenariusz();
   assert.throws(
     () =>
-      wpis(db, spolka, 'przeniesienie', '2026-01-11', {
+      wpis(db, spolka, 'przeniesienie', '2026-01-09', {
         emisja_zdarzenie_id: emisjaId,
         zbywca_osoba_id: kowalski,
         pozycje: [{ nabywca_osoba_id: wisniewski, ilosc: 10 }],
       }),
-    /wcześniejsza niż ostatnie zdarzenie/
+    /nie może poprzedzać ostatniego wpisu/
+  );
+});
+
+test('D-R01: data wpisu podana z zewnatrz jest odrzucana (takze dawna data zdarzenia)', () => {
+  for (const pole of ['data_wpisu', 'chwila', 'teraz', 'data_zdarzenia']) {
+    assert.throws(() => rejestr.odrzucRecznaDate({ typ: 'emisja', [pole]: '2026-01-01' }), /nadaje system/);
+  }
+  assert.doesNotThrow(() => rejestr.odrzucRecznaDate({ typ: 'emisja', dane: {} }));
+});
+
+test('D-R01: zwykly wpis dostaje systemowa chwile UTC, a migracja z KRN - date rejestracji z KRN', () => {
+  const db = bazaTestowa();
+  const spolka = dodajSpolke(db);
+  const m = rejestr.dokonajWpisu(db, {
+    spolkaId: spolka,
+    typ: 'emisja',
+    migracja_krn: { data_rejestracji: '2024-07-29T10:15' },
+    wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2024-07-01' },
+    autor: 'Test',
+  });
+  assert.equal(m.zdarzenie.data_wpisu, '2024-07-29T08:15:00Z');
+  assert.deepEqual(JSON.parse(m.zdarzenie.dane_json).migracja_krn, { data_rejestracji: '2024-07-29T10:15' });
+
+  const przed = Date.now();
+  const z = rejestr.dokonajWpisu(db, {
+    spolkaId: spolka,
+    typ: 'emisja',
+    wejscie: { seria: 'B', nr_pierwszy: 11, ilosc: 5, data_wpisu_krs: '2026-01-01' },
+    autor: 'Test',
+  });
+  assert.match(z.zdarzenie.data_wpisu, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  assert.ok(Math.abs(Date.parse(z.zdarzenie.data_wpisu) - przed) < 5000);
+
+  // Po zwyklym wpisie historii z KRN nie da sie juz „dosypac”.
+  assert.throws(
+    () =>
+      rejestr.dokonajWpisu(db, {
+        spolkaId: spolka,
+        typ: 'emisja',
+        migracja_krn: { data_rejestracji: '2024-08-01' },
+        wejscie: { seria: 'C', nr_pierwszy: 16, ilosc: 5, data_wpisu_krs: '2024-07-01' },
+        autor: 'Test',
+      }),
+    /wyłącznie do rejestru, w którym nie dokonano jeszcze zwykłego wpisu/
   );
 });
 

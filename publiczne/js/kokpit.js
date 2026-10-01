@@ -40,22 +40,42 @@ function zakresyNakladajaSie(a, b) {
 function opiszZakres(z) {
   return z.nr_od === z.nr_do ? String(z.nr_od) : `${z.nr_od}–${z.nr_do}`;
 }
+/* D-R03: widok szczegółowy — wiersz na grupę zakresów z JEDNĄ datą wpisu
+   (zakresy scalone tylko w obrębie tego samego dnia), a nie na zakres
+   z datą najstarszej transzy pozycji. */
 function rozbijNaSzczegoly(akcjonariusze) {
   const wiersze = [];
   for (const a of akcjonariusze) {
-    for (const z of a.zakresy) {
-      const ilosc = z.nr_do - z.nr_od + 1;
+    const grupy = a.grupy_wpisu && a.grupy_wpisu.length
+      ? a.grupy_wpisu
+      : a.zakresy.map((z) => ({ zakresy: [z], numery: opiszZakres(z), data_wpisu: null }));
+    for (const g of grupy) {
+      const ilosc = g.zakresy.reduce((suma, z) => suma + z.nr_do - z.nr_od + 1, 0);
       wiersze.push({
         ...a,
-        zakresy: [z],
+        zakresy: g.zakresy,
+        grupy_wpisu: [g],
         ilosc,
-        numery: opiszZakres(z),
+        numery: g.numery,
         procent: a.ilosc ? (a.procent * ilosc) / a.ilosc : a.procent,
-        obciazenia: a.obciazenia.filter((o) => parsujNumery(o.numery).some((zo) => zakresyNakladajaSie(zo, z))),
+        obciazenia: a.obciazenia.filter((o) =>
+          parsujNumery(o.numery).some((zo) => g.zakresy.some((z) => zakresyNakladajaSie(zo, z)))),
       });
     }
   }
   return wiersze;
+}
+
+/** Numery z datą wpisu każdej grupy zakresów (D-R03) — jak na informacji z rejestru. */
+function NumeryZDatami({ pozycja }) {
+  const grupy = pozycja.grupy_wpisu || [];
+  if (grupy.length === 0) return pozycja.numery;
+  return grupy.map((g, i) => (
+    <div key={i} className="grupa-wpisu">
+      {g.numery}
+      {g.data_wpisu && <span className="wyciszony"> (wpis {fmt.data(g.data_wpisu)})</span>}
+    </div>
+  ));
 }
 
 /* Naprawa Z-058: pokrycie i rodzaj akcji (art. 300(33) § 1 pkt 4 i 9 KSH) sa
@@ -85,7 +105,30 @@ function rodzajAkcjiDlaEmisji(emisje, emisjaKlucz) {
   return NAZWY_RODZAJU_AKCJI_KOKPIT[rodzaj] || 'zwykła';
 }
 
-function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
+/* D-P1: czynności uruchamiane wprost z wiersza — kreator dostaje serię,
+   osobę i zakres numerów (do zawężenia). */
+const CZYNNOSCI_WIERSZA = [
+  ['przeniesienie', 'Zbycie'],
+  ['obciazenie', 'Obciążenie'],
+  ['umorzenie', 'Umorzenie'],
+];
+
+function CzynnosciWiersza({ spolkaId, pozycja }) {
+  const adres = (typ) => {
+    const q = new URLSearchParams({ typ, emisja: String(pozycja.emisja_klucz), osoba: String(pozycja.osoba_id), zakres: pozycja.numery });
+    return `/spolki/${spolkaId}/zdarzenie?${q.toString()}`;
+  };
+  return (
+    <div className="rzad bez-druku" style={{ gap: 4, flexWrap: 'wrap' }}>
+      {CZYNNOSCI_WIERSZA.map(([typ, nazwa]) => (
+        <button key={typ} className="btn btn-maly" onClick={() => idz(adres(typ))}>{nazwa}</button>
+      ))}
+    </div>
+  );
+}
+
+function TabelaAkcjonariatu({ akcjonariusze, razem, emisje, lacznie = [], spolkaId, czynnosci = false }) {
+  const lacznieWgOsoby = new Map(lacznie.map((l) => [l.osoba_id, l]));
   if (akcjonariusze.length === 0) {
     return (
       <Pusto
@@ -107,6 +150,7 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
           <th className="do-prawej">% akcji</th>
           <th>Pokrycie</th>
           <th>Obciążenia</th>
+          {czynnosci && <th className="bez-druku"><span className="sr-only">Czynności</span></th>}
         </tr>
       </thead>
       <tbody>
@@ -115,30 +159,25 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
           // do przewijania z osi akcji nadajemy TYLKO pierwszemu.
           const pierwszaDlaPozycji =
             akcjonariusze.findIndex((x) => x.osoba_id === a.osoba_id && x.emisja_klucz === a.emisja_klucz) === i;
+          // D-R06: „Łącznie” zamyka osobę z kilkoma seriami (wiersze osoby
+          // przychodzą z serwera obok siebie).
+          const nastepny = akcjonariusze[i + 1];
+          const sumaOsoby = (!nastepny || nastepny.osoba_id !== a.osoba_id) ? lacznieWgOsoby.get(a.osoba_id) : null;
           return (
+            <React.Fragment key={`${a.osoba_id}-${a.emisja_klucz}-${i}`}>
             <tr
-              key={`${a.osoba_id}-${a.emisja_klucz}-${i}`}
               id={pierwszaDlaPozycji ? `akcjonariusz-${a.osoba_id}-${a.emisja_klucz}` : undefined}
             >
               <td>
                 <div style={{ fontWeight: 500 }}>{a.osoba ? a.osoba.oznaczenie : `osoba #${a.osoba_id}`}</div>
                 <div className="wiersz-podtytul">
-                  akcjonariusz od {fmt.data(a.data_nabycia)}
-                  {a.osoba && a.osoba.jawny_identyfikator ? ` · ${a.osoba.jawny_identyfikator}` : ''}
+                  {a.osoba && a.osoba.jawny_identyfikator ? a.osoba.jawny_identyfikator : ''}
                 </div>
-                {/* D-050/B12: moment SYSTEMOWEGO wpisu (co do sekundy) —
-                    inny od daty prawnej zdarzenia wyżej. Puste dla pozycji
-                    wpisanych przed kolumną `data_wpisu` z sekundami. */}
-                {a.wpisano_do_rejestru && (
-                  <div className="wiersz-podtytul wyciszony">
-                    Wpisano do rejestru: {fmt.dataCzas(a.wpisano_do_rejestru)}
-                  </div>
-                )}
               </td>
               <td>{a.seria}</td>
               <td>{rodzajAkcjiDlaEmisji(emisje, a.emisja_klucz)}</td>
               <td className="do-prawej" style={{ fontWeight: 600 }}>{fmt.liczba(a.ilosc)}</td>
-              <td className="kol-dane">{a.numery}</td>
+              <td className="kol-dane"><NumeryZDatami pozycja={a} /></td>
               <td className="do-prawej">{fmt.procent(a.procent)}</td>
               <td>{opiszPokrycieKokpit(a.pokryta)}</td>
               <td>
@@ -154,7 +193,21 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
                   </div>
                 )}
               </td>
+              {czynnosci && <td><CzynnosciWiersza spolkaId={spolkaId} pozycja={a} /></td>}
             </tr>
+            {sumaOsoby && (
+              <tr className="wiersz-lacznie">
+                <td className="wyciszony">Łącznie</td>
+                <td colSpan={2} className="wyciszony">serie {sumaOsoby.serie.join(', ')}</td>
+                <td className="do-prawej" style={{ fontWeight: 600 }}>{fmt.liczba(sumaOsoby.ilosc)}</td>
+                <td />
+                <td className="do-prawej" style={{ fontWeight: 600 }}>{fmt.procent(sumaOsoby.procent)}</td>
+                <td />
+                <td />
+                {czynnosci && <td />}
+              </tr>
+            )}
+            </React.Fragment>
           );
         })}
       </tbody>
@@ -166,9 +219,156 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje }) {
           <td className="do-prawej">100%</td>
           <td />
           <td />
+          {czynnosci && <td />}
         </tr>
       </tfoot>
     </table>
+  );
+}
+
+/* ═════════════════════════════════════════════════════
+   SPROSTOWANIE EMISJI (D-P3)
+   ═════════════════════════════════════════════════════ */
+
+const KOMUNIKAT_EMISJA_OBJETA =
+  'Akcje tej emisji zostały już objęte — seria, numeracja i liczba akcji nie mogą być prostowane. ' +
+  'Jeżeli liczba akcji ma się zmniejszyć, dokonaj umorzenia; jeżeli zwiększyć — wpisz nową emisję.';
+
+function ModalSprostowaniaEmisji({ emisja, objeta, przyZamknieciu, przyZapisie }) {
+  const [dane, ustawDane] = useState({
+    seria: emisja.seria, nr_pierwszy: emisja.nr_pierwszy, ilosc: emisja.ilosc,
+    tytul: emisja.tytul || '', opis: emisja.opis || '', uwagi: emisja.uwagi || '',
+  });
+  const [uzasadnienie, ustawUzasadnienie] = useState('');
+  const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const zmien = (pole) => (z) => ustawDane((d) => ({ ...d, [pole]: z.target.value }));
+
+  async function zapisz() {
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    try {
+      await API.post(`/api/psa/zdarzenia/${emisja.klucz}/sprostuj`, {
+        uzasadnienie,
+        zamiast: {
+          typ: 'emisja',
+          dane: {
+            seria: dane.seria, nr_pierwszy: Number(dane.nr_pierwszy), ilosc: Number(dane.ilosc),
+            tytul: dane.tytul || null, opis: dane.opis || null, uwagi: dane.uwagi || null,
+            podstawa_prawna: emisja.podstawa_prawna || null,
+            cena_emisyjna_grosze: emisja.cena_emisyjna_grosze ?? null, waluta: emisja.waluta,
+            data_emisji: emisja.data_emisji || null, data_wpisu_krs: emisja.data_wpisu_krs || null,
+            rodzaj_akcji: emisja.rodzaj_akcji, obowiazki_wobec_spolki: emisja.obowiazki_wobec_spolki || null,
+          },
+        },
+      });
+      przyZapisie();
+    } catch (e) {
+      ustawBlad(e.message);
+      ustawZapisywanie(false);
+    }
+  }
+
+  return (
+    <Modal
+      tytul={`Sprostowanie emisji serii ${emisja.seria}`}
+      przyZamknieciu={przyZamknieciu}
+      szerokosc={600}
+      stopka={
+        <>
+          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          <button className="btn btn-glowny" disabled={!uzasadnienie.trim() || zapisywanie} onClick={zapisz}>
+            {zapisywanie ? 'Zapisywanie…' : 'Zapisz sprostowanie'}
+          </button>
+        </>
+      }
+    >
+      {objeta && <Komunikat odmiana="uwaga" tresc={KOMUNIKAT_EMISJA_OBJETA} />}
+      <Komunikat odmiana="blad" tresc={blad} />
+      <div className="siatka-2">
+        <Pole etykieta="Seria"><input type="text" value={dane.seria} disabled={objeta} onChange={zmien('seria')} /></Pole>
+        <Pole etykieta="Numer pierwszej akcji"><input type="number" min="1" value={dane.nr_pierwszy} disabled={objeta} onChange={zmien('nr_pierwszy')} /></Pole>
+        <Pole etykieta="Liczba akcji"><input type="number" min="1" value={dane.ilosc} disabled={objeta} onChange={zmien('ilosc')} /></Pole>
+      </div>
+      <Pole etykieta="Tytuł emisji"><input type="text" value={dane.tytul} onChange={zmien('tytul')} /></Pole>
+      <Pole etykieta="Opis (drukowany na informacji z rejestru)"><textarea value={dane.opis} onChange={zmien('opis')} /></Pole>
+      <Pole etykieta="Uwagi (wewnętrzne)"><textarea value={dane.uwagi} onChange={zmien('uwagi')} /></Pole>
+      <Pole etykieta="Uzasadnienie sprostowania" wymagane>
+        <textarea value={uzasadnienie} onChange={(z) => ustawUzasadnienie(z.target.value)} />
+      </Pole>
+    </Modal>
+  );
+}
+
+/* ═════════════════════════════════════════════════════
+   PRZEKAZANIE REJESTRU (D-31) — tylko ewidencja
+   ═════════════════════════════════════════════════════ */
+
+const ODBIORCY_PRZEKAZANIA = [
+  ['notariusz', 'Notariusz'],
+  ['izba_notarialna', 'Izba notarialna'],
+  ['podmiot_rachunki', 'Podmiot prowadzący rachunki papierów wartościowych (art. 300³¹ § 1 pkt 1 KSH)'],
+];
+
+function ModalPrzekazania({ spolkaId, przyZamknieciu, przyZapisie }) {
+  const [dane, ustawDane] = useState({
+    data_przekazania: fmt.dzisIso(), odbiorca_typ: 'notariusz', odbiorca_nazwa: '',
+    odbiorca_identyfikator: '', podstawa: '',
+  });
+  const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const zmien = (pole) => (z) => ustawDane((d) => ({ ...d, [pole]: z.target.value }));
+
+  async function zapisz() {
+    ustawZapisywanie(true);
+    ustawBlad(null);
+    try {
+      await API.post(`/api/psa/spolki/${spolkaId}/przekazanie`, dane);
+      przyZapisie();
+    } catch (e) {
+      ustawBlad(e.message);
+      ustawZapisywanie(false);
+    }
+  }
+
+  const gotowe = dane.data_przekazania && dane.odbiorca_nazwa.trim() && dane.podstawa.trim();
+  return (
+    <Modal
+      tytul="Przekazanie prowadzenia rejestru"
+      przyZamknieciu={przyZamknieciu}
+      szerokosc={600}
+      stopka={
+        <>
+          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          <button className="btn btn-glowny" disabled={!gotowe || zapisywanie} onClick={zapisz}>
+            {zapisywanie ? 'Zapisywanie…' : 'Zapisz przekazanie'}
+          </button>
+        </>
+      }
+    >
+      <Komunikat odmiana="uwaga" tresc={
+        'Po zapisaniu przekazania rejestr tej spółki jest tylko do odczytu: nie przyjmie żadnego wpisu ' +
+        'ani zmiany danych. Podgląd i informacja z rejestru pozostają dostępne. Czynności nie da się cofnąć.'
+      } />
+      <Komunikat odmiana="blad" tresc={blad} />
+      <Pole etykieta="Data przekazania" wymagane>
+        <PoleDaty wartosc={dane.data_przekazania} max={fmt.dzisIso()} przyZmianie={(v) => ustawDane((d) => ({ ...d, data_przekazania: v }))} />
+      </Pole>
+      <Pole etykieta="Odbiorca" wymagane>
+        <select value={dane.odbiorca_typ} onChange={zmien('odbiorca_typ')}>
+          {ODBIORCY_PRZEKAZANIA.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+        </select>
+      </Pole>
+      <Pole etykieta="Nazwa odbiorcy" wymagane podpowiedz="Np. „Notariusz Jan Kowalski, Kancelaria Notarialna w Gdańsku”.">
+        <input type="text" value={dane.odbiorca_nazwa} onChange={zmien('odbiorca_nazwa')} />
+      </Pole>
+      <Pole etykieta="Identyfikator odbiorcy" podpowiedz="Np. numer Rep. N, NIP albo KRS podmiotu.">
+        <input type="text" value={dane.odbiorca_identyfikator} onChange={zmien('odbiorca_identyfikator')} />
+      </Pole>
+      <Pole etykieta="Podstawa" wymagane podpowiedz="Np. „nowa umowa o prowadzenie rejestru z dnia … (art. 300³² § 2 KSH)”.">
+        <textarea value={dane.podstawa} onChange={zmien('podstawa')} />
+      </Pole>
+    </Modal>
   );
 }
 
@@ -620,6 +820,8 @@ function EkranKokpitu({ spolkaId }) {
   const [kwalifikowanieZgloszenia, ustawKwalifikowanieZgloszenia] = useState(null);
 
   const wstecz = data !== fmt.dzisIso();
+  const [przekazywanie, ustawPrzekazywanie] = useState(false);
+  const [prostowanaEmisja, ustawProstowanaEmisje] = useState(null);
 
   const { dane, ladowanie, blad, odswiez } = useDane(
     `/api/psa/spolki/${spolkaId}?data=${encodeURIComponent(data)}`,
@@ -663,6 +865,9 @@ function EkranKokpitu({ spolkaId }) {
   const zdarzeniaPozostale = zdarzenia.filter((z) => !TYPY_WE_WLASNYCH_REJESTRACH.includes(z.typ));
   const dokumentyAkt = akta.dane ? akta.dane.dokumenty : [];
   const liczbaAkcjonariuszy = new Set(akcjonariusze.map((a) => a.osoba_id)).size;
+  // D-31: rejestr przekazany innemu podmiotowi — tylko odczyt, jak widok archiwalny.
+  const przekazany = Boolean(spolka.przekazanie_data);
+  const tylkoOdczyt = wstecz || przekazany;
 
   return (
     <>
@@ -683,6 +888,11 @@ function EkranKokpitu({ spolkaId }) {
                 Stan na {fmt.dataCzas(data)}
               </span>
             )}
+            {przekazany && (
+              <span className="pigulka-archiwalna" title={spolka.przekazanie_podstawa || ''}>
+                Rejestr przekazany {fmt.data(spolka.przekazanie_data)} — {spolka.przekazanie_odbiorca_nazwa}
+              </span>
+            )}
           </div>
           <div className="naglowek-strony-kontekst">
             Rejestr prowadzi {spolka.organ_prowadzacy || 'Kancelaria Notarialna Łukasz Kozon'} —
@@ -693,7 +903,7 @@ function EkranKokpitu({ spolkaId }) {
                 z rejestru" — tego samego formatu przycisku. Zostaje jako
                 dyskretny odnośnik tekstowy, nie znika (bywa potrzebna raz na
                 spółkę), ale nie konkuruje wzrokowo ze zwykłymi akcjami. */}
-            {!wstecz && dane.liczba_zdarzen === 0 && (
+            {!tylkoOdczyt && dane.liczba_zdarzen === 0 && (
               <>
                 {' · '}
                 <button
@@ -721,6 +931,11 @@ function EkranKokpitu({ spolkaId }) {
           <button className="btn" onClick={() => idz(`/spolki/${spolkaId}/wydruk/informacja?data=${data}`)}>
             <Ikona nazwa="dokument" rozmiar={16} /> Informacja z rejestru
           </button>
+          {!tylkoOdczyt && (
+            <button className="btn-tekstowy" onClick={() => ustawPrzekazywanie(true)}>
+              Przekazanie rejestru…
+            </button>
+          )}
         </div>
       </div>
 
@@ -771,7 +986,7 @@ function EkranKokpitu({ spolkaId }) {
                     Szczegółowy
                   </button>
                 </div>
-                {!wstecz && (
+                {!tylkoOdczyt && (
                   <button className="btn btn-maly btn-glowny" onClick={() => ustawDodawanieAkcjonariusza(true)}>
                     <Ikona nazwa="plus" rozmiar={14} /> Dodaj akcjonariusza
                   </button>
@@ -784,8 +999,11 @@ function EkranKokpitu({ spolkaId }) {
                 akcjonariusze={szczegolowy ? rozbijNaSzczegoly(akcjonariusze) : akcjonariusze}
                 razem={dane.razem_akcji}
                 emisje={emisje}
+                lacznie={dane.akcjonariusze_lacznie || []}
+                spolkaId={spolkaId}
+                czynnosci={!tylkoOdczyt}
               />
-              {!wstecz && (
+              {!tylkoOdczyt && (
                 <DalszeWpisy tytul="Dalsze wpisy:">
                   <PrzyciskWpisu spolkaId={spolkaId} typ="przeniesienie">Przeniesienie akcji</PrzyciskWpisu>
                   <PrzyciskWpisu spolkaId={spolkaId} typ="zmiana_danych_akcjonariusza">
@@ -804,7 +1022,7 @@ function EkranKokpitu({ spolkaId }) {
             tytul="Rejestr akcji"
             licznik={emisje.length}
             akcje={
-              !wstecz && (
+              !tylkoOdczyt && (
                 <PrzyciskWpisu spolkaId={spolkaId} typ="emisja" glowny>Nowa emisja</PrzyciskWpisu>
               )
             }
@@ -829,7 +1047,8 @@ function EkranKokpitu({ spolkaId }) {
                       {/* Kolumna akcji pojawia się TYLKO wtedy, gdy jest co
                           obejmować — pusty nagłówek zabierał miejsce ośmiu
                           kolumnom, które zawsze mają treść. */}
-                      {!wstecz && nieobjete > 0 && <th />}
+                      {!tylkoOdczyt && nieobjete > 0 && <th />}
+                      {!tylkoOdczyt && <th />}
                     </tr>
                   </thead>
                   <tbody>
@@ -850,7 +1069,7 @@ function EkranKokpitu({ spolkaId }) {
                           {/* Emisja bez objęcia to akcje, których nikt nie ma —
                               wskazanie obejmującego zaczyna się przy tym wierszu,
                               z już wybraną serią. */}
-                          {!wstecz && nieobjete > 0 && (
+                          {!tylkoOdczyt && nieobjete > 0 && (
                             <td className="do-prawej bez-druku">
                               {b.nieobjete ? (
                                 <PrzyciskWpisu spolkaId={spolkaId} typ="objecie" emisja={e.klucz} glowny>
@@ -859,13 +1078,23 @@ function EkranKokpitu({ spolkaId }) {
                               ) : null}
                             </td>
                           )}
+                          {!tylkoOdczyt && (
+                            <td className="do-prawej bez-druku">
+                              <button
+                                className="btn btn-maly"
+                                onClick={() => ustawProstowanaEmisje({ emisja: e, objeta: e.ilosc - (b.nieobjete || 0) > 0 })}
+                              >
+                                Sprostuj
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               )}
-              {!wstecz && (
+              {!tylkoOdczyt && (
                 <DalszeWpisy tytul="Dalsze wpisy:">
                   <PrzyciskWpisu spolkaId={spolkaId} typ="umorzenie">Umorzenie akcji</PrzyciskWpisu>
                   <PrzyciskWpisu spolkaId={spolkaId} typ="uniewaznienie">Unieważnienie przez sąd</PrzyciskWpisu>
@@ -881,7 +1110,7 @@ function EkranKokpitu({ spolkaId }) {
             tytul="Rejestr uprawnień, przywilejów i obowiązków"
             licznik={uprawnienia.length + ograniczenia.length}
             akcje={
-              !wstecz && (
+              !tylkoOdczyt && (
                 <PrzyciskWpisu spolkaId={spolkaId} typ="uprawnienie" glowny>Wpisz uprawnienie</PrzyciskWpisu>
               )
             }
@@ -941,7 +1170,7 @@ function EkranKokpitu({ spolkaId }) {
                 )}
               </div>
 
-              {!wstecz && (
+              {!tylkoOdczyt && (
                 <DalszeWpisy tytul="Dalsze wpisy:">
                   <PrzyciskWpisu spolkaId={spolkaId} typ="ograniczenie">Ograniczenie w rozporządzaniu</PrzyciskWpisu>
                   <PrzyciskWpisu spolkaId={spolkaId} typ="zobowiazanie">
@@ -957,7 +1186,7 @@ function EkranKokpitu({ spolkaId }) {
             tytul="Rejestr zajęć, zastawów, użytkowania"
             licznik={obciazenia.length}
             akcje={
-              !wstecz && (
+              !tylkoOdczyt && (
                 <PrzyciskWpisu spolkaId={spolkaId} typ="obciazenie" glowny>Zastaw lub użytkowanie</PrzyciskWpisu>
               )
             }
@@ -991,7 +1220,7 @@ function EkranKokpitu({ spolkaId }) {
                   </tbody>
                 </table>
               )}
-              {!wstecz && (
+              {!tylkoOdczyt && (
                 <DalszeWpisy tytul="Dalsze wpisy:">
                   {/* Zajęcie idzie Z URZĘDU — bez żądania i bez opłaty
                       (art. 300(34) § 2 KSH), dlatego stoi obok, a nie
@@ -1016,7 +1245,7 @@ function EkranKokpitu({ spolkaId }) {
             tytul="Rejestr zdarzeń"
             licznik={zdarzeniaPozostale.length}
             akcje={
-              !wstecz && (
+              !tylkoOdczyt && (
                 <PrzyciskWpisu spolkaId={spolkaId} typ="zdarzenie_inne" glowny>Odnotuj zdarzenie</PrzyciskWpisu>
               )
             }
@@ -1031,14 +1260,23 @@ function EkranKokpitu({ spolkaId }) {
               ) : (
                 <table className="tabela">
                   <thead>
-                    <tr><th>Data</th><th>Zdarzenie</th><th>Wpisano</th></tr>
+                    <tr><th>Wpisano</th><th>Zdarzenie</th><th>Autor</th></tr>
                   </thead>
                   <tbody>
                     {zdarzeniaPozostale.map((z) => (
                       <tr key={z.id}>
-                        <td className="wyciszony">{fmt.data(z.data_zdarzenia)}</td>
+                        <td className="wyciszony">{fmt.dataCzas(z.data_wpisu)}</td>
                         <td className="zawijaj">{z.podsumowanie || `Zdarzenie typu „${z.typ}”.`}</td>
-                        <td className="wyciszony">{fmt.dataCzas(z.data_wpisu)} · {z.autor}</td>
+                        <td className="wyciszony">
+                          {z.autor}
+                          {/* D-Z: osoba działająca — audyt, widoczny tylko w kancelarii. */}
+                          {z.dane && z.dane.dzialajacy && (
+                            <div className="wiersz-podtytul">
+                              działał(a): {z.dane.dzialajacy.imie} {z.dane.dzialajacy.nazwisko}
+                              {z.dane.dzialajacy.funkcja === 'zastepca_notarialny' ? ' (zastępca notarialny)' : ' (notariusz)'}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1087,7 +1325,7 @@ function EkranKokpitu({ spolkaId }) {
             tytul="Historia zdarzeń"
             licznik={dane.liczba_zdarzen}
             akcje={
-              !wstecz && (
+              !tylkoOdczyt && (
                 <button className="btn btn-maly" onClick={przelicz} title="Odbudowa stanu ze zdarzeń">
                   Przelicz stan
                 </button>
@@ -1107,9 +1345,9 @@ function EkranKokpitu({ spolkaId }) {
                     >
                       <div className="rzad-rozdzielony">
                         <div className="zdarzenie-data">
-                          {fmt.data(z.data_zdarzenia)} · zdarzenie #{z.id}
+                          {fmt.dataCzas(z.data_wpisu)} · zdarzenie #{z.id}
                         </div>
-                        {!wstecz && z.typ !== 'sprostowanie' && !z.sprostowane_przez_id && (
+                        {!tylkoOdczyt && z.typ !== 'sprostowanie' && !z.sprostowane_przez_id && (
                           <button className="btn btn-maly bez-druku" onClick={() => ustawSprostowanie(z)}>
                             Sprostuj
                           </button>
@@ -1157,6 +1395,29 @@ function EkranKokpitu({ spolkaId }) {
           nieobjete={nieobjete}
           sanAkcjonariusze={akcjonariusze.length > 0}
           przyZamknieciu={() => ustawDodawanieAkcjonariusza(false)}
+        />
+      )}
+
+      {prostowanaEmisja && (
+        <ModalSprostowaniaEmisji
+          emisja={prostowanaEmisja.emisja}
+          objeta={prostowanaEmisja.objeta}
+          przyZamknieciu={() => ustawProstowanaEmisje(null)}
+          przyZapisie={() => {
+            ustawProstowanaEmisje(null);
+            odswiez();
+          }}
+        />
+      )}
+
+      {przekazywanie && (
+        <ModalPrzekazania
+          spolkaId={spolkaId}
+          przyZamknieciu={() => ustawPrzekazywanie(false)}
+          przyZapisie={() => {
+            ustawPrzekazywanie(false);
+            odswiez();
+          }}
         />
       )}
 

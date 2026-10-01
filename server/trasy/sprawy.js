@@ -28,6 +28,7 @@ const zawiadomienia = require('../zawiadomienia');
 const terminy = require('../logika/terminy');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const przepisy = require('../logika/przepisy');
+const osobaDzialajaca = require('../logika/osoba-dzialajaca');
 const aml = require('../logika/aml');
 const maskowanie = require('../logika/maskowanie');
 const konfiguracja = require('../konfiguracja');
@@ -172,9 +173,8 @@ router.post(
     const spolkaId = Number(cialo.spolka_id);
     const spolka = rejestr.wczytajSpolke(db(), spolkaId);
     if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
-    if (przepisy.STATUSY_SPOLKI_BLOKUJACE_WPIS.includes(spolka.status)) {
-      throw bledneZadanie(`Spółka ma status „${spolka.status}” — nie można założyć nowej sprawy.`);
-    }
+    const blokada = przepisy.blokadaWpisu(spolka);
+    if (blokada) throw bledneZadanie(`${blokada} Nie można założyć nowej sprawy.`);
 
     const typZdarzenia = String(cialo.typ_zdarzenia || '');
     if (!typyZdarzen.dostepneWKreatorze().some((t) => t.kod === typZdarzenia)) {
@@ -334,13 +334,13 @@ router.post(
     const sprawa = wczytajSprawe(id);
     if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
 
-    const { data_zdarzenia, dane } = zad.body || {};
+    rejestr.odrzucRecznaDate(zad.body);
+    const { dane } = zad.body || {};
     let podglad;
     try {
       podglad = rejestr.przygotujPodglad(db(), {
         spolkaId: sprawa.spolka_id,
         typ: sprawa.typ_zdarzenia,
-        data_zdarzenia,
         wejscie: dane || {},
       });
     } catch (e) {
@@ -354,7 +354,7 @@ router.post(
     // cofnac bez utraty danych".
     db()
       .prepare('UPDATE psa_sprawy SET dane_wejsciowe_json = ?, zaktualizowano = ? WHERE id = ?')
-      .run(JSON.stringify({ data_zdarzenia, dane }), czas.terazIso(), id);
+      .run(JSON.stringify({ dane }), czas.terazIso(), id);
 
     odp.json({
       dopuszczalne: podglad.dopuszczalne,
@@ -379,13 +379,14 @@ router.post(
     const sprawa = wczytajSprawe(id);
     if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
 
-    const { data_zdarzenia, dane } = zad.body || {};
+    rejestr.odrzucRecznaDate(zad.body);
+    const { dane } = zad.body || {};
 
     const { wynik, oplata } = rejestr.dokonajWpisuSprawy(db(), {
       sprawaId: id,
-      data_zdarzenia,
       wejscie: dane || {},
       autor: kto,
+      dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
     });
 
     // Zawiadomienie o wpisie (art. 300(34) § 7 KSH) NIE idzie stad automatem.
@@ -400,7 +401,6 @@ router.post(
       zdarzenie: {
         id: wynik.zdarzenie.id,
         typ: wynik.zdarzenie.typ,
-        data_zdarzenia: wynik.zdarzenie.data_zdarzenia,
         data_wpisu: wynik.zdarzenie.data_wpisu,
         hash_skrocony: wynik.zdarzenie.hash.slice(0, 12),
       },

@@ -31,6 +31,7 @@
  * nigdy nie wstawia wartości zastępczych.
  */
 
+const czas = require('../pomocnicze/czas');
 const przepisy = require('./przepisy');
 const konfiguracja = require('../konfiguracja');
 const ustawienia = require('./ustawienia');
@@ -44,15 +45,14 @@ const widoki = require('../widoki');
 
 function dataPl(iso) {
   if (!iso) return null;
-  const [r, m, d] = String(iso).slice(0, 10).split('-');
+  const [r, m, d] = String(czas.dzienLokalny(iso)).split('-');
   if (!r || !m || !d) return null;
   return `${d}.${m}.${r}`;
 }
 
-/** Godzina z `psa_zdarzenia.data_wpisu` (ISO z sekundami) — do minuty. */
+/** Godzina z `psa_zdarzenia.data_wpisu` (UTC) — w strefie kancelarii, do minuty. */
 function godzina(isoZChwila) {
-  if (!isoZChwila || !String(isoZChwila).includes('T')) return null;
-  return String(isoZChwila).slice(11, 16);
+  return czas.godzinaLokalna(isoZChwila);
 }
 
 /** Imię i nazwisko / nazwa w mianowniku — kolejność jak w piśmie, nie jak na liście. */

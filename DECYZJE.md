@@ -977,6 +977,180 @@
 
 ---
 
+### D-065 — Chwila wpisu jedyną osią czasu rejestru; data zdarzenia usunięta (D-R01)
+
+- Data: 2026-09-26 (aktualizacja po porównaniu z rejestrem KRN, etap 1)
+- Obszar: rejestr / model danych / łańcuch skrótów
+- Decyzja (notariusz, `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md`, D-R01; odpowiedzi w
+  `docs/krn/ETAP-0-RAPORT.md`): stan rejestru liczy się wyłącznie od chwili wpisu, dla każdego
+  rodzaju wpisu (art. 300³⁷ § 1; dla przypadków z § 2 — art. 300³⁸ § 1 KSH). Kolumna
+  `psa_zdarzenia.data_zdarzenia` usunięta z tabeli i ze skrótu (`lancuch.skrot`). `data_wpisu`
+  nadaje system (UTC, `RRRR-MM-DDTGG:MM:SSZ`); żadna trasa nie przyjmuje daty wpisu ani dawnej
+  daty zdarzenia (`rejestr.odrzucRecznaDate` → odmowa). Jedyny wyjątek: stan otwarcia z KRN
+  (`migracja_krn.data_rejestracji`, zapisane w treści zdarzenia, więc w skrócie), dopuszczalny tylko
+  w rejestrze bez zwykłych wpisów. „Stan na dzień D” = zdarzenia wpisane do 23:59:59 dnia D
+  (Europe/Warsaw); dla dnia bieżącego — do chwili sporządzenia. Sprostowanie działa od chwili
+  swojego wpisu (A5), więc informacja na dzień wcześniejszy nie zmienia się.
+- Uzasadnienie: nabycie akcji następuje z chwilą wpisu; informacja na dzień D ma być taka sama
+  niezależnie od chwili jej wygenerowania. W produkcji nie ma spółek (potwierdzenie notariusza
+  z 26.09.2026), więc usunięcie kolumny z łańcucha nie narusza żadnego zapisanego skrótu.
+- Skutek w kodzie: migracja 57 (`DROP COLUMN`, wykonuje się tylko na pustej tabeli zdarzeń —
+  hook `warunek` w `server/migracje.js`); `server/pomocnicze/czas.js` (`terazUtc`, `chwilaUtc`,
+  `koniecDniaUtc`, `dzienLokalny`, `godzinaLokalna`); `server/logika/stan.js` (kolejność i
+  przedziały po `data_wpisu`); `server/widoki.js` (jedna semantyka „stanu na”, pola
+  `chwila_stanu`, `stan_biezacy`); `server/logika/walidacje.js` (`sprawdzChwile` zamiast
+  `sprawdzDate`/`sprawdzChronologie`); `server/rejestr.js`, trasy, zawiadomienia i dokumenty
+  (prezentacja w strefie kancelarii); UI bez pola „Data zdarzenia”, emisja dostała pole „Data
+  emisji” (atrybut emisji, nie zdarzenia), migracja zbiera datę i godzinę rejestracji w KRN.
+  `psa_sprawy.dokument_data` (data dokumentu-podstawy) zostaje (A4). Pozostałe znaczniki czasu
+  poza rejestrem (np. `data_wplywu`, `utworzono`) bez zmian — dotyczą obsługi spraw, nie stanu
+  rejestru. Testy: `testy/d-r01-chwila-wpisu.test.js`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-R01), `docs/krn/ETAP-0-RAPORT.md`.
+
+---
+
+### D-066 — Treść informacji z rejestru po porównaniu z KRN (D-R02–D-R07)
+
+- Data: 2026-09-26 (etap 2)
+- Obszar: informacja z rejestru / widok stanu
+- Decyzja: w tabeli emisji wyłącznie „Data zarejestrowania emisji” (`data_wpisu_krs`, art. 300³³
+  § 1 pkt 3 KSH), cena emisyjna z walutą emisji i opis emisji; bez podstawy prawnej i bez daty
+  emisji (ta zostaje na ekranie). W sekcji „Spółka” opis spółki. „Data zarejestrowania spółki” =
+  `data_utworzenia_spolki`, która przechowuje datę rejestracji w KRS (import `dataRejestracjiWKRS`)
+  — D-R02a spełnione bez zmian. Wiersz akcjonariusza = osoba + seria; w kolumnie „Numery i data
+  wpisu” zakresy z datą wpisu każdego z nich, scalane tylko w obrębie tego samego dnia wpisu
+  (np. `1–889, 990 (wpis 12.08.2026); 890–989 (wpis 25.09.2026)`); wiersze osoby obok siebie i
+  wiersz „Łącznie” (akcje, udział) dla osoby z kilkoma seriami. Osobny wiersz „Wpisano do rejestru”
+  usunięty (powtarzałby datę wpisu). Liczba głosów nie występuje w żadnej odpowiedzi API ani
+  dokumencie — wyjątek: uchwała o wyborze notariusza (wzór 03) prosi o nią opcją `zGlosami` (A6).
+  Stopka: „Sporządzono dd.mm.rrrr, godz. gg:mm”; dla dnia bieżącego „Stan na dd.mm.rrrr, godz. gg:mm”.
+- Skutek w kodzie: `server/logika/stan.js` (`grupy_wpisu`, kolejność wierszy wg osoby),
+  `server/widoki.js` (`grupy_wpisu`, `akcjonariusze_lacznie`, `glosy` tylko z `zGlosami`),
+  `server/logika/informacja-dokument.js`, `server/trasy/spolki.js` (wzór 03). Testy:
+  `testy/etap2-informacja.test.js`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-R02, D-R02a, D-R03/R06, D-R04/R05, D-R06, D-R07).
+
+---
+
+### D-067 — Kokpit i portal: zakresy z datą wpisu, wiersz „Łącznie” (D-R03/R06, etap 3)
+
+- Data: 2026-09-26 (etap 3)
+- Obszar: interfejs kancelarii i portal klienta
+- Decyzja: kolumna numerów w kokpicie i w podglądzie rejestru w portalu pokazuje każdą grupę
+  zakresów z jej datą wpisu (te same `grupy_wpisu`, co informacja z rejestru). Widok szczegółowy
+  kokpitu ma wiersz na grupę zakresów z jedną datą wpisu (dawniej: wiersz na zakres z datą
+  najstarszej transzy). Osoba z kilkoma seriami ma wiersz „Łącznie” (akcje, udział) w obu widokach
+  kokpitu i w portalu. Podtytuł „akcjonariusz od …” usunięty — daty stoją przy numerach. Liczba
+  głosów nie jest nigdzie wyświetlana (sprawdzone: kokpit, portal, informacja, eksporty).
+- Skutek w kodzie: `publiczne/js/kokpit.js` (`rozbijNaSzczegoly`, `NumeryZDatami`,
+  `TabelaAkcjonariatu`), `publiczne/js/portal.js`, `publiczne/style/rejestr.css`, `publiczne/dist/*`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-R03/R06, etap 3).
+
+---
+
+### D-068 — Przekazanie rejestru: tylko ewidencja, potem rejestr tylko do odczytu (D-31)
+
+- Data: 2026-09-26 (etap 4)
+- Obszar: rejestr / dane spółki
+- Decyzja: `POST /api/psa/spolki/:id/przekazanie` zapisuje zdarzenie `przekazanie_rejestru` (data
+  przekazania, typ odbiorcy: notariusz / izba notarialna / podmiot z art. 300³¹ § 1 pkt 1 KSH,
+  nazwa, identyfikator, podstawa — np. nowa umowa, art. 300³² § 2 KSH) i jego odbicie w
+  `psa_spolki.przekazanie_*` (migracja 58); pusta `data_zakonczenia_umowy` dostaje datę
+  przekazania. Od tej chwili każdy wpis jest odrzucany — jedna funkcja
+  `przepisy.blokadaWpisu(spolka)` sprawdzana w walidacji wpisu, w `rejestr.zapiszZdarzenie`
+  (ostatnia zapora), przy zakładaniu spraw (kancelaria i portal) i przy zmianie danych spółki.
+  Podgląd, historia i informacja z rejestru pozostają dostępne. Kokpit: pigułka „Rejestr
+  przekazany”, przyciski akcji ukryte jak w widoku archiwalnym, okno ewidencji przekazania.
+  Pakietu eksportu nie budujemy.
+- Testy: `testy/d-31-przekazanie-http.test.js`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-31).
+
+---
+
+### D-069 — Kraje: słownik ISO 3166-1 alfa-2, kod zapisuje baza (D-34)
+
+- Data: 2026-09-26 (etap 4)
+- Obszar: model danych / adresy
+- Decyzja: słownik `psa_kraje` (249 kodów, polskie nazwy z ICU, `server/dane/kraje.json`) i
+  kolumny `*kraj_kod` przy sześciu polach kraju (spółka, reprezentant spółki, osoba, wniosek,
+  reprezentant we wniosku, akcjonariusz we wniosku) — migracja 59. Kod ustawiają wyzwalacze bazy
+  przy KAŻDYM zapisie, więc obejmują wszystkie ścieżki (kreator, portal, przyjęcie wniosku, import
+  z KRS) bez zmian w trasach: dokładne dopasowanie kodu albo nazwy polskiej lub angielskiej (bez
+  wielkości liter) → kod, a pole tekstowe dostaje polską nazwę ze słownika (formatowanie adresów i
+  pisma bez zmian). Wartość nierozpoznana zostaje, kod = NULL, trafia do raportu
+  `GET /api/psa/kraje/do-poprawy` (karta „Kraje do poprawy” w konfiguracji) — bez zgadywania.
+  Kolumny tekstowe zostają (odwracalność). W interfejsie pole kraju to lista wyboru ze słownika
+  (`publiczne/js/kraje.js`, generowany z JSON; zgodność pilnowana testem).
+- Uwaga: SQLite porównuje wielkość liter tylko w ASCII — „WŁOCHY” wielkimi literami nie zostanie
+  rozpoznane i trafi do raportu (bezpieczny kierunek błędu).
+- Testy: `testy/d-34-kraje.test.js`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-34).
+
+---
+
+### D-070 — Osoba działająca przy wpisie: tylko audyt (D-Z)
+
+- Data: 2026-09-26 (etap 4)
+- Obszar: rejestr / audyt
+- Decyzja: słownik `psa_osoby_dzialajace` (imię, nazwisko, funkcja: notariusz / zastępca
+  notarialny, aktywny) i domyślna osoba pracownika `psa_uzytkownicy.osoba_dzialajaca_id`
+  (migracja 60). Przy KAŻDYM wpisie (sprawa, wpis bezpośredni, otwarcie rejestru, sprostowanie,
+  zmiana danych spółki, przekazanie) zapisujemy kopię danych osoby w `dane_json.dzialajacy`
+  (objęte skrótem — późniejsza zmiana słownika nie zmienia historii), niezależnie od autora-
+  pracownika. Ustalanie (`server/logika/osoba-dzialajaca.js`): wskazana w żądaniu
+  (`dzialajacy_id`) → domyślna pracownika → jedyny aktywny notariusz → notariusz z danych
+  kancelarii, gdy słownik jest pusty; niejednoznaczność = odmowa, nie domysł. Nie drukujemy jej na
+  żadnym dokumencie ani nie pokazujemy w portalu; widoczna tylko w historii zdarzeń kokpitu.
+  Zarządzanie: ekran „Użytkownicy” (słownik + domyślna osoba pracownika); wybór przy wpisie w
+  kreatorze sprawy.
+- Testy: `testy/d-z-osoba-dzialajaca.test.js`.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-Z).
+
+---
+
+### D-071 — Przepływ wprowadzania danych (D-P1, D-P2, D-P3)
+
+- Data: 2026-09-26 (etap 5)
+- Obszar: interfejs kancelarii / walidacja
+- Decyzja:
+  - **D-P1** — przy każdym wierszu akcjonariusza (także w widoku szczegółowym, per zakres) przyciski
+    „Zbycie / Obciążenie / Umorzenie”. Parametry `emisja`, `osoba`, `zakres` przechodzą przez
+    założenie sprawy do kreatora (`daneStartowe` w `publiczne/js/sprawy.js`): wypełnione są seria,
+    zbywca albo akcjonariusz i zakres numerów, który można zawęzić (umorzenie i obciążenie dostały
+    pole „Numery akcji”; przeniesienie korzysta z istniejącego trybu ręcznego zakresu).
+  - **D-P2** — było już zrealizowane: `WyborZKartoteki` (jeden komponent w całej aplikacji)
+    wyszukuje w `psa_osoby` i ma „+ Nowa osoba w kartotece” w tym samym oknie; po zapisie osoba jest
+    od razu wybrana. Używany dla nabywcy, obejmującego, zastawnika/użytkownika, przedstawiciela.
+  - **D-P3** — po objęciu choć jednej akcji emisji sprostowanie serii, numeru pierwszej akcji albo
+    liczby akcji (i wycofanie całej emisji) jest odrzucane w `walidacje.js`
+    (`sprawdzSprostowanieEmisji`) z komunikatem kierującym do umorzenia albo nowej emisji; pola
+    opisowe przechodzą. W kokpicie przycisk „Sprostuj” przy emisji otwiera okno z tymi trzema polami
+    zablokowanymi i tym samym komunikatem.
+  - Podglądu „przed/po” nie rozbudowujemy. Walidacja „nabywca ≠ zbywca” bez zmian (obejmuje
+    wszystkie tytuły przejścia oraz przeniesienie ułamka — `ETAP-0-RAPORT.md`, B9).
+- Testy: `testy/d-p3-blokada-emisji.test.js`; UI sprawdzone w przeglądarce (Playwright):
+  wypełnienie kreatora dla trzech czynności, okna sprostowania emisji i przekazania, brak błędów JS.
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (D-P1, D-P2, D-P3).
+
+---
+
+### D-072 — Dokumentacja po porównaniu z KRN i reguły przejęcia z KRN (D-R08, etap 6)
+
+- Data: 2026-09-26 (etap 6)
+- Obszar: dokumentacja
+- Decyzja: `CLAUDE-PSA.md` — nowa reguła domenowa 6 (chwila wpisu jedyną osią czasu), model danych
+  (`psa_zdarzenia` bez daty zdarzenia, `przekazanie_*`, `*kraj_kod`, `psa_kraje`,
+  `psa_osoby_dzialajace`, znaczenie `data_utworzenia_spolki`), typ `przekazanie_rejestru`, nowe
+  walidacje blokujące. `PRZEJECIE-REJESTRU.md` §3a — reguły D-R08 pkt 1–8, w tym wstrzymanie
+  migracji Charlie Unicorn AI PSA do decyzji notariusza. `docs/krn/POROWNANIE-KRN-PSA.md` —
+  tabela rozstrzygnięć. Test scenariusza KRN z numeracją AN 1–25 / AZ 26–100:
+  `testy/d-r08-krn-numeracja.test.js`.
+- Otwarte: weryfikacja cytatów art. 300³⁵ § 1¹ i art. 300³² § 3 KSH (Dz.U. 2026 poz. 176) —
+  notariusz odłożył ją na później (`ETAP-0-RAPORT.md`, A7).
+- Źródło: `docs/krn/PROMPT-CLAUDE-CODE-PSA-KRN.md` (etap 6, D-R08).
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

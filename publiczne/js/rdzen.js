@@ -82,18 +82,38 @@ function procent(p) {
   return `${wartosc.toFixed(miejsca)}%`;
 }
 
+/* D-R01: znaczniki wpisu przychodzą w UTC (`…Z`) — pokazujemy je zawsze
+   w strefie kancelarii, niezależnie od strefy przeglądarki. Same daty
+   (`RRRR-MM-DD`) nie mają strefy i idą bez przeliczania. */
+const STREFA_KANCELARII = 'Europe/Warsaw';
+
+function czesciLokalne(iso) {
+  const czesci = {};
+  new Intl.DateTimeFormat('en-GB', {
+    timeZone: STREFA_KANCELARII,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(iso)).forEach((p) => { czesci[p.type] = p.value; });
+  return czesci;
+}
+
 function data(iso) {
   if (!iso) return '—';
-  const [r, m, d] = String(iso).slice(0, 10).split('-');
+  const tekst = String(iso);
+  if (tekst.includes('T')) {
+    const c = czesciLokalne(tekst);
+    return `${c.day}.${c.month}.${c.year}`;
+  }
+  const [r, m, d] = tekst.slice(0, 10).split('-');
   return `${d}.${m}.${r}`;
 }
 
 function dataCzas(iso) {
   if (!iso) return '—';
   const tekst = String(iso);
-  const dzien = data(tekst);
-  const godzina = tekst.slice(11, 19);
-  return godzina ? `${dzien}, godz. ${godzina}` : dzien;
+  if (!tekst.includes('T')) return data(tekst);
+  const c = czesciLokalne(tekst);
+  return `${c.day}.${c.month}.${c.year}, godz. ${c.hour}:${c.minute}:${c.second}`;
 }
 
 function dzisIso() {

@@ -54,14 +54,15 @@ function oczysc(tekst) {
 
 /**
  * Skrot pojedynczego zdarzenia.
- * hash = sha256(id | spolka_id | typ | data_zdarzenia | data_wpisu | autor | dane_json | hash_poprzedni)
+ * hash = sha256(id | spolka_id | typ | data_wpisu | autor | dane_json | hash_poprzedni)
+ *
+ * D-R01: bez daty zdarzenia - jedyna osia czasu rejestru jest chwila wpisu.
  */
 function skrot(zdarzenie) {
   const pola = [
     String(zdarzenie.id),
     String(zdarzenie.spolka_id),
     String(zdarzenie.typ),
-    String(zdarzenie.data_zdarzenia),
     String(zdarzenie.data_wpisu),
     oczysc(zdarzenie.autor),
     String(zdarzenie.dane_json),

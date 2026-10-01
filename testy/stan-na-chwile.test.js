@@ -1,14 +1,12 @@
 'use strict';
 
 /**
- * Sprint 6, faza 2.3 (SESJA-PSA-5-INTERFEJS.md) — „stan na" z dokładnością
- * do minuty. Jedyna dozwolona zmiana poza warstwą prezentacji w tamtej
- * sesji: porównanie po `data_wpisu` (DATETIME), nie po `data_zdarzenia`,
- * gdy parametr `data` niesie godzinę.
+ * „Stan na" z dokładnością do minuty; od D-R01 jedyną osią czasu jest
+ * chwila wpisu (`data_wpisu`, UTC).
  *
- * Zdarzenia budowane bezpośrednio przez `rejestr.zapiszZdarzenie` (nie przez
- * `dokonajWpisu`) — to jedyny sposób na pełną kontrolę nad `data_wpisu` co do
- * minuty w teście (normalna ścieżka zawsze wstawia `terazIso()`).
+ * Zdarzenia budowane bezpośrednio przez `rejestr.zapiszZdarzenie` z
+ * wewnętrznym parametrem `chwila` — pełna kontrola nad chwilą wpisu w teście
+ * (normalna ścieżka zawsze wstawia `terazUtc()`).
  *
  * `TZ` ustawiona jawnie na strefę kancelarii (`.env.przyklad`) — porównanie
  * chwil (`?data=` bez przesunięcia, jak z formularza w przeglądarce, vs.
@@ -28,20 +26,18 @@ const { bazaTestowa, dodajSpolke } = require('./pomoc');
 
 function przygotujDwaWpisyTegoSamegoDnia(db, spolka) {
   // Emisja A wpisana rano, emisja B (inna seria) wpisana po południu tego
-  // samego dnia (`data_zdarzenia` identyczna dla obu — liczy się `data_wpisu`).
+  // samego dnia — liczy się wyłącznie chwila wpisu (D-R01).
   rejestr.zapiszZdarzenie(db, {
     spolka_id: spolka,
     typ: 'emisja',
-    data_zdarzenia: '2026-01-15',
-    data_wpisu: '2026-01-15T09:00:00+01:00',
+    chwila: '2026-01-15T09:00:00+01:00',
     autor: 'Test',
     dane: { seria: 'A', nr_pierwszy: 1, ilosc: 10 },
   });
   rejestr.zapiszZdarzenie(db, {
     spolka_id: spolka,
     typ: 'emisja',
-    data_zdarzenia: '2026-01-15',
-    data_wpisu: '2026-01-15T14:00:00+01:00',
+    chwila: '2026-01-15T14:00:00+01:00',
     autor: 'Test',
     dane: { seria: 'B', nr_pierwszy: 1, ilosc: 5 },
   });
@@ -83,25 +79,19 @@ test('stan sprzed pierwszego wpisu jest pusty', () => {
   assert.deepEqual(przedWszystkim.niezgodnosci, []);
 });
 
-test('format bez godziny zachowuje dotychczasowe zachowanie (po data_zdarzenia, nie data_wpisu)', () => {
+test('D-R01: dzień D = koniec dnia D po chwili wpisu; emisje też liczą się od wpisu', () => {
   const db = bazaTestowa();
   const spolka = dodajSpolke(db);
   przygotujDwaWpisyTegoSamegoDnia(db, spolka);
 
-  // `emisje` (lista serii) nie jest i nigdy nie była filtrowana po dniu —
-  // pokazuje wszystkie serie niezależnie od suwaka „stan na" (zachowanie
-  // sprzed sprintu 6, niezmienione). Data filtruje wyłącznie `bilans`
-  // (ile z każdej serii jest w danym dniu nieobjęte/przypisane/umorzone).
   const naDzien = widoki.widokStanu(db, spolka, '2026-01-15');
   assert.equal(naDzien.emisje.length, 2);
   const nieobjeteNaDzien = naDzien.bilans.reduce((s, b) => s + b.nieobjete, 0);
-  assert.equal(nieobjeteNaDzien, 15, 'na dzień 2026-01-15 obie serie (10+5) są już otwarte jako nieobjęte');
+  assert.equal(nieobjeteNaDzien, 15, 'na koniec dnia 2026-01-15 obie serie (10+5) są już wpisane');
 
-  // Dzień przed data_zdarzenia obu emisji — format daty (bez godziny) wciąż
-  // porównuje po `data_zdarzenia`, więc żadna z serii jeszcze nie „zaszła".
   const dzienWczesniej = widoki.widokStanu(db, spolka, '2026-01-14');
-  const nieobjeteDzienWczesniej = dzienWczesniej.bilans.reduce((s, b) => s + b.nieobjete, 0);
-  assert.equal(nieobjeteDzienWczesniej, 0);
+  assert.equal(dzienWczesniej.emisje.length, 0);
+  assert.equal(dzienWczesniej.bilans.reduce((s, b) => s + b.nieobjete, 0), 0);
 });
 
 test('chwila z sekundami jest równoważna chwili bez sekund na tę samą minutę', () => {

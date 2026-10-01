@@ -96,11 +96,11 @@ test.before(async () => {
   nowakId = dodajOsobe({ nazwisko: 'Nowak', imie: 'Anna', pesel: '85050512345', typ: 'fizyczna' });
 
   const emisja = rejestr.dokonajWpisu(db(), {
-    spolkaId, typ: 'emisja', data_zdarzenia: '2026-01-10',
+    spolkaId, typ: 'emisja',
     wejscie: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
   });
   rejestr.dokonajWpisu(db(), {
-    spolkaId, typ: 'objecie', data_zdarzenia: '2026-01-10',
+    spolkaId, typ: 'objecie',
     wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: kowalskiId, ilosc: 60 }, { osoba_id: nowakId, ilosc: 40 }] },
     autor: 'Test',
   });
@@ -262,11 +262,11 @@ test('POST /api/psa/portal/zadania: ten sam klucz_idempotencji nie zaklada drugi
   const spolkaIdempId = dodajSpolke({ nazwa: `Portal Idempotencja ${czas.terazIso()}` });
   const osobaIdempId = dodajOsobe({ nazwisko: 'Idempotentny', imie: 'Karol', pesel: '90010112360' });
   const emisjaIdemp = rejestr.dokonajWpisu(db(), {
-    spolkaId: spolkaIdempId, typ: 'emisja', data_zdarzenia: '2026-01-10',
+    spolkaId: spolkaIdempId, typ: 'emisja',
     wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
   });
   rejestr.dokonajWpisu(db(), {
-    spolkaId: spolkaIdempId, typ: 'objecie', data_zdarzenia: '2026-01-10',
+    spolkaId: spolkaIdempId, typ: 'objecie',
     wejscie: { emisja_zdarzenie_id: emisjaIdemp.zdarzenie.id, pozycje: [{ osoba_id: osobaIdempId, ilosc: 10 }] }, autor: 'Test',
   });
   await dodajKonto({ email: 'idempotentny@example.pl', haslo: 'HasloKarola123', rola: 'akcjonariusz', osobaId: osobaIdempId });
@@ -481,11 +481,11 @@ test('AML: akcjonariusz wgrywa WLASNY skan dokumentu, trafia do wspolnej kartote
   db().prepare('UPDATE psa_spolki SET stosuje_procedure_aml = 1 WHERE id = ?').run(spolkaAmlId);
   const osobaAmlId = dodajOsobe({ nazwisko: 'Skanowy', imie: 'Piotr', pesel: '90010112345' });
   const emisjaAml = rejestr.dokonajWpisu(db(), {
-    spolkaId: spolkaAmlId, typ: 'emisja', data_zdarzenia: '2026-01-10',
+    spolkaId: spolkaAmlId, typ: 'emisja',
     wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
   });
   rejestr.dokonajWpisu(db(), {
-    spolkaId: spolkaAmlId, typ: 'objecie', data_zdarzenia: '2026-01-10',
+    spolkaId: spolkaAmlId, typ: 'objecie',
     wejscie: { emisja_zdarzenie_id: emisjaAml.zdarzenie.id, pozycje: [{ osoba_id: osobaAmlId, ilosc: 10 }] }, autor: 'Test',
   });
   await dodajKonto({ email: 'skanowy@example.pl', haslo: 'HasloPiotra123', rola: 'akcjonariusz', osobaId: osobaAmlId });

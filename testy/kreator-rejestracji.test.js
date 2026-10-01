@@ -28,12 +28,10 @@ test('otworzRejestr: emisja + objęcie zapisane atomowo w jednej transakcji (odw
       {
         typ: 'emisja',
         klucz_tymczasowy: 'emisja-A',
-        data_zdarzenia: '2026-01-10',
         dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
       },
       {
         typ: 'objecie',
-        data_zdarzenia: '2026-01-10',
         dane: {
           emisja_zdarzenie_id: { __odwolanie_do_partii: 'emisja-A' },
           pozycje: [{ osoba_id: jan, ilosc: 100 }],
@@ -65,12 +63,10 @@ test('otworzRejestr: odwołanie do nieistniejącego klucza tymczasowego jest odr
           {
             typ: 'emisja',
             klucz_tymczasowy: 'emisja-A',
-            data_zdarzenia: '2026-01-10',
             dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
           },
           {
             typ: 'objecie',
-            data_zdarzenia: '2026-01-10',
             dane: {
               emisja_zdarzenie_id: { __odwolanie_do_partii: 'literowka' },
               pozycje: [{ osoba_id: jan, ilosc: 100 }],
@@ -94,11 +90,10 @@ test('otworzRejestr: gdy drugie zdarzenie zawodzi, PIERWSZE też się cofa (atom
       autor: 'Test',
       dzisiaj: '2026-12-31',
       zdarzenia: [
-        { typ: 'emisja', data_zdarzenia: '2026-01-10', dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' } },
+        { typ: 'emisja', dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' } },
         // Objecie przekracza pule emisji - walidacja bilansu odrzuci cala partie.
         {
           typ: 'objecie',
-          data_zdarzenia: '2026-01-10',
           dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: jan, ilosc: 999 }] },
         },
       ],

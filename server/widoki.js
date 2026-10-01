@@ -14,6 +14,7 @@ const maskowanie = require('./logika/maskowanie');
 const przepisy = require('./logika/przepisy');
 const rejestr = require('./rejestr');
 const n = require('./logika/numery');
+const u = require('./logika/ulamki');
 const czas = require('./pomocnicze/czas');
 
 const ROLE = przepisy.ROLE_ODBIORCY;
@@ -45,39 +46,37 @@ function osobaDlaRoli(osoba, rola, odbiorcaOsobaId) {
  *                       Domyslnie dzisiaj (data-only).
  * @param {string} rola  `przepisy.ROLE_ODBIORCY`; domyslnie kancelaria
  *
- * Dwie odrebne semantyki, bo mieszaja dwa rozne pojecia czasu w rejestrze
- * (regula domenowa 6): format daty porownuje po `data_zdarzenia` (kiedy
- * czynnosc prawnie zaszla - pozwala np. na wpis z data historyczna wczesniej
- * niz dzisiaj). Format z godzina porownuje po `data_wpisu` (kiedy WPIS trafil
- * do rejestru) - odroznia dwa wpisy z tego samego dnia po kolejnosci
- * rzeczywistego wprowadzenia, nie po deklarowanej dacie zdarzenia.
+ * D-R01 - jedna semantyka: stan rejestru to wynik zdarzen WPISANYCH do
+ * wskazanej chwili (art. 300(37) § 1 i art. 300(38) § 1 KSH). Dzien D =
+ * koniec dnia D (23:59:59 czasu kancelarii), a dla dnia biezacego - chwila
+ * sporzadzenia. Wpis dokonany pozniej (takze sprostowanie) nie zmienia
+ * stanu na dzien wczesniejszy, wiec informacja na dzien D jest zawsze taka
+ * sama, niezaleznie od tego, kiedy ja wygenerowano.
  */
 function widokStanu(db, spolkaId, data, opcje = {}) {
   const rola = opcje.rola || ROLE.KANCELARIA;
   const odbiorcaOsobaId = opcje.odbiorcaOsobaId ?? null;
   const surowaData = String(data || czas.dzisIso());
-  const zChwila = surowaData.includes('T');
-  const dzien = surowaData.slice(0, 10);
+  const dzisiaj = czas.dzisIso();
+  const biezacy = surowaData === dzisiaj || !data;
+  const chwilaStanu = biezacy
+    ? czas.terazUtc()
+    : czas.poprawnaData(surowaData)
+      ? czas.koniecDniaUtc(surowaData)
+      : czas.chwilaUtc(surowaData);
+  const dzien = czas.dzienLokalny(chwilaStanu);
 
   const spolka = rejestr.wczytajSpolke(db, spolkaId);
   if (!spolka) return null;
 
   const wszystkieZdarzenia = rejestr.wczytajZdarzenia(db, spolkaId);
-  let stan;
-  let dzienDoFiltrow;
-  if (zChwila) {
-    const chwila = new Date(surowaData).getTime();
-    const doChwili = wszystkieZdarzenia.filter((z) => new Date(z.data_wpisu).getTime() <= chwila);
-    stan = stanLogika.odtworzStan(doChwili);
-    dzienDoFiltrow = null; // stan juz ograniczony do wpisow sprzed `chwila` - bez drugiego filtra po dacie
-  } else {
-    stan = stanLogika.odtworzStan(wszystkieZdarzenia);
-    dzienDoFiltrow = dzien;
-  }
+  const stan = stanLogika.odtworzStan(
+    wszystkieZdarzenia.filter((z) => String(z.data_wpisu) <= chwilaStanu)
+  );
+  const dzienDoFiltrow = null; // stan juz ograniczony do wpisow sprzed chwili - bez drugiego filtra
   const osoby = rejestr.wczytajOsobySpolki(db, spolkaId);
-  // D-050/B12 - moment WPISU (nie data prawna zdarzenia) przy pozycji
-  // akcjonariusza: `data_wpisu` jest systemowa, co do sekundy (patrz
-  // migracje.js:92), `data_zdarzenia`/`data_od` to data NOTARIALNA.
+  // D-050/B12, D-R01 - moment WPISU przy pozycji akcjonariusza
+  // (`data_wpisu`, systemowa, UTC co do sekundy).
   const dataWpisuZdarzenia = new Map(wszystkieZdarzenia.map((z) => [z.id, z.data_wpisu]));
 
   const akcjonariat = stanLogika.akcjonariatNaDzien(stan, dzienDoFiltrow);
@@ -88,6 +87,9 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
 
   return {
     data: dzien,
+    // D-R07: dla dnia biezacego informacja podaje takze godzine stanu.
+    chwila_stanu: chwilaStanu,
+    stan_biezacy: biezacy,
     rola,
     spolka: spolkaDlaRoli(spolka, rola),
 
@@ -124,8 +126,16 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
       // Ulamek dokladny (Z-057) - do formatowania "X i N/D" zamiast lossy
       // decimala, gdy pozycja obejmuje ulamkowo wspoluprawniony numer.
       udzial_ulamek: p.udzial_ulamek,
-      glosy: p.glosy,
+      // D-R06: liczby glosow nie pokazujemy nigdzie - wyjatek to uchwala o
+      // wyborze notariusza (wzor 03), ktora prosi o nie jawnie (`zGlosami`).
+      ...(opcje.zGlosami ? { glosy: p.glosy } : {}),
       wymaga_przedstawiciela: p.wymaga_przedstawiciela,
+      // D-R03: zakresy numerow z data wpisu kazdego z nich.
+      grupy_wpisu: p.grupy_wpisu.map((g) => ({
+        data_wpisu: g.dzien_wpisu,
+        zakresy: g.zakresy,
+        numery: n.opisz(g.zakresy),
+      })),
       zakresy: p.zakresy,
       numery: n.opisz(p.zakresy),
       procent: p.procent,
@@ -150,6 +160,9 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
     })),
 
     razem_akcji: akcjonariat.razem_akcji,
+
+    // D-R06: wiersz „Łącznie” dla osoby z więcej niż jedną serią.
+    akcjonariusze_lacznie: lacznieNaOsobe(akcjonariat.pozycje),
 
     obciazenia: obciazenia.map((o) => ({
       klucz: o.klucz,
@@ -194,6 +207,30 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
   };
 }
 
+/**
+ * Sumy na osobe przez wszystkie serie - tylko dla osob z kilkoma seriami.
+ * Udzial sumujemy na ulamkach (regula domenowa 4a), procent z tych samych
+ * wartosci, co w wierszach.
+ */
+function lacznieNaOsobe(pozycje) {
+  const wynik = new Map();
+  for (const p of pozycje) {
+    const w = wynik.get(p.osoba_id) || {
+      osoba_id: p.osoba_id,
+      serie: [],
+      udzial_ulamek: { licznik: 0, mianownik: 1 },
+      procent: 0,
+    };
+    w.serie.push(p.seria);
+    w.udzial_ulamek = u.suma(w.udzial_ulamek, p.udzial_ulamek || { licznik: p.ilosc, mianownik: 1 });
+    w.procent += p.procent;
+    wynik.set(p.osoba_id, w);
+  }
+  return [...wynik.values()]
+    .filter((w) => w.serie.length > 1)
+    .map((w) => ({ ...w, ilosc: w.udzial_ulamek.licznik / w.udzial_ulamek.mianownik }));
+}
+
 /** Historia zdarzen spolki - os czasu w kokpicie. */
 function widokZdarzen(db, spolkaId, { limit = null } = {}) {
   const zdarzenia = rejestr.wczytajZdarzenia(db, spolkaId);
@@ -218,7 +255,6 @@ function widokZdarzen(db, spolkaId, { limit = null } = {}) {
   return wycinek.map((z) => ({
     id: z.id,
     typ: z.typ,
-    data_zdarzenia: z.data_zdarzenia,
     data_wpisu: z.data_wpisu,
     autor: z.autor,
     uzasadnienie: z.uzasadnienie,
@@ -260,6 +296,8 @@ function podsumujZdarzenie(z, osoby) {
       return `Umorzenie ${suma(d.pozycje)} akcji serii ${d.seria}${
         d.tryb ? ` (${d.tryb})` : ''
       }.`;
+    case 'przekazanie_rejestru':
+      return `Przekazanie prowadzenia rejestru: ${d.odbiorca_nazwa || 'inny podmiot'} z dniem ${d.data_przekazania || '—'}.`;
     case 'zmiana_danych_spolki':
       return `Zmiana danych spółki: ${(d.zmienione_pola || []).join(', ') || 'bez wskazania pól'}.`;
     case 'obciazenie':

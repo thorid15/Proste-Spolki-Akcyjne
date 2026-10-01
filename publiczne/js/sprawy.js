@@ -522,11 +522,26 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
 /* ─────────────────────────────────────────────────────
    KROKI 3–4 OSADZONE — wspólne dla nowej i wznawianej sprawy
    ───────────────────────────────────────────────────── */
-function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano, emisjaPoczatkowa }) {
+/**
+ * D-P1 — dane startowe kreatora uruchomionego z wiersza akcjonariusza albo
+ * zakresu akcji w kokpicie: seria, osoba (zbywca / akcjonariusz) i zakres
+ * numerów, który w kreatorze można zawęzić.
+ */
+function daneStartowe(typ, emisja, osoba, zakres) {
+  if (!emisja) return {};
+  const baza = { emisja_zdarzenie_id: Number(emisja) };
+  const osobaId = osoba ? Number(osoba) : null;
+  const zakresy = zakres ? { zakresy_tekst: zakres.replace(/–/g, '-') } : {};
+  if (typ === 'przeniesienie' && osobaId) return { ...baza, zbywca_osoba_id: osobaId, pozycje: [{ ...zakresy }] };
+  if (typ === 'umorzenie' && osobaId) return { ...baza, pozycje: [{ osoba_id: osobaId, ...zakresy }] };
+  if (typ === 'obciazenie' && osobaId) return { ...baza, akcjonariusz_osoba_id: osobaId, ...zakresy };
+  return baza;
+}
+
+function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy }) {
   const draft = sprawa.dane_wejsciowe_json ? JSON.parse(sprawa.dane_wejsciowe_json) : null;
 
   const [krok, ustawKrok] = useState(2);
-  const [dataZdarzenia, ustawDateZdarzenia] = useState((draft && draft.data_zdarzenia) || sprawa.data_wplywu.slice(0, 10));
   // `emisjaPoczatkowa` przychodzi z przejścia EMISJA → OBJĘCIE (kreator.js) —
   // seria jest już wskazana, notariusz uzupełnia tylko, kto ją obejmuje.
   // Zapisany draft ma pierwszeństwo: to stan, do którego ktoś wrócił.
@@ -537,7 +552,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   // (0.4 pkt 1 — „raz wpisane, nigdy więcej”), zbywcę wciąż można zmienić —
   // sprawę mógł założyć pełnomocnik albo osoba trzecia w czyimś imieniu.
   const [dane, ustawDane] = useState(
-    (draft && draft.dane) || (emisjaPoczatkowa ? { emisja_zdarzenie_id: emisjaPoczatkowa } : {})
+    (draft && draft.dane) || daneStartowe(sprawa.typ_zdarzenia, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy)
   );
   useEffect(() => {
     if (draft || emisjaPoczatkowa) return;
@@ -552,6 +567,11 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   const [ladowaniePodgladu, ustawLadowaniePodgladu] = useState(false);
   const [zapisywanie, ustawZapisywanie] = useState(false);
   const [wynik, ustawWynik] = useState(null);
+  // D-Z: osoba działająca przy wpisie (audyt) — domyślnie ta przypisana pracownikowi.
+  const dzialajace = useDane('/api/psa/auth/osoby-dzialajace');
+  const [dzialajacyId, ustawDzialajacyId] = useState(null);
+  const listaDzialajacych = dzialajace.dane ? dzialajace.dane.osoby.filter((o) => o.aktywny) : [];
+  const wybranyDzialajacy = dzialajacyId ?? (dzialajace.dane ? dzialajace.dane.moja_domyslna_id : null);
   const [bladLokalny, ustawBladLokalny] = useState(null);
 
   function budujDane() {
@@ -563,7 +583,6 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
     ustawBladLokalny(null);
     try {
       const odpowiedz = await API.post(`/api/psa/sprawy/${sprawa.id}/podglad`, {
-        data_zdarzenia: dataZdarzenia,
         dane: budujDane(),
       });
       ustawPodglad(odpowiedz);
@@ -580,8 +599,8 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
     ustawBladLokalny(null);
     try {
       const odpowiedz = await API.post(`/api/psa/sprawy/${sprawa.id}/wpisz`, {
-        data_zdarzenia: dataZdarzenia,
         dane: budujDane(),
+        ...(wybranyDzialajacy ? { dzialajacy_id: wybranyDzialajacy } : {}),
       });
       ustawWynik(odpowiedz);
       // Sprawa jest juz „wpisana” w bazie - ukrywamy w rodzicu akcje i panel
@@ -692,9 +711,10 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
       {krok === 2 && (
         <>
           <div className="card-h">Co się zmienia</div>
-          <Pole etykieta="Data zdarzenia" wymagane podpowiedz="Data z dokumentu.">
-            <PoleDaty wartosc={dataZdarzenia} max={fmt.dzisIso()} przyZmianie={(v) => v && ustawDateZdarzenia(v)} skroty />
-          </Pole>
+          <p className="podstawa-prawna">
+            Datę i godzinę wpisu nadaje system w chwili zatwierdzenia — od niej liczy się stan
+            rejestru (art. 300³⁷ § 1 i art. 300³⁸ § 1 KSH).
+          </p>
           {KrokTresci ? (
             <KrokTresci dane={dane} ustawDane={ustawDane} spolka={spolka} />
           ) : (
@@ -780,6 +800,18 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
                 <div className="podstawa-prawna">
                   Przycisk „Dokonaj wpisu” pozostaje nieaktywny do czasu odhaczenia całej checklisty.
                 </div>
+              )}
+              {!sawatpliwosci && listaDzialajacych.length > 0 && (
+                <Pole etykieta="Osoba działająca przy wpisie" podpowiedz="Tylko do audytu — nie trafia na dokumenty.">
+                  <select value={wybranyDzialajacy ?? ''} onChange={(z) => ustawDzialajacyId(z.target.value === '' ? null : Number(z.target.value))}>
+                    <option value="">— ustal automatycznie —</option>
+                    {listaDzialajacych.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.imie} {o.nazwisko} ({o.funkcja === 'notariusz' ? 'notariusz' : 'zastępca notarialny'})
+                      </option>
+                    ))}
+                  </select>
+                </Pole>
               )}
               {!sawatpliwosci && (
                 <p className="zdanie-nieodwracalne">Wpisu nie można cofnąć — możliwe jest tylko sprostowanie.</p>
@@ -986,7 +1018,7 @@ function PodstawaWpisu({ sprawa, typy, odswiez }) {
 /* ─────────────────────────────────────────────────────
    EKRAN SPRAWY
    ───────────────────────────────────────────────────── */
-function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
+function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy }) {
   const { dane, ladowanie, blad, odswiez } = useDane(`/api/psa/sprawy/${sprawaId}`);
   const meta = useDane('/api/psa/meta');
   // Ustawiane od razu po udanym wpisie (patrz KreatorSprawy) - ukrywa akcje
@@ -1107,6 +1139,8 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa }) {
             odswiezSprawe={odswiez}
             naWpisano={() => ustawWlasnieWpisano(true)}
             emisjaPoczatkowa={emisjaPoczatkowa}
+            osobaPoczatkowa={osobaPoczatkowa}
+            zakresPoczatkowy={zakresPoczatkowy}
           />
       )}
       {sprawa.stan === 'wstrzymana' && (

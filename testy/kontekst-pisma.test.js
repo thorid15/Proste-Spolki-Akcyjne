@@ -29,6 +29,11 @@ for (const [klucz, wartosc] of Object.entries({
 })) {
   process.env[klucz] = wartosc;
 }
+// Modul kontekstu czyta ustawienia kancelarii z bazy (`psa_ustawienia`) -
+// wlasna baza w pamieci z wykonanymi migracjami, zamiast pliku z `.env`,
+// ktory w czystym srodowisku nie ma tabel.
+process.env.WSPOLNA_BAZA = ':memory:';
+require('../server/migracje').uruchom(require('../server/baza').db());
 
 const kontekst = require('../server/logika/kontekst-pisma');
 const wzoryDysk = require('../server/logika/wzory-dysk');
@@ -87,7 +92,6 @@ const SPRAWA = {
   sposob_usuniecia: 'Przedłożenie zgody spółki na zbycie akcji nie w pełni pokrytej.',
   termin_usuniecia: '2026-08-20',
   dane_wejsciowe_json: JSON.stringify({
-    data_zdarzenia: '2026-08-13',
     dane: { seria: 'A', pozycje: [{ ilosc: 250 }] },
   }),
 };

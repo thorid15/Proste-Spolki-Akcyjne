@@ -61,4 +61,83 @@ function poprawnaDataAlboChwila(tekst) {
   return poprawnaData(tekst) || poprawnaChwila(tekst);
 }
 
-module.exports = { terazIso, dzisIso, poprawnaData, poprawnaChwila, poprawnaDataAlboChwila };
+// ─────────────────────────────────────────────────────────────
+// D-R01 — chwila wpisu do rejestru (UTC)
+// ─────────────────────────────────────────────────────────────
+//
+// `psa_zdarzenia.data_wpisu` (i pochodne `data_od`/`data_do` w projekcji
+// stanu) to znacznik UTC `RRRR-MM-DDTGG:MM:SSZ`. Jeden, staly format -
+// porownania tekstowe sa wtedy porownaniami chwil. Prezentacja zawsze w
+// strefie kancelarii (Europe/Warsaw, wymuszona przez `konfiguracja.js`),
+// stad funkcje `dzienLokalny`/`godzinaLokalna` nizej.
+
+/** Chwila jako `RRRR-MM-DDTGG:MM:SSZ` (UTC, bez milisekund). */
+function utc(data) {
+  return data.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+/** Biezaca chwila w UTC - jedyne zrodlo `data_wpisu`. */
+function terazUtc(data = new Date()) {
+  return utc(data);
+}
+
+/**
+ * Normalizuje wskazanie chwili do UTC:
+ * - `RRRR-MM-DD` → poludnie tego dnia czasu lokalnego (uzywane wylacznie
+ *   przez wstrzykiwany zegar testow i przez date rejestracji z KRN, gdy
+ *   KRN nie podaje godziny),
+ * - `RRRR-MM-DDTGG:MM[:SS]` bez strefy → czas lokalny kancelarii,
+ * - z `Z` albo przesunieciem → wprost.
+ */
+function chwilaUtc(tekst) {
+  const t = String(tekst || '');
+  if (poprawnaData(t)) {
+    const [r, m, d] = t.split('-').map(Number);
+    return utc(new Date(r, m - 1, d, 12, 0, 0));
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(t);
+  if (m) {
+    return utc(new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)));
+  }
+  const ms = Date.parse(t);
+  if (Number.isNaN(ms)) throw new Error(`Niepoprawne wskazanie chwili: „${t}”.`);
+  return utc(new Date(ms));
+}
+
+/** Koniec dnia `RRRR-MM-DD` (23:59:59 czasu lokalnego) jako UTC - „stan na dzien D”. */
+function koniecDniaUtc(dzien) {
+  const [r, m, d] = String(dzien).slice(0, 10).split('-').map(Number);
+  return utc(new Date(r, m - 1, d, 23, 59, 59));
+}
+
+/**
+ * Dzien kalendarzowy w strefie kancelarii. Dla samej daty (`RRRR-MM-DD`)
+ * zwraca ja bez zmian - daty dzienne nie maja strefy.
+ */
+function dzienLokalny(iso) {
+  if (!iso) return null;
+  const t = String(iso);
+  if (!t.includes('T')) return t.slice(0, 10);
+  return dzisIso(new Date(t));
+}
+
+/** Godzina `GG:MM` (albo `GG:MM:SS`) w strefie kancelarii; `null` dla samej daty. */
+function godzinaLokalna(iso, { sekundy = false } = {}) {
+  if (!iso || !String(iso).includes('T')) return null;
+  const d = new Date(String(iso));
+  const g = `${dwie(d.getHours())}:${dwie(d.getMinutes())}`;
+  return sekundy ? `${g}:${dwie(d.getSeconds())}` : g;
+}
+
+module.exports = {
+  terazIso,
+  dzisIso,
+  poprawnaData,
+  poprawnaChwila,
+  poprawnaDataAlboChwila,
+  terazUtc,
+  chwilaUtc,
+  koniecDniaUtc,
+  dzienLokalny,
+  godzinaLokalna,
+};

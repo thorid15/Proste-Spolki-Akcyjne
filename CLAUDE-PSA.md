@@ -151,8 +151,15 @@ mastera sekcji 9 — jeśli PSA ich potrzebuje (np. `--sb` do szerokości sideba
    przy zwykłym przeniesieniu, więc druga i kolejne transakcje na tych samych akcjach omijały
    blokadę; patrz `ARCHITEKTURA-PSA.md` §4 poz. 9/10).
 5. **Kwoty w groszach (`INTEGER`).** Cena emisyjna, opłaty. Żadnych floatów.
-6. **Data zdarzenia ≠ data wpisu.** `data_zdarzenia` (z dokumentu, `DATE`) i `data_wpisu`
-   (`DATETIME` co do sekundy, ustawiana przez system, nieedytowalna).
+6. **Chwila wpisu jest jedyną osią czasu rejestru** (D-065, decyzja D-R01; art. 300³⁷ § 1 i
+   art. 300³⁸ § 1 KSH). `data_wpisu` nadaje system (UTC `RRRR-MM-DDTGG:MM:SSZ`, co do sekundy),
+   nie da się jej podać ani antydatować (`rejestr.odrzucRecznaDate`). Daty zdarzenia **nie ma** —
+   kolumna usunięta z tabeli i ze skrótu. „Stan na dzień D” = zdarzenia wpisane do 23:59:59 dnia D
+   (Europe/Warsaw), dla dnia bieżącego — do chwili sporządzenia; informacja na dzień D nie zależy od
+   chwili jej wygenerowania, sprostowanie działa od chwili swojego wpisu. Jedyny wyjątek: stan
+   otwarcia z KRN (`dane.migracja_krn.data_rejestracji`), tylko w rejestrze bez zwykłych wpisów.
+   Data dokumentu-podstawy (`psa_sprawy.dokument_data`) i data emisji (`psa_emisje.data_emisji`)
+   to atrybuty dokumentu i emisji, nie oś czasu rejestru.
 7. **Termin 7 dni** liczony w `server/logika/terminy.js` (czysta funkcja): od `data_wplywu`,
    zawieszany na czas stanu `wstrzymana`, wznawiany od dnia usunięcia przeszkody.
 8. **Zajęcie egzekucyjne**: ścieżka z urzędu — bez żądania, bez uprzedniego powiadomienia
@@ -202,8 +209,16 @@ mastera sekcji 9 — jeśli PSA ich potrzebuje (np. `--sb` do szerokości sideba
 `umowe_zawarl` (`notariusz`/`zastepca`/`osoba_upowazniona`), `umowe_zawarl_imie_nazwisko`
 (art. 300³² § 1² — wymagane w zgłoszeniu do KRS), `dodatkowe_informacje_umowa_spolki`
 (art. 300³³ § 2), `zakaz_glosu_zastawnika` 0/1 (art. 300²³ § 2),
-`data_zakonczenia_umowy`, `opis` (drukowany na raporcie), `uwagi` (wewnętrzne, nigdy na wydruku),
-`utworzono`, `zaktualizowano`.
+`data_zakonczenia_umowy`, `opis` (drukowany na informacji z rejestru), `uwagi` (wewnętrzne, nigdy
+na wydruku), `utworzono`, `zaktualizowano`.
+- `data_utworzenia_spolki` przechowuje **datę rejestracji spółki w KRS** (import
+  `dataRejestracjiWKRS`) — drukowana jako „Data zarejestrowania spółki” (art. 300³³ § 1 pkt 3).
+- `kraj_kod`, `reprezentant_kraj_kod` — kod ISO 3166-1 alfa-2 (D-069); pola tekstowe `kraj`
+  dostają polską nazwę ze słownika `psa_kraje`, kod ustawiają wyzwalacze.
+- `przekazanie_data`, `przekazanie_odbiorca_typ` (`notariusz`/`izba_notarialna`/`podmiot_rachunki`),
+  `przekazanie_odbiorca_nazwa`, `przekazanie_odbiorca_identyfikator`, `przekazanie_podstawa` —
+  ewidencja przekazania rejestru (D-068); po zapisie rejestr jest tylko do odczytu
+  (`przepisy.blokadaWpisu`).
 
 ### `psa_osoby` — kartoteka wspólna
 `id`, `typ` (`fizyczna`/`prawna`), `nazwisko`, `imie`, `nazwa`, `pesel`, `data_urodzenia`, `nip`,
@@ -212,7 +227,16 @@ mastera sekcji 9 — jeśli PSA ich potrzebuje (np. `--sb` do szerokości sideba
 `zgoda_email` 0/1 (art. 300³³ § 1 pkt 5 — **adres doręczeń dla zwołania WZ**, art. 300⁸⁷ § 1),
 `zadanie_powiadomien_auto` 0/1 + `kanal_powiadomien` (`portal`/`email`/`edoreczenia`) —
 art. 300³⁴ § 9 🔵, `aml_status` (`brak`/`wykonane`/`niemozliwe`),
-`aml_data`, `aml_notatka`, `utworzono`.
+`aml_data`, `aml_notatka`, `utworzono`, `kraj_kod` (D-069).
+
+### `psa_kraje` — słownik ISO 3166-1 alfa-2 (D-069)
+`kod` (PK), `nazwa` (polska), `nazwa_klucz`, `nazwa_en_klucz`. 249 pozycji z `server/dane/kraje.json`.
+Wartość kraju spoza słownika zostaje bez kodu i trafia do raportu `GET /api/psa/kraje/do-poprawy`.
+
+### `psa_osoby_dzialajace` — osoby działające przy wpisach (D-070)
+`id`, `imie`, `nazwisko`, `funkcja` (`notariusz`/`zastepca_notarialny`), `aktywny`, `utworzono`;
+domyślna osoba pracownika: `psa_uzytkownicy.osoba_dzialajaca_id`. Kopia osoby trafia do
+`psa_zdarzenia.dane_json.dzialajacy` przy każdym wpisie — tylko audyt, nigdy na dokumentach.
 
 ### `psa_emisje`
 `id`, `spolka_id` FK, `tytul`, `podstawa_prawna`, `seria`, `nr_pierwszy`, `ilosc`,
@@ -223,12 +247,13 @@ art. 300³⁴ § 9 🔵, `aml_status` (`brak`/`wykonane`/`niemozliwe`),
 `status` (`aktywna`/`w_umarzaniu`/`umorzona`/`wykreslona`), `zdarzenie_id` FK, `opis`, `uwagi`.
 
 ### `psa_zdarzenia` — ŹRÓDŁO PRAWDY (append-only)
-`id`, `spolka_id` FK, `typ` (katalog z sekcji 6), `data_zdarzenia` (DATE),
-`data_wpisu` (DATETIME), `autor`, `sprawa_id` FK NULL, `dane_json` (pełna treść zdarzenia —
+`id`, `spolka_id` FK, `typ` (katalog z sekcji 6),
+`data_wpisu` (UTC, co do sekundy — jedyna oś czasu, reguła 6), `autor`, `sprawa_id` FK NULL, `dane_json` (pełna treść zdarzenia —
 snapshot, nie referencje), `zdarzenie_prostowane_id` NULL, `uzasadnienie` NULL,
 `hash_poprzedni`, `hash`.
 
-`hash` = `sha256(id + spolka_id + typ + data_zdarzenia + data_wpisu + autor + dane_json + hash_poprzedni)`.
+`hash` = `sha256(id + spolka_id + typ + data_wpisu + autor + dane_json + hash_poprzedni)` (od D-065 bez
+daty zdarzenia).
 Łańcuch **globalny** (nie per spółka) — prostsze i wykrywa usunięcie całego rekordu.
 Implementacja: `node:crypto`, bez zależności zewnętrznych.
 
@@ -317,6 +342,7 @@ rozproszony po routerach).
 | `wykreslenie_zajecia` | Uchylenie zajęcia | nie | nie |
 | `zmiana_danych_akcjonariusza` | Adres, e-mail, nazwisko, zgoda na komunikację elektroniczną | tak | nie |
 | `zmiana_danych_spolki` | Firma, siedziba, adres, dane KRS | tak | nie |
+| `przekazanie_rejestru` | Przekazanie prowadzenia rejestru innemu podmiotowi (D-068) — tylko ewidencja, potem tylko odczyt | nie | nie |
 | `uprawnienie` | Ustanowienie/zmiana/wykreślenie uprawnienia, przywileju, obowiązku | tak | nie |
 | `ograniczenie` | Ograniczenia co do rozporządzania akcją | tak | nie |
 | `zdarzenie_inne` | WZA, zmiana umowy spółki, inne bez odzwierciedlenia w pozostałych strukturach | tak | nie |
@@ -360,7 +386,10 @@ Zapis odrzucany z komunikatem po polsku, gdy:
 - ułamek zapisany na zakresie numerów szerszym niż jedna akcja,
 - akcje należą do emisji, która nie została objęta,
 - akcje są objęte zajęciem lub obciążeniem z `blokuje_rozporzadzanie=1`,
-- `data_zdarzenia` jest z przyszłości lub wcześniejsza niż ostatnie zdarzenie na tych akcjach,
+- chwila wpisu poprzedza ostatni wpis spółki (możliwe tylko przy migracji z KRN) albo data
+  rejestracji z KRN leży w przyszłości,
+- sprostowanie serii, numeracji lub liczby akcji emisji, z której objęto choć jedną akcję (D-071),
+- rejestr przekazany innemu podmiotowi (D-068),
 - zakres numerów wykracza poza serię lub nakłada się na cudzy,
 - spółka ma status `wykreslona`.
 

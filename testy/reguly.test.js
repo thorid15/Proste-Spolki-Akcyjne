@@ -188,13 +188,20 @@ test('kanoniczny JSON nie zależy od kolejności kluczy', () => {
   );
 });
 
+test('D-R01: data zdarzenia nie wchodzi do skrótu (pole usunięte z łańcucha)', () => {
+  const r = {
+    id: 1, spolka_id: 1, typ: 'emisja', data_wpisu: '2026-01-10T11:00:00Z',
+    autor: 'A', dane_json: '{}', hash_poprzedni: lancuch.HASH_POCZATKOWY,
+  };
+  assert.equal(lancuch.skrot({ ...r, data_zdarzenia: '2020-01-01' }), lancuch.skrot(r));
+});
+
 test('skrót zmienia się przy każdej zmianie pola zdarzenia', () => {
   const podstawa = {
     id: 1,
     spolka_id: 1,
     typ: 'emisja',
-    data_zdarzenia: '2026-01-10',
-    data_wpisu: '2026-01-10T12:00:00+01:00',
+    data_wpisu: '2026-01-10T11:00:00Z',
     autor: 'Łukasz Kozon',
     dane_json: '{"ilosc":100}',
     hash_poprzedni: lancuch.HASH_POCZATKOWY,
@@ -206,8 +213,7 @@ test('skrót zmienia się przy każdej zmianie pola zdarzenia', () => {
     id: 2,
     spolka_id: 2,
     typ: 'objecie',
-    data_zdarzenia: '2026-01-11',
-    data_wpisu: '2026-01-10T12:00:01+01:00',
+    data_wpisu: '2026-01-10T11:00:01Z',
     autor: 'Ktoś inny',
     dane_json: '{"ilosc":101}',
     hash_poprzedni: 'f'.repeat(64),
@@ -221,7 +227,7 @@ test('skrót zmienia się przy każdej zmianie pola zdarzenia', () => {
 });
 
 test('granice pól są jednoznaczne — przesunięcie treści między polami zmienia skrót', () => {
-  const a = { id: 1, spolka_id: 1, typ: 'ab', data_zdarzenia: 'c', data_wpisu: 'd', autor: 'e', dane_json: 'f', hash_poprzedni: 'g' };
-  const b = { ...a, typ: 'a', data_zdarzenia: 'bc' };
+  const a = { id: 1, spolka_id: 1, typ: 'ab', data_wpisu: 'c', autor: 'e', dane_json: 'f', hash_poprzedni: 'g' };
+  const b = { ...a, typ: 'a', data_wpisu: 'bc' };
   assert.notEqual(lancuch.skrot(a), lancuch.skrot(b));
 });

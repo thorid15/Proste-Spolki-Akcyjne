@@ -74,13 +74,14 @@ function dodajOsobe(db, nadpisania = {}) {
  */
 function wpis(db, spolkaId, typ, data, wejscie, opcje = {}) {
   const wejscieFinalne = typ === 'emisja' ? { data_wpisu_krs: data, ...wejscie } : wejscie;
+  // D-R01: `data` to chwila wpisu z zegara wstrzykiwanego w testach
+  // (`RRRR-MM-DD` = poludnie tego dnia czasu kancelarii).
   return rejestr.dokonajWpisu(db, {
     spolkaId,
     typ,
-    data_zdarzenia: data,
+    teraz: data,
     wejscie: wejscieFinalne,
     autor: opcje.autor || 'Test',
-    dzisiaj: opcje.dzisiaj || '2026-12-31',
   });
 }
 
@@ -118,7 +119,7 @@ const AKCJONARIUSZ_PELNY = {
 
 /** Zdarzenie w formie "surowej" - do testow czystej logiki, bez bazy. */
 function zdarzenie(id, typ, data, dane) {
-  return { id, typ, data_zdarzenia: data, dane };
+  return { id, typ, data_wpisu: data, dane };
 }
 
 module.exports = { bazaTestowa, dodajSpolke, dodajOsobe, wpis, zdarzenie, PDF_TESTOWY, AKCJONARIUSZ_PELNY };

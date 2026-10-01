@@ -15,6 +15,7 @@ const rejestr = require('../rejestr');
 const widoki = require('../widoki');
 const oplaty = require('../oplaty');
 const przepisy = require('../logika/przepisy');
+const osobaDzialajaca = require('../logika/osoba-dzialajaca');
 const u = require('../logika/ulamki');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const wzoryDysk = require('../logika/wzory-dysk');
@@ -205,7 +206,7 @@ router.get(
                   WHERE sa.spolka_id = s.id AND sa.data_do IS NULL
                     AND sa.kategoria = 'akcjonariusz')                 AS liczba_akcji,
                 (SELECT COUNT(*) FROM psa_emisje e WHERE e.spolka_id = s.id) AS liczba_emisji,
-                (SELECT MAX(z.data_zdarzenia) FROM psa_zdarzenia z
+                (SELECT MAX(z.data_wpisu) FROM psa_zdarzenia z
                   WHERE z.spolka_id = s.id)                            AS ostatnie_zdarzenie,
                 (SELECT COUNT(*) FROM psa_zdarzenia z WHERE z.spolka_id = s.id) AS liczba_zdarzen
            FROM psa_spolki s
@@ -416,6 +417,8 @@ router.put(
     const kto = autor(zad);
     const biezaca = rejestr.wczytajSpolke(db(), id);
     if (!biezaca) throw nieZnaleziono('Nie odnaleziono spółki.');
+    // D-31: rejestr przekazany jest tylko do odczytu - takze dane spolki.
+    if (biezaca.przekazanie_data) throw bledneZadanie(przepisy.blokadaWpisu(biezaca));
 
     const dane = wyczysc(zad.body || {});
     sprawdzDaneSpolki({ ...biezaca, ...dane }, { wymaganaNazwa: true });
@@ -452,8 +455,8 @@ router.put(
       return rejestr.zapiszZdarzenie(db(), {
         spolka_id: id,
         typ: 'zmiana_danych_spolki',
-        data_zdarzenia: czas.dzisIso(),
         autor: kto,
+        dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
         dane: {
           przed: Object.fromEntries(doZdarzenia.map((p) => [p, biezaca[p] ?? null])),
           po: Object.fromEntries(doZdarzenia.map((p) => [p, dane[p] ?? null])),
@@ -647,12 +650,86 @@ router.get(
   })
 );
 
+/**
+ * D-31 - przekazanie prowadzenia rejestru innemu podmiotowi (art. 300(32)
+ * § 2 KSH: nowa umowa spolki). Wylacznie ewidencja: zdarzenie w lancuchu +
+ * odbicie w `psa_spolki`; od tej chwili kazdy wpis jest odrzucany, a podglad
+ * i informacja z rejestru pozostaja dostepne. Pakietu eksportu nie budujemy.
+ */
+router.post(
+  '/:id/przekazanie',
+  asy((zad, odp) => {
+    const id = Number(zad.params.id);
+    const kto = autor(zad);
+    const spolka = rejestr.wczytajSpolke(db(), id);
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const blokada = przepisy.blokadaWpisu(spolka);
+    if (blokada) throw bledneZadanie(blokada);
+
+    const c = zad.body || {};
+    const dataPrzekazania = String(c.data_przekazania || '');
+    if (!czas.poprawnaData(dataPrzekazania)) {
+      throw bledneZadanie('Data przekazania musi mieć format RRRR-MM-DD.');
+    }
+    if (dataPrzekazania > czas.dzisIso()) {
+      throw bledneZadanie('Przekazanie ewidencjonuje się po fakcie — data nie może być z przyszłości.');
+    }
+    const typOdbiorcy = String(c.odbiorca_typ || '');
+    if (!Object.prototype.hasOwnProperty.call(przepisy.ODBIORCY_PRZEKAZANIA, typOdbiorcy)) {
+      throw bledneZadanie(
+        `Typ odbiorcy musi być jednym z: ${Object.keys(przepisy.ODBIORCY_PRZEKAZANIA).join(', ')}.`
+      );
+    }
+    const nazwa = String(c.odbiorca_nazwa || '').trim();
+    const podstawa = String(c.podstawa || '').trim();
+    if (!nazwa) throw bledneZadanie('Podaj nazwę odbiorcy (notariusz, izba, podmiot).');
+    if (!podstawa) {
+      throw bledneZadanie('Podaj podstawę przekazania (np. „nowa umowa o prowadzenie rejestru z dnia …”).');
+    }
+    const identyfikator = String(c.odbiorca_identyfikator || '').trim() || null;
+
+    const zdarzenie = db().transaction(() => {
+      const z = rejestr.zapiszZdarzenie(db(), {
+        spolka_id: id,
+        typ: 'przekazanie_rejestru',
+        autor: kto,
+        dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
+        dane: {
+          data_przekazania: dataPrzekazania,
+          odbiorca_typ: typOdbiorcy,
+          odbiorca_nazwa: nazwa,
+          odbiorca_identyfikator: identyfikator,
+          podstawa,
+        },
+      });
+      db()
+        .prepare(
+          `UPDATE psa_spolki
+              SET przekazanie_data = @data, przekazanie_odbiorca_typ = @typ,
+                  przekazanie_odbiorca_nazwa = @nazwa, przekazanie_odbiorca_identyfikator = @identyfikator,
+                  przekazanie_podstawa = @podstawa,
+                  data_zakonczenia_umowy = COALESCE(data_zakonczenia_umowy, @data),
+                  zaktualizowano = @teraz
+            WHERE id = @id`
+        )
+        .run({ data: dataPrzekazania, typ: typOdbiorcy, nazwa, identyfikator, podstawa, teraz: czas.terazIso(), id });
+      return z;
+    }).immediate();
+
+    odp.status(201).json({
+      spolka: rejestr.wczytajSpolke(db(), id),
+      zdarzenie: { id: zdarzenie.id, typ: zdarzenie.typ, data_wpisu: zdarzenie.data_wpisu },
+    });
+  })
+);
+
 /** Podglad zdarzenia - krok 4 kreatora. Nic nie zapisuje. */
 router.post(
   '/:id/zdarzenia/podglad',
   asy((zad, odp) => {
     const id = Number(zad.params.id);
-    const { typ, data_zdarzenia, dane } = zad.body || {};
+    rejestr.odrzucRecznaDate(zad.body);
+    const { typ, dane, migracja_krn: migracjaKrn } = zad.body || {};
     if (!typ) throw bledneZadanie('Nie wskazano typu zdarzenia.');
 
     let podglad;
@@ -660,8 +737,8 @@ router.post(
       podglad = rejestr.przygotujPodglad(db(), {
         spolkaId: id,
         typ,
-        data_zdarzenia,
         wejscie: dane || {},
+        migracja_krn: migracjaKrn || null,
       });
     } catch (e) {
       // Blad kreatora (np. brak pokrycia) tez jest wynikiem podgladu -
@@ -679,15 +756,14 @@ router.post(
       throw e;
     }
 
-    const data = data_zdarzenia || czas.dzisIso();
     odp.json({
       dopuszczalne: podglad.dopuszczalne,
       bledy: podglad.bledy,
       ostrzezenia: podglad.ostrzezenia,
       dane: podglad.dane,
       typ: typyZdarzen.typ(typ),
-      przed: tabelaAkcjonariatu(podglad.stanPrzed, data, podglad.osoby, db(), id),
-      po: podglad.stanPo ? tabelaAkcjonariatu(podglad.stanPo, data, podglad.osoby, db(), id) : null,
+      przed: tabelaAkcjonariatu(podglad.stanPrzed, podglad.osoby, db(), id),
+      po: podglad.stanPo ? tabelaAkcjonariatu(podglad.stanPo, podglad.osoby, db(), id) : null,
     });
   })
 );
@@ -702,18 +778,17 @@ router.post(
   asy((zad, odp) => {
     const id = Number(zad.params.id);
     const kto = autor(zad);
-    const { typ, data_zdarzenia, dane, uzasadnienie } = zad.body || {};
+    rejestr.odrzucRecznaDate(zad.body);
+    const { typ, dane, uzasadnienie, migracja_krn: migracjaKrn } = zad.body || {};
     if (!typ) throw bledneZadanie('Nie wskazano typu zdarzenia.');
-    if (!czas.poprawnaData(data_zdarzenia)) {
-      throw bledneZadanie('Data zdarzenia musi mieć format RRRR-MM-DD.');
-    }
 
     const wynik = rejestr.dokonajWpisu(db(), {
       spolkaId: id,
       typ,
-      data_zdarzenia,
+      migracja_krn: migracjaKrn || null,
       wejscie: dane || {},
       autor: kto,
+      dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
       uzasadnienie: uzasadnienie || null,
     });
 
@@ -721,7 +796,6 @@ router.post(
       zdarzenie: {
         id: wynik.zdarzenie.id,
         typ: wynik.zdarzenie.typ,
-        data_zdarzenia: wynik.zdarzenie.data_zdarzenia,
         data_wpisu: wynik.zdarzenie.data_wpisu,
         autor: wynik.zdarzenie.autor,
         hash_skrocony: wynik.zdarzenie.hash.slice(0, 12),
@@ -789,16 +863,14 @@ router.post(
     }
     for (const z of zdarzenia) {
       if (!z || !z.typ) throw bledneZadanie('Każde zdarzenie otwarcia rejestru musi mieć typ.');
-      if (!czas.poprawnaData(z.data_zdarzenia)) {
-        throw bledneZadanie('Data każdego zdarzenia musi mieć format RRRR-MM-DD.');
-      }
+      rejestr.odrzucRecznaDate(z);
     }
 
     const dzis = czas.dzisIso();
     const wyniki = rejestr.otworzRejestr(db(), id, {
       zdarzenia,
       autor: kto,
-      dzisiaj: dzis,
+      dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
     });
 
     // Rok prowadzenia biegnie od dnia, w ktorym rejestr faktycznie rusza
@@ -818,7 +890,7 @@ router.post(
       zdarzenia: wyniki.map((w) => ({
         id: w.zdarzenie.id,
         typ: w.zdarzenie.typ,
-        data_zdarzenia: w.zdarzenie.data_zdarzenia,
+        data_wpisu: w.zdarzenie.data_wpisu,
         hash_skrocony: w.zdarzenie.hash.slice(0, 12),
       })),
       oplata_prowadzenia: prowadzenie.utworzono ? prowadzenie.oplata : null,
@@ -846,16 +918,16 @@ router.post(
 );
 
 /** Tabela akcjonariatu do porownania przed/po w kreatorze. */
-function tabelaAkcjonariatu(stan, data, osoby, baza, spolkaId) {
+function tabelaAkcjonariatu(stan, osoby, baza, spolkaId) {
   const stanLogika = require('../logika/stan');
   const maskowanie = require('../logika/maskowanie');
   const n = require('../logika/numery');
 
   const wszystkieOsoby = new Map([...rejestr.wczytajOsobySpolki(baza, spolkaId), ...osoby]);
-  const wynik = stanLogika.akcjonariatNaDzien(stan, data);
+  const wynik = stanLogika.akcjonariatNaDzien(stan, null);
   return {
     razem_akcji: wynik.razem_akcji,
-    bilans: stanLogika.bilansNaDzien(stan, data),
+    bilans: stanLogika.bilansNaDzien(stan, null),
     pozycje: wynik.pozycje.map((p) => ({
       osoba_id: p.osoba_id,
       oznaczenie: maskowanie.oznaczenieOsoby(wszystkieOsoby.get(p.osoba_id)),
@@ -884,8 +956,8 @@ const WZORY_NA_ZADANIE = {
   '10': { nazwa: 'Klauzula do umowy zbycia akcji', typ: 'klauzula_zbycia' },
 };
 
-function stanAkcjonariatuNaDzis(spolkaId, dzis) {
-  const widok = widoki.widokStanu(db(), spolkaId, dzis, { rola: przepisy.ROLE_ODBIORCY.KANCELARIA });
+function stanAkcjonariatuNaDzis(spolkaId, dzis, { zGlosami = false } = {}) {
+  const widok = widoki.widokStanu(db(), spolkaId, dzis, { rola: przepisy.ROLE_ODBIORCY.KANCELARIA, zGlosami });
   return widok || { akcjonariusze: [], razem_akcji: 0 };
 }
 
@@ -898,7 +970,8 @@ function budujKontekstNaZadanie(kod, spolka, cialo) {
     case '02':
       return kontekstPisma.informacjaRodo({ spolka });
     case '03': {
-      const stan = stanAkcjonariatuNaDzis(spolka.id, dzis);
+      // D-R06/A6: liczba glosow - wylacznie na uchwale o wyborze notariusza.
+      const stan = stanAkcjonariatuNaDzis(spolka.id, dzis, { zGlosami: true });
       return kontekstPisma.uchwalaWyboru({ spolka, akcjonariusze: stan.akcjonariusze, uchwala: cialo.uchwala || {}, dzis });
     }
     case '08': {

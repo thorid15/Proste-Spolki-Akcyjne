@@ -2204,7 +2204,127 @@ const MIGRACJE = [
       ALTER TABLE psa_konta ADD COLUMN zgloszenie_id INTEGER REFERENCES psa_zgloszenia(id);
     `,
   },
+  {
+    wersja: 57,
+    nazwa: 'D-R01: chwila wpisu jedyna osia czasu - usuniecie data_zdarzenia z lancucha',
+    // Kolumna wchodzila do skrotu zdarzenia (`lancuch.skrot`). Po jej usunieciu
+    // skroty zapisanych zdarzen przestalyby sie zgadzac, a zdarzen append-only
+    // nie wolno przepisywac (art. 300(31) § 4 KSH) - migracja wykonuje sie
+    // WYLACZNIE na pustym rejestrze (decyzja notariusza z 26.09.2026: brak
+    // spolek w produkcji). Baze z zapisanymi zdarzeniami trzeba zalozyc od nowa.
+    warunek(db) {
+      const ile = db.prepare('SELECT COUNT(*) AS ile FROM psa_zdarzenia').get().ile;
+      if (ile > 0) {
+        throw new Error(
+          `Migracja 57 (D-R01) wymaga pustej tabeli psa_zdarzenia, a zawiera ona ${ile} zdarzen. ` +
+            'Usun baze i uruchom aplikacje ponownie - skrotow lancucha nie przeliczamy.'
+        );
+      }
+    },
+    sql: `
+      DROP INDEX IF EXISTS psa_ix_zdarzenia_spolka;
+      ALTER TABLE psa_zdarzenia DROP COLUMN data_zdarzenia;
+      CREATE INDEX IF NOT EXISTS psa_ix_zdarzenia_spolka
+        ON psa_zdarzenia (spolka_id, data_wpisu, id);
+    `,
+  },
+  {
+    wersja: 58,
+    nazwa: 'D-31: ewidencja przekazania rejestru innemu podmiotowi',
+    sql: `
+      -- Przekazanie prowadzenia rejestru (art. 300(32) § 2 KSH - nowa umowa
+      -- spolki z innym podmiotem). Tylko ewidencja; zrodlem prawdy jest
+      -- zdarzenie „przekazanie_rejestru” w lancuchu, kolumny to jego odbicie
+      -- do szybkiej blokady wpisow. NULL = rejestr prowadzimy my.
+      ALTER TABLE psa_spolki ADD COLUMN przekazanie_data TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN przekazanie_odbiorca_typ TEXT
+        CHECK (przekazanie_odbiorca_typ IS NULL OR przekazanie_odbiorca_typ IN
+               ('notariusz','izba_notarialna','podmiot_rachunki'));
+      ALTER TABLE psa_spolki ADD COLUMN przekazanie_odbiorca_nazwa TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN przekazanie_odbiorca_identyfikator TEXT;
+      ALTER TABLE psa_spolki ADD COLUMN przekazanie_podstawa TEXT;
+    `,
+  },
+  {
+    wersja: 59,
+    nazwa: 'D-34: slownik krajow ISO 3166-1 alfa-2 i kody krajow w adresach',
+    sql: sqlSlownikaKrajow(),
+  },
+  {
+    wersja: 60,
+    nazwa: 'D-Z: osoba dzialajaca przy wpisie (notariusz albo zastepca notarialny)',
+    sql: `
+      -- Tylko do audytu: kto dzialal przy wpisie, niezaleznie od pracownika-
+      -- autora. Przy zdarzeniu zapisujemy KOPIE danych (dane_json.dzialajacy,
+      -- objeta skrotem), wiec pozniejsza zmiana slownika nie zmienia historii.
+      CREATE TABLE IF NOT EXISTS psa_osoby_dzialajace (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        imie       TEXT NOT NULL,
+        nazwisko   TEXT NOT NULL,
+        funkcja    TEXT NOT NULL CHECK (funkcja IN ('notariusz','zastepca_notarialny')),
+        aktywny    INTEGER NOT NULL DEFAULT 1 CHECK (aktywny IN (0,1)),
+        utworzono  TEXT NOT NULL
+      );
+      ALTER TABLE psa_uzytkownicy ADD COLUMN osoba_dzialajaca_id INTEGER
+        REFERENCES psa_osoby_dzialajace(id);
+    `,
+  },
 ];
+
+/**
+ * D-34 - slownik krajow i kody krajow w adresach. Kod ISO 3166-1 alfa-2
+ * (`*_kraj_kod`) jest zrodlem prawdy; kolumna tekstowa `*kraj` zostaje
+ * (odwracalnosc, formatowanie adresow i pisma) i dostaje polska nazwe ze
+ * slownika. Jedno miejsce dla WSZYSTKICH sciezek zapisu - wyzwalacze:
+ * wartosc rozpoznana dokladnie (kod, nazwa polska albo angielska, bez
+ * wielkosci liter) dostaje kod; nierozpoznana zostaje jak jest, z kodem
+ * NULL, i trafia do raportu do recznej poprawy - nie zgadujemy.
+ */
+function sqlSlownikaKrajow() {
+  const kraje = require('./dane/kraje.json');
+  const q = (t) => `'${String(t).replace(/'/g, "''")}'`;
+  const wiersze = kraje
+    .map((k) => `(${q(k.kod)}, ${q(k.nazwa)}, ${q(k.nazwa.toLocaleLowerCase('pl'))}, ${q(k.nazwa_en.toLowerCase())})`)
+    .join(',\n        ');
+  const kolumny = [
+    ['psa_spolki', 'kraj', 'kraj_kod'],
+    ['psa_spolki', 'reprezentant_kraj', 'reprezentant_kraj_kod'],
+    ['psa_osoby', 'kraj', 'kraj_kod'],
+    ['psa_wnioski', 'kraj', 'kraj_kod'],
+    ['psa_wnioski', 'reprezentant_kraj', 'reprezentant_kraj_kod'],
+    ['psa_wnioski_akcjonariusze', 'kraj', 'kraj_kod'],
+  ];
+  const kodDla = (w) => `(SELECT kod FROM psa_kraje
+          WHERE kod = upper(trim(${w})) OR nazwa_klucz = lower(trim(${w})) OR nazwa_en_klucz = lower(trim(${w})))`;
+  const czesci = kolumny.map(([tabela, pole, kod]) => {
+    const ustaw = `UPDATE ${tabela}
+          SET ${kod} = ${kodDla(`NEW.${pole}`)},
+              ${pole} = COALESCE((SELECT nazwa FROM psa_kraje WHERE kod = ${kodDla(`NEW.${pole}`)}), NEW.${pole})
+        WHERE id = NEW.id;`;
+    return `
+      ALTER TABLE ${tabela} ADD COLUMN ${kod} TEXT REFERENCES psa_kraje(kod);
+      CREATE TRIGGER ${tabela}_${pole}_kod_ins AFTER INSERT ON ${tabela}
+      BEGIN
+        ${ustaw}
+      END;
+      CREATE TRIGGER ${tabela}_${pole}_kod_upd AFTER UPDATE OF ${pole} ON ${tabela}
+      BEGIN
+        ${ustaw}
+      END;
+      UPDATE ${tabela} SET ${pole} = ${pole};`;
+  });
+  return `
+      CREATE TABLE IF NOT EXISTS psa_kraje (
+        kod             TEXT PRIMARY KEY CHECK (length(kod) = 2),
+        nazwa           TEXT NOT NULL,
+        nazwa_klucz     TEXT NOT NULL,
+        nazwa_en_klucz  TEXT NOT NULL
+      );
+      INSERT INTO psa_kraje (kod, nazwa, nazwa_klucz, nazwa_en_klucz) VALUES
+        ${wiersze};
+      ${czesci.join('\n')}
+  `;
+}
 
 /** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
 const SQL_TABELA_WERSJI = `
@@ -2231,6 +2351,7 @@ function uruchom(db) {
     if (wykonane.has(migracja.wersja)) continue;
 
     const transakcja = db.transaction(() => {
+      if (typeof migracja.warunek === 'function') migracja.warunek(db);
       db.exec(migracja.sql);
       db.prepare('INSERT INTO psa_migracje (wersja, nazwa, wykonano) VALUES (?, ?, ?)').run(
         migracja.wersja,

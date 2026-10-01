@@ -75,8 +75,71 @@ function ModalHasloTymczasowe({ email, haslo, przyZamknieciu }) {
   );
 }
 
+/* D-Z — osoby działające przy wpisach (notariusz, zastępca notarialny).
+   Tylko do audytu: zapisywane przy każdym wpisie, nie drukowane. */
+const FUNKCJE_DZIALAJACYCH = { notariusz: 'notariusz', zastepca_notarialny: 'zastępca notarialny' };
+
+function OsobyDzialajace({ osoby, odswiez }) {
+  const [nowa, ustawNowa] = useState({ imie: '', nazwisko: '', funkcja: 'zastepca_notarialny' });
+  const [blad, ustawBlad] = useState(null);
+  async function dodaj() {
+    ustawBlad(null);
+    try {
+      await API.post('/api/psa/auth/osoby-dzialajace', nowa);
+      ustawNowa({ imie: '', nazwisko: '', funkcja: 'zastepca_notarialny' });
+      odswiez();
+    } catch (e) { ustawBlad(e.message); }
+  }
+  async function przelacz(o) {
+    ustawBlad(null);
+    try { await API.patch(`/api/psa/auth/osoby-dzialajace/${o.id}`, { aktywny: !o.aktywny }); odswiez(); }
+    catch (e) { ustawBlad(e.message); }
+  }
+  return (
+    <Karta tytul="Osoby działające przy wpisach" tight>
+      <div className="podpowiedz" style={{ marginBottom: 10 }}>
+        Notariusz albo zastępca notarialny zapisywany przy każdym wpisie — wyłącznie do audytu,
+        nie trafia na dokumenty. Gdy słownik jest pusty, przy wpisie zapisuje się notariusz z
+        danych kancelarii.
+      </div>
+      <Komunikat odmiana="blad" tresc={blad} />
+      <table className="tbl">
+        <thead><tr><th>Imię i nazwisko</th><th>Funkcja</th><th>Stan</th><th></th></tr></thead>
+        <tbody>
+          {osoby.map((o) => (
+            <tr key={o.id}>
+              <td>{o.imie} {o.nazwisko}</td>
+              <td>{FUNKCJE_DZIALAJACYCH[o.funkcja]}</td>
+              <td><Pigulka odmiana={o.aktywny ? 'rejestr' : 'neutralna'}>{o.aktywny ? 'aktywna' : 'nieaktywna'}</Pigulka></td>
+              <td><button className="btn btn-sm" onClick={() => przelacz(o)}>{o.aktywny ? 'Wyłącz' : 'Włącz'}</button></td>
+            </tr>
+          ))}
+          <tr>
+            <td>
+              <div className="row-g">
+                <input type="text" placeholder="Imię" value={nowa.imie} onChange={(z) => ustawNowa({ ...nowa, imie: z.target.value })} />
+                <input type="text" placeholder="Nazwisko" value={nowa.nazwisko} onChange={(z) => ustawNowa({ ...nowa, nazwisko: z.target.value })} />
+              </div>
+            </td>
+            <td>
+              <select value={nowa.funkcja} onChange={(z) => ustawNowa({ ...nowa, funkcja: z.target.value })}>
+                <option value="notariusz">notariusz</option>
+                <option value="zastepca_notarialny">zastępca notarialny</option>
+              </select>
+            </td>
+            <td />
+            <td><button className="btn btn-sm" disabled={!nowa.imie.trim() || !nowa.nazwisko.trim()} onClick={dodaj}>Dodaj</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </Karta>
+  );
+}
+
 function EkranUzytkownikow() {
   const { dane, ladowanie, odswiez } = useDane('/api/psa/auth/uzytkownicy');
+  const dzialajace = useDane('/api/psa/auth/osoby-dzialajace');
+  const osobyDzialajace = dzialajace.dane ? dzialajace.dane.osoby : [];
   const [modalNowy, ustawModalNowy] = useState(false);
   const [hasloDoPokazania, ustawHasloDoPokazania] = useState(null);
   const [blad, ustawBlad] = useState(null);
@@ -123,6 +186,7 @@ function EkranUzytkownikow() {
               <th>Imię i nazwisko</th>
               <th>E-mail</th>
               <th>Rola</th>
+              <th>Domyślna osoba działająca</th>
               <th>Ostatnie logowanie</th>
               <th>Stan</th>
               <th></th>
@@ -137,6 +201,17 @@ function EkranUzytkownikow() {
                   <select value={u.rola} onChange={(z) => przelacz(u, 'rola', z.target.value)}>
                     <option value="pracownik">Pracownik</option>
                     <option value="admin">Administrator</option>
+                  </select>
+                </td>
+                <td>
+                  <select
+                    value={u.osoba_dzialajaca_id ?? ''}
+                    onChange={(z) => przelacz(u, 'osoba_dzialajaca_id', z.target.value === '' ? null : Number(z.target.value))}
+                  >
+                    <option value="">— ustalana automatycznie —</option>
+                    {osobyDzialajace.filter((o) => o.aktywny).map((o) => (
+                      <option key={o.id} value={o.id}>{o.imie} {o.nazwisko} ({FUNKCJE_DZIALAJACYCH[o.funkcja]})</option>
+                    ))}
                   </select>
                 </td>
                 <td className="przyciemnione">{u.ostatnie_logowanie ? fmt.dataCzas(u.ostatnie_logowanie) : '— nigdy —'}</td>
@@ -156,6 +231,8 @@ function EkranUzytkownikow() {
           </tbody>
         </table>
       </Karta>
+
+      <OsobyDzialajace osoby={osobyDzialajace} odswiez={dzialajace.odswiez} />
 
       {modalNowy && (
         <ModalNowyUzytkownik
