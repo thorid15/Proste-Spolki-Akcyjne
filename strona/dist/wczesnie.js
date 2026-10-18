@@ -1,0 +1,1 @@
+(function(){try{if(window.matchMedia&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserver' in window){document.documentElement.classList.add('anim');}}catch(e){}})();
