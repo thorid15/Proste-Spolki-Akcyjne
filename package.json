@@ -13,7 +13,10 @@
     "dev": "node narzedzia/buduj-front.js --dev",
     "test": "node --test \"testy/*.test.js\"",
     "scenariusz": "node narzedzia/scenariusz-e2e.js",
-    "dokumentacja": "node narzedzia/dokumentacja-baza.js && node narzedzia/dokumentacja-endpointy.js"
+    "dokumentacja": "node narzedzia/dokumentacja-baza.js && node narzedzia/dokumentacja-endpointy.js",
+    "test:seed": "node narzedzia/test-seed.js",
+    "test:link": "node narzedzia/test-link.js",
+    "test:oznacz": "node narzedzia/test-oznacz.js"
   },
   "dependencies": {
     "bcrypt": "6.0.0",

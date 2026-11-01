@@ -195,7 +195,40 @@ const konfiguracja = {
     pokaz_znak_izby: flaga('POKAZ_ZNAK_IZBY', false),
     nazwa_izby: tekst('NAZWA_IZBY', 'Izba Notarialna'),
   },
+
+  /**
+   * Poczta (T1, SESJA-PSA-WYTYCZNE.md). Kazda wiadomosc idzie przez
+   * `server/poczta.js: wyslij()`, a ten wybiera transport:
+   *   - `smtp` — nodemailer (docelowo Microsoft 365, biuro@notariusz.gdansk.pl),
+   *   - `skrzynka-testowa` — plik .eml na dysku, nic nie wychodzi z serwera
+   *     (WYLACZNIE w trybie testowym — poza nim odmowa wysylki).
+   * Puste = `smtp`, jesli skonfigurowany; inaczej wysylka konczy sie
+   * widocznym bledem, nigdy cichym sukcesem.
+   */
+  POCZTA_TRANSPORT: tekst('POCZTA_TRANSPORT', null),
+
+  /**
+   * Tryb testowy (T1-T6, DECYZJE.md D-074). Wlacza go WYLACZNIE zmienna
+   * `PSA_TRYB_TESTOWY` (w `.env`). Serwer odmawia startu przy
+   * `NODE_ENV=production` i na bazie nieoznaczonej jako testowa
+   * (`server/tryb-testowy/index.js: sprawdzStart`). Baza, dokumenty i
+   * skrzynka trybu testowego leza w `dane-testowe/` (poza `publiczne/`,
+   * w `.gitignore`) — produkcyjna `WSPOLNA_BAZA` nie jest wtedy otwierana.
+   */
+  TRYB_TESTOWY: flaga('PSA_TRYB_TESTOWY', false),
+  NODE_ENV: tekst('NODE_ENV', null),
+  BAZA_TESTOWA: sciezka('PSA_BAZA_TESTOWA', './dane-testowe/kancelaria-testowa.db'),
+  KATALOG_TESTOWY: sciezka('PSA_KATALOG_TESTOWY', './dane-testowe'),
 };
+
+if (konfiguracja.TRYB_TESTOWY) {
+  konfiguracja.WSPOLNA_BAZA_PRODUKCYJNA = konfiguracja.WSPOLNA_BAZA;
+  konfiguracja.WSPOLNA_BAZA = konfiguracja.BAZA_TESTOWA;
+  konfiguracja.KATALOG_DOKUMENTOW = path.join(konfiguracja.KATALOG_TESTOWY, 'dokumenty');
+  // Tryb testowy sluzy przejsciu takze przeplywow portalu.
+  konfiguracja.PORTAL_WLACZONY = true;
+}
+konfiguracja.KATALOG_SKRZYNKI = path.join(konfiguracja.KATALOG_TESTOWY, 'skrzynka');
 
 module.exports = konfiguracja;
 // Eksportowana osobno do testow jednostkowych (Z-002) - reszta modulu zalezy

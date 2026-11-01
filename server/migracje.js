@@ -2269,6 +2269,45 @@ const MIGRACJE = [
         REFERENCES psa_osoby_dzialajace(id);
     `,
   },
+  {
+    wersja: 61,
+    nazwa: 'D-074: tryb testowy - oznaczenie bazy testowej i dziennik logowan testowych',
+    sql: `
+      -- Oznaczenie CALEJ bazy jako testowej (nie rekordow — D-044 zostaje).
+      -- Wiersz wstawia wylacznie \`npm run test:seed\` albo \`npm run test:oznacz\`
+      -- (z potwierdzeniem). Bez wiersza tryb testowy odmawia startu.
+      -- \`przesuniecie_ms\` — symulowana data (T4); \`walidator_wynik\` — wynik
+      -- atrapy walidatora podpisu (T5).
+      CREATE TABLE IF NOT EXISTS psa_baza_testowa (
+        id               INTEGER PRIMARY KEY CHECK (id = 1),
+        oznaczono        TEXT NOT NULL,
+        opis             TEXT NOT NULL,
+        przesuniecie_ms  INTEGER NOT NULL DEFAULT 0,
+        walidator_wynik  TEXT NOT NULL DEFAULT 'qes_poprawny'
+      );
+
+      -- Dziennik zdarzen uwierzytelniania trybu testowego (T6): kazde
+      -- logowanie w trybie testowym, z droga (lista kont, link, formularz).
+      CREATE TABLE IF NOT EXISTS psa_dziennik_logowan (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        chwila      TEXT NOT NULL,
+        chwila_rzeczywista TEXT NOT NULL,
+        typ_konta   TEXT NOT NULL CHECK (typ_konta IN ('pracownik', 'portal')),
+        konto_id    INTEGER NOT NULL,
+        email       TEXT NOT NULL,
+        droga       TEXT NOT NULL,
+        tryb_testowy INTEGER NOT NULL CHECK (tryb_testowy IN (0, 1))
+      );
+
+      CREATE TRIGGER IF NOT EXISTS psa_dziennik_logowan_bez_zmian
+      BEFORE UPDATE ON psa_dziennik_logowan
+      BEGIN SELECT RAISE(ABORT, 'psa_dziennik_logowan jest append-only'); END;
+
+      CREATE TRIGGER IF NOT EXISTS psa_dziennik_logowan_bez_usuwania
+      BEFORE DELETE ON psa_dziennik_logowan
+      BEGIN SELECT RAISE(ABORT, 'psa_dziennik_logowan jest append-only'); END;
+    `,
+  },
 ];
 
 /**

@@ -23,6 +23,7 @@ npm run dev                # budowanie po każdej zmianie w publiczne/js + serwe
 npm run buduj              # tylko budowanie: publiczne/js → publiczne/dist (esbuild, D-046)
 npm run buduj-strone       # strona publiczna (SEO) → strona/dist/ — bundel osobny od serwer.js (D-063/D-065)
 npm test
+npm run test:seed         # tryb testowy: baza z danymi fikcyjnymi (patrz „Tryb testowy”)
 ```
 
 Warstwa klienta (`publiczne/js/*.js`, JSX) jest kompilowana przy budowaniu do dwóch paczek w
@@ -45,6 +46,60 @@ sesja, aktywna tylko gdy `PORTAL_WLACZONY=true`.
 Front ładuje React 18 i Babel z CDN (`unpkg.com`, wersje przypięte) — maszyna
 uruchamiająca przeglądarkę musi mieć do niego dostęp. Bez bundlera, bez
 TypeScriptu, bez Tailwinda, bez bibliotek PDF.
+
+---
+
+## Tryb testowy (bez poczty, dane fikcyjne) — D-074
+
+Do przejścia każdego przepływu kancelarii i portalu bez skonfigurowanej poczty. Działa na **osobnej
+bazie** (`dane-testowe/kancelaria-testowa.db`); produkcyjna `WSPOLNA_BAZA` nie jest wtedy otwierana.
+Wszystko w `.env` — polecenia działają tak samo na Windows.
+
+**Uruchomienie (3 kroki)**
+
+1. W `.env` dopisz `PSA_TRYB_TESTOWY=1` (portal włącza się wtedy sam).
+2. `npm run test:seed` — tworzy bazę testową od nowa i wypełnia ją scenariuszami.
+3. `npm start` → `http://localhost:3005/` (kancelaria) albo `/portal.html` (portal) → kliknij konto
+   z listy „Tryb testowy — konta testowe” pod formularzem logowania.
+
+Na każdym ekranie jest czerwony pasek „TRYB TESTOWY — e-maile nie są wysyłane” z odnośnikami do
+skrzynki i panelu. Wyłączenie: usuń `PSA_TRYB_TESTOWY` z `.env`.
+
+**Konta** (hasło wszystkich: `Test-Haslo-2026`): `notariusz@example.com` (administrator),
+`pracownik@example.com`, `zarzad@example.com` (konto spółki Alfa Testowa P.S.A.),
+`anna.zgoda@example.com` (akcjonariusz ze zgodą e-mail), `bartosz.bezzgody@example.com`
+(akcjonariusz bez zgody). Lista na ekranie logowania woła **zwykły** endpoint logowania — te same
+uprawnienia, izolacja spółek i ważność sesji. Link z wiersza poleceń:
+`npm run test:link -- <e-mail>` (konto nieaktywne → link aktywacyjny, ten sam co w zaproszeniu;
+aktywne → adres logowania). Każde logowanie w trybie testowym trafia do `psa_dziennik_logowan`.
+
+**Dane z `test:seed`:** spółka z aktywnym rejestrem (KRS `0000990001` z atrapy KRS), akcjonariusze
+ze zgodą e-mail i bez niej, żądanie wpisu zbycia bez zgody zbywcy (sprawa w weryfikacji), wydana
+informacja z rejestru (zapłacona przez atrapę tpay), zgłoszenie z formularza publicznego (zaproszenie
+w skrzynce). Atrapa KRS odpowiada dla `0000990001`–`0000990003`; inne numery idą do prawdziwego API.
+
+**Skrzynka testowa** — `http://localhost:3005/test/skrzynka` (bez logowania): każda wiadomość zapisana
+jako `.eml` w `dane-testowe/skrzynka/`, lista, podgląd z klikalnymi linkami, status „testowa —
+niewysłana”. Nic nie wychodzi z serwera. Po wysłaniu zaproszenia ekran pokazuje dodatkowo
+„Zaloguj (tryb testowy)” — ten sam link i token, który poszedł do skrzynki.
+
+**Panel** — `http://localhost:3005/test`:
+- *symulowana data* — jedna funkcja czasu (`czas.teraz()`) dla bramki 18.02.2027, terminów i chwil
+  nowych zdarzeń; data wcześniejsza niż ostatnie zdarzenie w rejestrze jest odrzucana;
+- *atrapa walidatora podpisu* — wybór wyniku (QES / PZ / PO / zaawansowany / brak podpisu / plik
+  zmieniony / inna osoba); podpina go adapter walidacji z Fazy 2;
+- *atrapa tpay* — gdy w `.env` nie ma danych tpay, „Zapłać” w portalu otwiera atrapę kasy, a ta wysyła
+  powiadomienie ITN na zwykły adres `/api/psa/platnosci/tpay/itn`.
+
+**Zabezpieczenia:** przy `NODE_ENV=production` albo na bazie nieoznaczonej jako testowa serwer
+**odmawia startu**; poza trybem testowym `/test/*` to 404, a skrzynka i atrapy są niedostępne.
+Kopię bazy prototypu oznacza się jako testową poleceniem `npm run test:oznacz -- <ścieżka>`
+(z potwierdzeniem „TAK”; odmawia dla pliku z `WSPOLNA_BAZA`), potem `PSA_BAZA_TESTOWA=<ścieżka>`.
+
+**Poczta produkcyjna:** jeden punkt `server/poczta.js: wyslij()` z wymiennym transportem
+(`POCZTA_TRANSPORT`, domyślnie `smtp`). Microsoft 365 (`biuro@notariusz.gdansk.pl`) podłącza się przez
+`SMTP_*` (smtp.office365.com:587) albo własnym transportem `zarejestrujTransport()`. Bez transportu
+wysyłka kończy się widocznym błędem, nigdy cichym sukcesem.
 
 ---
 

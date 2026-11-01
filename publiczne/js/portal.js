@@ -201,6 +201,7 @@ function EkranLoginPortal({ przyZalogowaniu }) {
       >
         {wysylanie ? 'Logowanie…' : 'Zaloguj się'}
       </button>
+      <KontaTestowe aplikacja="portal" przyZalogowaniu={() => przyZalogowaniu()} />
 
       <div className="brama-stopka">
         Dostęp zakłada kancelaria po weryfikacji tożsamości — nie ma tu samodzielnej rejestracji.
@@ -270,7 +271,10 @@ function EkranZgloszenieWstepne() {
           gotowe.link_aktywacyjny ? (
             <a className="btn btn-glowny" href={gotowe.link_aktywacyjny}>Otwórz portal</a>
           ) : (
-            <button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>
+            <span>
+              <button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>
+              <PrzyciskLinkuTestowego link={gotowe.link_testowy} />
+            </span>
           )
         }
       />

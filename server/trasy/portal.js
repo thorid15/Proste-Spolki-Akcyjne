@@ -52,6 +52,7 @@ const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien, BladZ
 const autoryzacja = require('../pomocnicze/autoryzacja');
 const { pobierzZKrs } = require('./krs');
 const osobyModul = require('./osoby');
+const trybTestowy = require('../tryb-testowy');
 
 const router = express.Router();
 
@@ -160,6 +161,9 @@ router.post(
     db().prepare('UPDATE psa_konta SET ostatnie_logowanie = ? WHERE id = ?').run(czas.terazIso(), konto.id);
 
     autoryzacja.zalogujKonto(zad, odp, konto.id);
+    trybTestowy.zapiszLogowanie(db(), {
+      typKonta: 'portal', kontoId: konto.id, email: konto.email, droga: (zad.body || {}).droga_testowa,
+    });
     odp.json({ konto: widokKonta({ ...konto, ostatnie_logowanie: czas.terazIso() }) });
   })
 );
@@ -324,6 +328,7 @@ router.post(
       // Gdy poczta nie dziala, link wraca TYLKO przy zgloszeniu skladanym
       // z tego samego urzadzenia — inaczej klient zostaje bez drogi dalej.
       link_aktywacyjny: zaproszenie.link_aktywacyjny,
+      link_testowy: zaproszenie.link_testowy,
     });
   })
 );
@@ -374,6 +379,9 @@ router.post(
       .run(hash, czas.terazIso(), konto.id);
 
     autoryzacja.zalogujKonto(zad, odp, konto.id);
+    trybTestowy.zapiszLogowanie(db(), {
+      typKonta: 'portal', kontoId: konto.id, email: konto.email, droga: 'link_aktywacyjny',
+    });
     odp.json({ konto: widokKonta({ ...konto, aktywne: 1 }) });
   })
 );

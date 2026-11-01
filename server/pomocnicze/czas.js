@@ -9,12 +9,37 @@
  * Strefe ustawia zmienna `TZ` (domyslnie Europe/Warsaw).
  */
 
+// ─────────────────────────────────────────────────────────────
+// Jedno zrodlo czasu (T4, SESJA-PSA-WYTYCZNE.md)
+// ─────────────────────────────────────────────────────────────
+//
+// Kazda chwila domenowa (data wpisu, terminy 7/14 dni i 12 miesiecy, bramka
+// 18.02.2027) bierze sie z `teraz()`. Przesuniecie ustawia WYLACZNIE tryb
+// testowy (`server/tryb-testowy/index.js`) — poza nim zawsze 0. Waznosc
+// sesji, tokenow aktywacyjnych i limiter logowania zostaja w czasie
+// rzeczywistym celowo: to zabezpieczenia, nie czas rejestru.
+
+let przesuniecieMs = 0;
+
+/** Biezaca chwila rejestru (z przesunieciem trybu testowego). */
+function teraz() {
+  return new Date(Date.now() + przesuniecieMs);
+}
+
+function ustawPrzesuniecie(ms) {
+  przesuniecieMs = Number.isFinite(Number(ms)) ? Number(ms) : 0;
+}
+
+function przesuniecie() {
+  return przesuniecieMs;
+}
+
 function dwie(liczba) {
   return String(liczba).padStart(2, '0');
 }
 
 /** Biezaca chwila jako `2026-08-04T17:45:12+02:00`. */
-function terazIso(data = new Date()) {
+function terazIso(data = teraz()) {
   const przesuniecieMin = -data.getTimezoneOffset();
   const znak = przesuniecieMin >= 0 ? '+' : '-';
   const abs = Math.abs(przesuniecieMin);
@@ -26,7 +51,7 @@ function terazIso(data = new Date()) {
 }
 
 /** Dzisiejsza data lokalna jako `RRRR-MM-DD`. */
-function dzisIso(data = new Date()) {
+function dzisIso(data = teraz()) {
   return `${data.getFullYear()}-${dwie(data.getMonth() + 1)}-${dwie(data.getDate())}`;
 }
 
@@ -77,7 +102,7 @@ function utc(data) {
 }
 
 /** Biezaca chwila w UTC - jedyne zrodlo `data_wpisu`. */
-function terazUtc(data = new Date()) {
+function terazUtc(data = teraz()) {
   return utc(data);
 }
 
@@ -130,6 +155,9 @@ function godzinaLokalna(iso, { sekundy = false } = {}) {
 }
 
 module.exports = {
+  teraz,
+  ustawPrzesuniecie,
+  przesuniecie,
   terazIso,
   dzisIso,
   poprawnaData,

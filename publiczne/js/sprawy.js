@@ -485,7 +485,7 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
         tresc="Przed wpisem należy powiadomić osobę, której uprawnienia mają być wykreślone, zmienione lub obciążone — chyba że wyraziła zgodę."
       />
       {sprawa.powiadomienie_wyslano && (
-        <Komunikat odmiana="ok" tresc={`Powiadomienie wysłano ${fmt.dataCzas(sprawa.powiadomienie_wyslano)}.`} />
+        <Komunikat odmiana="ok" tresc={`Powiadomienie wysłano ${fmt.dataCzas(sprawa.powiadomienie_wyslano)}${stanTrybuTestowego() ? ' — testowa, niewysłana (skrzynka testowa)' : ''}.`} />
       )}
       {sprawa.zgoda_forma && (
         <Komunikat odmiana="ok" tresc={`Odnotowano zgodę (${sprawa.zgoda_forma}) z dnia ${fmt.data(sprawa.zgoda_data)}.`} />
@@ -1116,7 +1116,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
                 <tr key={w.id}>
                   <td>{w.typ}</td>
                   <td className="przyciemnione">{w.kanal}</td>
-                  <td>{w.wyslano ? fmt.dataCzas(w.wyslano) : <span className="przyciemnione">nie wysłano</span>}</td>
+                  <td>{w.wyslano ? `${fmt.dataCzas(w.wyslano)}${stanTrybuTestowego() ? ' · testowa — niewysłana' : ''}` : <span className="przyciemnione">nie wysłano</span>}</td>
                   <td className="przyciemnione">{w.autor}</td>
                   <td>
                     {w.szablon_kod && (

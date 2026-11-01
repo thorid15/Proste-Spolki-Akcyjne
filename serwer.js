@@ -6,6 +6,7 @@
  * Port dev: 3005. Prefiks tabel: `psa_*`. Trasy: `/api/psa/...`.
  */
 
+const fs = require('node:fs');
 const path = require('node:path');
 const express = require('express');
 
@@ -17,6 +18,7 @@ const autoryzacja = require('./server/pomocnicze/autoryzacja');
 const auth = require('./server/trasy/auth');
 const przypomnienia = require('./server/logika/przypomnienia');
 const { uruchomHarmonogramPrzypomnien } = require('./server/logika/harmonogram');
+const trybTestowy = require('./server/tryb-testowy');
 
 const aplikacja = express();
 
@@ -72,6 +74,19 @@ aplikacja.use((zad, odp, dalej) => {
 
 aplikacja.use(autoryzacja.wczytajSesje);
 
+// ── Tryb testowy (D-074) — straznik PRZED pierwszym dotknieciem bazy ──────
+// Przy NODE_ENV=production albo na bazie bez oznaczenia testowego proces
+// odmawia startu (T6). Poza trybem testowym nic sie tu nie dzieje.
+try {
+  trybTestowy.sprawdzStart();
+} catch (e) {
+  if (e instanceof trybTestowy.BladTrybuTestowego && require.main === module) {
+    console.error(`[psa] ODMOWA STARTU — ${e.message}`);
+    process.exit(1);
+  }
+  throw e;
+}
+
 // ── Migracje przy starcie - idempotentne ─────────────────────────────────
 const zastosowane = migracje.uruchom(db());
 if (zastosowane.length > 0) {
@@ -80,6 +95,8 @@ if (zastosowane.length > 0) {
 // Sprzatanie czarnej listy tokenow (Z-250/Z-251) — wpisy przeterminowane
 // razem z tokenem, ktorego dotyczyly, sa juz nieszkodliwym balastem.
 autoryzacja.wyczyscWygasleUniewaznienia();
+
+if (konfiguracja.TRYB_TESTOWY) trybTestowy.wczytajStan(db());
 
 // ── API ──────────────────────────────────────────────────────────────────
 // `/api/wspolne` i `/api/psa/auth` (logowanie) musza byc dostepne bez sesji.
@@ -92,6 +109,14 @@ aplikacja.use('/api/psa/auth', auth);
 // sekretem wspolnym z operatorem (`server/platnosci.js`), wiec musi stac
 // PRZED bramkami sesji.
 aplikacja.use('/api/psa/platnosci', require('./server/trasy/platnosci'));
+
+// Trasy trybu testowego istnieja WYLACZNIE w trybie testowym — inaczej 404
+// (jawnie: bez tego `/test/...` trafialoby w strone aplikacji z kodem 200).
+if (konfiguracja.TRYB_TESTOWY) {
+  aplikacja.use('/test', require('./server/tryb-testowy/trasy'));
+} else {
+  aplikacja.use('/test', (zad, odp) => odp.status(404).type('text/plain').send('Nie odnaleziono.'));
+}
 if (konfiguracja.PORTAL_WLACZONY) {
   aplikacja.use('/api/psa/portal', require('./server/trasy/portal'));
 } else {
@@ -121,8 +146,27 @@ aplikacja.use('/api/psa', require('./server/trasy/pozostale'));
 // Portal klienta to OSOBNA aplikacja jednostronicowa (wlasny routing na
 // hashu, wlasna sesja) - jawny routing na wypadek koncowego "/", ktorego
 // `express.static` z opcja `extensions` nie rozwiazuje do pliku.
+/**
+ * Strona aplikacji. W trybie testowym dostaje dwa skrypty przed paczka:
+ * stan trybu (konta testowe, data) i czerwony pasek — poza nim plik idzie
+ * bez zmian.
+ */
+function wyslijStrone(odp, plik) {
+  const pelna = path.join(__dirname, 'publiczne', plik);
+  if (!konfiguracja.TRYB_TESTOWY) return odp.sendFile(pelna);
+  const html = fs.readFileSync(pelna, 'utf8').replace(
+    '<script',
+    '<script src="/test/konfiguracja.js"></script>\n  <script src="/test/pasek.js" defer></script>\n  <script'
+  );
+  return odp.type('html').set('Cache-Control', 'no-store').send(html);
+}
+
+if (konfiguracja.TRYB_TESTOWY) {
+  aplikacja.get(['/', '/index.html'], (zad, odp) => wyslijStrone(odp, 'index.html'));
+  aplikacja.get('/portal.html', (zad, odp) => wyslijStrone(odp, 'portal.html'));
+}
 aplikacja.get(['/portal', '/portal/'], (zad, odp) => {
-  odp.sendFile(path.join(__dirname, 'publiczne', 'portal.html'));
+  wyslijStrone(odp, 'portal.html');
 });
 aplikacja.use(express.static(path.join(__dirname, 'publiczne'), { extensions: ['html'] }));
 
@@ -141,7 +185,7 @@ aplikacja.use(['/obrazy', '/style', '/js', '/vendor', '/dist', '/fonty'], (zad, 
 
 // Pozostale sciezki obsluguje aplikacja jednostronicowa.
 aplikacja.get('*', (zad, odp) => {
-  odp.sendFile(path.join(__dirname, 'publiczne', 'index.html'));
+  wyslijStrone(odp, 'index.html');
 });
 
 aplikacja.use(posrednikBledow);
@@ -149,7 +193,11 @@ aplikacja.use(posrednikBledow);
 // ─────────────────────────────────────────────────────────────────────────
 if (require.main === module) {
   auth.zapewnijAdmina(db(), konfiguracja.ADMIN_EMAIL).finally(() => {
+    trybTestowy.ustawAtrapeTpay(konfiguracja.PORT);
     aplikacja.listen(konfiguracja.PORT, () => {
+      if (konfiguracja.TRYB_TESTOWY) {
+        console.log('[psa] ══ TRYB TESTOWY — e-maile nie są wysyłane (skrzynka: /test/skrzynka, panel: /test) ══');
+      }
       console.log(`[psa] Rejestr akcjonariuszy P.S.A. — http://localhost:${konfiguracja.PORT}`);
       console.log(`[psa] baza: ${konfiguracja.WSPOLNA_BAZA}`);
       console.log(`[psa] portal klienta: ${konfiguracja.PORTAL_WLACZONY ? 'włączony' : 'wyłączony (PORTAL_WLACZONY=false)'}`);

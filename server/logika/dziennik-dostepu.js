@@ -52,7 +52,7 @@ function zapiszOdczytRejestruPortalu(db, { kto, spolkaId, liczbaOsob, zamaskowan
   if (zamaskowane) return;
   // Ta sama funkcja formatujaca co przy zapisie (`chwila` w tabeli) - inny
   // format dawalby bezsensowne porownanie stringow ponizej.
-  const graniczna = czas.terazIso(new Date(Date.now() - OKNO_DEDUPLIKACJI_MIN * 60 * 1000));
+  const graniczna = czas.terazIso(new Date(czas.teraz().getTime() - OKNO_DEDUPLIKACJI_MIN * 60 * 1000));
   const istniejacy = db
     .prepare(
       `SELECT id FROM psa_dziennik_dostepu

@@ -32,7 +32,14 @@ function EkranZgloszenWstepnych() {
     ustawPrzetwarzanie(id);
     try {
       const wynik = await API.post(`/api/psa/zgloszenia/${id}/zapros`, {});
-      if (!wynik.email_wyslany) {
+      if (wynik.link_testowy) {
+        // Tryb testowy: wiadomość leży w skrzynce testowej — link wprost tutaj.
+        ustawLinkDoPrzekazania({
+          email: (zgloszenia.find((z) => z.id === id) || {}).email || '',
+          link: wynik.link_testowy,
+          powod: 'tryb testowy — wiadomość w skrzynce testowej (/test/skrzynka)',
+        });
+      } else if (!wynik.email_wyslany) {
         ustawLinkDoPrzekazania({
           email: (zgloszenia.find((z) => z.id === id) || {}).email || '',
           link: wynik.link_aktywacyjny || null,

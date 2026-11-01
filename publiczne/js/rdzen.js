@@ -117,7 +117,9 @@ function dataCzas(iso) {
 }
 
 function dzisIso() {
-  const t = new Date();
+  // Tryb testowy (T4): ta sama symulowana data co na serwerze; poza nim 0.
+  const przesuniecie = (window.PSA_TRYB_TESTOWY && window.PSA_TRYB_TESTOWY.przesuniecie_ms) || 0;
+  const t = new Date(Date.now() + przesuniecie);
   const dwa = (x) => String(x).padStart(2, '0');
   return `${t.getFullYear()}-${dwa(t.getMonth() + 1)}-${dwa(t.getDate())}`;
 }

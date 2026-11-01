@@ -151,6 +151,7 @@ function SekcjaZaproszeniaPortal({ osobaId, emailPodpowiedz }) {
       {wynik && !wynik.juz_aktywne && wynik.email_wyslany && (
         <Komunikat odmiana="ok" tresc="Zaproszenie wysłane e-mailem." />
       )}
+      {wynik && <PrzyciskLinkuTestowego link={wynik.link_testowy} />}
       {wynik && !wynik.juz_aktywne && !wynik.email_wyslany && wynik.link_aktywacyjny && (
         <Komunikat
           odmiana="uwaga"

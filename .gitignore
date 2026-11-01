@@ -16,3 +16,6 @@ dokumenty/
 .DS_Store
 __pycache__/
 *.pyc
+
+# Tryb testowy (D-074): baza testowa, dokumenty i skrzynka testowa
+dane-testowe/

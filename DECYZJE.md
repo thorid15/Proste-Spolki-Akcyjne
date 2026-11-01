@@ -1214,6 +1214,45 @@
 
 ---
 
+### D-074 — Tryb testowy bez poczty (SESJA-PSA-WYTYCZNE.md, Faza 1)
+
+- Data: 2026-11-01 (sesja wdrożenia wytycznych „Rejestr akcjonariuszy PSA online”)
+- Obszar: operacyjne / poczta / uwierzytelnianie
+- Decyzja: tryb testowy (`PSA_TRYB_TESTOWY=1` w `.env`, nic innego go nie włącza):
+  1. **Poczta przez jeden punkt** (`server/poczta.js: wyslij()`) z wymiennym transportem
+     (`POCZTA_TRANSPORT`): `smtp` albo — wyłącznie w trybie testowym — `skrzynka-testowa`
+     (`.eml` w `dane-testowe/skrzynka/`, nic nie wychodzi z serwera, status „testowa — niewysłana”).
+     Bez transportu wysyłka zwraca widoczny błąd, nigdy cichy sukces. Strona „Skrzynka testowa”
+     (`/test/skrzynka`) bez logowania, tylko w trybie testowym.
+  2. **Logowanie bez poczty** bez osobnego endpointu ani tokenu: lista kont testowych na ekranach
+     logowania woła zwykłe `POST /login` znanym hasłem kont testowych (`Test-Haslo-2026`), „Zaloguj
+     (tryb testowy)” otwiera zwykły link aktywacyjny, `npm run test:link` drukuje ten sam link.
+     Aplikacja nie ma logowania linkiem ani drugiego składnika — nie ma czego wyłączać.
+  3. **Osobna baza** (`PSA_BAZA_TESTOWA`, domyślnie `dane-testowe/kancelaria-testowa.db`) i katalog
+     dokumentów; oznaczenie bazy wierszem w `psa_baza_testowa` (migracja 61). **D-044 zostaje** —
+     oznaczamy całą bazę, nie rekordy.
+  4. **Jedna funkcja czasu** `czas.teraz()` z przesunięciem ustawianym tylko przez tryb testowy
+     (symulowana data, zapisana w bazie testowej); data wcześniejsza niż ostatnie zdarzenie —
+     odrzucana. Ważność sesji, tokenów i limiter logowania zostają w czasie rzeczywistym.
+  5. **Atrapy:** KRS (numery `0000990001`–`0000990003`, kształt odpowiedzi API), tpay w aplikacji
+     (`/test/tpay/*`, ITN na zwykły endpoint, gdy w `.env` brak danych tpay), walidator podpisu
+     (wybór wyniku; podpięcie w Fazie 2).
+  6. **Zabezpieczenia:** `NODE_ENV=production` albo baza bez oznaczenia → odmowa startu, zanim
+     ruszą migracje; poza trybem testowym `/test/*` → 404; czerwony pasek na każdym ekranie;
+     każde logowanie w trybie testowym w `psa_dziennik_logowan` (append-only, migracja 61).
+- Uzasadnienie: wymaganie Łukasza — przejście każdego przepływu bez skonfigurowanej poczty
+  (docelowo Microsoft 365, `biuro@notariusz.gdansk.pl`; transportu produkcyjnego nie konfigurujemy).
+- Odrzucono: osobny endpoint „zaloguj bez hasła” (inna ścieżka niż produkcyjna); znaczniki testowe
+  per rekord (D-044); nowa zależność do plików `.eml` (MailComposer jest w `nodemailer`).
+- Testy: `testy/tryb-testowy.test.js`, `testy/tryb-testowy-wylaczony.test.js`.
+- Skutek w kodzie: `server/tryb-testowy/*` (nowe), `server/poczta.js`, `server/pomocnicze/czas.js`,
+  `server/konfiguracja.js`, `server/migracje.js` (61), `serwer.js`, `server/trasy/{auth,portal,
+  zgloszenia,krs}.js`, `server/logika/{zaproszenia,dziennik-dostepu}.js`, `publiczne/js/tryb-testowy.js`
+  (nowy), `publiczne/js/{auth,portal,osoby,zgloszenia,sprawy,rdzen}.js`, `narzedzia/test-{seed,link,
+  oznacz}.js` (nowe).
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

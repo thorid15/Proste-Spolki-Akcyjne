@@ -8,7 +8,7 @@
 | Faza | Stan | Commit |
 |---|---|---|
 | 0 — Inwentarz | ZROBIONA (1.11.2026) | patrz `git log` — „Faza 0” |
-| 1 — Tryb testowy (T1–T6) | ZROBIONA — szczegóły w sekcji „Faza 1” | patrz `git log` — „Faza 1” |
+| 1 — Tryb testowy (T1–T6) | ZROBIONA — sekcja 3 | patrz `git log` — „Faza 1” |
 | 2 — Podpisy | CZEKA na akceptację STOP (konflikty K1–K4) | — |
 | 3 — Zgody, dostęp, informacje | — | — |
 | 4 — Przeniesienie rejestru | — | — |
@@ -160,6 +160,29 @@ produkcji bez SMTP). O2 — automatyczne informacje z rejestru bez QES notariusz
 
 ---
 
-## 3. Faza 1 — tryb testowy (T1–T6)
+## 3. Faza 1 — tryb testowy (T1–T6) — WDROŻONE
 
-Szczegóły — sekcja wypełniana po wdrożeniu (niżej).
+Decyzja: **D-074**. Testy: `testy/tryb-testowy.test.js` (9), `testy/tryb-testowy-wylaczony.test.js` (5).
+Pełny zestaw po Fazie 1: **548/548 zielone** (534 + 14 nowych). Opis dla użytkownika: README, „Tryb testowy”.
+
+| ID | Wynik | Jak |
+|---|---|---|
+| T1 | WDROŻONE | `server/poczta.js` — jeden punkt, transport `smtp` / `skrzynka-testowa` (+ `zarejestrujTransport` pod Microsoft 365); `server/tryb-testowy/skrzynka.js` — `.eml` przez MailComposer z `nodemailer` (bez nowej zależności) w `dane-testowe/skrzynka/`; strona `/test/skrzynka` (lista, podgląd, klikalne linki, pobranie `.eml`); status „testowa — niewysłana” w odpowiedzi i w kancelarii (`sprawy.js`: wydane pisma, powiadomienie). Bez trybu i bez SMTP: `status: 'blad'` (test) |
+| T2 | WDROŻONE (dopasowane) | Aplikacja nie ma „Wyślij link” ani drugiego składnika — logowanie hasłem. Lista kont testowych na ekranach logowania kancelarii i portalu (`publiczne/js/tryb-testowy.js`) woła zwykłe `POST /login`; po zaproszeniu (formularz publiczny, kolejka zgłoszeń, zaproszenie akcjonariusza) przycisk „Zaloguj (tryb testowy)” = ten sam link aktywacyjny (`link_testowy` tylko w trybie testowym); `npm run test:link -- <e-mail>`. Test: ten sam token w bazie, e-mailu i odpowiedzi; błędne hasło nadal 401 |
+| T3 | WDROŻONE | `npm run test:seed` (`narzedzia/test-seed.js`) — przez zwykłe API: spółka z aktywnym rejestrem, akcjonariusze ze zgodą e-mail i bez, żądanie zbycia bez zgody zbywcy, wydana informacja (atrapa tpay + ITN), zgłoszenie publiczne; PESEL fikcyjne z poprawną sumą; atrapa KRS `server/tryb-testowy/krs-atrapa.js` (0000990001–3) |
+| T4 | WDROŻONE | `czas.teraz()` + przesunięcie (`server/pomocnicze/czas.js`), zapis w `psa_baza_testowa`; panel `/test`; blokada daty sprzed ostatniego zdarzenia; front (`rdzen.js: dzisIso`) bierze tę samą datę. Naprawione mieszanie zegarów w `dziennik-dostepu.js:55` |
+| T5 | WDROŻONE / CZĘŚCIOWO | atrapa tpay w aplikacji (`/test/tpay/api`, kasa z ITN na zwykły endpoint) — dostępna z paska (panel); atrapa walidatora podpisu z 7 wynikami — zapis wyboru gotowy, **podpięcie w Fazie 2** (walidatora w kodzie jeszcze nie ma) |
+| T6 | WDROŻONE | `server/tryb-testowy/index.js: sprawdzStart` przed migracjami (produkcja / baza nieoznaczona → odmowa startu, test w procesie potomnym); `/test/*` → 404 poza trybem (test); pasek na każdym ekranie (wstrzyknięcie w `serwer.js`); `psa_dziennik_logowan` append-only (migracja 61); `npm run test:oznacz` z potwierdzeniem; konfiguracja wyłącznie w `.env` (Windows) |
+
+Sprawdzone w przeglądarce (Playwright): pasek w kancelarii i portalu (390 px), logowanie jednym kliknięciem
+w obu aplikacjach, wpisy w dzienniku logowań, brak błędów JS.
+
+**Odchylenia od planu:** brak logowania linkiem w aplikacji → T2 oparte na liście kont i linku
+aktywacyjnym (D-074 pkt 2). `ARCHITEKTURA-PSA.md` zaktualizuję w Fazie 5 (zasada: aktualizacja na końcu).
+
+### Instrukcja — tryb testowy w 3 krokach
+
+1. W `.env` dopisz `PSA_TRYB_TESTOWY=1`.
+2. `npm run test:seed`
+3. `npm start` → `http://localhost:3005/` (kancelaria) lub `/portal.html` (portal) → kliknij konto pod
+   „Tryb testowy — konta testowe”. Skrzynka: `/test/skrzynka`, symulowana data i atrapy: `/test`.
