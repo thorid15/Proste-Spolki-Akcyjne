@@ -24,6 +24,11 @@ const czas = require('./pomocnicze/czas');
  * Zajęcie i wykreślenie zajęcia (`odplatne: false`) nigdy tu nie trafiają —
  * wolne od opłat z mocy art. 300(34) § 2 KSH.
  */
+/** W5.7 — stawka według gwarancji ceny spółki (data podpisania umowy). */
+function spolkaDoStawki(db, spolkaId) {
+  return spolkaId ? db.prepare('SELECT id, data_umowy FROM psa_spolki WHERE id = ?').get(spolkaId) : null;
+}
+
 function naliczOplateWpisu(db, { spolkaId, sprawaId, typZdarzenia, autor }) {
   const teraz = czas.terazIso();
   const wynik = db
@@ -34,7 +39,7 @@ function naliczOplateWpisu(db, { spolkaId, sprawaId, typZdarzenia, autor }) {
     .run({
       spolka_id: spolkaId,
       sprawa_id: sprawaId,
-      kwota_grosze: ustawienia.stawkaGrosze(db, 'wpis'),
+      kwota_grosze: ustawienia.stawkaGrosze(db, 'wpis', { spolka: spolkaDoStawki(db, spolkaId) }),
       stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
       data_naliczenia: czas.dzisIso(),
       notatka: `Wpis: ${typZdarzenia}`,
@@ -60,7 +65,7 @@ function naliczOplateInformacji(db, { spolkaId, odbiorcaOsobaId, zamawiajacyOsob
       // NULL = naleznosc spolki. Wypelnione = prywatna naleznosc
       // akcjonariusza, ktorej spolka nie widzi w swoich rozliczeniach.
       zamawiajacy_osoba_id: zamawiajacyOsobaId ?? null,
-      kwota_grosze: ustawienia.stawkaGrosze(db, 'informacja'),
+      kwota_grosze: ustawienia.stawkaGrosze(db, 'informacja', { spolka: spolkaDoStawki(db, spolkaId) }),
       stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
       data_naliczenia: czas.dzisIso(),
       notatka: notatka || (odbiorcaOsobaId ? `Informacja z rejestru — odbiorca #${odbiorcaOsobaId}` : 'Informacja z rejestru'),
@@ -72,7 +77,7 @@ function naliczOplateInformacji(db, { spolkaId, odbiorcaOsobaId, zamawiajacyOsob
 
 /** Reczny wpis oplaty — np. informacja wydana na miejscu, korekta, notatka ksiegowa. */
 function dodajOplateReczna(db, { spolkaId, sprawaId, typ, kwotaGrosze, okres, notatka, autor }) {
-  const kwota = kwotaGrosze != null && kwotaGrosze !== '' ? Number(kwotaGrosze) : ustawienia.stawkaGrosze(db, typ);
+  const kwota = kwotaGrosze != null && kwotaGrosze !== '' ? Number(kwotaGrosze) : ustawienia.stawkaGrosze(db, typ, { spolka: spolkaDoStawki(db, spolkaId) });
   // Jedna walidacja, wspolna dla automatu (zawsze przechodzi - bierze
   // stawke wprost z przepisy.js) i tego recznego wpisu (Z-101..Z-104).
   const walidacja = przepisy.walidujKwoteGrosze(typ, kwota);
@@ -168,7 +173,7 @@ function naliczOkresProwadzenia(db, { spolkaId, okres, autor }) {
       okres: okres.etykieta,
       okres_od: okres.od,
       okres_do: okres.do,
-      kwota_grosze: ustawienia.stawkaGrosze(db, 'prowadzenie'),
+      kwota_grosze: ustawienia.stawkaGrosze(db, 'prowadzenie', { spolka: spolkaDoStawki(db, spolkaId) }),
       stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
       data_naliczenia: czas.dzisIso(),
       autor,
@@ -211,7 +216,7 @@ function naliczOplateWpisuOtwarcia(db, { spolkaId, autor }) {
     )
     .run({
       spolka_id: spolkaId,
-      kwota_grosze: ustawienia.stawkaGrosze(db, 'wpis'),
+      kwota_grosze: ustawienia.stawkaGrosze(db, 'wpis', { spolka: spolkaDoStawki(db, spolkaId) }),
       stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
       data_naliczenia: czas.dzisIso(),
       notatka: 'Pierwszy wpis (otwarcie rejestru)',

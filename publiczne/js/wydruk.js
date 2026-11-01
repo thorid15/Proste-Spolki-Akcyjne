@@ -112,6 +112,8 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
           {/* Eksport surowych danych do dalszej obróbki — narzędzie, nie
               dokument: nic nie podpisuje i niczego nie zaświadcza. */}
           <a className="btn" href={`/api/psa/spolki/${spolkaId}/stan.csv?data=${data}`}>Eksport CSV</a>
+          {/* W6.3 — cały rejestr z historią i dokumentami (art. 90a PrNot). */}
+          <a className="btn" href={`/api/psa/spolki/${spolkaId}/eksport.zip`}>Eksport całego rejestru (ZIP)</a>
         </div>
         <div className="row-g">
           {/* K5 (FAZA 3 sesji frontendowej v2): ten sam mechanizm co

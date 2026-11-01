@@ -779,6 +779,10 @@ const PODSTAWY = {
   FORMA_ZBYCIA: 'art. 300(36) § 4 KSH',
   FORMA_ZGODY_SPOLKI: 'art. 300(39) § 4 KSH, art. 300(40) § 1 KSH',
   WYBOR_PODMIOTU: 'art. 300(31) § 5 KSH',
+  // W5.5 — PRZEPISY-PSA.md § 9 (taksa) i § 8 (art. 89 § 2 PrNot), art. 300(35) § 3 KSH.
+  WYNAGRODZENIE_INFORMACJI: '§ 15b ust. 3 rozporządzenia w sprawie maksymalnych stawek taksy notarialnej, '
+    + 'art. 300(35) § 3 KSH, art. 89 § 2 ustawy — Prawo o notariacie',
+  DOSTEP_ORGANOW: 'art. 300(35) § 4 KSH',
   DOKUMENTY_PODSTAWA: 'art. 300(34) § 4 KSH',
   BADANIE_TRESCI_I_FORMY: 'art. 300(34) § 5 KSH',
   OGRANICZENIA_ROZPORZADZANIA: 'art. 300(34) § 6 KSH',

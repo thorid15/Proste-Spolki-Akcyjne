@@ -56,6 +56,7 @@ const osobyModul = require('./osoby');
 const trybTestowy = require('../tryb-testowy');
 const walidacjaPodpisu = require('../logika/walidacja-podpisu');
 const formyPodpisu = require('../logika/formy-podpisu');
+const informacje = require('../informacje');
 
 const router = express.Router();
 
@@ -1602,43 +1603,27 @@ router.get(
 );
 
 /** Stan rejestru z maskowaniem wg roli konta (art. 300(35) KSH). */
+/**
+ * Zakładka „Rejestr” — WYŁĄCZNIE dane spółki (D-077, W5.1). Stan akcjonariatu
+ * jest tylko w płatnej informacji z rejestru (art. 300(35) § 3 KSH). Odcięcie
+ * na poziomie API, nie widoku — akcjonariusze nie wychodzą z tej trasy wcale.
+ */
+const POLA_SPOLKI_PORTAL = [
+  'id', 'nazwa', 'krs', 'nip', 'regon', 'forma_prawna', 'kraj', 'kod_pocztowy', 'miejscowosc', 'ulica',
+  'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial', 'status', 'data_utworzenia_spolki',
+  'data_otwarcia_rejestru', 'kapital_akcyjny_grosze',
+];
+
 router.get(
   '/rejestr/:spolkaId',
   asy((zad, odp) => {
     // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
-    const spolkaId = Number(zad.params.spolkaId);
-    const data = zad.query.data ? String(zad.query.data) : czas.dzisIso();
-    if (!czas.poprawnaData(data)) throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD.');
-
-    const stan = widoki.widokStanu(db(), spolkaId, data, {
-      rola: rolaOdbioru(zad.konto),
-      odbiorcaOsobaId: zad.konto.osoba_id,
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.spolkaId));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    odp.json({
+      spolka: Object.fromEntries(POLA_SPOLKI_PORTAL.map((k) => [k, spolka[k] ?? null])),
+      akcjonariat_w_informacji: true,
     });
-    if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
-
-    // Naprawa Z-152/P-009: to jedyny ekran portalu, na ktorym rola "spolka"
-    // widzi PESEL/adres wspolakcjonariuszy w calosci (art. 300(35) KSH) - bez
-    // wpisu do dziennika taki wglad byl niewidoczny po fakcie. `zamaskowane`
-    // z `zamaskujOsobe` odpowiada na szersze pytanie ("cokolwiek ukryte" -
-    // ustawia je juz samo ukrycie AML/PEP), stad osobny, wezszy test na
-    // POLA_WRAZLIWE. Wlasne dane odbiorcy (widziane bez maskowania z
-    // definicji) sie nie licza - nie ma tu wgladu w CUDZE dane wrazliwe.
-    const rolaOdp = rolaOdbioru(zad.konto);
-    const osobyZWrazliwymiDanymi = maskowanie.widziWrazliweDaneInnych(rolaOdp)
-      ? new Set(
-        stan.akcjonariusze
-          .filter((a) => a.osoba && a.osoba_id !== zad.konto.osoba_id)
-          .map((a) => a.osoba_id)
-      )
-      : new Set();
-    dziennikDostepu.zapiszOdczytRejestruPortalu(db(), {
-      kto: `Portal — ${zad.konto.email}`,
-      spolkaId,
-      liczbaOsob: osobyZWrazliwymiDanymi.size,
-      zamaskowane: osobyZWrazliwymiDanymi.size === 0,
-    });
-
-    odp.json(stan);
   })
 );
 
@@ -1885,146 +1870,224 @@ router.get(
   })
 );
 
-router.post(
-  '/zadania',
-  asy((zad, odp) => {
-    const konto = zad.konto;
-    const cialo = zad.body || {};
+/**
+ * Założenie żądania wpisu z portalu — jedna droga dla formularza „Zgłoś
+ * zmianę” i dla oświadczenia o zgodzie na komunikację e-mail (W4.1):
+ * te same opłaty, termin i kolejka kancelarii. `odp` może być przechwytem.
+ */
+function zalozZadaniePortalowe(konto, cialo, odp) {
 
-    // Naprawa Z-351/Z-353: klucz idempotencyjny wyslany PONOWNIE (podwojne
-    // klikniecie, ponowienie po zerwanym polaczeniu) oddaje JUZ zalozona
-    // sprawe (i jej JUZ naliczona oplate) zamiast zakladac druga sprawe
-    // i podwojnie obciazyc klienta za ten sam wpis.
-    const kluczIdempotencji = cialo.klucz_idempotencji ? String(cialo.klucz_idempotencji).trim() : null;
-    if (kluczIdempotencji) {
-      const istniejaca = db().prepare('SELECT id FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
-      if (istniejaca) {
-        const sprawaIstniejaca = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(istniejaca.id);
-        const oplataIstniejaca = db()
+  // Naprawa Z-351/Z-353: klucz idempotencyjny wyslany PONOWNIE (podwojne
+  // klikniecie, ponowienie po zerwanym polaczeniu) oddaje JUZ zalozona
+  // sprawe (i jej JUZ naliczona oplate) zamiast zakladac druga sprawe
+  // i podwojnie obciazyc klienta za ten sam wpis.
+  const kluczIdempotencji = cialo.klucz_idempotencji ? String(cialo.klucz_idempotencji).trim() : null;
+  if (kluczIdempotencji) {
+    const istniejaca = db().prepare('SELECT id FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
+    if (istniejaca) {
+      const sprawaIstniejaca = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(istniejaca.id);
+      const oplataIstniejaca = db()
+        .prepare(`SELECT id FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
+        .get(istniejaca.id);
+      return odp.status(200).json({
+        sprawa: widokSprawyPortal(sprawaIstniejaca),
+        oplata_id: oplataIstniejaca ? oplataIstniejaca.id : null,
+        juz_istniala: true,
+      });
+    }
+  }
+
+  // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
+  const spolkaId = Number(cialo.spolka_id);
+  const spolka = rejestr.wczytajSpolke(db(), spolkaId);
+  if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
+  const blokada = przepisy.blokadaWpisu(spolka);
+  if (blokada) throw bledneZadanie(`${blokada} Nie można zgłosić nowej sprawy.`);
+
+  const typZdarzenia = String(cialo.typ_zdarzenia || '');
+  // Celowo NIE bramkujemy sprintem 5: ulamkowe czesci akcji, wspolny
+  // przedstawiciel i wzmianka o pokryciu wymagaja oceny pracownika kancelarii
+  // (decyzja nr 10, sekcja 15 CLAUDE-PSA.md) - portal klienta ich nie oferuje.
+  const typ = typyZdarzen
+    .dostepneWKreatorze(2)
+    .find((t) => t.kod === typZdarzenia && !t.z_urzedu);
+  if (!typ) {
+    throw bledneZadanie(`Typ zdarzenia „${typZdarzenia}” nie jest dostępny do zgłoszenia przez portal.`);
+  }
+
+  // Opis przestal byc obowiazkowy: wpisu dokonuje sie NA PODSTAWIE
+  // DOKUMENTU (art. 300(34) § 4 KSH), a nie opisu zadajacego. Klient, ktory
+  // dolaczyl umowe i wskazal typ zdarzenia, powiedzial juz wszystko —
+  // wymuszanie wypracowania obok dokumentu tworzylo drugie zrodlo prawdy,
+  // ktore pracownik i tak musial konfrontowac z plikiem.
+  const opis = String(cialo.opis || '').trim();
+
+  const dataWplywu = czas.terazIso();
+  const dane = {
+    spolka_id: spolkaId,
+    typ_zdarzenia: typZdarzenia,
+    zrodlo: 'portal',
+    zadajacy_osoba_id: konto.osoba_id,
+    zadajacy_opis: konto.rola === 'spolka'
+      ? `${spolka.nazwa} (zgłoszenie przez portal)`
+      : opis || `${konto.email} (zgłoszenie przez portal)`,
+    data_wplywu: dataWplywu,
+    stan: 'nowa',
+    wymaga_powiadomienia: typ.wymaga_powiadomienia === true ? 1 : 0,
+    autor: `Portal — ${konto.email}`,
+    notatka: opis || null,
+    klucz_idempotencji: kluczIdempotencji,
+    utworzono: czas.terazIso(),
+  };
+  dane.termin_do = terminy.policzTermin(
+    { data_wplywu: dataWplywu.slice(0, 10), stan: 'nowa', wstrzymana_od: null, wznowiona_od: null },
+    czas.dzisIso()
+  ).termin_do;
+
+  // ── Zadanie zlozone przez portal jest skuteczne z chwila OPLACENIA ──
+  //
+  // Art. 300(34) § 1 KSH liczy tydzien od OTRZYMANIA zadania. Umowa
+  // o prowadzenie rejestru stanowi, ze zadanie skladane przez portal
+  // dochodzi do skutku z chwila zaplaty — do tego czasu sprawa nie jest
+  // widoczna w kolejce kancelarii i ZADEN termin ustawowy nie biegnie.
+  //
+  // To NIE jest wstrzymywanie czynnosci ustawowej za dlugi: zadania
+  // zlozonego jeszcze nie ma. Klient, ktory chce zlozyc je natychmiast,
+  // ma otwarta droge papierowa i mailowa — wtedy sprawa rusza od razu,
+  // a oplate rozlicza faktura (`server/trasy/sprawy.js`).
+  //
+  // WYJATEK: gdy platnosci online sa wylaczone, bramka nie obowiazuje.
+  // Inaczej awaria operatora albo brak konfiguracji zamienialaby portal
+  // w czarna dziure — zadanie zapisane, nikomu niepokazane, a klient
+  // przekonany, ze zlozyl. Wtedy zadanie jest skuteczne od razu, a oplate
+  // rozlicza faktura; to ta sama sciezka, co przy zadaniu papierowym.
+  dane.oczekuje_na_oplate = tpay.skonfigurowany() ? 1 : 0;
+
+  const kolumny = Object.keys(dane);
+  let wynik;
+  try {
+    wynik = db()
+      .prepare(`INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
+      .run(dane);
+  } catch (e) {
+    // Ostatnia linia obrony przed wyscigiem: dwa naprawde ROWNOCZESNE
+    // zadania z tym samym kluczem moga oba minac SELECT wyzej, zanim
+    // ktorykolwiek INSERT sie wykona - indeks unikalny to wtedy lapie tutaj.
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' && kluczIdempotencji) {
+      const wygrana = db().prepare('SELECT * FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
+      if (wygrana) {
+        const oplataWygranej = db()
           .prepare(`SELECT id FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
-          .get(istniejaca.id);
+          .get(wygrana.id);
         return odp.status(200).json({
-          sprawa: widokSprawyPortal(sprawaIstniejaca),
-          oplata_id: oplataIstniejaca ? oplataIstniejaca.id : null,
+          sprawa: widokSprawyPortal(wygrana),
+          oplata_id: oplataWygranej ? oplataWygranej.id : null,
           juz_istniala: true,
         });
       }
     }
+    throw e;
+  }
+  const sprawaId = Number(wynik.lastInsertRowid);
 
-    // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
-    const spolkaId = Number(cialo.spolka_id);
-    const spolka = rejestr.wczytajSpolke(db(), spolkaId);
-    if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
-    const blokada = przepisy.blokadaWpisu(spolka);
-    if (blokada) throw bledneZadanie(`${blokada} Nie można zgłosić nowej sprawy.`);
-
-    const typZdarzenia = String(cialo.typ_zdarzenia || '');
-    // Celowo NIE bramkujemy sprintem 5: ulamkowe czesci akcji, wspolny
-    // przedstawiciel i wzmianka o pokryciu wymagaja oceny pracownika kancelarii
-    // (decyzja nr 10, sekcja 15 CLAUDE-PSA.md) - portal klienta ich nie oferuje.
-    const typ = typyZdarzen
-      .dostepneWKreatorze(2)
-      .find((t) => t.kod === typZdarzenia && !t.z_urzedu);
-    if (!typ) {
-      throw bledneZadanie(`Typ zdarzenia „${typZdarzenia}” nie jest dostępny do zgłoszenia przez portal.`);
-    }
-
-    // Opis przestal byc obowiazkowy: wpisu dokonuje sie NA PODSTAWIE
-    // DOKUMENTU (art. 300(34) § 4 KSH), a nie opisu zadajacego. Klient, ktory
-    // dolaczyl umowe i wskazal typ zdarzenia, powiedzial juz wszystko —
-    // wymuszanie wypracowania obok dokumentu tworzylo drugie zrodlo prawdy,
-    // ktore pracownik i tak musial konfrontowac z plikiem.
-    const opis = String(cialo.opis || '').trim();
-
-    const dataWplywu = czas.terazIso();
-    const dane = {
-      spolka_id: spolkaId,
-      typ_zdarzenia: typZdarzenia,
-      zrodlo: 'portal',
-      zadajacy_osoba_id: konto.osoba_id,
-      zadajacy_opis: konto.rola === 'spolka'
-        ? `${spolka.nazwa} (zgłoszenie przez portal)`
-        : opis || `${konto.email} (zgłoszenie przez portal)`,
-      data_wplywu: dataWplywu,
-      stan: 'nowa',
-      wymaga_powiadomienia: typ.wymaga_powiadomienia === true ? 1 : 0,
+  // Oplata za wpis powstaje RAZEM ze sprawa i jest z nia zwiazana — to po
+  // niej `server/platnosci.js` wie, ktora sprawe uruchomic po zaplacie.
+  const oplata = typ.odplatne === false
+    ? null
+    : oplaty.naliczOplateWpisu(db(), {
+      spolkaId,
+      sprawaId,
+      typZdarzenia: typZdarzenia,
       autor: `Portal — ${konto.email}`,
-      notatka: opis || null,
-      klucz_idempotencji: kluczIdempotencji,
-      utworzono: czas.terazIso(),
-    };
-    dane.termin_do = terminy.policzTermin(
-      { data_wplywu: dataWplywu.slice(0, 10), stan: 'nowa', wstrzymana_od: null, wznowiona_od: null },
-      czas.dzisIso()
-    ).termin_do;
+    });
 
-    // ── Zadanie zlozone przez portal jest skuteczne z chwila OPLACENIA ──
-    //
-    // Art. 300(34) § 1 KSH liczy tydzien od OTRZYMANIA zadania. Umowa
-    // o prowadzenie rejestru stanowi, ze zadanie skladane przez portal
-    // dochodzi do skutku z chwila zaplaty — do tego czasu sprawa nie jest
-    // widoczna w kolejce kancelarii i ZADEN termin ustawowy nie biegnie.
-    //
-    // To NIE jest wstrzymywanie czynnosci ustawowej za dlugi: zadania
-    // zlozonego jeszcze nie ma. Klient, ktory chce zlozyc je natychmiast,
-    // ma otwarta droge papierowa i mailowa — wtedy sprawa rusza od razu,
-    // a oplate rozlicza faktura (`server/trasy/sprawy.js`).
-    //
-    // WYJATEK: gdy platnosci online sa wylaczone, bramka nie obowiazuje.
-    // Inaczej awaria operatora albo brak konfiguracji zamienialaby portal
-    // w czarna dziure — zadanie zapisane, nikomu niepokazane, a klient
-    // przekonany, ze zlozyl. Wtedy zadanie jest skuteczne od razu, a oplate
-    // rozlicza faktura; to ta sama sciezka, co przy zadaniu papierowym.
-    dane.oczekuje_na_oplate = tpay.skonfigurowany() ? 1 : 0;
+  // Czynnosc wolna od oplaty (art. 300(34) § 2 KSH — wpis z urzedu) nie ma
+  // na co czekac: zadanie jest skuteczne od razu.
+  if (!oplata) {
+    db().prepare('UPDATE psa_sprawy SET oczekuje_na_oplate = 0 WHERE id = ?').run(sprawaId);
+  }
 
-    const kolumny = Object.keys(dane);
-    let wynik;
-    try {
-      wynik = db()
-        .prepare(`INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
-        .run(dane);
-    } catch (e) {
-      // Ostatnia linia obrony przed wyscigiem: dwa naprawde ROWNOCZESNE
-      // zadania z tym samym kluczem moga oba minac SELECT wyzej, zanim
-      // ktorykolwiek INSERT sie wykona - indeks unikalny to wtedy lapie tutaj.
-      if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' && kluczIdempotencji) {
-        const wygrana = db().prepare('SELECT * FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
-        if (wygrana) {
-          const oplataWygranej = db()
-            .prepare(`SELECT id FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
-            .get(wygrana.id);
-          return odp.status(200).json({
-            sprawa: widokSprawyPortal(wygrana),
-            oplata_id: oplataWygranej ? oplataWygranej.id : null,
-            juz_istniala: true,
-          });
-        }
-      }
-      throw e;
-    }
-    const sprawaId = Number(wynik.lastInsertRowid);
+  const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
+  odp.status(201).json({ sprawa: widokSprawyPortal(sprawa), oplata_id: oplata ? oplata.id : null });
+}
 
-    // Oplata za wpis powstaje RAZEM ze sprawa i jest z nia zwiazana — to po
-    // niej `server/platnosci.js` wie, ktora sprawe uruchomic po zaplacie.
-    const oplata = typ.odplatne === false
-      ? null
-      : oplaty.naliczOplateWpisu(db(), {
-        spolkaId,
-        sprawaId,
-        typZdarzenia: typZdarzenia,
-        autor: `Portal — ${konto.email}`,
-      });
+router.post('/zadania', asy((zad, odp) => zalozZadaniePortalowe(zad.konto, zad.body || {}, odp)));
 
-    // Czynnosc wolna od oplaty (art. 300(34) § 2 KSH — wpis z urzedu) nie ma
-    // na co czekac: zadanie jest skuteczne od razu.
-    if (!oplata) {
-      db().prepare('UPDATE psa_sprawy SET oczekuje_na_oplate = 0 WHERE id = ?').run(sprawaId);
-    }
+// ─────────────────────────────────────────────────────────────
+// W4.1/W4.2 — oświadczenia akcjonariusza składane OSOBIŚCIE (konto albo link
+// z zaproszenia), nigdy przez zarząd w jego imieniu. Każde z datą, odwołalne
+// (tabela append-only `psa_oswiadczenia`).
+//   - zgoda na komunikację e-mail — dana rejestru (art. 300(33) § 1 pkt 5 KSH):
+//     złożenie i cofnięcie idą przez ŻĄDANIE WPISU, nie przez ustawienia konta;
+//   - żądanie automatycznego przesyłania powiadomień (art. 300(34) § 9 KSH,
+//     🔵) — oświadczenie w portalu, skuteczne od razu.
+// ─────────────────────────────────────────────────────────────
 
-    const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
-    odp.status(201).json({ sprawa: widokSprawyPortal(sprawa), oplata_id: oplata ? oplata.id : null });
-  })
-);
+const WZORZEC_EMAIL_OSW = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function ostatnieOswiadczenie(osobaId, spolkaId, rodzaj) {
+  return db().prepare(
+    `SELECT * FROM psa_oswiadczenia WHERE osoba_id = ? AND (spolka_id IS ? OR spolka_id = ?) AND rodzaj = ?
+      ORDER BY id DESC LIMIT 1`
+  ).get(osobaId, spolkaId, spolkaId, rodzaj) || null;
+}
+
+function wymagajAkcjonariuszaPortalu(zad) {
+  if (zad.konto.rola !== 'akcjonariusz' || !zad.konto.osoba_id) {
+    throw bledneZadanie('Oświadczenia składa osobiście akcjonariusz albo nabywca ze swojego konta — nie zarząd w jego imieniu.');
+  }
+}
+
+router.get('/oswiadczenia', asy((zad, odp) => {
+  wymagajAkcjonariuszaPortalu(zad);
+  const osoba = db().prepare('SELECT id, email, zgoda_email_status FROM psa_osoby WHERE id = ?').get(zad.konto.osoba_id);
+  const spolki = db().prepare(
+    `SELECT DISTINCT s.id, s.nazwa FROM psa_stan_akcji sa JOIN psa_spolki s ON s.id = sa.spolka_id
+      WHERE sa.osoba_id = ? AND sa.data_do IS NULL ORDER BY s.nazwa`
+  ).all(zad.konto.osoba_id);
+  odp.json({
+    zgoda_email: { email: osoba.email, status: osoba.zgoda_email_status },
+    spolki: spolki.map((s) => ({
+      spolka_id: s.id,
+      nazwa: s.nazwa,
+      powiadomienia_automatyczne: ostatnieOswiadczenie(osoba.id, s.id, 'powiadomienia_automatyczne'),
+      zgoda_email_ostatnie: ostatnieOswiadczenie(osoba.id, s.id, 'zgoda_email'),
+    })),
+  });
+}));
+
+router.post('/oswiadczenia', asy((zad, odp) => {
+  wymagajAkcjonariuszaPortalu(zad);
+  const cialo = zad.body || {};
+  const spolkaId = Number(cialo.spolka_id);
+  const rodzaj = String(cialo.rodzaj || '');
+  const zlozone = cialo.zlozone !== false;
+  if (!['zgoda_email', 'powiadomienia_automatyczne'].includes(rodzaj)) throw bledneZadanie('Nieznany rodzaj oświadczenia.');
+  const teraz = czas.terazIso();
+  const konto = zad.konto;
+
+  let sprawaId = null;
+  let email = null;
+  if (rodzaj === 'zgoda_email') {
+    email = zlozone ? String(cialo.email || '').trim().toLowerCase() : null;
+    if (zlozone && !WZORZEC_EMAIL_OSW.test(email || '')) throw bledneZadanie('Podaj adres e-mail, na który mamy kierować korespondencję.');
+    const przechwyt = { kod: 200, tresc: null, status(k) { this.kod = k; return this; }, json(t) { this.tresc = t; return this; } };
+    zalozZadaniePortalowe(konto, {
+      spolka_id: spolkaId,
+      typ_zdarzenia: 'zmiana_danych_akcjonariusza',
+      opis: zlozone
+        ? `Oświadczenie złożone osobiście w portalu (${teraz}): zgoda na komunikację ze spółką i podmiotem prowadzącym rejestr przy wykorzystaniu poczty elektronicznej — adres ${email} (art. 300(33) § 1 pkt 5 KSH).`
+        : `Oświadczenie złożone osobiście w portalu (${teraz}): cofnięcie zgody na komunikację przy wykorzystaniu poczty elektronicznej (art. 300(33) § 1 pkt 5 KSH).`,
+    }, przechwyt);
+    sprawaId = przechwyt.tresc && przechwyt.tresc.sprawa ? przechwyt.tresc.sprawa.id : null;
+  }
+
+  db().prepare(
+    `INSERT INTO psa_oswiadczenia (osoba_id, spolka_id, rodzaj, zlozone, email, konto_id, sprawa_id, utworzono)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(konto.osoba_id, spolkaId, rodzaj, zlozone ? 1 : 0, email, konto.id, sprawaId, teraz);
+  odp.status(201).json({ ok: true, sprawa_id: sprawaId, utworzono: teraz });
+}));
 
 // ─────────────────────────────────────────────────────────────
 // Dokumenty do wlasnej sprawy (upload z portalu)
@@ -2472,6 +2535,7 @@ router.post(
     });
     if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
 
+    const numerInformacji = informacje.nadajNumer(db());
     const trescHtml = informacjaDokument.informacjaZRejestru({
       kancelaria: ustawienia.kancelaria(db()),
       spolka: stan.spolka,
@@ -2479,6 +2543,10 @@ router.post(
       stan,
       odbiorca: { rola: rolaOdbioru(konto) },
       sporzadzono: czas.terazIso(),
+      numer: numerInformacji,
+      wynagrodzenie: informacje.wynagrodzenie(db(), {
+        spolka: stan.spolka, nettoGrosze: oplata.kwota_grosze, vatProcent: oplata.stawka_vat_procent,
+      }),
     });
 
     const autorWpisu = `Portal — ${konto.email}`;
@@ -2488,13 +2556,13 @@ router.post(
     // spolki, rozstrzyga sie potem, komu wolno go otworzyc.
     const wynikZapisu = db()
       .prepare(
-        `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, odbiorca_osoba_id, kanal, tresc_html, wyslano, autor, utworzono)
-         VALUES (?, 'informacja_z_rejestru', ?, 'portal', ?, ?, ?, ?)`
+        `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, odbiorca_osoba_id, kanal, tresc_html, wyslano, autor, utworzono, numer)
+         VALUES (?, 'informacja_z_rejestru', ?, 'portal', ?, ?, ?, ?, ?)`
       )
       .run(
         spolkaId,
         konto.rola === 'spolka' ? null : konto.osoba_id,
-        trescHtml, czas.terazIso(), autorWpisu, czas.terazIso()
+        trescHtml, czas.terazIso(), autorWpisu, czas.terazIso(), numerInformacji
       );
     const dokumentId = Number(wynikZapisu.lastInsertRowid);
 

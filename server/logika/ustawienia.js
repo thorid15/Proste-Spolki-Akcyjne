@@ -89,8 +89,41 @@ function kancelaria(db) {
   return wynik;
 }
 
-/** Stawka w groszach: baza, a gdy jej nie ustawiono — wartosc z przepisow. */
-function stawkaGrosze(db, typ) {
+/** W5.7 — okres gwarancji ceny w latach (parametr „Stawki i terminy”, domyślnie 3 — D-073). */
+const GWARANCJA_DOMYSLNA_LAT = 3;
+function gwarancjaCenyLat(db) {
+  const v = Number(zBazy(db).gwarancja_ceny_lat);
+  return Number.isInteger(v) && v >= 0 ? v : GWARANCJA_DOMYSLNA_LAT;
+}
+
+function dodajLata(dzien, lata) {
+  const [r, m, d] = String(dzien).slice(0, 10).split('-').map(Number);
+  return `${String(r + lata).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/** Wersja stawek obowiązująca w danym dniu (W5.7) albo null, gdy stawek nie zmieniano. */
+function wersjaStawek(db, dzien) {
+  return db.prepare('SELECT * FROM psa_stawki_wersje WHERE od_dnia <= ? ORDER BY od_dnia DESC, id DESC LIMIT 1')
+    .get(String(dzien).slice(0, 10)) || null;
+}
+
+/**
+ * Stawka w groszach. Spółka w okresie gwarancji ceny (od dnia podpisania
+ * umowy — `data_umowy`) rozliczana jest według wersji stawek z tamtego dnia
+ * (W5.7); poza nim — stawka bieżąca: baza, a gdy jej nie ustawiono — przepisy.
+ */
+function stawkaGrosze(db, typ, { spolka = null, dzien = null } = {}) {
+  if (spolka && spolka.data_umowy) {
+    const dzis = dzien || require('../pomocnicze/czas').dzisIso();
+    if (dzis < dodajLata(spolka.data_umowy, gwarancjaCenyLat(db))) {
+      const w = wersjaStawek(db, spolka.data_umowy);
+      if (w && w[`${typ}_grosze`] != null) return w[`${typ}_grosze`];
+    }
+  }
+  return stawkaBiezaca(db, typ);
+}
+
+function stawkaBiezaca(db, typ) {
   const przepisy = require('./przepisy');
   const ustawione = zBazy(db)[`stawka_${typ}`];
   const zPrzepisow = przepisy.stawkaGrosze(typ);
@@ -113,20 +146,30 @@ function doEkranu(db) {
     const typ = p.klucz.replace('stawka_', '');
     return {
       ...p,
-      wartosc: stawkaGrosze(db, typ),
+      wartosc: stawkaBiezaca(db, typ),
       maksymalna: przepisy.STAWKI_MAKSYMALNE_GROSZE[
         typ === 'prowadzenie' ? 'PROWADZENIE_ROCZNIE' : typ.toUpperCase()
       ],
       z_bazy: Object.prototype.hasOwnProperty.call(ustawione, p.klucz),
     };
   };
-  return { kancelaria: POLA_KANCELARII.map(pole), stawki: POLA_STAWEK.map(stawka) };
+  return {
+    kancelaria: POLA_KANCELARII.map(pole),
+    stawki: POLA_STAWEK.map(stawka),
+    gwarancja_ceny_lat: gwarancjaCenyLat(db),
+    wersje_stawek: db.prepare('SELECT * FROM psa_stawki_wersje ORDER BY od_dnia DESC, id DESC').all(),
+  };
 }
 
 /** Bledy blokujace zapis. Pusta lista = w porzadku. */
 function bledy(zmiany) {
   const lista = [];
   const cyfry = (v) => String(v || '').replace(/\D/g, '');
+
+  if ('gwarancja_ceny_lat' in zmiany && String(zmiany.gwarancja_ceny_lat ?? '').trim() !== '') {
+    const v = Number(zmiany.gwarancja_ceny_lat);
+    if (!Number.isInteger(v) || v < 0 || v > 10) lista.push('Gwarancja ceny: liczba pełnych lat od 0 do 10.');
+  }
 
   for (const p of POLA_KANCELARII) {
     if (!(p.klucz in zmiany)) continue;
@@ -189,7 +232,9 @@ function nipPoprawny(cyfry) {
  * jak celowo skasowana nazwa kancelarii.
  */
 function zapisz(db, zmiany, autor) {
-  const dozwolone = new Set([...KLUCZE_KANCELARII, ...KLUCZE_STAWEK]);
+  const dozwolone = new Set([...KLUCZE_KANCELARII, ...KLUCZE_STAWEK, 'gwarancja_ceny_lat']);
+  const TYPY = ['prowadzenie', 'wpis', 'informacja'];
+  const przed = Object.fromEntries(TYPY.map((t) => [t, stawkaBiezaca(db, t)]));
   const teraz = czas.terazIso();
   const wstaw = db.prepare(
     `INSERT INTO psa_ustawienia (klucz, wartosc, zaktualizowano, autor)
@@ -209,10 +254,24 @@ function zapisz(db, zmiany, autor) {
     }
   });
   transakcja();
+
+  // W5.7 — każda zmiana stawek to nowa WERSJA z datą; poprzednie zostają
+  // dla spółek w okresie gwarancji ceny.
+  const po = Object.fromEntries(TYPY.map((t) => [t, stawkaBiezaca(db, t)]));
+  if (TYPY.some((t) => przed[t] !== po[t])) {
+    const dodaj = db.prepare(
+      `INSERT INTO psa_stawki_wersje (od_dnia, prowadzenie_grosze, wpis_grosze, informacja_grosze, autor, utworzono)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    if (!db.prepare('SELECT 1 FROM psa_stawki_wersje LIMIT 1').get()) {
+      dodaj.run('0000-01-01', przed.prowadzenie, przed.wpis, przed.informacja, 'stan przed pierwszą zmianą', teraz);
+    }
+    dodaj.run(czas.dzisIso(), po.prowadzenie, po.wpis, po.informacja, autor || null, teraz);
+  }
   return zmienione;
 }
 
 module.exports = {
-  POLA_KANCELARII, POLA_STAWEK, kancelaria, stawkaGrosze, doEkranu,
+  POLA_KANCELARII, POLA_STAWEK, kancelaria, stawkaGrosze, stawkaBiezaca, wersjaStawek, gwarancjaCenyLat, doEkranu,
   bledy, zapisz, nipPoprawny,
 };

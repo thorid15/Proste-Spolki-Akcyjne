@@ -571,7 +571,7 @@ test('Z-203: ostrzezenie AML rozroznia nabywce-osobe prawna od fizycznej w tresc
   const wynikFizyczna = walidacje.sprawdz({
     zdarzenia: dziennik,
     spolka: { id: 1, status: 'aktywna' },
-    osoby: new Map([[8, { id: 8, typ: 'fizyczna', nazwisko: 'Kowalski', imie: 'Jan', aml_status: 'brak' }]]),
+    osoby: new Map([[8, { id: 8, typ: 'fizyczna', nazwisko: 'Kowalski', imie: 'Jan', data_urodzenia: '1980-01-01', aml_status: 'brak' }]]),
     dzisiaj: '2026-02-01',
     propozycja: {
       typ: 'objecie',
@@ -585,4 +585,20 @@ test('Z-203: ostrzezenie AML rozroznia nabywce-osobe prawna od fizycznej w tresc
     wynikFizyczna.ostrzezenia.join(' | ')
   );
   assert.ok(!wynikFizyczna.ostrzezenia.some((o) => /podmiotu/.test(o)), 'osoba fizyczna nie dostaje etykiety "podmiotu"');
+});
+
+test('W6.1 / D-076: nowy wpis osoby fizycznej bez PESEL i bez daty urodzenia — błąd; z datą urodzenia albo PESEL — dopuszczalny', () => {
+  const dziennik = [emisjaZdarzenie(1, { data_wpisu_krs: '2026-01-01' })];
+  const sprawdz = (osoba) => walidacje.sprawdz({
+    zdarzenia: dziennik,
+    spolka: { id: 1, status: 'aktywna' },
+    osoby: new Map([[9, { id: 9, typ: 'fizyczna', nazwisko: 'Nowak', imie: 'Ewa', aml_status: 'wykonane', ...osoba }]]),
+    dzisiaj: '2026-02-01',
+    propozycja: { typ: 'objecie', chwila: '2026-01-02', dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: 9, zakresy: [{ nr_od: 1, nr_do: 10 }] }] } },
+  });
+  const bez = sprawdz({});
+  assert.equal(bez.dopuszczalne, false);
+  assert.ok(bez.bledy.some((b) => /PESEL albo daty urodzenia/.test(b)), bez.bledy.join(' | '));
+  assert.equal(sprawdz({ data_urodzenia: '1990-05-05' }).dopuszczalne, true);
+  assert.equal(sprawdz({ pesel: '90050512345' }).dopuszczalne, true);
 });

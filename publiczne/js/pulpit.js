@@ -19,7 +19,7 @@
     ustawowego w tym systemie, więc czas oczekiwania jest tu jego zastępstwem). */
 const PRIORYTET_DO_ZROBIENIA = { sprawa_po_terminie: 0, sprawa_po_celu: 1, inne: 2, sprawa_w_celu: 3 };
 
-function pozycjeDoZrobienia({ sprawy, zgloszenia, wnioski, zawiadomienia, podpisy = [] }) {
+function pozycjeDoZrobienia({ sprawy, zgloszenia, wnioski, zawiadomienia, podpisy = [], listy = [], zadaniaTerminowe = [] }) {
   const pozycje = [];
   for (const s of sprawy) {
     const priorytet = s.termin && s.termin.po_terminie
@@ -93,6 +93,31 @@ function pozycjeDoZrobienia({ sprawy, zgloszenia, wnioski, zawiadomienia, podpis
       prawo: <Pigulka odmiana={p.walidacja_wynik === 'poprawny' ? 'rejestr' : 'sygnal'}>podpis</Pigulka>,
     });
   }
+  for (const l of listy) {
+    pozycje.push({
+      klucz: `list-${l.id}`,
+      priorytet: PRIORYTET_DO_ZROBIENIA.inne,
+      data: l.utworzono,
+      ikona: 'szablony',
+      tytul: `List do nadania — ${l.odbiorca_nazwa}`,
+      podtytul: l.spolka_nazwa,
+      przyKlik: () => idz('/listy'),
+      prawo: <Pigulka odmiana="mosiadz">list</Pigulka>,
+    });
+  }
+  // W6.2 / W6.5 — zadania z terminem ustawowym (za bramką 18.02.2027).
+  for (const z of zadaniaTerminowe) {
+    pozycje.push({
+      klucz: z.klucz,
+      priorytet: PRIORYTET_DO_ZROBIENIA.inne,
+      data: z.termin,
+      ikona: 'sprawy',
+      tytul: z.tytul,
+      podtytul: `${z.spolka_nazwa} — termin ${fmt.data(z.termin)} (${z.podstawa})`,
+      przyKlik: () => idz(`/spolki/${z.spolka_id}`),
+      prawo: <Pigulka odmiana="sygnal">termin</Pigulka>,
+    });
+  }
   return pozycje.sort((a, b) => (a.priorytet - b.priorytet) || (new Date(a.data) - new Date(b.data)));
 }
 
@@ -150,13 +175,13 @@ function EkranPulpitu() {
   if (ladowanie) return <Spinner />;
   if (blad) return <Komunikat odmiana="blad" tytul="Nie udało się wczytać pulpitu" tresc={blad.message} />;
 
-  const { spolki, integralnosc, sprawy, zgloszenia, wnioski, zawiadomienia, podpisy } = dane;
+  const { spolki, integralnosc, sprawy, zgloszenia, wnioski, zawiadomienia, podpisy, listy, zadania_terminowe: zadaniaTerminowe } = dane;
   const wToku = sprawy.pozycje || [];
   const poTerminie = wToku.filter((s) => s.termin && s.termin.po_terminie).length;
   // Wczesny sygnal to przekroczenie CELU wewnetrznego, nie zblizanie sie do
   // siodmego dnia - po to cel istnieje, zeby ostrzegal wczesniej niz ustawa.
   const poCelu = wToku.filter((s) => s.termin && s.termin.po_celu && !s.termin.po_terminie).length;
-  const doZrobienia = pozycjeDoZrobienia({ sprawy: wToku, zgloszenia, wnioski, zawiadomienia, podpisy });
+  const doZrobienia = pozycjeDoZrobienia({ sprawy: wToku, zgloszenia, wnioski, zawiadomienia, podpisy, listy, zadaniaTerminowe });
 
   return (
     <>

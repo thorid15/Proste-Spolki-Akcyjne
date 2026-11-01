@@ -210,7 +210,7 @@ test('adres zamaskowany jest nazwany wprost, a nie przemilczany', () => {
     ulica: null, nr_domu: null, kod_pocztowy: null, miejscowosc: null,
   };
   const html = dokument({ stan });
-  assert.match(html, /adres zamieszkania zasłonięty/);
+  assert.match(html, /PESEL, data urodzenia i adres zamieszkania nie są udostępniane/);
   assert.match(html, /nie udostępnia się akcjonariuszowi/, 'brak danych jest nazwany, nie przemilczany');
 });
 

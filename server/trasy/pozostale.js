@@ -182,10 +182,84 @@ router.get(
              WHERE sp.stan = 'wpisana'
                AND NOT EXISTS (SELECT 1 FROM psa_wydane_dokumenty w
                                 WHERE w.sprawa_id = sp.id
-                                  AND w.typ = 'zawiadomienie_wpis'))              AS zawiadomienia`
+                                  AND w.typ = 'zawiadomienie_wpis'))              AS zawiadomienia,
+           -- W4.3: pisma do osób bez zgody na e-mail czekające na nadanie.
+           (SELECT COUNT(*) FROM psa_listy WHERE status = 'do_wyslania')        AS listy`
       )
       .get();
     odp.json({ liczniki: wiersz });
+  })
+);
+
+/**
+ * W6.2 / W6.5 — zadania z terminem do „Do zrobienia” (za bramką 18.02.2027,
+ * jedna funkcja czasu). Zgłoszenia do sądu i KRS składa się przez Portal
+ * Rejestrów Sądowych — tu tylko przypomnienie i projekt treści, bez automatu.
+ */
+function zadaniaTerminowe(dzis) {
+  const zadania = [];
+  if (!przepisy.nowelizacjaObowiazuje(dzis)) return zadania;
+  // W6.2 — art. 300(32) § 3 KSH: zawiadomienie sądu o rozwiązaniu/wygaśnięciu umowy w 7 dni.
+  const rozwiazane = db().prepare(
+    `SELECT s.id, s.nazwa, COALESCE(s.data_zakonczenia_umowy, s.przekazanie_data) AS data_konca FROM psa_spolki s
+      WHERE COALESCE(s.data_zakonczenia_umowy, s.przekazanie_data) IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM psa_wydane_dokumenty w WHERE w.spolka_id = s.id AND w.typ = 'zawiadomienie_sad_rozwiazanie')`
+  ).all();
+  for (const r of rozwiazane) {
+    if (!przepisy.nowelizacjaObowiazuje(r.data_konca)) continue;
+    zadania.push({
+      klucz: `sad-${r.id}`, rodzaj: 'zawiadomienie_sadu', spolka_id: r.id, spolka_nazwa: r.nazwa,
+      tytul: 'Zawiadom sąd rejestrowy o rozwiązaniu albo wygaśnięciu umowy (PRS)',
+      termin: terminy.dodajDni(String(r.data_konca).slice(0, 10), przepisy.TERMINY.ZAWIADOMIENIE_SADU_DNI),
+      podstawa: 'art. 300(32) § 3 KSH',
+    });
+  }
+  // W6.5 — art. 29 ustawy zmieniającej: rejestry istniejące 18.02.2027 — wniosek do KRS w 3 miesiące.
+  if (dzis <= przepisy.NOWELIZACJA.KONIEC_OKRESU_PRZEJSCIOWEGO) {
+    const istniejace = db().prepare(
+      `SELECT s.id, s.nazwa FROM psa_spolki s
+        WHERE s.status = 'aktywna' AND COALESCE(s.data_otwarcia_rejestru, substr(s.utworzono, 1, 10)) < ?
+          AND NOT EXISTS (SELECT 1 FROM psa_wydane_dokumenty w WHERE w.spolka_id = s.id AND w.typ = 'raport'
+                            AND w.tresc_html LIKE '[przypomnienie-krs]%')`
+    ).all(przepisy.NOWELIZACJA.WEJSCIE_W_ZYCIE);
+    for (const r of istniejace) {
+      zadania.push({
+        klucz: `krs-${r.id}`, rodzaj: 'przypomnienie_krs', spolka_id: r.id, spolka_nazwa: r.nazwa,
+        tytul: 'Przypomnij zarządowi o zgłoszeniu podmiotu prowadzącego rejestr do KRS',
+        termin: przepisy.NOWELIZACJA.KONIEC_OKRESU_PRZEJSCIOWEGO,
+        podstawa: 'art. 29 ustawy z 23.01.2026 (Dz.U. 2026 poz. 176), art. 300(32) § 1(1) KSH',
+      });
+    }
+  }
+  return zadania.sort((a, b) => String(a.termin).localeCompare(String(b.termin)));
+}
+
+/**
+ * W6.5 — projekt przypomnienia dla zarządu („PROJEKT — do akceptacji Łukasza”).
+ * Zapisuje ślad (typ `raport`, znacznik `[przypomnienie-krs]`) — zadanie znika z pulpitu.
+ */
+router.post(
+  '/spolki/:id/przypomnienie-krs',
+  wymagajPracownika,
+  asy((zad, odp) => {
+    if (!przepisy.nowelizacjaObowiazuje(czas.dzisIso())) {
+      return odp.status(501).json(jeszczeNieaktywne('art. 29 ustawy zmieniającej', 'Przypomnienie o zgłoszeniu do KRS.'));
+    }
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const k = ustawienia.kancelaria(db());
+    const html = `[przypomnienie-krs]<p><strong>PROJEKT — do akceptacji Łukasza</strong></p>
+<p>Szanowni Państwo,</p>
+<p>od 18 lutego 2027 r. zarząd spółki ${spolka.nazwa}${spolka.krs ? ` (KRS ${spolka.krs})` : ''} zgłasza do sądu rejestrowego
+zawarcie umowy o prowadzenie rejestru akcjonariuszy (art. 300(32) § 1(1)–1(3) KSH). Spółki, których rejestr był prowadzony
+w dniu 18 lutego 2027 r., składają wniosek w ciągu 3 miesięcy, tj. do ${przepisy.NOWELIZACJA.KONIEC_OKRESU_PRZEJSCIOWEGO}
+(art. 29 ustawy z 23 stycznia 2026 r.). Zgłoszenie wskazuje: ${k.notariusz_mianownik || 'notariusza'}, siedzibę i adres kancelarii
+(${k.adres || '—'}); dołącza się oświadczenie zarządu potwierdzające zawarcie umowy. Wniosek składa się przez Portal Rejestrów Sądowych.</p>
+<p>${k.nazwa}</p>`;
+    db().prepare(
+      `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, kanal, tresc_html, autor, utworzono) VALUES (?, 'raport', 'papier', ?, ?, ?)`
+    ).run(spolka.id, html, autor(zad), czas.terazIso());
+    odp.json({ tresc_html: html.replace('[przypomnienie-krs]', '') });
   })
 );
 
@@ -303,6 +377,12 @@ router.get(
       .all();
 
     odp.json({
+      zadania_terminowe: zadaniaTerminowe(dzis),
+      listy: db().prepare(
+        `SELECT l.id, l.odbiorca_nazwa, l.rodzaj_pisma, l.utworzono, s.nazwa AS spolka_nazwa
+           FROM psa_listy l JOIN psa_spolki s ON s.id = l.spolka_id
+          WHERE l.status = 'do_wyslania' ORDER BY l.utworzono ASC`
+      ).all(),
       spolki,
       liczniki: { ...liczniki, sprawy_w_toku: sprawy.length },
       integralnosc: {

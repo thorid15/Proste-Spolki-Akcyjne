@@ -51,14 +51,16 @@ function dodajOsobe(db, nadpisania = {}) {
     imie: 'Jan',
     nazwa: null,
     pesel: null,
+    // D-076 (W6.1): nowy wpis osoby fizycznej wymaga PESEL albo daty urodzenia.
+    data_urodzenia: '1980-01-01',
     aml_status: 'wykonane',
     utworzono: czas.terazIso(),
     ...nadpisania,
   };
   const wynik = db
     .prepare(
-      `INSERT INTO psa_osoby (typ, nazwisko, imie, nazwa, pesel, aml_status, utworzono)
-       VALUES (@typ, @nazwisko, @imie, @nazwa, @pesel, @aml_status, @utworzono)`
+      `INSERT INTO psa_osoby (typ, nazwisko, imie, nazwa, pesel, data_urodzenia, aml_status, utworzono)
+       VALUES (@typ, @nazwisko, @imie, @nazwa, @pesel, @data_urodzenia, @aml_status, @utworzono)`
     )
     .run(dane);
   return Number(wynik.lastInsertRowid);

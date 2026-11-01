@@ -35,11 +35,17 @@ const MENU = [
       // po zamknieciu calej roboty przy spolce — stad wlasna kolejka,
       // a nie automat przy kazdym wpisie.
       { sciezka: '/zawiadomienia', nazwa: 'Zawiadomienia', ikona: 'szablony', licznik: 'zawiadomienia' },
+      // W4.3 — pisma do osób bez zgody na komunikację e-mail (adres z rejestru).
+      { sciezka: '/listy', nazwa: 'Listy do wysyłki', ikona: 'szablony', licznik: 'listy' },
     ],
   },
   {
     grupa: 'Rozliczenia',
-    pozycje: [{ sciezka: '/oplaty', nazwa: 'Opłaty', ikona: 'oplaty' }],
+    pozycje: [
+      { sciezka: '/oplaty', nazwa: 'Opłaty', ikona: 'oplaty' },
+      // W5.6 — numer, data, odbiorca, opłata każdej wydanej informacji z rejestru.
+      { sciezka: '/informacje', nazwa: 'Dziennik informacji', ikona: 'oplaty' },
+    ],
   },
   {
     grupa: 'Konfiguracja',
@@ -61,6 +67,7 @@ const OPIS_LICZNIKA = {
   wnioski: 'wniosków do weryfikacji',
   sprawy: 'spraw w toku',
   zawiadomienia: 'wpisów bez zawiadomienia',
+  listy: 'listów do nadania',
 };
 
 /**
@@ -240,6 +247,8 @@ function opisTrasy(segmenty) {
     zgloszenia: { tytul: 'Zgłoszenia', podtytul: 'Pierwszy kontakt z publicznego formularza portalu — do oceny przed wysłaniem zaproszenia.' },
     wnioski: { tytul: 'Wnioski', podtytul: 'Wnioski o prowadzenie rejestru złożone przez portal klienta — porównanie z KRS i akceptacja.' },
     zawiadomienia: { tytul: 'Zawiadomienia', podtytul: 'Wpisy dokonane, o których nie zawiadomiono jeszcze żądającego i spółki (art. 300³⁴ § 7 KSH).' },
+    listy: { tytul: 'Listy do wysyłki', podtytul: 'Pisma do osób bez zgody na komunikację e-mail — adres z rejestru, data i numer nadania (art. 300³³ § 1 pkt 5 KSH).' },
+    informacje: { tytul: 'Dziennik wydanych informacji', podtytul: 'Informacje z rejestru (art. 300³⁵ KSH): numer, data, odbiorca, opłata.' },
     oplaty: { tytul: 'Opłaty', podtytul: 'Naliczenia za czynności rejestrowe i prowadzenie rejestru.' },
     konfiguracja: { tytul: 'Konfiguracja', podtytul: 'Dane kancelarii, stawki, terminy, szablony dokumentów i użytkownicy modułu.' },
   };
@@ -340,6 +349,8 @@ function Aplikacja() {
     }
     if (segmenty[0] === 'zgloszenia') return <EkranZgloszenWstepnych />;
     if (segmenty[0] === 'zawiadomienia') return <EkranZawiadomien />;
+    if (segmenty[0] === 'listy') return <EkranListow />;
+    if (segmenty[0] === 'informacje') return <EkranDziennikaInformacji />;
     if (segmenty[0] === 'wnioski') {
       if (segmenty.length === 1) return <EkranWnioski />;
       const id = Number(segmenty[1]);

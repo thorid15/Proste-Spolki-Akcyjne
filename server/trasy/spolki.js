@@ -640,6 +640,24 @@ router.get(
   })
 );
 
+/** W6.3 — eksport całego rejestru z dokumentami (ZIP, art. 90a PrNot, D-080). */
+router.get(
+  '/:id/eksport.zip',
+  asy((zad, odp) => {
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    const archiwum = require('../eksport').zbudujEksport(db(), spolka);
+    dziennikDostepu.zapisz(db(), {
+      kto: autor(zad), typKto: 'pracownik', spolkaId: spolka.id, akcja: dziennikDostepu.AKCJE.EKSPORT,
+      opis: 'eksport całego rejestru z dokumentami (ZIP)',
+    });
+    const nazwa = `rejestr-${String(spolka.krs || spolka.id)}-${czas.dzisIso()}.zip`;
+    odp.set('Content-Type', 'application/zip');
+    odp.set('Content-Disposition', `attachment; filename="${nazwa}"`);
+    odp.send(archiwum);
+  })
+);
+
 /** Pelna historia zdarzen. */
 router.get(
   '/:id/zdarzenia',

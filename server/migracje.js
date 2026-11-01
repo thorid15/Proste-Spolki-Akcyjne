@@ -2350,6 +2350,74 @@ const MIGRACJE = [
       ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_poczta_zadeklarowano TEXT;
     `,
   },
+  {
+    wersja: 64,
+    nazwa: 'Faza 3: oswiadczenia akcjonariuszy, kolejka listow, wersje stawek, dziennik informacji',
+    sql: `
+      -- W4.1/W4.2: oswiadczenia skladane OSOBISCIE przez akcjonariusza albo
+      -- nabywce (konto portalu albo link z zaproszenia) — nie przez zarzad.
+      -- Append-only: stan = ostatni wiersz dla (osoba, spolka, rodzaj).
+      -- Zgoda na komunikacje e-mail jest dana rejestru (art. 300(33) § 1 pkt 5)
+      -- — jej zlozenie/cofniecie zaklada zadanie wpisu (sprawa_id).
+      CREATE TABLE IF NOT EXISTS psa_oswiadczenia (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        osoba_id    INTEGER NOT NULL REFERENCES psa_osoby(id),
+        spolka_id   INTEGER REFERENCES psa_spolki(id),
+        rodzaj      TEXT NOT NULL CHECK (rodzaj IN ('zgoda_email', 'powiadomienia_automatyczne')),
+        zlozone     INTEGER NOT NULL CHECK (zlozone IN (0, 1)),
+        email       TEXT,
+        konto_id    INTEGER REFERENCES psa_konta(id),
+        sprawa_id   INTEGER REFERENCES psa_sprawy(id),
+        utworzono   TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS psa_ix_oswiadczenia_osoba ON psa_oswiadczenia (osoba_id, rodzaj);
+      CREATE TRIGGER IF NOT EXISTS psa_oswiadczenia_bez_zmian
+      BEFORE UPDATE ON psa_oswiadczenia
+      BEGIN SELECT RAISE(ABORT, 'psa_oswiadczenia jest append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS psa_oswiadczenia_bez_usuwania
+      BEFORE DELETE ON psa_oswiadczenia
+      BEGIN SELECT RAISE(ABORT, 'psa_oswiadczenia jest append-only'); END;
+
+      -- W4.3: kolejka listow — pismo do osoby bez zgody na e-mail idzie
+      -- pocztą na adres Z REJESTRU (kopia adresu w chwili wystawienia).
+      CREATE TABLE IF NOT EXISTS psa_listy (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        wydany_dokument_id  INTEGER NOT NULL REFERENCES psa_wydane_dokumenty(id),
+        spolka_id           INTEGER NOT NULL REFERENCES psa_spolki(id),
+        sprawa_id           INTEGER REFERENCES psa_sprawy(id),
+        odbiorca_osoba_id   INTEGER REFERENCES psa_osoby(id),
+        odbiorca_nazwa      TEXT NOT NULL,
+        adres               TEXT NOT NULL,
+        rodzaj_pisma        TEXT NOT NULL,
+        status              TEXT NOT NULL DEFAULT 'do_wyslania' CHECK (status IN ('do_wyslania', 'nadany')),
+        data_nadania        TEXT,
+        numer_nadania       TEXT,
+        potwierdzenie_sciezka TEXT,
+        potwierdzenie_nazwa TEXT,
+        nadal               TEXT,
+        utworzono           TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS psa_ix_listy_status ON psa_listy (status);
+
+      -- W5.7: stawki wersjonowane z data — spolka w okresie gwarancji ceny
+      -- rozliczana wg wersji z dnia podpisania umowy.
+      CREATE TABLE IF NOT EXISTS psa_stawki_wersje (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        od_dnia             TEXT NOT NULL,
+        prowadzenie_grosze  INTEGER NOT NULL,
+        wpis_grosze         INTEGER NOT NULL,
+        informacja_grosze   INTEGER NOT NULL,
+        autor               TEXT,
+        utworzono           TEXT NOT NULL
+      );
+
+      -- W5.3/W5.6: numer informacji, odbiorca spoza kartoteki (organ),
+      -- sygnatura sprawy organu, wynagrodzenie na dokumencie.
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN numer TEXT;
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN odbiorca_opis TEXT;
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN sygnatura TEXT;
+    `,
+  },
 ];
 
 /**

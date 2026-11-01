@@ -453,7 +453,9 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
     ustawBlad(null);
     try {
       const odp = await API.post(`/api/psa/sprawy/${sprawa.id}/powiadomienie`, { osoba_id: osobaId });
-      if (!odp.wysylka.wyslano) ustawBlad(odp.wysylka.powod);
+      // W4.3 — bez zgody na e-mail pismo idzie do kolejki listów (adres z rejestru).
+      if (odp.wysylka.status === 'list') window.alert(`${odp.wysylka.powod} Zakładka „Listy do wysyłki”.`);
+      else if (!odp.wysylka.wyslano) ustawBlad(odp.wysylka.powod);
       odswiez();
     } catch (e) {
       ustawBlad(e.message);

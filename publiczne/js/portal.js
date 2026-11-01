@@ -1125,124 +1125,41 @@ function EkranSpolkaPortal({ spolkaId }) {
    PODGLĄD REJESTRU (z maskowaniem — art. 300(35) KSH)
    ───────────────────────────────────────────────────── */
 function EkranRejestrPortal({ spolkaId }) {
-  const [dataStan, ustawDataStan] = useState(fmt.dzisIso());
-  const { dane, ladowanie, blad } = useDane(`/api/psa/portal/rejestr/${spolkaId}?data=${dataStan}`, [dataStan]);
+  // D-077 (W5.1): zakładka pokazuje wyłącznie dane spółki — akcjonariat jest
+  // w płatnej informacji z rejestru (API tej trasy akcjonariuszy nie zwraca).
+  const { dane, ladowanie, blad } = useDane(`/api/psa/portal/rejestr/${spolkaId}`);
+  const s = dane && dane.spolka;
+  const adres = s ? [[s.ulica, [s.nr_domu, s.nr_lokalu].filter(Boolean).join('/')].filter(Boolean).join(' '),
+    [s.kod_pocztowy, s.miejscowosc].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '';
 
   return (
     <div className="pion" style={{ gap: 16 }}>
       {blad && <Komunikat odmiana="blad" tresc={blad.message} />}
       {ladowanie && <Spinner />}
-
-      {dane && (
+      {s && (
         <>
+          <Karta tight tytul="Dane spółki">
+            <dl className="pary">
+              <dt>Firma</dt><dd>{s.nazwa}</dd>
+              <dt>KRS</dt><dd>{s.krs || '—'}</dd>
+              <dt>Siedziba i adres</dt><dd>{adres || '—'}</dd>
+              <dt>Sąd rejestrowy</dt><dd>{[s.sad_rejestrowy, s.wydzial].filter(Boolean).join(', ') || '—'}</dd>
+              <dt>Data rejestracji spółki</dt><dd>{s.data_utworzenia_spolki ? fmt.data(s.data_utworzenia_spolki) : '—'}</dd>
+              <dt>Rejestr akcjonariuszy prowadzony od</dt><dd>{s.data_otwarcia_rejestru ? fmt.data(s.data_otwarcia_rejestru) : '—'}</dd>
+            </dl>
+          </Karta>
           <Karta tight>
-            <div className="rzad-rozdzielony">
-              <div className="row-g" style={{ marginBottom: 0 }}>
-                <label className="fl" style={{ margin: 0 }}>Stan na dzień</label>
-                <PoleDaty wartosc={dataStan} przyZmianie={(v) => v && ustawDataStan(v)} />
-              </div>
-              <button className="btn" onClick={() => idz(`/informacja/${spolkaId}`)}>Informacja z rejestru</button>
+            <Komunikat
+              odmiana="info"
+              tresc="Stan akcjonariatu (akcjonariusze, akcje, obciążenia) jest dostępny w informacji z rejestru akcjonariuszy (art. 300³⁵ § 3 KSH)."
+            />
+            <button className="btn btn-glowny" onClick={() => idz(`/informacja/${spolkaId}`)}>Zamów informację z rejestru</button>
+            <div style={{ marginTop: 'var(--od-4)' }}>
+              <a href={`#/zgloszenie-bledu/${spolkaId}`} onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}`); }}>
+                Zgłoś błąd we wpisie
+              </a>
             </div>
           </Karta>
-
-          <Karta tight tytul={`Akcjonariat — razem ${fmt.liczba(dane.razem_akcji)} akcji`}>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Akcjonariusz</th>
-                  <th>Seria</th>
-                  <th className="prawo">Ilość</th>
-                  <th>Numery</th>
-                  <th className="prawo">Udział</th>
-                  <th>Obciążenia</th>
-                  <th><span className="sr-only">Zgłoszenie błędu</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {dane.akcjonariusze.length === 0 && (
-                  <tr><td colSpan={7} className="przyciemnione">Brak wpisanych akcjonariuszy.</td></tr>
-                )}
-                {dane.akcjonariusze.map((a, i) => {
-                  // D-R06: „Łącznie” po ostatniej serii osoby z kilkoma seriami.
-                  const nastepny = dane.akcjonariusze[i + 1];
-                  const suma = (!nastepny || nastepny.osoba_id !== a.osoba_id)
-                    ? (dane.akcjonariusze_lacznie || []).find((l) => l.osoba_id === a.osoba_id)
-                    : null;
-                  return (
-                  <React.Fragment key={i}>
-                  <tr>
-                    <td style={{ fontWeight: 500 }}>
-                      {a.osoba ? a.osoba.oznaczenie : 'nieznany'}
-                      {a.osoba && a.osoba.zamaskowane && <span className="podpowiedz"> (dane częściowo zamaskowane)</span>}
-                    </td>
-                    <td>{a.seria}</td>
-                    <td className="prawo">{fmt.liczba(a.ilosc)}</td>
-                    <td className="mono">
-                      {/* D-R03: zakresy z datą wpisu każdego z nich. */}
-                      {(a.grupy_wpisu && a.grupy_wpisu.length ? a.grupy_wpisu : [{ numery: a.numery }]).map((g, j) => (
-                        <div key={j}>
-                          {g.numery}
-                          {g.data_wpisu && <span className="przyciemnione"> (wpis {fmt.data(g.data_wpisu)})</span>}
-                        </div>
-                      ))}
-                    </td>
-                    <td className="prawo">{fmt.procent(a.procent)}</td>
-                    <td>{a.obciazenia.length > 0 ? <Pigulka odmiana="sygnal">{a.obciazenia.length}</Pigulka> : '—'}</td>
-                    <td>
-                      {/* B9 — dyskretny odnośnik przy KONKRETNYM wpisie, z
-                          wypełnionym odwołaniem do pozycji (seria, numery). */}
-                      <a
-                        href={`#/zgloszenie-bledu/${spolkaId}`}
-                        className="male wyciszony"
-                        onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}?odwolanie=${encodeURIComponent(`${a.osoba ? a.osoba.oznaczenie : 'nieznany'}, seria ${a.seria}, nr ${a.numery}`)}`); }}
-                      >
-                        Zgłoś błąd
-                      </a>
-                    </td>
-                  </tr>
-                  {suma && (
-                    <tr>
-                      <td className="przyciemnione">Łącznie</td>
-                      <td className="przyciemnione">serie {suma.serie.join(', ')}</td>
-                      <td className="prawo" style={{ fontWeight: 600 }}>{fmt.liczba(suma.ilosc)}</td>
-                      <td />
-                      <td className="prawo" style={{ fontWeight: 600 }}>{fmt.procent(suma.procent)}</td>
-                      <td />
-                      <td />
-                    </tr>
-                  )}
-                  </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </Karta>
-
-          {/* B9 — ogólny odnośnik pod rejestrem, nie tylko przy pozycji:
-              „coś się nie zgadza" bywa np. w danych spółki, nie akcjonariusza. */}
-          <div className="podpowiedz" style={{ textAlign: 'center' }}>
-            <a href={`#/zgloszenie-bledu/${spolkaId}`} onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}`); }}>
-              Coś się nie zgadza?
-            </a>
-          </div>
-
-          {dane.emisje.length > 0 && (
-            <Karta tight tytul="Emisje">
-              <table className="tbl">
-                <thead><tr><th>Seria</th><th className="prawo">Ilość</th><th>Numery</th><th>Status</th></tr></thead>
-                <tbody>
-                  {dane.emisje.map((e) => (
-                    <tr key={e.klucz}>
-                      <td>{e.seria}</td>
-                      <td className="prawo">{fmt.liczba(e.ilosc)}</td>
-                      <td className="mono">{e.zakres}</td>
-                      <td>{e.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Karta>
-          )}
         </>
       )}
     </div>
@@ -1960,6 +1877,87 @@ function FormularzZmianyHaslaPortal() {
   );
 }
 
+const NAZWY_ZGODY = {
+  brak: 'nie wyrażono',
+  zadeklarowana: 'zadeklarowana we wniosku (bez Twojego oświadczenia)',
+  potwierdzona: 'wyrażona — wpisana do rejestru',
+};
+
+/**
+ * W4.1/W4.2 — dwa odrębne oświadczenia składane osobiście: zgoda na komunikację
+ * e-mail (dana rejestru — przez żądanie wpisu) i żądanie automatycznych
+ * powiadomień (oświadczenie w portalu). Każde z datą, każde można cofnąć.
+ */
+function OswiadczeniaAkcjonariusza() {
+  const { dane, odswiez } = useDane('/api/psa/portal/oswiadczenia');
+  const [email, ustawEmail] = useState('');
+  const [blad, ustawBlad] = useState(null);
+  const [komunikat, ustawKomunikat] = useState(null);
+
+  async function zloz(spolkaId, rodzaj, zlozone) {
+    ustawBlad(null);
+    ustawKomunikat(null);
+    try {
+      const odp = await API.post('/api/psa/portal/oswiadczenia', { spolka_id: spolkaId, rodzaj, zlozone, email });
+      ustawKomunikat(odp.sprawa_id
+        ? 'Oświadczenie złożone. Zgoda na e-mail jest daną rejestru — utworzyliśmy żądanie wpisu, które sprawdzi kancelaria.'
+        : 'Oświadczenie zapisane.');
+      odswiez();
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się złożyć oświadczenia.');
+    }
+  }
+
+  if (!dane) return null;
+  const zgoda = dane.zgoda_email;
+  return (
+    <Karta tytul="Moje oświadczenia">
+      <Komunikat odmiana="blad" tresc={blad} />
+      <Komunikat odmiana="ok" tresc={komunikat} />
+      <div className="podpowiedz">
+        Oświadczenia składasz osobiście — zarząd spółki nie może złożyć ich w Twoim imieniu. Bez zgody na e-mail
+        korespondencja z rejestru przychodzi listem na adres z rejestru.
+      </div>
+      <p>
+        <strong>Zgoda na komunikację e-mail</strong> (art. 300³³ § 1 pkt 5 KSH): {NAZWY_ZGODY[zgoda.status] || zgoda.status}
+        {zgoda.status === 'potwierdzona' && zgoda.email ? ` (${zgoda.email})` : ''}.
+      </p>
+      <Pole etykieta="Adres e-mail do korespondencji z rejestru">
+        <input type="email" value={email} onChange={(z) => ustawEmail(z.target.value)} placeholder="np. jan@example.com" />
+      </Pole>
+      {dane.spolki.map((s) => {
+        const pow = s.powiadomienia_automatyczne;
+        const powAktywne = Boolean(pow && pow.zlozone);
+        return (
+          <div key={s.spolka_id} className="karta" style={{ marginTop: 'var(--od-4)' }}>
+            <strong>{s.nazwa}</strong>
+            <div className="row-g" style={{ flexWrap: 'wrap', marginTop: 'var(--od-2)' }}>
+              <button className="btn btn-maly" disabled={!email.trim()} onClick={() => zloz(s.spolka_id, 'zgoda_email', true)}>
+                Wyrażam zgodę na e-mail
+              </button>
+              <button className="btn btn-maly" disabled={zgoda.status !== 'potwierdzona'} onClick={() => zloz(s.spolka_id, 'zgoda_email', false)}>
+                Cofam zgodę na e-mail
+              </button>
+            </div>
+            {s.zgoda_email_ostatnie && (
+              <div className="przyciemnione">
+                Ostatnie oświadczenie: {s.zgoda_email_ostatnie.zlozone ? 'zgoda' : 'cofnięcie'} z {fmt.dataCzas(s.zgoda_email_ostatnie.utworzono)}
+                {s.zgoda_email_ostatnie.sprawa_id ? ' — żądanie wpisu w kancelarii' : ''}.
+              </div>
+            )}
+            <p style={{ marginTop: 'var(--od-4)' }}>
+              <strong>Automatyczne powiadomienia</strong> (art. 300³⁴ § 9 KSH): {powAktywne ? `żądanie złożone ${fmt.dataCzas(pow.utworzono)}` : 'nie złożono'}.
+            </p>
+            <button className="btn btn-maly" onClick={() => zloz(s.spolka_id, 'powiadomienia_automatyczne', !powAktywne)}>
+              {powAktywne ? 'Cofam żądanie powiadomień' : 'Żądam automatycznych powiadomień'}
+            </button>
+          </div>
+        );
+      })}
+    </Karta>
+  );
+}
+
 function EkranKonto({ konto, przyWylogowaniu }) {
   const [wylogowywanie, ustawWylogowywanie] = useState(false);
 
@@ -1974,6 +1972,7 @@ function EkranKonto({ konto, przyWylogowaniu }) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
+      {konto.rola === 'akcjonariusz' && <OswiadczeniaAkcjonariusza />}
       <Karta tytul="Dane logowania">
         <div className="metryka-pion">
           <MetrykaPoz etykieta="E-mail" wartosc={konto.email} />

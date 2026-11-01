@@ -516,7 +516,7 @@ function emailDoRejestru(osoba) {
  * @param {object} [odbiorca]  `{ rola, opis }` — kto dostaje wypis
  * @param {string} [sporzadzono] znacznik czasu sporzadzenia (ISO)
  */
-function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzadzono }) {
+function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzadzono, numer = null, wynagrodzenie = null }) {
   const opisOdbiorcy = (odbiorca && !pusty(odbiorca.opis) && odbiorca.opis)
     || OPISY_ODBIORCY[(odbiorca && odbiorca.rola) || stan.rola]
     || OPISY_ODBIORCY.spolka;
@@ -539,8 +539,15 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
 
     const opisy = [];
     if (osoba && !pusty(osoba.jawny_identyfikator)) opisy.push(esc(osoba.jawny_identyfikator));
+    // D-076: PESEL albo data urodzenia są w rejestrze; art. 300(35) § 1(1) KSH —
+    // nie udostępnia się ich pozostałym akcjonariuszom (maskowanie wg roli, W5.4).
+    const jawne = (v) => !pusty(v) && v !== require('./maskowanie').ZASLONA;
+    if (osoba && osoba.typ !== 'prawna') {
+      if (jawne(osoba.pesel)) opisy.push(`PESEL ${esc(osoba.pesel)}`);
+      else if (jawne(osoba.data_urodzenia)) opisy.push(`ur. ${esc(dataPl(osoba.data_urodzenia))}`);
+    }
     if (!pusty(adres)) opisy.push(esc(adres));
-    else if (osoba && osoba.zamaskowane) opisy.push('adres zamieszkania zasłonięty');
+    else if (osoba && osoba.zamaskowane) opisy.push('PESEL, data urodzenia i adres zamieszkania nie są udostępniane');
     if (email) opisy.push(`${esc(email)} — zgoda na komunikację elektroniczną`);
     if (a.wspolwlasnosc) opisy.push('akcje we współwłasności ułamkowej');
 
@@ -790,6 +797,8 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
 
   ${tresc}
 
+  ${sekcjaWynagrodzenia(numer, wynagrodzenie)}
+
   <footer class="stopka-arkusza">
     <span>${esc(spolka.nazwa)} — stan na ${esc(stanNaOpis)}</span>
     ${sporzadzonoOpis ? `<span>${sporzadzonoOpis}</span>` : ''}
@@ -799,4 +808,21 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
 </html>`;
 }
 
-module.exports = { informacjaZRejestru, adresAkcjonariusza, emailDoRejestru };
+/**
+ * W5.5 — na każdej informacji: numer, wynagrodzenie i VAT z podstawą prawną
+ * (PRZEPISY-PSA.md § 8–9). `wynagrodzenie`: { netto, vat_procent, vat, brutto,
+ * podstawa, pobrano, uwaga }.
+ */
+function sekcjaWynagrodzenia(numer, w) {
+  if (!numer && !w) return '';
+  const zl = (g) => `${(Number(g) / 100).toFixed(2).replace('.', ',')} zł`;
+  return `<section class="sekcja">
+    <h2 class="sekcja-tytul">Wynagrodzenie</h2>
+    ${numer ? `<p>Numer informacji: <strong>${esc(numer)}</strong></p>` : ''}
+    ${w ? `<p>Wynagrodzenie notariusza: ${zl(w.netto)} netto + ${esc(w.vat_procent)}% VAT (${zl(w.vat)}) = <strong>${zl(w.brutto)}</strong> brutto${
+      w.pobrano ? '' : ` — <strong>nie pobrano</strong>${w.uwaga ? ` (${esc(w.uwaga)})` : ''}`}.</p>
+    <p>Podstawa: ${esc(w.podstawa)}.</p>` : ''}
+  </section>`;
+}
+
+module.exports = { informacjaZRejestru, adresAkcjonariusza, emailDoRejestru, sekcjaWynagrodzenia };
