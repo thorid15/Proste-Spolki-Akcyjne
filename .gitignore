@@ -23,3 +23,6 @@ dane-testowe/
 # Probki podpisow z danymi osobowymi (testy/fixtures/podpisy/README.md)
 testy/fixtures/podpisy/*.pdf
 testy/fixtures/podpisy/*.xml
+testy/e2e/zrzuty/
+test-results/
+playwright-report/
