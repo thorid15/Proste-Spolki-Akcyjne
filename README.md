@@ -157,8 +157,8 @@ niewysłana”. Nic nie wychodzi z serwera. Po wysłaniu zaproszenia ekran pokaz
 **Panel** — `http://localhost:3005/test`:
 - *symulowana data* — jedna funkcja czasu (`czas.teraz()`) dla bramki 18.02.2027, terminów i chwil
   nowych zdarzeń; data wcześniejsza niż ostatnie zdarzenie w rejestrze jest odrzucana;
-- *atrapa walidatora podpisu* — wybór wyniku (QES / PZ / PO / zaawansowany / brak podpisu / plik
-  zmieniony / inna osoba); podpina go adapter walidacji z Fazy 2;
+- *atrapa testu podpisu* (D-086) — „każdy plik jako podpisany” (domyślnie), „jako niepodpisany”,
+  „jako różny od oryginału” albo „sprawdź plik jak na produkcji”;
 - *atrapa tpay* — gdy w `.env` nie ma danych tpay, „Zapłać” w portalu otwiera atrapę kasy, a ta wysyła
   powiadomienie ITN na zwykły adres `/api/psa/platnosci/tpay/itn`.
 
