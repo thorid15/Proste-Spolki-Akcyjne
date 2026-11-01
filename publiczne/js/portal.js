@@ -1226,16 +1226,13 @@ function EkranRejestrPortal({ spolkaId }) {
               ['Rejestr akcjonariuszy prowadzony od', s.data_otwarcia_rejestru ? fmt.data(s.data_otwarcia_rejestru) : null],
             ]} />
           </Karta>
-          <Karta tight>
-            <Komunikat
-              odmiana="info"
-              tresc="Stan akcjonariatu (akcjonariusze, akcje, obciążenia) jest dostępny w informacji z rejestru akcjonariuszy (art. 300³⁵ § 3 KSH)."
-            />
-            <button className="btn btn-glowny" onClick={() => idz(`/informacja/${spolkaId}`)}>Zamów informację z rejestru</button>
-            <div style={{ marginTop: 'var(--od-4)' }}>
-              <a href={`#/zgloszenie-bledu/${spolkaId}`} onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}`); }}>
-                Zgłoś błąd we wpisie
-              </a>
+          <Karta>
+            <p style={{ margin: '0 0 var(--od-16)' }}>
+              Stan akcjonariatu (akcjonariusze, akcje, obciążenia) jest dostępny w pełnej informacji z rejestru akcjonariuszy.
+            </p>
+            <div className="przyciski-karty">
+              <button className="btn btn-glowny" onClick={() => idz(`/informacja/${spolkaId}`)}>Zamów informację z rejestru</button>
+              <button className="btn" onClick={() => idz(`/zgloszenie-bledu/${spolkaId}`)}>Zgłoś błąd we wpisie</button>
             </div>
           </Karta>
         </>

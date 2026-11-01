@@ -627,6 +627,13 @@ body {
   .wiersz-zaplaty-opis { flex-basis: 100%; }
 }
 
+/* ── Rząd przycisków karty: główny pierwszy; na telefonie w pionie, pełna szerokość (R4 P3) ── */
+.przyciski-karty { display: flex; gap: var(--od-12); flex-wrap: wrap; align-items: center; }
+@media (max-width: 420px) {
+  .przyciski-karty { flex-direction: column; align-items: stretch; }
+  .przyciski-karty > .btn { width: 100%; }
+}
+
 /* ── Lista „etykieta — wartość” (R4 P1/K2) ── */
 .lista-danych {
   display: grid; grid-template-columns: minmax(7rem, 40%) 1fr;
