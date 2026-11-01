@@ -22,8 +22,9 @@ const WYNIKI = { DO_WERYFIKACJI: 'do_weryfikacji', ODRZUCONY: 'odrzucony' };
 
 const KOMUNIKATY = {
   brak: 'Ten plik nie ma podpisu elektronicznego — wygląda na skan, zdjęcie albo niepodpisany PDF. '
-    + 'Skanu nie przyjmujemy. Podpisz pobrany dokument w mObywatelu (podpis kwalifikowany), podpisem '
-    + 'zaufanym albo osobistym i wgraj plik z podpisem — albo odeślij oryginał pocztą.',
+    + 'Skanu nie przyjmujemy. Podpisz pobrany dokument w mObywatelu (podpis kwalifikowany), profilem zaufanym '
+    + 'na gov.pl (wgraj wtedy plik .xml) albo podpisem osobistym — albo podpisz na papierze: oryginał pocztą '
+    + '(także z podpisem notarialnie poświadczonym) lub w kancelarii.',
   zmieniony: 'Ten plik różni się od dokumentu pobranego z portalu — najpewniej został otwarty i zapisany '
     + 'ponownie w innym programie. Pobierz dokument jeszcze raz i podpisz go bez otwierania w innych programach.',
   przyjety: 'Plik ma podpis elektroniczny — pracownik kancelarii sprawdzi podpis i dokument.',
@@ -55,13 +56,17 @@ function pdfMaPodpis(plik) {
   return /\/ByteRange\s*\[/.test(tekst) && /\/Type\s*\/Sig\b|\/FT\s*\/Sig\b|\/SubFilter\s*\//.test(tekst);
 }
 
-/** XAdES otaczający: dokument osadzony w `ds:Object` (base64). */
+/**
+ * XAdES otaczający (np. podpis zaufany z gov.pl): dokument osadzony w `ds:Object` (base64).
+ * Obiektów bywa kilka (np. `xades:QualifyingProperties`) — bierzemy pierwszy z czystym base64.
+ */
 function dokumentZXades(plik) {
-  const m = /<(?:\w+:)?Object\b[^>]*>([\s\S]*?)<\/(?:\w+:)?Object>/.exec(plik.toString('utf8'));
-  if (!m) return null;
-  const tresc = m[1].replace(/\s+/g, '');
-  if (!/^[A-Za-z0-9+/=]+$/.test(tresc) || tresc.length < 8) return null;
-  return Buffer.from(tresc, 'base64');
+  const wzor = /<(?:\w+:)?Object\b[^>]*>([\s\S]*?)<\/(?:\w+:)?Object>/g;
+  for (const m of plik.toString('utf8').matchAll(wzor)) {
+    const tresc = m[1].replace(/\s+/g, '');
+    if (/^[A-Za-z0-9+/=]+$/.test(tresc) && tresc.length >= 8) return Buffer.from(tresc, 'base64');
+  }
+  return null;
 }
 
 /** W3.4 — `{ zgodny: true|false|null, opis }` (null = nie da się porównać → bez blokady). */

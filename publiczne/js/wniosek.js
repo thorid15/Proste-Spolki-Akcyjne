@@ -46,10 +46,10 @@ function oryginalDopuszczalny(dokument) {
 
 /**
  * Jedna pozycja listy — ekran „Podpisz dokument” (W3.2, D-075):
- * 1. Pobierz → 2. Podpisz w mObywatelu (nowa karta) → 3. Wgraj podpisany plik.
- * Skanu nie przyjmujemy; ścieżka alternatywna — oryginał pocztą (W3.8).
+ * 1. Pobierz → 2. Podpisz podpisem zaufanym na gov.pl (domyślnie, D-087; inne sposoby w instrukcji)
+ * → 3. Wgraj podpisany plik (PDF albo XML). Skanu nie przyjmujemy; albo „na papierze” (W3.8).
  */
-function PozycjaDokumentu({ dokument, edytowalne, przyZmianie, mobywatelUrl }) {
+function PozycjaDokumentu({ dokument, edytowalne, przyZmianie, mobywatelUrl, pzUrl, adresKancelarii }) {
   const [wysylanie, ustawWysylanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
   const wejscie = useRef(null);
@@ -138,8 +138,12 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie, mobywatelUrl }) {
         </div>
       ) : poczta ? (
         <div className="dokument-pozycja-podpis">
-          <Pigulka odmiana="mosiadz">oryginał pocztą</Pigulka>
-          <span className="dokument-pozycja-czeka">czeka na oryginał w kancelarii</span>
+          <Pigulka odmiana="mosiadz">podpis na papierze</Pigulka>
+          <span className="dokument-pozycja-czeka">
+            wydrukuj i podpisz własnoręcznie (podpis może być notarialnie poświadczony), wyślij
+            {adresKancelarii ? ` na adres: ${adresKancelarii}` : ' do kancelarii'} albo podpisz w kancelarii
+            — odnotujemy otrzymanie
+          </span>
           {edytowalne && (
             <button className="btn btn-sm" onClick={() => oryginalPoczta(false)} disabled={wysylanie}>
               Jednak podpiszę elektronicznie
@@ -154,8 +158,8 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie, mobywatelUrl }) {
             </a>
           </li>
           <li>
-            <a className="btn btn-maly" href={mobywatelUrl} target="_blank" rel="noopener noreferrer">
-              2. Podpisz w mObywatelu
+            <a className="btn btn-maly" href={pzUrl} target="_blank" rel="noopener noreferrer">
+              2. Podpisz podpisem zaufanym (gov.pl)
             </a>
           </li>
           <li>
@@ -189,13 +193,13 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie, mobywatelUrl }) {
       )}
       {edytowalne && !podpisany && umowa && (
         <div className="podpowiedz">
-          Podpisujesz za spółkę: najlepiej własnym podpisem kwalifikowanym (np. z karty lub chmury) albo odeślij
-          oryginał pocztą. Podpis kwalifikowany z mObywatela też przyjmiemy.
+          Podpisujesz za spółkę — możesz użyć dowolnego sposobu z instrukcji poniżej (podpis zaufany, kwalifikowany,
+          osobisty albo na papierze).
         </div>
       )}
       {edytowalne && !podpisany && !poczta && oryginalDopuszczalny(dokument) && (
         <button type="button" className="btn btn-pelny btn-sm" onClick={() => oryginalPoczta(true)} disabled={wysylanie}>
-          Wolę wysłać podpisany oryginał pocztą
+          Podpiszę na papierze
         </button>
       )}
       <Komunikat odmiana="blad" tresc={blad} />
@@ -203,10 +207,43 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie, mobywatelUrl }) {
   );
 }
 
-/** Instrukcja dla klienta — dosłownie z § 3 wytycznych „Rejestr akcjonariuszy PSA online”. */
-function InstrukcjaMobywatel({ mobywatelUrl }) {
+/**
+ * Instrukcja dla klienta (D-087): domyślnie podpis zaufany z linkiem do gov.pl, pod spodem krótka
+ * rozpiska pozostałych sposobów — klient niczego nie wybiera ani nie kategoryzuje. Część „mObywatel”
+ * — dosłownie z § 3 wytycznych „Rejestr akcjonariuszy PSA online”.
+ */
+function InstrukcjaPodpisu({ mobywatelUrl, pzUrl, adresKancelarii }) {
   return (
+    <>
     <details className="instrukcja-podpisu" open>
+      <summary className="instrukcja-podpisu-tytul">Jak podpisać — najprościej podpisem zaufanym (bezpłatnie)</summary>
+      <ol className="instrukcja-podpisu-lista">
+        <li>Kliknij <strong>Pobierz dokument</strong> i zapisz plik na komputerze.</li>
+        <li>
+          Wejdź na <a href={pzUrl} target="_blank" rel="noopener noreferrer"><strong>gov.pl — Podpisz dokument elektronicznie</strong></a>,
+          wybierz pobrany plik i podpisz go — logujesz się profilem zaufanym (np. przez bank).
+        </li>
+        <li>
+          Pobierz podpisany plik — zwykle ma końcówkę <strong>.xml</strong> — i wgraj go tutaj bez zmian przyciskiem{' '}
+          <strong>Wgraj podpisany dokument</strong>.
+        </li>
+      </ol>
+      <p>
+        <strong>Ważne:</strong> nie otwieraj i nie zapisuj ponownie pobranego pliku w innym programie, bo system odrzuci
+        zmieniony dokument. Skanów i zdjęć podpisanych dokumentów nie przyjmujemy.
+      </p>
+      <p>Możesz też podpisać inaczej — każdy z tych sposobów jest równie dobry:</p>
+      <ul className="instrukcja-podpisu-lista">
+        <li><strong>Podpis kwalifikowany</strong> — np. bezpłatnie w mObywatelu (e-dowód i telefon z NFC) albo własnym certyfikatem (karta, chmura).</li>
+        <li><strong>Podpis osobisty</strong> — e-dowodem z czytnikiem albo telefonem z NFC.</li>
+        <li>
+          <strong>Na papierze</strong> — wydrukuj i podpisz własnoręcznie (podpis może być notarialnie poświadczony),
+          wyślij{adresKancelarii ? <> na adres: <strong>{adresKancelarii}</strong></> : ' do kancelarii'} albo podpisz
+          w kancelarii; przy dokumencie kliknij <strong>Podpiszę na papierze</strong>.
+        </li>
+      </ul>
+    </details>
+    <details className="instrukcja-podpisu">
       <summary className="instrukcja-podpisu-tytul">Jak podpisać dokument w mObywatelu (bezpłatnie)</summary>
       <p>Potrzebujesz:</p>
       <ul className="instrukcja-podpisu-lista">
@@ -228,11 +265,8 @@ function InstrukcjaMobywatel({ mobywatelUrl }) {
         zmieniony dokument. Bezpłatnie możesz podpisać 5 dokumentów miesięcznie.
       </p>
       <p>Wolisz podpisać na telefonie? W aplikacji wybierz Usługi → Podpis kwalifikowany.</p>
-      <p className="przyciemnione">
-        Nie masz e-dowodu albo telefonu z NFC? Podpisz plik podpisem zaufanym na gov.pl albo odeślij podpisany oryginał
-        pocztą. Skanów i zdjęć podpisanych dokumentów nie przyjmujemy.
-      </p>
     </details>
+    </>
   );
 }
 
@@ -573,6 +607,8 @@ function EkranWniosku() {
   const [komunikatKrs, ustawKomunikatKrs] = useState(null);
   const [akcjonariusze, ustawAkcjonariusze] = useState([]);
   const [mobywatelUrl, ustawMobywatelUrl] = useState('https://podpis.mobywatel.gov.pl');
+  const [pzUrl, ustawPzUrl] = useState('https://www.gov.pl/web/gov/podpisz-dokument-elektronicznie-wykorzystaj-podpis-zaufany');
+  const [adresKancelarii, ustawAdresKancelarii] = useState(null);
   const [dodawanieAkcjonariusza, ustawDodawanieAkcjonariusza] = useState(false);
   const [bladAkcjonariuszy, ustawBladAkcjonariuszy] = useState(null);
   const [skladanie, ustawSkladanie] = useState(false);
@@ -601,6 +637,8 @@ function EkranWniosku() {
         ustawAkcjonariusze(a.akcjonariusze);
         ustawDokumenty(d.dokumenty || []);
         if (d.podpis && d.podpis.mobywatel_url) ustawMobywatelUrl(d.podpis.mobywatel_url);
+        if (d.podpis && d.podpis.pz_url) ustawPzUrl(d.podpis.pz_url);
+        if (d.podpis && d.podpis.adres_kancelarii) ustawAdresKancelarii(d.podpis.adres_kancelarii);
         // Złożony wniosek nie przyjmuje już zmian, więc trzy pierwsze kroki
         // nie mają czego od klienta chcieć — a przeklikiwanie ich po raz
         // drugi tylko odsuwa go od tego, po co wrócił: dokumentów do
@@ -1205,7 +1243,7 @@ function EkranWniosku() {
                   tresc={kompletOdeslany
                     ? 'Komplet podpisanych dokumentów wrócił do kancelarii.'
                     : 'Kancelaria sprawdziła dane i przygotowała komplet dokumentów. Przy każdym dokumencie: pobierz go, '
-                      + 'podpisz w mObywatelu (albo podpisem zaufanym lub osobistym) i wgraj podpisany plik. Do kancelarii '
+                      + 'podpisz go (najprościej podpisem zaufanym na gov.pl — instrukcja niżej) i wgraj podpisany plik. Do kancelarii '
                       + 'pójdą dopiero, gdy klikniesz „Odeślij komplet” — do tego czasu możesz je wymieniać.'}
                 />
                 <Komunikat
@@ -1219,6 +1257,8 @@ function EkranWniosku() {
                       dokument={d}
                       edytowalne={dokumentyWidoczne && !kompletOdeslany}
                       mobywatelUrl={mobywatelUrl}
+                      pzUrl={pzUrl}
+                      adresKancelarii={adresKancelarii}
                       przyZmianie={(wynik) => {
                         if (wynik.dokumenty) ustawDokumenty(wynik.dokumenty);
                         if (wynik.wniosek) ustawDane(wynik.wniosek);
@@ -1254,7 +1294,7 @@ function EkranWniosku() {
                   )}
                 </div>
 
-                <InstrukcjaMobywatel mobywatelUrl={mobywatelUrl} />
+                <InstrukcjaPodpisu mobywatelUrl={mobywatelUrl} pzUrl={pzUrl} adresKancelarii={adresKancelarii} />
               </>
             )}
 

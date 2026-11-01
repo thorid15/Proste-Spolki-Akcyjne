@@ -351,17 +351,16 @@ function potwierdzPodpis(wniosekId, dokumentId, potwierdzono, autor, { forma = n
   if (!wiersz) return null;
 
   if (potwierdzono) {
+    // D-087: pracownik nie musi wskazywać formy — potwierdza, że podpis jest w porządku.
+    // Plik z podpisem → podpis elektroniczny; bez pliku → oryginał papierowy (data otrzymania).
+    // Forma podana wprost (API) nadal jest sprawdzana z tabelą § 2.
     const typ = formyPodpisu.typDlaDokumentuWniosku(wiersz.typ);
-    let wybrana = forma;
-    if (!wybrana && wiersz.podpis_sciezka && FORMY_ELEKTRONICZNE.includes(wiersz.walidacja_typ)) {
-      wybrana = wiersz.walidacja_typ;
+    const wybrana = forma || null;
+    if (wybrana) {
+      const ocena = formyPodpisu.ocenForme(typ, wybrana);
+      if (!ocena.dopuszczalna) throw new BladPodpisu(ocena.przyczyna);
     }
-    if (!wybrana) {
-      throw new BladPodpisu('Wskaż formę podpisu (podpis elektroniczny z pliku albo oryginał otrzymany pocztą).');
-    }
-    const ocena = formyPodpisu.ocenForme(typ, wybrana);
-    if (!ocena.dopuszczalna) throw new BladPodpisu(ocena.przyczyna);
-    if (FORMY_ELEKTRONICZNE.includes(wybrana)) {
+    if (wybrana ? FORMY_ELEKTRONICZNE.includes(wybrana) : Boolean(wiersz.podpis_sciezka)) {
       if (!wiersz.podpis_sciezka) return false;
     } else {
       const dzien = oryginalOtrzymano || czas.dzisIso();

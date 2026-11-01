@@ -1008,7 +1008,13 @@ router.get(
   asy((zad, odp) => {
     const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
     // Adres usługi podpisu — parametr konfiguracji (W3.2), nie stała w widoku.
-    const podpis = { mobywatel_url: konfiguracja.PODPIS.mobywatel_url };
+    const k = ustawienia.kancelaria(db());
+    const podpis = {
+      mobywatel_url: konfiguracja.PODPIS.mobywatel_url,
+      pz_url: konfiguracja.PODPIS.pz_url,
+      // Oryginał pocztą (D-087) — adres z ustawień kancelarii.
+      adres_kancelarii: [k.nazwa, k.kancelaria_ulica, [k.kancelaria_kod, k.kancelaria_miasto].filter(Boolean).join(' ')].filter(Boolean).join(', ') || null,
+    };
     if (!wniosek) return odp.json({ dokumenty: [], podpis });
     odp.json({ dokumenty: wczytajDokumentyWniosku(wniosek.id), podpis });
   })

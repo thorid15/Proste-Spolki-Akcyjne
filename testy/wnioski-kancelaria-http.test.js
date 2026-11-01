@@ -833,10 +833,12 @@ test('D-075: ID w stopce i skrót przy generowaniu; oryginał pocztą; podpis no
   const [stSkan, skan] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${oswiadczenie.id}/podpis-potwierdz`, { forma: 'skan' }, ciastkoPracownik);
   assert.equal(stSkan, 400);
   assert.match(skan.blad, /nie jest dopuszczalną formą/);
+  // D-087: bez wskazywania formy — sama data otrzymania oryginału.
   const [stPap, pap] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${oswiadczenie.id}/podpis-potwierdz`,
-    { forma: 'oryginal', oryginal_otrzymano: '2026-11-01' }, ciastkoPracownik);
+    { oryginal_otrzymano: '2026-11-01' }, ciastkoPracownik);
   assert.equal(stPap, 200);
-  assert.equal(pap.dokument.forma_podpisu, 'oryginal');
+  assert.equal(pap.dokument.forma_podpisu, null);
+  assert.ok(pap.dokument.podpis_potwierdzono);
   assert.equal(pap.dokument.oryginal_otrzymano, '2026-11-01');
 
   // W2.5 — podpis notariusza zablokowany do ważnego podpisu spółki.

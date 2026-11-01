@@ -15,6 +15,9 @@
  * | Umowa o prowadzenie rejestru     | spółka podpisuje pierwsza, notariusz ostatni (QES);             |
  * |                                  | zarząd: własny QES, PZ albo oryginał pocztą                     |
  *
+ * D-087: przy każdym dokumencie dodatkowo pięć równorzędnych sposobów z art. 300(34)
+ * § 3 zd. 2 KSH (od 18.02.2027) — patrz `FORMY_USTAWOWE` niżej.
+ *
  * Skan (zdjęcie, kopia) i podpis elektroniczny zaawansowany (niekwalifikowany)
  * nie są żadną z form — nigdy nie są dopuszczalne.
  */
@@ -90,6 +93,18 @@ const REGULY = {
   },
 };
 
+/**
+ * D-087: pięć równorzędnych sposobów podpisu z art. 300(34) § 3 zd. 2 KSH (Dz.U. 2026 poz. 176,
+ * od 18.02.2027 — `PRZEPISY-PSA.md`): podpis notarialnie poświadczony, podpis złożony w obecności
+ * osoby upoważnionej przez podmiot prowadzący rejestr, QES, podpis zaufany, podpis osobisty.
+ * Kancelaria przyjmuje je przy KAŻDYM dokumencie, żaden nie jest uprzywilejowany. Zwykły oryginał
+ * pocztą — dodatkowo tam, gdzie wystarcza (forma dokumentowa, tabela § 2).
+ */
+const FORMY_USTAWOWE = [FORMY.QES, FORMY.PZ, FORMY.PO, FORMY.ORYGINAL_POSWIADCZONY, FORMY.W_KANCELARII];
+for (const r of Object.values(REGULY)) {
+  for (const f of FORMY_USTAWOWE) if (!r.formy.includes(f)) r.formy.push(f);
+}
+
 /** Typ dokumentu kompletu wniosku (`dokumenty-wniosku.TYPY`) → typ z tabeli § 2. */
 function typDlaDokumentuWniosku(typ) {
   // Żądanie pierwszego wpisu nie wykreśla, nie zmienia ani nie obciąża
@@ -127,6 +142,7 @@ function formyPapierowe(typDokumentu) {
 
 module.exports = {
   FORMY,
+  FORMY_USTAWOWE,
   NAZWY_FORM,
   DOKUMENTY,
   REGULY,

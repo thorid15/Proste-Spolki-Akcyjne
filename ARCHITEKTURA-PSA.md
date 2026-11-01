@@ -551,7 +551,7 @@ forma, podpis notariusza, „oryginał pocztą” · 64 `psa_oswiadczenia`, `psa
 
 - **Podpis dokumentu wniosku:** wystawienie (ID, SHA-256) → portal: pobierz → mObywatel → wgraj → `walidacja-podpisu`
   (czy podpisany, czy = oryginał; w trybie testowym — atrapa) → odrzucony: 400 z komunikatem dla klienta; inaczej
-  „Do zrobienia → podpisy” → pracownik sprawdza podpis i wskazuje formę (D-052, D-086) → podpis notariusza po podpisie spółki.
+  „Do zrobienia → podpisy” → pracownik sprawdza podpis i potwierdza jednym kliknięciem (D-052, D-086, D-087) → podpis notariusza po podpisie spółki.
 - **Wpis bez zgody:** `blokadaWpisu()` → powiadomienie: e-mail przy zgodzie potwierdzonej, inaczej `psa_listy` →
   nadanie listu ustawia `powiadomienie_wyslano` → wpis dozwolony.
 - **Przeniesienie:** zgłoszenie (wariant) → wniosek (klauzula § 7.4) → przyjęcie wniosku wiąże spółkę →

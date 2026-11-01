@@ -1451,6 +1451,29 @@
   `publiczne/js/{wniosek,wnioski,pulpit}.js`, `testy/podpisy.test.js`, `.env.przyklad`. Bez migracji
   (stara wartość atrapy w bazie testowej → „plik podpisany”).
 
+### D-087 — Sposoby podpisu równorzędne, jak w KSH od 18.02.2027 (Łukasz, po raporcie Fazy 5)
+
+- Data: 2026-11-01
+- Obszar: podpisy / portal
+- Decyzja:
+  1. Przy **każdym** dokumencie przyjmujemy równorzędnie pięć sposobów z art. 300(34) § 3 zd. 2 KSH
+     (Dz.U. 2026 poz. 176, `PRZEPISY-PSA.md`): podpis notarialnie poświadczony, podpis złożony w obecności
+     osoby upoważnionej (w kancelarii), kwalifikowany podpis elektroniczny, podpis zaufany, podpis osobisty
+     (`formy-podpisu.FORMY_USTAWOWE`). Zwykły oryginał pocztą — dodatkowo tam, gdzie wystarcza (tabela § 2;
+     przy zgodzie na wpis nadal nie). Notariusz podpisuje umowę QES (bez zmian).
+  2. **Ma być prosto.** Klient niczego nie kategoryzuje: domyślnie „Podpisz podpisem zaufanym (gov.pl)”
+     (`PODPIS_PZ_URL`; wynik zwykle `.xml` — XAdES, przyjmowany i porównywany z oryginałem także, gdy
+     w pliku jest kilka `ds:Object`), pod instrukcją krótka rozpiska pozostałych sposobów (kwalifikowany,
+     np. mObywatel; osobisty; na papierze — pocztą, także z podpisem notarialnie poświadczonym, albo
+     w kancelarii) i przycisk „Podpiszę na papierze” (adres kancelarii z ustawień). Instrukcja mObywatela
+     z § 3 — zwinięta niżej.
+  3. **Pracownik nie wskazuje formy** przy dokumentach wniosku — „Podpis prawidłowy” jednym kliknięciem;
+     przy papierze tylko data otrzymania (domyślnie dziś). Forma podana wprost przez API nadal jest
+     sprawdzana. Zgoda na wpis w sprawie (W2.2) — bez zmian (tam forma decyduje o ważności zgody).
+- Skutek w kodzie: `server/logika/{formy-podpisu,walidacja-podpisu}.js`, `server/konfiguracja.js`,
+  `server/trasy/portal.js`, `server/logika/pakiet-wniosku.js`, `publiczne/js/{wniosek,wnioski}.js`,
+  `testy/{podpisy,wnioski-kancelaria-http}.test.js`, `.env.przyklad`.
+
 ---
 
 ## Decyzje otwarte

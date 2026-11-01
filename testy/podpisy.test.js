@@ -32,6 +32,16 @@ test('W2.1/W2.2: formy z tabeli § 2 — skan nigdy, zgoda na wpis bez zwykłego
   assert.equal(formy.ocenForme(formy.DOKUMENTY.UMOWA_REJESTRU, 'pz', { notariusz: true }).dopuszczalna, false, 'notariusz: tylko QES');
 });
 
+test('D-087: pięć sposobów z art. 300(34) § 3 zd. 2 KSH (od 18.02.2027) — równorzędne przy każdym dokumencie', () => {
+  assert.deepEqual([...formy.FORMY_USTAWOWE].sort(), ['oryginal_poswiadczony', 'po', 'pz', 'qes', 'w_kancelarii']);
+  for (const typ of Object.values(formy.DOKUMENTY)) {
+    for (const f of formy.FORMY_USTAWOWE) assert.equal(formy.ocenForme(typ, f).dopuszczalna, true, `${typ}: ${f}`);
+    assert.ok(formy.formyPapierowe(typ).includes('oryginal_poswiadczony'), typ);
+  }
+  assert.equal(formy.ocenForme(formy.DOKUMENTY.ZGODA_NA_WPIS, 'oryginal').dopuszczalna, false, 'zgoda: zwykły oryginał nadal nie');
+  assert.equal(formy.ocenForme(formy.DOKUMENTY.UMOWA_REJESTRU, 'oryginal_poswiadczony', { notariusz: true }).dopuszczalna, false, 'notariusz: tylko QES');
+});
+
 test('W2.4: skan (JPG/PNG), PDF bez podpisu, zwykły XML i inny plik — odrzucone z komunikatem dla laika', async () => {
   const pliki = [
     Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 1]),
@@ -55,6 +65,19 @@ test('D-086: plik podpisany (PAdES, XAdES, CAdES) → do weryfikacji przez praco
     assert.equal(w.wynik, 'do_weryfikacji', typ);
     assert.equal(w.typ, typ);
   }
+});
+
+test('D-087: podpis zaufany z gov.pl (XAdES .xml) — przyjęty; dokument osadzony porównany, także za QualifyingProperties', async () => {
+  const pz = Buffer.from('<?xml version="1.0" encoding="UTF-8"?><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">'
+    + '<ds:SignedInfo/><ds:Object><xades:QualifyingProperties xmlns:xades="x"><xades:SignedProperties/></xades:QualifyingProperties></ds:Object>'
+    + `<ds:Object Id="dok" MimeType="application/pdf" Encoding="http://www.w3.org/2000/09/xmldsig#base64">${ORYGINAL.toString('base64')}</ds:Object></ds:Signature>`);
+  const w = await walidacja.waliduj({ plik: pz, oryginal: odcisk });
+  assert.equal(w.wynik, 'do_weryfikacji');
+  assert.equal(w.typ, 'xades');
+  assert.match(w.kontrole.join(' '), /podpisany dokument = oryginał/);
+  const brak = await walidacja.waliduj({ plik: ORYGINAL });
+  assert.match(brak.komunikat, /profilem zaufanym/);
+  assert.match(brak.komunikat, /oryginał pocztą/);
 });
 
 test('W3.4: porównanie z oryginałem — zgodny przechodzi, zmieniony odrzucony, bez skrótu bez blokady', async () => {

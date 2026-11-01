@@ -170,7 +170,7 @@ async function scenariuszA(k) {
   for (const a of szczegoly.akcjonariusze) {
     await zapytaj(k, 'POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${a.id}/zweryfikuj`, { zweryfikowano: true });
   }
-  for (const d of szczegoly.dokumenty) await zapytaj(k, 'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${d.id}/podpis-potwierdz`, { forma: 'qes' });
+  for (const d of szczegoly.dokumenty) await zapytaj(k, 'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${d.id}/podpis-potwierdz`, {});
   const przyjecie = await zapytaj(k, 'POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, {});
   const zdarzen = db().prepare('SELECT COUNT(*) AS n FROM psa_zdarzenia WHERE spolka_id = ?').get(przyjecie.spolka_id).n;
   sprawdz(Boolean(przyjecie.spolka_id) && zdarzen === 0, 'wniosek przyjęty — spółka założona, rejestru jeszcze nie otwarto (Etap 7)');

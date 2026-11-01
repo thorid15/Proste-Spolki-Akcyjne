@@ -1019,13 +1019,8 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
   // zadeklarowany / otrzymany oryginał papierowy — treść jest wtedy zamknięta.
   const podpisany = Boolean(dokument.podpis_nazwa_pliku || dokument.oryginal_poczta_zadeklarowano || dokument.oryginal_otrzymano);
   const doPoprawy = !podpisany && !zablokowane && dokument.edytowalny;
-  const formy = dokument.formy_dopuszczalne || [];
-  const elektroniczne = ['qes', 'pz', 'po'];
-  const [forma, ustawForme] = useState(
-    dokument.forma_podpisu
-      || (elektroniczne.includes(dokument.walidacja_typ) ? dokument.walidacja_typ : '')
-      || (dokument.podpis_nazwa_pliku ? '' : (formy.find((f) => !elektroniczne.includes(f.kod)) || {}).kod || '')
-  );
+  // D-087: bez wybierania formy — pracownik potwierdza podpis jednym kliknięciem.
+  const papier = !dokument.podpis_nazwa_pliku;
   const [otrzymano, ustawOtrzymano] = useState(dokument.oryginal_otrzymano || dzisIso());
 
   useEffect(() => {
@@ -1091,7 +1086,7 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
     try {
       const wynik = await API.post(
         `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/podpis-potwierdz`,
-        { potwierdzono, forma: forma || null, oryginal_otrzymano: elektroniczne.includes(forma) ? null : otrzymano }
+        { potwierdzono, oryginal_otrzymano: papier ? otrzymano : null }
       );
       przyZapisie(wynik.dokumenty);
       przyZamknieciu();
@@ -1110,8 +1105,7 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
             Cofnij potwierdzenie
           </button>
         ) : (
-          <button className="btn btn-glowny" onClick={() => potwierdzPodpis(true)} disabled={zapisywanie || !forma}
-            title={!forma ? 'Wskaż formę podpisu' : undefined}>
+          <button className="btn btn-glowny" onClick={() => potwierdzPodpis(true)} disabled={zapisywanie}>
             {zapisywanie ? 'Zapisywanie…' : 'Podpis prawidłowy'}
           </button>
         )
@@ -1157,22 +1151,15 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
           <WynikWalidacji walidacja={dokument.walidacja} />
           {!zablokowane && !dokument.podpis_potwierdzono && (
             <div className="karta" style={{ marginTop: 'var(--od-4)' }}>
-              <Pole etykieta="Forma podpisu (zaznacza pracownik — D-052)" wymagane>
-                <select value={forma} onChange={(z) => ustawForme(z.target.value)}>
-                  <option value="">— wybierz —</option>
-                  {formy.map((f) => (
-                    <option key={f.kod} value={f.kod} disabled={elektroniczne.includes(f.kod) && !dokument.podpis_nazwa_pliku}>
-                      {f.nazwa}
-                    </option>
-                  ))}
-                </select>
-              </Pole>
-              {forma && !elektroniczne.includes(forma) && (
-                <Pole etykieta="Data otrzymania oryginału" wymagane>
+              {papier && (
+                <Pole etykieta="Data otrzymania oryginału (albo podpisu w kancelarii)" wymagane>
                   <input type="date" value={otrzymano} onChange={(z) => ustawOtrzymano(z.target.value)} />
                 </Pole>
               )}
-              <div className="podpowiedz">Skan i podpis zaawansowany nie są dopuszczalną formą (D-075).</div>
+              <div className="podpowiedz">
+                Dopuszczalne: podpis zaufany, kwalifikowany, osobisty, notarialnie poświadczony, złożony w kancelarii albo
+                własnoręczny na oryginale. Skan i zdjęcie — nie.
+              </div>
             </div>
           )}
           {dokument.typ === 'umowa_rejestru' && (

@@ -21,7 +21,7 @@ https://github.com/thorid15/Proste-Spolki-Akcyjne/pull/13 (do `claude/Main` — 
 K6 rozstrzygnięte po STOP Fazy 2 — D-079.
 
 **Następny krok:** przegląd raportu przez Łukasza, testy ręczne (R4), odpowiedzi R2, akceptacja szablonów (R3); merge PR #13.
-Po STOP Fazy 4 — D-085 (stałe stawki, obciążenia płatne, bez opłaty za przejęcie). Po raporcie — D-086 (podpisy: test pliku + pracownik).
+Po STOP Fazy 4 — D-085 (stałe stawki, obciążenia płatne, bez opłaty za przejęcie). Po raporcie — D-086 (podpisy: test pliku + pracownik), D-087 (5 równorzędnych sposobów podpisu).
 
 Stan wejściowy testów: `npm test` — 534/534 zielone (przed zmianami).
 
@@ -33,9 +33,10 @@ Stan wejściowy testów: `npm test` — 534/534 zielone (przed zmianami).
 Przed sesją (sekcja 1, policzone ponownie z tabel): JEST 3 · CZĘŚCIOWO 14 · BRAK 23 · SPRZECZNE 6 (podsumowanie
 Fazy 0 podawało 17/8 — błąd sumowania, tabele były poprawne).
 
-Weryfikacja: `npm test` **579/579** (wejście 534/534) · `npm run scenariusz:testowy` **34/34 kontroli**
+Weryfikacja: `npm test` **581/581** (wejście 534/534) · `npm run scenariusz:testowy` **34/34 kontroli**
 (5 scenariuszy, sekcja R4) · pierwotny `npm run scenariusz` przechodzi całą ścieżkę na serwerze testowym.
-Decyzje sesji: D-074–D-086 (`DECYZJE.md`); D-086 — podpisy: tylko podstawowy test pliku, resztę sprawdza pracownik. Migracje 61–65. Szczegóły „jak” — sekcje 3–6.
+Decyzje sesji: D-074–D-087 (`DECYZJE.md`); D-086 — podpisy: tylko podstawowy test pliku, resztę sprawdza pracownik;
+D-087 — sposoby podpisu równorzędne jak w KSH od 18.02.2027, ma być prosto: domyślnie podpis zaufany, pracownik nie wybiera formy. Migracje 61–65. Szczegóły „jak” — sekcje 3–6.
 
 ### R1. Pozycje wytycznych
 
@@ -49,19 +50,19 @@ Wynik: **BYŁO** (zgodne, bez zmian) · **POPRAWIONE** (istniało, sprzeczne/nie
 | T4 | Symulowana data | BRAK | WDROŻONE | `czas.teraz()` z przesunięciem, panel `/test`, blokada cofania przed ostatnie zdarzenie |
 | T5 | Atrapy walidatora i ITN tpay | CZĘŚCIOWO | WDROŻONE | atrapa testu pliku (podpisany / brak podpisu / różny od oryginału / jak na produkcji), kasa tpay z ITN |
 | T6 | Zabezpieczenia trybu testowego | BRAK | WDROŻONE | odmowa startu w produkcji / na bazie nieoznaczonej, `/test` → 404 poza trybem, pasek |
-| W2.1 | Formy podpisu per dokument, skan odrzucany | SPRZECZNE | POPRAWIONE | `logika/formy-podpisu.js` (tabela § 2), portal odrzuca skan (D-075) |
+| W2.1 | Formy podpisu per dokument, skan odrzucany | SPRZECZNE | POPRAWIONE | `logika/formy-podpisu.js`; D-087: przy każdym dokumencie 5 równorzędnych sposobów z art. 300(34) § 3 zd. 2 KSH (od 18.02.2027); skan odrzucany |
 | W2.2 | Zgoda na wpis tylko w formach z tabeli | SPRZECZNE | POPRAWIONE | kod formy z art. 300(34) § 3 zd. 2; skan → 400 |
 | W2.3 | Brak zgody → powiadomienie przed wpisem | BRAK | WDROŻONE | `blokadaWpisu()`; nadanie listu odblokowuje |
 | W2.4 | Automatyczna walidacja po wgraniu | BRAK | WDROŻONE | D-086: tylko podstawowy test — czy plik ma podpis (PAdES/XAdES/CAdES); skan → odrzucenie |
 | W2.5 | Spółka pierwsza, notariusz ostatni; uchwała + reprezentacja | CZĘŚCIOWO | POPRAWIONE | podpis notariusza dopiero po podpisie spółki (D-078: przyjęcie wniosku bez niego) |
 | W3.1 | PDF < 5 MB, ID w stopce, SHA-256 | CZĘŚCIOWO | POPRAWIONE | ID na każdej stronie, skrót i długość oryginału, limit 5 MB |
-| W3.2 | Ekran „Podpisz dokument” + instrukcja | BRAK | WDROŻONE | Pobierz → mObywatel → Wgraj; instrukcja dosłownie z § 3 |
+| W3.2 | Ekran „Podpisz dokument” + instrukcja | BRAK | WDROŻONE | Pobierz → podpis zaufany na gov.pl (domyślnie, D-087) → Wgraj; krótka rozpiska innych sposobów; instrukcja mObywatela z § 3 zwinięta |
 | W3.3 | Walidacja QES przez DSS | BRAK | **POMINIĘTE** | D-086: bez usługi DSS — ważność podpisu sprawdza pracownik |
 | W3.4 | Pierwsza wersja = oryginał | BRAK | WDROŻONE | PAdES: skrót prefiksu; XAdES: dokument osadzony; zmieniony → odrzucenie (zostaje wg D-086); potwierdzone na próbkach |
 | W3.5 | Podpisujący = oczekiwana osoba | BRAK | **POMINIĘTE** | D-086: osobę podpisującą sprawdza pracownik (bez automatycznego PESEL) |
-| W3.6 | Wynik w „Do zrobienia”, potwierdza człowiek | CZĘŚCIOWO | POPRAWIONE | pulpit → „podpisy”; pracownik wskazuje formę i potwierdza |
+| W3.6 | Wynik w „Do zrobienia”, potwierdza człowiek | CZĘŚCIOWO | POPRAWIONE | pulpit → „podpisy”; pracownik potwierdza jednym kliknięciem, bez wybierania formy (D-087) |
 | W3.7 | Kilku podpisujących; zgoda osobno | BRAK | WDROŻONE | kolejny podpis — kontrola oryginału; zgoda = osobny dokument (formy § 2); osoby — pracownik (D-086) |
-| W3.8 | Ścieżki alternatywne, podpowiedź dla zarządu | BRAK | WDROŻONE | „oryginał pocztą”, podpowiedź przy umowie, PZ w instrukcji |
+| W3.8 | Ścieżki alternatywne, podpowiedź dla zarządu | BRAK | WDROŻONE | D-087: podpis zaufany domyślnie; kwalifikowany / osobisty / „Podpiszę na papierze” (pocztą, także notarialnie poświadczony, albo w kancelarii) |
 | W4.1 | Dwa oświadczenia składane osobiście | SPRZECZNE | POPRAWIONE | „Moje oświadczenia” w portalu; zgoda e-mail przez żądanie wpisu |
 | W4.2 | Cofnięcie obu oświadczeń | BRAK | WDROŻONE | bezpłatne (D-083) |
 | W4.3 | Bez zgody → list, kolejka, nadanie | SPRZECZNE | POPRAWIONE | „Listy do wysyłki”; e-mail tylko przy zgodzie potwierdzonej (D-081) |
@@ -114,7 +115,7 @@ Automatycznie to samo sprawdza `npm run scenariusz:testowy` (34 kontrole; nadpis
 | # | Konto | Kroki | Oczekiwany wynik |
 |---|---|---|---|
 | 1 | notariusz@ → gamma.zarzad@ (portal) | `/test`: atrapa „Każdy plik jako niepodpisany” → portal: Wniosek → Wgraj podpisany dokument | komunikat „Skanu nie przyjmujemy…”, plik nieprzyjęty |
-| 2 | j.w. | atrapa „Każdy plik jako podpisany” → wgraj; potem „różny od oryginału” | przyjęty → „Do zrobienia → podpisy”, pracownik wskazuje formę i potwierdza; różny — komunikat „plik różni się od pobranego” |
+| 2 | j.w. | atrapa „Każdy plik jako podpisany” → wgraj; potem „różny od oryginału”; przy innym dokumencie „Podpiszę na papierze” | przyjęty → „Do zrobienia → podpisy”, pracownik klika „Podpis prawidłowy” (bez wybierania formy); różny — komunikat; papier — adres kancelarii, pracownik podaje datę otrzymania |
 | 3 | notariusz@ | Sprawy → zbycie (zbywca Bartosz Próbny, bez zgody) | „Dokonaj wpisu” nieaktywny z przyczyną (art. 300(34) § 3) |
 | 4 | notariusz@ | Listy do wysyłki → Drukuj pismo → Odnotuj nadanie (data, numer, skan) | pismo z adresem z rejestru; wpis w sprawie odblokowany |
 | 5 | anna.zgoda@ (portal) | Konto → Moje oświadczenia → cofnij zgodę na e-mail | w kancelarii nowa sprawa, bezpłatna; po wpisaniu cofnięcia w kartotece logowanie Anny zablokowane z pouczeniem o poczcie |

@@ -217,6 +217,8 @@ const konfiguracja = {
   PODPIS: {
     mobywatel_url: tekst('PODPIS_MOBYWATEL_URL', 'https://podpis.mobywatel.gov.pl'),
     limit_bajtow: liczba('PODPIS_LIMIT_BAJTOW', 5 * 1024 * 1024),
+    // Podpis zaufany (profil zaufany) na gov.pl — wynik zwykle jako plik .xml (XAdES), D-087.
+    pz_url: tekst('PODPIS_PZ_URL', 'https://www.gov.pl/web/gov/podpisz-dokument-elektronicznie-wykorzystaj-podpis-zaufany'),
   },
 
   /**

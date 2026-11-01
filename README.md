@@ -51,16 +51,19 @@ TypeScriptu, bez Tailwinda, bez bibliotek PDF.
 
 ## Podpisy dokumentów — D-075, D-076, D-086
 
-Polityka (`server/logika/formy-podpisu.js`, tabela § 2 wytycznych): **skanów nie przyjmujemy**; podpis
-kwalifikowany (mObywatel), zaufany, osobisty albo oryginał pocztą (zgoda na wpis — wyłącznie
-z podpisem notarialnie poświadczonym) albo podpis w kancelarii. Forma zgody według art. 300³⁴ § 3
-zd. 2 KSH obowiązuje już teraz (D-076).
+Polityka (`server/logika/formy-podpisu.js`, tabela § 2 wytycznych, D-087): **skanów nie przyjmujemy**.
+Przy każdym dokumencie równorzędnie — jak w art. 300³⁴ § 3 zd. 2 KSH od 18.02.2027: podpis notarialnie
+poświadczony, podpis złożony w kancelarii, kwalifikowany (np. mObywatel), zaufany (plik `.xml` z gov.pl)
+albo osobisty. Zwykły oryginał pocztą — dodatkowo tam, gdzie wystarcza (nie przy zgodzie na wpis).
+Forma zgody według art. 300³⁴ § 3 zd. 2 KSH obowiązuje już teraz (D-076).
 
 - **Generowanie:** każdy PDF do podpisu ma unikalne ID w stopce; przy wystawieniu zapisuje się SHA-256
   i długość pliku; limit 5 MB (`PODPIS_LIMIT_BAJTOW`).
-- **Portal — „Podpisz dokument”:** Pobierz → Podpisz w mObywatelu (`PODPIS_MOBYWATEL_URL`, nowa
-  karta) → Wgraj podpisany dokument; instrukcja dosłownie z § 3; „Wolę wysłać podpisany oryginał
-  pocztą”.
+- **Portal — „Podpisz dokument”:** Pobierz → Podpisz podpisem zaufanym na gov.pl (`PODPIS_PZ_URL`,
+  domyślnie — najprościej) → Wgraj podpisany dokument (PDF albo XML); krótka rozpiska innych sposobów
+  (kwalifikowany, np. mObywatel; osobisty; na papierze) i „Podpiszę na papierze” (adres z ustawień).
+  Instrukcja mObywatela z § 3 — zwinięta niżej. Pracownik potwierdza podpis jednym kliknięciem,
+  bez wybierania formy (D-087).
 - **Test po wgraniu — tylko podstawowy (D-086)** (`server/logika/walidacja-podpisu.js`): plik bez podpisu
   elektronicznego (skan, zdjęcie, niepodpisany PDF) → odrzucenie z komunikatem dla laika; pierwsza wersja
   pliku ≠ dokument wystawiony przez kancelarię → odrzucenie („plik zmieniono po pobraniu”). Każdy inny
