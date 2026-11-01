@@ -1382,6 +1382,40 @@
 
 ---
 
+### D-084 — Przeniesienie rejestru od innego podmiotu (Faza 4, wytyczne § 7)
+
+- Data: 2026-11-01 (SESJA-PSA-WYTYCZNE.md, Faza 4)
+- Obszar: zgłoszenia / wnioski / rejestr / opłaty
+- Decyzja:
+  1. Wariant istniejącego przepływu zgłoszenie → wniosek: opcja „Przenoszę rejestr od innego podmiotu”
+     w formularzu publicznym (odpowiedź jak przy każdym zgłoszeniu — D-079), rekord `psa_przeniesienia`.
+  2. Statusy § 7.3 jako jawna maszyna stanów (`server/logika/przeniesienie.js`) z warunkami przejść;
+     historia append-only; „Wygasła” — po 12 miesiącach bez ziszczenia warunku (przy odczycie listy i pulpitu).
+  3. Checklisty Etapu 3 i 6 zaznacza człowiek (D-052); blokada tylko pozycji na pewno niespełnionych
+     (brak uchwały, umowy spółki, danych poprzednika).
+  4. Umowa: klauzula § 7.4 **dosłownie** (w pakiecie wniosku i jako szablon); uchwała — brzmienie wyboru
+     spod klauzuli, reszta „PROJEKT — do akceptacji Łukasza”; pozostałe pisma pakietu przez `psa_szablony`
+     (wbudowane, edytowalne), jako PROJEKT; zgłoszenie do KRS — za bramką 18.02.2027.
+  5. Okres przejściowy: datę rozwiązania wpisuje kancelaria po weryfikacji dokumentu; przypomnienia
+     (14 dni, 30 dni przed terminem 12 miesięcy) w „Do zrobienia” i w portalu; żądania przed skutecznością —
+     odmowa (klauzula ust. 5), po skuteczności bez danych — przeszkoda (zamrożenie terminu).
+  6. Otwarcie: zdarzenie `przejecie` na początku łańcucha SHA-256 (stan na dzień skuteczności, skróty
+     dokumentów źródłowych, protokół), archiwum poprzednika tylko do odczytu poza łańcuchem, zatwierdzenie
+     protokołu przejęcia podpisem kwalifikowanym notariusza (ścieżka walidacji z Fazy 2).
+  7. Rozliczenie: rok prowadzenia od dnia skuteczności; bez opłaty za wpis przy imporcie. **Opłata za
+     przejęcie i początek gwarancji ceny przy umowie warunkowej — „do ustalenia” (§ 9), bez wartości
+     domyślnej** — do decyzji gwarancja ceny nie jest stosowana.
+  8. Etap 8: spółka (potwierdzenie + stan rejestru), poprzednik (potwierdzenie odbioru — do druku),
+     akcjonariusze (informacja z art. 14 RODO + formularz zgód — e-mail przy zgodzie, inaczej list);
+     organy egzekucyjne i [2027] przypomnienie o KRS — zadania ręczne na pulpicie.
+- Testy: `testy/przeniesienie-stany.test.js`, `testy/przeniesienie-http.test.js`.
+- Skutek w kodzie: migracja 65, `server/przeniesienia.js`, `server/trasy/przeniesienia.js`,
+  `server/trasy/{portal,spolki,sprawy,wnioski,pozostale}.js`, `server/rejestr.js`,
+  `server/logika/{przeniesienie,typy-zdarzen,stan,dokumenty-wniosku,pakiet-wniosku,ustawienia}.js`,
+  `publiczne/js/{przeniesienia,portal,pulpit,app}.js`.
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

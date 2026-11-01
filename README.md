@@ -100,6 +100,19 @@ Próbki prawdziwych podpisów do testu: `testy/fixtures/podpisy/` (README w kata
   o zgłoszeniu do KRS do 18.05.2027 (projekt pisma). Zgłoszenia składa się przez PRS — bez automatu.
 - **Eksport całego rejestru** (wydruk spółki → „Eksport całego rejestru (ZIP)”).
 
+## Przeniesienie rejestru od innego podmiotu — D-084 (Faza 4)
+
+Zgłoszenie z opcją „Przenoszę rejestr od innego podmiotu” → wniosek (umowa z klauzulą § 7.4) → kancelaria
+(menu **Przeniesienia**): weryfikacja (checklista Etapu 3) → umowa zawarta pod warunkiem (pisma) → data
+rozwiązania dotychczasowej umowy → dane od poprzednika → uzgodnienie (checklista Etapu 6, rozbieżności →
+„Wstrzymane”) → protokół przejęcia podpisany przez notariusza → otwarcie w kreatorze stanu otwarcia
+(zdarzenie „PRZEJĘCIE” na początku łańcucha) → „Aktywny”. Umowa wygasa po 12 miesiącach bez rozwiązania
+dotychczasowej. Opłata za przejęcie i początek gwarancji ceny — do ustalenia.
+
+W trybie testowym `test:seed` zakłada przeniesienie w każdym statusie § 7.3; „Beta Przenoszona P.S.A.”
+czeka w statusie „Zgłoszone” do samodzielnego przejścia (link aktywacyjny konta `beta.zarzad@example.com`
+w skrzynce testowej albo `npm run test:link -- beta.zarzad@example.com`).
+
 ## Tryb testowy (bez poczty, dane fikcyjne) — D-074
 
 Do przejścia każdego przepływu kancelarii i portalu bez skonfigurowanej poczty. Działa na **osobnej

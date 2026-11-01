@@ -11,7 +11,7 @@
 | 1 — Tryb testowy (T1–T6) | ZROBIONA — sekcja 3 | patrz `git log` — „Faza 1” |
 | 2 — Podpisy (§ 2–3) | ZROBIONA — sekcja 4; STOP | patrz `git log` — „Faza 2” |
 | 3 — Zgody, dostęp, informacje (§ 4–6) | ZROBIONA — sekcja 5; QW1–QW3 rozstrzygnięte (D-083) | patrz `git log` — „Faza 3” |
-| 4 — Przeniesienie rejestru | — | — |
+| 4 — Przeniesienie rejestru (§ 7) | ZROBIONA — sekcja 6; STOP | patrz `git log` — „Faza 4” |
 | 5 — Raport końcowy | — | — |
 
 **Decyzje Łukasza (STOP Fazy 1, 1.11.2026):** K1/K2 — forma zgody i PESEL albo data urodzenia według
@@ -20,7 +20,7 @@ propozycja uzupełnienia `PRZEPISY-PSA.md` (P1–P9) przyjęta i dopisana; Faza 
 https://github.com/thorid15/Proste-Spolki-Akcyjne/pull/13 (do `claude/Main` — w repozytorium nie ma `main`).
 K6 rozstrzygnięte po STOP Fazy 2 — D-079.
 
-**Następny krok:** Faza 4 — przeniesienie rejestru (sekcja 6).
+**Następny krok:** akceptacja STOP Fazy 4, potem Faza 5 (weryfikacja końcowa, `scenariusz-e2e.js` w trybie testowym, raport).
 
 Stan wejściowy testów: `npm test` — 534/534 zielone (przed zmianami).
 
@@ -298,3 +298,34 @@ w `portal-http`, `blok-d-http`, `sprint5`, `informacja-dokument`. Pełny zestaw:
 pisma w portalu przy żądaniu automatycznych powiadomień; QW3 — bez zaproszeń i bez logowania do portalu dla
 osób bez zgody na e-mail, pouczenie na liście i w formularzach; organy — bez opłaty. Testy: **574/574**.
 Lista kont testowych (T2) bez „akcjonariusza bez zgody” — taka osoba nie ma konta w portalu (D-083).
+
+---
+
+## 6. Faza 4 — przeniesienie rejestru (§ 7) — WDROŻONE (jedna sesja, bez podziału 4a/4b)
+
+Decyzja **D-084**. Migracja 65. Testy: `testy/przeniesienie-stany.test.js` (7 — każde przejście, „Wygasła”
+po 12 miesiącach, przypomnienia), `testy/przeniesienie-http.test.js` (przebieg od zgłoszenia do „Aktywny”).
+Pełny zestaw: **582/582**. Scenariusz przeszedł też na żywo w trybie testowym (Beta: zgłoszenie → aktywacja
+konta → wniosek z umową warunkową → przyjęcie → wszystkie statusy → „Aktywny”).
+
+| ID | Wynik | Jak |
+|---|---|---|
+| W7.1 | WDROŻONE | opcja w formularzu publicznym (rodzaj zgłoszenia `przeniesienie`, poprzednik, okres wypowiedzenia); odpowiedź jak dla każdego zgłoszenia (D-079); KRS — `krs.js` |
+| W7.2 | WDROŻONE | portal (Start → „Przeniesienie rejestru”): umowa spółki, informacja poprzednika, podpisana uchwała; wzór uchwały z brzmieniem „od chwili rozwiązania albo wygaśnięcia…”; akcjonariat z danych poprzednika (D-053) |
+| W7.3 | WDROŻONE | checklista Etapu 3 (5 pozycji, człowiek); „uchwała” i „umowa spółki” zablokowane bez dokumentu; AML — istniejący mechanizm (pozycja checklisty) |
+| W7.4 | WDROŻONE | klauzula § 7.4 dosłownie (pakiet wniosku + szablon), uchwała — brzmienie spod klauzuli; 9 pism w `psa_szablony` jako PROJEKT (wezwanie w 3 wariantach poprzednika; KRS za bramką 2027); pakiet dla spółki w portalu po zawarciu umowy |
+| W7.5 | WDROŻONE | data rozwiązania wpisywana przez kancelarię (z dokumentem); przypomnienia 14 dni / 30 dni przed terminem 12 miesięcy — „Do zrobienia” i portal; żądania: przed skutecznością odmowa, po — przeszkoda (zamrożenie terminu) |
+| W7.6 | WDROŻONE | checklista Etapu 6 (6 pozycji); rozbieżność → „Wstrzymane — rozbieżności” z opisem; system niczego nie poprawia |
+| W7.7 | WDROŻONE | kreator stanu otwarcia w trybie przejęcia: zdarzenie `przejecie` na początku łańcucha (stan na dzień, skróty dokumentów, protokół), archiwum poprzednika append-only poza łańcuchem, protokół przejęcia (PDF z ID) zatwierdzany podpisem kwalifikowanym (walidator z Fazy 2) |
+| W7.8 | WDROŻONE | spółka — e-mail z potwierdzeniem i stanem; poprzednik — potwierdzenie odbioru (PROJEKT do druku); akcjonariusze — informacja z art. 14 RODO + formularz zgód (e-mail przy zgodzie, inaczej list); organy egzekucyjne i [2027] KRS — zadania ręczne |
+| W7.9 | WDROŻONE | data zawarcia i data skuteczności; rok prowadzenia od skuteczności, bez opłaty za wpis; opłata za przejęcie i początek gwarancji — „do ustalenia” (bez wartości domyślnej — gwarancja nie jest stosowana) |
+| W7.10 | WDROŻONE | jawna maszyna stanów z warunkami; historia append-only; test każdego przejścia |
+
+**Pisma „PROJEKT — do akceptacji Łukasza”** (Szablony dokumentów, kody `przeniesienie_*`): uchwała,
+wypowiedzenie, potwierdzenie zawarcia, wezwanie do przekazania (dom maklerski/bank, notariusz, rada izby),
+zgłoszenie do KRS i wniosek o wpis danych [2027], informacja z art. 14 RODO, potwierdzenie odbioru. Klauzula
+§ 7.4 — dosłownie z wytycznych (nie PROJEKT).
+
+**Do decyzji (§ 9):** opłata za przejęcie; początek 3-letniej gwarancji ceny przy umowie warunkowej
+(zawarcie czy skuteczność). **Uwaga:** KC art. 89 i art. 17 § 1 KSH są w § 10 „do sprawdzenia” — nie są
+podstawą blokady (blokady opierają się na brakach dokumentów i danych).
