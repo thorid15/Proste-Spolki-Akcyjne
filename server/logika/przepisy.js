@@ -54,6 +54,15 @@ const TERMINY = {
   ZAWIADOMIENIE_SADU_DNI: 7,
 
   /**
+   * Przeniesienie rejestru (wytyczne § 7.4, klauzula umowy warunkowej):
+   * wypowiedzenie dotychczasowej umowy w 14 dni od zawarcia (ust. 3), termin
+   * ostateczny warunku 12 miesięcy (ust. 4), ostrzeżenie przed nim.
+   */
+  PRZENIESIENIE_WYPOWIEDZENIE_DNI: 14,
+  PRZENIESIENIE_TERMIN_WARUNKU_MIESIECY: 12,
+  PRZENIESIENIE_OSTRZEZENIE_DNI: 30,
+
+  /**
    * PRZEPISY-PSA.md art. 300(33) § 3 🔵 - wszelkie zmiany danych z § 1
    * pkt 1-4 oraz 9-11 zarzad zglasza PODMIOTOWI PROWADZACEMU REJESTR (do nas,
    * nie do sadu rejestrowego - poprawka erraty nr 4) w terminie 7 dni od

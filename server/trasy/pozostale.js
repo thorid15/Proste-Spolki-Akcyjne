@@ -377,7 +377,13 @@ router.get(
       .all();
 
     odp.json({
-      zadania_terminowe: zadaniaTerminowe(dzis),
+      zadania_terminowe: (() => {
+        // Faza 4 — przeniesienia: wygaśnięcie po 12 miesiącach, przypomnienia (W7.5), zadania ręczne (W7.8).
+        const przen = require('../przeniesienia');
+        przen.zastosujWygasniecia(db(), dzis);
+        return [...zadaniaTerminowe(dzis), ...przen.zadaniaPoPrzejeciu(db(), dzis)]
+          .sort((a, b) => String(a.termin).localeCompare(String(b.termin)));
+      })(),
       listy: db().prepare(
         `SELECT l.id, l.odbiorca_nazwa, l.rodzaj_pisma, l.utworzono, s.nazwa AS spolka_nazwa
            FROM psa_listy l JOIN psa_spolki s ON s.id = l.spolka_id

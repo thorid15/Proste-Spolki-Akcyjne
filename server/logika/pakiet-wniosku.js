@@ -200,6 +200,8 @@ async function wystaw(wniosek, akcjonariusze) {
     wniosek,
     akcjonariusze,
     dzis: czas.dzisIso(),
+    // W7.4 — wniosek przeniesienia rejestru: umowa z klauzulą warunkową.
+    przeniesienie: require('../przeniesienia').dlaWniosku(db(), wniosek),
   });
 
   // Pliki składamy PRZED kasowaniem poprzedniego kompletu: gdyby składanie

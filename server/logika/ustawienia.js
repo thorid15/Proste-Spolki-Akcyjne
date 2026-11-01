@@ -113,6 +113,9 @@ function wersjaStawek(db, dzien) {
  * (W5.7); poza nim — stawka bieżąca: baza, a gdy jej nie ustawiono — przepisy.
  */
 function stawkaGrosze(db, typ, { spolka = null, dzien = null } = {}) {
+  // W7.9 / § 9 — początek gwarancji przy umowie warunkowej (przejęcie) jest
+  // DO USTALENIA: bez wartości domyślnej, więc gwarancji nie stosujemy.
+  if (spolka && spolka.data_skutecznosci_umowy) return stawkaBiezaca(db, typ);
   if (spolka && spolka.data_umowy) {
     const dzis = dzien || require('../pomocnicze/czas').dzisIso();
     if (dzis < dodajLata(spolka.data_umowy, gwarancjaCenyLat(db))) {

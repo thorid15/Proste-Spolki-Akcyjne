@@ -444,13 +444,40 @@ function nazwaPliku({ typ, wniosek, akcjonariusz }) {
  * @returns {{typ: string, nazwa: string, nazwaPliku: string, kolejnosc: number,
  *   akcjonariuszId: number|null, bloki: object[], brakujace?: string[]}[]}
  */
-function zlozPakiet({ wniosek, akcjonariusze, dzis }) {
-  const dokumenty = [umowaRejestru({ wniosek, dzis })];
+/**
+ * W7.4 — klauzula § 7.4 wytycznych (umowa pod warunkiem zawieszającym),
+ * DOSŁOWNIE; doklejana do umowy, gdy wniosek dotyczy przeniesienia rejestru.
+ */
+function klauzulaWarunkowa(poprzednik) {
+  const kto = String(poprzednik || '').trim() || '[dotychczasowy podmiot]';
+  return [
+    b.sekcja('§ … Skuteczność umowy'),
+    b.punkt('1.', `Umowa zostaje zawarta pod warunkiem zawieszającym rozwiązania albo wygaśnięcia umowy o prowadzenie rejestru akcjonariuszy Spółki zawartej z ${kto} („Dotychczasowa Umowa").`),
+    b.punkt('2.', 'Umowa staje się skuteczna z chwilą rozwiązania albo wygaśnięcia Dotychczasowej Umowy. Jeżeli Dotychczasowa Umowa uległa rozwiązaniu albo wygasła przed zawarciem Umowy, Umowa jest skuteczna z chwilą jej zawarcia.'),
+    b.punkt('3.', 'Spółka zobowiązuje się złożyć oświadczenie o wypowiedzeniu Dotychczasowej Umowy w terminie 14 dni od zawarcia Umowy oraz zawiadomić Notariusza o dacie rozwiązania albo wygaśnięcia Dotychczasowej Umowy niezwłocznie, nie później niż w terminie 3 dni od jej ustalenia, przedkładając dokument potwierdzający tę datę.'),
+    b.punkt('4.', 'Jeżeli warunek, o którym mowa w ust. 1, nie ziści się w terminie 12 miesięcy od zawarcia Umowy, Umowa wygasa.'),
+    b.punkt('5.', 'Do chwili skuteczności Umowy Notariusz nie prowadzi rejestru akcjonariuszy Spółki i nie przysługuje mu wynagrodzenie.'),
+  ];
+}
+
+function zlozPakiet({ wniosek, akcjonariusze, dzis, przeniesienie = null }) {
+  const umowa = umowaRejestru({ wniosek, dzis });
+  if (przeniesienie) umowa.bloki = [...umowa.bloki, ...klauzulaWarunkowa(przeniesienie.poprzednik_nazwa)];
+  const dokumenty = [umowa];
 
   // Uchwała jest druga — obok umowy to drugi dokument „założycielski"
   // pakietu, przed indywidualnymi oświadczeniami akcjonariuszy.
   if (akcjonariusze.length > 0) {
-    dokumenty.push(uchwalaProjekt({ wniosek, akcjonariusze, dzis }));
+    const uchwala = uchwalaProjekt({ wniosek, akcjonariusze, dzis });
+    if (przeniesienie) {
+      // W7.4 — brzmienie wyboru spod klauzuli § 7.4; reszta uchwały — PROJEKT.
+      uchwala.bloki = [
+        b.akapit('PROJEKT — do akceptacji Łukasza (uchwała przy przeniesieniu rejestru).'),
+        ...uchwala.bloki,
+        b.akapit('Wybór notariusza jako podmiotu prowadzącego rejestr akcjonariuszy następuje od chwili rozwiązania albo wygaśnięcia dotychczasowej umowy o prowadzenie rejestru akcjonariuszy.'),
+      ];
+    }
+    dokumenty.push(uchwala);
   }
 
   for (const a of akcjonariusze) {

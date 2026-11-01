@@ -204,6 +204,8 @@ router.post(
     if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
     const blokada = przepisy.blokadaWpisu(spolka);
     if (blokada) throw bledneZadanie(`${blokada} Nie można założyć nowej sprawy.`);
+    const przejecieSprawy = require('../przeniesienia').stanDlaSpraw(db(), spolkaId);
+    if (przejecieSprawy && przejecieSprawy.blokada) throw bledneZadanie(przejecieSprawy.blokada);
 
     const typZdarzenia = String(cialo.typ_zdarzenia || '');
     if (!typyZdarzen.dostepneWKreatorze().some((t) => t.kod === typZdarzenia)) {
@@ -315,6 +317,11 @@ router.post(
       throw e;
     }
 
+    // W7.5 — spółka w trakcie przeniesienia: brak danych od poprzednika = przeszkoda.
+    const przejecie = require('../przeniesienia').stanDlaSpraw(db(), Number(cialo.spolka_id));
+    if (przejecie && przejecie.przeszkoda) {
+      require('../przeniesienia').wstrzymajZPrzeszkoda(db(), Number(wynik.lastInsertRowid), przejecie.przeszkoda);
+    }
     odp.status(201).json({ sprawa: widokSprawy(wczytajSprawe(wynik.lastInsertRowid)) });
   })
 );

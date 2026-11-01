@@ -113,9 +113,9 @@ function pozycjeDoZrobienia({ sprawy, zgloszenia, wnioski, zawiadomienia, podpis
       data: z.termin,
       ikona: 'sprawy',
       tytul: z.tytul,
-      podtytul: `${z.spolka_nazwa} — termin ${fmt.data(z.termin)} (${z.podstawa})`,
-      przyKlik: () => idz(`/spolki/${z.spolka_id}`),
-      prawo: <Pigulka odmiana="sygnal">termin</Pigulka>,
+      podtytul: `${z.spolka_nazwa || ''} — termin ${fmt.data(z.termin)} (${z.podstawa})`,
+      przyKlik: () => idz(z.sciezka || `/spolki/${z.spolka_id}`),
+      prawo: <Pigulka odmiana="sygnal">{z.sciezka && z.sciezka.startsWith('/przeniesienia') ? 'przeniesienie' : 'termin'}</Pigulka>,
     });
   }
   return pozycje.sort((a, b) => (a.priorytet - b.priorytet) || (new Date(a.data) - new Date(b.data)));

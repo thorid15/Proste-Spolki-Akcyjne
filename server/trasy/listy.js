@@ -26,6 +26,7 @@ const NAZWY_PISM = {
   zawiadomienie_wpis: 'Zawiadomienie o dokonaniu wpisu',
   zawiadomienie_odmowa: 'Zawiadomienie o odmowie wpisu',
   wezwanie: 'Wezwanie do usunięcia przeszkody',
+  przejecie_rodo: 'Informacja o przejęciu rejestru (art. 14 RODO) i formularz zgód',
 };
 
 router.get('/', asy((zad, odp) => {

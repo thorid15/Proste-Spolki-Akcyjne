@@ -26,7 +26,7 @@ const czas = require('./pomocnicze/czas');
  */
 /** W5.7 — stawka według gwarancji ceny spółki (data podpisania umowy). */
 function spolkaDoStawki(db, spolkaId) {
-  return spolkaId ? db.prepare('SELECT id, data_umowy FROM psa_spolki WHERE id = ?').get(spolkaId) : null;
+  return spolkaId ? db.prepare('SELECT id, data_umowy, data_skutecznosci_umowy FROM psa_spolki WHERE id = ?').get(spolkaId) : null;
 }
 
 function naliczOplateWpisu(db, { spolkaId, sprawaId, typZdarzenia, autor }) {

@@ -140,6 +140,7 @@ aplikacja.use('/api/psa/wnioski', autoryzacja.wymagajPracownika, require('./serv
 aplikacja.use('/api/psa/zawiadomienia', autoryzacja.wymagajPracownika, require('./server/trasy/zawiadomienia'));
 aplikacja.use('/api/psa/listy', autoryzacja.wymagajPracownika, require('./server/trasy/listy'));
 aplikacja.use('/api/psa/informacje', autoryzacja.wymagajPracownika, require('./server/trasy/informacje'));
+aplikacja.use('/api/psa/przeniesienia', autoryzacja.wymagajPracownika, require('./server/trasy/przeniesienia'));
 aplikacja.use('/api/psa', require('./server/trasy/pozostale'));
 
 // ── Statyki ──────────────────────────────────────────────────────────────

@@ -313,6 +313,13 @@ router.post(
         `${zKrs.komunikat} Rejestr akcjonariuszy prowadzimy wyłącznie dla prostych spółek akcyjnych.`
       );
     }
+    // W7.1 — wariant „Przenoszę rejestr od innego podmiotu” (walidacja danych
+    // wejściowych PRZED rozpoznaniem duplikatu — odpowiedź nie może się różnić).
+    const przen = cialo.przeniesienie && typeof cialo.przeniesienie === 'object' ? cialo.przeniesienie : null;
+    if (przen && !['dom_maklerski', 'notariusz', 'rada_izby'].includes(przen.poprzednik_typ)) {
+      throw bledneZadanie('Wskaż, kto dotąd prowadził rejestr: dom maklerski / bank, notariusz albo notariusz, który zakończył działalność.');
+    }
+
     // D-079 (K6): formularz NIE ujawnia, czy kancelaria prowadzi już rejestr
     // spółki ani czy zgłoszenie jest w toku — sam numer KRS nie może tego
     // zdradzić. Duplikat obsługujemy po cichu: ślad dla kancelarii (zgłoszenie
@@ -344,6 +351,7 @@ router.post(
       telefon: String(cialo.telefon || '').trim() || null,
       nazwa_spolki: String(cialo.nazwa_spolki || '').trim() || nazwaZKrs,
       opis: String(cialo.opis || '').trim() || null,
+      rodzaj: przen ? 'przeniesienie' : 'nowy',
       status: 'nowe',
       utworzono: czas.terazIso(),
     };
@@ -364,6 +372,15 @@ router.post(
         }));
       }
       throw e;
+    }
+
+    if (przen) {
+      require('../przeniesienia').utworzZeZgloszenia(db(), {
+        zgloszenieId: Number(wynikZgloszenia.lastInsertRowid), krs, nazwa: dane.nazwa_spolki,
+        poprzednikTyp: przen.poprzednik_typ,
+        poprzednikNazwa: String(przen.poprzednik_nazwa || '').trim() || null,
+        okresWypowiedzenia: String(przen.okres_wypowiedzenia || '').trim() || null,
+      });
     }
 
     // Zaproszenie idzie OD RAZU. Na tym etapie kancelaria niczego jeszcze nie
@@ -1914,6 +1931,9 @@ function zalozZadaniePortalowe(konto, cialo, odp) {
   if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
   const blokada = przepisy.blokadaWpisu(spolka);
   if (blokada) throw bledneZadanie(`${blokada} Nie można zgłosić nowej sprawy.`);
+  // W7.5 — spółka w trakcie przeniesienia rejestru (przed skutecznością: odmowa; potem: przeszkoda).
+  const przejecieSprawy = require('../przeniesienia').stanDlaSpraw(db(), spolkaId);
+  if (przejecieSprawy && przejecieSprawy.blokada) throw bledneZadanie(przejecieSprawy.blokada);
 
   const typZdarzenia = String(cialo.typ_zdarzenia || '');
   // Celowo NIE bramkujemy sprintem 5: ulamkowe czesci akcji, wspolny
@@ -2019,10 +2039,78 @@ function zalozZadaniePortalowe(konto, cialo, odp) {
   }
 
   const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
-  odp.status(201).json({ sprawa: widokSprawyPortal(sprawa), oplata_id: oplata ? oplata.id : null });
+  if (przejecieSprawy && przejecieSprawy.przeszkoda) {
+    require('../przeniesienia').wstrzymajZPrzeszkoda(db(), sprawaId, przejecieSprawy.przeszkoda);
+  }
+  odp.status(201).json({
+    sprawa: widokSprawyPortal(db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId)),
+    oplata_id: oplata ? oplata.id : null,
+  });
 }
 
 router.post('/zadania', asy((zad, odp) => zalozZadaniePortalowe(zad.konto, zad.body || {}, odp)));
+
+// ─────────────────────────────────────────────────────────────
+// Faza 4 — przeniesienie rejestru (W7.1–W7.5) widziane przez spółkę:
+// status, przypomnienia, dokumenty startowe, wzór uchwały, pakiet pism.
+// ─────────────────────────────────────────────────────────────
+
+const uploadPrzeniesienia = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
+const PISMA_DLA_SPOLKI = ['przeniesienie_uchwala', 'przeniesienie_wypowiedzenie', 'przeniesienie_potwierdzenie_zawarcia',
+  'przeniesienie_wezwanie', 'przeniesienie_zgloszenie_krs'];
+
+function przeniesienieKonta(konto) {
+  const modul = require('../przeniesienia');
+  let p = modul.dlaKonta(db(), konto);
+  if (p && !p.wniosek_id) {
+    const wn = db().prepare('SELECT id FROM psa_wnioski WHERE konto_id = ? ORDER BY id DESC LIMIT 1').get(konto.id);
+    if (wn) { modul.powiazWniosek(db(), p.id, wn.id); p = modul.wczytaj(db(), p.id); }
+  }
+  return p;
+}
+
+function pismaDlaSpolki(p) {
+  const modul = require('../przeniesienia');
+  const poZawarciu = !['zgloszone', 'weryfikacja'].includes(p.status);
+  return modul.listaPism(db(), p).filter((x) => PISMA_DLA_SPOLKI.includes(x.kod)
+    && (poZawarciu || x.kod === 'przeniesienie_uchwala'));
+}
+
+router.get('/przeniesienie', asy((zad, odp) => {
+  const p = przeniesienieKonta(zad.konto);
+  if (!p) return odp.json({ przeniesienie: null });
+  odp.json({
+    przeniesienie: {
+      id: p.id, status: p.status, nazwa_statusu: p.nazwa_statusu, nazwa: p.nazwa, krs: p.krs,
+      poprzednik_nazwa: p.poprzednik_nazwa, poprzednik_opis: p.poprzednik_opis,
+      data_zawarcia_umowy: p.data_zawarcia_umowy, data_skutecznosci: p.data_skutecznosci, termin_warunku: p.termin_warunku,
+      przypomnienia: p.przypomnienia,
+      dokumenty: p.dokumenty.map((d) => ({ id: d.id, typ: d.typ, zrodlo: d.zrodlo, nazwa_pliku: d.nazwa_pliku, utworzono: d.utworzono })),
+      pisma: pismaDlaSpolki(p),
+    },
+  });
+}));
+
+router.post('/przeniesienie/dokumenty', uploadPrzeniesienia.single('plik'), asy((zad, odp) => {
+  const p = przeniesienieKonta(zad.konto);
+  if (!p) throw nieZnaleziono('Nie zgłoszono przeniesienia rejestru.');
+  const typ = String((zad.body || {}).typ || '');
+  if (!['umowa_spolki', 'informacja_poprzednika', 'uchwala', 'wypowiedzenie', 'potwierdzenie_rozwiazania'].includes(typ)) {
+    throw bledneZadanie('Nieznany rodzaj dokumentu.');
+  }
+  if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+  require('../przeniesienia').dodajDokument(db(), p.id, {
+    typ, zrodlo: 'klient', nazwa: zad.file.originalname, bufor: zad.file.buffer, autor: `Portal — ${zad.konto.email}`,
+  });
+  odp.status(201).json({ ok: true });
+}));
+
+router.get('/przeniesienie/pisma/:kod', asy((zad, odp) => {
+  const p = przeniesienieKonta(zad.konto);
+  if (!p) throw nieZnaleziono('Nie zgłoszono przeniesienia rejestru.');
+  if (!pismaDlaSpolki(p).some((x) => x.kod === zad.params.kod)) throw nieZnaleziono('Pismo nie jest jeszcze dostępne.');
+  odp.type('html').send(require('../przeniesienia').renderujPismo(db(), p, zad.params.kod).html);
+}));
 
 // ─────────────────────────────────────────────────────────────
 // W4.1/W4.2 — oświadczenia akcjonariusza składane OSOBIŚCIE (konto albo link

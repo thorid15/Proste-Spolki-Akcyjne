@@ -851,6 +851,17 @@ router.post(
       )
       .run(spolkaId, autor(zad), teraz, teraz, wniosek.id);
 
+    // Faza 4 — wniosek przeniesienia rejestru: spółka z wniosku przypięta do
+    // przeniesienia. Rejestru NIE otwieramy i opłat NIE naliczamy — to Etap 7
+    // (przejęcie), z rokiem prowadzenia od dnia skuteczności umowy (W7.9).
+    const przeniesienieWniosku = require('../przeniesienia').dlaWniosku(db(), wniosek);
+    if (przeniesienieWniosku) {
+      db().prepare('UPDATE psa_przeniesienia SET spolka_id = ? WHERE id = ? AND spolka_id IS NULL').run(spolkaId, przeniesienieWniosku.id);
+      if (przeniesienieWniosku.data_skutecznosci) {
+        db().prepare('UPDATE psa_spolki SET data_skutecznosci_umowy = ? WHERE id = ?').run(przeniesienieWniosku.data_skutecznosci, spolkaId);
+      }
+    }
+
     // Konto, ktore zlozylo wniosek, przestaje byc "wnioskodawca": osoba
     // podpisala umowe o prowadzenie rejestru W IMIENIU SPOLKI, wiec od
     // przyjecia wniosku widzi rejestr TEJ spolki - i wylacznie tej

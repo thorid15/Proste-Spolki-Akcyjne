@@ -312,6 +312,24 @@ const TYPY = [
     dokumenty: [],
   },
   {
+    // W7.7 — zdarzenie otwierające rejestr przejęty od innego podmiotu:
+    // POCZĄTEK łańcucha SHA-256, stan na dzień przejęcia i skróty dokumentów
+    // źródłowych. Historia poprzednika — poza łańcuchem (archiwum tylko do odczytu).
+    kod: 'przejecie',
+    nazwa: 'Przejęcie rejestru (otwarcie)',
+    opis_zdarzeniem: 'Kancelaria przejęła prowadzenie rejestru od innego podmiotu',
+    podpowiedz: 'Otwarcie rejestru przeniesionego — stan na dzień przejęcia według danych poprzednika.',
+    symbol: '⇥',
+    grupa: 'dane',
+    sprint: 1,
+    kreator: false,
+    odplatne: false,
+    wymaga_powiadomienia: false,
+    podstawa_prawna: PODSTAWY.PROWADZENIE_REJESTRU,
+    checklista: [],
+    dokumenty: [],
+  },
+  {
     kod: 'uprawnienie',
     nazwa: 'Uprawnienie, przywilej albo obowiązek',
     opis_zdarzeniem: 'Ustanowiono, zmieniono albo wykreślono uprawnienie akcjonariusza',

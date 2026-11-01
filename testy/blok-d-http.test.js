@@ -198,6 +198,10 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     // `POST` niesie spolka_id w ciele — chroniony przez `wymagajDostepuDoSpolkiWCiele`.
     'GET /oswiadczenia',
     'POST /oswiadczenia',
+    // Faza 4: przeniesienie rejestru — WYŁĄCZNIE własne (po zgłoszeniu/wniosku konta z sesji).
+    'GET /przeniesienie',
+    'POST /przeniesienie/dokumenty',
+    'GET /przeniesienie/pisma/:kod',
     'POST /zadania/:id/dokumenty',
     // B9: zgloszenie nieprawidlowosci we wpisie. `GET` (wlasna lista) dziala
     // WYLACZNIE po `konto.id` z sesji; `POST` niesie `spolka_id` w ciele —

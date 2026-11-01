@@ -869,7 +869,7 @@ function sprawdzChecklisteOtwarcia(checklista) {
  */
 router.post(
   '/:id/otworz-rejestr',
-  asy((zad, odp) => {
+  asy(async (zad, odp) => {
     const id = Number(zad.params.id);
     const spolka = rejestr.wczytajSpolke(db(), id);
     if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
@@ -885,24 +885,60 @@ router.post(
     }
 
     const dzis = czas.dzisIso();
+
+    // Faza 4 (W7.7) — rejestr przenoszony od innego podmiotu: otwarcie tylko
+    // w Etapie 7 (status „Uzgodnienie”, checklista odbioru, zatwierdzenie QES).
+    const modulPrzen = require('../przeniesienia');
+    const przen = modulPrzen.dlaSpolki(db(), id);
+    if (przen && !['uzgodnienie', 'aktywny', 'wygasla'].includes(przen.status)) {
+      throw bledneZadanie(`Rejestr tej spółki jest w trakcie przeniesienia („${przen.nazwa_statusu}”) — otwarcie dopiero w etapie uzgodnienia (Etap 7).`);
+    }
+    const trybPrzejecia = Boolean(przen && przen.status === 'uzgodnienie');
+    if (trybPrzejecia) {
+      const przeszkody = require('../logika/przeniesienie').przeszkodyPrzejscia(przen, 'aktywny', { dzis, dokumenty: przen.dokumenty });
+      if (przeszkody.length) throw bledneZadanie(przeszkody[0], przeszkody);
+    }
+
     const wyniki = rejestr.otworzRejestr(db(), id, {
       zdarzenia,
       autor: kto,
       dzialajacy: osobaDzialajaca.dlaZadania(db(), zad),
+      przejecie: trybPrzejecia ? {
+        stan_na: przen.data_skutecznosci,
+        poprzednik: { typ: przen.poprzednik_typ, nazwa: przen.poprzednik_nazwa },
+        przeniesienie_id: przen.id,
+        dokumenty_zrodlowe: przen.dokumenty.map((d) => ({ nazwa: d.nazwa_pliku, typ: d.typ, zrodlo: d.zrodlo, sha256: d.sha256 })),
+        protokol: { id_dokumentu: przen.protokol_id_dokumentu, sha256: przen.protokol_sha256, zatwierdzono: przen.zatwierdzono },
+      } : null,
     });
+
+    if (trybPrzejecia) {
+      // W7.7 — historia poprzednika jako archiwum tylko do odczytu, poza łańcuchem.
+      const archiwum = String((zad.body && zad.body.archiwum) || '').trim()
+        || JSON.stringify({ dokumenty_zrodlowe: przen.dokumenty, uwaga: 'Historia poprzednika w dokumentach źródłowych.' });
+      db().prepare(`INSERT INTO psa_przeniesienia_archiwum (przeniesienie_id, spolka_id, tresc, sha256, autor, utworzono) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(przen.id, id, archiwum, crypto.createHash('sha256').update(archiwum).digest('hex'), kto, czas.terazIso());
+    }
 
     // Rok prowadzenia biegnie od dnia, w ktorym rejestr faktycznie rusza
     // (§ 15b pkt 1 rozporzadzenia: "za kazdy rozpoczety rok") - tym dniem
     // jest DZIS, chyba ze pole bylo juz wczesniej recznie wypelnione.
-    const dataOtwarcia = spolka.data_otwarcia_rejestru || dzis;
-    if (!spolka.data_otwarcia_rejestru) {
-      db().prepare('UPDATE psa_spolki SET data_otwarcia_rejestru = ? WHERE id = ?').run(dzis, id);
+    // W7.9 — przy przejęciu: dzień SKUTECZNOŚCI umowy; wcześniej brak wynagrodzenia.
+    const dataOtwarcia = trybPrzejecia ? przen.data_skutecznosci : (spolka.data_otwarcia_rejestru || dzis);
+    if (trybPrzejecia || !spolka.data_otwarcia_rejestru) {
+      db().prepare('UPDATE psa_spolki SET data_otwarcia_rejestru = ?, data_skutecznosci_umowy = COALESCE(data_skutecznosci_umowy, ?) WHERE id = ?')
+        .run(dataOtwarcia, trybPrzejecia ? przen.data_skutecznosci : null, id);
     }
-    const { prowadzenie, wpis } = oplaty.naliczOtwarcieRejestru(db(), {
-      spolkaId: id,
-      dataOtwarcia,
-      autor: kto,
-    });
+    // Opłata za przejęcie — do decyzji (§ 9): import nie jest wpisem, więc bez opłaty za wpis.
+    const { prowadzenie, wpis } = trybPrzejecia
+      ? { prowadzenie: oplaty.naliczPierwszyRok(db(), { spolkaId: id, dataOtwarcia, autor: kto }), wpis: { utworzono: false } }
+      : oplaty.naliczOtwarcieRejestru(db(), { spolkaId: id, dataOtwarcia, autor: kto });
+
+    let powiadomienia = null;
+    if (trybPrzejecia) {
+      modulPrzen.przejdz(db(), przen.id, 'aktywny', { autor: kto, dane: { uwagi: 'Otwarcie rejestru — zdarzenie PRZEJĘCIE' } });
+      powiadomienia = await modulPrzen.powiadomieniaPoPrzejeciu(db(), przen.id, kto);
+    }
 
     odp.status(201).json({
       zdarzenia: wyniki.map((w) => ({
@@ -913,6 +949,7 @@ router.post(
       })),
       oplata_prowadzenia: prowadzenie.utworzono ? prowadzenie.oplata : null,
       oplata_wpisu: wpis.utworzono ? wpis.oplata : null,
+      przejecie: trybPrzejecia ? { przeniesienie_id: przen.id, powiadomienia, oplata_za_przejecie: 'do ustalenia' } : null,
     });
   })
 );
