@@ -852,11 +852,9 @@ select {
 
 /* Pole daty segmentowe DD.MM.RRRR */
 .pole-daty { display: flex; align-items: center; gap: var(--od-8); flex-wrap: wrap; }
-/* Ramka pola daty rozciąga się na całą kolumnę, tak jak sąsiednie pola
-   tekstowe. Same segmenty DD.MM.RRRR zostają wąskie i wyrównane do lewej —
-   chodzi o to, żeby para pól obok siebie miała jedną linię, a nie o to,
-   żeby rozstrzelić cyfry. */
-.pole-daty > .data-segmenty { flex: 1 1 auto; justify-content: flex-start; }
+/* R4 P5: ramka pola daty obejmuje tylko datę DD.MM.RRRR (jeden wzorzec dla wszystkich pól dat),
+   przycisk kalendarza tuż obok — pole nie rozciąga się na całą kolumnę. */
+.pole-daty > .data-segmenty { flex: 0 0 auto; justify-content: flex-start; }
 .data-segmenty {
   display: inline-flex; align-items: center;
   padding: var(--od-8) var(--od-12);

@@ -46,3 +46,17 @@ test('P3: na 390 px oba przyciski na pełną szerokość, główny wyżej; ukła
   await karta.evaluate((el) => el.setAttribute('data-test', 'informacja'));
   expect(await sprawdzUklad(page, '[data-test="informacja"]')).toEqual([]);
 });
+
+test('P5: „Stan na dzień” — pole tylko na datę, kalendarz obok, układ bez problemów', async ({ page }) => {
+  await otworz(page, { konto: 'zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/informacja/1', czekaj: 'text=Stan na dzień', szerokosc: 1440 });
+  const segmenty = page.locator('.data-segmenty').first();
+  const kalendarz = page.locator('.pole-daty .kalendarz-kotwica button').first();
+  const [s, k] = [await segmenty.boundingBox(), await kalendarz.boundingBox()];
+  // Szerokość pola daty = sama data (DD.MM.RRRR + marginesy), nie cała kolumna — wzorzec ≤ 12rem.
+  expect(s.width).toBeLessThanOrEqual(192);
+  expect(k.x - (s.x + s.width)).toBeLessThan(24);
+  expect(Math.abs((k.y + k.height / 2) - (s.y + s.height / 2))).toBeLessThan(4);
+  const karta = page.locator('.karta', { has: segmenty });
+  await karta.evaluate((el) => el.setAttribute('data-test', 'zamowienie'));
+  expect(await sprawdzUklad(page, '[data-test="zamowienie"]')).toEqual([]);
+});
