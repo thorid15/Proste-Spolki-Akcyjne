@@ -149,7 +149,7 @@ test('przeniesienie rejestru: od zgłoszenia do „Aktywny”', async () => {
 
   const [stOtw, otw] = await zapytaj('POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`, otwarcie);
   assert.equal(stOtw, 201, JSON.stringify(otw));
-  assert.equal(otw.przejecie.oplata_za_przejecie, 'do ustalenia');
+  assert.equal(otw.przejecie.oplata_za_przejecie, 'brak (D-085)');
   const zdarzenia = db().prepare('SELECT * FROM psa_zdarzenia WHERE spolka_id = ? ORDER BY id').all(spolkaId);
   assert.equal(zdarzenia[0].typ, 'przejecie', 'PRZEJĘCIE otwiera łańcuch SHA-256');
   const danePrzejecia = JSON.parse(zdarzenia[0].dane_json);

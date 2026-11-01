@@ -89,40 +89,20 @@ function kancelaria(db) {
   return wynik;
 }
 
-/** W5.7 — okres gwarancji ceny w latach (parametr „Stawki i terminy”, domyślnie 3 — D-073). */
-const GWARANCJA_DOMYSLNA_LAT = 3;
-function gwarancjaCenyLat(db) {
-  const v = Number(zBazy(db).gwarancja_ceny_lat);
-  return Number.isInteger(v) && v >= 0 ? v : GWARANCJA_DOMYSLNA_LAT;
-}
-
-function dodajLata(dzien, lata) {
-  const [r, m, d] = String(dzien).slice(0, 10).split('-').map(Number);
-  return `${String(r + lata).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-}
-
-/** Wersja stawek obowiązująca w danym dniu (W5.7) albo null, gdy stawek nie zmieniano. */
+/** Wersja stawek obowiązująca w danym dniu — historia zmian (ślad), nie podstawa rozliczeń. */
 function wersjaStawek(db, dzien) {
   return db.prepare('SELECT * FROM psa_stawki_wersje WHERE od_dnia <= ? ORDER BY od_dnia DESC, id DESC LIMIT 1')
     .get(String(dzien).slice(0, 10)) || null;
 }
 
 /**
- * Stawka w groszach. Spółka w okresie gwarancji ceny (od dnia podpisania
- * umowy — `data_umowy`) rozliczana jest według wersji stawek z tamtego dnia
- * (W5.7); poza nim — stawka bieżąca: baza, a gdy jej nie ustawiono — przepisy.
+ * Stawka w groszach — D-085: STAŁE stawki aż do zmiany przez notariusza
+ * (rozporządzenie zmienia się rzadko, a stawki są maksymalne). Gwarancja ceny
+ * z D-073 to informacja na stronie, nie osobny mechanizm rozliczeń; parametry
+ * `spolka`/`dzien` zostają w sygnaturze dla zgodności wywołań.
  */
-function stawkaGrosze(db, typ, { spolka = null, dzien = null } = {}) {
-  // W7.9 / § 9 — początek gwarancji przy umowie warunkowej (przejęcie) jest
-  // DO USTALENIA: bez wartości domyślnej, więc gwarancji nie stosujemy.
-  if (spolka && spolka.data_skutecznosci_umowy) return stawkaBiezaca(db, typ);
-  if (spolka && spolka.data_umowy) {
-    const dzis = dzien || require('../pomocnicze/czas').dzisIso();
-    if (dzis < dodajLata(spolka.data_umowy, gwarancjaCenyLat(db))) {
-      const w = wersjaStawek(db, spolka.data_umowy);
-      if (w && w[`${typ}_grosze`] != null) return w[`${typ}_grosze`];
-    }
-  }
+// eslint-disable-next-line no-unused-vars
+function stawkaGrosze(db, typ, opcje = {}) {
   return stawkaBiezaca(db, typ);
 }
 
@@ -159,7 +139,6 @@ function doEkranu(db) {
   return {
     kancelaria: POLA_KANCELARII.map(pole),
     stawki: POLA_STAWEK.map(stawka),
-    gwarancja_ceny_lat: gwarancjaCenyLat(db),
     wersje_stawek: db.prepare('SELECT * FROM psa_stawki_wersje ORDER BY od_dnia DESC, id DESC').all(),
   };
 }
@@ -169,10 +148,6 @@ function bledy(zmiany) {
   const lista = [];
   const cyfry = (v) => String(v || '').replace(/\D/g, '');
 
-  if ('gwarancja_ceny_lat' in zmiany && String(zmiany.gwarancja_ceny_lat ?? '').trim() !== '') {
-    const v = Number(zmiany.gwarancja_ceny_lat);
-    if (!Number.isInteger(v) || v < 0 || v > 10) lista.push('Gwarancja ceny: liczba pełnych lat od 0 do 10.');
-  }
 
   for (const p of POLA_KANCELARII) {
     if (!(p.klucz in zmiany)) continue;
@@ -235,7 +210,7 @@ function nipPoprawny(cyfry) {
  * jak celowo skasowana nazwa kancelarii.
  */
 function zapisz(db, zmiany, autor) {
-  const dozwolone = new Set([...KLUCZE_KANCELARII, ...KLUCZE_STAWEK, 'gwarancja_ceny_lat']);
+  const dozwolone = new Set([...KLUCZE_KANCELARII, ...KLUCZE_STAWEK]);
   const TYPY = ['prowadzenie', 'wpis', 'informacja'];
   const przed = Object.fromEntries(TYPY.map((t) => [t, stawkaBiezaca(db, t)]));
   const teraz = czas.terazIso();
@@ -259,7 +234,7 @@ function zapisz(db, zmiany, autor) {
   transakcja();
 
   // W5.7 — każda zmiana stawek to nowa WERSJA z datą; poprzednie zostają
-  // dla spółek w okresie gwarancji ceny.
+  // jako historia zmian (D-085).
   const po = Object.fromEntries(TYPY.map((t) => [t, stawkaBiezaca(db, t)]));
   if (TYPY.some((t) => przed[t] !== po[t])) {
     const dodaj = db.prepare(
@@ -275,6 +250,6 @@ function zapisz(db, zmiany, autor) {
 }
 
 module.exports = {
-  POLA_KANCELARII, POLA_STAWEK, kancelaria, stawkaGrosze, stawkaBiezaca, wersjaStawek, gwarancjaCenyLat, doEkranu,
+  POLA_KANCELARII, POLA_STAWEK, kancelaria, stawkaGrosze, stawkaBiezaca, wersjaStawek, doEkranu,
   bledy, zapisz, nipPoprawny,
 };

@@ -147,18 +147,15 @@ test('W5.3/W5.6: informacja dla organu — sygnatura obowiązkowa, numer, wpis d
   assert.match(tekst, /nie pobrano/);
 });
 
-test('W5.7: zmiana stawek tworzy wersję; spółka w okresie gwarancji rozliczana wg stawki z dnia umowy', async () => {
+test('W5.7 / D-085: stawki stałe do zmiany przez notariusza; każda zmiana zostaje w historii wersji', async () => {
   const ustawienia = require('../server/logika/ustawienia');
-  const przed = ustawienia.stawkaGrosze(db(), 'wpis');
   const [st] = await zapytaj('PUT', '/api/psa/ustawienia', { stawka_wpis: '8000' });
   assert.equal(st, 200);
   const spolka = db().prepare('SELECT * FROM psa_spolki WHERE id = ?').get(S.spolkaId);
-  assert.equal(ustawienia.stawkaGrosze(db(), 'wpis'), 8000, 'nowa spółka / bez gwarancji — stawka bieżąca');
-  assert.equal(ustawienia.stawkaGrosze(db(), 'wpis', { spolka }), przed, 'w gwarancji — stawka z dnia umowy');
-  assert.equal(ustawienia.stawkaGrosze(db(), 'wpis', { spolka, dzien: '2029-01-02' }), 8000, 'po 3 latach — stawka bieżąca');
+  assert.equal(ustawienia.stawkaGrosze(db(), 'wpis'), 8000);
+  assert.equal(ustawienia.stawkaGrosze(db(), 'wpis', { spolka }), 8000, 'bez osobnego mechanizmu gwarancji');
   const [, ekran] = await zapytaj('GET', '/api/psa/ustawienia');
-  assert.equal(ekran.gwarancja_ceny_lat, 3);
-  assert.ok(ekran.wersje_stawek.length >= 2);
+  assert.ok(ekran.wersje_stawek.length >= 2, 'historia zmian stawek');
   await zapytaj('PUT', '/api/psa/ustawienia', { stawka_wpis: '' });
 });
 

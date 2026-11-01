@@ -94,7 +94,8 @@ Próbki prawdziwych podpisów do testu: `testy/fixtures/podpisy/` (README w kata
 - **Zakładka „Rejestr” w portalu** — tylko dane spółki; akcjonariat w płatnej informacji z rejestru.
 - **Dziennik informacji** (kancelaria): numer, data, odbiorca, opłata; „Wydaj informację organowi”
   (sygnatura obowiązkowa). Każda informacja: numer `INF/RRRR/NNNN`, wynagrodzenie, VAT i podstawa.
-- **Stawki** wersjonowane z datą; gwarancja ceny (`gwarancja_ceny_lat`, domyślnie 3 lata od umowy).
+- **Stawki** stałe aż do zmiany przez notariusza (D-085); każda zmiana zapisuje wersję z datą (ślad).
+  Płatne są tylko zmiany w akcjonariacie i nowe obciążenia akcji; pozostałe zmiany i informacje dla organów — bez opłat.
 - **PESEL albo data urodzenia** wymagane przy nowym wpisie osoby fizycznej (D-076).
 - **Do zrobienia** (od 18.02.2027): zawiadomienie sądu o rozwiązaniu umowy w 7 dni, przypomnienie
   o zgłoszeniu do KRS do 18.05.2027 (projekt pisma). Zgłoszenia składa się przez PRS — bez automatu.
@@ -107,7 +108,7 @@ Zgłoszenie z opcją „Przenoszę rejestr od innego podmiotu” → wniosek (um
 rozwiązania dotychczasowej umowy → dane od poprzednika → uzgodnienie (checklista Etapu 6, rozbieżności →
 „Wstrzymane”) → protokół przejęcia podpisany przez notariusza → otwarcie w kreatorze stanu otwarcia
 (zdarzenie „PRZEJĘCIE” na początku łańcucha) → „Aktywny”. Umowa wygasa po 12 miesiącach bez rozwiązania
-dotychczasowej. Opłata za przejęcie i początek gwarancji ceny — do ustalenia.
+dotychczasowej. Bez opłaty za przejęcie (D-085); rok prowadzenia liczony od dnia skuteczności.
 
 W trybie testowym `test:seed` zakłada przeniesienie w każdym statusie § 7.3; „Beta Przenoszona P.S.A.”
 czeka w statusie „Zgłoszone” do samodzielnego przejścia (link aktywacyjny konta `beta.zarzad@example.com`

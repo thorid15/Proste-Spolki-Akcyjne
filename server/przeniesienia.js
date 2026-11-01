@@ -54,9 +54,8 @@ function wczytaj(db, id, { dzis = czas.dzisIso() } = {}) {
     blokady_odbioru: reguly.blokadyChecklisty(reguly.CHECKLISTA_ODBIORU, dok),
     dokumenty: dok,
     historia: db.prepare('SELECT * FROM psa_przeniesienia_historia WHERE przeniesienie_id = ? ORDER BY id').all(id),
-    // W7.9 — punkty rozszerzenia bez wartości domyślnej (§ 9 wytycznych).
-    oplata_za_przejecie: 'do ustalenia',
-    poczatek_gwarancji_ceny: 'do ustalenia',
+    // W7.9 / D-085 — opłaty za przejęcie rejestru nie pobieramy.
+    oplata_za_przejecie: 'brak (D-085)',
   };
 }
 

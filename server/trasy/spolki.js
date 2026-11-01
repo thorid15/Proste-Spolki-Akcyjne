@@ -929,7 +929,7 @@ router.post(
       db().prepare('UPDATE psa_spolki SET data_otwarcia_rejestru = ?, data_skutecznosci_umowy = COALESCE(data_skutecznosci_umowy, ?) WHERE id = ?')
         .run(dataOtwarcia, trybPrzejecia ? przen.data_skutecznosci : null, id);
     }
-    // Opłata za przejęcie — do decyzji (§ 9): import nie jest wpisem, więc bez opłaty za wpis.
+    // D-085 — bez opłaty za przejęcie; import nie jest wpisem, więc bez opłaty za wpis.
     const { prowadzenie, wpis } = trybPrzejecia
       ? { prowadzenie: oplaty.naliczPierwszyRok(db(), { spolkaId: id, dataOtwarcia, autor: kto }), wpis: { utworzono: false } }
       : oplaty.naliczOtwarcieRejestru(db(), { spolkaId: id, dataOtwarcia, autor: kto });
@@ -949,7 +949,7 @@ router.post(
       })),
       oplata_prowadzenia: prowadzenie.utworzono ? prowadzenie.oplata : null,
       oplata_wpisu: wpis.utworzono ? wpis.oplata : null,
-      przejecie: trybPrzejecia ? { przeniesienie_id: przen.id, powiadomienia, oplata_za_przejecie: 'do ustalenia' } : null,
+      przejecie: trybPrzejecia ? { przeniesienie_id: przen.id, powiadomienia, oplata_za_przejecie: 'brak (D-085)' } : null,
     });
   })
 );

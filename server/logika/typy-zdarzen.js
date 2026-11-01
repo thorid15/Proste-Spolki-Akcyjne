@@ -349,7 +349,7 @@ const TYPY = [
     symbol: '⊣',
     grupa: 'prawa',
     sprint: 2,
-    odplatne: false, // D-083: bezpłatne — płatne są wyłącznie zmiany w akcjonariacie
+    odplatne: true, // D-085: nowe obciążenie akcji (np. ograniczenie z umowy spółki) — płatne
     wymaga_powiadomienia: false,
     podstawa_prawna: PODSTAWY.OGRANICZENIA_ROZPORZADZANIA,
     checklista: [...BADANIE_DOKUMENTU],

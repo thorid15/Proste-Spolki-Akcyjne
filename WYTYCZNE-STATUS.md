@@ -268,7 +268,7 @@ w `portal-http`, `blok-d-http`, `sprint5`, `informacja-dokument`. Pełny zestaw:
 | W5.4 | POPRAWIONE | maskowanie działało (biała lista); informacja pokazuje teraz PESEL albo datę urodzenia w wersji pełnej (spółka), a akcjonariuszowi zasłania u innych — test API (`portal-http`) |
 | W5.5 | WDROŻONE | sekcja „Wynagrodzenie” na każdej informacji: netto, VAT, brutto, podstawa z `PRZEPISY-PSA.md` (`PODSTAWY.WYNAGRODZENIE_INFORMACJI`) |
 | W5.6 | WDROŻONE | „Dziennik informacji” (`GET /api/psa/informacje`): numer `INF/RRRR/NNNN`, data, spółka, odbiorca, sygnatura, opłata |
-| W5.7 | WDROŻONE / CZĘŚCIOWO | `psa_stawki_wersje` — każda zmiana stawek to wersja z datą; spółka w gwarancji rozliczana wg wersji z dnia umowy (test); parametr `gwarancja_ceny_lat` w API ustawień — **pola w ekranie „Stawki i terminy” jeszcze nie ma** |
+| W5.7 | WDROŻONE | D-085: stałe stawki aż do zmiany przez notariusza (rozliczenie wg bieżących); każda zmiana zapisuje wersję w `psa_stawki_wersje` (ślad); gwarancja ceny — tylko przekaz marketingowy, parametr usunięty |
 | W6.1 | WDROŻONE | D-076: walidacja wpisu — osoba fizyczna nabywca/obejmujący/zastawnik bez PESEL i daty urodzenia → błąd (od dziś, bez bramki) |
 | W6.2 | WDROŻONE (ZA BRAMKĄ) | zadanie z terminem 7 dni w „Do zrobienia” po rozwiązaniu/przekazaniu (od 18.02.2027); projekt przez istniejący generator |
 | W6.3 | WDROŻONE | D-080: eksport ZIP (README, informacja, historia z łańcuchem, dokumenty) — przycisk przy „Eksport CSV” |
@@ -318,7 +318,7 @@ konta → wniosek z umową warunkową → przyjęcie → wszystkie statusy → �
 | W7.6 | WDROŻONE | checklista Etapu 6 (6 pozycji); rozbieżność → „Wstrzymane — rozbieżności” z opisem; system niczego nie poprawia |
 | W7.7 | WDROŻONE | kreator stanu otwarcia w trybie przejęcia: zdarzenie `przejecie` na początku łańcucha (stan na dzień, skróty dokumentów, protokół), archiwum poprzednika append-only poza łańcuchem, protokół przejęcia (PDF z ID) zatwierdzany podpisem kwalifikowanym (walidator z Fazy 2) |
 | W7.8 | WDROŻONE | spółka — e-mail z potwierdzeniem i stanem; poprzednik — potwierdzenie odbioru (PROJEKT do druku); akcjonariusze — informacja z art. 14 RODO + formularz zgód (e-mail przy zgodzie, inaczej list); organy egzekucyjne i [2027] KRS — zadania ręczne |
-| W7.9 | WDROŻONE | data zawarcia i data skuteczności; rok prowadzenia od skuteczności, bez opłaty za wpis; opłata za przejęcie i początek gwarancji — „do ustalenia” (bez wartości domyślnej — gwarancja nie jest stosowana) |
+| W7.9 | WDROŻONE | data zawarcia i data skuteczności; rok prowadzenia od skuteczności, bez opłaty za wpis; **bez opłaty za przejęcie** (D-085) |
 | W7.10 | WDROŻONE | jawna maszyna stanów z warunkami; historia append-only; test każdego przejścia |
 
 **Pisma „PROJEKT — do akceptacji Łukasza”** (Szablony dokumentów, kody `przeniesienie_*`): uchwała,
@@ -326,6 +326,6 @@ wypowiedzenie, potwierdzenie zawarcia, wezwanie do przekazania (dom maklerski/ba
 zgłoszenie do KRS i wniosek o wpis danych [2027], informacja z art. 14 RODO, potwierdzenie odbioru. Klauzula
 § 7.4 — dosłownie z wytycznych (nie PROJEKT).
 
-**Do decyzji (§ 9):** opłata za przejęcie; początek 3-letniej gwarancji ceny przy umowie warunkowej
-(zawarcie czy skuteczność). **Uwaga:** KC art. 89 i art. 17 § 1 KSH są w § 10 „do sprawdzenia” — nie są
+**Rozstrzygnięte (D-085):** brak opłaty za przejęcie; stałe stawki do zmiany przez notariusza (gwarancja —
+tylko marketing); obciążenia ujawniane jako nowe wpisy — płatne; szablony Łukasz akceptuje na końcu. **Uwaga:** KC art. 89 i art. 17 § 1 KSH są w § 10 „do sprawdzenia” — nie są
 podstawą blokady (blokady opierają się na brakach dokumentów i danych).

@@ -24,7 +24,7 @@ const czas = require('./pomocnicze/czas');
  * Zajęcie i wykreślenie zajęcia (`odplatne: false`) nigdy tu nie trafiają —
  * wolne od opłat z mocy art. 300(34) § 2 KSH.
  */
-/** W5.7 — stawka według gwarancji ceny spółki (data podpisania umowy). */
+/** Spółka przekazywana do `stawkaGrosze` (D-085: stawki stałe do zmiany przez notariusza). */
 function spolkaDoStawki(db, spolkaId) {
   return spolkaId ? db.prepare('SELECT id, data_umowy, data_skutecznosci_umowy FROM psa_spolki WHERE id = ?').get(spolkaId) : null;
 }

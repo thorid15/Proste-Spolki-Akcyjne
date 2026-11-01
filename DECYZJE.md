@@ -1414,6 +1414,25 @@
   `server/logika/{przeniesienie,typy-zdarzen,stan,dokumenty-wniosku,pakiet-wniosku,ustawienia}.js`,
   `publiczne/js/{przeniesienia,portal,pulpit,app}.js`.
 
+### D-085 — Stałe stawki, obciążenia jako nowe wpisy, brak opłaty za przejęcie (Łukasz, STOP Fazy 4)
+
+- Data: 2026-11-01 (SESJA-PSA-WYTYCZNE.md, odpowiedź Łukasza na STOP Fazy 4)
+- Obszar: opłaty / przeniesienie / szablony
+- Decyzja:
+  1. **Obciążenia akcji ujawniane jako nowe wpisy** (np. ograniczenie rozporządzania po zmianie umowy
+     spółki) — **płatne** jak wpis zmiany w akcjonariacie (`ograniczenie` → `odplatne: true`).
+     Pozostałe zmiany bezpłatne bez zmian (D-083).
+  2. **Brak opłaty za przejęcie rejestru** od innego podmiotu (W7.9) — rozstrzyga „do ustalenia” z D-084 pkt 7.
+  3. **Stałe stawki aż do zmiany przez notariusza** — rozliczenie zawsze wg stawek bieżących
+     (`stawkaGrosze` = stawka bieżąca). „Gwarancja ceny” to wyłącznie przekaz marketingowy (stawki
+     i tak są maksymalne wg rozporządzenia, które zmienia się rzadko) — parametr `gwarancja_ceny_lat`
+     usunięty z ustawień; wersje stawek (`psa_stawki_wersje`) zostają jako ślad zmian, nie podstawa
+     rozliczeń. Zastępuje D-082 w części „gwarancja ceny” i D-084 pkt 7 w części „początek gwarancji”.
+  4. **Szablony pism (PROJEKT — do akceptacji Łukasza)** — Łukasz akceptuje i poprawia je na końcu prac;
+     do tego czasu zostają oznaczone jako PROJEKT.
+- Skutek w kodzie: `server/logika/{ustawienia,typy-zdarzen}.js`, `server/przeniesienia.js`,
+  `server/trasy/spolki.js`, `publiczne/js/przeniesienia.js`; testy `faza3-http`, `przeniesienie-http`.
+
 ---
 
 ## Decyzje otwarte

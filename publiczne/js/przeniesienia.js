@@ -96,7 +96,7 @@ function EkranPrzeniesienia({ id }) {
           <MetrykaPoz etykieta="Umowa zawarta" wartosc={p.data_zawarcia_umowy ? fmt.data(p.data_zawarcia_umowy) : '—'} />
           <MetrykaPoz etykieta="Termin ostateczny warunku" wartosc={p.termin_warunku ? fmt.data(p.termin_warunku) : '—'} />
           <MetrykaPoz etykieta="Skuteczność (rozwiązanie dotychczasowej umowy)" wartosc={p.data_skutecznosci ? fmt.data(p.data_skutecznosci) : '—'} />
-          <MetrykaPoz etykieta="Opłata za przejęcie / początek gwarancji ceny" wartosc={`${p.oplata_za_przejecie} / ${p.poczatek_gwarancji_ceny}`} />
+          <MetrykaPoz etykieta="Opłata za przejęcie" wartosc={p.oplata_za_przejecie} />
         </div>
         {p.przypomnienia.map((pr) => <Komunikat key={pr.rodzaj} odmiana="uwaga" tresc={pr.tresc} />)}
         {p.rozbieznosci && p.status === 'wstrzymane_rozbieznosci' && <Komunikat odmiana="uwaga" tytul="Rozbieżności" tresc={p.rozbieznosci} />}

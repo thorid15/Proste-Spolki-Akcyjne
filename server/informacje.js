@@ -19,7 +19,7 @@ function nadajNumer(db) {
   return `INF/${rok}/${String(w.n + 1).padStart(4, '0')}`;
 }
 
-/** Wynagrodzenie na informacji (W5.5) — stawka spółki (W5.7, gwarancja ceny). */
+/** Wynagrodzenie na informacji (W5.5) — stawka bieżąca (D-085). */
 function wynagrodzenie(db, { spolka, nettoGrosze = null, vatProcent = null, pobrano = true, uwaga = null }) {
   const netto = nettoGrosze != null ? Number(nettoGrosze) : ustawienia.stawkaGrosze(db, 'informacja', { spolka });
   const procent = vatProcent != null ? Number(vatProcent) : przepisy.STAWKA_VAT_PROCENT;
