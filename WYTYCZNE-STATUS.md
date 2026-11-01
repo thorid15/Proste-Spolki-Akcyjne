@@ -18,7 +18,7 @@
 nowelizacji **od dziś** (D-076); K5 — zakładka „Rejestr” w portalu tylko z danymi spółki (D-077, Faza 3);
 propozycja uzupełnienia `PRZEPISY-PSA.md` (P1–P9) przyjęta i dopisana; Faza 1 zaakceptowana, PR
 https://github.com/thorid15/Proste-Spolki-Akcyjne/pull/13 (do `claude/Main` — w repozytorium nie ma `main`).
-Otwarte: K6 (formularz publiczny zdradza, czy spółka jest klientem).
+K6 rozstrzygnięte po STOP Fazy 2 — D-079.
 
 **Następny krok:** akceptacja STOP Fazy 2 (sekcja 4), potem Faza 3.
 
@@ -218,15 +218,30 @@ Pełny zestaw: **556 zielonych, 1 pominięty** (próbki podpisów).
 | W3.8 | WDROŻONE | „Wolę wysłać podpisany oryginał pocztą” (migracja 63), podpowiedź dla zarządu przy umowie (własny QES albo oryginał; QES z mObywatela nie blokowany), PZ na gov.pl w instrukcji |
 | T5 | WDROŻONE | atrapa walidatora podpięta: w trybie testowym wynik z panelu `/test` (portal i podpis notariusza) |
 
-**Próbki podpisów:** brak — `testy/fixtures/podpisy/` pusty, test parametryzowany pominięty z komunikatem.
-Do dostarczenia: PDF podpisany w mObywatelu u 4 dostawców (Sigillum, SimplySign, mSzafir, Cencert), PZ, PO,
-każdy z oryginałem przed podpisem. Rozpoznanie PZ/PO i zachowanie oryginału jako pierwszej rewizji —
-do ustalenia na próbkach (do tego czasu PZ/PO → ręcznie; kontroli oryginału nie luzowałem).
+**Próbki podpisów (Łukasz, 1.11.2026):** SimplySign, Szafir, CENCERT, EUROCERT — ten sam dokument
+(„rejestry-notarialne.pl_211”). Pliki tylko lokalnie w `testy/fixtures/podpisy/` (`.gitignore` — dane osobowe).
+
+| Dostawca | Podpis | Oryginał jako pierwsza rewizja (W3.4) | PESEL w certyfikacie (W3.5) |
+|---|---|---|---|
+| SimplySign (Certum) | CAdES + znacznik czasu dokumentu (RFC 3161), przyrostowo | **tak** — pierwsze 99 090 B identyczne jak u CENCERT i EUROCERT | tak, `serialNumber` PNOPL |
+| CENCERT (Enigma) | CAdES, przyrostowo | **tak** | tak, PNOPL |
+| EUROCERT | PKCS#7 (`adbe.pkcs7.detached`), przyrostowo | **tak** | tak, PNOPL |
+| Szafir (KIR) | CAdES, przyrostowo | struktura przyrostowa (pierwsza rewizja 87 508 B), ale **podpisany inny wydruk** (Chrome m154 zamiast m153) — nie da się porównać z oryginałem pozostałych | tak, PNOPL |
+
+Wynik testu `podpisy.test.js` na próbkach: wszystkie 4 rozpoznane jako podpisane, oryginał zgodny,
+podmieniony oryginał → odrzucenie; bez DSS wynik „do weryfikacji ręcznej” (poprawnie — brak automatycznej
+akceptacji). Kontroli oryginału nie luzowałem. **Brakuje:** Sigillum (PWPW), podpis zaufany (PZ), podpis
+osobisty (PO); dla Szafira — oryginał, który był podpisywany (potwierdzi zachowanie pierwszej rewizji).
+EUROCERT nie jest dostawcą mObywatela — próbka potwierdza obsługę zwykłego QES (np. zarządu).
+
+**Decyzje po STOP Fazy 2:** D-078 (przyjęcie wniosku bez podpisu notariusza), D-079 (K6 — formularz
+publiczny nie ujawnia, czy rejestr jest prowadzony; link aktywacyjny nie wraca w odpowiedzi).
+Pełny zestaw testów: **561/561**.
 
 **Uwagi:**
 - Ścieżka endpointu DSS (`/services/rest/validation/validateSignature`) przyjęta z pamięci — zweryfikować
   przy instalacji usługi (README).
 - Do Fazy 3 (kolejka listów W4.3) powiadomienie bez e-maila nie oznacza się jako wysłane — wpis w takiej
   sprawie wymaga ważnej zgody. W trybie testowym (skrzynka) powiadomienie liczy się jako wysłane.
-- Przyjęcie wniosku nie wymaga podpisu notariusza (nie było w wytycznych) — do decyzji, czy blokować.
+- Przyjęcie wniosku nie wymaga podpisu notariusza — potwierdzone (D-078).
 - Katalog próbek: `testy/fixtures/podpisy/` (konwencja repozytorium `testy/`, nie `test/`).

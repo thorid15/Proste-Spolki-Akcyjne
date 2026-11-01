@@ -24,10 +24,15 @@ const PDF = '%PDF-1.4\ntrailer<</Root 1 0 R>>\n%%EOF\n';
   const cA = { v: '' }, cP = { v: '' }, cK = { v: '' };
   const anon = mk(cA), prac = mk(cP), kl = mk(cK);
 
-  const [, zgl] = await anon('POST', '/api/psa/portal/zgloszenia', {
-    nazwa_spolki: 'Platnosci E2E P.S.A.', krs: KRS, email: `p.${Date.now()}@example-test.pl`, osoba: 'Jan Kowalski',
+  const emailKlienta = `p.${Date.now()}@example-test.pl`;
+  await anon('POST', '/api/psa/portal/zgloszenia', {
+    nazwa_spolki: 'Platnosci E2E P.S.A.', krs: KRS, email: emailKlienta, osoba: 'Jan Kowalski',
   });
-  await kl('POST', `/api/psa/portal/aktywacja/${zgl.link_aktywacyjny.split('/').pop()}`, { haslo: 'HasloKlienta123' });
+  // D-079: link aktywacyjny nie wraca do formularza publicznego — bierzemy go z kolejki kancelarii.
+  await prac('POST', '/api/psa/auth/login', { email: 'lukasz@kancelaria.pl', haslo: process.env.ADMIN_HASLO });
+  const [, kolejka] = await prac('GET', '/api/psa/zgloszenia?status=zaproszono');
+  const [, ponowne] = await prac('POST', `/api/psa/zgloszenia/${kolejka.zgloszenia.find((z) => z.email === emailKlienta).id}/zapros`, {});
+  await kl('POST', `/api/psa/portal/aktywacja/${ponowne.link_aktywacyjny.split('/').pop()}`, { haslo: 'HasloKlienta123' });
   await kl('GET', '/api/psa/portal/wniosek');
   await kl('POST', '/api/psa/portal/rodo', {});
   await kl('PUT', '/api/psa/portal/wniosek', { nazwa: 'Platnosci E2E P.S.A.', krs: KRS, reprezentant_imie_nazwisko: 'Jan Kowalski', reprezentant_funkcja: 'Prezes' });

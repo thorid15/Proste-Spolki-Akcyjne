@@ -147,7 +147,13 @@ test('próbki prawdziwych podpisów (testy/fixtures/podpisy) — parametryzowane
         : null;
       const w = await walidacja.waliduj({ plik, nazwa, oryginal });
       assert.notEqual(w.typ, 'brak', 'podpis rozpoznany');
-      if (oryginal) assert.ok(!/różni się/.test(w.komunikat || ''), `${dostawca}: pierwsza rewizja = oryginał`);
+      assert.ok(walidacja.pdfMaPodpis(plik) || walidacja.format(plik) === 'xades', 'słownik podpisu w pliku');
+      if (oryginal) {
+        assert.ok(!/różni się/.test(w.komunikat || ''), `${dostawca}: pierwsza rewizja = oryginał`);
+        // Kontrola negatywna: inny oryginał (np. dokument zmieniony przed podpisem) → odrzucenie.
+        const inny = await walidacja.waliduj({ plik, nazwa, oryginal: { ...oryginal, sha256: '0'.repeat(64) } });
+        assert.equal(inny.wynik, 'odrzucony', `${dostawca}: zmieniony dokument odrzucony`);
+      }
     });
   }
 });

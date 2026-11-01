@@ -44,15 +44,20 @@ const PDF = '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%
     nazwa_spolki: 'E2E Prosta Spółka Akcyjna', krs: KRS, email: EMAIL, osoba: 'Jan Kowalski', telefon: '',
   });
   krok('zgloszenie z formularza publicznego', stZgl === 201, `status ${stZgl}`);
-  krok('zaproszenie wysylane automatycznie', Boolean(zgl.link_aktywacyjny), 'link aktywacyjny w odpowiedzi');
+  krok('odpowiedz bez linku aktywacyjnego (D-079)', !('link_aktywacyjny' in zgl), 'link przekazuje kancelaria');
 
-  const [stDubl] = await anon('POST', '/api/psa/portal/zgloszenia', {
+  const [stDubl, dubl] = await anon('POST', '/api/psa/portal/zgloszenia', {
     nazwa_spolki: 'Inna', krs: KRS, email: 'inny@example-test.pl', osoba: 'Ktos',
   });
-  krok('duplikat po numerze KRS odrzucony', stDubl === 400, `status ${stDubl}`);
+  krok('duplikat po numerze KRS — ta sama odpowiedz co nowe zgloszenie (D-079)',
+    stDubl === stZgl && JSON.stringify(dubl) === JSON.stringify(zgl), `status ${stDubl}`);
 
-  // 2. Aktywacja konta
-  const token = zgl.link_aktywacyjny.split('/').pop();
+  // 2. Aktywacja konta — link z kolejki zgloszen kancelarii (bez SMTP)
+  await prac('POST', '/api/psa/auth/login', { email: 'lukasz@kancelaria.pl', haslo: process.env.ADMIN_HASLO || 'zmien-to' });
+  const [, kolejka] = await prac('GET', '/api/psa/zgloszenia?status=zaproszono');
+  const pozycja = (kolejka.zgloszenia || []).find((z) => z.email === EMAIL);
+  const [, ponowne] = await prac('POST', `/api/psa/zgloszenia/${pozycja.id}/zapros`, {});
+  const token = ponowne.link_aktywacyjny.split('/').pop();
   const [stAkt] = await kl('POST', `/api/psa/portal/aktywacja/${token}`, { haslo: 'HasloKlienta123' });
   krok('aktywacja konta i ustawienie hasla', stAkt === 200, `status ${stAkt}`);
 

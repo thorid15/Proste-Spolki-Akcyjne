@@ -1294,6 +1294,33 @@
 
 ---
 
+### D-078 — Przyjęcie wniosku bez podpisu notariusza na umowie
+
+- Data: 2026-11-01 (odpowiedź Łukasza na STOP Fazy 2)
+- Obszar: wnioski / umowa o prowadzenie rejestru
+- Decyzja: przyjęcie wniosku **nie wymaga** podpisu notariusza na umowie — notariusz podpisuje ją
+  później. Kolejność z W2.5 zostaje: podpis notariusza (QES) można wgrać dopiero po potwierdzeniu
+  ważnego podpisu spółki.
+- Skutek w kodzie: brak zmiany (stan zgodny); `POST /wnioski/:id/przyjmij` bez warunku podpisu notariusza.
+
+### D-079 — Formularz publiczny nie ujawnia, czy kancelaria prowadzi rejestr spółki (K6)
+
+- Data: 2026-11-01 (odpowiedź Łukasza na STOP Fazy 2)
+- Obszar: portal / formularz zgłoszenia / ochrona informacji o klientach
+- Decyzja: po wpisaniu numeru KRS formularz zgłoszenia odpowiada **tak samo** dla nowej spółki, dla
+  spółki, której rejestr już prowadzimy, i dla zgłoszenia w toku. Duplikat obsługiwany po cichu:
+  zgłoszenie zapisane jako zamknięte z notatką wewnętrzną (ślad w kolejce „Zgłoszenia”, filtr
+  „odrzucone”), bez nowego konta i zaproszenia; na podany adres idzie neutralna wiadomość. Walidacja
+  danymi publicznymi KRS („nie ma takiej spółki”, „to nie jest P.S.A.”) zostaje — dotyczy rejestru
+  publicznego, nie relacji z kancelarią. **Link aktywacyjny nie wraca już w odpowiedzi formularza**
+  (zdradzałby różnicę; usuwa też obserwację O1) — przy awarii poczty przekazuje go kancelaria
+  z kolejki zgłoszeń.
+- Testy: `testy/zgloszenia-http.test.js` (identyczna odpowiedź, ślad, brak konta).
+- Skutek w kodzie: `server/trasy/portal.js` (`POST /zgloszenia`, `zgloszenieDuplikat`),
+  `publiczne/js/portal.js` (ekran po zgłoszeniu), `narzedzia/scenariusz-e2e.js`, `testy/reczne/*`.
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

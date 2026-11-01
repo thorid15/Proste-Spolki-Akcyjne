@@ -46,6 +46,7 @@ const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
+const poczta = require('../poczta');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien, BladZadania, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
@@ -198,6 +199,51 @@ router.get(
 
 const WZORZEC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Jedna postać odpowiedzi formularza zgłoszenia — dla nowego KRS i duplikatu (D-079). */
+function odpowiedzZgloszenia({ formaPrawna, wyslano, linkTestowy }) {
+  return { ok: true, forma_prawna: formaPrawna || null, zaproszenie_wyslane: Boolean(wyslano), link_testowy: linkTestowy };
+}
+
+function trescZgloszeniaPonownego({ kancelariaNazwa, krs, adresPortalu }) {
+  return `
+    <p>Dzień dobry,</p>
+    <p>otrzymaliśmy zgłoszenie dotyczące prowadzenia rejestru akcjonariuszy spółki o numerze KRS ${krs}.
+       Kancelaria je rozpatrzy i odezwie się na ten adres.</p>
+    <p>Jeśli masz już konto w portalu klienta ${kancelariaNazwa}, możesz się zalogować:
+       <a href="${adresPortalu}">${adresPortalu}</a>.</p>
+  `;
+}
+
+/**
+ * Duplikat zgłoszenia (D-079) — bez nowego konta i bez zaproszenia. Ślad dla
+ * kancelarii: zgłoszenie zamknięte (`odrzucone`) z notatką wewnętrzną —
+ * widoczne w kolejce „Zgłoszenia” po filtrze statusu. Na podany adres idzie
+ * neutralna wiadomość, która nie mówi, czy rejestr jest prowadzony.
+ */
+async function zgloszenieDuplikat({ email, krs, cialo, nazwaZKrs, formaPrawna, powod }) {
+  const teraz = czas.terazIso();
+  db().prepare(
+    `INSERT INTO psa_zgloszenia (email, krs, telefon, nazwa_spolki, opis, status, notatka_wewnetrzna,
+                                 obsluzone_przez, obsluzone_kiedy, utworzono)
+     VALUES (?, ?, ?, ?, ?, 'odrzucone', ?, 'automat', ?, ?)`
+  ).run(
+    email, krs, String(cialo.telefon || '').trim() || null,
+    String(cialo.nazwa_spolki || '').trim() || nazwaZKrs, String(cialo.opis || '').trim() || null,
+    `[${teraz}] Zgłoszenie ponowne — ${powod}. Formularz odpowiedział jak przy nowym zgłoszeniu (D-079); `
+      + 'nie założono konta ani nie wysłano zaproszenia. W razie potrzeby skontaktuj się ze zgłaszającym.',
+    teraz, teraz
+  );
+  const kancelaria = ustawienia.kancelaria(db());
+  const proba = await poczta.wyslij({
+    do: email,
+    temat: `Zgłoszenie przyjęte — ${kancelaria.nazwa}`,
+    html: trescZgloszeniaPonownego({ kancelariaNazwa: kancelaria.nazwa, krs, adresPortalu: konfiguracja.URL_PORTALU }),
+  });
+  return odpowiedzZgloszenia({
+    formaPrawna, wyslano: proba.wyslano, linkTestowy: konfiguracja.TRYB_TESTOWY ? konfiguracja.URL_PORTALU : undefined,
+  });
+}
+
 router.post(
   '/zgloszenia',
   asy(async (zad, odp) => {
@@ -231,31 +277,6 @@ router.post(
     });
     limiter.zanotujNieudana(zad.ip, `zgloszenie:${email}`);
 
-    // Duplikat rozpoznajemy po NUMERZE KRS, nie po adresie e-mail: jeden
-    // klient pod jednym adresem miewa kilka spolek i zgloszenie drugiej
-    // jest normalna sytuacja, nie pomylka.
-    const juzProwadzona = db().prepare('SELECT id, nazwa FROM psa_spolki WHERE krs = ?').get(krs);
-    if (juzProwadzona) {
-      throw bledneZadanie(
-        `Rejestr dla spółki o numerze KRS ${krs} jest już prowadzony przez kancelarię. `
-        + 'Zaloguj się do portalu albo napisz do nas, jeśli potrzebujesz dostępu.'
-      );
-    }
-    const wToku = db()
-      .prepare(
-        `SELECT id FROM psa_wnioski WHERE krs = ? AND status NOT IN ('przyjety','odrzucony') LIMIT 1`
-      )
-      .get(krs);
-    const zgloszoneWczesniej = db()
-      .prepare(`SELECT id FROM psa_zgloszenia WHERE krs = ? AND status <> 'odrzucone' LIMIT 1`)
-      .get(krs);
-    if (wToku || zgloszoneWczesniej) {
-      throw bledneZadanie(
-        `Zgłoszenie dla spółki o numerze KRS ${krs} jest już w toku. `
-        + 'Sprawdź skrzynkę — zaproszenie do portalu poszło na wskazany wcześniej adres.'
-      );
-    }
-
     // Rejestru akcjonariuszy nie prowadzi sie dla kazdej spolki — art. 300(30)
     // § 1 KSH dotyczy PROSTEJ spolki akcyjnej. Sprawdzamy to od razu, zamiast
     // odsylac klienta po tygodniu: numer albo dotyczy P.S.A., albo nie ma po
@@ -280,6 +301,27 @@ router.post(
         `${zKrs.komunikat} Rejestr akcjonariuszy prowadzimy wyłącznie dla prostych spółek akcyjnych.`
       );
     }
+    // D-079 (K6): formularz NIE ujawnia, czy kancelaria prowadzi już rejestr
+    // spółki ani czy zgłoszenie jest w toku — sam numer KRS nie może tego
+    // zdradzić. Duplikat obsługujemy po cichu: ślad dla kancelarii (zgłoszenie
+    // zamknięte z notatką), neutralna wiadomość na podany adres i odpowiedź
+    // dokładnie taka jak przy nowym zgłoszeniu. Duplikat rozpoznajemy po KRS,
+    // nie po adresie e-mail (jeden klient miewa kilka spółek).
+    const juzProwadzona = db().prepare('SELECT id FROM psa_spolki WHERE krs = ?').get(krs);
+    const wToku = db()
+      .prepare(`SELECT id FROM psa_wnioski WHERE krs = ? AND status NOT IN ('przyjety','odrzucony') LIMIT 1`)
+      .get(krs);
+    const zgloszoneWczesniej = db()
+      .prepare(`SELECT id FROM psa_zgloszenia WHERE krs = ? AND status <> 'odrzucone' LIMIT 1`)
+      .get(krs);
+    if (juzProwadzona || wToku || zgloszoneWczesniej) {
+      return odp.status(201).json(await zgloszenieDuplikat({
+        email, krs, cialo, nazwaZKrs: zKrs && zKrs.znaleziono ? zKrs.dane.nazwa : null,
+        formaPrawna: zKrs && zKrs.znaleziono ? zKrs.dane.forma_prawna : null,
+        powod: juzProwadzona ? 'rejestr spółki jest już prowadzony' : 'zgłoszenie albo wniosek dla tego KRS jest w toku',
+      }));
+    }
+
     const daneKrs = zKrs && zKrs.znaleziono ? zKrs.dane : null;
     const formaPrawna = daneKrs ? daneKrs.forma_prawna : null;
     const nazwaZKrs = daneKrs ? daneKrs.nazwa : null;
@@ -305,10 +347,9 @@ router.post(
       // tego samego KRS moga oba minac SELECT wyzej, zanim ktorykolwiek INSERT
       // sie wykona - indeks unikalny (migracja 48) to wtedy lapie tutaj.
       if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-        throw bledneZadanie(
-          `Zgłoszenie dla spółki o numerze KRS ${krs} jest już w toku. `
-          + 'Sprawdź skrzynkę — zaproszenie do portalu poszło na wskazany wcześniej adres.'
-        );
+        return odp.status(201).json(await zgloszenieDuplikat({
+          email, krs, cialo, nazwaZKrs, formaPrawna, powod: 'równoczesne zgłoszenie dla tego KRS',
+        }));
       }
       throw e;
     }
@@ -323,15 +364,13 @@ router.post(
       autor: 'Portal — zgłoszenie',
     });
 
-    odp.status(201).json({
-      ok: true,
-      forma_prawna: formaPrawna,
-      zaproszenie_wyslane: zaproszenie.email_wyslany,
-      // Gdy poczta nie dziala, link wraca TYLKO przy zgloszeniu skladanym
-      // z tego samego urzadzenia — inaczej klient zostaje bez drogi dalej.
-      link_aktywacyjny: zaproszenie.link_aktywacyjny,
-      link_testowy: zaproszenie.link_testowy,
-    });
+    // D-079: odpowiedź identyczna jak przy duplikacie. Linku aktywacyjnego
+    // w odpowiedzi już NIE ma — zdradzałby różnicę, a zgłaszający cudzym
+    // adresem przejmowałby konto (obserwacja O1). Przy awarii poczty link
+    // przekazuje kancelaria z kolejki zgłoszeń.
+    odp.status(201).json(odpowiedzZgloszenia({
+      formaPrawna, wyslano: zaproszenie.email_wyslany, linkTestowy: zaproszenie.link_testowy,
+    }));
   })
 );
 

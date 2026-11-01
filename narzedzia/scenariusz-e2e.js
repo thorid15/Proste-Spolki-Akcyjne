@@ -200,8 +200,11 @@ async function main() {
   if (!zgloszenie) throw new Error('Nie odnaleziono zgłoszenia w kolejce kancelarii.');
   info(`zgłoszenie #${zgloszenie.id} widoczne w kolejce, status: ${zgloszenie.status}`);
 
-  let link = zgloszenieOdpowiedz.link_aktywacyjny;
-  if (zgloszenieOdpowiedz.zaproszenie_wyslane) {
+  // D-079: formularz publiczny nie oddaje linku aktywacyjnego — przy braku SMTP
+  // kancelaria wysyła zaproszenie ponownie z kolejki i dostaje link do przekazania.
+  const ponowne = await zapytaj(kancelaria, 'POST', `/api/psa/zgloszenia/${zgloszenie.id}/zapros`, {});
+  let link = ponowne.link_aktywacyjny;
+  if (ponowne.email_wyslany) {
     info('e-mail z linkiem aktywacyjnym został wysłany na adres klienta');
     throw new Error(
       'SMTP jest skonfigurowany, więc link nie wraca w odpowiedzi — otwórz link z maila ' +

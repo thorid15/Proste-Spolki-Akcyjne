@@ -255,27 +255,24 @@ function EkranZgloszenieWstepne() {
   }
 
   if (gotowe) {
-    // Zaproszenie idzie od razu, wiec klient ma isc do skrzynki, a nie czekac
-    // na telefon z kancelarii. Gdy poczta zawiedzie, link wraca w odpowiedzi
-    // — pokazujemy go tutaj, zeby droga dalej nie urwala sie w pol kroku.
+    // Zaproszenie idzie od razu, wiec klient ma isc do skrzynki. Linku w odpowiedzi
+    // nie ma (D-079): przy awarii poczty przekazuje go kancelaria z kolejki zgloszen.
     return (
       <Pusto
         ikona="sprawdz"
-        tytul="Zaproszenie wysłane"
+        tytul="Zgłoszenie przyjęte"
         opis={
-          gotowe.zaproszenie_wyslane === false && gotowe.link_aktywacyjny
-            ? 'Nie udało się wysłać wiadomości. Skorzystaj z linku poniżej — jest ważny przez 7 dni.'
-            : `Na adres ${email.trim()} poszedł link do portalu. Jest ważny przez 7 dni — ustawisz tam hasło i wypełnisz wniosek o prowadzenie rejestru.`
+          // D-079: ten sam tekst bez względu na to, czy kancelaria zna już
+          // spółkę — sam numer KRS nie może tego zdradzić.
+          gotowe.zaproszenie_wyslane === false
+            ? 'Nie udało się wysłać wiadomości e-mail — kancelaria skontaktuje się z Tobą.'
+            : `Na adres ${email.trim()} wysłaliśmy wiadomość z dalszymi krokami. Sprawdź skrzynkę (także folder spam).`
         }
         akcja={
-          gotowe.link_aktywacyjny ? (
-            <a className="btn btn-glowny" href={gotowe.link_aktywacyjny}>Otwórz portal</a>
-          ) : (
-            <span>
-              <button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>
-              <PrzyciskLinkuTestowego link={gotowe.link_testowy} />
-            </span>
-          )
+          <span>
+            <button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>
+            <PrzyciskLinkuTestowego link={gotowe.link_testowy} />
+          </span>
         }
       />
     );
