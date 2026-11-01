@@ -114,6 +114,18 @@ W trybie testowym `test:seed` zakłada przeniesienie w każdym statusie § 7.3; 
 czeka w statusie „Zgłoszone” do samodzielnego przejścia (link aktywacyjny konta `beta.zarzad@example.com`
 w skrzynce testowej albo `npm run test:link -- beta.zarzad@example.com`).
 
+
+## Scenariusz E2E w trybie testowym (Faza 5)
+
+```bash
+npm run scenariusz:testowy
+```
+
+Odtwarza bazę testową (`test:seed`), uruchamia serwer w tym samym procesie i sprawdza 5 scenariuszy (37 kontroli):
+podpisy z każdym wynikiem atrapy walidatora, wpis bez zgody → list do wysyłki, zgody akcjonariusza, przeniesienie
+rejestru do „Aktywny”, informacja z rejestru w wersji dla spółki i akcjonariusza na dacie 2027-02-20. Kod wyjścia 1
+przy błędzie. Pierwotny `npm run scenariusz -- --haslo …` działa też na serwerze w trybie testowym (link aktywacyjny
+ze skrzynki testowej). Testy ręczne dla notariusza: `WYTYCZNE-STATUS.md`, sekcja R4.
 ## Tryb testowy (bez poczty, dane fikcyjne) — D-074
 
 Do przejścia każdego przepływu kancelarii i portalu bez skonfigurowanej poczty. Działa na **osobnej

@@ -12,7 +12,7 @@
 | 2 — Podpisy (§ 2–3) | ZROBIONA — sekcja 4; STOP | patrz `git log` — „Faza 2” |
 | 3 — Zgody, dostęp, informacje (§ 4–6) | ZROBIONA — sekcja 5; QW1–QW3 rozstrzygnięte (D-083) | patrz `git log` — „Faza 3” |
 | 4 — Przeniesienie rejestru (§ 7) | ZROBIONA — sekcja 6; STOP | patrz `git log` — „Faza 4” |
-| 5 — Raport końcowy | — | — |
+| 5 — Raport końcowy | ZROBIONA — sekcja „RAPORT KOŃCOWY” | patrz `git log` — „Faza 5” |
 
 **Decyzje Łukasza (STOP Fazy 1, 1.11.2026):** K1/K2 — forma zgody i PESEL albo data urodzenia według
 nowelizacji **od dziś** (D-076); K5 — zakładka „Rejestr” w portalu tylko z danymi spółki (D-077, Faza 3);
@@ -20,9 +20,122 @@ propozycja uzupełnienia `PRZEPISY-PSA.md` (P1–P9) przyjęta i dopisana; Faza 
 https://github.com/thorid15/Proste-Spolki-Akcyjne/pull/13 (do `claude/Main` — w repozytorium nie ma `main`).
 K6 rozstrzygnięte po STOP Fazy 2 — D-079.
 
-**Następny krok:** akceptacja STOP Fazy 4, potem Faza 5 (weryfikacja końcowa, `scenariusz-e2e.js` w trybie testowym, raport).
+**Następny krok:** przegląd raportu przez Łukasza, testy ręczne (R4), odpowiedzi R2, akceptacja szablonów (R3); merge PR #13.
+Po STOP Fazy 4 — D-085 (stałe stawki, obciążenia płatne, bez opłaty za przejęcie).
 
 Stan wejściowy testów: `npm test` — 534/534 zielone (przed zmianami).
+
+---
+
+## RAPORT KOŃCOWY (Faza 5, 1.11.2026)
+
+**Wynik: 46 pozycji wytycznych — WDROŻONE 23 · POPRAWIONE 19 · BYŁO 2 · CZĘŚCIOWO 2 · DO DECYZJI 0 · POMINIĘTE 0.**
+Przed sesją (sekcja 1, policzone ponownie z tabel): JEST 3 · CZĘŚCIOWO 14 · BRAK 23 · SPRZECZNE 6 (podsumowanie
+Fazy 0 podawało 17/8 — błąd sumowania, tabele były poprawne).
+
+Weryfikacja: `npm test` **582/582** (wejście 534/534) · `npm run scenariusz:testowy` **37/37 kontroli**
+(5 scenariuszy, sekcja R4) · pierwotny `npm run scenariusz` przechodzi całą ścieżkę na serwerze testowym.
+Decyzje sesji: D-074–D-085 (`DECYZJE.md`). Migracje 61–65. Szczegóły „jak” — sekcje 3–6.
+
+### R1. Pozycje wytycznych
+
+Wynik: **BYŁO** (zgodne, bez zmian) · **POPRAWIONE** (istniało, sprzeczne/niepełne — naprawione) · **WDROŻONE** (nowe) · **CZĘŚCIOWO**.
+
+| ID | Wymóg | Przed | Wynik | Jak |
+|---|---|---|---|---|
+| T1 | Jeden punkt poczty + skrzynka testowa | CZĘŚCIOWO | WDROŻONE | `poczta.wyslij()` z transportem `skrzynka-testowa` (.eml), `/test/skrzynka` |
+| T2 | Logowanie bez poczty | BRAK | WDROŻONE | lista kont testowych na ekranach logowania (hasło testowe), dziennik logowań |
+| T3 | Baza testowa + atrapa KRS | BRAK | WDROŻONE | `npm run test:seed` przez zwykłe API, oznaczenie bazy, atrapa KRS |
+| T4 | Symulowana data | BRAK | WDROŻONE | `czas.teraz()` z przesunięciem, panel `/test`, blokada cofania przed ostatnie zdarzenie |
+| T5 | Atrapy walidatora i ITN tpay | CZĘŚCIOWO | WDROŻONE | 7 wyników walidatora, kasa tpay z ITN w aplikacji |
+| T6 | Zabezpieczenia trybu testowego | BRAK | WDROŻONE | odmowa startu w produkcji / na bazie nieoznaczonej, `/test` → 404 poza trybem, pasek |
+| W2.1 | Formy podpisu per dokument, skan odrzucany | SPRZECZNE | POPRAWIONE | `logika/formy-podpisu.js` (tabela § 2), portal odrzuca skan (D-075) |
+| W2.2 | Zgoda na wpis tylko w formach z tabeli | SPRZECZNE | POPRAWIONE | kod formy z art. 300(34) § 3 zd. 2; skan → 400 |
+| W2.3 | Brak zgody → powiadomienie przed wpisem | BRAK | WDROŻONE | `blokadaWpisu()`; nadanie listu odblokowuje |
+| W2.4 | Automatyczna walidacja po wgraniu | BRAK | WDROŻONE | `logika/walidacja-podpisu.js` — format, ByteRange, PZ/PO → ręcznie |
+| W2.5 | Spółka pierwsza, notariusz ostatni; uchwała + reprezentacja | CZĘŚCIOWO | POPRAWIONE | podpis notariusza dopiero po podpisie spółki (D-078: przyjęcie wniosku bez niego) |
+| W3.1 | PDF < 5 MB, ID w stopce, SHA-256 | CZĘŚCIOWO | POPRAWIONE | ID na każdej stronie, skrót i długość oryginału, limit 5 MB |
+| W3.2 | Ekran „Podpisz dokument” + instrukcja | BRAK | WDROŻONE | Pobierz → mObywatel → Wgraj; instrukcja dosłownie z § 3 |
+| W3.3 | Walidacja QES przez DSS | BRAK | **CZĘŚCIOWO** | adapter REST gotowy i testowany na atrapie; **usługi DSS nie zainstalowano** → każdy QES „do weryfikacji ręcznej” |
+| W3.4 | Pierwsza wersja = oryginał | BRAK | WDROŻONE | PAdES: skrót prefiksu; XAdES: dokument osadzony; potwierdzone na 3 próbkach |
+| W3.5 | Podpisujący = oczekiwana osoba | BRAK | WDROŻONE | PESEL z PNOPL; inny → odrzucenie; brak → ręcznie |
+| W3.6 | Wynik w „Do zrobienia”, potwierdza człowiek | CZĘŚCIOWO | POPRAWIONE | pulpit → „podpisy” |
+| W3.7 | Kilku podpisujących; zgoda osobno | BRAK | **CZĘŚCIOWO** | kolejny podpis — kontrola oryginału; wielu pod uchwałą — bez oczekiwanej osoby (ręcznie) |
+| W3.8 | Ścieżki alternatywne, podpowiedź dla zarządu | BRAK | WDROŻONE | „oryginał pocztą”, podpowiedź przy umowie, PZ w instrukcji |
+| W4.1 | Dwa oświadczenia składane osobiście | SPRZECZNE | POPRAWIONE | „Moje oświadczenia” w portalu; zgoda e-mail przez żądanie wpisu |
+| W4.2 | Cofnięcie obu oświadczeń | BRAK | WDROŻONE | bezpłatne (D-083) |
+| W4.3 | Bez zgody → list, kolejka, nadanie | SPRZECZNE | POPRAWIONE | „Listy do wysyłki”; e-mail tylko przy zgodzie potwierdzonej (D-081) |
+| W4.4 | Powiadomienie zbywcy na adres z rejestru | CZĘŚCIOWO | POPRAWIONE | adres wyłącznie z kartoteki; pola z żądania ignorowane |
+| W4.5 | Wpis/odmowa — żądający i spółka, bezpłatnie | CZĘŚCIOWO | POPRAWIONE | odmowa także do spółki |
+| W5.1 | Bez logowania tylko dane spółki | SPRZECZNE | POPRAWIONE | D-077: zakładka „Rejestr” bez akcjonariatu; D-079: formularz nie ujawnia prowadzenia rejestru |
+| W5.2 | Informacja w portalu: spółka i akcjonariusz | JEST | BYŁO | — |
+| W5.3 | Organy poza portalem | CZĘŚCIOWO | POPRAWIONE | „Wydaj informację organowi” (sygnatura), bez opłaty (D-083) |
+| W5.4 | Wersja dla akcjonariusza bez danych innych | JEST | POPRAWIONE | PESEL albo data ur. w wersji pełnej; zasłona u innych — sprawdzone też na dacie 2027-02-20 |
+| W5.5 | Wynagrodzenie i VAT z podstawą | BRAK | WDROŻONE | sekcja „Wynagrodzenie” na każdej informacji |
+| W5.6 | Dziennik wydanych informacji | CZĘŚCIOWO | POPRAWIONE | numer `INF/RRRR/NNNN`, „Dziennik informacji” |
+| W5.7 | Stawki § 15b + gwarancja | CZĘŚCIOWO | POPRAWIONE | D-085: stałe stawki do zmiany przez notariusza; wersje jako ślad; gwarancja — marketing |
+| W6.1 | [2027] PESEL albo data ur. | SPRZECZNE | POPRAWIONE | D-076: wymagane od dziś; `PRZEPISY-PSA.md` § 12 sprostowany |
+| W6.2 | [2027] Zawiadomienie sądu w 7 dni | CZĘŚCIOWO | POPRAWIONE | zadanie terminowe za bramką 18.02.2027 |
+| W6.3 | Eksport rejestru z dokumentami | CZĘŚCIOWO | POPRAWIONE | D-080: ZIP (README, informacja, historia z łańcuchem, dokumenty) |
+| W6.4 | Brak automatycznego usuwania | JEST | BYŁO | + test regresyjny |
+| W6.5 | [2027] Przypomnienie o KRS w 3 miesiące | BRAK | WDROŻONE | zadanie do 18.05.2027 + pismo PROJEKT |
+| W7.1 | Wejście „Przenoszę rejestr” | BRAK | WDROŻONE | opcja w formularzu publicznym → `psa_przeniesienia` |
+| W7.2 | Dokumenty startowe, wzór uchwały | CZĘŚCIOWO | POPRAWIONE | portal „Przeniesienie rejestru”, uchwała spod klauzuli |
+| W7.3 | Checklista Etapu 3 | BRAK | WDROŻONE | 5 pozycji, blokada tylko przy braku dokumentu (D-052) |
+| W7.4 | Umowa warunkowa + pakiet | BRAK | WDROŻONE | klauzula § 7.4 dosłownie, 9 pism PROJEKT |
+| W7.5 | Okres przejściowy, przypomnienia | BRAK | WDROŻONE | 14 dni / 30 dni przed 12 miesiącami; żądania: odmowa / przeszkoda |
+| W7.6 | Odbiór, uzgodnienie | BRAK | WDROŻONE | checklista Etapu 6, „Wstrzymane — rozbieżności” |
+| W7.7 | Otwarcie „PRZEJĘCIE” | CZĘŚCIOWO | POPRAWIONE | zdarzenie `przejecie` na początku łańcucha, archiwum poprzednika, protokół z QES |
+| W7.8 | Powiadomienia po otwarciu | BRAK | WDROŻONE | spółka, poprzednik, akcjonariusze (RODO art. 14), organy i KRS — zadania |
+| W7.9 | Rozliczenie | BRAK | WDROŻONE | rok od skuteczności, bez opłaty za wpis i za przejęcie (D-085) |
+| W7.10 | Statusy § 7.3 | BRAK | WDROŻONE | jawna maszyna stanów, test każdego przejścia |
+
+### R2. Otwarte pytania do Łukasza
+
+1. **DSS (W3.3)** — gdzie uruchomić usługę walidacji (serwer kancelarii / Docker)? Bez niej żaden QES nie jest
+   akceptowany automatycznie. Ścieżkę endpointu (`/services/rest/validation/validateSignature`) zweryfikować przy instalacji.
+2. **Uchwała z wieloma podpisami (W3.7)** — wystarczy weryfikacja ręczna osób podpisujących?
+3. **Szablony PROJEKT** (R3) — akceptacja i poprawki na końcu prac (D-085).
+4. **`PRZEPISY-PSA.md` § 10** — KC art. 89 i art. 17 § 1 KSH oznaczone „do sprawdzenia” (nie są podstawą blokad).
+5. 15 pytań z `testy-audyt/PYTANIA-DO-LUKASZA.md` (sprzed tej sesji) — nadal bez odpowiedzi.
+
+### R3. Pisma „PROJEKT — do akceptacji Łukasza”
+
+Ekran „Szablony dokumentów” (`psa_szablony`), kody `przeniesienie_*`: uchwała o wyborze notariusza (część poza
+brzmieniem spod klauzuli) · wypowiedzenie dotychczasowej umowy · potwierdzenie zawarcia nowej umowy · wezwanie do
+przekazania — dom maklerski/bank · wezwanie — notariusz · zawiadomienie rady izby notarialnej · zgłoszenie do KRS
+i wniosek o wpis danych [2027] · informacja z art. 14 RODO po przejęciu · potwierdzenie odbioru dla poprzednika.
+Poza szablonami: przypomnienie zarządowi o zgłoszeniu do KRS (W6.5, `trasy/pozostale.js`). Klauzula § 7.4 —
+dosłownie z wytycznych, nie PROJEKT.
+
+### R4. Testy ręczne w trybie testowym (dla Łukasza)
+
+Start: w `.env` `PSA_TRYB_TESTOWY=1` → `npm run test:seed` → `npm start` → http://localhost:3005 (czerwony pasek
+„TRYB TESTOWY”). Hasło wszystkich kont: `Test-Haslo-2026`. Panel: http://localhost:3005/test, poczta: `/test/skrzynka`.
+Automatycznie to samo sprawdza `npm run scenariusz:testowy` (37 kontroli; nadpisuje bazę testową).
+
+| # | Konto | Kroki | Oczekiwany wynik |
+|---|---|---|---|
+| 1 | notariusz@ → gamma.zarzad@ (portal) | `/test`: walidator „Brak podpisu” → portal: Wniosek → Wgraj podpisany dokument | komunikat „Skanu nie przyjmujemy…”, plik nieprzyjęty |
+| 2 | j.w. | walidator „QES poprawny” (potem „PZ”, „Podpis innej osoby”) → wgraj ponownie | QES: przyjęty; PZ: „do weryfikacji” w „Do zrobienia → podpisy”; inna osoba: odrzucony z nazwiskiem |
+| 3 | notariusz@ | Sprawy → zbycie (zbywca Bartosz Próbny, bez zgody) | „Dokonaj wpisu” nieaktywny z przyczyną (art. 300(34) § 3) |
+| 4 | notariusz@ | Listy do wysyłki → Drukuj pismo → Odnotuj nadanie (data, numer, skan) | pismo z adresem z rejestru; wpis w sprawie odblokowany |
+| 5 | anna.zgoda@ (portal) | Konto → Moje oświadczenia → cofnij zgodę na e-mail | w kancelarii nowa sprawa, bezpłatna; po wpisaniu cofnięcia w kartotece logowanie Anny zablokowane z pouczeniem o poczcie |
+| 6 | zarzad@ (portal) | Rejestr → Zamów informację → atrapa kasy „Zapłać” → otwórz | tylko dane spółki na zakładce; informacja z pełnymi danymi, numer `INF/RRRR/NNNN`, VAT |
+| 7 | anna.zgoda@ | Zamów informację → zapłać → otwórz | PESEL, data urodzenia i adres innych zasłonięte (•••), własne dane w całości |
+| 8 | notariusz@ | Dziennik informacji → Wydaj informację organowi (bez sygnatury, potem z sygnaturą) | bez sygnatury — błąd; z sygnaturą — pozycja w dzienniku, bez opłaty |
+| 9 | notariusz@ | Przeniesienia → Theta Uzgadniana → checklista odbioru → Protokół (PDF) → wgraj podpisany → Spółki → Otwórz rejestr | status „Aktywny”, pierwsze zdarzenie „PRZEJĘCIE”, bez opłaty za przejęcie, e-mail do spółki w skrzynce |
+| 10 | notariusz@ | Przeniesienia → Epsilon Weryfikowana → „Umowa zawarta pod warunkiem” bez dokumentów | blokada „brak dokumentu (uchwala / umowa_spolki)”; po dołączeniu i zaznaczeniu — przechodzi |
+| 11 | beta.zarzad@ | `/test/skrzynka` → link z zaproszenia → hasło → Wniosek → … (pełna ścieżka jak scenariusz A) | portal: „Przeniesienie rejestru — Zgłoszone”, potem pisma pakietu |
+| 12 | notariusz@ | `/test`: data = dziś + 15 dni → Pulpit | przy Zeta Warunkowa: „Minęło 14 dni… brak zawiadomienia” |
+| 13 | notariusz@ | `/test`: data 2027-02-20 → Pulpit; Przeniesienia → pisma | zadania nowelizacji (KRS do 18.05.2027, zawiadomienie sądu 7 dni); pismo „Zgłoszenie do KRS” dostępne. Daty nie da się potem cofnąć przed ostatni wpis |
+| 14 | notariusz@ | Spółki → Alfa Testowa → Wydruk → Eksport całego rejestru (ZIP) | README, informacja, historia z łańcuchem SHA-256, dokumenty |
+
+### R5. Próbki podpisów — jeszcze potrzebne
+
+Mam: SimplySign, CENCERT, EUROCERT (oryginał zgodny), Szafir (inny wydruk). **Potrzebne:** Sigillum (PWPW),
+podpis zaufany (PZ), podpis osobisty (PO), Szafir na tym samym oryginale co pozostałe. Pliki tylko lokalnie
+(`testy/fixtures/podpisy/`, poza repozytorium — dane osobowe).
 
 ---
 

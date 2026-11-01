@@ -26,7 +26,7 @@
 | `server/migracje.js` | Tablica 44 idempotentnych migracji schematu SQLite + silnik je wykonujący przy starcie. |
 | `server/oplaty.js` | Serwis rozliczeń (naliczanie/prowadzenie rejestru, wpis, informacja z rejestru) wg stawek z `logika/przepisy.js`. |
 | `server/platnosci.js` | Łączy powiadomienia tpay z bazą: oznacza opłatę jako opłaconą, uskutecznia żądanie wpisu (start biegu 7 dni), odblokowuje informację z rejestru. |
-| `server/poczta.js` | Wysyłka e-mail przez nodemailer, bezpieczna „no-op" gdy brak danych SMTP w `.env`. |
+| `server/poczta.js` | Jedyny punkt wysyłki e-mail (`wyslij()`), transporty `smtp` / `skrzynka-testowa` (D-074); bezpieczna „no-op" gdy brak SMTP. Patrz sekcja 9. |
 | `server/rejestr.js` | Serwis zapisu zdarzeń i pełnej materializacji stanu spółki (emisje, stan akcji, obciążenia, uprawnienia, ograniczenia) po każdym zdarzeniu. |
 | `server/widoki.js` | Zamienia stan domenowy na struktury dla UI/wydruków z zastosowanym maskowaniem danych wrażliwych. |
 | `server/zawiadomienia.js` | Generuje i wysyła cztery pisma wychodzące ze sprawy jako wypełnione wzory `.docx`, z zapisem śladu w `psa_wydane_dokumenty`. |
@@ -113,7 +113,9 @@ planu — dziś martwe, nieużywane przez bieżący kod. Patrz też `DECYZJE.md`
 
 | Plik | Opis |
 |---|---|
-| `scenariusz-e2e.js` | Skrypt E2E przechodzący całą ścieżkę od zgłoszenia klienta po pierwsze zawiadomienie, przez realne trasy HTTP z dwoma osobnymi sesjami (portal + kancelaria). |
+| `scenariusz-e2e.js` | Skrypt E2E przechodzący całą ścieżkę od zgłoszenia klienta po pierwsze zawiadomienie, przez realne trasy HTTP z dwoma osobnymi sesjami (portal + kancelaria). `--tryb-testowy` → `scenariusz-e2e-testowy.js` (sekcja 9). |
+| `scenariusz-e2e-testowy.js` | Tryb testowy: `test:seed`, serwer w procesie, konta testowe, skrzynka testowa, atrapy; 5 scenariuszy, 37 kontroli (`npm run scenariusz:testowy`). |
+| `test-seed.js` | `npm run test:seed` — baza testowa z danymi fikcyjnymi przez zwykłe API (D-074). |
 | `dokumentacja-baza.js` | Generuje `testy-audyt/schemat-bazy.txt` z realnego schematu bazy (część `npm run dokumentacja`). |
 | `dokumentacja-endpointy.js` | Generuje `testy-audyt/endpointy-api.md` przez introspekcję żywych routerów Express (część `npm run dokumentacja`). |
 
@@ -518,3 +520,48 @@ Zweryfikowane grepem nazw tabel/tematów po `CLAUDE-PSA.md` → zero trafień dl
 
 Pełne opisy znalezisk cytowanych powyżej: `testy-audyt/ZNALEZISKA.md`. Rejestr decyzji projektowych
 (w tym te, które adresują część powyższych rozbieżności): `DECYZJE.md`.
+
+---
+
+## 9. Wdrożenie wytycznych „PSA online” (SESJA-PSA-WYTYCZNE.md, D-074–D-085, migracje 61–65)
+
+Raport i status pozycji: `WYTYCZNE-STATUS.md`. Poniżej tylko to, co zmienia mapę systemu.
+
+### Nowe moduły
+
+| Plik | Rola |
+|---|---|
+| `server/tryb-testowy/{index,trasy,skrzynka,krs-atrapa}.js`, `klient/pasek.js` | Tryb testowy (D-074): oznaczenie bazy, odmowa startu w produkcji, panel `/test` (data symulowana, atrapa walidatora, atrapa tpay z ITN), skrzynka `.eml`, pasek na każdym ekranie. Poza trybem `/test/*` → 404. |
+| `server/pomocnicze/czas.js` | `teraz()` z przesunięciem — jedyne źródło „dziś” (także bramki 18.02.2027). |
+| `server/logika/formy-podpisu.js` | Tabela § 2: formy podpisu per typ dokumentu, formy zgody na wpis (art. 300(34) § 3 zd. 2 KSH). |
+| `server/logika/walidacja-podpisu.js` | Format, `/ByteRange`, oryginał (skrót prefiksu PAdES / dokument XAdES), PESEL z PNOPL, adapter REST DSS; bez DSS nigdy automatycznej akceptacji. |
+| `server/listy.js`, `server/trasy/listy.js` | Kolejka listów do osób bez zgody na e-mail (D-081): adres z rejestru, druk, nadanie (data, numer, skan). |
+| `server/informacje.js`, `server/trasy/informacje.js` | Numer `INF/RRRR/NNNN`, wynagrodzenie z VAT, dziennik informacji, informacja dla organu (bez opłaty). |
+| `server/eksport.js` | Eksport ZIP całego rejestru z dokumentami (D-080). |
+| `server/logika/przeniesienie.js`, `server/przeniesienia.js`, `server/trasy/przeniesienia.js` | Przeniesienie rejestru (D-084): maszyna stanów § 7.3, checklisty, dokumenty, pisma, protokół przejęcia, Etap 8. |
+| `publiczne/js/{tryb-testowy,listy,przeniesienia}.js` | Ekrany: konta testowe przy logowaniu, „Listy do wysyłki”, „Przeniesienia”. |
+
+### Tabele (migracje 61–65)
+
+61 `psa_baza_testowa`, dziennik logowań testowych · 62–63 oryginał dokumentu (ID, SHA-256, długość), wynik walidacji,
+forma, podpis notariusza, „oryginał pocztą” · 64 `psa_oswiadczenia`, `psa_listy`, `psa_stawki_wersje`, numer informacji
+· 65 `psa_przeniesienia` (+ historia, dokumenty, archiwum — append-only), szablony pism `przeniesienie_*`, zdarzenie `przejecie`.
+
+### Przepływy
+
+- **Podpis dokumentu wniosku:** wystawienie (ID, SHA-256) → portal: pobierz → mObywatel → wgraj → `walidacja-podpisu`
+  (w trybie testowym — atrapa) → odrzucony: 400 z komunikatem dla klienta; poprawny / do weryfikacji: „Do zrobienia →
+  podpisy” → potwierdza człowiek (D-052) → podpis notariusza po podpisie spółki.
+- **Wpis bez zgody:** `blokadaWpisu()` → powiadomienie: e-mail przy zgodzie potwierdzonej, inaczej `psa_listy` →
+  nadanie listu ustawia `powiadomienie_wyslano` → wpis dozwolony.
+- **Przeniesienie:** zgłoszenie (wariant) → wniosek (klauzula § 7.4) → przyjęcie wniosku wiąże spółkę →
+  weryfikacja → umowa warunkowa → data skuteczności → dane poprzednika → uzgodnienie / wstrzymane → protokół z QES
+  → `otworz-rejestr` w trybie przejęcia (zdarzenie `przejecie` pierwsze w łańcuchu) → aktywny.
+
+### Niezmienniki dopisane
+
+- E-mail do akcjonariusza tylko przy `zgoda_email_status = 'potwierdzona'`; portal akcjonariusza tylko z tą zgodą (D-083).
+- Brak automatycznej akceptacji podpisu bez DSS; skan nigdy nie jest podpisem.
+- Formularz publiczny nie ujawnia, czy kancelaria prowadzi rejestr spółki (D-079).
+- Tryb testowy nigdy na produkcji ani na bazie nieoznaczonej; w trybie testowym żaden e-mail nie wychodzi.
+- Stawki stałe do zmiany przez notariusza; wersje stawek to ślad, nie podstawa rozliczeń (D-085).
