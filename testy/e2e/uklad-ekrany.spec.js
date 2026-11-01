@@ -60,3 +60,15 @@ test('P5: „Stan na dzień” — pole tylko na datę, kalendarz obok, układ b
   await karta.evaluate((el) => el.setAttribute('data-test', 'zamowienie'));
   expect(await sprawdzUklad(page, '[data-test="zamowienie"]')).toEqual([]);
 });
+
+test('K4: informacja z 3 seriami i długim zakresem — PDF bez wyjątku, emisje w marginesach A4', async ({ page }) => {
+  const { informacjaZTrzemaSeriami } = require('./pomocnicze/informacja-dluga');
+  await page.setViewportSize({ width: 794, height: 1123 });
+  await page.emulateMedia({ media: 'print' });
+  await page.setContent(informacjaZTrzemaSeriami());
+  const pdf = await page.pdf({ format: 'A4' });
+  expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+  const problemy = (await sprawdzUklad(page, '.arkusz')).filter((p) => /seria|Numery|000001/.test(p.selektor) || p.selektor === 'document');
+  expect(problemy).toEqual([]);
+  await page.screenshot({ path: require('node:path').join(__dirname, 'zrzuty', 'informacja-dluga-a4.png'), fullPage: true });
+});

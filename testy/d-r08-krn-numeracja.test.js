@@ -57,7 +57,8 @@ test('seria AN 1–25 i AZ 26–100 przechodzi przez migrację, przeniesienie i 
   // Na dzień 2026-07-01 (przed transzą 96–100) B nie ma akcji.
   assert.equal(widoki.widokStanu(db, spolka, '2026-07-01').akcjonariusze.some((p) => p.osoba_id === b), false);
 
-  const html = informacjaZRejestru({ kancelaria: { nazwa: 'K' }, spolka: stan.spolka, data: stan.data, stan });
+  // R4 K4: numery mają miejsca łamania (<wbr>) po myślnikach i przecinkach — treść bez zmian.
+  const html = informacjaZRejestru({ kancelaria: { nazwa: 'K' }, spolka: stan.spolka, data: stan.data, stan }).replace(/<wbr>/g, '');
   assert.match(html, /1–25/);
   assert.match(html, /26–100/);
   assert.equal(rejestr.zweryfikujIntegralnosc(db).ok, true);
