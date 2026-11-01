@@ -35,7 +35,7 @@ Fazy 0 podawało 17/8 — błąd sumowania, tabele były poprawne).
 
 Weryfikacja: `npm test` **581/581** (wejście 534/534) · `npm run scenariusz:testowy` **34/34 kontroli**
 (5 scenariuszy, sekcja R4) · pierwotny `npm run scenariusz` przechodzi całą ścieżkę na serwerze testowym.
-Decyzje sesji: D-074–D-087 (`DECYZJE.md`); D-086 — podpisy: tylko podstawowy test pliku, resztę sprawdza pracownik;
+Decyzje sesji: D-074–D-088 (`DECYZJE.md`); D-088 — zgoda na wpis: jedno pole „w dopuszczalnej formie”; D-086 — podpisy: tylko podstawowy test pliku, resztę sprawdza pracownik;
 D-087 — sposoby podpisu równorzędne jak w KSH od 18.02.2027, ma być prosto: domyślnie podpis zaufany, pracownik nie wybiera formy. Migracje 61–65. Szczegóły „jak” — sekcje 3–6.
 
 ### R1. Pozycje wytycznych
@@ -51,7 +51,7 @@ Wynik: **BYŁO** (zgodne, bez zmian) · **POPRAWIONE** (istniało, sprzeczne/nie
 | T5 | Atrapy walidatora i ITN tpay | CZĘŚCIOWO | WDROŻONE | atrapa testu pliku (podpisany / brak podpisu / różny od oryginału / jak na produkcji), kasa tpay z ITN |
 | T6 | Zabezpieczenia trybu testowego | BRAK | WDROŻONE | odmowa startu w produkcji / na bazie nieoznaczonej, `/test` → 404 poza trybem, pasek |
 | W2.1 | Formy podpisu per dokument, skan odrzucany | SPRZECZNE | POPRAWIONE | `logika/formy-podpisu.js`; D-087: przy każdym dokumencie 5 równorzędnych sposobów z art. 300(34) § 3 zd. 2 KSH (od 18.02.2027); skan odrzucany |
-| W2.2 | Zgoda na wpis tylko w formach z tabeli | SPRZECZNE | POPRAWIONE | kod formy z art. 300(34) § 3 zd. 2; skan → 400 |
+| W2.2 | Zgoda na wpis tylko w formach z tabeli | SPRZECZNE | POPRAWIONE | D-088: pracownik zaznacza „zgoda w dopuszczalnej formie” (5 form z art. 300(34) § 3 zd. 2) i datę; bez tego — powiadomienie |
 | W2.3 | Brak zgody → powiadomienie przed wpisem | BRAK | WDROŻONE | `blokadaWpisu()`; nadanie listu odblokowuje |
 | W2.4 | Automatyczna walidacja po wgraniu | BRAK | WDROŻONE | D-086: tylko podstawowy test — czy plik ma podpis (PAdES/XAdES/CAdES); skan → odrzucenie |
 | W2.5 | Spółka pierwsza, notariusz ostatni; uchwała + reprezentacja | CZĘŚCIOWO | POPRAWIONE | podpis notariusza dopiero po podpisie spółki (D-078: przyjęcie wniosku bez niego) |

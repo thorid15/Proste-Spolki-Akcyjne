@@ -72,7 +72,8 @@ Forma zgody według art. 300³⁴ § 3 zd. 2 KSH obowiązuje już teraz (D-076).
 - **Umowa o prowadzenie rejestru:** spółka podpisuje pierwsza; podpis notariusza (QES) można wgrać
   dopiero po potwierdzeniu ważnego podpisu spółki. Checklista otwarcia: „reprezentacja wg KRS”.
 - **Wpis bez ważnej zgody** — „Dokonaj wpisu” zablokowane do wysłania powiadomienia
-  (art. 300³⁴ § 3 zd. 1 KSH), z przyczyną obok przycisku.
+  (art. 300³⁴ § 3 zd. 1 KSH), z przyczyną obok przycisku. Zgodę pracownik odnotowuje jednym polem
+  „zgoda w dopuszczalnej formie” + data (D-088).
 
 Próbki prawdziwych podpisów do testu: `testy/fixtures/podpisy/` (README w katalogu; pliki w `.gitignore`).
 

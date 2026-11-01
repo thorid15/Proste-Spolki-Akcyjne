@@ -1474,6 +1474,17 @@
   `server/trasy/portal.js`, `server/logika/pakiet-wniosku.js`, `publiczne/js/{wniosek,wnioski}.js`,
   `testy/{podpisy,wnioski-kancelaria-http}.test.js`, `.env.przyklad`.
 
+### D-088 — Zgoda na wpis: pracownik potwierdza tylko „w dopuszczalnej formie” (Łukasz)
+
+- Data: 2026-11-01
+- Obszar: sprawy / zgoda na wpis (W2.2)
+- Decyzja: zamiast wyboru konkretnej formy z listy — pole „Zgoda jest w dopuszczalnej formie” (podpis
+  zaufany, kwalifikowany, osobisty, notarialnie poświadczony albo złożony w kancelarii) i data zgody.
+  Bez zaznaczenia zgody nie odnotowuje się — przed wpisem idzie powiadomienie (art. 300(34) § 3 KSH),
+  blokada wpisu bez zmian. API przyjmuje `dopuszczalna: true` (zapis `zgoda_forma = 'ustawowa'`);
+  kod konkretnej formy nadal przyjmowany i sprawdzany. Upraszcza D-076 w części formularza.
+- Skutek w kodzie: `server/trasy/sprawy.js`, `publiczne/js/sprawy.js`, `testy/sprawy-http.test.js`. Bez migracji.
+
 ---
 
 ## Decyzje otwarte

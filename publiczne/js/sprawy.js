@@ -444,7 +444,8 @@ function AkcjeSprawy({ sprawa, odswiez }) {
 function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
   const [osobaId, ustawOsobeId] = useState(null);
   const [wysylanie, ustawWysylanie] = useState(false);
-  const [forma, ustawForme] = useState('');
+  const [zgodaOk, ustawZgodaOk] = useState(false);
+  const [dataZgody, ustawDateZgody] = useState(dzisIso());
   const [blad, ustawBlad] = useState(null);
 
   async function wyslij() {
@@ -465,11 +466,11 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
   }
 
   async function odnotujZgode() {
-    if (!forma) return;
+    if (!zgodaOk) return;
     ustawWysylanie(true);
     ustawBlad(null);
     try {
-      await API.post(`/api/psa/sprawy/${sprawa.id}/zgoda`, { forma });
+      await API.post(`/api/psa/sprawy/${sprawa.id}/zgoda`, { dopuszczalna: true, data: dataZgody });
       odswiez();
     } catch (e) {
       ustawBlad(e.message);
@@ -478,7 +479,6 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
     }
   }
 
-  const meta = useDane('/api/psa/meta');
 
   return (
     <div id="panel-powiadomienia"><Karta tytul="Uprzednie powiadomienie (art. 300(34) § 3 KSH)">
@@ -509,18 +509,19 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
           </button>
         </div>
         <div>
-          <Pole
-            etykieta="Albo odnotuj zgodę — forma (art. 300(34) § 3 zd. 2 KSH)"
-            podpowiedz={meta.dane ? meta.dane.uwaga_zgody_na_wpis : null}
-          >
-            <select value={forma} onChange={(z) => ustawForme(z.target.value)}>
-              <option value="">— wybierz formę zgody —</option>
-              {((meta.dane && meta.dane.formy_zgody_na_wpis) || []).map((f) => (
-                <option key={f.kod} value={f.kod}>{f.nazwa}</option>
-              ))}
-            </select>
+          <Pole etykieta="Albo odnotuj zgodę (art. 300(34) § 3 zd. 2 KSH)">
+            <label style={{ display: 'flex', gap: 'var(--od-2)', alignItems: 'flex-start' }}>
+              <input type="checkbox" checked={zgodaOk} onChange={(z) => ustawZgodaOk(z.target.checked)} />
+              <span>
+                Zgoda jest w dopuszczalnej formie: podpis zaufany, kwalifikowany, osobisty, notarialnie poświadczony
+                albo złożony w kancelarii. <span className="przyciemnione">Skan i zwykły oryginał — nie (wtedy wyślij powiadomienie).</span>
+              </span>
+            </label>
           </Pole>
-          <button className="btn btn-sm" disabled={!forma || wysylanie} onClick={odnotujZgode}>
+          <Pole etykieta="Data zgody">
+            <input type="date" value={dataZgody} onChange={(z) => ustawDateZgody(z.target.value)} />
+          </Pole>
+          <button className="btn btn-sm" disabled={!zgodaOk || wysylanie} onClick={odnotujZgode}>
             Odnotuj zgodę
           </button>
         </div>

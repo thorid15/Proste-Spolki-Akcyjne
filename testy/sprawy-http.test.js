@@ -265,9 +265,14 @@ test('pelny cykl sprawy: nowa → weryfikacja → wpisana, z zawiadomieniem bez 
     assert.equal(stZla, 400, forma);
     assert.match(zla.blad, /nie jest dopuszczalną formą/);
   }
-  const [stZgoda, poZgodzie] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/zgoda`, { forma: 'qes' });
+  // D-088: pracownik potwierdza tylko „w dopuszczalnej formie” (tak/nie) — bez wybierania formy.
+  const [stNie, nie] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/zgoda`, { dopuszczalna: false });
+  assert.equal(stNie, 400);
+  assert.match(nie.blad, /wyślij powiadomienie/);
+  const [stZgoda, poZgodzie] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/zgoda`, { dopuszczalna: true, data: '2026-11-01' });
   assert.equal(stZgoda, 200);
   assert.equal(poZgodzie.sprawa.zgoda_wazna, true);
+  assert.equal(poZgodzie.sprawa.zgoda_forma_nazwa, 'w dopuszczalnej formie');
   assert.equal(poZgodzie.sprawa.blokada_wpisu, null);
 
   const [stWpis, wpisOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {

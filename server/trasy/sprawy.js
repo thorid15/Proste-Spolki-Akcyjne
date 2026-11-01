@@ -78,7 +78,11 @@ function wczytajSprawe(id) {
  * LEFT JOIN-em wylacznie do wyliczenia ponizej - nie wychodza na zewnatrz.
  */
 /** Zgoda na wpis odnotowana w formie dopuszczalnej (W2.2, D-076). */
+/** D-088: pracownik potwierdza tylko „zgoda w dopuszczalnej formie” — bez wybierania konkretnej formy. */
+const ZGODA_USTAWOWA = 'ustawowa';
+
 function zgodaWazna(sprawa) {
+  if (sprawa.zgoda_forma === ZGODA_USTAWOWA) return true;
   return Boolean(sprawa.zgoda_forma)
     && formyPodpisu.ocenForme(formyPodpisu.DOKUMENTY.ZGODA_NA_WPIS, sprawa.zgoda_forma).dopuszczalna;
 }
@@ -112,7 +116,9 @@ function widokSprawy(sprawa, dzis = czas.dzisIso()) {
     odplatne: typ ? typ.odplatne : null,
     termin: terminy.policzTermin(sprawa, dzis),
     zgoda_wazna: zgodaWazna(sprawa),
-    zgoda_forma_nazwa: sprawa.zgoda_forma ? (formyPodpisu.NAZWY_FORM[sprawa.zgoda_forma] || sprawa.zgoda_forma) : null,
+    zgoda_forma_nazwa: sprawa.zgoda_forma
+      ? (sprawa.zgoda_forma === ZGODA_USTAWOWA ? 'w dopuszczalnej formie' : (formyPodpisu.NAZWY_FORM[sprawa.zgoda_forma] || sprawa.zgoda_forma))
+      : null,
     blokada_wpisu: blokadaWpisu(sprawa),
     zadajacy_wymaga_przegladu_aml: sprawa.zadajacy_osoba_id
       ? aml.wymagaPrzegladu(
@@ -677,12 +683,17 @@ router.post(
     const id = Number(zad.params.id);
     const sprawa = wczytajSprawe(id);
     if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
-    const { forma, data } = zad.body || {};
-    // D-076 (zastępuje D-026): forma zgody to kod z tabeli § 2 wytycznych,
-    // nie opis dowolny. Skan i zwykły oryginał pocztą = brak zgody.
-    if (!forma || !String(forma).trim()) throw bledneZadanie('Wskaż formę, w jakiej udzielono zgody.');
-    const ocena = formyPodpisu.ocenForme(formyPodpisu.DOKUMENTY.ZGODA_NA_WPIS, String(forma));
-    if (!ocena.dopuszczalna) throw bledneZadanie(`${ocena.przyczyna} To nie jest ważna zgoda — przed wpisem wyślij powiadomienie.`);
+    const { data, dopuszczalna } = zad.body || {};
+    let { forma } = zad.body || {};
+    // D-088 (upraszcza D-076): pracownik potwierdza „zgoda w dopuszczalnej formie” (tak/nie).
+    // Kod konkretnej formy (API) nadal przyjmowany i sprawdzany. Skan i zwykły oryginał = brak zgody.
+    if (dopuszczalna === false) throw bledneZadanie('Zgoda nie jest w dopuszczalnej formie — to nie jest ważna zgoda. Przed wpisem wyślij powiadomienie.');
+    if (dopuszczalna === true) forma = ZGODA_USTAWOWA;
+    if (!forma || !String(forma).trim()) throw bledneZadanie('Potwierdź, że zgoda jest w dopuszczalnej formie.');
+    if (forma !== ZGODA_USTAWOWA) {
+      const ocena = formyPodpisu.ocenForme(formyPodpisu.DOKUMENTY.ZGODA_NA_WPIS, String(forma));
+      if (!ocena.dopuszczalna) throw bledneZadanie(`${ocena.przyczyna} To nie jest ważna zgoda — przed wpisem wyślij powiadomienie.`);
+    }
     if (data && !czas.poprawnaData(String(data))) throw bledneZadanie('Data zgody musi mieć format RRRR-MM-DD.');
     db()
       .prepare('UPDATE psa_sprawy SET zgoda_forma = ?, zgoda_data = ?, zaktualizowano = ? WHERE id = ?')
