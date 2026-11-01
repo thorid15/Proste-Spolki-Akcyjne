@@ -81,7 +81,7 @@ function SekcjaSkanowAml({ osobaId, spolkaId }) {
           {skany.map((s) => (
             <li key={s.id}>
               <a href={`/api/psa/osoby/${osobaId}/aml-skany/${s.id}/plik`} target="_blank" rel="noopener">
-                {s.nazwa_pliku}
+                {nazwaPlikuDoWyswietlenia({ nazwaOryginalna: s.nazwa_pliku, rodzaj: 'skan-aml', data: s.utworzono })}
               </a>{' '}
               <span className="podpowiedz">
                 ({TYPY_DOKUMENTU_AML.find((t) => t.wartosc === s.typ_dokumentu)?.etykieta || s.typ_dokumentu}

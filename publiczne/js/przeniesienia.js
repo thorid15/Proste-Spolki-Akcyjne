@@ -133,7 +133,7 @@ function EkranPrzeniesienia({ id }) {
       <Karta tytul="Dokumenty (SHA-256)">
         <table className="tabela">
           <tbody>{p.dokumenty.map((d) => (
-            <tr key={d.id}><td><a href={`/api/psa/przeniesienia/${id}/dokumenty/${d.id}`}>{d.nazwa_pliku}</a></td><td>{d.typ}</td><td>{d.zrodlo}</td><td className="przyciemnione" style={{ fontSize: '0.75em' }}>{d.sha256.slice(0, 16)}…</td></tr>
+            <tr key={d.id}><td><a href={`/api/psa/przeniesienia/${id}/dokumenty/${d.id}`}>{nazwaPlikuDoWyswietlenia({ nazwaOryginalna: d.nazwa_pliku, rodzaj: d.typ, data: d.utworzono })}</a></td><td>{d.typ}</td><td>{d.zrodlo}</td><td className="przyciemnione" style={{ fontSize: '0.75em' }}>{d.sha256.slice(0, 16)}…</td></tr>
           ))}</tbody>
         </table>
         <div className="row-g" style={{ flexWrap: 'wrap', marginTop: 'var(--od-2)' }}>

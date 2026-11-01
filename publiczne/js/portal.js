@@ -968,7 +968,7 @@ function PrzeniesieniePortal() {
         <input type="file" ref={plik} />
         <button className="btn btn-maly" onClick={wyslij}>Wgraj dokument</button>
       </div>
-      {p.dokumenty.length > 0 && <ul>{p.dokumenty.map((d) => <li key={d.id}>{d.nazwa_pliku} <span className="przyciemnione">({d.typ})</span></li>)}</ul>}
+      {p.dokumenty.length > 0 && <ul>{p.dokumenty.map((d) => <li key={d.id}>{nazwaPlikuDoWyswietlenia({ nazwaOryginalna: d.nazwa_pliku, rodzaj: d.typ, data: d.utworzono })} <span className="przyciemnione">({d.typ})</span></li>)}</ul>}
       {p.pisma.length > 0 && (
         <>
           <p><strong>Dokumenty do pobrania</strong></p>

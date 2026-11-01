@@ -72,3 +72,22 @@ test('K4: informacja z 3 seriami i długim zakresem — PDF bez wyjątku, emisje
   expect(problemy).toEqual([]);
   await page.screenshot({ path: require('node:path').join(__dirname, 'zrzuty', 'informacja-dluga-a4.png'), fullPage: true });
 });
+
+for (const szerokosc of [1440, 390]) {
+  test(`K1: sprawa przeniesienia ${szerokosc} px — jedna kolumna, jeden pasek akcji, układ bez problemów`, async ({ page }) => {
+    await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/sprawy/1', czekaj: 'text=Uprzednie powiadomienie', szerokosc });
+    const kolumna = page.locator('.kolumna-sprawy');
+    await expect(kolumna).toHaveCount(1);
+    const szerokosci = await kolumna.evaluate((k) => [...k.children].filter((e) => e.offsetWidth > 0).map((e) => Math.round(e.getBoundingClientRect().width)));
+    expect(new Set(szerokosci).size).toBe(1);
+    if (szerokosc === 1440) expect(szerokosci[0]).toBeLessThanOrEqual(768);
+    const pasek = page.locator('.pasek-akcji');
+    await expect(pasek).toHaveCount(1);
+    for (const nazwa of ['Popraw podstawę wpisu', 'Wystaw żądanie wpisu']) await expect(pasek.getByRole('button', { name: nazwa })).toBeVisible();
+    await expect(page.locator('.btn-tekstowy', { hasText: 'podstawę wpisu' })).toHaveCount(0);
+    await expect(page.locator('#panel-powiadomienia label.chk input[type="checkbox"]')).toHaveCount(1);
+    expect(await sprawdzUklad(page, '.kolumna-sprawy .karta')).toEqual([]);
+    const tekst = await page.locator('.kolumna-sprawy').innerText();
+    expect(tekst).not.toMatch(/[0-9a-f]{4,8}(-[0-9a-f]{4}){1,3}-[0-9a-f]{12}/i);
+  });
+}

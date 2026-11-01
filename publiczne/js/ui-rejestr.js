@@ -152,6 +152,35 @@ function ListaDanych({ pary }) {
   );
 }
 
+/** R4 K1: jedna kolumna sprawy — wszystkie karty i kroki tej samej szerokości (48rem; na telefonie pełna). */
+function KolumnaSprawy({ children }) {
+  return <div className="kolumna-sprawy">{children}</div>;
+}
+
+/**
+ * R4 K1: jeden pasek akcji — wyrównany do prawej, drugorzędne po lewej, jeden główny skrajny prawy;
+ * na telefonie w pionie, główny na górze. `akcje`: [{ etykieta, przyKlik, glowna?, niebezpieczna?, wylaczona? }].
+ */
+function PasekAkcji({ akcje }) {
+  const widoczne = (akcje || []).filter(Boolean);
+  if (!widoczne.length) return null;
+  const kolejnosc = [...widoczne.filter((a) => !a.glowna), ...widoczne.filter((a) => a.glowna).slice(0, 1)];
+  return (
+    <div className="pasek-akcji bez-druku">
+      {kolejnosc.map((a) => (
+        <button
+          key={a.etykieta}
+          className={`btn btn-sm${a.glowna ? ' btn-glowny' : ''}${a.niebezpieczna ? ' btn-danger' : ''}`}
+          onClick={a.przyKlik}
+          disabled={a.wylaczona}
+        >
+          {a.etykieta}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Karta({ tytul, akcje, scisla, tight, dzieci, children }) {
   const tresc = children ?? dzieci;
   if (scisla || tight) {
@@ -1808,6 +1837,8 @@ window.Przelacznik = Przelacznik;
 window.Spinner = Spinner;
 window.Karta = Karta;
 window.ListaDanych = ListaDanych;
+window.KolumnaSprawy = KolumnaSprawy;
+window.PasekAkcji = PasekAkcji;
 window.Pigulka = Pigulka;
 window.Komunikat = Komunikat;
 window.Pusto = Pusto;
