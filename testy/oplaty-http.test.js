@@ -36,7 +36,7 @@ let ciastkoPracownika;
 // Z-200/Z-201/Z-204: serwer wymaga teraz kompletnej checklisty otwarcia
 // rejestru (patrz `server/trasy/spolki.js: KODY_CHECKLISTY_OTWARCIA`).
 const CHECKLISTA_PELNA = {
-  forma: true, wpis_krs: true, uchwala: true, umowa: true, jedna_umowa: true,
+  forma: true, wpis_krs: true, uchwala: true, reprezentacja: true, umowa: true, jedna_umowa: true,
   dane_z_umowy: true, ograniczenia: true, bilans: true, zakres_danych: true, aml: true,
 };
 

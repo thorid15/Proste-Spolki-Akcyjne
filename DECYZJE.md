@@ -1253,6 +1253,47 @@
 
 ---
 
+### D-075 — Polityka podpisów (Łukasz, 31.10.2026) — zastępuje D-054 w zakresie mechanizmu
+
+- Data: 2026-11-01 (SESJA-PSA-WYTYCZNE.md, Faza 2 pkt 1)
+- Obszar: portal / kancelaria / dokumenty / podpisy
+- Decyzja: **skany odrzucane**; dopuszczalne formy podpisu według tabeli § 2 wytycznych, zapisanej
+  w jednym miejscu (`server/logika/formy-podpisu.js`); podpis online przez mObywatel (QES), podpis
+  zaufany (PZ) albo osobisty (PO); oryginał pocztą (dla zgody na wpis — wyłącznie z podpisem
+  notarialnie poświadczonym); podpis w kancelarii. Automatyczna walidacja po wgraniu blokuje tylko to,
+  co na pewno niespełnione; niepewne → „Do weryfikacji ręcznej”; nigdy automatycznej akceptacji bez
+  udanej walidacji. Checklistę nadal zaznacza człowiek (D-052). Zasada „dokument po dokumencie” z D-054
+  **zostaje**.
+- Uzasadnienie: decyzja Łukasza, wytyczne „Rejestr akcjonariuszy PSA online” § 2–3.
+- Odrzucono: przyjmowanie skanu jako dokumentu podpisanego (D-054 w części „wgranie skanu”).
+- Skutek w kodzie: Faza 2 — `formy-podpisu.js`, `walidacja-podpisu.js`, portal „Podpisz dokument”.
+
+### D-076 — Forma zgody i PESEL albo data urodzenia według nowelizacji — od dziś (K1, K2)
+
+- Data: 2026-11-01 (odpowiedź Łukasza na STOP Fazy 1)
+- Obszar: rejestr / zgody / dane osobowe
+- Decyzja: (1) zgoda na wpis (art. 300³⁴ § 3) przyjmowana **już teraz** wyłącznie w formach
+  z art. 300³⁴ § 3 zd. 2 w brzmieniu nowelizacji (podpis notarialnie poświadczony, podpis w obecności
+  osoby upoważnionej przez prowadzącego rejestr, QES, PZ, PO) — bez czekania na 18.02.2027 i bez
+  bramki daty; skan i zwykły oryginał pocztą = brak zgody. **Zastępuje D-026** (forma zgody jako
+  dowolny tekst). (2) Rejestr **wymaga PESEL albo daty urodzenia** akcjonariusza będącego osobą
+  fizyczną już teraz (wymóg z art. 30 ustawy zmieniającej stosowany wcześniej jako polityka
+  kancelarii); udostępnianie bez zmian — art. 300³⁵ § 1¹ (maskowanie dla pozostałych akcjonariuszy
+  działa już dziś, W5.4). Klientów przygotowujemy od razu do formy docelowej.
+- Uzasadnienie: decyzja Łukasza — „nie będziemy zmieniać w lutym”.
+- Skutek w kodzie: (1) Faza 2 (W2.2); (2) Faza 3 (W6.1). `PRZEPISY-PSA.md` § 12 pkt 2–3 sprostowane.
+
+### D-077 — Zakładka „Rejestr” w portalu: tylko dane spółki, bez akcjonariatu (K5)
+
+- Data: 2026-11-01 (odpowiedź Łukasza na STOP Fazy 1)
+- Obszar: portal / dostęp
+- Decyzja: zakładka „Rejestr” w portalu pokazuje wyłącznie dane spółki; stan akcjonariatu — tylko
+  w płatnej informacji z rejestru (W5.1). Sposób realizacji prawa dostępu z art. 300³⁵ § 2 (§ 9 pkt 1
+  wytycznych) pozostaje do opisania w regulaminie.
+- Skutek w kodzie: Faza 3 (W5.1) — portal i API (maskowanie na poziomie API, nie tylko widoku).
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

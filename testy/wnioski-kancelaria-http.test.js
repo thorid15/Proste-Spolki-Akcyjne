@@ -25,7 +25,7 @@ process.env.PORTAL_WLACZONY = 'true';
 const app = require('../serwer');
 const { db } = require('../server/baza');
 const hasla = require('../server/logika/hasla');
-const { AKCJONARIUSZ_PELNY } = require('./pomoc');
+const { AKCJONARIUSZ_PELNY, podpisanyPdf } = require('./pomoc');
 const { KATALOG_DOKUMENTOW } = require('../server/konfiguracja');
 
 let serwer;
@@ -118,13 +118,13 @@ async function wnioskGotowyDoWeryfikacji(
 
     for (const d of bezSkanow ? [] : udostepnione.dokumenty) {
       const formularz = new FormData();
-      formularz.append('plik', new Blob(['%PDF-1.4\npodpisana tresc'], { type: 'application/pdf' }), `podpisany-${d.typ}.pdf`);
+      formularz.append('plik', new Blob([podpisanyPdf(db(), d.id)], { type: 'application/pdf' }), `podpisany-${d.typ}.pdf`);
       await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${d.id}/podpis`, {
         method: 'POST', headers: { Cookie: ciastko }, body: formularz,
       });
       if (!bezPotwierdzenPodpisow) {
         await zapytaj(
-          'POST', `/api/psa/wnioski/${zlozony.id}/dokumenty/${d.id}/podpis-potwierdz`, {}, ciastkoPracownik
+          'POST', `/api/psa/wnioski/${zlozony.id}/dokumenty/${d.id}/podpis-potwierdz`, { forma: 'qes' }, ciastkoPracownik
         );
       }
     }
@@ -445,7 +445,7 @@ test('POST /api/psa/wnioski/:id/przyjmij: odmawia, dopoki podpisy nie sa potwier
   // Potwierdzenie kazdej pozycji otwiera droge do przyjecia.
   for (const d of szczegoly.dokumenty) {
     const [stPotw, poPotw] = await zapytaj(
-      'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${d.id}/podpis-potwierdz`, {}, ciastkoPracownik
+      'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${d.id}/podpis-potwierdz`, { forma: 'qes' }, ciastkoPracownik
     );
     assert.equal(stPotw, 200);
     assert.ok(poPotw.dokument.podpis_potwierdzono);
@@ -462,10 +462,10 @@ test('POST /api/psa/wnioski/:id/dokumenty/:dokId/podpis-potwierdz: bez skanu odm
   assert.equal(dokument.podpis_nazwa_pliku, null, 'ale nikt niczego jeszcze nie odesłał');
 
   const [status, wynik] = await zapytaj(
-    'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/podpis-potwierdz`, {}, ciastkoPracownik
+    'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/podpis-potwierdz`, { forma: 'qes' }, ciastkoPracownik
   );
   assert.equal(status, 400);
-  assert.match(wynik.blad, /nie odesłał jeszcze skanu/i);
+  assert.match(wynik.blad, /nie wgrał jeszcze pliku z podpisem/i);
 });
 
 test('PUT /api/psa/wnioski/:id/dokumenty/:dokId/tresc: zapis oznacza sprawdzenie, po podpisaniu odmawia', async () => {
@@ -490,7 +490,7 @@ test('PUT /api/psa/wnioski/:id/dokumenty/:dokId/tresc: zapis oznacza sprawdzenie
 
   // Po odesłaniu podpisanego skanu treść jest zamknięta.
   const formularz = new FormData();
-  formularz.append('plik', new Blob(['%PDF-1.4\nskan'], { type: 'application/pdf' }), 'skan.pdf');
+  formularz.append('plik', new Blob([podpisanyPdf(db(), dokument.id)], { type: 'application/pdf' }), 'podpisany.pdf');
   await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`, {
     method: 'POST', headers: { Cookie: ciastkoKlienta }, body: formularz,
   });
@@ -512,14 +512,14 @@ test('Z-205: po potwierdzeniu podpisu kancelaria zapisuje skrot tresci, a klient
   assert.equal(dokument.podpis_nazwa_pliku, null);
 
   const oryginalny = new FormData();
-  oryginalny.append('plik', new Blob(['%PDF-1.4\noryginalna tresc'], { type: 'application/pdf' }), 'oryginal.pdf');
+  oryginalny.append('plik', new Blob([podpisanyPdf(db(), dokument.id)], { type: 'application/pdf' }), 'oryginal.pdf');
   const odpUpload = await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`, {
     method: 'POST', headers: { Cookie: ciastkoKlienta }, body: oryginalny,
   });
   assert.equal(odpUpload.status, 201);
 
   const [stPotw, poPotw] = await zapytaj(
-    'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/podpis-potwierdz`, {}, ciastkoPracownik
+    'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/podpis-potwierdz`, { forma: 'qes' }, ciastkoPracownik
   );
   assert.equal(stPotw, 200);
   assert.ok(poPotw.dokument.podpis_potwierdzono, 'kancelaria potwierdzila podpis');
@@ -528,7 +528,7 @@ test('Z-205: po potwierdzeniu podpisu kancelaria zapisuje skrot tresci, a klient
 
   // Proba podmiany JUZ POTWIERDZONEGO skanu — dokladnie scenariusz z audytu.
   const podmieniony = new FormData();
-  podmieniony.append('plik', new Blob(['%PDF-1.4\nINNA tresc podsunieta po potwierdzeniu'], { type: 'application/pdf' }), 'podmiana.pdf');
+  podmieniony.append('plik', new Blob([podpisanyPdf(db(), dokument.id, 'INNA tresc podsunieta po potwierdzeniu')], { type: 'application/pdf' }), 'podmiana.pdf');
   const odpPodmiana = await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`, {
     method: 'POST', headers: { Cookie: ciastkoKlienta }, body: podmieniony,
   });

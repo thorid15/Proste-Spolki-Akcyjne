@@ -122,4 +122,23 @@ function zdarzenie(id, typ, data, dane) {
   return { id, typ, data_wpisu: data, dane };
 }
 
-module.exports = { bazaTestowa, dodajSpolke, dodajOsobe, wpis, zdarzenie, PDF_TESTOWY, AKCJONARIUSZ_PELNY };
+/**
+ * „Podpisany" plik dokumentu z kompletu wniosku (D-075): oryginał wystawiony
+ * przez kancelarię + dopisany na końcu słownik podpisu (jak podpis
+ * przyrostowy PAdES). Bez usługi DSS walidator daje „do weryfikacji ręcznej"
+ * — plik zostaje przyjęty. Prawdziwego podpisu tu nie ma.
+ */
+function podpisanyPdf(db, dokumentId, dopisek = '') {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const konfiguracja = require('../server/konfiguracja');
+  const w = db.prepare('SELECT sciezka FROM psa_wnioski_dokumenty WHERE id = ?').get(dokumentId);
+  const oryginal = fs.readFileSync(path.join(konfiguracja.KATALOG_DOKUMENTOW, w.sciezka));
+  return Buffer.concat([
+    oryginal,
+    Buffer.from(`\n% podpis testowy ${dopisek}\n9999 0 obj\n<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached `
+      + '/ByteRange [0 0 0 0] /Contents <00> >>\nendobj\n%%EOF\n'),
+  ]);
+}
+
+module.exports = { bazaTestowa, dodajSpolke, dodajOsobe, wpis, zdarzenie, PDF_TESTOWY, AKCJONARIUSZ_PELNY, podpisanyPdf };

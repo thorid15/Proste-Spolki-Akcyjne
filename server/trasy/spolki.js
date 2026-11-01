@@ -819,7 +819,7 @@ router.post(
  * przez API z pominieciem kreatora.
  */
 const KODY_CHECKLISTY_OTWARCIA = [
-  'forma', 'wpis_krs', 'uchwala', 'umowa', 'jedna_umowa',
+  'forma', 'wpis_krs', 'uchwala', 'reprezentacja', 'umowa', 'jedna_umowa',
   'dane_z_umowy', 'ograniczenia', 'bilans', 'zakres_danych', 'aml',
 ];
 

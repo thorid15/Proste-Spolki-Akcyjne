@@ -208,6 +208,22 @@ const konfiguracja = {
   POCZTA_TRANSPORT: tekst('POCZTA_TRANSPORT', null),
 
   /**
+   * Podpisy (Faza 2, D-075).
+   *   - `mobywatel_url` — usługa podpisu kwalifikowanego mObywatel (nowa karta,
+   *     brak API — klient podpisuje sam),
+   *   - `limit_bajtow` — limit pliku w mObywatelu (5 MB, wytyczne § 3),
+   *   - `dss_url` — usługa walidacji DSS (biblioteka Komisji Europejskiej)
+   *     uruchomiona OSOBNO na serwerze; puste = każdy podpis do weryfikacji
+   *     ręcznej (nigdy automatyczna akceptacja).
+   */
+  PODPIS: {
+    mobywatel_url: tekst('PODPIS_MOBYWATEL_URL', 'https://podpis.mobywatel.gov.pl'),
+    limit_bajtow: liczba('PODPIS_LIMIT_BAJTOW', 5 * 1024 * 1024),
+    dss_url: tekst('DSS_URL', null),
+    dss_limit_ms: liczba('DSS_LIMIT_MS', 30000),
+  },
+
+  /**
    * Tryb testowy (T1-T6, DECYZJE.md D-074). Wlacza go WYLACZNIE zmienna
    * `PSA_TRYB_TESTOWY` (w `.env`). Serwer odmawia startu przy
    * `NODE_ENV=production` i na bazie nieoznaczonej jako testowa

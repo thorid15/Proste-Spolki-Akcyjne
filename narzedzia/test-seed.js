@@ -151,7 +151,7 @@ async function main() {
 
   const otwarcie = await zapytaj(kancelaria, 'POST', `/api/psa/spolki/${spolka.id}/otworz-rejestr`, {
     checklista: {
-      forma: true, wpis_krs: true, uchwala: true, umowa: true, jedna_umowa: true,
+      forma: true, wpis_krs: true, uchwala: true, reprezentacja: true, umowa: true, jedna_umowa: true,
       dane_z_umowy: true, ograniczenia: true, bilans: true, zakres_danych: true, aml: true,
     },
     zdarzenia: [

@@ -53,6 +53,7 @@ const autoryzacja = require('../pomocnicze/autoryzacja');
 const { pobierzZKrs } = require('./krs');
 const osobyModul = require('./osoby');
 const trybTestowy = require('../tryb-testowy');
+const walidacjaPodpisu = require('../logika/walidacja-podpisu');
 
 const router = express.Router();
 
@@ -984,7 +985,9 @@ router.get(
   })
 );
 
-const ROZSZERZENIA_PODPISU_DOZWOLONE = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
+// D-075: skan nie jest podpisem. Obrazy przyjmujemy na serwer tylko po to,
+// zeby odpowiedziec klientowi zrozumialym komunikatem (walidator je odrzuca).
+const ROZSZERZENIA_PODPISU_DOZWOLONE = new Set(['.pdf', '.xml', '.xades', '.jpg', '.jpeg', '.png']);
 const LIMIT_ROZMIARU_PODPISU_BAJTY = 20 * 1024 * 1024;
 
 const uploadPodpisanego = multer({
@@ -1004,7 +1007,7 @@ const uploadPodpisanego = multer({
     const rozszerzenie = path.extname(plik.originalname).toLowerCase();
     if (!ROZSZERZENIA_PODPISU_DOZWOLONE.has(rozszerzenie)) {
       return wywolaj(
-        new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Dozwolone: PDF albo skan/zdjęcie (JPG, PNG).`)
+        new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Wgraj plik z podpisem elektronicznym (PDF albo XML z mObywatela, podpisu zaufanego lub osobistego).`)
       );
     }
     wywolaj(null, true);
@@ -1036,6 +1039,59 @@ function przyjmijSkan(zad, odp, dalej) {
     }
     return dalej();
   });
+}
+
+/** Multer dla pliku PODPISANEGO — walidacje tresci robi walidator podpisu (D-075). */
+function przyjmijPodpisany(zad, odp, dalej) {
+  uploadPodpisanego.single('plik')(zad, odp, (e) => {
+    if (e) return dalejPoUploadzie(dalej)(e);
+    return dalej();
+  });
+}
+
+/** Osoba, ktora ma podpisac dokument (W3.5) — albo null, gdy podpisuje kilka osob. */
+function oczekiwanyPodpisujacy(wniosek, dokument) {
+  if (dokument.typ === dokumentyWniosku.TYPY.UMOWA_REJESTRU) {
+    const czesci = String(wniosek.reprezentant_imie_nazwisko || '').trim().split(/\s+/).filter(Boolean);
+    if (czesci.length === 0) return null;
+    return { imie: czesci.slice(0, -1).join(' ') || null, nazwisko: czesci[czesci.length - 1], pesel: wniosek.reprezentant_pesel || null };
+  }
+  if (dokument.akcjonariusz_id) {
+    const a = db().prepare('SELECT imie, nazwisko, pesel FROM psa_wnioski_akcjonariusze WHERE id = ?').get(dokument.akcjonariusz_id);
+    if (a && (a.nazwisko || a.pesel)) return a;
+  }
+  return null;
+}
+
+/**
+ * Walidacja podpisu po wgraniu (W2.4, W3.3-W3.5). Odrzucony plik nie zostaje
+ * na dysku — klient dostaje komunikat zrozumialy dla laika. Wynik „poprawny”
+ * albo „do weryfikacji” zapisuje sie przy dokumencie i trafia do „Do zrobienia”
+ * kancelarii; checklisty nie zaznacza (D-052).
+ */
+async function walidujPodpisany(wniosek, dokument, plik) {
+  const wynik = await walidacjaPodpisu.waliduj({
+    plik: fs.readFileSync(plik.path),
+    nazwa: plik.originalname,
+    oryginal: { sha256: dokument.oryginal_sha256, dlugosc: dokument.oryginal_dlugosc },
+    oczekiwany: oczekiwanyPodpisujacy(wniosek, dokument),
+    atrapa: () => trybTestowy.wynikWalidatora(db()),
+  });
+  if (wynik.wynik === walidacjaPodpisu.WYNIKI.ODRZUCONY) {
+    fs.rmSync(plik.path, { force: true });
+    throw bledneZadanie(wynik.komunikat, { walidacja: wynik });
+  }
+  return wynik;
+}
+
+function zapiszWalidacje(dokumentId, wynik) {
+  db()
+    .prepare(
+      `UPDATE psa_wnioski_dokumenty
+          SET walidacja_wynik = ?, walidacja_typ = ?, walidacja_json = ?, walidacja_kiedy = ?
+        WHERE id = ?`
+    )
+    .run(wynik.wynik, wynik.typ || null, JSON.stringify(wynik), czas.terazIso(), dokumentId);
 }
 
 /**
@@ -1240,8 +1296,8 @@ router.post(
   '/wniosek/dokumenty/:id/podpis',
   wymagajWnioskodawcy,
   zaladujWlasnyWniosekDoUploadu,
-  przyjmijSkan,
-  asy((zad, odp) => {
+  przyjmijPodpisany,
+  asy(async (zad, odp) => {
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
     const dokument = db()
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
@@ -1257,8 +1313,11 @@ router.post(
       );
     }
 
+    const walidacja = await walidujPodpisany(zad.psaWniosek, dokument, zad.file);
     zapiszPodpisanySkan(zad.psaWniosek, dokument, zad.file);
+    zapiszWalidacje(dokument.id, walidacja);
     odp.status(201).json({
+      walidacja,
       wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(zad.psaWniosek.id),
       dokumenty: wczytajDokumentyWniosku(zad.psaWniosek.id),
     });
@@ -1343,8 +1402,8 @@ router.post(
   '/wniosek/umowa-podpisana',
   wymagajWnioskodawcy,
   zaladujWlasnyWniosekDoUploadu,
-  przyjmijSkan,
-  asy((zad, odp) => {
+  przyjmijPodpisany,
+  asy(async (zad, odp) => {
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
     const umowa = db()
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE wniosek_id = ? AND typ = ? AND udostepniono IS NOT NULL')
@@ -1357,8 +1416,11 @@ router.post(
       );
     }
 
+    const walidacja = await walidujPodpisany(zad.psaWniosek, umowa, zad.file);
     zapiszPodpisanySkan(zad.psaWniosek, umowa, zad.file);
+    zapiszWalidacje(umowa.id, walidacja);
     odp.status(201).json({
+      walidacja,
       wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(zad.psaWniosek.id),
       dokumenty: wczytajDokumentyWniosku(zad.psaWniosek.id),
     });

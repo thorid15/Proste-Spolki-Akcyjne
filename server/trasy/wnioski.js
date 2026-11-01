@@ -40,6 +40,11 @@ const akcjonariuszLogika = require('../logika/akcjonariusz');
 const pakietWniosku = require('../logika/pakiet-wniosku');
 const blokiDokumentu = require('../logika/bloki-dokumentu');
 const poczta = require('../poczta');
+const multer = require('multer');
+const crypto = require('node:crypto');
+const walidacjaPodpisu = require('../logika/walidacja-podpisu');
+const formyPodpisu = require('../logika/formy-podpisu');
+const trybTestowy = require('../tryb-testowy');
 
 const router = express.Router();
 
@@ -333,13 +338,82 @@ router.post(
   '/:id/dokumenty/:dokId/podpis-potwierdz',
   asy((zad, odp) => {
     const wniosek = wczytajOtwartyWniosek(Number(zad.params.id));
-    const potwierdzono = (zad.body || {}).potwierdzono !== false;
-    const wynik = pakietWniosku.potwierdzPodpis(
-      wniosek.id, Number(zad.params.dokId), potwierdzono, autor(zad)
-    );
+    const cialo = zad.body || {};
+    const potwierdzono = cialo.potwierdzono !== false;
+    let wynik;
+    try {
+      wynik = pakietWniosku.potwierdzPodpis(wniosek.id, Number(zad.params.dokId), potwierdzono, autor(zad), {
+        forma: cialo.forma || null,
+        oryginalOtrzymano: cialo.oryginal_otrzymano || null,
+      });
+    } catch (e) {
+      if (e instanceof pakietWniosku.BladPodpisu) throw bledneZadanie(e.message);
+      throw e;
+    }
     if (wynik === null) throw nieZnaleziono('Nie odnaleziono dokumentu.');
-    if (wynik === false) throw bledneZadanie('Klient nie odesłał jeszcze skanu tego dokumentu.');
+    if (wynik === false) {
+      throw bledneZadanie('Klient nie wgrał jeszcze pliku z podpisem elektronicznym. Przy oryginale otrzymanym pocztą wskaż formę „oryginał”.');
+    }
     odp.json({ dokument: wynik, dokumenty: pakietWniosku.lista(wniosek.id) });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// W2.5 — podpis notariusza na umowie: OSTATNI, kwalifikowany, dopiero po
+// waznym podpisie spolki (D-075). Kancelaria wgrywa plik podpisany przez
+// notariusza (najpewniej ten sam plik z podpisem spolki, podpisany kolejny
+// raz — W3.7: pierwsza wersja musi byc oryginalem).
+// ─────────────────────────────────────────────────────────────
+
+const uploadNotariusza = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+});
+
+router.post(
+  '/:id/dokumenty/:dokId/podpis-notariusza',
+  uploadNotariusza.single('plik'),
+  asy(async (zad, odp) => {
+    const wniosek = wczytajOtwartyWniosek(Number(zad.params.id));
+    const dokument = db()
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ?')
+      .get(Number(zad.params.dokId), wniosek.id);
+    if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+    if (dokument.typ !== 'umowa_rejestru') throw bledneZadanie('Notariusz podpisuje wyłącznie umowę o prowadzenie rejestru.');
+    if (!dokument.podpis_potwierdzono) {
+      throw bledneZadanie(
+        'Podpis notariusza jest dostępny dopiero po ważnym podpisie spółki — najpierw potwierdź podpis spółki pod umową (lista dokumentów wyżej).'
+      );
+    }
+    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+
+    const czesci = String(konfiguracja.KANCELARIA.notariusz_mianownik || '').trim().split(/\s+/);
+    const wynik = await walidacjaPodpisu.waliduj({
+      plik: zad.file.buffer,
+      nazwa: zad.file.originalname,
+      oryginal: { sha256: dokument.oryginal_sha256, dlugosc: dokument.oryginal_dlugosc },
+      oczekiwany: czesci.length > 1 ? { imie: czesci.slice(0, -1).join(' '), nazwisko: czesci[czesci.length - 1] } : null,
+      atrapa: () => trybTestowy.wynikWalidatora(db()),
+    });
+    if (wynik.wynik === walidacjaPodpisu.WYNIKI.ODRZUCONY) throw bledneZadanie(wynik.komunikat, { walidacja: wynik });
+    if (wynik.typ && !formyPodpisu.ocenForme(formyPodpisu.DOKUMENTY.UMOWA_REJESTRU, wynik.typ, { notariusz: true }).dopuszczalna
+        && wynik.typ !== 'niekwalifikowany') {
+      throw bledneZadanie('Notariusz podpisuje umowę podpisem kwalifikowanym (QES).');
+    }
+
+    const katalog = path.join(konfiguracja.KATALOG_DOKUMENTOW, `wniosek_${wniosek.id}`, 'dokumenty', 'notariusz');
+    fs.mkdirSync(katalog, { recursive: true });
+    const pelna = path.join(katalog, `${crypto.randomUUID()}.pdf`);
+    fs.writeFileSync(pelna, zad.file.buffer);
+    db()
+      .prepare(
+        `UPDATE psa_wnioski_dokumenty
+            SET notariusz_podpis_sciezka = ?, notariusz_podpis_wgrano = ?,
+                notariusz_walidacja_wynik = ?, notariusz_walidacja_json = ?
+          WHERE id = ?`
+      )
+      .run(path.relative(konfiguracja.KATALOG_DOKUMENTOW, pelna), czas.terazIso(), wynik.wynik, JSON.stringify(wynik), dokument.id);
+    odp.status(201).json({ walidacja: wynik, dokumenty: pakietWniosku.lista(wniosek.id) });
   })
 );
 

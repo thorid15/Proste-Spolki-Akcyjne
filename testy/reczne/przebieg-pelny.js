@@ -110,7 +110,7 @@ const PDF = '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%
     await prac('POST', `/api/psa/wnioski/${w.id}/akcjonariusze/${a.id}/zweryfikuj`, { zweryfikowano: true });
   }
   for (const d of udost.dokumenty) {
-    await prac('POST', `/api/psa/wnioski/${w.id}/dokumenty/${d.id}/podpis-potwierdz`, {});
+    await prac('POST', `/api/psa/wnioski/${w.id}/dokumenty/${d.id}/podpis-potwierdz`, { forma: 'qes' });
   }
   const [stPrzyjmij, przyjmij] = await prac('POST', `/api/psa/wnioski/${w.id}/przyjmij`, {});
   krok('wniosek przyjety, spolka zalozona', stPrzyjmij === 200, `spolka #${przyjmij.spolka_id}`);

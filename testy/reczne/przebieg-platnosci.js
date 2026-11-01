@@ -45,7 +45,7 @@ const PDF = '%PDF-1.4\ntrailer<</Root 1 0 R>>\n%%EOF\n';
     const f = new FormData();
     f.append('plik', new Blob([PDF], { type: 'application/pdf' }), 'skan.pdf');
     await fetch(`${B}/api/psa/portal/wniosek/dokumenty/${d.id}/podpis`, { method: 'POST', headers: { Cookie: cK.v }, body: f });
-    await prac('POST', `/api/psa/wnioski/${w.id}/dokumenty/${d.id}/podpis-potwierdz`, {});
+    await prac('POST', `/api/psa/wnioski/${w.id}/dokumenty/${d.id}/podpis-potwierdz`, { forma: 'qes' });
   }
   await kl('POST', '/api/psa/portal/wniosek/odeslij');
   for (const a of db.prepare('SELECT id FROM psa_wnioski_akcjonariusze WHERE wniosek_id = ?').all(w.id)) {

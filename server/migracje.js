@@ -2308,6 +2308,38 @@ const MIGRACJE = [
       BEGIN SELECT RAISE(ABORT, 'psa_dziennik_logowan jest append-only'); END;
     `,
   },
+  {
+    wersja: 62,
+    nazwa: 'D-075: podpisy - oryginal (ID, SHA-256, dlugosc), wynik walidacji, forma, podpis notariusza',
+    sql: `
+      -- W3.1/W3.4: przy GENEROWANIU dokumentu do podpisu zapisujemy unikalne ID
+      -- (w stopce PDF), skrot SHA-256 i dlugosc — podpisany plik musi zaczynac
+      -- sie dokladnie tymi bajtami (podpis przyrostowy PAdES).
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN id_dokumentu TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_sha256 TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_dlugosc INTEGER;
+
+      -- W2.4/W3.3-W3.5: wynik automatycznej walidacji po wgraniu. Nigdy nie
+      -- zaznacza checklisty (D-052) — tylko podpowiada, co sprawdzic recznie.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_wynik TEXT
+        CHECK (walidacja_wynik IS NULL OR walidacja_wynik IN ('poprawny','do_weryfikacji','odrzucony'));
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_typ TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_json TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_kiedy TEXT;
+
+      -- W2.1: forma podpisu odnotowana przez kancelarie (m.in. oryginal
+      -- papierowy: zwykly / notarialnie poswiadczony, data otrzymania).
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN forma_podpisu TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_otrzymano TEXT;
+
+      -- W2.5: notariusz podpisuje umowe OSTATNI (QES), dopiero po waznym
+      -- podpisie spolki — plik z podpisem notariusza osobno.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_podpis_sciezka TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_podpis_wgrano TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_walidacja_wynik TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_walidacja_json TEXT;
+    `,
+  },
 ];
 
 /**

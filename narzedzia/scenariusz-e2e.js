@@ -382,7 +382,7 @@ async function main() {
   // te same kody co `CHECKLISTA_OTWARCIA` w `publiczne/js/spolki.js`.
   const otwarcie = await zapytaj(kancelaria, 'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`, {
     checklista: {
-      forma: true, wpis_krs: true, uchwala: true, umowa: true, jedna_umowa: true,
+      forma: true, wpis_krs: true, uchwala: true, reprezentacja: true, umowa: true, jedna_umowa: true,
       dane_z_umowy: true, ograniczenia: true, bilans: true, zakres_danych: true, aml: true,
     },
     zdarzenia: [

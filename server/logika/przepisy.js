@@ -774,6 +774,11 @@ const PODSTAWY = {
   TRYB_WPISU: 'art. 300(34) § 1 KSH',
   ZAJECIE_Z_URZEDU: 'art. 300(34) § 2 KSH',
   UPRZEDNIE_POWIADOMIENIE: 'art. 300(34) § 3 KSH',
+  // PRZEPISY-PSA.md art. 300(34) § 3 zd. 2 (🔵, stosowane od dzis — D-076).
+  FORMA_ZGODY_NA_WPIS: 'art. 300(34) § 3 zd. 2 KSH',
+  FORMA_ZBYCIA: 'art. 300(36) § 4 KSH',
+  FORMA_ZGODY_SPOLKI: 'art. 300(39) § 4 KSH, art. 300(40) § 1 KSH',
+  WYBOR_PODMIOTU: 'art. 300(31) § 5 KSH',
   DOKUMENTY_PODSTAWA: 'art. 300(34) § 4 KSH',
   BADANIE_TRESCI_I_FORMY: 'art. 300(34) § 5 KSH',
   OGRANICZENIA_ROZPORZADZANIA: 'art. 300(34) § 6 KSH',

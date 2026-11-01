@@ -247,6 +247,8 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
   bezBrakow('wzór 06 (wezwanie do usunięcia przeszkody)', wstrzOdp.wysylka);
 
   await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'wznow' });
+  // W2.3: powiadomienie bez SMTP nie wyszło — wpis wymaga ważnej zgody (D-076).
+  await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/zgoda`, { forma: 'w_kancelarii' });
 
   const [st07, wpisOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {
     dane: { emisja_zdarzenie_id: emisjaOdp.zdarzenie.id, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },

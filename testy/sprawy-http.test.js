@@ -250,6 +250,26 @@ test('pelny cykl sprawy: nowa → weryfikacja → wpisana, z zawiadomieniem bez 
   assert.ok(stAntydata >= 400 && stAntydata < 500, `oczekiwano odmowy, jest ${stAntydata}`);
   assert.match(JSON.stringify(antydata), /nadaje system/);
 
+  // W2.3 (D-075/D-076): bez ważnej zgody i bez powiadomienia wpis zablokowany — z przyczyną.
+  const [stBlok, blok] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {
+    dane: { emisja_zdarzenie_id: emisjaZdarzenieId, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
+  });
+  assert.equal(stBlok, 400);
+  assert.match(blok.blad, /Brak ważnej zgody na wpis.*powiadomienia/);
+  const [, przedZgoda] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
+  assert.ok(przedZgoda.sprawa.blokada_wpisu, 'widok sprawy niesie przyczynę blokady');
+
+  // W2.2: skan i zwykły oryginał pocztą = brak zgody; QES — zgoda ważna.
+  for (const forma of ['skan', 'oryginal']) {
+    const [stZla, zla] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/zgoda`, { forma });
+    assert.equal(stZla, 400, forma);
+    assert.match(zla.blad, /nie jest dopuszczalną formą/);
+  }
+  const [stZgoda, poZgodzie] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/zgoda`, { forma: 'qes' });
+  assert.equal(stZgoda, 200);
+  assert.equal(poZgodzie.sprawa.zgoda_wazna, true);
+  assert.equal(poZgodzie.sprawa.blokada_wpisu, null);
+
   const [stWpis, wpisOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {
     dane: { emisja_zdarzenie_id: emisjaZdarzenieId, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
   });
@@ -409,6 +429,7 @@ test('AML jako bramka: niemozliwe blokuje wpis takze w workflow sprawy', async (
     spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'zbywca',
   });
   await zapytaj('PATCH', `/api/psa/sprawy/${sprawaOdp.sprawa.id}`, { akcja: 'weryfikuj' });
+  await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/zgoda`, { forma: 'qes' });
 
   const [status, odp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/wpisz`, {
     dane: {

@@ -511,10 +511,11 @@ function opisz(d, { wniosek, akcjonariusze = [] }) {
  * @param {{typ: string, bloki: object[]}} dokument
  * @returns {Promise<Buffer>}
  */
-function zloz(dokument) {
+function zloz(dokument, { identyfikator = null } = {}) {
   return bloki.doPdf(dokument.bloki, {
     tytul: NAZWY[dokument.typ] || 'Dokument',
     autor: ustawienia.kancelaria(db()).nazwa,
+    identyfikator,
   });
 }
 
