@@ -1214,6 +1214,279 @@
 
 ---
 
+### D-074 — Tryb testowy bez poczty (SESJA-PSA-WYTYCZNE.md, Faza 1)
+
+- Data: 2026-11-01 (sesja wdrożenia wytycznych „Rejestr akcjonariuszy PSA online”)
+- Obszar: operacyjne / poczta / uwierzytelnianie
+- Decyzja: tryb testowy (`PSA_TRYB_TESTOWY=1` w `.env`, nic innego go nie włącza):
+  1. **Poczta przez jeden punkt** (`server/poczta.js: wyslij()`) z wymiennym transportem
+     (`POCZTA_TRANSPORT`): `smtp` albo — wyłącznie w trybie testowym — `skrzynka-testowa`
+     (`.eml` w `dane-testowe/skrzynka/`, nic nie wychodzi z serwera, status „testowa — niewysłana”).
+     Bez transportu wysyłka zwraca widoczny błąd, nigdy cichy sukces. Strona „Skrzynka testowa”
+     (`/test/skrzynka`) bez logowania, tylko w trybie testowym.
+  2. **Logowanie bez poczty** bez osobnego endpointu ani tokenu: lista kont testowych na ekranach
+     logowania woła zwykłe `POST /login` znanym hasłem kont testowych (`Test-Haslo-2026`), „Zaloguj
+     (tryb testowy)” otwiera zwykły link aktywacyjny, `npm run test:link` drukuje ten sam link.
+     Aplikacja nie ma logowania linkiem ani drugiego składnika — nie ma czego wyłączać.
+  3. **Osobna baza** (`PSA_BAZA_TESTOWA`, domyślnie `dane-testowe/kancelaria-testowa.db`) i katalog
+     dokumentów; oznaczenie bazy wierszem w `psa_baza_testowa` (migracja 61). **D-044 zostaje** —
+     oznaczamy całą bazę, nie rekordy.
+  4. **Jedna funkcja czasu** `czas.teraz()` z przesunięciem ustawianym tylko przez tryb testowy
+     (symulowana data, zapisana w bazie testowej); data wcześniejsza niż ostatnie zdarzenie —
+     odrzucana. Ważność sesji, tokenów i limiter logowania zostają w czasie rzeczywistym.
+  5. **Atrapy:** KRS (numery `0000990001`–`0000990003`, kształt odpowiedzi API), tpay w aplikacji
+     (`/test/tpay/*`, ITN na zwykły endpoint, gdy w `.env` brak danych tpay), walidator podpisu
+     (wybór wyniku; podpięcie w Fazie 2).
+  6. **Zabezpieczenia:** `NODE_ENV=production` albo baza bez oznaczenia → odmowa startu, zanim
+     ruszą migracje; poza trybem testowym `/test/*` → 404; czerwony pasek na każdym ekranie;
+     każde logowanie w trybie testowym w `psa_dziennik_logowan` (append-only, migracja 61).
+- Uzasadnienie: wymaganie Łukasza — przejście każdego przepływu bez skonfigurowanej poczty
+  (docelowo Microsoft 365, `biuro@notariusz.gdansk.pl`; transportu produkcyjnego nie konfigurujemy).
+- Odrzucono: osobny endpoint „zaloguj bez hasła” (inna ścieżka niż produkcyjna); znaczniki testowe
+  per rekord (D-044); nowa zależność do plików `.eml` (MailComposer jest w `nodemailer`).
+- Testy: `testy/tryb-testowy.test.js`, `testy/tryb-testowy-wylaczony.test.js`.
+- Skutek w kodzie: `server/tryb-testowy/*` (nowe), `server/poczta.js`, `server/pomocnicze/czas.js`,
+  `server/konfiguracja.js`, `server/migracje.js` (61), `serwer.js`, `server/trasy/{auth,portal,
+  zgloszenia,krs}.js`, `server/logika/{zaproszenia,dziennik-dostepu}.js`, `publiczne/js/tryb-testowy.js`
+  (nowy), `publiczne/js/{auth,portal,osoby,zgloszenia,sprawy,rdzen}.js`, `narzedzia/test-{seed,link,
+  oznacz}.js` (nowe).
+
+---
+
+### D-075 — Polityka podpisów (Łukasz, 31.10.2026) — zastępuje D-054 w zakresie mechanizmu
+
+- Data: 2026-11-01 (SESJA-PSA-WYTYCZNE.md, Faza 2 pkt 1)
+- Obszar: portal / kancelaria / dokumenty / podpisy
+- Decyzja: **skany odrzucane**; dopuszczalne formy podpisu według tabeli § 2 wytycznych, zapisanej
+  w jednym miejscu (`server/logika/formy-podpisu.js`); podpis online przez mObywatel (QES), podpis
+  zaufany (PZ) albo osobisty (PO); oryginał pocztą (dla zgody na wpis — wyłącznie z podpisem
+  notarialnie poświadczonym); podpis w kancelarii. Automatyczna walidacja po wgraniu blokuje tylko to,
+  co na pewno niespełnione; niepewne → „Do weryfikacji ręcznej”; nigdy automatycznej akceptacji bez
+  udanej walidacji. Checklistę nadal zaznacza człowiek (D-052). Zasada „dokument po dokumencie” z D-054
+  **zostaje**.
+- Uzasadnienie: decyzja Łukasza, wytyczne „Rejestr akcjonariuszy PSA online” § 2–3.
+- Odrzucono: przyjmowanie skanu jako dokumentu podpisanego (D-054 w części „wgranie skanu”).
+- Skutek w kodzie: Faza 2 — `formy-podpisu.js`, `walidacja-podpisu.js`, portal „Podpisz dokument”.
+
+### D-076 — Forma zgody i PESEL albo data urodzenia według nowelizacji — od dziś (K1, K2)
+
+- Data: 2026-11-01 (odpowiedź Łukasza na STOP Fazy 1)
+- Obszar: rejestr / zgody / dane osobowe
+- Decyzja: (1) zgoda na wpis (art. 300³⁴ § 3) przyjmowana **już teraz** wyłącznie w formach
+  z art. 300³⁴ § 3 zd. 2 w brzmieniu nowelizacji (podpis notarialnie poświadczony, podpis w obecności
+  osoby upoważnionej przez prowadzącego rejestr, QES, PZ, PO) — bez czekania na 18.02.2027 i bez
+  bramki daty; skan i zwykły oryginał pocztą = brak zgody. **Zastępuje D-026** (forma zgody jako
+  dowolny tekst). (2) Rejestr **wymaga PESEL albo daty urodzenia** akcjonariusza będącego osobą
+  fizyczną już teraz (wymóg z art. 30 ustawy zmieniającej stosowany wcześniej jako polityka
+  kancelarii); udostępnianie bez zmian — art. 300³⁵ § 1¹ (maskowanie dla pozostałych akcjonariuszy
+  działa już dziś, W5.4). Klientów przygotowujemy od razu do formy docelowej.
+- Uzasadnienie: decyzja Łukasza — „nie będziemy zmieniać w lutym”.
+- Skutek w kodzie: (1) Faza 2 (W2.2); (2) Faza 3 (W6.1). `PRZEPISY-PSA.md` § 12 pkt 2–3 sprostowane.
+
+### D-077 — Zakładka „Rejestr” w portalu: tylko dane spółki, bez akcjonariatu (K5)
+
+- Data: 2026-11-01 (odpowiedź Łukasza na STOP Fazy 1)
+- Obszar: portal / dostęp
+- Decyzja: zakładka „Rejestr” w portalu pokazuje wyłącznie dane spółki; stan akcjonariatu — tylko
+  w płatnej informacji z rejestru (W5.1). Sposób realizacji prawa dostępu z art. 300³⁵ § 2 (§ 9 pkt 1
+  wytycznych) pozostaje do opisania w regulaminie.
+- Skutek w kodzie: Faza 3 (W5.1) — portal i API (maskowanie na poziomie API, nie tylko widoku).
+
+---
+
+### D-078 — Przyjęcie wniosku bez podpisu notariusza na umowie
+
+- Data: 2026-11-01 (odpowiedź Łukasza na STOP Fazy 2)
+- Obszar: wnioski / umowa o prowadzenie rejestru
+- Decyzja: przyjęcie wniosku **nie wymaga** podpisu notariusza na umowie — notariusz podpisuje ją
+  później. Kolejność z W2.5 zostaje: podpis notariusza (QES) można wgrać dopiero po potwierdzeniu
+  ważnego podpisu spółki.
+- Skutek w kodzie: brak zmiany (stan zgodny); `POST /wnioski/:id/przyjmij` bez warunku podpisu notariusza.
+
+### D-079 — Formularz publiczny nie ujawnia, czy kancelaria prowadzi rejestr spółki (K6)
+
+- Data: 2026-11-01 (odpowiedź Łukasza na STOP Fazy 2)
+- Obszar: portal / formularz zgłoszenia / ochrona informacji o klientach
+- Decyzja: po wpisaniu numeru KRS formularz zgłoszenia odpowiada **tak samo** dla nowej spółki, dla
+  spółki, której rejestr już prowadzimy, i dla zgłoszenia w toku. Duplikat obsługiwany po cichu:
+  zgłoszenie zapisane jako zamknięte z notatką wewnętrzną (ślad w kolejce „Zgłoszenia”, filtr
+  „odrzucone”), bez nowego konta i zaproszenia; na podany adres idzie neutralna wiadomość. Walidacja
+  danymi publicznymi KRS („nie ma takiej spółki”, „to nie jest P.S.A.”) zostaje — dotyczy rejestru
+  publicznego, nie relacji z kancelarią. **Link aktywacyjny nie wraca już w odpowiedzi formularza**
+  (zdradzałby różnicę; usuwa też obserwację O1) — przy awarii poczty przekazuje go kancelaria
+  z kolejki zgłoszeń.
+- Testy: `testy/zgloszenia-http.test.js` (identyczna odpowiedź, ślad, brak konta).
+- Skutek w kodzie: `server/trasy/portal.js` (`POST /zgloszenia`, `zgloszenieDuplikat`),
+  `publiczne/js/portal.js` (ekran po zgłoszeniu), `narzedzia/scenariusz-e2e.js`, `testy/reczne/*`.
+
+---
+
+### D-080 — Eksport całego rejestru z dokumentami (W6.3) — zastępuje „pakietu eksportu nie budujemy” z D-068
+
+- Data: 2026-11-01 (SESJA-PSA-WYTYCZNE.md, Faza 3)
+- Obszar: rejestr / akta
+- Decyzja: `GET /api/psa/spolki/:id/eksport.zip` — README, pełna informacja z rejestru (HTML), historia
+  zdarzeń (CSV i JSON z łańcuchem SHA-256), dokumenty (sprawy, akta spółki, wniosek, wydane pisma,
+  potwierdzenia nadania). Ślad w dzienniku dostępu (`eksport`). Nic nie jest usuwane (W6.4 — test
+  regresyjny pilnuje miejsc usuwania plików).
+- Podstawa: art. 90a PrNot (PRZEPISY-PSA.md § 8).
+
+### D-081 — Komunikacja z akcjonariuszem: e-mail tylko przy zgodzie złożonej osobiście, inaczej list
+
+- Data: 2026-11-01 (Faza 3, W4.1–W4.5)
+- Obszar: zawiadomienia / powiadomienia / portal
+- Decyzja: pismo do osoby (zawiadomienie o wpisie, odmowie, wezwanie, powiadomienie uprzednie) idzie
+  e-mailem wyłącznie przy `zgoda_email_status = 'potwierdzona'`; `zadeklarowana` (deklaracja zarządu we
+  wniosku) nie jest zgodą. W pozostałych przypadkach — kolejka listów: adres z rejestru (kopia w chwili
+  wystawienia, nigdy z żądania), data i numer nadania, skan potwierdzenia; powiadomienie uprzednie jest
+  „wysłane” z dniem nadania. Odmowa — także do spółki (bezpłatnie). Oświadczenia akcjonariusza (zgoda
+  e-mail, żądanie automatycznych powiadomień) składa on sam w portalu; zgoda e-mail jako dana rejestru
+  idzie przez żądanie wpisu `zmiana_danych_akcjonariusza` (opłata jak dziś — QW1 otwarte).
+- Skutek w kodzie: `server/listy.js`, `server/trasy/listy.js`, `server/zawiadomienia.js`,
+  `server/trasy/portal.js` (`/oswiadczenia`), migracja 64.
+
+### D-082 — Informacje z rejestru: numer, wynagrodzenie z VAT, organy; wersje stawek i gwarancja ceny
+
+- Data: 2026-11-01 (Faza 3, W5.3–W5.7)
+- Obszar: informacje / opłaty
+- Decyzja: każda informacja ma numer `INF/RRRR/NNNN` i sekcję „Wynagrodzenie” (netto, VAT, brutto,
+  podstawa: § 15b ust. 3 rozporządzenia, art. 300³⁵ § 3 KSH, art. 89 § 2 PrNot). Informację organowi
+  (art. 300³⁵ § 4) wydaje kancelaria z sygnaturą sprawy — bez automatycznej opłaty („nie pobrano”, do
+  decyzji kancelarii). Dziennik wydanych informacji: numer, data, odbiorca, opłata. Zmiana stawek tworzy
+  wersję z datą (`psa_stawki_wersje`); spółka w okresie gwarancji ceny (`gwarancja_ceny_lat`, domyślnie 3,
+  liczone od `data_umowy`) rozliczana według wersji z dnia umowy. Informacja dla spółki pokazuje PESEL
+  albo datę urodzenia (D-076); akcjonariusz nie widzi ich u innych.
+
+---
+
+### D-083 — Odpowiedzi QW1–QW3 i opłaty od organów (Łukasz, STOP Fazy 3)
+
+- Data: 2026-11-01
+- Obszar: opłaty / portal / komunikacja
+- Decyzja:
+  1. **QW1** — płatne są **wyłącznie zmiany w akcjonariacie**. Zmiana albo cofnięcie zgody na e-mail
+     i inne zmiany danych są bezpłatne: `odplatne: false` dla `zmiana_danych_akcjonariusza`,
+     `zmiana_danych_spolki`, `uprawnienie`, `ograniczenie`, `przedstawiciel`, `pokrycie_akcji`,
+     `zdarzenie_inne`. Płatne zostają: emisja, objęcie, przeniesienie (także ułamka), umorzenie,
+     unieważnienie, zobowiązanie do przeniesienia oraz obciążenia (ustanowienie, wykreślenie, prawo głosu
+     zastawnika) — **obciążenia do potwierdzenia** (zmieniają prawa do akcji, nie osobę akcjonariusza).
+  2. **QW2** — przy żądaniu automatycznych powiadomień kopia pisma trafia dodatkowo do zakładki
+     „Dokumenty” portalu; e-mail albo list idą bez zmian.
+  3. **QW3** — osoby bez zgody na komunikację e-mail **nie są zapraszane do portalu** (odmowa zaproszenia)
+     i nie logują się do niego (po wpisaniu cofnięcia zgody dostęp wygasa); żądania składają pocztą albo
+     w kancelarii. Uprzedzenie: pouczenie na każdym liście, podpowiedź we wniosku i w „Moich oświadczeniach”.
+  4. **Organy** — informacja z rejestru bez opłaty.
+- Skutek w kodzie: `logika/typy-zdarzen.js`, `zawiadomienia.js`, `listy.js`, `trasy/listy.js`,
+  `logika/zaproszenia.js`, `trasy/portal.js` (logowanie), `trasy/informacje.js`, `publiczne/js/*`;
+  dane testowe: bez konta portalu dla akcjonariusza bez zgody (lista kont T2 skrócona).
+
+---
+
+### D-084 — Przeniesienie rejestru od innego podmiotu (Faza 4, wytyczne § 7)
+
+- Data: 2026-11-01 (SESJA-PSA-WYTYCZNE.md, Faza 4)
+- Obszar: zgłoszenia / wnioski / rejestr / opłaty
+- Decyzja:
+  1. Wariant istniejącego przepływu zgłoszenie → wniosek: opcja „Przenoszę rejestr od innego podmiotu”
+     w formularzu publicznym (odpowiedź jak przy każdym zgłoszeniu — D-079), rekord `psa_przeniesienia`.
+  2. Statusy § 7.3 jako jawna maszyna stanów (`server/logika/przeniesienie.js`) z warunkami przejść;
+     historia append-only; „Wygasła” — po 12 miesiącach bez ziszczenia warunku (przy odczycie listy i pulpitu).
+  3. Checklisty Etapu 3 i 6 zaznacza człowiek (D-052); blokada tylko pozycji na pewno niespełnionych
+     (brak uchwały, umowy spółki, danych poprzednika).
+  4. Umowa: klauzula § 7.4 **dosłownie** (w pakiecie wniosku i jako szablon); uchwała — brzmienie wyboru
+     spod klauzuli, reszta „PROJEKT — do akceptacji Łukasza”; pozostałe pisma pakietu przez `psa_szablony`
+     (wbudowane, edytowalne), jako PROJEKT; zgłoszenie do KRS — za bramką 18.02.2027.
+  5. Okres przejściowy: datę rozwiązania wpisuje kancelaria po weryfikacji dokumentu; przypomnienia
+     (14 dni, 30 dni przed terminem 12 miesięcy) w „Do zrobienia” i w portalu; żądania przed skutecznością —
+     odmowa (klauzula ust. 5), po skuteczności bez danych — przeszkoda (zamrożenie terminu).
+  6. Otwarcie: zdarzenie `przejecie` na początku łańcucha SHA-256 (stan na dzień skuteczności, skróty
+     dokumentów źródłowych, protokół), archiwum poprzednika tylko do odczytu poza łańcuchem, zatwierdzenie
+     protokołu przejęcia podpisem kwalifikowanym notariusza (ścieżka walidacji z Fazy 2).
+  7. Rozliczenie: rok prowadzenia od dnia skuteczności; bez opłaty za wpis przy imporcie. **Opłata za
+     przejęcie i początek gwarancji ceny przy umowie warunkowej — „do ustalenia” (§ 9), bez wartości
+     domyślnej** — do decyzji gwarancja ceny nie jest stosowana.
+  8. Etap 8: spółka (potwierdzenie + stan rejestru), poprzednik (potwierdzenie odbioru — do druku),
+     akcjonariusze (informacja z art. 14 RODO + formularz zgód — e-mail przy zgodzie, inaczej list);
+     organy egzekucyjne i [2027] przypomnienie o KRS — zadania ręczne na pulpicie.
+- Testy: `testy/przeniesienie-stany.test.js`, `testy/przeniesienie-http.test.js`.
+- Skutek w kodzie: migracja 65, `server/przeniesienia.js`, `server/trasy/przeniesienia.js`,
+  `server/trasy/{portal,spolki,sprawy,wnioski,pozostale}.js`, `server/rejestr.js`,
+  `server/logika/{przeniesienie,typy-zdarzen,stan,dokumenty-wniosku,pakiet-wniosku,ustawienia}.js`,
+  `publiczne/js/{przeniesienia,portal,pulpit,app}.js`.
+
+### D-085 — Stałe stawki, obciążenia jako nowe wpisy, brak opłaty za przejęcie (Łukasz, STOP Fazy 4)
+
+- Data: 2026-11-01 (SESJA-PSA-WYTYCZNE.md, odpowiedź Łukasza na STOP Fazy 4)
+- Obszar: opłaty / przeniesienie / szablony
+- Decyzja:
+  1. **Obciążenia akcji ujawniane jako nowe wpisy** (np. ograniczenie rozporządzania po zmianie umowy
+     spółki) — **płatne** jak wpis zmiany w akcjonariacie (`ograniczenie` → `odplatne: true`).
+     Pozostałe zmiany bezpłatne bez zmian (D-083).
+  2. **Brak opłaty za przejęcie rejestru** od innego podmiotu (W7.9) — rozstrzyga „do ustalenia” z D-084 pkt 7.
+  3. **Stałe stawki aż do zmiany przez notariusza** — rozliczenie zawsze wg stawek bieżących
+     (`stawkaGrosze` = stawka bieżąca). „Gwarancja ceny” to wyłącznie przekaz marketingowy (stawki
+     i tak są maksymalne wg rozporządzenia, które zmienia się rzadko) — parametr `gwarancja_ceny_lat`
+     usunięty z ustawień; wersje stawek (`psa_stawki_wersje`) zostają jako ślad zmian, nie podstawa
+     rozliczeń. Zastępuje D-082 w części „gwarancja ceny” i D-084 pkt 7 w części „początek gwarancji”.
+  4. **Szablony pism (PROJEKT — do akceptacji Łukasza)** — Łukasz akceptuje i poprawia je na końcu prac;
+     do tego czasu zostają oznaczone jako PROJEKT.
+- Skutek w kodzie: `server/logika/{ustawienia,typy-zdarzen}.js`, `server/przeniesienia.js`,
+  `server/trasy/spolki.js`, `publiczne/js/przeniesienia.js`; testy `faza3-http`, `przeniesienie-http`.
+
+### D-086 — Podpisy: tylko podstawowy test pliku, resztę sprawdza pracownik (Łukasz, po raporcie Fazy 5)
+
+- Data: 2026-11-01
+- Obszar: podpisy / portal / tryb testowy
+- Decyzja:
+  1. Po wgraniu system sprawdza **tylko**: czy plik ma podpis elektroniczny (PAdES, XAdES, CAdES — skan,
+     zdjęcie, niepodpisany PDF → odrzucenie) oraz **porównanie z oryginałem** (pierwsza wersja = dokument
+     wystawiony przez kancelarię; na pewno inny → odrzucenie; nie da się porównać → bez blokady).
+  2. **Bez usługi DSS** i bez automatycznego sprawdzania osoby podpisującej (PESEL) — ważność podpisu,
+     osobę i formę sprawdza **pracownik** („Do zrobienia → podpisy”), wskazując formę przy potwierdzeniu.
+  3. Atrapa trybu testowego: „plik podpisany” (domyślnie), „brak podpisu”, „plik różny od oryginału”,
+     „sprawdź plik jak na produkcji”.
+  Zastępuje D-075 w części walidacji (W3.3, W3.5, W3.7 — do pracownika).
+- Skutek w kodzie: `server/logika/walidacja-podpisu.js` (uproszczony), `server/trasy/{portal,wnioski}.js`,
+  `server/przeniesienia.js`, `server/konfiguracja.js` (bez `DSS_URL`), `server/tryb-testowy/index.js`,
+  `publiczne/js/{wniosek,wnioski,pulpit}.js`, `testy/podpisy.test.js`, `.env.przyklad`. Bez migracji
+  (stara wartość atrapy w bazie testowej → „plik podpisany”).
+
+### D-087 — Sposoby podpisu równorzędne, jak w KSH od 18.02.2027 (Łukasz, po raporcie Fazy 5)
+
+- Data: 2026-11-01
+- Obszar: podpisy / portal
+- Decyzja:
+  1. Przy **każdym** dokumencie przyjmujemy równorzędnie pięć sposobów z art. 300(34) § 3 zd. 2 KSH
+     (Dz.U. 2026 poz. 176, `PRZEPISY-PSA.md`): podpis notarialnie poświadczony, podpis złożony w obecności
+     osoby upoważnionej (w kancelarii), kwalifikowany podpis elektroniczny, podpis zaufany, podpis osobisty
+     (`formy-podpisu.FORMY_USTAWOWE`). Zwykły oryginał pocztą — dodatkowo tam, gdzie wystarcza (tabela § 2;
+     przy zgodzie na wpis nadal nie). Notariusz podpisuje umowę QES (bez zmian).
+  2. **Ma być prosto.** Klient niczego nie kategoryzuje: domyślnie „Podpisz podpisem zaufanym (gov.pl)”
+     (`PODPIS_PZ_URL`; wynik zwykle `.xml` — XAdES, przyjmowany i porównywany z oryginałem także, gdy
+     w pliku jest kilka `ds:Object`), pod instrukcją krótka rozpiska pozostałych sposobów (kwalifikowany,
+     np. mObywatel; osobisty; na papierze — pocztą, także z podpisem notarialnie poświadczonym, albo
+     w kancelarii) i przycisk „Podpiszę na papierze” (adres kancelarii z ustawień). Instrukcja mObywatela
+     z § 3 — zwinięta niżej.
+  3. **Pracownik nie wskazuje formy** przy dokumentach wniosku — „Podpis prawidłowy” jednym kliknięciem;
+     przy papierze tylko data otrzymania (domyślnie dziś). Forma podana wprost przez API nadal jest
+     sprawdzana. Zgoda na wpis w sprawie (W2.2) — bez zmian (tam forma decyduje o ważności zgody).
+- Skutek w kodzie: `server/logika/{formy-podpisu,walidacja-podpisu}.js`, `server/konfiguracja.js`,
+  `server/trasy/portal.js`, `server/logika/pakiet-wniosku.js`, `publiczne/js/{wniosek,wnioski}.js`,
+  `testy/{podpisy,wnioski-kancelaria-http}.test.js`, `.env.przyklad`.
+
+### D-088 — Zgoda na wpis: pracownik potwierdza tylko „w dopuszczalnej formie” (Łukasz)
+
+- Data: 2026-11-01
+- Obszar: sprawy / zgoda na wpis (W2.2)
+- Decyzja: zamiast wyboru konkretnej formy z listy — pole „Zgoda jest w dopuszczalnej formie” (podpis
+  zaufany, kwalifikowany, osobisty, notarialnie poświadczony albo złożony w kancelarii) i data zgody.
+  Bez zaznaczenia zgody nie odnotowuje się — przed wpisem idzie powiadomienie (art. 300(34) § 3 KSH),
+  blokada wpisu bez zmian. API przyjmuje `dopuszczalna: true` (zapis `zgoda_forma = 'ustawowa'`);
+  kod konkretnej formy nadal przyjmowany i sprawdzany. Upraszcza D-076 w części formularza.
+- Skutek w kodzie: `server/trasy/sprawy.js`, `publiczne/js/sprawy.js`, `testy/sprawy-http.test.js`. Bez migracji.
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

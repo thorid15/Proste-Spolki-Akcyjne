@@ -51,14 +51,16 @@ function dodajOsobe(db, nadpisania = {}) {
     imie: 'Jan',
     nazwa: null,
     pesel: null,
+    // D-076 (W6.1): nowy wpis osoby fizycznej wymaga PESEL albo daty urodzenia.
+    data_urodzenia: '1980-01-01',
     aml_status: 'wykonane',
     utworzono: czas.terazIso(),
     ...nadpisania,
   };
   const wynik = db
     .prepare(
-      `INSERT INTO psa_osoby (typ, nazwisko, imie, nazwa, pesel, aml_status, utworzono)
-       VALUES (@typ, @nazwisko, @imie, @nazwa, @pesel, @aml_status, @utworzono)`
+      `INSERT INTO psa_osoby (typ, nazwisko, imie, nazwa, pesel, data_urodzenia, aml_status, utworzono)
+       VALUES (@typ, @nazwisko, @imie, @nazwa, @pesel, @data_urodzenia, @aml_status, @utworzono)`
     )
     .run(dane);
   return Number(wynik.lastInsertRowid);
@@ -122,4 +124,23 @@ function zdarzenie(id, typ, data, dane) {
   return { id, typ, data_wpisu: data, dane };
 }
 
-module.exports = { bazaTestowa, dodajSpolke, dodajOsobe, wpis, zdarzenie, PDF_TESTOWY, AKCJONARIUSZ_PELNY };
+/**
+ * „Podpisany" plik dokumentu z kompletu wniosku (D-075): oryginał wystawiony
+ * przez kancelarię + dopisany na końcu słownik podpisu (jak podpis
+ * przyrostowy PAdES). Walidator (D-086) daje „do weryfikacji” przez pracownika
+ * — plik zostaje przyjęty. Prawdziwego podpisu tu nie ma.
+ */
+function podpisanyPdf(db, dokumentId, dopisek = '') {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const konfiguracja = require('../server/konfiguracja');
+  const w = db.prepare('SELECT sciezka FROM psa_wnioski_dokumenty WHERE id = ?').get(dokumentId);
+  const oryginal = fs.readFileSync(path.join(konfiguracja.KATALOG_DOKUMENTOW, w.sciezka));
+  return Buffer.concat([
+    oryginal,
+    Buffer.from(`\n% podpis testowy ${dopisek}\n9999 0 obj\n<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached `
+      + '/ByteRange [0 0 0 0] /Contents <00> >>\nendobj\n%%EOF\n'),
+  ]);
+}
+
+module.exports = { bazaTestowa, dodajSpolke, dodajOsobe, wpis, zdarzenie, PDF_TESTOWY, AKCJONARIUSZ_PELNY, podpisanyPdf };

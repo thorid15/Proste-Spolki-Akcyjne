@@ -36,7 +36,7 @@ let ciastkoPracownika;
 // Z-200/Z-201/Z-204: serwer wymaga teraz kompletnej checklisty otwarcia
 // rejestru (patrz `server/trasy/spolki.js: KODY_CHECKLISTY_OTWARCIA`).
 const CHECKLISTA_PELNA = {
-  forma: true, wpis_krs: true, uchwala: true, umowa: true, jedna_umowa: true,
+  forma: true, wpis_krs: true, uchwala: true, reprezentacja: true, umowa: true, jedna_umowa: true,
   dane_z_umowy: true, ograniczenia: true, bilans: true, zakres_danych: true, aml: true,
 };
 
@@ -269,6 +269,8 @@ test('portal: zamowienie informacji z rejestru nalicza oplate', async () => {
        VALUES (?, ?, 'akcjonariusz', ?, 1, ?)`
     )
     .run('portal-oplaty@example.pl', hashPortal, kowalski.id, new Date().toISOString());
+  // QW3 / D-083: portal tylko dla akcjonariusza ze zgodą na komunikację e-mail.
+  db().prepare("UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona' WHERE id = ?").run(kowalski.id);
 
   const loginPortal = await fetch(`${baza}/api/psa/portal/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

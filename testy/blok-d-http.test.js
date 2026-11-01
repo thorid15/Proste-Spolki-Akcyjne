@@ -190,7 +190,18 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'POST /wniosek/dokumenty/:id/podpis',
     'GET /wniosek/dokumenty/:id/podpis',
     'DELETE /wniosek/dokumenty/:id/podpis',
+    // D-075 (W3.8): „wyślę oryginał pocztą” — ten sam wzór izolacji co wyżej
+    // (dokument szukany razem z wniosek_id wniosku z sesji).
+    'POST /wniosek/dokumenty/:id/oryginal-poczta',
     'POST /zadania',
+    // W4.1/W4.2: oświadczenia akcjonariusza — wyłącznie WŁASNE (osoba_id z sesji);
+    // `POST` niesie spolka_id w ciele — chroniony przez `wymagajDostepuDoSpolkiWCiele`.
+    'GET /oswiadczenia',
+    'POST /oswiadczenia',
+    // Faza 4: przeniesienie rejestru — WYŁĄCZNIE własne (po zgłoszeniu/wniosku konta z sesji).
+    'GET /przeniesienie',
+    'POST /przeniesienie/dokumenty',
+    'GET /przeniesienie/pisma/:kod',
     'POST /zadania/:id/dokumenty',
     // B9: zgloszenie nieprawidlowosci we wpisie. `GET` (wlasna lista) dziala
     // WYLACZNIE po `konto.id` z sesji; `POST` niesie `spolka_id` w ciele —
@@ -232,7 +243,7 @@ async function przygotujDwieSpolki() {
     .run('Spółka B P.S.A.', czas.terazIso()).lastInsertRowid;
 
   const osobaAId = db()
-    .prepare(`INSERT INTO psa_osoby (typ, nazwisko, imie, aml_status, utworzono) VALUES ('fizyczna', 'Akcjonariusz', 'A', 'wykonane', ?)`)
+    .prepare(`INSERT INTO psa_osoby (typ, nazwisko, imie, data_urodzenia, aml_status, utworzono) VALUES ('fizyczna', 'Akcjonariusz', 'A', '1980-01-01', 'wykonane', ?)`)
     .run(czas.terazIso()).lastInsertRowid;
 
   const emisja = rejestr.dokonajWpisu(db(), {
@@ -248,6 +259,8 @@ async function przygotujDwieSpolki() {
   const kontoAId = db()
     .prepare(`INSERT INTO psa_konta (email, hash_hasla, rola, osoba_id, aktywne, utworzono) VALUES (?, ?, 'akcjonariusz', ?, 1, ?)`)
     .run(`akcjonariusz-a-${Date.now()}@example.pl`, hashA, Number(osobaAId), czas.terazIso()).lastInsertRowid;
+  // QW3 / D-083: portal tylko dla akcjonariusza ze zgodą na komunikację e-mail.
+  db().prepare("UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona' WHERE id = ?").run(Number(osobaAId));
   const emailA = db().prepare('SELECT email FROM psa_konta WHERE id = ?').get(kontoAId).email;
 
   const odpLogin = await fetch(`${baza}/api/psa/portal/login`, {
@@ -357,7 +370,7 @@ test('D4: pobranie pliku wystawionego dokumentu (kancelaria) zostawia slad w dzi
  * zobaczyc dane wrazliwe innej osoby. Musi zostac slad, ale bez zalewania
  * dziennika przy kazdym odswiezeniu.
  */
-test('D4: odczyt rejestru przez role "spolka" (dane niezamaskowane) zostawia JEDEN slad na 15 minut', async () => {
+test('D4/D-077: zakładka „Rejestr” roli "spolka" — same dane spółki, bez PESEL, więc bez śladu w dzienniku', async () => {
   const spolkaId = Number(
     db()
       .prepare(`INSERT INTO psa_spolki (nazwa, forma_prawna, status, utworzono) VALUES (?, 'PROSTA SPÓŁKA AKCYJNA', 'aktywna', ?)`)
@@ -390,24 +403,12 @@ test('D4: odczyt rejestru przez role "spolka" (dane niezamaskowane) zostawia JED
 
   const liczbaPrzed = db().prepare('SELECT COUNT(*) AS n FROM psa_dziennik_dostepu').get().n;
 
-  const [status] = await zapytajJako(ciastkoSpolka, 'GET', `/api/psa/portal/rejestr/${spolkaId}`);
+  const [status, dane] = await zapytajJako(ciastkoSpolka, 'GET', `/api/psa/portal/rejestr/${spolkaId}`);
   assert.equal(status, 200);
-  const wpis = ostatniWpisDziennika();
-  assert.equal(wpis.typ_kto, 'portal');
-  assert.equal(wpis.spolka_id, spolkaId);
-  assert.equal(wpis.akcja, 'odczyt_rejestru');
-  assert.match(wpis.opis, /1 osoby/);
-
-  // Cztery kolejne odczyty w tym samym oknie - zaden nowy wpis.
-  for (let i = 0; i < 4; i += 1) {
-    await zapytajJako(ciastkoSpolka, 'GET', `/api/psa/portal/rejestr/${spolkaId}`);
-  }
+  assert.equal(dane.akcjonariusze, undefined);
+  assert.doesNotMatch(JSON.stringify(dane), /90010112345/);
   const liczbaPo = db().prepare('SELECT COUNT(*) AS n FROM psa_dziennik_dostepu').get().n;
-  assert.equal(liczbaPo, liczbaPrzed + 1, 'piec odczytow w 15 minut daje jeden wpis');
-
-  // Dziennik jest append-only - nawet SQL wprost nie moze go zmienic.
-  assert.throws(() => db().prepare('UPDATE psa_dziennik_dostepu SET opis = ? WHERE id = ?').run('zmienione', wpis.id));
-  assert.throws(() => db().prepare('DELETE FROM psa_dziennik_dostepu WHERE id = ?').run(wpis.id));
+  assert.equal(liczbaPo, liczbaPrzed, 'bez wglądu w dane osób nie ma czego odnotowywać — wgląd idzie przez informację (D4)');
 });
 
 test('D4: odczyt rejestru przez role "akcjonariusz" (dane w pelni zamaskowane) nie zostawia sladu', async () => {

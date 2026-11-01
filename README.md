@@ -23,6 +23,7 @@ npm run dev                # budowanie po każdej zmianie w publiczne/js + serwe
 npm run buduj              # tylko budowanie: publiczne/js → publiczne/dist (esbuild, D-046)
 npm run buduj-strone       # strona publiczna (SEO) → strona/dist/ — bundel osobny od serwer.js (D-063/D-065)
 npm test
+npm run test:seed         # tryb testowy: baza z danymi fikcyjnymi (patrz „Tryb testowy”)
 ```
 
 Warstwa klienta (`publiczne/js/*.js`, JSX) jest kompilowana przy budowaniu do dwóch paczek w
@@ -45,6 +46,135 @@ sesja, aktywna tylko gdy `PORTAL_WLACZONY=true`.
 Front ładuje React 18 i Babel z CDN (`unpkg.com`, wersje przypięte) — maszyna
 uruchamiająca przeglądarkę musi mieć do niego dostęp. Bez bundlera, bez
 TypeScriptu, bez Tailwinda, bez bibliotek PDF.
+
+---
+
+## Podpisy dokumentów — D-075, D-076, D-086
+
+Polityka (`server/logika/formy-podpisu.js`, tabela § 2 wytycznych, D-087): **skanów nie przyjmujemy**.
+Przy każdym dokumencie równorzędnie — jak w art. 300³⁴ § 3 zd. 2 KSH od 18.02.2027: podpis notarialnie
+poświadczony, podpis złożony w kancelarii, kwalifikowany (np. mObywatel), zaufany (plik `.xml` z gov.pl)
+albo osobisty. Zwykły oryginał pocztą — dodatkowo tam, gdzie wystarcza (nie przy zgodzie na wpis).
+Forma zgody według art. 300³⁴ § 3 zd. 2 KSH obowiązuje już teraz (D-076).
+
+- **Generowanie:** każdy PDF do podpisu ma unikalne ID w stopce; przy wystawieniu zapisuje się SHA-256
+  i długość pliku; limit 5 MB (`PODPIS_LIMIT_BAJTOW`).
+- **Portal — „Podpisz dokument”:** Pobierz → Podpisz podpisem zaufanym na gov.pl (`PODPIS_PZ_URL`,
+  domyślnie — najprościej) → Wgraj podpisany dokument (PDF albo XML); krótka rozpiska innych sposobów
+  (kwalifikowany, np. mObywatel; osobisty; na papierze) i „Podpiszę na papierze” (adres z ustawień).
+  Instrukcja mObywatela z § 3 — zwinięta niżej. Pracownik potwierdza podpis jednym kliknięciem,
+  bez wybierania formy (D-087).
+- **Test po wgraniu — tylko podstawowy (D-086)** (`server/logika/walidacja-podpisu.js`): plik bez podpisu
+  elektronicznego (skan, zdjęcie, niepodpisany PDF) → odrzucenie z komunikatem dla laika; pierwsza wersja
+  pliku ≠ dokument wystawiony przez kancelarię → odrzucenie („plik zmieniono po pobraniu”). Każdy inny
+  plik → „Do zrobienia → podpisy”: **ważność podpisu, osobę podpisującą i formę sprawdza pracownik**
+  (D-052). Bez usług zewnętrznych, bez automatycznej akceptacji.
+- **Umowa o prowadzenie rejestru:** spółka podpisuje pierwsza; podpis notariusza (QES) można wgrać
+  dopiero po potwierdzeniu ważnego podpisu spółki. Checklista otwarcia: „reprezentacja wg KRS”.
+- **Wpis bez ważnej zgody** — „Dokonaj wpisu” zablokowane do wysłania powiadomienia
+  (art. 300³⁴ § 3 zd. 1 KSH), z przyczyną obok przycisku. Zgodę pracownik odnotowuje jednym polem
+  „zgoda w dopuszczalnej formie” + data (D-088).
+
+Próbki prawdziwych podpisów do testu: `testy/fixtures/podpisy/` (README w katalogu; pliki w `.gitignore`).
+
+## Zgody, listy, informacje, eksport — D-076–D-082 (Faza 3)
+
+- **Oświadczenia akcjonariusza** (portal → Konto → „Moje oświadczenia”): zgoda na komunikację e-mail
+  (dana rejestru — zakłada żądanie wpisu) i żądanie automatycznych powiadomień; z datą, odwołalne,
+  wyłącznie osobiście (nie przez zarząd).
+- **Listy do wysyłki** (kancelaria): pisma do osób bez zgody na e-mail — druk z adresem z rejestru,
+  data i numer nadania, skan potwierdzenia nadania. Nadanie powiadomienia odblokowuje wpis.
+- **Zakładka „Rejestr” w portalu** — tylko dane spółki; akcjonariat w płatnej informacji z rejestru.
+- **Dziennik informacji** (kancelaria): numer, data, odbiorca, opłata; „Wydaj informację organowi”
+  (sygnatura obowiązkowa). Każda informacja: numer `INF/RRRR/NNNN`, wynagrodzenie, VAT i podstawa.
+- **Stawki** stałe aż do zmiany przez notariusza (D-085); każda zmiana zapisuje wersję z datą (ślad).
+  Płatne są tylko zmiany w akcjonariacie i nowe obciążenia akcji; pozostałe zmiany i informacje dla organów — bez opłat.
+- **PESEL albo data urodzenia** wymagane przy nowym wpisie osoby fizycznej (D-076).
+- **Do zrobienia** (od 18.02.2027): zawiadomienie sądu o rozwiązaniu umowy w 7 dni, przypomnienie
+  o zgłoszeniu do KRS do 18.05.2027 (projekt pisma). Zgłoszenia składa się przez PRS — bez automatu.
+- **Eksport całego rejestru** (wydruk spółki → „Eksport całego rejestru (ZIP)”).
+
+## Przeniesienie rejestru od innego podmiotu — D-084 (Faza 4)
+
+Zgłoszenie z opcją „Przenoszę rejestr od innego podmiotu” → wniosek (umowa z klauzulą § 7.4) → kancelaria
+(menu **Przeniesienia**): weryfikacja (checklista Etapu 3) → umowa zawarta pod warunkiem (pisma) → data
+rozwiązania dotychczasowej umowy → dane od poprzednika → uzgodnienie (checklista Etapu 6, rozbieżności →
+„Wstrzymane”) → protokół przejęcia podpisany przez notariusza → otwarcie w kreatorze stanu otwarcia
+(zdarzenie „PRZEJĘCIE” na początku łańcucha) → „Aktywny”. Umowa wygasa po 12 miesiącach bez rozwiązania
+dotychczasowej. Bez opłaty za przejęcie (D-085); rok prowadzenia liczony od dnia skuteczności.
+
+W trybie testowym `test:seed` zakłada przeniesienie w każdym statusie § 7.3; „Beta Przenoszona P.S.A.”
+czeka w statusie „Zgłoszone” do samodzielnego przejścia (link aktywacyjny konta `beta.zarzad@example.com`
+w skrzynce testowej albo `npm run test:link -- beta.zarzad@example.com`).
+
+
+## Scenariusz E2E w trybie testowym (Faza 5)
+
+```bash
+npm run scenariusz:testowy
+```
+
+Odtwarza bazę testową (`test:seed`), uruchamia serwer w tym samym procesie i sprawdza 5 scenariuszy (34 kontrole):
+podpisy (test pliku i atrapa, D-086), wpis bez zgody → list do wysyłki, zgody akcjonariusza, przeniesienie
+rejestru do „Aktywny”, informacja z rejestru w wersji dla spółki i akcjonariusza na dacie 2027-02-20. Kod wyjścia 1
+przy błędzie. Pierwotny `npm run scenariusz -- --haslo …` działa też na serwerze w trybie testowym (link aktywacyjny
+ze skrzynki testowej). Testy ręczne dla notariusza: `WYTYCZNE-STATUS.md`, sekcja R4.
+## Tryb testowy (bez poczty, dane fikcyjne) — D-074
+
+Do przejścia każdego przepływu kancelarii i portalu bez skonfigurowanej poczty. Działa na **osobnej
+bazie** (`dane-testowe/kancelaria-testowa.db`); produkcyjna `WSPOLNA_BAZA` nie jest wtedy otwierana.
+Wszystko w `.env` — polecenia działają tak samo na Windows.
+
+**Uruchomienie (3 kroki)**
+
+1. W `.env` dopisz `PSA_TRYB_TESTOWY=1` (portal włącza się wtedy sam).
+2. `npm run test:seed` — tworzy bazę testową od nowa i wypełnia ją scenariuszami.
+3. `npm start` → `http://localhost:3005/` (kancelaria) albo `/portal.html` (portal) → kliknij konto
+   z listy „Tryb testowy — konta testowe” pod formularzem logowania.
+
+Na każdym ekranie jest czerwony pasek „TRYB TESTOWY — e-maile nie są wysyłane” z odnośnikami do
+skrzynki i panelu. Wyłączenie: usuń `PSA_TRYB_TESTOWY` z `.env`.
+
+**Konta** (hasło wszystkich: `Test-Haslo-2026`): `notariusz@example.com` (administrator),
+`pracownik@example.com`, `zarzad@example.com` (konto spółki Alfa Testowa P.S.A.),
+`anna.zgoda@example.com` (akcjonariusz ze zgodą e-mail), `gamma.zarzad@example.com` (wnioskodawca
+z dokumentami do podpisu). Akcjonariusz bez zgody na e-mail (Bartosz Próbny) jest w rejestrze, ale nie ma konta
+w portalu (D-083) — dostaje listy. Lista na ekranie logowania woła **zwykły** endpoint logowania — te same
+uprawnienia, izolacja spółek i ważność sesji. Link z wiersza poleceń:
+`npm run test:link -- <e-mail>` (konto nieaktywne → link aktywacyjny, ten sam co w zaproszeniu;
+aktywne → adres logowania). Każde logowanie w trybie testowym trafia do `psa_dziennik_logowan`.
+
+**Dane z `test:seed`:** spółka z aktywnym rejestrem (KRS `0000990001` z atrapy KRS), akcjonariusze
+ze zgodą e-mail i bez niej, żądanie wpisu zbycia bez zgody zbywcy (sprawa w weryfikacji) z powiadomieniem
+zbywcy w kolejce listów, informacja dla organu, wydana informacja z rejestru (zapłacona przez atrapę tpay),
+oświadczenie akcjonariusza, zgłoszenie z formularza publicznego, wniosek z dokumentami do podpisu. Atrapa KRS odpowiada dla `0000990001`–`0000990003`; inne numery idą do prawdziwego API.
+
+**Skrzynka testowa** — `http://localhost:3005/test/skrzynka` (bez logowania): każda wiadomość zapisana
+jako `.eml` w `dane-testowe/skrzynka/`, lista, podgląd z klikalnymi linkami, status „testowa —
+niewysłana”. Nic nie wychodzi z serwera. Po wysłaniu zaproszenia ekran pokazuje dodatkowo
+„Zaloguj (tryb testowy)” — ten sam link i token, który poszedł do skrzynki.
+
+**Panel** — `http://localhost:3005/test`:
+- *symulowana data* — jedna funkcja czasu (`czas.teraz()`) dla bramki 18.02.2027, terminów i chwil
+  nowych zdarzeń; data wcześniejsza niż ostatnie zdarzenie w rejestrze jest odrzucana;
+- *atrapa walidatora podpisu* — wybór wyniku (QES / PZ / PO / zaawansowany / brak podpisu / plik
+  zmieniony / inna osoba); podpina go adapter walidacji z Fazy 2;
+- *atrapa tpay* — gdy w `.env` nie ma danych tpay, „Zapłać” w portalu otwiera atrapę kasy, a ta wysyła
+  powiadomienie ITN na zwykły adres `/api/psa/platnosci/tpay/itn`.
+
+**Zabezpieczenia:** przy `NODE_ENV=production` albo na bazie nieoznaczonej jako testowa serwer
+**odmawia startu**; poza trybem testowym `/test/*` to 404, a skrzynka i atrapy są niedostępne.
+Kopię bazy prototypu oznacza się jako testową poleceniem `npm run test:oznacz -- <ścieżka>`
+(z potwierdzeniem „TAK”; odmawia dla pliku z `WSPOLNA_BAZA`), potem `PSA_BAZA_TESTOWA=<ścieżka>`.
+
+**Podpisy w trybie testowym:** konto `gamma.zarzad@example.com` ma wniosek z kompletem dokumentów do
+podpisu — w portalu „Podpisz dokumenty do wniosku”. Wgraj dowolny PDF: wynik ustala atrapa walidatora
+z panelu `/test` (QES / PZ / PO / zaawansowany / brak podpisu / plik zmieniony / inna osoba).
+
+**Poczta produkcyjna:** jeden punkt `server/poczta.js: wyslij()` z wymiennym transportem
+(`POCZTA_TRANSPORT`, domyślnie `smtp`). Microsoft 365 (`biuro@notariusz.gdansk.pl`) podłącza się przez
+`SMTP_*` (smtp.office365.com:587) albo własnym transportem `zarejestrujTransport()`. Bez transportu
+wysyłka kończy się widocznym błędem, nigdy cichym sukcesem.
 
 ---
 

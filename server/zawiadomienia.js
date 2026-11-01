@@ -34,6 +34,7 @@ const poczta = require('./poczta');
 const czas = require('./pomocnicze/czas');
 const konfiguracja = require('./konfiguracja');
 const ustawienia = require('./logika/ustawienia');
+const listy = require('./listy');
 
 /** Wzór z `wzory/` odpowiadający każdemu z czterech pism automatu. */
 const WZOR_KOD = {
@@ -85,12 +86,38 @@ function zapiszPlikNaDysku({ spolkaId, sprawaId, wzorPlik, bufor }) {
  * wysyłki (pismo idzie z widocznym „—" zamiast zgadniętej treści), ale
  * wracają w wyniku — wywołujący pokazuje je jako ostrzeżenie do sprawdzenia.
  */
-async function wydajIWyslij(db, { wzorTyp, dane, sprawaId, spolkaId, odbiorcaOsobaId, odbiorcaEmail, temat, autor }) {
+async function wydajIWyslij(db, { wzorTyp, dane, sprawaId, spolkaId, odbiorcaOsobaId, odbiorcaEmail, odbiorcaOsoba = null, temat, autor }) {
   const kod = WZOR_KOD[wzorTyp];
   const wynik = wzoryDysk.wypelnij(kod, dane);
   const tekst = docx.tekst(wynik.plik);
   const nazwaPliku = `${wynik.nazwa.replace(/\s+/g, '-')}.docx`;
   const sciezkaPlik = zapiszPlikNaDysku({ spolkaId, sprawaId, wzorPlik: nazwaPliku, bufor: wynik.plik });
+
+  // QW2 / D-083 — akcjonariusz z żądaniem automatycznych powiadomień dostaje
+  // DODATKOWO kopię pisma w portalu (zakładka „Dokumenty”); nie zastępuje
+  // e-maila ani listu.
+  const kopiaDoPortalu = (idPisma) => {
+    if (!odbiorcaOsoba || !spolkaId || !listy.zadaPowiadomienAutomatycznych(db, odbiorcaOsoba.id, spolkaId)) return null;
+    return zapiszWydanyDokument(db, {
+      sprawaId, spolkaId, typ: wzorTyp, odbiorcaOsobaId, kanal: 'portal', trescHtml: tekst, sciezkaPlik,
+      szablonKod: kod, szablonHash: wynik.hash, wyslano: czas.terazIso(), autor: `${autor} (kopia do portalu, pismo #${idPisma})`,
+    });
+  };
+
+  // W4.3 — osoba bez zgody na komunikację e-mail: pismo do kolejki listów,
+  // na adres z rejestru (W4.4). E-mail wyłącznie przy zgodzie potwierdzonej.
+  if (odbiorcaOsoba && listy.kanalDlaOsoby(odbiorcaOsoba) === 'papier') {
+    const id = zapiszWydanyDokument(db, {
+      sprawaId, spolkaId, typ: wzorTyp, odbiorcaOsobaId, kanal: 'papier', trescHtml: tekst, sciezkaPlik,
+      szablonKod: kod, szablonHash: wynik.hash, wyslano: null, autor,
+    });
+    const listId = listy.dodaj(db, { wydanyDokumentId: id, spolkaId, sprawaId, osoba: odbiorcaOsoba, rodzajPisma: wzorTyp });
+    return {
+      id, wyslano: false, status: 'list', list_id: listId, kopia_portal_id: kopiaDoPortalu(id),
+      powod: 'Brak zgody na komunikację e-mail — pismo czeka w kolejce listów (adres z rejestru).',
+      brakujace: wynik.brakujace, bledy: wynik.bledy,
+    };
+  }
 
   const html = `
     <p>W załączeniu przesyłamy pismo. Treść (bez formatowania, do szybkiego wglądu):</p>
@@ -118,7 +145,7 @@ async function wydajIWyslij(db, { wzorTyp, dane, sprawaId, spolkaId, odbiorcaOso
     autor,
   });
 
-  return { id, ...proba, brakujace: wynik.brakujace, bledy: wynik.bledy };
+  return { id, ...proba, kopia_portal_id: kopiaDoPortalu(id), brakujace: wynik.brakujace, bledy: wynik.bledy };
 }
 
 /** art. 300(34) § 7 KSH — niezwłoczne powiadomienie żądającego i spółki o wpisie. */
@@ -145,6 +172,7 @@ async function poWpisie(db, { sprawa, zdarzenie, spolka, osoby, podsumowanie, au
         spolkaId: spolka.id,
         odbiorcaOsobaId: sprawa.zadajacy_osoba_id,
         odbiorcaEmail: zadajacy ? zadajacy.email : null,
+        odbiorcaOsoba: zadajacy,
         temat: `Zawiadomienie o wpisie do rejestru — ${spolka.nazwa}`,
         autor,
       })),
@@ -208,16 +236,30 @@ async function poOdmowie(db, { sprawa, spolka, osoby, autor }) {
   const zadajacy = sprawa.zadajacy_osoba_id ? osoby.get(sprawa.zadajacy_osoba_id) : null;
   const dane = kontekstPisma.zawiadomienieNiedokonania({ spolka, sprawa, zadajacy, osoby, dzis: czas.dzisIso() });
 
-  return wydajIWyslij(db, {
+  const wynik = await wydajIWyslij(db, {
     wzorTyp: 'zawiadomienie_odmowa',
     dane,
     sprawaId: sprawa.id,
     spolkaId: spolka.id,
     odbiorcaOsobaId: sprawa.zadajacy_osoba_id,
     odbiorcaEmail: zadajacy ? zadajacy.email : null,
+    odbiorcaOsoba: zadajacy,
     temat: `Zawiadomienie o odmowie wpisu — ${spolka.nazwa}`,
     autor,
   });
+  // W4.5 (wytyczne § 4): o odmowie z przyczynami wie też spółka — to samo
+  // pismo do jej wiadomości. Bezpłatnie, niezależnie od płatności (art. 300(34) § 7).
+  const doSpolki = await wydajIWyslij(db, {
+    wzorTyp: 'zawiadomienie_odmowa',
+    dane,
+    sprawaId: sprawa.id,
+    spolkaId: spolka.id,
+    odbiorcaOsobaId: null,
+    odbiorcaEmail: spolka.email,
+    temat: `Zawiadomienie o odmowie wpisu (do wiadomości spółki) — ${spolka.nazwa}`,
+    autor,
+  });
+  return { ...wynik, spolka: doSpolki };
 }
 
 /** Wezwanie do uzupełnienia, wysyłane przy przejściu sprawy w stan „wstrzymana”. */
@@ -234,6 +276,7 @@ async function wezwanie(db, { sprawa, spolka, osoby, powodWstrzymania, autor }) 
     spolkaId: spolka.id,
     odbiorcaOsobaId: sprawa.zadajacy_osoba_id,
     odbiorcaEmail: zadajacy ? zadajacy.email : null,
+    odbiorcaOsoba: zadajacy,
     temat: `Wezwanie do uzupełnienia — ${spolka.nazwa}`,
     autor,
   });
@@ -266,6 +309,8 @@ async function powiadomienieUprzednie(db, { sprawa, spolka, osoby, odbiorca, aut
     spolkaId: spolka.id,
     odbiorcaOsobaId: odbiorca.id,
     odbiorcaEmail: odbiorca.email,
+    // W4.4 — adres wyłącznie z rejestru (rekord kartoteki), nigdy z żądania.
+    odbiorcaOsoba: odbiorca,
     temat: `Powiadomienie o treści zamierzonego wpisu — ${spolka.nazwa}`,
     autor,
   });

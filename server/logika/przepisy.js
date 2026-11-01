@@ -54,6 +54,15 @@ const TERMINY = {
   ZAWIADOMIENIE_SADU_DNI: 7,
 
   /**
+   * Przeniesienie rejestru (wytyczne § 7.4, klauzula umowy warunkowej):
+   * wypowiedzenie dotychczasowej umowy w 14 dni od zawarcia (ust. 3), termin
+   * ostateczny warunku 12 miesięcy (ust. 4), ostrzeżenie przed nim.
+   */
+  PRZENIESIENIE_WYPOWIEDZENIE_DNI: 14,
+  PRZENIESIENIE_TERMIN_WARUNKU_MIESIECY: 12,
+  PRZENIESIENIE_OSTRZEZENIE_DNI: 30,
+
+  /**
    * PRZEPISY-PSA.md art. 300(33) § 3 🔵 - wszelkie zmiany danych z § 1
    * pkt 1-4 oraz 9-11 zarzad zglasza PODMIOTOWI PROWADZACEMU REJESTR (do nas,
    * nie do sadu rejestrowego - poprawka erraty nr 4) w terminie 7 dni od
@@ -774,6 +783,15 @@ const PODSTAWY = {
   TRYB_WPISU: 'art. 300(34) § 1 KSH',
   ZAJECIE_Z_URZEDU: 'art. 300(34) § 2 KSH',
   UPRZEDNIE_POWIADOMIENIE: 'art. 300(34) § 3 KSH',
+  // PRZEPISY-PSA.md art. 300(34) § 3 zd. 2 (🔵, stosowane od dzis — D-076).
+  FORMA_ZGODY_NA_WPIS: 'art. 300(34) § 3 zd. 2 KSH',
+  FORMA_ZBYCIA: 'art. 300(36) § 4 KSH',
+  FORMA_ZGODY_SPOLKI: 'art. 300(39) § 4 KSH, art. 300(40) § 1 KSH',
+  WYBOR_PODMIOTU: 'art. 300(31) § 5 KSH',
+  // W5.5 — PRZEPISY-PSA.md § 9 (taksa) i § 8 (art. 89 § 2 PrNot), art. 300(35) § 3 KSH.
+  WYNAGRODZENIE_INFORMACJI: '§ 15b ust. 3 rozporządzenia w sprawie maksymalnych stawek taksy notarialnej, '
+    + 'art. 300(35) § 3 KSH, art. 89 § 2 ustawy — Prawo o notariacie',
+  DOSTEP_ORGANOW: 'art. 300(35) § 4 KSH',
   DOKUMENTY_PODSTAWA: 'art. 300(34) § 4 KSH',
   BADANIE_TRESCI_I_FORMY: 'art. 300(34) § 5 KSH',
   OGRANICZENIA_ROZPORZADZANIA: 'art. 300(34) § 6 KSH',

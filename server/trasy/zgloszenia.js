@@ -103,6 +103,7 @@ router.post(
       email_wyslany: wynik.email_wyslany,
       powod: wynik.powod,
       link_aktywacyjny: wynik.link_aktywacyjny,
+      link_testowy: wynik.link_testowy,
     });
   })
 );

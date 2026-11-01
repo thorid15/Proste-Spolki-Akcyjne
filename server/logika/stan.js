@@ -742,6 +742,7 @@ const TYPY_BEZ_SKUTKU = new Set([
   'zmiana_danych_akcjonariusza',
   'zmiana_danych_spolki',
   'przekazanie_rejestru',
+  'przejecie',
   'zobowiazanie',
   'zdarzenie_inne',
 ]);

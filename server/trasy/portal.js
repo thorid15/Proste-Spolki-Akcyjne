@@ -46,12 +46,17 @@ const informacjaDokument = require('../logika/informacja-dokument');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
 const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
+const poczta = require('../poczta');
 const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany, brakUprawnien, BladZadania, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
 const { pobierzZKrs } = require('./krs');
 const osobyModul = require('./osoby');
+const trybTestowy = require('../tryb-testowy');
+const walidacjaPodpisu = require('../logika/walidacja-podpisu');
+const formyPodpisu = require('../logika/formy-podpisu');
+const informacje = require('../informacje');
 
 const router = express.Router();
 
@@ -157,9 +162,23 @@ router.post(
     }
 
     limiter.wyczyscPoUdanej(zad.ip, `portal:${email}`);
+    // QW3 / D-083 — portal tylko dla akcjonariusza ze zgodą na komunikację
+    // e-mail; po wpisaniu cofnięcia zgody dostęp wygasa.
+    if (konto.rola === 'akcjonariusz' && konto.osoba_id) {
+      const osoba = db().prepare('SELECT zgoda_email_status FROM psa_osoby WHERE id = ?').get(konto.osoba_id);
+      if (!osoba || osoba.zgoda_email_status !== 'potwierdzona') {
+        throw nieAutoryzowany(
+          'Bez zgody na komunikację e-mail dostęp do portalu jest wyłączony. Korespondencja z rejestru przychodzi pocztą, '
+            + 'a żądania wpisu składa się pocztą albo w kancelarii.'
+        );
+      }
+    }
     db().prepare('UPDATE psa_konta SET ostatnie_logowanie = ? WHERE id = ?').run(czas.terazIso(), konto.id);
 
     autoryzacja.zalogujKonto(zad, odp, konto.id);
+    trybTestowy.zapiszLogowanie(db(), {
+      typKonta: 'portal', kontoId: konto.id, email: konto.email, droga: (zad.body || {}).droga_testowa,
+    });
     odp.json({ konto: widokKonta({ ...konto, ostatnie_logowanie: czas.terazIso() }) });
   })
 );
@@ -191,6 +210,51 @@ router.get(
 // ─────────────────────────────────────────────────────────────
 
 const WZORZEC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Jedna postać odpowiedzi formularza zgłoszenia — dla nowego KRS i duplikatu (D-079). */
+function odpowiedzZgloszenia({ formaPrawna, wyslano, linkTestowy }) {
+  return { ok: true, forma_prawna: formaPrawna || null, zaproszenie_wyslane: Boolean(wyslano), link_testowy: linkTestowy };
+}
+
+function trescZgloszeniaPonownego({ kancelariaNazwa, krs, adresPortalu }) {
+  return `
+    <p>Dzień dobry,</p>
+    <p>otrzymaliśmy zgłoszenie dotyczące prowadzenia rejestru akcjonariuszy spółki o numerze KRS ${krs}.
+       Kancelaria je rozpatrzy i odezwie się na ten adres.</p>
+    <p>Jeśli masz już konto w portalu klienta ${kancelariaNazwa}, możesz się zalogować:
+       <a href="${adresPortalu}">${adresPortalu}</a>.</p>
+  `;
+}
+
+/**
+ * Duplikat zgłoszenia (D-079) — bez nowego konta i bez zaproszenia. Ślad dla
+ * kancelarii: zgłoszenie zamknięte (`odrzucone`) z notatką wewnętrzną —
+ * widoczne w kolejce „Zgłoszenia” po filtrze statusu. Na podany adres idzie
+ * neutralna wiadomość, która nie mówi, czy rejestr jest prowadzony.
+ */
+async function zgloszenieDuplikat({ email, krs, cialo, nazwaZKrs, formaPrawna, powod }) {
+  const teraz = czas.terazIso();
+  db().prepare(
+    `INSERT INTO psa_zgloszenia (email, krs, telefon, nazwa_spolki, opis, status, notatka_wewnetrzna,
+                                 obsluzone_przez, obsluzone_kiedy, utworzono)
+     VALUES (?, ?, ?, ?, ?, 'odrzucone', ?, 'automat', ?, ?)`
+  ).run(
+    email, krs, String(cialo.telefon || '').trim() || null,
+    String(cialo.nazwa_spolki || '').trim() || nazwaZKrs, String(cialo.opis || '').trim() || null,
+    `[${teraz}] Zgłoszenie ponowne — ${powod}. Formularz odpowiedział jak przy nowym zgłoszeniu (D-079); `
+      + 'nie założono konta ani nie wysłano zaproszenia. W razie potrzeby skontaktuj się ze zgłaszającym.',
+    teraz, teraz
+  );
+  const kancelaria = ustawienia.kancelaria(db());
+  const proba = await poczta.wyslij({
+    do: email,
+    temat: `Zgłoszenie przyjęte — ${kancelaria.nazwa}`,
+    html: trescZgloszeniaPonownego({ kancelariaNazwa: kancelaria.nazwa, krs, adresPortalu: konfiguracja.URL_PORTALU }),
+  });
+  return odpowiedzZgloszenia({
+    formaPrawna, wyslano: proba.wyslano, linkTestowy: konfiguracja.TRYB_TESTOWY ? konfiguracja.URL_PORTALU : undefined,
+  });
+}
 
 router.post(
   '/zgloszenia',
@@ -225,31 +289,6 @@ router.post(
     });
     limiter.zanotujNieudana(zad.ip, `zgloszenie:${email}`);
 
-    // Duplikat rozpoznajemy po NUMERZE KRS, nie po adresie e-mail: jeden
-    // klient pod jednym adresem miewa kilka spolek i zgloszenie drugiej
-    // jest normalna sytuacja, nie pomylka.
-    const juzProwadzona = db().prepare('SELECT id, nazwa FROM psa_spolki WHERE krs = ?').get(krs);
-    if (juzProwadzona) {
-      throw bledneZadanie(
-        `Rejestr dla spółki o numerze KRS ${krs} jest już prowadzony przez kancelarię. `
-        + 'Zaloguj się do portalu albo napisz do nas, jeśli potrzebujesz dostępu.'
-      );
-    }
-    const wToku = db()
-      .prepare(
-        `SELECT id FROM psa_wnioski WHERE krs = ? AND status NOT IN ('przyjety','odrzucony') LIMIT 1`
-      )
-      .get(krs);
-    const zgloszoneWczesniej = db()
-      .prepare(`SELECT id FROM psa_zgloszenia WHERE krs = ? AND status <> 'odrzucone' LIMIT 1`)
-      .get(krs);
-    if (wToku || zgloszoneWczesniej) {
-      throw bledneZadanie(
-        `Zgłoszenie dla spółki o numerze KRS ${krs} jest już w toku. `
-        + 'Sprawdź skrzynkę — zaproszenie do portalu poszło na wskazany wcześniej adres.'
-      );
-    }
-
     // Rejestru akcjonariuszy nie prowadzi sie dla kazdej spolki — art. 300(30)
     // § 1 KSH dotyczy PROSTEJ spolki akcyjnej. Sprawdzamy to od razu, zamiast
     // odsylac klienta po tygodniu: numer albo dotyczy P.S.A., albo nie ma po
@@ -274,6 +313,34 @@ router.post(
         `${zKrs.komunikat} Rejestr akcjonariuszy prowadzimy wyłącznie dla prostych spółek akcyjnych.`
       );
     }
+    // W7.1 — wariant „Przenoszę rejestr od innego podmiotu” (walidacja danych
+    // wejściowych PRZED rozpoznaniem duplikatu — odpowiedź nie może się różnić).
+    const przen = cialo.przeniesienie && typeof cialo.przeniesienie === 'object' ? cialo.przeniesienie : null;
+    if (przen && !['dom_maklerski', 'notariusz', 'rada_izby'].includes(przen.poprzednik_typ)) {
+      throw bledneZadanie('Wskaż, kto dotąd prowadził rejestr: dom maklerski / bank, notariusz albo notariusz, który zakończył działalność.');
+    }
+
+    // D-079 (K6): formularz NIE ujawnia, czy kancelaria prowadzi już rejestr
+    // spółki ani czy zgłoszenie jest w toku — sam numer KRS nie może tego
+    // zdradzić. Duplikat obsługujemy po cichu: ślad dla kancelarii (zgłoszenie
+    // zamknięte z notatką), neutralna wiadomość na podany adres i odpowiedź
+    // dokładnie taka jak przy nowym zgłoszeniu. Duplikat rozpoznajemy po KRS,
+    // nie po adresie e-mail (jeden klient miewa kilka spółek).
+    const juzProwadzona = db().prepare('SELECT id FROM psa_spolki WHERE krs = ?').get(krs);
+    const wToku = db()
+      .prepare(`SELECT id FROM psa_wnioski WHERE krs = ? AND status NOT IN ('przyjety','odrzucony') LIMIT 1`)
+      .get(krs);
+    const zgloszoneWczesniej = db()
+      .prepare(`SELECT id FROM psa_zgloszenia WHERE krs = ? AND status <> 'odrzucone' LIMIT 1`)
+      .get(krs);
+    if (juzProwadzona || wToku || zgloszoneWczesniej) {
+      return odp.status(201).json(await zgloszenieDuplikat({
+        email, krs, cialo, nazwaZKrs: zKrs && zKrs.znaleziono ? zKrs.dane.nazwa : null,
+        formaPrawna: zKrs && zKrs.znaleziono ? zKrs.dane.forma_prawna : null,
+        powod: juzProwadzona ? 'rejestr spółki jest już prowadzony' : 'zgłoszenie albo wniosek dla tego KRS jest w toku',
+      }));
+    }
+
     const daneKrs = zKrs && zKrs.znaleziono ? zKrs.dane : null;
     const formaPrawna = daneKrs ? daneKrs.forma_prawna : null;
     const nazwaZKrs = daneKrs ? daneKrs.nazwa : null;
@@ -284,6 +351,7 @@ router.post(
       telefon: String(cialo.telefon || '').trim() || null,
       nazwa_spolki: String(cialo.nazwa_spolki || '').trim() || nazwaZKrs,
       opis: String(cialo.opis || '').trim() || null,
+      rodzaj: przen ? 'przeniesienie' : 'nowy',
       status: 'nowe',
       utworzono: czas.terazIso(),
     };
@@ -299,12 +367,20 @@ router.post(
       // tego samego KRS moga oba minac SELECT wyzej, zanim ktorykolwiek INSERT
       // sie wykona - indeks unikalny (migracja 48) to wtedy lapie tutaj.
       if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-        throw bledneZadanie(
-          `Zgłoszenie dla spółki o numerze KRS ${krs} jest już w toku. `
-          + 'Sprawdź skrzynkę — zaproszenie do portalu poszło na wskazany wcześniej adres.'
-        );
+        return odp.status(201).json(await zgloszenieDuplikat({
+          email, krs, cialo, nazwaZKrs, formaPrawna, powod: 'równoczesne zgłoszenie dla tego KRS',
+        }));
       }
       throw e;
+    }
+
+    if (przen) {
+      require('../przeniesienia').utworzZeZgloszenia(db(), {
+        zgloszenieId: Number(wynikZgloszenia.lastInsertRowid), krs, nazwa: dane.nazwa_spolki,
+        poprzednikTyp: przen.poprzednik_typ,
+        poprzednikNazwa: String(przen.poprzednik_nazwa || '').trim() || null,
+        okresWypowiedzenia: String(przen.okres_wypowiedzenia || '').trim() || null,
+      });
     }
 
     // Zaproszenie idzie OD RAZU. Na tym etapie kancelaria niczego jeszcze nie
@@ -317,14 +393,13 @@ router.post(
       autor: 'Portal — zgłoszenie',
     });
 
-    odp.status(201).json({
-      ok: true,
-      forma_prawna: formaPrawna,
-      zaproszenie_wyslane: zaproszenie.email_wyslany,
-      // Gdy poczta nie dziala, link wraca TYLKO przy zgloszeniu skladanym
-      // z tego samego urzadzenia — inaczej klient zostaje bez drogi dalej.
-      link_aktywacyjny: zaproszenie.link_aktywacyjny,
-    });
+    // D-079: odpowiedź identyczna jak przy duplikacie. Linku aktywacyjnego
+    // w odpowiedzi już NIE ma — zdradzałby różnicę, a zgłaszający cudzym
+    // adresem przejmowałby konto (obserwacja O1). Przy awarii poczty link
+    // przekazuje kancelaria z kolejki zgłoszeń.
+    odp.status(201).json(odpowiedzZgloszenia({
+      formaPrawna, wyslano: zaproszenie.email_wyslany, linkTestowy: zaproszenie.link_testowy,
+    }));
   })
 );
 
@@ -374,6 +449,9 @@ router.post(
       .run(hash, czas.terazIso(), konto.id);
 
     autoryzacja.zalogujKonto(zad, odp, konto.id);
+    trybTestowy.zapiszLogowanie(db(), {
+      typKonta: 'portal', kontoId: konto.id, email: konto.email, droga: 'link_aktywacyjny',
+    });
     odp.json({ konto: widokKonta({ ...konto, aktywne: 1 }) });
   })
 );
@@ -929,8 +1007,16 @@ router.get(
   wymagajWnioskodawcy,
   asy((zad, odp) => {
     const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
-    if (!wniosek) return odp.json({ dokumenty: [] });
-    odp.json({ dokumenty: wczytajDokumentyWniosku(wniosek.id) });
+    // Adres usługi podpisu — parametr konfiguracji (W3.2), nie stała w widoku.
+    const k = ustawienia.kancelaria(db());
+    const podpis = {
+      mobywatel_url: konfiguracja.PODPIS.mobywatel_url,
+      pz_url: konfiguracja.PODPIS.pz_url,
+      // Oryginał pocztą (D-087) — adres z ustawień kancelarii.
+      adres_kancelarii: [k.nazwa, k.kancelaria_ulica, [k.kancelaria_kod, k.kancelaria_miasto].filter(Boolean).join(' ')].filter(Boolean).join(', ') || null,
+    };
+    if (!wniosek) return odp.json({ dokumenty: [], podpis });
+    odp.json({ dokumenty: wczytajDokumentyWniosku(wniosek.id), podpis });
   })
 );
 
@@ -976,7 +1062,9 @@ router.get(
   })
 );
 
-const ROZSZERZENIA_PODPISU_DOZWOLONE = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
+// D-075: skan nie jest podpisem. Obrazy przyjmujemy na serwer tylko po to,
+// zeby odpowiedziec klientowi zrozumialym komunikatem (walidator je odrzuca).
+const ROZSZERZENIA_PODPISU_DOZWOLONE = new Set(['.pdf', '.xml', '.xades', '.jpg', '.jpeg', '.png']);
 const LIMIT_ROZMIARU_PODPISU_BAJTY = 20 * 1024 * 1024;
 
 const uploadPodpisanego = multer({
@@ -996,7 +1084,7 @@ const uploadPodpisanego = multer({
     const rozszerzenie = path.extname(plik.originalname).toLowerCase();
     if (!ROZSZERZENIA_PODPISU_DOZWOLONE.has(rozszerzenie)) {
       return wywolaj(
-        new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Dozwolone: PDF albo skan/zdjęcie (JPG, PNG).`)
+        new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Wgraj plik z podpisem elektronicznym (PDF albo XML z mObywatela, podpisu zaufanego lub osobistego).`)
       );
     }
     wywolaj(null, true);
@@ -1028,6 +1116,44 @@ function przyjmijSkan(zad, odp, dalej) {
     }
     return dalej();
   });
+}
+
+/** Multer dla pliku PODPISANEGO — walidacje tresci robi walidator podpisu (D-075). */
+function przyjmijPodpisany(zad, odp, dalej) {
+  uploadPodpisanego.single('plik')(zad, odp, (e) => {
+    if (e) return dalejPoUploadzie(dalej)(e);
+    return dalej();
+  });
+}
+
+/**
+ * Podstawowy test po wgraniu (W2.4, D-086): czy plik ma podpis elektroniczny
+ * i czy pierwsza wersja to dokument wystawiony przez kancelarie (W3.4).
+ * Odrzucony plik nie zostaje na dysku — klient dostaje komunikat zrozumialy
+ * dla laika. Plik z podpisem trafia do „Do zrobienia” — reszte sprawdza
+ * pracownik; checklisty nie zaznacza (D-052).
+ */
+async function walidujPodpisany(wniosek, dokument, plik) {
+  const wynik = await walidacjaPodpisu.waliduj({
+    plik: fs.readFileSync(plik.path),
+    oryginal: { sha256: dokument.oryginal_sha256, dlugosc: dokument.oryginal_dlugosc },
+    atrapa: () => trybTestowy.wynikWalidatora(db()),
+  });
+  if (wynik.wynik === walidacjaPodpisu.WYNIKI.ODRZUCONY) {
+    fs.rmSync(plik.path, { force: true });
+    throw bledneZadanie(wynik.komunikat, { walidacja: wynik });
+  }
+  return wynik;
+}
+
+function zapiszWalidacje(dokumentId, wynik) {
+  db()
+    .prepare(
+      `UPDATE psa_wnioski_dokumenty
+          SET walidacja_wynik = ?, walidacja_typ = ?, walidacja_json = ?, walidacja_kiedy = ?
+        WHERE id = ?`
+    )
+    .run(wynik.wynik, wynik.typ || null, JSON.stringify(wynik), czas.terazIso(), dokumentId);
 }
 
 /**
@@ -1114,14 +1240,17 @@ router.post(
     if (dokumenty.length === 0) {
       throw bledneZadanie('Kancelaria nie udostępniła jeszcze dokumentów do podpisu.');
     }
-    const bezSkanu = dokumenty.filter((d) => !d.podpis_nazwa_pliku);
+    // D-075: pozycja jest gotowa, gdy ma plik z podpisem elektronicznym albo
+    // klient zadeklarowal odeslanie oryginalu pocztą (W3.8).
+    const bezSkanu = dokumenty.filter((d) => !d.podpis_nazwa_pliku && !d.oryginal_poczta_zadeklarowano);
     if (bezSkanu.length > 0) {
       throw bledneZadanie(
-        'Komplet jest niepełny — brakuje podpisanych skanów.',
+        'Komplet jest niepełny — przy każdym dokumencie wgraj plik z podpisem albo zaznacz „Wyślę oryginał pocztą”.',
         bezSkanu.map((d) => d.nazwa_pliku)
       );
     }
-    if (!wniosek.umowa_podpisana_sciezka) {
+    const umowaPoczta = dokumenty.some((d) => d.typ === dokumentyWniosku.TYPY.UMOWA_REJESTRU && d.oryginal_poczta_zadeklarowano);
+    if (!wniosek.umowa_podpisana_sciezka && !umowaPoczta) {
       throw bledneZadanie('Brakuje podpisanej umowy o prowadzenie rejestru.');
     }
 
@@ -1232,8 +1361,8 @@ router.post(
   '/wniosek/dokumenty/:id/podpis',
   wymagajWnioskodawcy,
   zaladujWlasnyWniosekDoUploadu,
-  przyjmijSkan,
-  asy((zad, odp) => {
+  przyjmijPodpisany,
+  asy(async (zad, odp) => {
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
     const dokument = db()
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
@@ -1249,8 +1378,11 @@ router.post(
       );
     }
 
+    const walidacja = await walidujPodpisany(zad.psaWniosek, dokument, zad.file);
     zapiszPodpisanySkan(zad.psaWniosek, dokument, zad.file);
+    zapiszWalidacje(dokument.id, walidacja);
     odp.status(201).json({
+      walidacja,
       wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(zad.psaWniosek.id),
       dokumenty: wczytajDokumentyWniosku(zad.psaWniosek.id),
     });
@@ -1327,6 +1459,37 @@ router.delete(
 );
 
 /**
+ * W3.8 — „Wyślę oryginał pocztą” zamiast pliku z podpisem elektronicznym.
+ * Tylko przy dokumentach, dla ktorych oryginal jest dopuszczalna forma
+ * (formy-podpisu.js); otrzymanie i rodzaj podpisu odnotowuje kancelaria.
+ */
+router.post(
+  '/wniosek/dokumenty/:id/oryginal-poczta',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
+    if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
+    if (!STATUSY_PRZYJMUJACE_PODPISY.has(wniosek.status)) {
+      throw bledneZadanie(`Wniosek ma status „${wniosek.status}” — nie można już zmieniać przesłanych dokumentów.`);
+    }
+    const dokument = db()
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
+      .get(Number(zad.params.id), wniosek.id);
+    if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+    const papierowe = formyPodpisu.formyPapierowe(formyPodpisu.typDlaDokumentuWniosku(dokument.typ))
+      .filter((f) => f !== formyPodpisu.FORMY.W_KANCELARII);
+    if (papierowe.length === 0) throw bledneZadanie('Ten dokument trzeba podpisać elektronicznie.');
+    const wysylam = (zad.body || {}).wysylam !== false;
+    db().prepare('UPDATE psa_wnioski_dokumenty SET oryginal_poczta_zadeklarowano = ? WHERE id = ?')
+      .run(wysylam ? czas.terazIso() : null, dokument.id);
+    odp.json({
+      wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
+      dokumenty: wczytajDokumentyWniosku(wniosek.id),
+    });
+  })
+);
+
+/**
  * Stara trasa odsylania umowy. Zostaje, bo umowa jest szczegolna (przenosi
  * status wniosku) i bo prowadzi do niej gotowy formularz - ale zapisuje
  * dokladnie to samo, co trasa ogolna wyzej: jeden mechanizm, nie dwa.
@@ -1335,8 +1498,8 @@ router.post(
   '/wniosek/umowa-podpisana',
   wymagajWnioskodawcy,
   zaladujWlasnyWniosekDoUploadu,
-  przyjmijSkan,
-  asy((zad, odp) => {
+  przyjmijPodpisany,
+  asy(async (zad, odp) => {
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
     const umowa = db()
       .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE wniosek_id = ? AND typ = ? AND udostepniono IS NOT NULL')
@@ -1349,8 +1512,11 @@ router.post(
       );
     }
 
+    const walidacja = await walidujPodpisany(zad.psaWniosek, umowa, zad.file);
     zapiszPodpisanySkan(zad.psaWniosek, umowa, zad.file);
+    zapiszWalidacje(umowa.id, walidacja);
     odp.status(201).json({
+      walidacja,
       wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(zad.psaWniosek.id),
       dokumenty: wczytajDokumentyWniosku(zad.psaWniosek.id),
     });
@@ -1456,43 +1622,27 @@ router.get(
 );
 
 /** Stan rejestru z maskowaniem wg roli konta (art. 300(35) KSH). */
+/**
+ * Zakładka „Rejestr” — WYŁĄCZNIE dane spółki (D-077, W5.1). Stan akcjonariatu
+ * jest tylko w płatnej informacji z rejestru (art. 300(35) § 3 KSH). Odcięcie
+ * na poziomie API, nie widoku — akcjonariusze nie wychodzą z tej trasy wcale.
+ */
+const POLA_SPOLKI_PORTAL = [
+  'id', 'nazwa', 'krs', 'nip', 'regon', 'forma_prawna', 'kraj', 'kod_pocztowy', 'miejscowosc', 'ulica',
+  'nr_domu', 'nr_lokalu', 'sad_rejestrowy', 'wydzial', 'status', 'data_utworzenia_spolki',
+  'data_otwarcia_rejestru', 'kapital_akcyjny_grosze',
+];
+
 router.get(
   '/rejestr/:spolkaId',
   asy((zad, odp) => {
     // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
-    const spolkaId = Number(zad.params.spolkaId);
-    const data = zad.query.data ? String(zad.query.data) : czas.dzisIso();
-    if (!czas.poprawnaData(data)) throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD.');
-
-    const stan = widoki.widokStanu(db(), spolkaId, data, {
-      rola: rolaOdbioru(zad.konto),
-      odbiorcaOsobaId: zad.konto.osoba_id,
+    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.spolkaId));
+    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
+    odp.json({
+      spolka: Object.fromEntries(POLA_SPOLKI_PORTAL.map((k) => [k, spolka[k] ?? null])),
+      akcjonariat_w_informacji: true,
     });
-    if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
-
-    // Naprawa Z-152/P-009: to jedyny ekran portalu, na ktorym rola "spolka"
-    // widzi PESEL/adres wspolakcjonariuszy w calosci (art. 300(35) KSH) - bez
-    // wpisu do dziennika taki wglad byl niewidoczny po fakcie. `zamaskowane`
-    // z `zamaskujOsobe` odpowiada na szersze pytanie ("cokolwiek ukryte" -
-    // ustawia je juz samo ukrycie AML/PEP), stad osobny, wezszy test na
-    // POLA_WRAZLIWE. Wlasne dane odbiorcy (widziane bez maskowania z
-    // definicji) sie nie licza - nie ma tu wgladu w CUDZE dane wrazliwe.
-    const rolaOdp = rolaOdbioru(zad.konto);
-    const osobyZWrazliwymiDanymi = maskowanie.widziWrazliweDaneInnych(rolaOdp)
-      ? new Set(
-        stan.akcjonariusze
-          .filter((a) => a.osoba && a.osoba_id !== zad.konto.osoba_id)
-          .map((a) => a.osoba_id)
-      )
-      : new Set();
-    dziennikDostepu.zapiszOdczytRejestruPortalu(db(), {
-      kto: `Portal — ${zad.konto.email}`,
-      spolkaId,
-      liczbaOsob: osobyZWrazliwymiDanymi.size,
-      zamaskowane: osobyZWrazliwymiDanymi.size === 0,
-    });
-
-    odp.json(stan);
   })
 );
 
@@ -1739,146 +1889,295 @@ router.get(
   })
 );
 
-router.post(
-  '/zadania',
-  asy((zad, odp) => {
-    const konto = zad.konto;
-    const cialo = zad.body || {};
+/**
+ * Założenie żądania wpisu z portalu — jedna droga dla formularza „Zgłoś
+ * zmianę” i dla oświadczenia o zgodzie na komunikację e-mail (W4.1):
+ * te same opłaty, termin i kolejka kancelarii. `odp` może być przechwytem.
+ */
+function zalozZadaniePortalowe(konto, cialo, odp) {
 
-    // Naprawa Z-351/Z-353: klucz idempotencyjny wyslany PONOWNIE (podwojne
-    // klikniecie, ponowienie po zerwanym polaczeniu) oddaje JUZ zalozona
-    // sprawe (i jej JUZ naliczona oplate) zamiast zakladac druga sprawe
-    // i podwojnie obciazyc klienta za ten sam wpis.
-    const kluczIdempotencji = cialo.klucz_idempotencji ? String(cialo.klucz_idempotencji).trim() : null;
-    if (kluczIdempotencji) {
-      const istniejaca = db().prepare('SELECT id FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
-      if (istniejaca) {
-        const sprawaIstniejaca = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(istniejaca.id);
-        const oplataIstniejaca = db()
+  // Naprawa Z-351/Z-353: klucz idempotencyjny wyslany PONOWNIE (podwojne
+  // klikniecie, ponowienie po zerwanym polaczeniu) oddaje JUZ zalozona
+  // sprawe (i jej JUZ naliczona oplate) zamiast zakladac druga sprawe
+  // i podwojnie obciazyc klienta za ten sam wpis.
+  const kluczIdempotencji = cialo.klucz_idempotencji ? String(cialo.klucz_idempotencji).trim() : null;
+  if (kluczIdempotencji) {
+    const istniejaca = db().prepare('SELECT id FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
+    if (istniejaca) {
+      const sprawaIstniejaca = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(istniejaca.id);
+      const oplataIstniejaca = db()
+        .prepare(`SELECT id FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
+        .get(istniejaca.id);
+      return odp.status(200).json({
+        sprawa: widokSprawyPortal(sprawaIstniejaca),
+        oplata_id: oplataIstniejaca ? oplataIstniejaca.id : null,
+        juz_istniala: true,
+      });
+    }
+  }
+
+  // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
+  const spolkaId = Number(cialo.spolka_id);
+  const spolka = rejestr.wczytajSpolke(db(), spolkaId);
+  if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
+  const blokada = przepisy.blokadaWpisu(spolka);
+  if (blokada) throw bledneZadanie(`${blokada} Nie można zgłosić nowej sprawy.`);
+  // W7.5 — spółka w trakcie przeniesienia rejestru (przed skutecznością: odmowa; potem: przeszkoda).
+  const przejecieSprawy = require('../przeniesienia').stanDlaSpraw(db(), spolkaId);
+  if (przejecieSprawy && przejecieSprawy.blokada) throw bledneZadanie(przejecieSprawy.blokada);
+
+  const typZdarzenia = String(cialo.typ_zdarzenia || '');
+  // Celowo NIE bramkujemy sprintem 5: ulamkowe czesci akcji, wspolny
+  // przedstawiciel i wzmianka o pokryciu wymagaja oceny pracownika kancelarii
+  // (decyzja nr 10, sekcja 15 CLAUDE-PSA.md) - portal klienta ich nie oferuje.
+  const typ = typyZdarzen
+    .dostepneWKreatorze(2)
+    .find((t) => t.kod === typZdarzenia && !t.z_urzedu);
+  if (!typ) {
+    throw bledneZadanie(`Typ zdarzenia „${typZdarzenia}” nie jest dostępny do zgłoszenia przez portal.`);
+  }
+
+  // Opis przestal byc obowiazkowy: wpisu dokonuje sie NA PODSTAWIE
+  // DOKUMENTU (art. 300(34) § 4 KSH), a nie opisu zadajacego. Klient, ktory
+  // dolaczyl umowe i wskazal typ zdarzenia, powiedzial juz wszystko —
+  // wymuszanie wypracowania obok dokumentu tworzylo drugie zrodlo prawdy,
+  // ktore pracownik i tak musial konfrontowac z plikiem.
+  const opis = String(cialo.opis || '').trim();
+
+  const dataWplywu = czas.terazIso();
+  const dane = {
+    spolka_id: spolkaId,
+    typ_zdarzenia: typZdarzenia,
+    zrodlo: 'portal',
+    zadajacy_osoba_id: konto.osoba_id,
+    zadajacy_opis: konto.rola === 'spolka'
+      ? `${spolka.nazwa} (zgłoszenie przez portal)`
+      : opis || `${konto.email} (zgłoszenie przez portal)`,
+    data_wplywu: dataWplywu,
+    stan: 'nowa',
+    wymaga_powiadomienia: typ.wymaga_powiadomienia === true ? 1 : 0,
+    autor: `Portal — ${konto.email}`,
+    notatka: opis || null,
+    klucz_idempotencji: kluczIdempotencji,
+    utworzono: czas.terazIso(),
+  };
+  dane.termin_do = terminy.policzTermin(
+    { data_wplywu: dataWplywu.slice(0, 10), stan: 'nowa', wstrzymana_od: null, wznowiona_od: null },
+    czas.dzisIso()
+  ).termin_do;
+
+  // ── Zadanie zlozone przez portal jest skuteczne z chwila OPLACENIA ──
+  //
+  // Art. 300(34) § 1 KSH liczy tydzien od OTRZYMANIA zadania. Umowa
+  // o prowadzenie rejestru stanowi, ze zadanie skladane przez portal
+  // dochodzi do skutku z chwila zaplaty — do tego czasu sprawa nie jest
+  // widoczna w kolejce kancelarii i ZADEN termin ustawowy nie biegnie.
+  //
+  // To NIE jest wstrzymywanie czynnosci ustawowej za dlugi: zadania
+  // zlozonego jeszcze nie ma. Klient, ktory chce zlozyc je natychmiast,
+  // ma otwarta droge papierowa i mailowa — wtedy sprawa rusza od razu,
+  // a oplate rozlicza faktura (`server/trasy/sprawy.js`).
+  //
+  // WYJATEK: gdy platnosci online sa wylaczone, bramka nie obowiazuje.
+  // Inaczej awaria operatora albo brak konfiguracji zamienialaby portal
+  // w czarna dziure — zadanie zapisane, nikomu niepokazane, a klient
+  // przekonany, ze zlozyl. Wtedy zadanie jest skuteczne od razu, a oplate
+  // rozlicza faktura; to ta sama sciezka, co przy zadaniu papierowym.
+  dane.oczekuje_na_oplate = tpay.skonfigurowany() ? 1 : 0;
+
+  const kolumny = Object.keys(dane);
+  let wynik;
+  try {
+    wynik = db()
+      .prepare(`INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
+      .run(dane);
+  } catch (e) {
+    // Ostatnia linia obrony przed wyscigiem: dwa naprawde ROWNOCZESNE
+    // zadania z tym samym kluczem moga oba minac SELECT wyzej, zanim
+    // ktorykolwiek INSERT sie wykona - indeks unikalny to wtedy lapie tutaj.
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' && kluczIdempotencji) {
+      const wygrana = db().prepare('SELECT * FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
+      if (wygrana) {
+        const oplataWygranej = db()
           .prepare(`SELECT id FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
-          .get(istniejaca.id);
+          .get(wygrana.id);
         return odp.status(200).json({
-          sprawa: widokSprawyPortal(sprawaIstniejaca),
-          oplata_id: oplataIstniejaca ? oplataIstniejaca.id : null,
+          sprawa: widokSprawyPortal(wygrana),
+          oplata_id: oplataWygranej ? oplataWygranej.id : null,
           juz_istniala: true,
         });
       }
     }
+    throw e;
+  }
+  const sprawaId = Number(wynik.lastInsertRowid);
 
-    // Dostep do tej spolki juz sprawdzony przez `wymagajDostepuDoSpolki` wyzej.
-    const spolkaId = Number(cialo.spolka_id);
-    const spolka = rejestr.wczytajSpolke(db(), spolkaId);
-    if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
-    const blokada = przepisy.blokadaWpisu(spolka);
-    if (blokada) throw bledneZadanie(`${blokada} Nie można zgłosić nowej sprawy.`);
-
-    const typZdarzenia = String(cialo.typ_zdarzenia || '');
-    // Celowo NIE bramkujemy sprintem 5: ulamkowe czesci akcji, wspolny
-    // przedstawiciel i wzmianka o pokryciu wymagaja oceny pracownika kancelarii
-    // (decyzja nr 10, sekcja 15 CLAUDE-PSA.md) - portal klienta ich nie oferuje.
-    const typ = typyZdarzen
-      .dostepneWKreatorze(2)
-      .find((t) => t.kod === typZdarzenia && !t.z_urzedu);
-    if (!typ) {
-      throw bledneZadanie(`Typ zdarzenia „${typZdarzenia}” nie jest dostępny do zgłoszenia przez portal.`);
-    }
-
-    // Opis przestal byc obowiazkowy: wpisu dokonuje sie NA PODSTAWIE
-    // DOKUMENTU (art. 300(34) § 4 KSH), a nie opisu zadajacego. Klient, ktory
-    // dolaczyl umowe i wskazal typ zdarzenia, powiedzial juz wszystko —
-    // wymuszanie wypracowania obok dokumentu tworzylo drugie zrodlo prawdy,
-    // ktore pracownik i tak musial konfrontowac z plikiem.
-    const opis = String(cialo.opis || '').trim();
-
-    const dataWplywu = czas.terazIso();
-    const dane = {
-      spolka_id: spolkaId,
-      typ_zdarzenia: typZdarzenia,
-      zrodlo: 'portal',
-      zadajacy_osoba_id: konto.osoba_id,
-      zadajacy_opis: konto.rola === 'spolka'
-        ? `${spolka.nazwa} (zgłoszenie przez portal)`
-        : opis || `${konto.email} (zgłoszenie przez portal)`,
-      data_wplywu: dataWplywu,
-      stan: 'nowa',
-      wymaga_powiadomienia: typ.wymaga_powiadomienia === true ? 1 : 0,
+  // Oplata za wpis powstaje RAZEM ze sprawa i jest z nia zwiazana — to po
+  // niej `server/platnosci.js` wie, ktora sprawe uruchomic po zaplacie.
+  const oplata = typ.odplatne === false
+    ? null
+    : oplaty.naliczOplateWpisu(db(), {
+      spolkaId,
+      sprawaId,
+      typZdarzenia: typZdarzenia,
       autor: `Portal — ${konto.email}`,
-      notatka: opis || null,
-      klucz_idempotencji: kluczIdempotencji,
-      utworzono: czas.terazIso(),
-    };
-    dane.termin_do = terminy.policzTermin(
-      { data_wplywu: dataWplywu.slice(0, 10), stan: 'nowa', wstrzymana_od: null, wznowiona_od: null },
-      czas.dzisIso()
-    ).termin_do;
+    });
 
-    // ── Zadanie zlozone przez portal jest skuteczne z chwila OPLACENIA ──
-    //
-    // Art. 300(34) § 1 KSH liczy tydzien od OTRZYMANIA zadania. Umowa
-    // o prowadzenie rejestru stanowi, ze zadanie skladane przez portal
-    // dochodzi do skutku z chwila zaplaty — do tego czasu sprawa nie jest
-    // widoczna w kolejce kancelarii i ZADEN termin ustawowy nie biegnie.
-    //
-    // To NIE jest wstrzymywanie czynnosci ustawowej za dlugi: zadania
-    // zlozonego jeszcze nie ma. Klient, ktory chce zlozyc je natychmiast,
-    // ma otwarta droge papierowa i mailowa — wtedy sprawa rusza od razu,
-    // a oplate rozlicza faktura (`server/trasy/sprawy.js`).
-    //
-    // WYJATEK: gdy platnosci online sa wylaczone, bramka nie obowiazuje.
-    // Inaczej awaria operatora albo brak konfiguracji zamienialaby portal
-    // w czarna dziure — zadanie zapisane, nikomu niepokazane, a klient
-    // przekonany, ze zlozyl. Wtedy zadanie jest skuteczne od razu, a oplate
-    // rozlicza faktura; to ta sama sciezka, co przy zadaniu papierowym.
-    dane.oczekuje_na_oplate = tpay.skonfigurowany() ? 1 : 0;
+  // Czynnosc wolna od oplaty (art. 300(34) § 2 KSH — wpis z urzedu) nie ma
+  // na co czekac: zadanie jest skuteczne od razu.
+  if (!oplata) {
+    db().prepare('UPDATE psa_sprawy SET oczekuje_na_oplate = 0 WHERE id = ?').run(sprawaId);
+  }
 
-    const kolumny = Object.keys(dane);
-    let wynik;
-    try {
-      wynik = db()
-        .prepare(`INSERT INTO psa_sprawy (${kolumny.join(', ')}) VALUES (${kolumny.map((k) => `@${k}`).join(', ')})`)
-        .run(dane);
-    } catch (e) {
-      // Ostatnia linia obrony przed wyscigiem: dwa naprawde ROWNOCZESNE
-      // zadania z tym samym kluczem moga oba minac SELECT wyzej, zanim
-      // ktorykolwiek INSERT sie wykona - indeks unikalny to wtedy lapie tutaj.
-      if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' && kluczIdempotencji) {
-        const wygrana = db().prepare('SELECT * FROM psa_sprawy WHERE klucz_idempotencji = ?').get(kluczIdempotencji);
-        if (wygrana) {
-          const oplataWygranej = db()
-            .prepare(`SELECT id FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
-            .get(wygrana.id);
-          return odp.status(200).json({
-            sprawa: widokSprawyPortal(wygrana),
-            oplata_id: oplataWygranej ? oplataWygranej.id : null,
-            juz_istniala: true,
-          });
-        }
-      }
-      throw e;
-    }
-    const sprawaId = Number(wynik.lastInsertRowid);
+  const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
+  if (przejecieSprawy && przejecieSprawy.przeszkoda) {
+    require('../przeniesienia').wstrzymajZPrzeszkoda(db(), sprawaId, przejecieSprawy.przeszkoda);
+  }
+  odp.status(201).json({
+    sprawa: widokSprawyPortal(db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId)),
+    oplata_id: oplata ? oplata.id : null,
+  });
+}
 
-    // Oplata za wpis powstaje RAZEM ze sprawa i jest z nia zwiazana — to po
-    // niej `server/platnosci.js` wie, ktora sprawe uruchomic po zaplacie.
-    const oplata = typ.odplatne === false
-      ? null
-      : oplaty.naliczOplateWpisu(db(), {
-        spolkaId,
-        sprawaId,
-        typZdarzenia: typZdarzenia,
-        autor: `Portal — ${konto.email}`,
-      });
+router.post('/zadania', asy((zad, odp) => zalozZadaniePortalowe(zad.konto, zad.body || {}, odp)));
 
-    // Czynnosc wolna od oplaty (art. 300(34) § 2 KSH — wpis z urzedu) nie ma
-    // na co czekac: zadanie jest skuteczne od razu.
-    if (!oplata) {
-      db().prepare('UPDATE psa_sprawy SET oczekuje_na_oplate = 0 WHERE id = ?').run(sprawaId);
-    }
+// ─────────────────────────────────────────────────────────────
+// Faza 4 — przeniesienie rejestru (W7.1–W7.5) widziane przez spółkę:
+// status, przypomnienia, dokumenty startowe, wzór uchwały, pakiet pism.
+// ─────────────────────────────────────────────────────────────
 
-    const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
-    odp.status(201).json({ sprawa: widokSprawyPortal(sprawa), oplata_id: oplata ? oplata.id : null });
-  })
-);
+const uploadPrzeniesienia = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
+const PISMA_DLA_SPOLKI = ['przeniesienie_uchwala', 'przeniesienie_wypowiedzenie', 'przeniesienie_potwierdzenie_zawarcia',
+  'przeniesienie_wezwanie', 'przeniesienie_zgloszenie_krs'];
+
+function przeniesienieKonta(konto) {
+  const modul = require('../przeniesienia');
+  let p = modul.dlaKonta(db(), konto);
+  if (p && !p.wniosek_id) {
+    const wn = db().prepare('SELECT id FROM psa_wnioski WHERE konto_id = ? ORDER BY id DESC LIMIT 1').get(konto.id);
+    if (wn) { modul.powiazWniosek(db(), p.id, wn.id); p = modul.wczytaj(db(), p.id); }
+  }
+  return p;
+}
+
+function pismaDlaSpolki(p) {
+  const modul = require('../przeniesienia');
+  const poZawarciu = !['zgloszone', 'weryfikacja'].includes(p.status);
+  return modul.listaPism(db(), p).filter((x) => PISMA_DLA_SPOLKI.includes(x.kod)
+    && (poZawarciu || x.kod === 'przeniesienie_uchwala'));
+}
+
+router.get('/przeniesienie', asy((zad, odp) => {
+  const p = przeniesienieKonta(zad.konto);
+  if (!p) return odp.json({ przeniesienie: null });
+  odp.json({
+    przeniesienie: {
+      id: p.id, status: p.status, nazwa_statusu: p.nazwa_statusu, nazwa: p.nazwa, krs: p.krs,
+      poprzednik_nazwa: p.poprzednik_nazwa, poprzednik_opis: p.poprzednik_opis,
+      data_zawarcia_umowy: p.data_zawarcia_umowy, data_skutecznosci: p.data_skutecznosci, termin_warunku: p.termin_warunku,
+      przypomnienia: p.przypomnienia,
+      dokumenty: p.dokumenty.map((d) => ({ id: d.id, typ: d.typ, zrodlo: d.zrodlo, nazwa_pliku: d.nazwa_pliku, utworzono: d.utworzono })),
+      pisma: pismaDlaSpolki(p),
+    },
+  });
+}));
+
+router.post('/przeniesienie/dokumenty', uploadPrzeniesienia.single('plik'), asy((zad, odp) => {
+  const p = przeniesienieKonta(zad.konto);
+  if (!p) throw nieZnaleziono('Nie zgłoszono przeniesienia rejestru.');
+  const typ = String((zad.body || {}).typ || '');
+  if (!['umowa_spolki', 'informacja_poprzednika', 'uchwala', 'wypowiedzenie', 'potwierdzenie_rozwiazania'].includes(typ)) {
+    throw bledneZadanie('Nieznany rodzaj dokumentu.');
+  }
+  if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
+  require('../przeniesienia').dodajDokument(db(), p.id, {
+    typ, zrodlo: 'klient', nazwa: zad.file.originalname, bufor: zad.file.buffer, autor: `Portal — ${zad.konto.email}`,
+  });
+  odp.status(201).json({ ok: true });
+}));
+
+router.get('/przeniesienie/pisma/:kod', asy((zad, odp) => {
+  const p = przeniesienieKonta(zad.konto);
+  if (!p) throw nieZnaleziono('Nie zgłoszono przeniesienia rejestru.');
+  if (!pismaDlaSpolki(p).some((x) => x.kod === zad.params.kod)) throw nieZnaleziono('Pismo nie jest jeszcze dostępne.');
+  odp.type('html').send(require('../przeniesienia').renderujPismo(db(), p, zad.params.kod).html);
+}));
+
+// ─────────────────────────────────────────────────────────────
+// W4.1/W4.2 — oświadczenia akcjonariusza składane OSOBIŚCIE (konto albo link
+// z zaproszenia), nigdy przez zarząd w jego imieniu. Każde z datą, odwołalne
+// (tabela append-only `psa_oswiadczenia`).
+//   - zgoda na komunikację e-mail — dana rejestru (art. 300(33) § 1 pkt 5 KSH):
+//     złożenie i cofnięcie idą przez ŻĄDANIE WPISU, nie przez ustawienia konta;
+//   - żądanie automatycznego przesyłania powiadomień (art. 300(34) § 9 KSH,
+//     🔵) — oświadczenie w portalu, skuteczne od razu.
+// ─────────────────────────────────────────────────────────────
+
+const WZORZEC_EMAIL_OSW = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function ostatnieOswiadczenie(osobaId, spolkaId, rodzaj) {
+  return db().prepare(
+    `SELECT * FROM psa_oswiadczenia WHERE osoba_id = ? AND (spolka_id IS ? OR spolka_id = ?) AND rodzaj = ?
+      ORDER BY id DESC LIMIT 1`
+  ).get(osobaId, spolkaId, spolkaId, rodzaj) || null;
+}
+
+function wymagajAkcjonariuszaPortalu(zad) {
+  if (zad.konto.rola !== 'akcjonariusz' || !zad.konto.osoba_id) {
+    throw bledneZadanie('Oświadczenia składa osobiście akcjonariusz albo nabywca ze swojego konta — nie zarząd w jego imieniu.');
+  }
+}
+
+router.get('/oswiadczenia', asy((zad, odp) => {
+  wymagajAkcjonariuszaPortalu(zad);
+  const osoba = db().prepare('SELECT id, email, zgoda_email_status FROM psa_osoby WHERE id = ?').get(zad.konto.osoba_id);
+  const spolki = db().prepare(
+    `SELECT DISTINCT s.id, s.nazwa FROM psa_stan_akcji sa JOIN psa_spolki s ON s.id = sa.spolka_id
+      WHERE sa.osoba_id = ? AND sa.data_do IS NULL ORDER BY s.nazwa`
+  ).all(zad.konto.osoba_id);
+  odp.json({
+    zgoda_email: { email: osoba.email, status: osoba.zgoda_email_status },
+    spolki: spolki.map((s) => ({
+      spolka_id: s.id,
+      nazwa: s.nazwa,
+      powiadomienia_automatyczne: ostatnieOswiadczenie(osoba.id, s.id, 'powiadomienia_automatyczne'),
+      zgoda_email_ostatnie: ostatnieOswiadczenie(osoba.id, s.id, 'zgoda_email'),
+    })),
+  });
+}));
+
+router.post('/oswiadczenia', asy((zad, odp) => {
+  wymagajAkcjonariuszaPortalu(zad);
+  const cialo = zad.body || {};
+  const spolkaId = Number(cialo.spolka_id);
+  const rodzaj = String(cialo.rodzaj || '');
+  const zlozone = cialo.zlozone !== false;
+  if (!['zgoda_email', 'powiadomienia_automatyczne'].includes(rodzaj)) throw bledneZadanie('Nieznany rodzaj oświadczenia.');
+  const teraz = czas.terazIso();
+  const konto = zad.konto;
+
+  let sprawaId = null;
+  let email = null;
+  if (rodzaj === 'zgoda_email') {
+    email = zlozone ? String(cialo.email || '').trim().toLowerCase() : null;
+    if (zlozone && !WZORZEC_EMAIL_OSW.test(email || '')) throw bledneZadanie('Podaj adres e-mail, na który mamy kierować korespondencję.');
+    const przechwyt = { kod: 200, tresc: null, status(k) { this.kod = k; return this; }, json(t) { this.tresc = t; return this; } };
+    zalozZadaniePortalowe(konto, {
+      spolka_id: spolkaId,
+      typ_zdarzenia: 'zmiana_danych_akcjonariusza',
+      opis: zlozone
+        ? `Oświadczenie złożone osobiście w portalu (${teraz}): zgoda na komunikację ze spółką i podmiotem prowadzącym rejestr przy wykorzystaniu poczty elektronicznej — adres ${email} (art. 300(33) § 1 pkt 5 KSH).`
+        : `Oświadczenie złożone osobiście w portalu (${teraz}): cofnięcie zgody na komunikację przy wykorzystaniu poczty elektronicznej (art. 300(33) § 1 pkt 5 KSH).`,
+    }, przechwyt);
+    sprawaId = przechwyt.tresc && przechwyt.tresc.sprawa ? przechwyt.tresc.sprawa.id : null;
+  }
+
+  db().prepare(
+    `INSERT INTO psa_oswiadczenia (osoba_id, spolka_id, rodzaj, zlozone, email, konto_id, sprawa_id, utworzono)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(konto.osoba_id, spolkaId, rodzaj, zlozone ? 1 : 0, email, konto.id, sprawaId, teraz);
+  odp.status(201).json({ ok: true, sprawa_id: sprawaId, utworzono: teraz });
+}));
 
 // ─────────────────────────────────────────────────────────────
 // Dokumenty do wlasnej sprawy (upload z portalu)
@@ -2326,6 +2625,7 @@ router.post(
     });
     if (!stan) throw nieZnaleziono('Nie odnaleziono spółki.');
 
+    const numerInformacji = informacje.nadajNumer(db());
     const trescHtml = informacjaDokument.informacjaZRejestru({
       kancelaria: ustawienia.kancelaria(db()),
       spolka: stan.spolka,
@@ -2333,6 +2633,10 @@ router.post(
       stan,
       odbiorca: { rola: rolaOdbioru(konto) },
       sporzadzono: czas.terazIso(),
+      numer: numerInformacji,
+      wynagrodzenie: informacje.wynagrodzenie(db(), {
+        spolka: stan.spolka, nettoGrosze: oplata.kwota_grosze, vatProcent: oplata.stawka_vat_procent,
+      }),
     });
 
     const autorWpisu = `Portal — ${konto.email}`;
@@ -2342,13 +2646,13 @@ router.post(
     // spolki, rozstrzyga sie potem, komu wolno go otworzyc.
     const wynikZapisu = db()
       .prepare(
-        `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, odbiorca_osoba_id, kanal, tresc_html, wyslano, autor, utworzono)
-         VALUES (?, 'informacja_z_rejestru', ?, 'portal', ?, ?, ?, ?)`
+        `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, odbiorca_osoba_id, kanal, tresc_html, wyslano, autor, utworzono, numer)
+         VALUES (?, 'informacja_z_rejestru', ?, 'portal', ?, ?, ?, ?, ?)`
       )
       .run(
         spolkaId,
         konto.rola === 'spolka' ? null : konto.osoba_id,
-        trescHtml, czas.terazIso(), autorWpisu, czas.terazIso()
+        trescHtml, czas.terazIso(), autorWpisu, czas.terazIso(), numerInformacji
       );
     const dokumentId = Number(wynikZapisu.lastInsertRowid);
 

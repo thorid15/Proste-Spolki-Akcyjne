@@ -155,10 +155,10 @@ test('POST /api/psa/portal/zgloszenia: zaklada konto i wysyla zaproszenie, ale z
     'POST', '/api/psa/portal/zgloszenia', { email: 'lead-bez-konta@example.pl', krs: '0000999888' }, null
   );
   assert.equal(status, 201);
-  // SMTP nie jest skonfigurowane w testach — wysylka sie nie udaje, wiec link
-  // wraca w odpowiedzi, zeby zaproszenie nie przepadlo.
+  // SMTP nie jest skonfigurowane w testach — wysylka sie nie udaje. Linku w
+  // odpowiedzi formularza publicznego nie ma (D-079 / O1) — przekazuje go kancelaria.
   assert.equal(wynik.zaproszenie_wyslane, false);
-  assert.ok(wynik.link_aktywacyjny, 'link aktywacyjny wraca, gdy poczta nie dziala');
+  assert.equal('link_aktywacyjny' in wynik, false, 'link aktywacyjny nie wraca do anonimowego zglaszajacego');
 
   const konto = db().prepare('SELECT * FROM psa_konta WHERE email = ?').get('lead-bez-konta@example.pl');
   assert.ok(konto, 'konto wnioskodawcy powstalo od razu');
@@ -186,12 +186,19 @@ test('POST /api/psa/portal/zgloszenia: druga spolka tego samego klienta przechod
   const zgloszenia = db().prepare('SELECT COUNT(*) AS n FROM psa_zgloszenia WHERE email = ?').get('dwie-spolki@example.pl').n;
   assert.equal(zgloszenia, 2, 'oba zgloszenia zostaja w kolejce kancelarii');
 
-  // Ten sam numer KRS drugi raz to juz pomylka albo duplikat.
+  // D-079 (K6): ten sam numer KRS drugi raz — odpowiedz IDENTYCZNA jak przy
+  // nowym zgloszeniu; formularz nie zdradza, ze zgloszenie jest w toku.
+  const [stNowe, nowe] = await zapytaj('POST', '/api/psa/portal/zgloszenia', { email: 'ktos-trzeci@example.pl', krs: '0000777888' }, null);
   const [stDuplikat, duplikat] = await zapytaj(
     'POST', '/api/psa/portal/zgloszenia', { email: 'ktos-inny@example.pl', krs: '0000111222' }, null
   );
-  assert.equal(stDuplikat, 400);
-  assert.match(duplikat.blad, /już w toku|już prowadzony/);
+  assert.equal(stDuplikat, stNowe);
+  assert.deepEqual(Object.keys(duplikat).sort(), Object.keys(nowe).sort());
+  assert.deepEqual({ ...duplikat }, { ...nowe });
+  const slad = db().prepare("SELECT * FROM psa_zgloszenia WHERE email = 'ktos-inny@example.pl'").get();
+  assert.equal(slad.status, 'odrzucone', 'duplikat: slad dla kancelarii, bez nowego konta');
+  assert.match(slad.notatka_wewnetrzna, /Zgłoszenie ponowne/);
+  assert.equal(db().prepare("SELECT COUNT(*) AS n FROM psa_konta WHERE email = 'ktos-inny@example.pl'").get().n, 0);
 });
 
 /**

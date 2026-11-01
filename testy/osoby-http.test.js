@@ -361,7 +361,7 @@ test('Z-253: POST /api/psa/osoby/:id/aml-skany odrzuca plik, ktorego tresc nie o
 // ─────────────────────────────────────────────────────────────
 
 test('Z-006: POST /api/psa/osoby/:id/zapros-do-portalu zaklada konto akcjonariusza i zwraca link (SMTP wylaczone w testach)', async () => {
-  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Zapraszany${sufiks()}`, imie: 'Jan' });
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', zgoda_email_status: 'potwierdzona', nazwisko: `Zapraszany${sufiks()}`, imie: 'Jan' });
   const email = `jan.zapraszany${sufiks()}@example-test.pl`;
 
   const [status, wynik] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, { email });
@@ -377,7 +377,7 @@ test('Z-006: POST /api/psa/osoby/:id/zapros-do-portalu zaklada konto akcjonarius
 });
 
 test('Z-006: POST /:id/zapros-do-portalu bez adresu e-mail odrzuca; dla nieistniejacej osoby zwraca 404', async () => {
-  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `BezEmaila${sufiks()}` });
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', zgoda_email_status: 'potwierdzona', nazwisko: `BezEmaila${sufiks()}` });
   const [stBrak] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, {});
   assert.equal(stBrak, 400);
 
@@ -386,8 +386,8 @@ test('Z-006: POST /:id/zapros-do-portalu bez adresu e-mail odrzuca; dla nieistni
 });
 
 test('Z-006: adres e-mail juz uzywany przez INNA osobe/rolo jest odrzucony, nie podpina sie pod cudze konto', async () => {
-  const [, osobaA] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Kolizja1${sufiks()}` });
-  const [, osobaB] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Kolizja2${sufiks()}` });
+  const [, osobaA] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', zgoda_email_status: 'potwierdzona', nazwisko: `Kolizja1${sufiks()}` });
+  const [, osobaB] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', zgoda_email_status: 'potwierdzona', nazwisko: `Kolizja2${sufiks()}` });
   const email = `kolizja${sufiks()}@example-test.pl`;
 
   const [stA] = await zapytaj('POST', `/api/psa/osoby/${osobaA.osoba.id}/zapros-do-portalu`, { email });
@@ -399,7 +399,7 @@ test('Z-006: adres e-mail juz uzywany przez INNA osobe/rolo jest odrzucony, nie 
 });
 
 test('Z-006: powtorne zaproszenie TEJ SAMEJ osoby na ten sam adres odswieza token, nie zaklada drugiego konta', async () => {
-  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Ponowione${sufiks()}` });
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', zgoda_email_status: 'potwierdzona', nazwisko: `Ponowione${sufiks()}` });
   const email = `ponowione${sufiks()}@example-test.pl`;
 
   const [, pierwsze] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, { email });
@@ -409,4 +409,11 @@ test('Z-006: powtorne zaproszenie TEJ SAMEJ osoby na ten sam adres odswieza toke
 
   const liczbaKont = db().prepare('SELECT COUNT(*) AS ile FROM psa_konta WHERE lower(email) = ?').get(email.toLowerCase()).ile;
   assert.equal(liczbaKont, 1);
+});
+
+test('QW3 / D-083: akcjonariusz bez zgody na komunikację e-mail nie jest zapraszany do portalu', async () => {
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `Bezzgody${sufiks()}`, imie: 'Ola' });
+  const [status, wynik] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, { email: `ola${sufiks()}@example-test.pl` });
+  assert.equal(status, 400);
+  assert.match(wynik.blad, /nie wyraził zgody na komunikację e-mail/);
 });

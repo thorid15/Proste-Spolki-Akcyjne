@@ -67,6 +67,8 @@ async function dodajKonto({ email, haslo, rola, spolkaId = null, osobaId = null 
        VALUES (?, ?, ?, ?, ?, 1, ?)`
     )
     .run(email, hash, rola, spolkaId, osobaId, czas.terazIso());
+  // QW3 / D-083: portal tylko dla akcjonariusza ze zgodą na komunikację e-mail.
+  if (rola === 'akcjonariusz' && osobaId) db().prepare("UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona' WHERE id = ?").run(osobaId);
   return Number(wynik.lastInsertRowid);
 }
 
@@ -155,33 +157,16 @@ test('moje: konto akcjonariusza widzi wlasny pakiet akcji, bez cudzych danych', 
   assert.equal(dane.spolki[0].razem_akcji, 60);
 });
 
-test('rejestr: akcjonariusz widzi wlasne dane w pelni, dane wspolakcjonariusza zamaskowane', async () => {
-  const odp = await fetch(`${baza}/api/psa/portal/rejestr/${spolkaId}`, { headers: { Cookie: ciastkoAkcjonariusz } });
-  assert.equal(odp.status, 200);
-  const dane = await odp.json();
-
-  const jan = dane.akcjonariusze.find((a) => a.osoba_id === kowalskiId);
-  const anna = dane.akcjonariusze.find((a) => a.osoba_id === nowakId);
-  assert.equal(jan.osoba.zamaskowane, false);
-  assert.equal(jan.osoba.pesel, '80010112345');
-  assert.equal(anna.osoba.zamaskowane, true);
-  assert.notEqual(anna.osoba.pesel, '85050512345');
-});
-
-test('rejestr: konto spolki widzi tresc rejestru (PESEL/adres) w calosci, ale NIE dane AML/PEP kancelarii (Z-150)', async () => {
-  // Naprawa Z-150: rola "spolka" ma pelny wglad do TRESCI REJESTRU
-  // (art. 300(35) § 1 KSH — PESEL, adres), ale AML/PEP/notatka to nie tresc
-  // rejestru, tylko wewnetrzna dokumentacja obowiazku AML kancelarii — nie
-  // wychodzi poza kancelarie NIGDY, niezaleznie od roli odbiorcy.
-  const odp = await fetch(`${baza}/api/psa/portal/rejestr/${spolkaId}`, { headers: { Cookie: ciastkoSpolka } });
-  const dane = await odp.json();
-  const anna = dane.akcjonariusze.find((a) => a.osoba_id === nowakId);
-  assert.equal(anna.osoba.pesel, '85050512345', 'tresc rejestru (PESEL) musi zostac widoczna dla spolki');
-  assert.equal(anna.osoba.aml_status, undefined, 'status AML nie moze wyjsc poza kancelarie do roli spolka');
-  assert.ok(
-    anna.osoba.zamaskowane_pola.includes('aml_status'),
-    'pole aml_status ma byc jawnie oznaczone jako pominiete dla roli spolka'
-  );
+test('D-077: zakładka „Rejestr” — API zwraca wyłącznie dane spółki, bez akcjonariatu (akcjonariusz i spółka)', async () => {
+  for (const ciastko of [ciastkoAkcjonariusz, ciastkoSpolka]) {
+    const odp = await fetch(`${baza}/api/psa/portal/rejestr/${spolkaId}`, { headers: { Cookie: ciastko } });
+    assert.equal(odp.status, 200);
+    const tekst = await odp.text();
+    const dane = JSON.parse(tekst);
+    assert.equal(dane.spolka.id, spolkaId);
+    assert.equal(dane.akcjonariusze, undefined, 'akcjonariat nie wychodzi z tej trasy');
+    assert.doesNotMatch(tekst, /80010112345|85050512345/, 'żadnego PESEL w odpowiedzi');
+  }
 });
 
 test('rejestr: dostep do cudzej spolki jest odrzucany (404, nie wyciek istnienia)', async () => {
@@ -562,4 +547,29 @@ test('dwuklik w „Zamow informacje" nie tworzy dwoch dlugow', async () => {
     przed + 1,
     'jedna należność na jedną chęć obejrzenia rejestru'
   );
+});
+
+test('W5.4/W5.5: informacja z rejestru (API) — akcjonariusz bez PESEL innych, spółka pełna; numer, wynagrodzenie, VAT, podstawa', async () => {
+  async function wydaj(ciastko) {
+    const zamow = await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastko }, body: JSON.stringify({ spolka_id: spolkaId }),
+    });
+    const { oplata_id: oplataId } = await zamow.json();
+    db().prepare("UPDATE psa_oplaty SET status = 'oplacona' WHERE id = ?").run(oplataId);
+    const odp = await fetch(`${baza}/api/psa/portal/informacja/${oplataId}/wydaj`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastko }, body: '{}',
+    });
+    const { dokument_id: id } = await odp.json();
+    return (await fetch(`${baza}/api/psa/portal/informacja/${id}`, { headers: { Cookie: ciastko } })).text();
+  }
+  const dlaAkcjonariusza = await wydaj(ciastkoAkcjonariusz);
+  assert.match(dlaAkcjonariusza, /80010112345/, 'własny PESEL widoczny');
+  assert.doesNotMatch(dlaAkcjonariusza, /85050512345/, 'PESEL innego akcjonariusza ukryty');
+  const dlaSpolki = await wydaj(ciastkoSpolka);
+  assert.match(dlaSpolki, /85050512345/, 'spółka dostaje wersję pełną');
+  for (const html of [dlaAkcjonariusza, dlaSpolki]) {
+    assert.match(html, /Numer informacji: <strong>INF\/\d{4}\/\d{4}<\/strong>/);
+    assert.match(html, /netto \+ 23% VAT/);
+    assert.match(html, /§ 15b ust\. 3 rozporządzenia.*art\. 300\(35\) § 3 KSH.*art\. 89 § 2/);
+  }
 });

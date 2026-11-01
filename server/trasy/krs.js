@@ -164,8 +164,10 @@ function zmapuj(odpowiedz, numerKrs) {
 async function pobierzZKrs(numerKrs) {
   const url = `${konfiguracja.KRS_API_URL}/OdpisAktualny/${numerKrs}?rejestr=P&format=json`;
 
-  let odpowiedz;
-  try {
+  // Tryb testowy (T3): numery z danych testowych odpowiada atrapa, w tym
+  // samym ksztalcie co API — reszta numerow idzie do prawdziwego KRS.
+  let odpowiedz = konfiguracja.TRYB_TESTOWY ? require('../tryb-testowy/krs-atrapa').odpowiedz(numerKrs) : null;
+  if (!odpowiedz) try {
     odpowiedz = await fetch(url, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(LIMIT_CZASU_MS),

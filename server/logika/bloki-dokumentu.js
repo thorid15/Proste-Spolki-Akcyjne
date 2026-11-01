@@ -158,11 +158,12 @@ function znormalizuj(dane) {
  * @param {{tytul: string, autor: string}} opcje
  * @returns {Promise<Buffer>}
  */
-function doPdf(bloki, { tytul, autor }) {
+function doPdf(bloki, { tytul, autor, identyfikator = null }) {
   const lista = znormalizuj(bloki);
   return pdf.zbuduj({
     tytul,
     autor,
+    identyfikator,
     tresc(p) {
       for (const blok of lista) {
         switch (blok.rodzaj) {

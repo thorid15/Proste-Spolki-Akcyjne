@@ -549,10 +549,18 @@ function podstawKluczePartii(wartosc, idPartii) {
  * prawdziwego ID przez `{ __odwolanie_do_partii: 'emisja-A' }` gdziekolwiek
  * w `dane` (patrz `podstawKluczePartii`).
  */
-function otworzRejestr(db, spolkaId, { zdarzenia, autor, teraz, dzialajacy }) {
+function otworzRejestr(db, spolkaId, { zdarzenia, autor, teraz, dzialajacy, przejecie = null }) {
   const transakcja = db.transaction(() => {
     const idPartii = new Map();
     const zapisane = [];
+    // W7.7 — rejestr przejęty: zdarzenie „PRZEJĘCIE” otwiera łańcuch SHA-256
+    // (stan na dzień przejęcia + skróty dokumentów źródłowych).
+    if (przejecie) {
+      if (wczytajZdarzenia(db, spolkaId).length > 0) {
+        throw new BladWalidacji(['Zdarzenie „PRZEJĘCIE” musi otwierać łańcuch — rejestr tej spółki ma już wpisy.']);
+      }
+      zapisane.push({ zdarzenie: zapiszZdarzenie(db, { spolka_id: spolkaId, typ: 'przejecie', autor, dzialajacy, dane: przejecie }) });
+    }
     for (const z of zdarzenia) {
       const wynik = _wykonajWpis(db, {
         spolkaId,

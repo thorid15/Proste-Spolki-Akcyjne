@@ -32,6 +32,7 @@ const ustawienia = require('./ustawienia');
 const czas = require('../pomocnicze/czas');
 const dokumentyWniosku = require('./dokumenty-wniosku');
 const bloki = require('./bloki-dokumentu');
+const formyPodpisu = require('./formy-podpisu');
 
 /** Kolumny listy dokumentów — bez ścieżek, które nie mają czego szukać w API. */
 const KOLUMNY_WIDOKU = `id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id, kolejnosc,
@@ -40,6 +41,10 @@ const KOLUMNY_WIDOKU = `id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id, k
         podpis_nazwa_pliku, podpis_rozmiar, podpis_wgrano,
         podpis_potwierdzono, podpis_potwierdzil, podpis_hash,
         otwarto_w_portalu,
+        id_dokumentu, oryginal_sha256, oryginal_dlugosc,
+        walidacja_wynik, walidacja_typ, walidacja_json, walidacja_kiedy,
+        forma_podpisu, oryginal_otrzymano, oryginal_poczta_zadeklarowano,
+        notariusz_podpis_wgrano, notariusz_walidacja_wynik, notariusz_walidacja_json,
         (tresc_bloki IS NOT NULL) AS edytowalny`;
 
 function katalogWniosku(wniosekId) {
@@ -62,10 +67,17 @@ function przeliczBrakujace(surowe) {
 
 function widokDokumentu(wiersz) {
   if (!wiersz) return null;
+  const zJson = (t) => { try { return t ? JSON.parse(t) : null; } catch { return null; } };
+  const { walidacja_json: wj, notariusz_walidacja_json: nj, ...reszta } = wiersz;
   return {
-    ...wiersz,
+    ...reszta,
     edytowalny: Boolean(wiersz.edytowalny),
     brakujace: przeliczBrakujace(wiersz.brakujace),
+    walidacja: zJson(wj),
+    notariusz_walidacja: zJson(nj),
+    // W2.1 — formy dopuszczalne dla tego dokumentu (jedno źródło: formy-podpisu.js).
+    formy_dopuszczalne: formyPodpisu.regula(formyPodpisu.typDlaDokumentuWniosku(wiersz.typ)).formy
+      .map((kod) => ({ kod, nazwa: formyPodpisu.NAZWY_FORM[kod] })),
   };
 }
 
@@ -164,18 +176,41 @@ function usunPlik(sciezkaWzgledna) {
  * @param {object[]} akcjonariusze wiersze `psa_wnioski_akcjonariusze`
  * @returns {Promise<{dokumenty: object[], sciezkaUmowy: string|null}>}
  */
+/** Unikalne ID dokumentu do podpisu — drukowane w stopce PDF (W3.1). */
+function nowyIdentyfikator(wniosekId) {
+  return `PSA-W${wniosekId}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+}
+
+/** Skrót i długość oryginału (W3.4) + kontrola limitu mObywatela (W3.1). */
+function odciskOryginalu(plik, nazwa) {
+  if (plik.length > konfiguracja.PODPIS.limit_bajtow) {
+    throw new Error(
+      `Dokument „${nazwa}” ma ${(plik.length / 1048576).toFixed(1)} MB — więcej niż limit podpisu w mObywatelu `
+        + `(${(konfiguracja.PODPIS.limit_bajtow / 1048576).toFixed(0)} MB). Skróć treść albo podziel dokument.`
+    );
+  }
+  return {
+    oryginal_sha256: crypto.createHash('sha256').update(plik).digest('hex'),
+    oryginal_dlugosc: plik.length,
+  };
+}
+
 async function wystaw(wniosek, akcjonariusze) {
   const pakiet = dokumentyWniosku.zlozPakiet({
     wniosek,
     akcjonariusze,
     dzis: czas.dzisIso(),
+    // W7.4 — wniosek przeniesienia rejestru: umowa z klauzulą warunkową.
+    przeniesienie: require('../przeniesienia').dlaWniosku(db(), wniosek),
   });
 
   // Pliki składamy PRZED kasowaniem poprzedniego kompletu: gdyby składanie
   // się wywróciło, klient ma zostać z tym, co miał, a nie z pustą listą.
   const zlozone = [];
   for (const d of pakiet) {
-    zlozone.push({ opis: d, plik: await dokumentyWniosku.zloz(d) });
+    const identyfikator = nowyIdentyfikator(wniosek.id);
+    const plik = await dokumentyWniosku.zloz(d, { identyfikator });
+    zlozone.push({ opis: d, plik, identyfikator, odcisk: odciskOryginalu(plik, d.nazwa) });
   }
 
   const katalog = katalogDokumentow(wniosek.id);
@@ -189,12 +224,14 @@ async function wystaw(wniosek, akcjonariusze) {
   const wstaw = db().prepare(
     `INSERT INTO psa_wnioski_dokumenty
        (wniosek_id, akcjonariusz_id, typ, nazwa, nazwa_pliku, sciezka, mime,
-        rozmiar, kolejnosc, tresc_bloki, brakujace, utworzono)
+        rozmiar, kolejnosc, tresc_bloki, brakujace, utworzono,
+        id_dokumentu, oryginal_sha256, oryginal_dlugosc)
      VALUES (@wniosek_id, @akcjonariusz_id, @typ, @nazwa, @nazwa_pliku, @sciezka,
-             'application/pdf', @rozmiar, @kolejnosc, @tresc_bloki, @brakujace, @utworzono)`
+             'application/pdf', @rozmiar, @kolejnosc, @tresc_bloki, @brakujace, @utworzono,
+             @id_dokumentu, @oryginal_sha256, @oryginal_dlugosc)`
   );
 
-  for (const { opis, plik } of zlozone) {
+  for (const { opis, plik, identyfikator, odcisk } of zlozone) {
     const sciezka = zapiszPlik(wniosek.id, plik);
     if (opis.typ === dokumentyWniosku.TYPY.UMOWA_REJESTRU) sciezkaUmowy = sciezka;
     wstaw.run({
@@ -209,6 +246,8 @@ async function wystaw(wniosek, akcjonariusze) {
       tresc_bloki: JSON.stringify(opis.bloki),
       brakujace: JSON.stringify(opis.brakujace || []),
       utworzono: teraz,
+      id_dokumentu: identyfikator,
+      ...odcisk,
     });
   }
 
@@ -242,10 +281,13 @@ async function zapiszTresc(wniosekId, dokumentId, noweBloki, autor) {
   }
 
   const znormalizowane = bloki.znormalizuj(noweBloki);
+  const identyfikator = wiersz.id_dokumentu || nowyIdentyfikator(wniosekId);
   const plik = await bloki.doPdf(znormalizowane, {
     tytul: dokumentyWniosku.NAZWY[wiersz.typ] || wiersz.nazwa,
     autor: ustawienia.kancelaria(db()).nazwa,
+    identyfikator,
   });
+  const odcisk = odciskOryginalu(plik, wiersz.nazwa);
 
   const sciezka = zapiszPlik(wniosekId, plik);
   const teraz = czas.terazIso();
@@ -258,14 +300,17 @@ async function zapiszTresc(wniosekId, dokumentId, noweBloki, autor) {
     .prepare(
       `UPDATE psa_wnioski_dokumenty
           SET sciezka = ?, rozmiar = ?, tresc_bloki = ?,
-              zmodyfikowano = ?, zmodyfikowal = ?, sprawdzono = ?, sprawdzil = ?
+              zmodyfikowano = ?, zmodyfikowal = ?, sprawdzono = ?, sprawdzil = ?,
+              id_dokumentu = ?, oryginal_sha256 = ?, oryginal_dlugosc = ?
         WHERE id = ?`
     )
     .run(
       sciezka, plik.length, JSON.stringify(znormalizowane),
       zmieniono ? teraz : wiersz.zmodyfikowano,
       zmieniono ? (autor || null) : wiersz.zmodyfikowal,
-      teraz, autor || null, wiersz.id
+      teraz, autor || null,
+      identyfikator, odcisk.oryginal_sha256, odcisk.oryginal_dlugosc,
+      wiersz.id
     );
   usunPlik(wiersz.sciezka);
 
@@ -292,10 +337,47 @@ async function zapiszTresc(wniosekId, dokumentId, noweBloki, autor) {
  * @returns {object|null} widok dokumentu po zmianie; `null` gdy nie ma takiego
  *   dokumentu, `false` gdy nie odesłano jeszcze skanu
  */
-function potwierdzPodpis(wniosekId, dokumentId, potwierdzono, autor) {
+class BladPodpisu extends Error {}
+
+const FORMY_ELEKTRONICZNE = [formyPodpisu.FORMY.QES, formyPodpisu.FORMY.PZ, formyPodpisu.FORMY.PO];
+
+/**
+ * @param {{forma?: string, oryginalOtrzymano?: string}} [opcje] — forma podpisu
+ *   wskazana przez pracownika (W2.1). Oryginał papierowy: data otrzymania
+ *   i rodzaj podpisu (zwykły / notarialnie poświadczony / w kancelarii).
+ */
+function potwierdzPodpis(wniosekId, dokumentId, potwierdzono, autor, { forma = null, oryginalOtrzymano = null } = {}) {
   const wiersz = dokument(wniosekId, dokumentId);
   if (!wiersz) return null;
-  if (!wiersz.podpis_sciezka) return false;
+
+  if (potwierdzono) {
+    // D-087: pracownik nie musi wskazywać formy — potwierdza, że podpis jest w porządku.
+    // Plik z podpisem → podpis elektroniczny; bez pliku → oryginał papierowy (data otrzymania).
+    // Forma podana wprost (API) nadal jest sprawdzana z tabelą § 2.
+    const typ = formyPodpisu.typDlaDokumentuWniosku(wiersz.typ);
+    const wybrana = forma || null;
+    if (wybrana) {
+      const ocena = formyPodpisu.ocenForme(typ, wybrana);
+      if (!ocena.dopuszczalna) throw new BladPodpisu(ocena.przyczyna);
+    }
+    if (wybrana ? FORMY_ELEKTRONICZNE.includes(wybrana) : Boolean(wiersz.podpis_sciezka)) {
+      if (!wiersz.podpis_sciezka) return false;
+    } else {
+      const dzien = oryginalOtrzymano || czas.dzisIso();
+      if (!czas.poprawnaData(dzien)) throw new BladPodpisu('Data otrzymania oryginału musi mieć format RRRR-MM-DD.');
+      db().prepare('UPDATE psa_wnioski_dokumenty SET oryginal_otrzymano = ? WHERE id = ?').run(dzien, wiersz.id);
+    }
+    db().prepare('UPDATE psa_wnioski_dokumenty SET forma_podpisu = ? WHERE id = ?').run(wybrana, wiersz.id);
+  } else if (!wiersz.podpis_sciezka && !wiersz.oryginal_otrzymano) {
+    return false;
+  }
+
+  if (!wiersz.podpis_sciezka) {
+    db()
+      .prepare('UPDATE psa_wnioski_dokumenty SET podpis_potwierdzono = ?, podpis_potwierdzil = ?, podpis_hash = NULL WHERE id = ?')
+      .run(potwierdzono ? czas.terazIso() : null, potwierdzono ? autor || null : null, wiersz.id);
+    return widokDokumentu(db().prepare(`SELECT ${KOLUMNY_WIDOKU} FROM psa_wnioski_dokumenty WHERE id = ?`).get(wiersz.id));
+  }
 
   // Skrot tresci PLIKU NA DYSKU w chwili potwierdzenia — dokumentuje, co
   // dokladnie kancelaria zaakceptowala (Z-205). Trasa portalu, ktora
@@ -340,6 +422,7 @@ function udostepnij(wniosekId) {
 }
 
 module.exports = {
+  BladPodpisu,
   KOLUMNY_WIDOKU,
   katalogWniosku,
   lista,

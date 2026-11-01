@@ -28,10 +28,20 @@
  *               aktywacja | wniosek | umowa | przyjecie | rejestr | zawiadomienie
  *               (domyślnie: zawiadomienie — pełny przebieg)
  *
+ * Tryb testowy (Faza 5, D-074): `--tryb-testowy` — świeża baza z `test:seed`,
+ * serwer w tym procesie, konta testowe, skrzynka testowa i atrapy (walidator
+ * podpisu, tpay, KRS); scenariusze podpisów, listów, zgód, przeniesienia
+ * rejestru i informacji po 18.02.2027 — `narzedzia/scenariusz-e2e-testowy.js`.
+ *
  * UWAGA: skrypt zapisuje prawdziwe dane w bazie wskazanej przez `.env`.
  * Uruchamiaj go na bazie testowej (WSPOLNA_BAZA=./dane/proba.db), nie na
  * produkcyjnej.
  */
+
+if (process.argv.includes('--tryb-testowy')) {
+  require('./scenariusz-e2e-testowy').uruchom();
+  return;
+}
 
 const KROKI = [
   'zgloszenie',
@@ -155,6 +165,19 @@ function koniec(krokNazwa) {
 
 const DZIS = new Date().toISOString().slice(0, 10);
 
+/** Serwer w trybie testowym: link aktywacyjny z ostatniej wiadomości do adresu w skrzynce testowej. */
+async function linkZeSkrzynkiTestowej(adres) {
+  const lista = await fetch(`${ADRES}/test/skrzynka`);
+  if (!lista.ok) return null;
+  const html = await lista.text();
+  const wzor = new RegExp(`<td>${adres.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</td>\\s*<td><a href="/test/skrzynka/([^"]+)"`);
+  const id = (html.match(wzor) || [])[1];
+  if (!id) return null;
+  const wiadomosc = await (await fetch(`${ADRES}/test/skrzynka/${id}`)).text();
+  const token = (wiadomosc.match(/aktywuj\/([\w-]+)/) || [])[1];
+  return token ? `${ADRES}/portal.html#/aktywuj/${token}` : null;
+}
+
 async function main() {
   console.log('═'.repeat(72));
   console.log(`Scenariusz E2E — ${ADRES}`);
@@ -200,16 +223,27 @@ async function main() {
   if (!zgloszenie) throw new Error('Nie odnaleziono zgłoszenia w kolejce kancelarii.');
   info(`zgłoszenie #${zgloszenie.id} widoczne w kolejce, status: ${zgloszenie.status}`);
 
-  let link = zgloszenieOdpowiedz.link_aktywacyjny;
-  if (zgloszenieOdpowiedz.zaproszenie_wyslane) {
+  // D-079: formularz publiczny nie oddaje linku aktywacyjnego — przy braku SMTP
+  // kancelaria wysyła zaproszenie ponownie z kolejki i dostaje link do przekazania.
+  const ponowne = await zapytaj(kancelaria, 'POST', `/api/psa/zgloszenia/${zgloszenie.id}/zapros`, {});
+  let link = ponowne.link_aktywacyjny;
+  if (ponowne.email_wyslany) {
+    // Tryb testowy (D-074): „wysłany” e-mail leży w skrzynce testowej — link stamtąd.
+    link = await linkZeSkrzynkiTestowej(EMAIL_KLIENTA);
+  }
+  if (link && ponowne.email_wyslany) {
+    info('link aktywacyjny odczytany ze skrzynki testowej (/test/skrzynka)');
+  } else if (ponowne.email_wyslany) {
     info('e-mail z linkiem aktywacyjnym został wysłany na adres klienta');
     throw new Error(
       'SMTP jest skonfigurowany, więc link nie wraca w odpowiedzi — otwórz link z maila ' +
         'i dokończ scenariusz ręcznie albo uruchom skrypt na konfiguracji bez SMTP.'
     );
   }
-  info('e-mail NIE wyszedł (SMTP nieskonfigurowany)');
-  info('link aktywacyjny wraca w odpowiedzi i pokazuje się w oknie do skopiowania:');
+  if (!ponowne.email_wyslany) {
+    info('e-mail NIE wyszedł (SMTP nieskonfigurowany)');
+    info('link aktywacyjny wraca w odpowiedzi i pokazuje się w oknie do skopiowania:');
+  }
   info(link);
   if (koniec('zaproszenie')) return;
 
@@ -382,7 +416,7 @@ async function main() {
   // te same kody co `CHECKLISTA_OTWARCIA` w `publiczne/js/spolki.js`.
   const otwarcie = await zapytaj(kancelaria, 'POST', `/api/psa/spolki/${spolkaId}/otworz-rejestr`, {
     checklista: {
-      forma: true, wpis_krs: true, uchwala: true, umowa: true, jedna_umowa: true,
+      forma: true, wpis_krs: true, uchwala: true, reprezentacja: true, umowa: true, jedna_umowa: true,
       dane_z_umowy: true, ograniczenia: true, bilans: true, zakres_danych: true, aml: true,
     },
     zdarzenia: [
@@ -442,8 +476,21 @@ async function main() {
   });
   info(
     'uprzednie powiadomienie zbywcy (art. 300(34) § 3 KSH): ' +
-      (powiadomienie.wysylka.wyslano ? 'wysłane e-mailem' : `NIEwysłane (${powiadomienie.wysylka.powod})`)
+      (powiadomienie.wysylka.wyslano ? 'wysłane e-mailem'
+        : powiadomienie.wysylka.status === 'list' ? 'list do nadania (zbywca bez zgody na e-mail — D-081)'
+          : `NIEwysłane (${powiadomienie.wysylka.powod})`)
   );
+  if (powiadomienie.wysylka.status === 'list') {
+    // W4.3: kancelaria drukuje pismo z adresem z rejestru i odnotowuje nadanie — to odblokowuje wpis.
+    const { listy } = await zapytaj(kancelaria, 'GET', '/api/psa/listy?status=do_wyslania');
+    const list = listy.find((l) => l.sprawa_id === sprawa.sprawa.id);
+    const nadanie = new FormData();
+    nadanie.append('data_nadania', DZIS);
+    nadanie.append('numer_nadania', `RR${ZNACZNIK}PL`);
+    await zapytaj(kancelaria, 'POST', `/api/psa/listy/${list.id}/nadanie`, nadanie);
+    info(`list nadany (nr ${`RR${ZNACZNIK}PL`}) — wpis odblokowany`);
+    ekran(`${ADRES}/#/listy`);
+  }
 
   const wejscie = {
     emisja_zdarzenie_id: emisjaId,

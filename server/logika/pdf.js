@@ -40,10 +40,13 @@ const INTERLINIA = 1.35;
  * @param {Function} opcje.tresc   (p) => void — wywołanie z pomocnikami niżej
  * @returns {Promise<Buffer>}
  */
-function zbuduj({ tytul, autor, tresc }) {
+function zbuduj({ tytul, autor, tresc, identyfikator = null }) {
   return new Promise((zrealizuj, odrzuc) => {
     const dokument = new PDFDocument({
       size: 'A4',
+      // Stopka z ID dokumentu (W3.1) dopisywana po złożeniu treści — wymaga
+      // dostępu do wszystkich stron naraz.
+      bufferPages: Boolean(identyfikator),
       margins: { top: MARGINES, bottom: MARGINES, left: MARGINES, right: MARGINES },
       info: {
         Title: tytul,
@@ -66,11 +69,36 @@ function zbuduj({ tytul, autor, tresc }) {
 
     try {
       tresc(pomocniki(dokument));
+      if (identyfikator) stopkaZIdentyfikatorem(dokument, identyfikator);
     } catch (e) {
       return odrzuc(e);
     }
     dokument.end();
   });
+}
+
+/**
+ * Stopka każdej strony: unikalne ID dokumentu i numer strony (W3.1). ID wiąże
+ * podpisany plik z dokumentem wystawionym przez kancelarię.
+ */
+function stopkaZIdentyfikatorem(dokument, identyfikator) {
+  const zakres = dokument.bufferedPageRange();
+  for (let i = zakres.start; i < zakres.start + zakres.count; i += 1) {
+    dokument.switchToPage(i);
+    const dolny = dokument.page.margins.bottom;
+    dokument.page.margins.bottom = 0;
+    dokument
+      .font('zwykla')
+      .fontSize(7.5)
+      .fillColor('#555555')
+      .text(
+        `ID dokumentu: ${identyfikator} · strona ${i - zakres.start + 1} z ${zakres.count}`,
+        MARGINES,
+        dokument.page.height - MARGINES / 2,
+        { width: dokument.page.width - 2 * MARGINES, align: 'center', lineBreak: false }
+      );
+    dokument.page.margins.bottom = dolny;
+  }
 }
 
 /** Wartość do wydruku — brak danych zostaje widoczną kreską, nie pustką. */

@@ -73,6 +73,8 @@ const CHECKLISTA_OTWARCIA = [
   { kod: 'forma', tresc: 'Forma prawna potwierdzona jako prosta spółka akcyjna.' },
   { kod: 'wpis_krs', tresc: 'Spółka wpisana do KRS, data wpisu ustalona.' },
   { kod: 'uchwala', tresc: 'Uchwała akcjonariuszy o wyborze podmiotu prowadzącego rejestr, skan wgrany.' },
+  // W2.5 (wytyczne § 2): umowa wymaga uchwały akcjonariuszy i sprawdzenia reprezentacji w KRS.
+  { kod: 'reprezentacja', tresc: 'Reprezentacja spółki przy umowie sprawdzona według KRS (odpis aktualny).' },
   { kod: 'umowa', tresc: 'Umowa o prowadzenie rejestru podpisana, skan wgrany, wskazany podpisujący.' },
   { kod: 'jedna_umowa', tresc: 'Spółka nie ma innej aktywnej umowy o prowadzenie rejestru.' },
   { kod: 'dane_z_umowy', tresc: 'Dane z umowy spółki przeniesione: seria, numery, uprzywilejowanie, cena emisyjna, wkłady.' },

@@ -201,6 +201,7 @@ function EkranLoginPortal({ przyZalogowaniu }) {
       >
         {wysylanie ? 'Logowanie…' : 'Zaloguj się'}
       </button>
+      <KontaTestowe aplikacja="portal" przyZalogowaniu={() => przyZalogowaniu()} />
 
       <div className="brama-stopka">
         Dostęp zakłada kancelaria po weryfikacji tożsamości — nie ma tu samodzielnej rejestracji.
@@ -227,6 +228,11 @@ function EkranZgloszenieWstepne() {
   const [email, ustawEmail] = useState('');
   const [krs, ustawKrs] = useState('');
   const [nazwaSpolki, ustawNazwaSpolki] = useState('');
+  // W7.1 — wariant „Przenoszę rejestr od innego podmiotu” (opis neutralny, bez porównań).
+  const [przenosze, ustawPrzenosze] = useState(false);
+  const [poprzednikTyp, ustawPoprzednikTyp] = useState('dom_maklerski');
+  const [poprzednikNazwa, ustawPoprzednikNazwa] = useState('');
+  const [okresWypowiedzenia, ustawOkres] = useState('');
   const [wysylanie, ustawWysylanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
   const [gotowe, ustawGotowe] = useState(false);
@@ -244,6 +250,10 @@ function EkranZgloszenieWstepne() {
         email: email.trim(),
         krs: krsCyfry,
         nazwa_spolki: nazwaSpolki.trim() || undefined,
+        przeniesienie: przenosze ? {
+          poprzednik_typ: poprzednikTyp, poprzednik_nazwa: poprzednikNazwa.trim() || undefined,
+          okres_wypowiedzenia: okresWypowiedzenia.trim() || undefined,
+        } : undefined,
       });
       ustawGotowe(wynik);
     } catch (e) {
@@ -254,24 +264,24 @@ function EkranZgloszenieWstepne() {
   }
 
   if (gotowe) {
-    // Zaproszenie idzie od razu, wiec klient ma isc do skrzynki, a nie czekac
-    // na telefon z kancelarii. Gdy poczta zawiedzie, link wraca w odpowiedzi
-    // — pokazujemy go tutaj, zeby droga dalej nie urwala sie w pol kroku.
+    // Zaproszenie idzie od razu, wiec klient ma isc do skrzynki. Linku w odpowiedzi
+    // nie ma (D-079): przy awarii poczty przekazuje go kancelaria z kolejki zgloszen.
     return (
       <Pusto
         ikona="sprawdz"
-        tytul="Zaproszenie wysłane"
+        tytul="Zgłoszenie przyjęte"
         opis={
-          gotowe.zaproszenie_wyslane === false && gotowe.link_aktywacyjny
-            ? 'Nie udało się wysłać wiadomości. Skorzystaj z linku poniżej — jest ważny przez 7 dni.'
-            : `Na adres ${email.trim()} poszedł link do portalu. Jest ważny przez 7 dni — ustawisz tam hasło i wypełnisz wniosek o prowadzenie rejestru.`
+          // D-079: ten sam tekst bez względu na to, czy kancelaria zna już
+          // spółkę — sam numer KRS nie może tego zdradzić.
+          gotowe.zaproszenie_wyslane === false
+            ? 'Nie udało się wysłać wiadomości e-mail — kancelaria skontaktuje się z Tobą.'
+            : `Na adres ${email.trim()} wysłaliśmy wiadomość z dalszymi krokami. Sprawdź skrzynkę (także folder spam).`
         }
         akcja={
-          gotowe.link_aktywacyjny ? (
-            <a className="btn btn-glowny" href={gotowe.link_aktywacyjny}>Otwórz portal</a>
-          ) : (
+          <span>
             <button className="btn" onClick={() => idz('/')}>Wróć do logowania</button>
-          )
+            <PrzyciskLinkuTestowego link={gotowe.link_testowy} />
+          </span>
         }
       />
     );
@@ -309,6 +319,27 @@ function EkranZgloszenieWstepne() {
         <Pole etykieta="Nazwa spółki">
           <input type="text" value={nazwaSpolki} onChange={(z) => ustawNazwaSpolki(z.target.value)} />
         </Pole>
+        <Przelacznik
+          wlaczony={przenosze}
+          przyZmianie={ustawPrzenosze}
+          etykieta="Przenoszę rejestr od innego podmiotu"
+          opis="Spółka ma już rejestr akcjonariuszy prowadzony przez inny podmiot (dom maklerski, bank albo notariusza) i chce przenieść jego prowadzenie."
+        />
+        {przenosze && (
+          <>
+            <Pole etykieta="Kto dotąd prowadzi rejestr" wymagane>
+              <select value={poprzednikTyp} onChange={(z) => ustawPoprzednikTyp(z.target.value)}>
+                <option value="dom_maklerski">dom maklerski / bank</option>
+                <option value="notariusz">notariusz</option>
+                <option value="rada_izby">notariusz, który zakończył działalność (rada izby notarialnej)</option>
+              </select>
+            </Pole>
+            <Pole etykieta="Nazwa dotychczasowego podmiotu"><input value={poprzednikNazwa} onChange={(z) => ustawPoprzednikNazwa(z.target.value)} /></Pole>
+            <Pole etykieta="Okres wypowiedzenia dotychczasowej umowy (jeśli znany)" podpowiedz="Informacyjnie — datę przejęcia ustalimy po zawiadomieniu o rozwiązaniu umowy.">
+              <input value={okresWypowiedzenia} onChange={(z) => ustawOkres(z.target.value)} placeholder="np. 3 miesiące" />
+            </Pole>
+          </>
+        )}
 
       <button
         className="btn btn-glowny btn-duzy"
@@ -918,6 +949,59 @@ function pozycjeDoZrobieniaPortal({ wniosek, sprawy, oplaty }) {
   return pozycje.sort((a, b) => a.priorytet - b.priorytet);
 }
 
+/**
+ * Faza 4 — przeniesienie rejestru widziane przez spółkę: status (§ 7.3),
+ * przypomnienia (W7.5), dokumenty startowe (W7.2), wzór uchwały i pakiet pism (W7.4).
+ */
+function PrzeniesieniePortal() {
+  const { dane, odswiez } = useDane('/api/psa/portal/przeniesienie');
+  const [typ, ustawTyp] = useState('umowa_spolki');
+  const [blad, ustawBlad] = useState(null);
+  const plik = useRef(null);
+  if (!dane || !dane.przeniesienie) return null;
+  const p = dane.przeniesienie;
+  async function wyslij() {
+    ustawBlad(null);
+    const f = new FormData();
+    f.append('typ', typ);
+    f.append('plik', plik.current.files[0]);
+    const odp = await fetch('/api/psa/portal/przeniesienie/dokumenty', { method: 'POST', body: f });
+    if (!odp.ok) { const t = await odp.json().catch(() => ({})); ustawBlad(t.blad || 'Nie udało się przesłać pliku.'); return; }
+    plik.current.value = '';
+    odswiez();
+  }
+  return (
+    <Karta tytul="Przeniesienie rejestru">
+      <p><strong>{p.nazwa_statusu}</strong> — dotychczasowy podmiot: {p.poprzednik_nazwa || p.poprzednik_opis}.</p>
+      {p.data_zawarcia_umowy && <p>Umowa zawarta {fmt.data(p.data_zawarcia_umowy)}; termin ostateczny warunku: {fmt.data(p.termin_warunku)}.</p>}
+      {p.data_skutecznosci && <p>Rejestr prowadzimy od {fmt.data(p.data_skutecznosci)}.</p>}
+      {p.przypomnienia.map((pr) => <Komunikat key={pr.rodzaj} odmiana="uwaga" tresc={pr.tresc} />)}
+      {p.status === 'umowa_warunkowa' && (
+        <Komunikat odmiana="info" tresc="W ostatnim tygodniu przed rozwiązaniem dotychczasowej umowy nie składaj nowych żądań u dotychczasowego podmiotu. Zawiadom nas o dacie rozwiązania — wgraj wypowiedzenie z potwierdzeniem doręczenia albo potwierdzenie od dotychczasowego podmiotu." />
+      )}
+      <Komunikat odmiana="blad" tresc={blad} />
+      <div className="row-g" style={{ flexWrap: 'wrap' }}>
+        <select value={typ} onChange={(z) => ustawTyp(z.target.value)}>
+          <option value="umowa_spolki">aktualny tekst umowy spółki</option>
+          <option value="informacja_poprzednika">informacja z dotychczasowego rejestru</option>
+          <option value="uchwala">podpisana uchwała akcjonariuszy</option>
+          <option value="wypowiedzenie">wypowiedzenie z potwierdzeniem doręczenia</option>
+          <option value="potwierdzenie_rozwiazania">potwierdzenie daty rozwiązania od poprzednika</option>
+        </select>
+        <input type="file" ref={plik} />
+        <button className="btn btn-maly" onClick={wyslij}>Wgraj dokument</button>
+      </div>
+      {p.dokumenty.length > 0 && <ul>{p.dokumenty.map((d) => <li key={d.id}>{d.nazwa_pliku} <span className="przyciemnione">({d.typ})</span></li>)}</ul>}
+      {p.pisma.length > 0 && (
+        <>
+          <p><strong>Dokumenty do pobrania</strong></p>
+          <ul>{p.pisma.map((x) => <li key={x.kod}><a href={`/api/psa/portal/przeniesienie/pisma/${x.kod}`} target="_blank" rel="noopener">{x.tytul}</a></li>)}</ul>
+        </>
+      )}
+    </Karta>
+  );
+}
+
 function EkranStart() {
   const { dane: moje, ladowanie: ladowanieMoje } = useDane('/api/psa/portal/moje');
   const { dane: zadania, ladowanie: ladowanieZadania } = useDane(
@@ -940,6 +1024,7 @@ function EkranStart() {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
+      <PrzeniesieniePortal />
       <Karta tytul="Do zrobienia">
         {pozycje.length === 0 ? (
           <Pusto ikona="sprawdz" tytul="Wszystko załatwione" opis="Nic teraz nie wymaga Twojej uwagi." />
@@ -1124,124 +1209,41 @@ function EkranSpolkaPortal({ spolkaId }) {
    PODGLĄD REJESTRU (z maskowaniem — art. 300(35) KSH)
    ───────────────────────────────────────────────────── */
 function EkranRejestrPortal({ spolkaId }) {
-  const [dataStan, ustawDataStan] = useState(fmt.dzisIso());
-  const { dane, ladowanie, blad } = useDane(`/api/psa/portal/rejestr/${spolkaId}?data=${dataStan}`, [dataStan]);
+  // D-077 (W5.1): zakładka pokazuje wyłącznie dane spółki — akcjonariat jest
+  // w płatnej informacji z rejestru (API tej trasy akcjonariuszy nie zwraca).
+  const { dane, ladowanie, blad } = useDane(`/api/psa/portal/rejestr/${spolkaId}`);
+  const s = dane && dane.spolka;
+  const adres = s ? [[s.ulica, [s.nr_domu, s.nr_lokalu].filter(Boolean).join('/')].filter(Boolean).join(' '),
+    [s.kod_pocztowy, s.miejscowosc].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '';
 
   return (
     <div className="pion" style={{ gap: 16 }}>
       {blad && <Komunikat odmiana="blad" tresc={blad.message} />}
       {ladowanie && <Spinner />}
-
-      {dane && (
+      {s && (
         <>
+          <Karta tight tytul="Dane spółki">
+            <dl className="pary">
+              <dt>Firma</dt><dd>{s.nazwa}</dd>
+              <dt>KRS</dt><dd>{s.krs || '—'}</dd>
+              <dt>Siedziba i adres</dt><dd>{adres || '—'}</dd>
+              <dt>Sąd rejestrowy</dt><dd>{[s.sad_rejestrowy, s.wydzial].filter(Boolean).join(', ') || '—'}</dd>
+              <dt>Data rejestracji spółki</dt><dd>{s.data_utworzenia_spolki ? fmt.data(s.data_utworzenia_spolki) : '—'}</dd>
+              <dt>Rejestr akcjonariuszy prowadzony od</dt><dd>{s.data_otwarcia_rejestru ? fmt.data(s.data_otwarcia_rejestru) : '—'}</dd>
+            </dl>
+          </Karta>
           <Karta tight>
-            <div className="rzad-rozdzielony">
-              <div className="row-g" style={{ marginBottom: 0 }}>
-                <label className="fl" style={{ margin: 0 }}>Stan na dzień</label>
-                <PoleDaty wartosc={dataStan} przyZmianie={(v) => v && ustawDataStan(v)} />
-              </div>
-              <button className="btn" onClick={() => idz(`/informacja/${spolkaId}`)}>Informacja z rejestru</button>
+            <Komunikat
+              odmiana="info"
+              tresc="Stan akcjonariatu (akcjonariusze, akcje, obciążenia) jest dostępny w informacji z rejestru akcjonariuszy (art. 300³⁵ § 3 KSH)."
+            />
+            <button className="btn btn-glowny" onClick={() => idz(`/informacja/${spolkaId}`)}>Zamów informację z rejestru</button>
+            <div style={{ marginTop: 'var(--od-4)' }}>
+              <a href={`#/zgloszenie-bledu/${spolkaId}`} onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}`); }}>
+                Zgłoś błąd we wpisie
+              </a>
             </div>
           </Karta>
-
-          <Karta tight tytul={`Akcjonariat — razem ${fmt.liczba(dane.razem_akcji)} akcji`}>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Akcjonariusz</th>
-                  <th>Seria</th>
-                  <th className="prawo">Ilość</th>
-                  <th>Numery</th>
-                  <th className="prawo">Udział</th>
-                  <th>Obciążenia</th>
-                  <th><span className="sr-only">Zgłoszenie błędu</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {dane.akcjonariusze.length === 0 && (
-                  <tr><td colSpan={7} className="przyciemnione">Brak wpisanych akcjonariuszy.</td></tr>
-                )}
-                {dane.akcjonariusze.map((a, i) => {
-                  // D-R06: „Łącznie” po ostatniej serii osoby z kilkoma seriami.
-                  const nastepny = dane.akcjonariusze[i + 1];
-                  const suma = (!nastepny || nastepny.osoba_id !== a.osoba_id)
-                    ? (dane.akcjonariusze_lacznie || []).find((l) => l.osoba_id === a.osoba_id)
-                    : null;
-                  return (
-                  <React.Fragment key={i}>
-                  <tr>
-                    <td style={{ fontWeight: 500 }}>
-                      {a.osoba ? a.osoba.oznaczenie : 'nieznany'}
-                      {a.osoba && a.osoba.zamaskowane && <span className="podpowiedz"> (dane częściowo zamaskowane)</span>}
-                    </td>
-                    <td>{a.seria}</td>
-                    <td className="prawo">{fmt.liczba(a.ilosc)}</td>
-                    <td className="mono">
-                      {/* D-R03: zakresy z datą wpisu każdego z nich. */}
-                      {(a.grupy_wpisu && a.grupy_wpisu.length ? a.grupy_wpisu : [{ numery: a.numery }]).map((g, j) => (
-                        <div key={j}>
-                          {g.numery}
-                          {g.data_wpisu && <span className="przyciemnione"> (wpis {fmt.data(g.data_wpisu)})</span>}
-                        </div>
-                      ))}
-                    </td>
-                    <td className="prawo">{fmt.procent(a.procent)}</td>
-                    <td>{a.obciazenia.length > 0 ? <Pigulka odmiana="sygnal">{a.obciazenia.length}</Pigulka> : '—'}</td>
-                    <td>
-                      {/* B9 — dyskretny odnośnik przy KONKRETNYM wpisie, z
-                          wypełnionym odwołaniem do pozycji (seria, numery). */}
-                      <a
-                        href={`#/zgloszenie-bledu/${spolkaId}`}
-                        className="male wyciszony"
-                        onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}?odwolanie=${encodeURIComponent(`${a.osoba ? a.osoba.oznaczenie : 'nieznany'}, seria ${a.seria}, nr ${a.numery}`)}`); }}
-                      >
-                        Zgłoś błąd
-                      </a>
-                    </td>
-                  </tr>
-                  {suma && (
-                    <tr>
-                      <td className="przyciemnione">Łącznie</td>
-                      <td className="przyciemnione">serie {suma.serie.join(', ')}</td>
-                      <td className="prawo" style={{ fontWeight: 600 }}>{fmt.liczba(suma.ilosc)}</td>
-                      <td />
-                      <td className="prawo" style={{ fontWeight: 600 }}>{fmt.procent(suma.procent)}</td>
-                      <td />
-                      <td />
-                    </tr>
-                  )}
-                  </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </Karta>
-
-          {/* B9 — ogólny odnośnik pod rejestrem, nie tylko przy pozycji:
-              „coś się nie zgadza" bywa np. w danych spółki, nie akcjonariusza. */}
-          <div className="podpowiedz" style={{ textAlign: 'center' }}>
-            <a href={`#/zgloszenie-bledu/${spolkaId}`} onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}`); }}>
-              Coś się nie zgadza?
-            </a>
-          </div>
-
-          {dane.emisje.length > 0 && (
-            <Karta tight tytul="Emisje">
-              <table className="tbl">
-                <thead><tr><th>Seria</th><th className="prawo">Ilość</th><th>Numery</th><th>Status</th></tr></thead>
-                <tbody>
-                  {dane.emisje.map((e) => (
-                    <tr key={e.klucz}>
-                      <td>{e.seria}</td>
-                      <td className="prawo">{fmt.liczba(e.ilosc)}</td>
-                      <td className="mono">{e.zakres}</td>
-                      <td>{e.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Karta>
-          )}
         </>
       )}
     </div>
@@ -1959,6 +1961,88 @@ function FormularzZmianyHaslaPortal() {
   );
 }
 
+const NAZWY_ZGODY = {
+  brak: 'nie wyrażono',
+  zadeklarowana: 'zadeklarowana we wniosku (bez Twojego oświadczenia)',
+  potwierdzona: 'wyrażona — wpisana do rejestru',
+};
+
+/**
+ * W4.1/W4.2 — dwa odrębne oświadczenia składane osobiście: zgoda na komunikację
+ * e-mail (dana rejestru — przez żądanie wpisu) i żądanie automatycznych
+ * powiadomień (oświadczenie w portalu). Każde z datą, każde można cofnąć.
+ */
+function OswiadczeniaAkcjonariusza() {
+  const { dane, odswiez } = useDane('/api/psa/portal/oswiadczenia');
+  const [email, ustawEmail] = useState('');
+  const [blad, ustawBlad] = useState(null);
+  const [komunikat, ustawKomunikat] = useState(null);
+
+  async function zloz(spolkaId, rodzaj, zlozone) {
+    ustawBlad(null);
+    ustawKomunikat(null);
+    try {
+      const odp = await API.post('/api/psa/portal/oswiadczenia', { spolka_id: spolkaId, rodzaj, zlozone, email });
+      ustawKomunikat(odp.sprawa_id
+        ? 'Oświadczenie złożone. Zgoda na e-mail jest daną rejestru — utworzyliśmy żądanie wpisu, które sprawdzi kancelaria.'
+        : 'Oświadczenie zapisane.');
+      odswiez();
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się złożyć oświadczenia.');
+    }
+  }
+
+  if (!dane) return null;
+  const zgoda = dane.zgoda_email;
+  return (
+    <Karta tytul="Moje oświadczenia">
+      <Komunikat odmiana="blad" tresc={blad} />
+      <Komunikat odmiana="ok" tresc={komunikat} />
+      <div className="podpowiedz">
+        Oświadczenia składasz osobiście — zarząd spółki nie może złożyć ich w Twoim imieniu. Bez zgody na e-mail
+        korespondencja z rejestru przychodzi listem na adres z rejestru, żądania wpisu składa się pocztą albo
+        w kancelarii, a dostęp do portalu wygasa po wpisaniu cofnięcia zgody.
+      </div>
+      <p>
+        <strong>Zgoda na komunikację e-mail</strong> (art. 300³³ § 1 pkt 5 KSH): {NAZWY_ZGODY[zgoda.status] || zgoda.status}
+        {zgoda.status === 'potwierdzona' && zgoda.email ? ` (${zgoda.email})` : ''}.
+      </p>
+      <Pole etykieta="Adres e-mail do korespondencji z rejestru">
+        <input type="email" value={email} onChange={(z) => ustawEmail(z.target.value)} placeholder="np. jan@example.com" />
+      </Pole>
+      {dane.spolki.map((s) => {
+        const pow = s.powiadomienia_automatyczne;
+        const powAktywne = Boolean(pow && pow.zlozone);
+        return (
+          <div key={s.spolka_id} className="karta" style={{ marginTop: 'var(--od-4)' }}>
+            <strong>{s.nazwa}</strong>
+            <div className="row-g" style={{ flexWrap: 'wrap', marginTop: 'var(--od-2)' }}>
+              <button className="btn btn-maly" disabled={!email.trim()} onClick={() => zloz(s.spolka_id, 'zgoda_email', true)}>
+                Wyrażam zgodę na e-mail
+              </button>
+              <button className="btn btn-maly" disabled={zgoda.status !== 'potwierdzona'} onClick={() => zloz(s.spolka_id, 'zgoda_email', false)}>
+                Cofam zgodę na e-mail
+              </button>
+            </div>
+            {s.zgoda_email_ostatnie && (
+              <div className="przyciemnione">
+                Ostatnie oświadczenie: {s.zgoda_email_ostatnie.zlozone ? 'zgoda' : 'cofnięcie'} z {fmt.dataCzas(s.zgoda_email_ostatnie.utworzono)}
+                {s.zgoda_email_ostatnie.sprawa_id ? ' — żądanie wpisu w kancelarii' : ''}.
+              </div>
+            )}
+            <p style={{ marginTop: 'var(--od-4)' }}>
+              <strong>Automatyczne powiadomienia</strong> (art. 300³⁴ § 9 KSH): {powAktywne ? `żądanie złożone ${fmt.dataCzas(pow.utworzono)}` : 'nie złożono'}.
+            </p>
+            <button className="btn btn-maly" onClick={() => zloz(s.spolka_id, 'powiadomienia_automatyczne', !powAktywne)}>
+              {powAktywne ? 'Cofam żądanie powiadomień' : 'Żądam automatycznych powiadomień'}
+            </button>
+          </div>
+        );
+      })}
+    </Karta>
+  );
+}
+
 function EkranKonto({ konto, przyWylogowaniu }) {
   const [wylogowywanie, ustawWylogowywanie] = useState(false);
 
@@ -1973,6 +2057,7 @@ function EkranKonto({ konto, przyWylogowaniu }) {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
+      {konto.rola === 'akcjonariusz' && <OswiadczeniaAkcjonariusza />}
       <Karta tytul="Dane logowania">
         <div className="metryka-pion">
           <MetrykaPoz etykieta="E-mail" wartosc={konto.email} />

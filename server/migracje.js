@@ -2269,6 +2269,284 @@ const MIGRACJE = [
         REFERENCES psa_osoby_dzialajace(id);
     `,
   },
+  {
+    wersja: 61,
+    nazwa: 'D-074: tryb testowy - oznaczenie bazy testowej i dziennik logowan testowych',
+    sql: `
+      -- Oznaczenie CALEJ bazy jako testowej (nie rekordow — D-044 zostaje).
+      -- Wiersz wstawia wylacznie \`npm run test:seed\` albo \`npm run test:oznacz\`
+      -- (z potwierdzeniem). Bez wiersza tryb testowy odmawia startu.
+      -- \`przesuniecie_ms\` — symulowana data (T4); \`walidator_wynik\` — wynik
+      -- atrapy walidatora podpisu (T5).
+      CREATE TABLE IF NOT EXISTS psa_baza_testowa (
+        id               INTEGER PRIMARY KEY CHECK (id = 1),
+        oznaczono        TEXT NOT NULL,
+        opis             TEXT NOT NULL,
+        przesuniecie_ms  INTEGER NOT NULL DEFAULT 0,
+        walidator_wynik  TEXT NOT NULL DEFAULT 'qes_poprawny'
+      );
+
+      -- Dziennik zdarzen uwierzytelniania trybu testowego (T6): kazde
+      -- logowanie w trybie testowym, z droga (lista kont, link, formularz).
+      CREATE TABLE IF NOT EXISTS psa_dziennik_logowan (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        chwila      TEXT NOT NULL,
+        chwila_rzeczywista TEXT NOT NULL,
+        typ_konta   TEXT NOT NULL CHECK (typ_konta IN ('pracownik', 'portal')),
+        konto_id    INTEGER NOT NULL,
+        email       TEXT NOT NULL,
+        droga       TEXT NOT NULL,
+        tryb_testowy INTEGER NOT NULL CHECK (tryb_testowy IN (0, 1))
+      );
+
+      CREATE TRIGGER IF NOT EXISTS psa_dziennik_logowan_bez_zmian
+      BEFORE UPDATE ON psa_dziennik_logowan
+      BEGIN SELECT RAISE(ABORT, 'psa_dziennik_logowan jest append-only'); END;
+
+      CREATE TRIGGER IF NOT EXISTS psa_dziennik_logowan_bez_usuwania
+      BEFORE DELETE ON psa_dziennik_logowan
+      BEGIN SELECT RAISE(ABORT, 'psa_dziennik_logowan jest append-only'); END;
+    `,
+  },
+  {
+    wersja: 62,
+    nazwa: 'D-075: podpisy - oryginal (ID, SHA-256, dlugosc), wynik walidacji, forma, podpis notariusza',
+    sql: `
+      -- W3.1/W3.4: przy GENEROWANIU dokumentu do podpisu zapisujemy unikalne ID
+      -- (w stopce PDF), skrot SHA-256 i dlugosc — podpisany plik musi zaczynac
+      -- sie dokladnie tymi bajtami (podpis przyrostowy PAdES).
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN id_dokumentu TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_sha256 TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_dlugosc INTEGER;
+
+      -- W2.4/W3.3-W3.5: wynik automatycznej walidacji po wgraniu. Nigdy nie
+      -- zaznacza checklisty (D-052) — tylko podpowiada, co sprawdzic recznie.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_wynik TEXT
+        CHECK (walidacja_wynik IS NULL OR walidacja_wynik IN ('poprawny','do_weryfikacji','odrzucony'));
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_typ TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_json TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_kiedy TEXT;
+
+      -- W2.1: forma podpisu odnotowana przez kancelarie (m.in. oryginal
+      -- papierowy: zwykly / notarialnie poswiadczony, data otrzymania).
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN forma_podpisu TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_otrzymano TEXT;
+
+      -- W2.5: notariusz podpisuje umowe OSTATNI (QES), dopiero po waznym
+      -- podpisie spolki — plik z podpisem notariusza osobno.
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_podpis_sciezka TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_podpis_wgrano TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_walidacja_wynik TEXT;
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_walidacja_json TEXT;
+    `,
+  },
+  {
+    wersja: 63,
+    nazwa: 'D-075: deklaracja klienta - oryginal pocztą zamiast pliku z podpisem elektronicznym',
+    sql: `
+      -- W3.8: sciezka alternatywna. Klient deklaruje, ze odsyla podpisany
+      -- ORYGINAL pocztą; otrzymanie i rodzaj podpisu odnotowuje kancelaria
+      -- (forma_podpisu, oryginal_otrzymano — migracja 62).
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_poczta_zadeklarowano TEXT;
+    `,
+  },
+  {
+    wersja: 64,
+    nazwa: 'Faza 3: oswiadczenia akcjonariuszy, kolejka listow, wersje stawek, dziennik informacji',
+    sql: `
+      -- W4.1/W4.2: oswiadczenia skladane OSOBISCIE przez akcjonariusza albo
+      -- nabywce (konto portalu albo link z zaproszenia) — nie przez zarzad.
+      -- Append-only: stan = ostatni wiersz dla (osoba, spolka, rodzaj).
+      -- Zgoda na komunikacje e-mail jest dana rejestru (art. 300(33) § 1 pkt 5)
+      -- — jej zlozenie/cofniecie zaklada zadanie wpisu (sprawa_id).
+      CREATE TABLE IF NOT EXISTS psa_oswiadczenia (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        osoba_id    INTEGER NOT NULL REFERENCES psa_osoby(id),
+        spolka_id   INTEGER REFERENCES psa_spolki(id),
+        rodzaj      TEXT NOT NULL CHECK (rodzaj IN ('zgoda_email', 'powiadomienia_automatyczne')),
+        zlozone     INTEGER NOT NULL CHECK (zlozone IN (0, 1)),
+        email       TEXT,
+        konto_id    INTEGER REFERENCES psa_konta(id),
+        sprawa_id   INTEGER REFERENCES psa_sprawy(id),
+        utworzono   TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS psa_ix_oswiadczenia_osoba ON psa_oswiadczenia (osoba_id, rodzaj);
+      CREATE TRIGGER IF NOT EXISTS psa_oswiadczenia_bez_zmian
+      BEFORE UPDATE ON psa_oswiadczenia
+      BEGIN SELECT RAISE(ABORT, 'psa_oswiadczenia jest append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS psa_oswiadczenia_bez_usuwania
+      BEFORE DELETE ON psa_oswiadczenia
+      BEGIN SELECT RAISE(ABORT, 'psa_oswiadczenia jest append-only'); END;
+
+      -- W4.3: kolejka listow — pismo do osoby bez zgody na e-mail idzie
+      -- pocztą na adres Z REJESTRU (kopia adresu w chwili wystawienia).
+      CREATE TABLE IF NOT EXISTS psa_listy (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        wydany_dokument_id  INTEGER NOT NULL REFERENCES psa_wydane_dokumenty(id),
+        spolka_id           INTEGER NOT NULL REFERENCES psa_spolki(id),
+        sprawa_id           INTEGER REFERENCES psa_sprawy(id),
+        odbiorca_osoba_id   INTEGER REFERENCES psa_osoby(id),
+        odbiorca_nazwa      TEXT NOT NULL,
+        adres               TEXT NOT NULL,
+        rodzaj_pisma        TEXT NOT NULL,
+        status              TEXT NOT NULL DEFAULT 'do_wyslania' CHECK (status IN ('do_wyslania', 'nadany')),
+        data_nadania        TEXT,
+        numer_nadania       TEXT,
+        potwierdzenie_sciezka TEXT,
+        potwierdzenie_nazwa TEXT,
+        nadal               TEXT,
+        utworzono           TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS psa_ix_listy_status ON psa_listy (status);
+
+      -- W5.7: stawki wersjonowane z data — spolka w okresie gwarancji ceny
+      -- rozliczana wg wersji z dnia podpisania umowy.
+      CREATE TABLE IF NOT EXISTS psa_stawki_wersje (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        od_dnia             TEXT NOT NULL,
+        prowadzenie_grosze  INTEGER NOT NULL,
+        wpis_grosze         INTEGER NOT NULL,
+        informacja_grosze   INTEGER NOT NULL,
+        autor               TEXT,
+        utworzono           TEXT NOT NULL
+      );
+
+      -- W5.3/W5.6: numer informacji, odbiorca spoza kartoteki (organ),
+      -- sygnatura sprawy organu, wynagrodzenie na dokumencie.
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN numer TEXT;
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN odbiorca_opis TEXT;
+      ALTER TABLE psa_wydane_dokumenty ADD COLUMN sygnatura TEXT;
+    `,
+  },
+  {
+    wersja: 65,
+    nazwa: 'Faza 4: przeniesienie rejestru od innego podmiotu (statusy § 7.3, dokumenty, archiwum, pakiet pism)',
+    sql: `
+      -- W7.10: przeniesienie jako jawna maszyna stanów (server/logika/przeniesienie.js).
+      CREATE TABLE IF NOT EXISTS psa_przeniesienia (
+        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+        zgloszenie_id         INTEGER REFERENCES psa_zgloszenia(id),
+        wniosek_id            INTEGER REFERENCES psa_wnioski(id),
+        spolka_id             INTEGER REFERENCES psa_spolki(id),
+        krs                   TEXT,
+        nazwa                 TEXT,
+        poprzednik_typ        TEXT NOT NULL CHECK (poprzednik_typ IN ('dom_maklerski', 'notariusz', 'rada_izby')),
+        poprzednik_nazwa      TEXT,
+        okres_wypowiedzenia   TEXT,
+        status                TEXT NOT NULL DEFAULT 'zgloszone' CHECK (status IN
+                                ('zgloszone','weryfikacja','umowa_warunkowa','oczekuje_na_przekazanie',
+                                 'uzgodnienie','aktywny','wstrzymane_rozbieznosci','wygasla')),
+        data_zawarcia_umowy   TEXT,
+        data_skutecznosci     TEXT,
+        checklista_weryfikacji TEXT,
+        checklista_odbioru    TEXT,
+        rozbieznosci          TEXT,
+        protokol_sciezka      TEXT,
+        protokol_id_dokumentu TEXT,
+        protokol_sha256       TEXT,
+        protokol_dlugosc      INTEGER,
+        zatwierdzenie_sciezka TEXT,
+        zatwierdzenie_walidacja TEXT,
+        zatwierdzono          TEXT,
+        utworzono             TEXT NOT NULL,
+        zaktualizowano        TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS psa_przeniesienia_historia (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        przeniesienie_id  INTEGER NOT NULL REFERENCES psa_przeniesienia(id),
+        z_statusu         TEXT,
+        na_status         TEXT NOT NULL,
+        uwagi             TEXT,
+        autor             TEXT NOT NULL,
+        utworzono         TEXT NOT NULL
+      );
+      CREATE TRIGGER IF NOT EXISTS psa_przeniesienia_historia_bez_zmian
+      BEFORE UPDATE ON psa_przeniesienia_historia BEGIN SELECT RAISE(ABORT, 'historia przeniesienia jest append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS psa_przeniesienia_historia_bez_usuwania
+      BEFORE DELETE ON psa_przeniesienia_historia BEGIN SELECT RAISE(ABORT, 'historia przeniesienia jest append-only'); END;
+
+      -- Dokumenty startowe (klient), umowa i pisma (kancelaria), dane od poprzednika — ze skrótem SHA-256.
+      CREATE TABLE IF NOT EXISTS psa_przeniesienia_dokumenty (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        przeniesienie_id  INTEGER NOT NULL REFERENCES psa_przeniesienia(id),
+        typ               TEXT NOT NULL CHECK (typ IN ('umowa_spolki','informacja_poprzednika','uchwala',
+                            'umowa_warunkowa','wypowiedzenie','potwierdzenie_rozwiazania','dane_poprzednika','inne')),
+        zrodlo            TEXT NOT NULL CHECK (zrodlo IN ('klient','kancelaria','poprzednik')),
+        nazwa_pliku       TEXT NOT NULL,
+        sciezka           TEXT NOT NULL,
+        sha256            TEXT NOT NULL,
+        rozmiar           INTEGER,
+        autor             TEXT NOT NULL,
+        utworzono         TEXT NOT NULL
+      );
+
+      -- W7.7: historia dotychczasowego podmiotu — archiwum TYLKO DO ODCZYTU, poza łańcuchem.
+      CREATE TABLE IF NOT EXISTS psa_przeniesienia_archiwum (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        przeniesienie_id  INTEGER NOT NULL REFERENCES psa_przeniesienia(id),
+        spolka_id         INTEGER NOT NULL REFERENCES psa_spolki(id),
+        tresc             TEXT NOT NULL,
+        sha256            TEXT NOT NULL,
+        autor             TEXT NOT NULL,
+        utworzono         TEXT NOT NULL
+      );
+      CREATE TRIGGER IF NOT EXISTS psa_przeniesienia_archiwum_bez_zmian
+      BEFORE UPDATE ON psa_przeniesienia_archiwum BEGIN SELECT RAISE(ABORT, 'archiwum poprzednika jest tylko do odczytu'); END;
+      CREATE TRIGGER IF NOT EXISTS psa_przeniesienia_archiwum_bez_usuwania
+      BEFORE DELETE ON psa_przeniesienia_archiwum BEGIN SELECT RAISE(ABORT, 'archiwum poprzednika jest tylko do odczytu'); END;
+
+      -- W7.9: data skuteczności umowy (opłata roczna od niej); W7.1: rodzaj zgłoszenia.
+      ALTER TABLE psa_spolki ADD COLUMN data_skutecznosci_umowy TEXT;
+      ALTER TABLE psa_zgloszenia ADD COLUMN rodzaj TEXT NOT NULL DEFAULT 'nowy' CHECK (rodzaj IN ('nowy', 'przeniesienie'));
+
+      -- W7.4: pakiet pism przez istniejący mechanizm szablonów (edytowalne przez administratora).
+      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
+        VALUES ('przeniesienie_klauzula', 1, 'Klauzula — umowa pod warunkiem zawieszającym (§ 7.4 wytycznych)', '<h3>§ … Skuteczność umowy</h3>
+<ol>
+<li>Umowa zostaje zawarta pod warunkiem zawieszającym rozwiązania albo wygaśnięcia umowy o prowadzenie rejestru akcjonariuszy Spółki zawartej z {{poprzednik_nazwa}} („Dotychczasowa Umowa”).</li>
+<li>Umowa staje się skuteczna z chwilą rozwiązania albo wygaśnięcia Dotychczasowej Umowy. Jeżeli Dotychczasowa Umowa uległa rozwiązaniu albo wygasła przed zawarciem Umowy, Umowa jest skuteczna z chwilą jej zawarcia.</li>
+<li>Spółka zobowiązuje się złożyć oświadczenie o wypowiedzeniu Dotychczasowej Umowy w terminie 14 dni od zawarcia Umowy oraz zawiadomić Notariusza o dacie rozwiązania albo wygaśnięcia Dotychczasowej Umowy niezwłocznie, nie później niż w terminie 3 dni od jej ustalenia, przedkładając dokument potwierdzający tę datę.</li>
+<li>Jeżeli warunek, o którym mowa w ust. 1, nie ziści się w terminie 12 miesięcy od zawarcia Umowy, Umowa wygasa.</li>
+<li>Do chwili skuteczności Umowy Notariusz nie prowadzi rejestru akcjonariuszy Spółki i nie przysługuje mu wynagrodzenie.</li>
+</ol>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 89 KC (⚠️ do sprawdzenia), art. 300(32) § 2 KSH', 1, 1, 'system', '2026-11-01T00:00:00Z');
+      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
+        VALUES ('przeniesienie_uchwala', 1, 'Uchwała akcjonariuszy o wyborze notariusza (przeniesienie)', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><h2>Uchwała nr … akcjonariuszy {{spolka_nazwa}} z dnia ……</h2>
+<p>w sprawie wyboru podmiotu prowadzącego rejestr akcjonariuszy</p>
+<p>§ 1. Akcjonariusze, działając na podstawie art. 300(31) § 5 Kodeksu spółek handlowych, wybierają notariusza {{notariusz}}, prowadzącego kancelarię notarialną: {{kancelaria_adres}}, na podmiot prowadzący rejestr akcjonariuszy Spółki <strong>od chwili rozwiązania albo wygaśnięcia dotychczasowej umowy o prowadzenie rejestru akcjonariuszy</strong>.</p>
+<p>§ 2. Uchwała wchodzi w życie z chwilą podjęcia.</p>
+<p>Podpisy akcjonariuszy: ……</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(31) § 5 KSH', 1, 1, 'system', '2026-11-01T00:00:00Z');
+      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
+        VALUES ('przeniesienie_wypowiedzenie', 1, 'Wypowiedzenie dotychczasowej umowy o prowadzenie rejestru', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><p>{{spolka_nazwa}}, KRS {{spolka_krs}}</p><p>Do: {{poprzednik_nazwa}}</p>
+<h2>Wypowiedzenie umowy o prowadzenie rejestru akcjonariuszy</h2>
+<p>Działając w imieniu {{spolka_nazwa}}, wypowiadamy umowę o prowadzenie rejestru akcjonariuszy Spółki z zachowaniem terminu wypowiedzenia wynikającego z tej umowy. Zgodnie z art. 300(32) § 2 KSH informujemy, że Spółka zawarła nową umowę o prowadzenie rejestru akcjonariuszy z notariuszem {{notariusz}} (potwierdzenie w załączeniu).</p>
+<p>Prosimy o potwierdzenie daty rozwiązania umowy.</p><p>Podpis zarządu: ……</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(32) § 2 KSH', 1, 1, 'system', '2026-11-01T00:00:00Z');
+      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
+        VALUES ('przeniesienie_potwierdzenie_zawarcia', 1, 'Potwierdzenie zawarcia nowej umowy (do wypowiedzenia)', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><h2>Potwierdzenie zawarcia umowy o prowadzenie rejestru akcjonariuszy</h2>
+<p>Potwierdzam, że w dniu {{data_zawarcia}} {{spolka_nazwa}} (KRS {{spolka_krs}}) zawarła ze mną umowę o prowadzenie rejestru akcjonariuszy pod warunkiem zawieszającym rozwiązania albo wygaśnięcia umowy z {{poprzednik_nazwa}}.</p>
+<p>{{notariusz}}, {{kancelaria_nazwa}}</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(32) § 2 KSH', 1, 1, 'system', '2026-11-01T00:00:00Z');
+      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
+        VALUES ('przeniesienie_wezwanie_dom_maklerski', 1, 'Wezwanie do przekazania rejestru — dom maklerski / bank', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><p>Do: {{poprzednik_nazwa}}</p><h2>Wezwanie do przekazania rejestru akcjonariuszy</h2>
+<p>W związku z rozwiązaniem umowy o prowadzenie rejestru akcjonariuszy {{spolka_nazwa}} (KRS {{spolka_krs}}) wzywamy do przekazania notariuszowi {{notariusz}}: rejestru według stanu na dzień rozwiązania, historii wpisów, dokumentów uzasadniających wpisy, żądań w toku oraz informacji o obciążeniach i zajęciach akcji. Podstawa: umowa, art. 300(35) § 3 KSH; od 18.02.2027 — także art. 83a ust. 4ac ustawy o obrocie instrumentami finansowymi.</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(35) § 3 KSH; 🔵 art. 83a ust. 4ac u.o.i.f.', 1, 1, 'system', '2026-11-01T00:00:00Z');
+      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
+        VALUES ('przeniesienie_wezwanie_notariusz', 1, 'Wezwanie do przekazania rejestru — notariusz', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><p>Do: {{poprzednik_nazwa}}</p><h2>Wezwanie do przekazania rejestru akcjonariuszy</h2>
+<p>W związku z rozwiązaniem umowy o prowadzenie rejestru akcjonariuszy {{spolka_nazwa}} (KRS {{spolka_krs}}) prosimy o przekazanie notariuszowi {{notariusz}} rejestru według stanu na dzień rozwiązania, historii wpisów, dokumentów uzasadniających wpisy, żądań w toku oraz informacji o obciążeniach i zajęciach. Podstawa: umowa, art. 300(35) § 3 KSH.</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(35) § 3 KSH', 1, 1, 'system', '2026-11-01T00:00:00Z');
+      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
+        VALUES ('przeniesienie_wezwanie_rada_izby', 1, 'Zawiadomienie rady izby notarialnej (notariusz, który zakończył działalność)', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><p>Do: Prezes Rady {{poprzednik_nazwa}}</p><h2>Zawiadomienie o zawarciu nowej umowy o prowadzenie rejestru akcjonariuszy</h2>
+<p>Na podstawie art. 90a § 2 ustawy — Prawo o notariacie zawiadamiamy, że {{spolka_nazwa}} (KRS {{spolka_krs}}) zawarła umowę o prowadzenie rejestru akcjonariuszy z notariuszem {{notariusz}}, i wnosimy o przekazanie dokumentów rejestru.</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 90a § 2 PrNot', 1, 1, 'system', '2026-11-01T00:00:00Z');
+      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
+        VALUES ('przeniesienie_zgloszenie_krs', 1, 'Zgłoszenie do sądu rejestrowego i wniosek o wpis danych podmiotu [2027]', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><h2>Zgłoszenie zawarcia umowy o prowadzenie rejestru akcjonariuszy</h2>
+<p>Zarząd {{spolka_nazwa}} (KRS {{spolka_krs}}) zgłasza zawarcie umowy o prowadzenie rejestru akcjonariuszy z notariuszem {{notariusz}}, kancelaria: {{kancelaria_adres}} (art. 300(32) § 1(1)–1(2) KSH), i wnosi o wpis danych podmiotu prowadzącego rejestr (art. 38 ustawy o KRS). Załącznik: oświadczenie zarządu potwierdzające zawarcie umowy (art. 300(32) § 1(3) KSH). Wniosek składa się przez Portal Rejestrów Sądowych.</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(32) § 1(1)–1(3) KSH, art. 38 ustawy o KRS', 1, 1, 'system', '2026-11-01T00:00:00Z');
+      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
+        VALUES ('przeniesienie_rodo_art14', 1, 'Informacja dla akcjonariuszy (art. 14 RODO) po przejęciu rejestru', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><h2>Informacja o przetwarzaniu danych osobowych</h2>
+<p>Od {{data_skutecznosci}} rejestr akcjonariuszy {{spolka_nazwa}} prowadzi notariusz {{notariusz}} ({{kancelaria_nazwa}}, {{kancelaria_adres}}). Dane osobowe akcjonariuszy pozyskaliśmy od dotychczasowego podmiotu prowadzącego rejestr ({{poprzednik_nazwa}}) w zakresie danych rejestru (art. 300(33) KSH) — w celu prowadzenia rejestru.</p>
+<p>Jeżeli chcesz otrzymywać korespondencję z rejestru e-mailem, złóż oświadczenie o zgodzie na komunikację elektroniczną (formularz w załączeniu). Bez zgody korespondencja przychodzi pocztą, a żądania wpisu składa się pocztą albo w kancelarii.</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 14 RODO (⚠️ do sprawdzenia)', 1, 1, 'system', '2026-11-01T00:00:00Z');
+      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
+        VALUES ('przeniesienie_potwierdzenie_odbioru', 1, 'Potwierdzenie odbioru rejestru — dla dotychczasowego podmiotu', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><p>Do: {{poprzednik_nazwa}}</p><h2>Potwierdzenie odbioru rejestru akcjonariuszy</h2>
+<p>Potwierdzam odbiór rejestru akcjonariuszy {{spolka_nazwa}} (KRS {{spolka_krs}}) według stanu na dzień {{data_skutecznosci}} wraz z dokumentami. Potwierdzenie może stanowić podstawę zawiadomienia sądu rejestrowego o rozwiązaniu umowy (od 18.02.2027 — art. 300(32) § 3 KSH).</p>
+<p>{{notariusz}}, {{kancelaria_nazwa}}</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(32) § 3 KSH (🔵)', 1, 1, 'system', '2026-11-01T00:00:00Z');
+    `,
+  },
 ];
 
 /**

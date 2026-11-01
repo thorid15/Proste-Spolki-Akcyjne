@@ -299,7 +299,8 @@ function sprawdzPokrycie(stanPrzed, propozycja, bledy) {
  * `brak`       = weryfikacja niewykonana -> ostrzezenie; checklista i tak
  *                nie pozwoli dokonac wpisu bez jej odhaczenia.
  */
-function sprawdzAml(propozycja, osoby, bledy, ostrzezenia) {
+/** Osoby, które wpis czyni akcjonariuszem albo uprawnionym z obciążenia (AML, W6.1). */
+function nabywcyWpisu(propozycja) {
   const dane = propozycja.dane || {};
   const nabywcy = new Set();
   if (propozycja.typ === 'objecie') {
@@ -317,6 +318,30 @@ function sprawdzAml(propozycja, osoby, bledy, ostrzezenia) {
   if (propozycja.typ === 'obciazenie' && dane.osoba_id != null) {
     nabywcy.add(Number(dane.osoba_id));
   }
+  return nabywcy;
+}
+
+/**
+ * W6.1 / D-076 — PESEL albo data urodzenia osoby fizycznej w nowym wpisie
+ * (art. 30 ustawy z 23.01.2026, Dz.U. 2026 poz. 176; kancelaria stosuje od
+ * dziś). Brak obu = na pewno niespełnione → błąd. Nie dotyczy wpisów
+ * dokonanych wcześniej ani osób prawnych.
+ */
+function sprawdzIdentyfikacjeNabywcow(propozycja, osoby, bledy) {
+  for (const id of nabywcyWpisu(propozycja)) {
+    const osoba = osoby.get(id);
+    if (!osoba || osoba.typ === 'prawna') continue;
+    if (String(osoba.pesel || '').trim() || String(osoba.data_urodzenia || '').trim()) continue;
+    const nazwa = [osoba.imie, osoba.nazwisko].filter(Boolean).join(' ') || `#${id}`;
+    bledy.push(
+      `Osoba „${nazwa}”: rejestr wymaga numeru PESEL albo daty urodzenia (D-076; art. 30 ustawy z 23.01.2026). `
+        + 'Uzupełnij dane w kartotece osób.'
+    );
+  }
+}
+
+function sprawdzAml(propozycja, osoby, bledy, ostrzezenia) {
+  const nabywcy = nabywcyWpisu(propozycja);
 
   for (const id of nabywcy) {
     const osoba = osoby.get(id);
@@ -823,6 +848,7 @@ function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map() } = {})
   sprawdzOgraniczenia(stanPrzed, propozycja, bledy, ostrzezenia);
   sprawdzPokrycie(stanPrzed, propozycja, bledy);
   sprawdzAml(propozycja, osoby, bledy, ostrzezenia);
+  sprawdzIdentyfikacjeNabywcow(propozycja, osoby, bledy);
 
   // Warstwa druga: bilans calego rejestru po zdarzeniu. Nawet jesli kontrole
   // szczegolowe czegos nie zlapaly, niezgodny bilans zatrzymuje zapis.

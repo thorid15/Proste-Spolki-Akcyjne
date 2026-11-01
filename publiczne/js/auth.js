@@ -114,6 +114,7 @@ function EkranLogowania({ przyZalogowaniu }) {
           >
             {wysylanie ? 'Logowanie…' : 'Zaloguj się'}
           </button>
+          <KontaTestowe aplikacja="kancelaria" przyZalogowaniu={przyZalogowaniu} />
         </form>
       </main>
 

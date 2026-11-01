@@ -27,6 +27,7 @@ const rejestr = require('../rejestr');
 const zawiadomienia = require('../zawiadomienia');
 const terminy = require('../logika/terminy');
 const typyZdarzen = require('../logika/typy-zdarzen');
+const formyPodpisu = require('../logika/formy-podpisu');
 const przepisy = require('../logika/przepisy');
 const osobaDzialajaca = require('../logika/osoba-dzialajaca');
 const aml = require('../logika/aml');
@@ -76,6 +77,35 @@ function wczytajSprawe(id) {
  * niczego nie blokuje. `sprawa.zadajacy_aml_*` to surowe kolumny dolaczone
  * LEFT JOIN-em wylacznie do wyliczenia ponizej - nie wychodza na zewnatrz.
  */
+/** Zgoda na wpis odnotowana w formie dopuszczalnej (W2.2, D-076). */
+/** D-088: pracownik potwierdza tylko „zgoda w dopuszczalnej formie” — bez wybierania konkretnej formy. */
+const ZGODA_USTAWOWA = 'ustawowa';
+
+function zgodaWazna(sprawa) {
+  if (sprawa.zgoda_forma === ZGODA_USTAWOWA) return true;
+  return Boolean(sprawa.zgoda_forma)
+    && formyPodpisu.ocenForme(formyPodpisu.DOKUMENTY.ZGODA_NA_WPIS, sprawa.zgoda_forma).dopuszczalna;
+}
+
+/**
+ * W2.3 — bez ważnej zgody „Dokonaj wpisu” jest zablokowane do wysłania
+ * powiadomienia o treści zamierzonego wpisu (art. 300(34) § 3 zd. 1 KSH).
+ * Blokada tylko tego, co NA PEWNO niespełnione (D-052): brak zgody w formie
+ * dopuszczalnej ORAZ brak wysłanego powiadomienia. Zajęcie (§ 2) — bez blokady.
+ */
+function blokadaWpisu(sprawa) {
+  const typ = typyZdarzen.istnieje(sprawa.typ_zdarzenia) ? typyZdarzen.typ(sprawa.typ_zdarzenia) : null;
+  if (!typ || !typ.wymaga_powiadomienia) return null;
+  if (zgodaWazna(sprawa) || sprawa.powiadomienie_wyslano) return null;
+  const kogo = typ.kogo_powiadomic ? ` (${typ.kogo_powiadomic})` : '';
+  return {
+    przyczyna: `Brak ważnej zgody na wpis${kogo} i nie wysłano powiadomienia o treści zamierzonego wpisu `
+      + `(${przepisy.PODSTAWY.UPRZEDNIE_POWIADOMIENIE}). Najpierw wyślij powiadomienie albo odnotuj zgodę `
+      + `w formie z ${przepisy.PODSTAWY.FORMA_ZGODY_NA_WPIS}.`,
+    gdzie: 'powiadomienie',
+  };
+}
+
 function widokSprawy(sprawa, dzis = czas.dzisIso()) {
   const { zadajacy_aml_status, zadajacy_aml_data, zadajacy_aml_data_przegladu, ...reszta } = sprawa;
   const typ = typyZdarzen.istnieje(sprawa.typ_zdarzenia) ? typyZdarzen.typ(sprawa.typ_zdarzenia) : null;
@@ -85,6 +115,11 @@ function widokSprawy(sprawa, dzis = czas.dzisIso()) {
     typ_symbol: typ ? typ.symbol : '?',
     odplatne: typ ? typ.odplatne : null,
     termin: terminy.policzTermin(sprawa, dzis),
+    zgoda_wazna: zgodaWazna(sprawa),
+    zgoda_forma_nazwa: sprawa.zgoda_forma
+      ? (sprawa.zgoda_forma === ZGODA_USTAWOWA ? 'w dopuszczalnej formie' : (formyPodpisu.NAZWY_FORM[sprawa.zgoda_forma] || sprawa.zgoda_forma))
+      : null,
+    blokada_wpisu: blokadaWpisu(sprawa),
     zadajacy_wymaga_przegladu_aml: sprawa.zadajacy_osoba_id
       ? aml.wymagaPrzegladu(
           { aml_status: zadajacy_aml_status, aml_data: zadajacy_aml_data, aml_data_przegladu: zadajacy_aml_data_przegladu },
@@ -175,6 +210,8 @@ router.post(
     if (!spolka) throw bledneZadanie('Nie odnaleziono spółki.');
     const blokada = przepisy.blokadaWpisu(spolka);
     if (blokada) throw bledneZadanie(`${blokada} Nie można założyć nowej sprawy.`);
+    const przejecieSprawy = require('../przeniesienia').stanDlaSpraw(db(), spolkaId);
+    if (przejecieSprawy && przejecieSprawy.blokada) throw bledneZadanie(przejecieSprawy.blokada);
 
     const typZdarzenia = String(cialo.typ_zdarzenia || '');
     if (!typyZdarzen.dostepneWKreatorze().some((t) => t.kod === typZdarzenia)) {
@@ -286,6 +323,11 @@ router.post(
       throw e;
     }
 
+    // W7.5 — spółka w trakcie przeniesienia: brak danych od poprzednika = przeszkoda.
+    const przejecie = require('../przeniesienia').stanDlaSpraw(db(), Number(cialo.spolka_id));
+    if (przejecie && przejecie.przeszkoda) {
+      require('../przeniesienia').wstrzymajZPrzeszkoda(db(), Number(wynik.lastInsertRowid), przejecie.przeszkoda);
+    }
     odp.status(201).json({ sprawa: widokSprawy(wczytajSprawe(wynik.lastInsertRowid)) });
   })
 );
@@ -381,6 +423,10 @@ router.post(
 
     rejestr.odrzucRecznaDate(zad.body);
     const { dane } = zad.body || {};
+
+    // Stan sprawy sprawdza `dokonajWpisuSprawy` — blokada W2.3 dotyczy sprawy w weryfikacji.
+    const blokada = sprawa.stan === 'weryfikacja' ? blokadaWpisu(sprawa) : null;
+    if (blokada) throw bledneZadanie(blokada.przyczyna, { blokada });
 
     const { wynik, oplata } = rejestr.dokonajWpisuSprawy(db(), {
       sprawaId: id,
@@ -637,8 +683,18 @@ router.post(
     const id = Number(zad.params.id);
     const sprawa = wczytajSprawe(id);
     if (!sprawa) throw nieZnaleziono('Nie odnaleziono sprawy.');
-    const { forma, data } = zad.body || {};
-    if (!forma || !String(forma).trim()) throw bledneZadanie('Opisz, w jaki sposób udzielono zgody.');
+    const { data, dopuszczalna } = zad.body || {};
+    let { forma } = zad.body || {};
+    // D-088 (upraszcza D-076): pracownik potwierdza „zgoda w dopuszczalnej formie” (tak/nie).
+    // Kod konkretnej formy (API) nadal przyjmowany i sprawdzany. Skan i zwykły oryginał = brak zgody.
+    if (dopuszczalna === false) throw bledneZadanie('Zgoda nie jest w dopuszczalnej formie — to nie jest ważna zgoda. Przed wpisem wyślij powiadomienie.');
+    if (dopuszczalna === true) forma = ZGODA_USTAWOWA;
+    if (!forma || !String(forma).trim()) throw bledneZadanie('Potwierdź, że zgoda jest w dopuszczalnej formie.');
+    if (forma !== ZGODA_USTAWOWA) {
+      const ocena = formyPodpisu.ocenForme(formyPodpisu.DOKUMENTY.ZGODA_NA_WPIS, String(forma));
+      if (!ocena.dopuszczalna) throw bledneZadanie(`${ocena.przyczyna} To nie jest ważna zgoda — przed wpisem wyślij powiadomienie.`);
+    }
+    if (data && !czas.poprawnaData(String(data))) throw bledneZadanie('Data zgody musi mieć format RRRR-MM-DD.');
     db()
       .prepare('UPDATE psa_sprawy SET zgoda_forma = ?, zgoda_data = ?, zaktualizowano = ? WHERE id = ?')
       .run(forma, data || czas.dzisIso(), czas.terazIso(), id);

@@ -21,7 +21,7 @@ process.env.PORTAL_WLACZONY = 'true';
 const app = require('../serwer');
 const { db } = require('../server/baza');
 const hasla = require('../server/logika/hasla');
-const { AKCJONARIUSZ_PELNY } = require('./pomoc');
+const { AKCJONARIUSZ_PELNY, podpisanyPdf } = require('./pomoc');
 
 let serwer;
 let baza;
@@ -148,6 +148,8 @@ test('GET /api/psa/portal/wniosek: inne role (spolka/akcjonariusz) nie maja dost
   db()
     .prepare(`INSERT INTO psa_konta (email, hash_hasla, rola, osoba_id, aktywne, utworzono) VALUES (?, ?, 'akcjonariusz', ?, 1, ?)`)
     .run('akcjonariusz-bez-wniosku@example.pl', hash, osobaId, new Date().toISOString());
+  // QW3 / D-083: portal tylko dla akcjonariusza ze zgodą na komunikację e-mail.
+  db().prepare("UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona' WHERE id = ?").run(osobaId);
   const odpLogin = await fetch(`${baza}/api/psa/portal/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -467,7 +469,7 @@ test('POST /api/psa/portal/wniosek/dokumenty/:id/podpis: skan wraca do KAZDEGO d
 
   async function wyslijSkan(dokumentId, nazwa) {
     const formularz = new FormData();
-    formularz.append('plik', new Blob(['%PDF-1.4\nskan'], { type: 'application/pdf' }), nazwa);
+    formularz.append('plik', new Blob([podpisanyPdf(db(), dokumentId)], { type: 'application/pdf' }), nazwa);
     const odp = await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${dokumentId}/podpis`, {
       method: 'POST', headers: { Cookie: ciastko }, body: formularz,
     });
@@ -574,13 +576,28 @@ test('POST /api/psa/portal/wniosek/umowa-podpisana: odmawia przed udostepnieniem
   });
   assert.equal(odpUdawany.status, 400, 'tresc HTML pod nazwa .pdf jest odrzucana');
 
+  // D-075: skan i niepodpisany PDF nie są podpisem — odmowa z komunikatem dla laika.
+  const umowaWiersz = db().prepare("SELECT id FROM psa_wnioski_dokumenty WHERE wniosek_id = ? AND typ = 'umowa_rejestru'").get(wniosekId);
+  for (const [tresc, typ, nazwa, wzorzec] of [
+    [Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]), 'image/jpeg', 'skan.jpg', /nie ma podpisu elektronicznego/],
+    ['%PDF-1.4\nbez podpisu', 'application/pdf', 'bez-podpisu.pdf', /nie ma podpisu elektronicznego/],
+    [Buffer.concat([Buffer.from('%PDF-1.4 INNY'), podpisanyPdf(db(), umowaWiersz.id).slice(13)]), 'application/pdf', 'zmieniony.pdf', /różni się od dokumentu pobranego/],
+  ]) {
+    const f = new FormData();
+    f.append('plik', new Blob([tresc], { type: typ }), nazwa);
+    const o = await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, { method: 'POST', headers: { Cookie: ciastko }, body: f });
+    assert.equal(o.status, 400, nazwa);
+    assert.match((await o.json()).blad, wzorzec, nazwa);
+  }
+
   const formularz = new FormData();
-  formularz.append('plik', new Blob(['%PDF-1.4\npodpisana tresc'], { type: 'application/pdf' }), 'podpisana-umowa.pdf');
+  formularz.append('plik', new Blob([podpisanyPdf(db(), umowaWiersz.id)], { type: 'application/pdf' }), 'podpisana-umowa.pdf');
   const odp = await fetch(`${baza}/api/psa/portal/wniosek/umowa-podpisana`, {
     method: 'POST', headers: { Cookie: ciastko }, body: formularz,
   });
   assert.equal(odp.status, 201);
   const dane = await odp.json();
+  assert.equal(dane.walidacja.wynik, 'do_weryfikacji', 'D-086: plik podpisany — sprawdza pracownik, nigdy automatyczna akceptacja');
   // Samo wgranie umowy nie stawia wniosku w kolejce kancelarii — robi to
   // dopiero odeslanie calego kompletu (`POST /wniosek/odeslij`).
   assert.equal(dane.wniosek.status, 'umowa_wygenerowana');

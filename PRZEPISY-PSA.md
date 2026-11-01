@@ -123,6 +123,11 @@ od opłat**.
 🟢 § 3. **Przed wpisem**, z wyłączeniem przypadku z § 2, podmiot prowadzący rejestr **powiadamia
 o treści zamierzonego wpisu osobę, której uprawnienia mają być wykreślone, zmienione lub obciążone**
 przez wpis, **chyba że wyraziła ona zgodę na wpis**.
+🔵 § 3 zd. 2 (Dz.U. 2026 poz. 176). Zgoda na wpis wymaga formy: **podpis notarialnie poświadczony,
+podpis złożony w obecności osoby upoważnionej przez podmiot prowadzący rejestr, kwalifikowany podpis
+elektroniczny, podpis zaufany albo podpis osobisty.** *(treść według wytycznych z 1.11.2026, § 10 —
+zweryfikowane w tekście aktu; brzmienie dosłowne do wklejenia z Dz.U.)* → kancelaria stosuje tę formę
+**już teraz** jako politykę (D-076).
 
 🟢 § 4. Osoba żądająca wpisu jest obowiązana przedłożyć dokumenty uzasadniające dokonanie wpisu.
 **Podstawę dokonania wpisu stanowi także oświadczenie akcjonariusza o zobowiązaniu do przeniesienia
@@ -155,9 +160,9 @@ korespondencji w postaci elektronicznej.
 → § 9 jest **ustawową podstawą portalu**: ustawodawca zakłada system teleinformatyczny podmiotu
 prowadzącego rejestr z kontami adresatów. Wymaga przechowywania **żądania adresata** per osoba
 i per kanał.
-→ **UWAGA — wcześniejszy błąd specyfikacji:** § 3 **nie zawiera** wymogów formy zgody (podpis
-notarialnie poświadczony / w obecności osoby upoważnionej / podpis kwalifikowany, zaufany, osobisty).
-To regulacja dla spółki akcyjnej. W P.S.A. zgoda podlega ogólnym regułom.
+→ **Sprostowanie 1.11.2026 (D-076):** wymogi formy zgody wprowadza nowelizacja w § 3 **zd. 2**
+(wyżej) — wcześniejsza uwaga, że to wyłącznie regulacja spółki akcyjnej, dotyczyła stanu sprzed
+nowelizacji. Kancelaria stosuje formę z zd. 2 już teraz.
 
 ### Art. 300³⁵ — jawność rejestru
 🟢 § 1. Rejestr akcjonariuszy jest **jawny dla spółki i każdego akcjonariusza**.
@@ -364,7 +369,14 @@ odrębnej praktyki.
 
 ## 8. Podmiot prowadzący rejestr jako notariusz — Prawo o notariacie
 
-⚠️ **Cała ta sekcja pochodzi spoza wydruku KSH — do zweryfikowania przy tekście ustawy.**
+🟢 Art. 85–90a i 108a–108b zweryfikowane w tekście ustawy (t.j. Dz.U. 2026 poz. 614) — wytyczne
+z 1.11.2026, § 10. Poniżej omówienie; brzmienie dosłowne do wklejenia.
+
+- **art. 89 § 2** — wynagrodzenie notariusza powiększa się o podatek od towarów i usług (podstawa
+  wskazania VAT na informacji z rejestru, W5.5);
+- **art. 90a** — § 1: akta i rejestr w postaci umożliwiającej przekazanie (eksport, W6.3); § 2: po
+  zaprzestaniu działalności przez notariusza rejestr przechowuje rada izby, a prezes rady przekazuje
+  dokumenty po zawiadomieniu przez spółkę o zawarciu nowej umowy (przeniesienie rejestru, § 7).
 
 Rozdział 8a „Rejestr akcjonariuszy prostej spółki akcyjnej":
 - **art. 108a** — notariusz *może* zawrzeć ze spółką umowę o prowadzenie rejestru na zasadach
@@ -380,7 +392,10 @@ Nie mieszać tych dwóch ścieżek w kodzie ani w checklistach.
 
 ## 9. AML i taksa
 
-⚠️ Do zweryfikowania przy tekstach ustaw — poniżej stan przyjęty w projekcie:
+Taksa (§ 15b rozporządzenia — 🟢 zweryfikowane, wytyczne § 10; bez zmian po Dz.U. 2026 poz. 1370):
+**§ 15b ust. 1** — prowadzenie rejestru za każdy rozpoczęty rok; **ust. 3** — informacja z rejestru
+(podstawa na informacji obok art. 300³⁵ § 3 KSH i art. 89 § 2 PrNot). AML — ⚠️ nadal do weryfikacji
+(ustawa AML art. 2 ust. 1 pkt 13a, art. 43 — „do sprawdzenia” w § 10 wytycznych):
 - notariusz w zakresie prowadzonego rejestru akcjonariuszy jest **instytucją obowiązaną**;
   brak możliwości zastosowania środków bezpieczeństwa finansowego stanowi **przeszkodę wpisu**,
   a przy jej nieusunięciu — **odmowę wpisu**;
@@ -388,6 +403,23 @@ Nie mieszać tych dwóch ścieżek w kodzie ani w checklistach.
   wpis **100 zł**, informacja z rejestru **50 zł**.
 
 ---
+
+## 9a. Przepisy przejściowe i przeniesienie rejestru (dopisane 1.11.2026, wytyczne § 10)
+
+🟢 zweryfikowane w tekście aktów (wytyczne § 10); omówienie, brzmienie dosłowne do wklejenia:
+- **art. 29 ustawy zmieniającej** (Dz.U. 2026 poz. 176) — spółki z rejestrem istniejącym 18.02.2027
+  składają wniosek do KRS w ciągu **3 miesięcy** (`przepisy.NOWELIZACJA.KONIEC_OKRESU_PRZEJSCIOWEGO`);
+- **art. 30 ustawy zmieniającej** — PESEL albo data urodzenia w nowych wpisach po 18.02.2027
+  (kancelaria — od dziś, D-076);
+- 🔵 **art. 83a ust. 4ac ustawy o obrocie instrumentami finansowymi** — firma inwestycyjna przekazuje
+  rejestr i dokumenty podmiotowi wskazanemu przez spółkę;
+- **art. 38 ustawy o KRS** — KRS ujawnia dane podmiotu prowadzącego rejestr; **art. 25da** — sąd
+  pozyskuje wykaz akcjonariuszy bezpośrednio od podmiotu prowadzącego rejestr.
+
+⚠️ **Do sprawdzenia w tekście źródłowym** (wytyczne § 10) — **nie mogą być podstawą blokady**:
+art. 17 § 1 KSH (uchwała jako warunek ważności umowy), KC art. 89 (warunek zawieszający) i art. 116,
+RODO art. 14, ustawa AML art. 2 ust. 1 pkt 13a i art. 43, KEZN § 12, § 27, § 31, Otwarte API KRS,
+parametry usługi mObywatel (limit 5 dokumentów miesięcznie, 5 MB, regulamin).
 
 ## 10. Sankcje
 
@@ -457,14 +489,13 @@ błędnie do wcześniejszych wersji specyfikacji. Nie wprowadzać ich ponownie.
    rejestr, chyba że statut stanowi inaczej. **W Dziale IA takiego przepisu nie ma.** Dywidendę
    w P.S.A. wypłaca spółka bezpośrednio (art. 300¹⁵–300¹⁷). Nie trzeba niczego wyłączać w umowie.
 
-2. **Rozszerzony katalog danych rejestru.** Nowelizacja **nie zmieniła** art. 300³³ § 1 pkt 1–11.
-   PESEL, data urodzenia, numer w rejestrze osób prawnych i współwłasność **nie są** obowiązkową
-   treścią rejestru P.S.A. (zmiana dotyczyła art. 328³ dla S.A.). Art. 300³⁵ § 1¹ jedynie zakazuje
-   udostępniania PESEL-u, daty urodzenia i adresu zamieszkania pozostałym akcjonariuszom.
+2. ~~**Rozszerzony katalog danych rejestru.**~~ **SPROSTOWANE 1.11.2026 (D-076):** art. 300³³ § 1
+   pkt 1–11 nie zmienia się, ale **art. 30 ustawy zmieniającej** wymaga PESEL albo daty urodzenia
+   w nowych wpisach po 18.02.2027 (wytyczne § 6, § 10 — zweryfikowane). Kancelaria wymaga ich **już
+   teraz** (D-076). Art. 300³⁵ § 1¹ zakazuje ich udostępniania pozostałym akcjonariuszom.
 
-3. **Wymogi formy zgody na wpis.** Art. 300³⁴ § 3 **nie zawiera** katalogu form (podpis notarialnie
-   poświadczony / w obecności osoby upoważnionej / kwalifikowany, zaufany, osobisty). To regulacja
-   spółki akcyjnej.
+3. ~~**Wymogi formy zgody na wpis.**~~ **SPROSTOWANE 1.11.2026 (D-076):** nowelizacja dodaje
+   art. 300³⁴ § 3 **zd. 2** z katalogiem form (patrz sekcja 1). Kancelaria stosuje go już teraz.
 
 4. **Kierunek zgłoszenia zmian danych.** Art. 300³³ § 3 kieruje zgłoszenie **do podmiotu
    prowadzącego rejestr**, nie do sądu rejestrowego.

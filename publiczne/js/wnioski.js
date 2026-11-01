@@ -1015,8 +1015,13 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
   const [zapisywanie, ustawZapisywanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
 
-  const podpisany = Boolean(dokument.podpis_nazwa_pliku);
+  // D-075: dokument „do potwierdzenia” to plik z podpisem elektronicznym albo
+  // zadeklarowany / otrzymany oryginał papierowy — treść jest wtedy zamknięta.
+  const podpisany = Boolean(dokument.podpis_nazwa_pliku || dokument.oryginal_poczta_zadeklarowano || dokument.oryginal_otrzymano);
   const doPoprawy = !podpisany && !zablokowane && dokument.edytowalny;
+  // D-087: bez wybierania formy — pracownik potwierdza podpis jednym kliknięciem.
+  const papier = !dokument.podpis_nazwa_pliku;
+  const [otrzymano, ustawOtrzymano] = useState(dokument.oryginal_otrzymano || dzisIso());
 
   useEffect(() => {
     // Podpisanego dokumentu nie ma po co wczytywać — jego treści i tak się
@@ -1081,7 +1086,7 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
     try {
       const wynik = await API.post(
         `/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/podpis-potwierdz`,
-        { potwierdzono }
+        { potwierdzono, oryginal_otrzymano: papier ? otrzymano : null }
       );
       przyZapisie(wynik.dokumenty);
       przyZamknieciu();
@@ -1125,23 +1130,41 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
         <>
           <Komunikat
             odmiana="uwaga"
-            tytul="Dokument został podpisany"
-            tresc="Treści nie można już zmieniać — podpis dotyczy tego brzmienia dokumentu.
-              Oba egzemplarze otwierają się jako pliki PDF w nowej karcie."
+            tytul={dokument.podpis_nazwa_pliku ? 'Dokument został podpisany' : 'Klient odsyła oryginał pocztą'}
+            tresc="Treści nie można już zmieniać — podpis dotyczy tego brzmienia dokumentu."
           />
           <div className="dok-egzemplarze">
             <EgzemplarzDokumentu
               nazwa="Egzemplarz wystawiony"
-              opis={dokument.nazwa_pliku || dokument.nazwa}
+              opis={`${dokument.nazwa_pliku || dokument.nazwa}${dokument.id_dokumentu ? ` · ID ${dokument.id_dokumentu}` : ''}`}
               href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}?podglad=1`}
             />
-            <EgzemplarzDokumentu
-              nazwa="Skan odesłany przez klienta"
-              opis={dokument.podpis_nazwa_pliku}
-              href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}?egzemplarz=podpisany&podglad=1`}
-              glowny
-            />
+            {dokument.podpis_nazwa_pliku && (
+              <EgzemplarzDokumentu
+                nazwa="Plik z podpisem od klienta"
+                opis={dokument.podpis_nazwa_pliku}
+                href={`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}?egzemplarz=podpisany&podglad=1`}
+                glowny
+              />
+            )}
           </div>
+          <WynikWalidacji walidacja={dokument.walidacja} />
+          {!zablokowane && !dokument.podpis_potwierdzono && (
+            <div className="karta" style={{ marginTop: 'var(--od-4)' }}>
+              {papier && (
+                <Pole etykieta="Data otrzymania oryginału (albo podpisu w kancelarii)" wymagane>
+                  <input type="date" value={otrzymano} onChange={(z) => ustawOtrzymano(z.target.value)} />
+                </Pole>
+              )}
+              <div className="podpowiedz">
+                Dopuszczalne: podpis zaufany, kwalifikowany, osobisty, notarialnie poświadczony, złożony w kancelarii albo
+                własnoręczny na oryginale. Skan i zdjęcie — nie.
+              </div>
+            </div>
+          )}
+          {dokument.typ === 'umowa_rejestru' && (
+            <PodpisNotariusza wniosekId={wniosekId} dokument={dokument} zablokowane={zablokowane} przyZapisie={przyZapisie} />
+          )}
         </>
       )}
 
@@ -1197,6 +1220,74 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
   );
 }
 
+/** Wynik podstawowego testu po wgraniu (W2.4, D-086) — czy plik ma podpis; resztę sprawdza pracownik. */
+function WynikWalidacji({ walidacja }) {
+  if (!walidacja) return null;
+  const odrzucony = walidacja.wynik === 'odrzucony';
+  return (
+    <Komunikat
+      odmiana={odrzucony ? 'blad' : 'uwaga'}
+      tytul={`${odrzucony ? 'Plik bez podpisu elektronicznego' : 'Plik podpisany — sprawdź podpis i dokument'}${walidacja.atrapa ? ' (atrapa trybu testowego)' : ''}`}
+      tresc={walidacja.komunikat}
+    />
+  );
+}
+
+/**
+ * W2.5 — notariusz podpisuje umowę OSTATNI, podpisem kwalifikowanym, dopiero
+ * po ważnym podpisie spółki. Przycisk zablokowany z przyczyną do tego czasu.
+ */
+function PodpisNotariusza({ wniosekId, dokument, zablokowane, przyZapisie }) {
+  const [blad, ustawBlad] = useState(null);
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const wejscie = useRef(null);
+  const dostepny = Boolean(dokument.podpis_potwierdzono);
+
+  async function wyslij(plik) {
+    if (!plik) return;
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      const formularz = new FormData();
+      formularz.append('plik', plik);
+      const odp = await fetch(`/api/psa/wnioski/${wniosekId}/dokumenty/${dokument.id}/podpis-notariusza`, { method: 'POST', body: formularz });
+      const tresc = await odp.json().catch(() => ({}));
+      if (!odp.ok) throw new Error(tresc.blad || `Błąd ${odp.status}`);
+      przyZapisie(tresc.dokumenty);
+    } catch (e) {
+      ustawBlad(e.message);
+    } finally {
+      ustawWysylanie(false);
+      if (wejscie.current) wejscie.current.value = '';
+    }
+  }
+
+  return (
+    <div className="karta" style={{ marginTop: 'var(--od-4)' }}>
+      <strong>Podpis notariusza (kwalifikowany, ostatni)</strong>
+      {dokument.notariusz_podpis_wgrano ? (
+        <>
+          <div>Wgrano {fmt.dataCzas(dokument.notariusz_podpis_wgrano)}.</div>
+          <WynikWalidacji walidacja={dokument.notariusz_walidacja} />
+        </>
+      ) : !dostepny ? (
+        <div className="przyciemnione">
+          Dostępny po ważnym podpisie spółki — najpierw zaznacz formę i potwierdź podpis spółki powyżej.
+        </div>
+      ) : !zablokowane && (
+        <>
+          <input ref={wejscie} type="file" accept=".pdf,.xml,.xades" className="pole-pliku-ukryte"
+            onChange={(z) => wyslij(z.target.files[0])} />
+          <button className="btn btn-maly" disabled={wysylanie} onClick={() => wejscie.current && wejscie.current.click()}>
+            {wysylanie ? 'Sprawdzanie podpisu…' : 'Wgraj umowę podpisaną przez notariusza'}
+          </button>
+        </>
+      )}
+      <Komunikat odmiana="blad" tresc={blad} />
+    </div>
+  );
+}
+
 /** „1 puste miejsce", „3 puste miejsca", „5 pustych miejsc" — polska odmiana. */
 function opisPustychMiejsc(ile) {
   const ostatnia = ile % 10;
@@ -1239,6 +1330,8 @@ function PozycjaDokumentuKancelarii({ wniosekId, dokument, dlaKogo, przyOtwarciu
         {dokument.brakujace.length > 0 && (
           <Pigulka odmiana="sygnal">{opisPustychMiejsc(dokument.brakujace.length)}</Pigulka>
         )}
+        {dokument.walidacja_wynik === 'do_weryfikacji' && <Pigulka odmiana="sygnal">podpis do weryfikacji</Pigulka>}
+        {dokument.oryginal_poczta_zadeklarowano && !dokument.oryginal_otrzymano && <Pigulka odmiana="mosiadz">oryginał pocztą</Pigulka>}
         {podpisany ? (
           <a
             className="dokument-pozycja-skan"
@@ -1249,7 +1342,7 @@ function PozycjaDokumentuKancelarii({ wniosekId, dokument, dlaKogo, przyOtwarciu
             {dokument.podpis_nazwa_pliku}
           </a>
         ) : (
-          <span className="dokument-pozycja-czeka">czeka na podpisany skan</span>
+          <span className="dokument-pozycja-czeka">{dokument.oryginal_poczta_zadeklarowano ? 'czeka na oryginał' : 'czeka na podpis'}</span>
         )}
         <span className="row-g" style={{ marginLeft: 'auto' }}>
           {/* Jeden przycisk zamiast „Podgląd" i „Edytuj treść": dokument
@@ -1257,7 +1350,7 @@ function PozycjaDokumentuKancelarii({ wniosekId, dokument, dlaKogo, przyOtwarciu
               klikając w to, co wymaga poprawy. Po podpisaniu nie ma czego
               poprawiać — zostaje sprawdzenie obu egzemplarzy w PDF. */}
           <button className="btn btn-maly btn-glowny" onClick={przyOtwarciu}>
-            {podpisany ? 'Sprawdź podpis' : 'Otwórz'}
+            {podpisany || dokument.oryginal_poczta_zadeklarowano ? 'Sprawdź podpis' : 'Otwórz'}
           </button>
           <a
             className="btn btn-maly"

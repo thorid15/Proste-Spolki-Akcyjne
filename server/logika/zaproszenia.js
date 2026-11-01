@@ -24,6 +24,23 @@ const czas = require('../pomocnicze/czas');
 
 const TOKEN_WAZNOSC_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** Nowy token aktywacyjny — ten sam w zaproszeniu e-mailem i w `npm run test:link`. */
+function nowyToken() {
+  return {
+    token: crypto.randomBytes(32).toString('base64url'),
+    tokenWygasa: new Date(Date.now() + TOKEN_WAZNOSC_MS).toISOString(),
+  };
+}
+
+/**
+ * Tryb testowy (T2): ten sam link, ktory poszedl do skrzynki testowej, wraca
+ * w odpowiedzi — ekran pokazuje przy nim „Zaloguj (tryb testowy)". Poza
+ * trybem testowym pole nie istnieje (odpowiedz bez zmian).
+ */
+function linkTestowy(link) {
+  return konfiguracja.TRYB_TESTOWY ? link : undefined;
+}
+
 function trescZaproszenia({ link, kancelariaNazwa }) {
   return `
     <p>Dzień dobry,</p>
@@ -76,11 +93,11 @@ async function wyslij(db, { zgloszenieId, email, autor }) {
       nowe_konto: false,
       email_wyslany: proba.wyslano,
       powod: proba.powod,
+      link_testowy: linkTestowy(konfiguracja.URL_PORTALU),
     };
   }
 
-  const token = crypto.randomBytes(32).toString('base64url');
-  const tokenWygasa = new Date(Date.now() + TOKEN_WAZNOSC_MS).toISOString();
+  const { token, tokenWygasa } = nowyToken();
 
   let kontoId;
   if (istniejace) {
@@ -117,6 +134,7 @@ async function wyslij(db, { zgloszenieId, email, autor }) {
     // JUZ istnieje, a token siedzi w bazie — bez tego pola zaproszenie
     // przepadaloby bezpowrotnie.
     link_aktywacyjny: proba.wyslano ? undefined : link,
+    link_testowy: linkTestowy(link),
   };
 }
 
@@ -157,6 +175,14 @@ async function wyslijAkcjonariuszowi(db, { osobaId, email, autor }) {
 
   const adres = String(email || '').trim().toLowerCase();
   if (!adres) throw new Error('Adres e-mail jest wymagany.');
+  // QW3 / D-083 — bez zgody na komunikację e-mail (złożonej osobiście) nie
+  // zapraszamy do portalu: korespondencja i żądania idą pocztą albo w kancelarii.
+  if (osoba.zgoda_email_status !== 'potwierdzona') {
+    throw new Error(
+      'Akcjonariusz nie wyraził zgody na komunikację e-mail — nie zapraszamy go do portalu (D-083). '
+        + 'Korespondencja idzie pocztą, a żądania wpisu składa on pocztą albo w kancelarii.'
+    );
+  }
 
   const kancelaria = ustawienia.kancelaria(db);
   const istniejace = db.prepare('SELECT * FROM psa_konta WHERE lower(email) = ?').get(adres);
@@ -176,8 +202,7 @@ async function wyslijAkcjonariuszowi(db, { osobaId, email, autor }) {
     return { konto_id: istniejace.id, nowe_konto: false, juz_aktywne: true, email_wyslany: false };
   }
 
-  const token = crypto.randomBytes(32).toString('base64url');
-  const tokenWygasa = new Date(Date.now() + TOKEN_WAZNOSC_MS).toISOString();
+  const { token, tokenWygasa } = nowyToken();
 
   let kontoId;
   if (istniejace) {
@@ -208,7 +233,10 @@ async function wyslijAkcjonariuszowi(db, { osobaId, email, autor }) {
     email_wyslany: proba.wyslano,
     powod: proba.powod,
     link_aktywacyjny: proba.wyslano ? undefined : link,
+    link_testowy: linkTestowy(link),
   };
 }
 
-module.exports = { wyslij, wyslijAkcjonariuszowi, trescZaproszenia, trescZaproszeniaAkcjonariusza, TOKEN_WAZNOSC_MS };
+module.exports = {
+  wyslij, wyslijAkcjonariuszowi, trescZaproszenia, trescZaproszeniaAkcjonariusza, TOKEN_WAZNOSC_MS, nowyToken,
+};
