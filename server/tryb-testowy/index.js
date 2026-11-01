@@ -37,7 +37,6 @@ const KONTA_TESTOWE = [
   { aplikacja: 'kancelaria', email: 'pracownik@example.com', opis: 'Pracownik kancelarii' },
   { aplikacja: 'portal', email: 'zarzad@example.com', opis: 'Zarząd spółki (Alfa Testowa P.S.A.)' },
   { aplikacja: 'portal', email: 'anna.zgoda@example.com', opis: 'Akcjonariusz ze zgodą e-mail (Anna Testowa)' },
-  { aplikacja: 'portal', email: 'bartosz.bezzgody@example.com', opis: 'Akcjonariusz bez zgody e-mail (Bartosz Próbny)' },
   { aplikacja: 'portal', email: 'gamma.zarzad@example.com', opis: 'Wnioskodawca — dokumenty do podpisu (Gamma Zgłoszeniowa)' },
 ];
 

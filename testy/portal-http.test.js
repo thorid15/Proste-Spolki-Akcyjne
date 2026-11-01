@@ -67,6 +67,8 @@ async function dodajKonto({ email, haslo, rola, spolkaId = null, osobaId = null 
        VALUES (?, ?, ?, ?, ?, 1, ?)`
     )
     .run(email, hash, rola, spolkaId, osobaId, czas.terazIso());
+  // QW3 / D-083: portal tylko dla akcjonariusza ze zgodą na komunikację e-mail.
+  if (rola === 'akcjonariusz' && osobaId) db().prepare("UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona' WHERE id = ?").run(osobaId);
   return Number(wynik.lastInsertRowid);
 }
 

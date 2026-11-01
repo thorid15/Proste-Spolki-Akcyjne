@@ -253,7 +253,9 @@ function FormularzOsoby({
           wylaczony={!edytowalne || zgoda === 'potwierdzona'}
           przyZmianie={(v) => przyZmianie({ zgoda_email_status: v ? 'zadeklarowana' : 'brak' })}
           etykieta="Akcjonariusz chce dostawać pisma od spółki e-mailem"
-          opis="Przygotujemy oświadczenie do podpisu. Adres e-mail trafi do rejestru dopiero po podpisaniu go przez akcjonariusza (art. 300(33) § 1 pkt 4 KSH)."
+          opis={zgoda === 'brak'
+            ? 'Bez zgody na e-mail akcjonariusz nie dostanie dostępu do portalu — pisma z rejestru przyjdą pocztą, a żądania wpisu złoży pocztą albo w kancelarii.'
+            : 'Przygotujemy oświadczenie do podpisu. Adres e-mail trafi do rejestru dopiero po podpisaniu go przez akcjonariusza (art. 300(33) § 1 pkt 5 KSH).'}
         />
       ) : (
         <Pole

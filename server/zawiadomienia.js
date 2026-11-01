@@ -93,6 +93,17 @@ async function wydajIWyslij(db, { wzorTyp, dane, sprawaId, spolkaId, odbiorcaOso
   const nazwaPliku = `${wynik.nazwa.replace(/\s+/g, '-')}.docx`;
   const sciezkaPlik = zapiszPlikNaDysku({ spolkaId, sprawaId, wzorPlik: nazwaPliku, bufor: wynik.plik });
 
+  // QW2 / D-083 — akcjonariusz z żądaniem automatycznych powiadomień dostaje
+  // DODATKOWO kopię pisma w portalu (zakładka „Dokumenty”); nie zastępuje
+  // e-maila ani listu.
+  const kopiaDoPortalu = (idPisma) => {
+    if (!odbiorcaOsoba || !spolkaId || !listy.zadaPowiadomienAutomatycznych(db, odbiorcaOsoba.id, spolkaId)) return null;
+    return zapiszWydanyDokument(db, {
+      sprawaId, spolkaId, typ: wzorTyp, odbiorcaOsobaId, kanal: 'portal', trescHtml: tekst, sciezkaPlik,
+      szablonKod: kod, szablonHash: wynik.hash, wyslano: czas.terazIso(), autor: `${autor} (kopia do portalu, pismo #${idPisma})`,
+    });
+  };
+
   // W4.3 — osoba bez zgody na komunikację e-mail: pismo do kolejki listów,
   // na adres z rejestru (W4.4). E-mail wyłącznie przy zgodzie potwierdzonej.
   if (odbiorcaOsoba && listy.kanalDlaOsoby(odbiorcaOsoba) === 'papier') {
@@ -102,7 +113,7 @@ async function wydajIWyslij(db, { wzorTyp, dane, sprawaId, spolkaId, odbiorcaOso
     });
     const listId = listy.dodaj(db, { wydanyDokumentId: id, spolkaId, sprawaId, osoba: odbiorcaOsoba, rodzajPisma: wzorTyp });
     return {
-      id, wyslano: false, status: 'list', list_id: listId,
+      id, wyslano: false, status: 'list', list_id: listId, kopia_portal_id: kopiaDoPortalu(id),
       powod: 'Brak zgody na komunikację e-mail — pismo czeka w kolejce listów (adres z rejestru).',
       brakujace: wynik.brakujace, bledy: wynik.bledy,
     };
@@ -134,7 +145,7 @@ async function wydajIWyslij(db, { wzorTyp, dane, sprawaId, spolkaId, odbiorcaOso
     autor,
   });
 
-  return { id, ...proba, brakujace: wynik.brakujace, bledy: wynik.bledy };
+  return { id, ...proba, kopia_portal_id: kopiaDoPortalu(id), brakujace: wynik.brakujace, bledy: wynik.bledy };
 }
 
 /** art. 300(34) § 7 KSH — niezwłoczne powiadomienie żądającego i spółki o wpisie. */

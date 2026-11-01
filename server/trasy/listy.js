@@ -46,6 +46,10 @@ pre{white-space:pre-wrap;font:inherit}@media print{.bez-druku{display:none}}</st
 <div class="nadawca">${esc(k.nazwa)}<br>${esc(k.adres || '')}</div>
 <div class="adres">${esc(list.odbiorca_nazwa)}\n${esc(list.adres).replace(/, /g, '\n')}</div>
 <pre>${esc(pismo ? pismo.tresc_html : '')}</pre>
+<p style="font-size:9pt;border-top:1px solid #999;padding-top:4mm">Pouczenie: nie wyraził(a) Pan/Pani zgody na komunikację
+przy wykorzystaniu poczty elektronicznej (art. 300(33) § 1 pkt 5 KSH). Korespondencja z rejestru przychodzi pocztą, a żądania
+wpisu składa się pocztą albo w kancelarii — portal klienta jest dostępny wyłącznie dla osób, które wyraziły zgodę na
+komunikację e-mail. Zgodę można wyrazić w każdej chwili w formie dokumentowej.</p>
 </body></html>`);
 }));
 

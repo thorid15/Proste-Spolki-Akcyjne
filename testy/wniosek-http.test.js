@@ -148,6 +148,8 @@ test('GET /api/psa/portal/wniosek: inne role (spolka/akcjonariusz) nie maja dost
   db()
     .prepare(`INSERT INTO psa_konta (email, hash_hasla, rola, osoba_id, aktywne, utworzono) VALUES (?, ?, 'akcjonariusz', ?, 1, ?)`)
     .run('akcjonariusz-bez-wniosku@example.pl', hash, osobaId, new Date().toISOString());
+  // QW3 / D-083: portal tylko dla akcjonariusza ze zgodą na komunikację e-mail.
+  db().prepare("UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona' WHERE id = ?").run(osobaId);
   const odpLogin = await fetch(`${baza}/api/psa/portal/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

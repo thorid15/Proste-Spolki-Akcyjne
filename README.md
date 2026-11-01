@@ -118,8 +118,9 @@ skrzynki i panelu. Wyłączenie: usuń `PSA_TRYB_TESTOWY` z `.env`.
 
 **Konta** (hasło wszystkich: `Test-Haslo-2026`): `notariusz@example.com` (administrator),
 `pracownik@example.com`, `zarzad@example.com` (konto spółki Alfa Testowa P.S.A.),
-`anna.zgoda@example.com` (akcjonariusz ze zgodą e-mail), `bartosz.bezzgody@example.com`
-(akcjonariusz bez zgody), `gamma.zarzad@example.com` (wnioskodawca z dokumentami do podpisu). Lista na ekranie logowania woła **zwykły** endpoint logowania — te same
+`anna.zgoda@example.com` (akcjonariusz ze zgodą e-mail), `gamma.zarzad@example.com` (wnioskodawca
+z dokumentami do podpisu). Akcjonariusz bez zgody na e-mail (Bartosz Próbny) jest w rejestrze, ale nie ma konta
+w portalu (D-083) — dostaje listy. Lista na ekranie logowania woła **zwykły** endpoint logowania — te same
 uprawnienia, izolacja spółek i ważność sesji. Link z wiersza poleceń:
 `npm run test:link -- <e-mail>` (konto nieaktywne → link aktywacyjny, ten sam co w zaproszeniu;
 aktywne → adres logowania). Każde logowanie w trybie testowym trafia do `psa_dziennik_logowan`.

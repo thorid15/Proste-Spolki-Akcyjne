@@ -175,6 +175,14 @@ async function wyslijAkcjonariuszowi(db, { osobaId, email, autor }) {
 
   const adres = String(email || '').trim().toLowerCase();
   if (!adres) throw new Error('Adres e-mail jest wymagany.');
+  // QW3 / D-083 — bez zgody na komunikację e-mail (złożonej osobiście) nie
+  // zapraszamy do portalu: korespondencja i żądania idą pocztą albo w kancelarii.
+  if (osoba.zgoda_email_status !== 'potwierdzona') {
+    throw new Error(
+      'Akcjonariusz nie wyraził zgody na komunikację e-mail — nie zapraszamy go do portalu (D-083). '
+        + 'Korespondencja idzie pocztą, a żądania wpisu składa on pocztą albo w kancelarii.'
+    );
+  }
 
   const kancelaria = ustawienia.kancelaria(db);
   const istniejace = db.prepare('SELECT * FROM psa_konta WHERE lower(email) = ?').get(adres);

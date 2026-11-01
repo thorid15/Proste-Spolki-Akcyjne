@@ -10,7 +10,7 @@
 | 0 — Inwentarz | ZROBIONA (1.11.2026) | patrz `git log` — „Faza 0” |
 | 1 — Tryb testowy (T1–T6) | ZROBIONA — sekcja 3 | patrz `git log` — „Faza 1” |
 | 2 — Podpisy (§ 2–3) | ZROBIONA — sekcja 4; STOP | patrz `git log` — „Faza 2” |
-| 3 — Zgody, dostęp, informacje (§ 4–6) | ZROBIONA — sekcja 5; STOP (QW1–QW3) | patrz `git log` — „Faza 3” |
+| 3 — Zgody, dostęp, informacje (§ 4–6) | ZROBIONA — sekcja 5; QW1–QW3 rozstrzygnięte (D-083) | patrz `git log` — „Faza 3” |
 | 4 — Przeniesienie rejestru | — | — |
 | 5 — Raport końcowy | — | — |
 
@@ -20,7 +20,7 @@ propozycja uzupełnienia `PRZEPISY-PSA.md` (P1–P9) przyjęta i dopisana; Faza 
 https://github.com/thorid15/Proste-Spolki-Akcyjne/pull/13 (do `claude/Main` — w repozytorium nie ma `main`).
 K6 rozstrzygnięte po STOP Fazy 2 — D-079.
 
-**Następny krok:** odpowiedzi na QW1–QW3 (sekcja 5) i akceptacja STOP Fazy 3, potem Faza 4 (propozycja podziału 4a/4b — sekcja 2.3).
+**Następny krok:** Faza 4 — przeniesienie rejestru (sekcja 6).
 
 Stan wejściowy testów: `npm test` — 534/534 zielone (przed zmianami).
 
@@ -292,3 +292,9 @@ w `portal-http`, `blok-d-http`, `sprint5`, `informacja-dokument`. Pełny zestaw:
 **Uwagi:** zgoda e-mail jest polem osoby w kartotece (wspólnej dla rejestrów) — oświadczenie wskazuje spółkę,
 żądanie wpisu powstaje w jej rejestrze; przy kilku spółkach akcjonariusz składa oświadczenie w każdej
 (do rozważenia przy QW1). Organy: opłata za informację — do decyzji (dziś „nie pobrano”).
+
+**Odpowiedzi Łukasza (STOP Fazy 3) — D-083, wdrożone:** QW1 — płatne tylko zmiany w akcjonariacie
+(zmiany danych, w tym zgoda e-mail, bezpłatne; obciążenia zostawiłem płatne — do potwierdzenia); QW2 — kopia
+pisma w portalu przy żądaniu automatycznych powiadomień; QW3 — bez zaproszeń i bez logowania do portalu dla
+osób bez zgody na e-mail, pouczenie na liście i w formularzach; organy — bez opłaty. Testy: **574/574**.
+Lista kont testowych (T2) bez „akcjonariusza bez zgody” — taka osoba nie ma konta w portalu (D-083).

@@ -1916,7 +1916,8 @@ function OswiadczeniaAkcjonariusza() {
       <Komunikat odmiana="ok" tresc={komunikat} />
       <div className="podpowiedz">
         Oświadczenia składasz osobiście — zarząd spółki nie może złożyć ich w Twoim imieniu. Bez zgody na e-mail
-        korespondencja z rejestru przychodzi listem na adres z rejestru.
+        korespondencja z rejestru przychodzi listem na adres z rejestru, żądania wpisu składa się pocztą albo
+        w kancelarii, a dostęp do portalu wygasa po wpisaniu cofnięcia zgody.
       </div>
       <p>
         <strong>Zgoda na komunikację e-mail</strong> (art. 300³³ § 1 pkt 5 KSH): {NAZWY_ZGODY[zgoda.status] || zgoda.status}

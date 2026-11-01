@@ -54,8 +54,8 @@ router.post('/organ', asy((zad, odp) => {
     odbiorca: { rola: przepisy.ROLE_ODBIORCY.ORGAN, opis: `${organ} — sygn. ${sygnatura}` },
     sporzadzono: czas.terazIso(),
     numer,
-    // Opłata od organu — do decyzji kancelarii; nie naliczamy automatycznie.
-    wynagrodzenie: informacje.wynagrodzenie(db(), { spolka, pobrano: false, uwaga: 'informacja dla organu — opłata do decyzji kancelarii' }),
+    // D-083 — od organów nie pobieramy opłat.
+    wynagrodzenie: informacje.wynagrodzenie(db(), { spolka, pobrano: false, uwaga: 'informacja dla organu — bez opłaty' }),
   });
   const wynik = db().prepare(
     `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, kanal, tresc_html, wyslano, autor, utworzono, numer, odbiorca_opis, sygnatura)

@@ -1359,6 +1359,29 @@
 
 ---
 
+### D-083 — Odpowiedzi QW1–QW3 i opłaty od organów (Łukasz, STOP Fazy 3)
+
+- Data: 2026-11-01
+- Obszar: opłaty / portal / komunikacja
+- Decyzja:
+  1. **QW1** — płatne są **wyłącznie zmiany w akcjonariacie**. Zmiana albo cofnięcie zgody na e-mail
+     i inne zmiany danych są bezpłatne: `odplatne: false` dla `zmiana_danych_akcjonariusza`,
+     `zmiana_danych_spolki`, `uprawnienie`, `ograniczenie`, `przedstawiciel`, `pokrycie_akcji`,
+     `zdarzenie_inne`. Płatne zostają: emisja, objęcie, przeniesienie (także ułamka), umorzenie,
+     unieważnienie, zobowiązanie do przeniesienia oraz obciążenia (ustanowienie, wykreślenie, prawo głosu
+     zastawnika) — **obciążenia do potwierdzenia** (zmieniają prawa do akcji, nie osobę akcjonariusza).
+  2. **QW2** — przy żądaniu automatycznych powiadomień kopia pisma trafia dodatkowo do zakładki
+     „Dokumenty” portalu; e-mail albo list idą bez zmian.
+  3. **QW3** — osoby bez zgody na komunikację e-mail **nie są zapraszane do portalu** (odmowa zaproszenia)
+     i nie logują się do niego (po wpisaniu cofnięcia zgody dostęp wygasa); żądania składają pocztą albo
+     w kancelarii. Uprzedzenie: pouczenie na każdym liście, podpowiedź we wniosku i w „Moich oświadczeniach”.
+  4. **Organy** — informacja z rejestru bez opłaty.
+- Skutek w kodzie: `logika/typy-zdarzen.js`, `zawiadomienia.js`, `listy.js`, `trasy/listy.js`,
+  `logika/zaproszenia.js`, `trasy/portal.js` (logowanie), `trasy/informacje.js`, `publiczne/js/*`;
+  dane testowe: bez konta portalu dla akcjonariusza bez zgody (lista kont T2 skrócona).
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w

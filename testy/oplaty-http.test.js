@@ -269,6 +269,8 @@ test('portal: zamowienie informacji z rejestru nalicza oplate', async () => {
        VALUES (?, ?, 'akcjonariusz', ?, 1, ?)`
     )
     .run('portal-oplaty@example.pl', hashPortal, kowalski.id, new Date().toISOString());
+  // QW3 / D-083: portal tylko dla akcjonariusza ze zgodą na komunikację e-mail.
+  db().prepare("UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona' WHERE id = ?").run(kowalski.id);
 
   const loginPortal = await fetch(`${baza}/api/psa/portal/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

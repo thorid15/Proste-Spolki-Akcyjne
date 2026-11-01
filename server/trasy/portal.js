@@ -162,6 +162,17 @@ router.post(
     }
 
     limiter.wyczyscPoUdanej(zad.ip, `portal:${email}`);
+    // QW3 / D-083 — portal tylko dla akcjonariusza ze zgodą na komunikację
+    // e-mail; po wpisaniu cofnięcia zgody dostęp wygasa.
+    if (konto.rola === 'akcjonariusz' && konto.osoba_id) {
+      const osoba = db().prepare('SELECT zgoda_email_status FROM psa_osoby WHERE id = ?').get(konto.osoba_id);
+      if (!osoba || osoba.zgoda_email_status !== 'potwierdzona') {
+        throw nieAutoryzowany(
+          'Bez zgody na komunikację e-mail dostęp do portalu jest wyłączony. Korespondencja z rejestru przychodzi pocztą, '
+            + 'a żądania wpisu składa się pocztą albo w kancelarii.'
+        );
+      }
+    }
     db().prepare('UPDATE psa_konta SET ostatnie_logowanie = ? WHERE id = ?').run(czas.terazIso(), konto.id);
 
     autoryzacja.zalogujKonto(zad, odp, konto.id);

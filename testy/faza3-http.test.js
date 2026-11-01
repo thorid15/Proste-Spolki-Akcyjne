@@ -171,6 +171,8 @@ test('W4.1/W4.2: oświadczenia osobiste — automatyczne powiadomienia od razu, 
   assert.equal(sprawa.typ_zdarzenia, 'zmiana_danych_akcjonariusza');
   assert.equal(sprawa.zadajacy_osoba_id, S.zeZgoda);
   assert.match(sprawa.notatka, /cofnięcie zgody/);
+  // QW1 / D-083: zmiana albo cofnięcie zgody e-mail jest bezpłatne.
+  assert.equal(db().prepare("SELECT COUNT(*) AS n FROM psa_oplaty WHERE sprawa_id = ?").get(cof.sprawa_id).n, 0);
   const [, stan] = await zapytaj('GET', '/api/psa/portal/oswiadczenia', undefined, S.portalZofia);
   assert.equal(stan.spolki[0].powiadomienia_automatyczne.zlozone, 1);
   assert.throws(() => db().prepare('DELETE FROM psa_oswiadczenia').run(), /append-only/);
@@ -231,4 +233,24 @@ test('W6.4: brak automatycznego usuwania — usuwanie plików tylko w znanych mi
   assert.deepEqual(znalezione.filter((f) => !dozwolone.has(f)), [], 'nowe miejsce usuwania plików wymaga świadomej decyzji (W6.4)');
   const harmonogram = fs.readFileSync(path.join(katalog, 'logika', 'harmonogram.js'), 'utf8');
   assert.doesNotMatch(harmonogram, /DELETE FROM|rmSync|unlink/, 'harmonogram niczego nie usuwa');
+});
+
+test('QW2 / D-083: przy żądaniu automatycznych powiadomień — dodatkowo kopia pisma w portalu (obok e-maila albo listu)', async () => {
+  const sprawaId = await sprawaZbycia();
+  db().prepare(`INSERT INTO psa_oswiadczenia (osoba_id, spolka_id, rodzaj, zlozone, utworzono) VALUES (?, ?, 'powiadomienia_automatyczne', 1, ?)`)
+    .run(S.bezZgody, S.spolkaId, czas.terazIso());
+  const [, wynik] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/powiadomienie`, { osoba_id: S.bezZgody });
+  assert.equal(wynik.wysylka.status, 'list', 'list nadal idzie');
+  const kopia = db().prepare('SELECT * FROM psa_wydane_dokumenty WHERE id = ?').get(wynik.wysylka.kopia_portal_id);
+  assert.equal(kopia.kanal, 'portal');
+  assert.equal(kopia.odbiorca_osoba_id, S.bezZgody);
+});
+
+test('QW3 / D-083: akcjonariusz bez zgody na e-mail nie loguje się do portalu', async () => {
+  const hash = await hasla.hashuj('HasloTestowe123');
+  db().prepare(`INSERT INTO psa_konta (email, hash_hasla, rola, osoba_id, aktywne, utworzono) VALUES ('bogdan@example.pl', ?, 'akcjonariusz', ?, 1, ?)`)
+    .run(hash, S.bezZgody, czas.terazIso());
+  const odp = await fetch(`${ADRES}/api/psa/portal/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'bogdan@example.pl', haslo: 'HasloTestowe123' }) });
+  assert.equal(odp.status, 401);
+  assert.match((await odp.json()).blad, /Bez zgody na komunikację e-mail dostęp do portalu jest wyłączony/);
 });

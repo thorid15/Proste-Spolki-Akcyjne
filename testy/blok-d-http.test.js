@@ -255,6 +255,8 @@ async function przygotujDwieSpolki() {
   const kontoAId = db()
     .prepare(`INSERT INTO psa_konta (email, hash_hasla, rola, osoba_id, aktywne, utworzono) VALUES (?, ?, 'akcjonariusz', ?, 1, ?)`)
     .run(`akcjonariusz-a-${Date.now()}@example.pl`, hashA, Number(osobaAId), czas.terazIso()).lastInsertRowid;
+  // QW3 / D-083: portal tylko dla akcjonariusza ze zgodą na komunikację e-mail.
+  db().prepare("UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona' WHERE id = ?").run(Number(osobaAId));
   const emailA = db().prepare('SELECT email FROM psa_konta WHERE id = ?').get(kontoAId).email;
 
   const odpLogin = await fetch(`${baza}/api/psa/portal/login`, {

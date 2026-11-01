@@ -183,7 +183,7 @@ async function main() {
   db().prepare('INSERT INTO psa_konta_spolki (konto_id, spolka_id, utworzono) VALUES (?, ?, ?)')
     .run(zarzad.lastInsertRowid, spolka.id, teraz);
   dodajKonto.run('anna.zgoda@example.com', hash, 'akcjonariusz', null, anna.id, teraz, teraz);
-  dodajKonto.run('bartosz.bezzgody@example.com', hash, 'akcjonariusz', null, bartosz.id, teraz, teraz);
+  // QW3 / D-083: akcjonariusz bez zgody na e-mail nie ma konta w portalu.
 
   // ── Zadanie wpisu zbycia bez zgody zbywcy ───────────────────────────────
   const { sprawa } = await zapytaj(kancelaria, 'POST', '/api/psa/sprawy', {

@@ -272,7 +272,7 @@ const TYPY = [
     symbol: 'a',
     grupa: 'dane',
     sprint: 2,
-    odplatne: true,
+    odplatne: false, // D-083: bezpłatne — płatne są wyłącznie zmiany w akcjonariacie
     wymaga_powiadomienia: false,
     podstawa_prawna: PODSTAWY.KATALOG_DANYCH,
     checklista: [poz('podstawa_zmiany', 'Zmiana ma udokumentowaną podstawę')],
@@ -288,7 +288,7 @@ const TYPY = [
     // Zapisywane juz w sprincie 1 - przez PUT /api/psa/spolki/:id.
     sprint: 1,
     kreator: false,
-    odplatne: true,
+    odplatne: false, // D-083: bezpłatne — płatne są wyłącznie zmiany w akcjonariacie
     wymaga_powiadomienia: false,
     podstawa_prawna: PODSTAWY.KATALOG_DANYCH,
     checklista: [poz('podstawa_zmiany', 'Zmiana ma udokumentowaną podstawę')],
@@ -318,7 +318,7 @@ const TYPY = [
     symbol: '★',
     grupa: 'prawa',
     sprint: 2,
-    odplatne: true,
+    odplatne: false, // D-083: bezpłatne — płatne są wyłącznie zmiany w akcjonariacie
     wymaga_powiadomienia: false,
     podstawa_prawna: PODSTAWY.KATALOG_DANYCH,
     checklista: [...BADANIE_DOKUMENTU],
@@ -331,7 +331,7 @@ const TYPY = [
     symbol: '⊣',
     grupa: 'prawa',
     sprint: 2,
-    odplatne: true,
+    odplatne: false, // D-083: bezpłatne — płatne są wyłącznie zmiany w akcjonariacie
     wymaga_powiadomienia: false,
     podstawa_prawna: PODSTAWY.OGRANICZENIA_ROZPORZADZANIA,
     checklista: [...BADANIE_DOKUMENTU],
@@ -345,7 +345,7 @@ const TYPY = [
     symbol: '·',
     grupa: 'inne',
     sprint: 2,
-    odplatne: true,
+    odplatne: false, // D-083: bezpłatne — płatne są wyłącznie zmiany w akcjonariacie
     wymaga_powiadomienia: false,
     podstawa_prawna: PODSTAWY.KATALOG_DANYCH,
     checklista: [poz('opis_zdarzenia', 'Zdarzenie zostało opisane w sposób umożliwiający jego identyfikację')],
@@ -455,7 +455,7 @@ const TYPY = [
     symbol: '⚑',
     grupa: 'akcje',
     sprint: 5,
-    odplatne: true,
+    odplatne: false, // D-083: bezpłatne — płatne są wyłącznie zmiany w akcjonariacie
     wymaga_powiadomienia: false,
     podstawa_prawna: PODSTAWY.WSPOLNY_PRZEDSTAWICIEL,
     tworzy: ['wzmianka o wspólnym przedstawicielu'],
@@ -475,7 +475,7 @@ const TYPY = [
     symbol: '✔',
     grupa: 'akcje',
     sprint: 5,
-    odplatne: true,
+    odplatne: false, // D-083: bezpłatne — płatne są wyłącznie zmiany w akcjonariacie
     wymaga_powiadomienia: false,
     podstawa_prawna: PODSTAWY.WZMIANKA_O_POKRYCIU,
     tworzy: ['wzmianka o pokryciu'],
