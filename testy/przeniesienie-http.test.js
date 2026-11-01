@@ -137,7 +137,7 @@ test('przeniesienie rejestru: od zgłoszenia do „Aktywny”', async () => {
   await zapytaj('PUT', `/api/psa/przeniesienia/${id}/checklista/odbioru`, {
     zaznaczone: { kompletnosc: true, liczba_akcji: true, pokrycie: true, obciazenia: true, lista_krs: true, rozbieznosci: true },
   });
-  // W7.7 — protokół (PDF z ID) podpisany przez notariusza; bez DSS: weryfikacja ręczna, nie odrzucenie.
+  // W7.7 — protokół (PDF z ID) podpisany przez notariusza; D-086: weryfikuje pracownik, nie odrzucenie.
   const [stProt, protokol] = await zapytaj('GET', `/api/psa/przeniesienia/${id}/protokol.pdf`);
   assert.equal(stProt, 200);
   const podpisany = Buffer.concat([protokol, Buffer.from('\n9 0 obj << /Type /Sig /SubFilter /ETSI.CAdES.detached /ByteRange [0 1 2 3] /Contents <00> >> endobj\n%%EOF\n')]);

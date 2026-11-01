@@ -1433,6 +1433,24 @@
 - Skutek w kodzie: `server/logika/{ustawienia,typy-zdarzen}.js`, `server/przeniesienia.js`,
   `server/trasy/spolki.js`, `publiczne/js/przeniesienia.js`; testy `faza3-http`, `przeniesienie-http`.
 
+### D-086 — Podpisy: tylko podstawowy test pliku, resztę sprawdza pracownik (Łukasz, po raporcie Fazy 5)
+
+- Data: 2026-11-01
+- Obszar: podpisy / portal / tryb testowy
+- Decyzja:
+  1. Po wgraniu system sprawdza **tylko**: czy plik ma podpis elektroniczny (PAdES, XAdES, CAdES — skan,
+     zdjęcie, niepodpisany PDF → odrzucenie) oraz **porównanie z oryginałem** (pierwsza wersja = dokument
+     wystawiony przez kancelarię; na pewno inny → odrzucenie; nie da się porównać → bez blokady).
+  2. **Bez usługi DSS** i bez automatycznego sprawdzania osoby podpisującej (PESEL) — ważność podpisu,
+     osobę i formę sprawdza **pracownik** („Do zrobienia → podpisy”), wskazując formę przy potwierdzeniu.
+  3. Atrapa trybu testowego: „plik podpisany” (domyślnie), „brak podpisu”, „plik różny od oryginału”,
+     „sprawdź plik jak na produkcji”.
+  Zastępuje D-075 w części walidacji (W3.3, W3.5, W3.7 — do pracownika).
+- Skutek w kodzie: `server/logika/walidacja-podpisu.js` (uproszczony), `server/trasy/{portal,wnioski}.js`,
+  `server/przeniesienia.js`, `server/konfiguracja.js` (bez `DSS_URL`), `server/tryb-testowy/index.js`,
+  `publiczne/js/{wniosek,wnioski,pulpit}.js`, `testy/podpisy.test.js`, `.env.przyklad`. Bez migracji
+  (stara wartość atrapy w bazie testowej → „plik podpisany”).
+
 ---
 
 ## Decyzje otwarte

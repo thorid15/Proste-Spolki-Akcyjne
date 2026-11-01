@@ -1120,32 +1120,17 @@ function przyjmijPodpisany(zad, odp, dalej) {
   });
 }
 
-/** Osoba, ktora ma podpisac dokument (W3.5) — albo null, gdy podpisuje kilka osob. */
-function oczekiwanyPodpisujacy(wniosek, dokument) {
-  if (dokument.typ === dokumentyWniosku.TYPY.UMOWA_REJESTRU) {
-    const czesci = String(wniosek.reprezentant_imie_nazwisko || '').trim().split(/\s+/).filter(Boolean);
-    if (czesci.length === 0) return null;
-    return { imie: czesci.slice(0, -1).join(' ') || null, nazwisko: czesci[czesci.length - 1], pesel: wniosek.reprezentant_pesel || null };
-  }
-  if (dokument.akcjonariusz_id) {
-    const a = db().prepare('SELECT imie, nazwisko, pesel FROM psa_wnioski_akcjonariusze WHERE id = ?').get(dokument.akcjonariusz_id);
-    if (a && (a.nazwisko || a.pesel)) return a;
-  }
-  return null;
-}
-
 /**
- * Walidacja podpisu po wgraniu (W2.4, W3.3-W3.5). Odrzucony plik nie zostaje
- * na dysku — klient dostaje komunikat zrozumialy dla laika. Wynik „poprawny”
- * albo „do weryfikacji” zapisuje sie przy dokumencie i trafia do „Do zrobienia”
- * kancelarii; checklisty nie zaznacza (D-052).
+ * Podstawowy test po wgraniu (W2.4, D-086): czy plik ma podpis elektroniczny
+ * i czy pierwsza wersja to dokument wystawiony przez kancelarie (W3.4).
+ * Odrzucony plik nie zostaje na dysku — klient dostaje komunikat zrozumialy
+ * dla laika. Plik z podpisem trafia do „Do zrobienia” — reszte sprawdza
+ * pracownik; checklisty nie zaznacza (D-052).
  */
 async function walidujPodpisany(wniosek, dokument, plik) {
   const wynik = await walidacjaPodpisu.waliduj({
     plik: fs.readFileSync(plik.path),
-    nazwa: plik.originalname,
     oryginal: { sha256: dokument.oryginal_sha256, dlugosc: dokument.oryginal_dlugosc },
-    oczekiwany: oczekiwanyPodpisujacy(wniosek, dokument),
     atrapa: () => trybTestowy.wynikWalidatora(db()),
   });
   if (wynik.wynik === walidacjaPodpisu.WYNIKI.ODRZUCONY) {

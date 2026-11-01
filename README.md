@@ -49,7 +49,7 @@ TypeScriptu, bez Tailwinda, bez bibliotek PDF.
 
 ---
 
-## Podpisy dokumentów — D-075, D-076
+## Podpisy dokumentów — D-075, D-076, D-086
 
 Polityka (`server/logika/formy-podpisu.js`, tabela § 2 wytycznych): **skanów nie przyjmujemy**; podpis
 kwalifikowany (mObywatel), zaufany, osobisty albo oryginał pocztą (zgoda na wpis — wyłącznie
@@ -61,26 +61,15 @@ zd. 2 KSH obowiązuje już teraz (D-076).
 - **Portal — „Podpisz dokument”:** Pobierz → Podpisz w mObywatelu (`PODPIS_MOBYWATEL_URL`, nowa
   karta) → Wgraj podpisany dokument; instrukcja dosłownie z § 3; „Wolę wysłać podpisany oryginał
   pocztą”.
-- **Walidacja po wgraniu** (`server/logika/walidacja-podpisu.js`): obraz / PDF bez podpisu → odrzucenie
-  z komunikatem dla laika; początek pliku ≠ oryginał → odrzucenie („plik zmieniono po pobraniu”);
-  usługa DSS → typ podpisu i podpisujący (PESEL z `PNOPL-…`); wszystko niepewne (brak DSS, awaria,
-  ostrzeżenie, podpis niekwalifikowany — w tym PZ/PO, brak PESEL) → **do weryfikacji ręcznej**.
-  Nigdy automatycznej akceptacji bez udanej walidacji. Wynik trafia do „Do zrobienia”; formę
-  i potwierdzenie zaznacza pracownik (D-052).
+- **Test po wgraniu — tylko podstawowy (D-086)** (`server/logika/walidacja-podpisu.js`): plik bez podpisu
+  elektronicznego (skan, zdjęcie, niepodpisany PDF) → odrzucenie z komunikatem dla laika; pierwsza wersja
+  pliku ≠ dokument wystawiony przez kancelarię → odrzucenie („plik zmieniono po pobraniu”). Każdy inny
+  plik → „Do zrobienia → podpisy”: **ważność podpisu, osobę podpisującą i formę sprawdza pracownik**
+  (D-052). Bez usług zewnętrznych, bez automatycznej akceptacji.
 - **Umowa o prowadzenie rejestru:** spółka podpisuje pierwsza; podpis notariusza (QES) można wgrać
   dopiero po potwierdzeniu ważnego podpisu spółki. Checklista otwarcia: „reprezentacja wg KRS”.
 - **Wpis bez ważnej zgody** — „Dokonaj wpisu” zablokowane do wysłania powiadomienia
   (art. 300³⁴ § 3 zd. 1 KSH), z przyczyną obok przycisku.
-
-**Usługa DSS** (biblioteka Komisji Europejskiej) działa jako **osobny proces** — Node nie dostaje żadnej
-biblioteki kryptograficznej ani PDF. Bez `DSS_URL` każdy podpis idzie do weryfikacji ręcznej.
-Uruchomienie do testów (nie instalujemy jej na produkcji w tej sesji):
-1. Pobierz gotową aplikację demonstracyjną DSS (*DSS demonstration webapp / bundle*) ze strony projektu
-   DSS Komisji Europejskiej (Digital Building Blocks) — wymaga Javy w wersji podanej w jej dokumentacji.
-2. Uruchom ją lokalnie (domyślnie Tomcat na porcie 8080) i sprawdź w jej dokumentacji ścieżkę REST
-   walidacji — adapter woła `POST {DSS_URL}/services/rest/validation/validateSignature`
-   (JSON: `signedDocument.bytes` w base64); przy innej ścieżce popraw `zapytajDss()`.
-3. W `.env`: `DSS_URL=http://localhost:8080` (adres bez ścieżki), opcjonalnie `DSS_LIMIT_MS=30000`.
 
 Próbki prawdziwych podpisów do testu: `testy/fixtures/podpisy/` (README w katalogu; pliki w `.gitignore`).
 
@@ -121,8 +110,8 @@ w skrzynce testowej albo `npm run test:link -- beta.zarzad@example.com`).
 npm run scenariusz:testowy
 ```
 
-Odtwarza bazę testową (`test:seed`), uruchamia serwer w tym samym procesie i sprawdza 5 scenariuszy (37 kontroli):
-podpisy z każdym wynikiem atrapy walidatora, wpis bez zgody → list do wysyłki, zgody akcjonariusza, przeniesienie
+Odtwarza bazę testową (`test:seed`), uruchamia serwer w tym samym procesie i sprawdza 5 scenariuszy (34 kontrole):
+podpisy (test pliku i atrapa, D-086), wpis bez zgody → list do wysyłki, zgody akcjonariusza, przeniesienie
 rejestru do „Aktywny”, informacja z rejestru w wersji dla spółki i akcjonariusza na dacie 2027-02-20. Kod wyjścia 1
 przy błędzie. Pierwotny `npm run scenariusz -- --haslo …` działa też na serwerze w trybie testowym (link aktywacyjny
 ze skrzynki testowej). Testy ręczne dla notariusza: `WYTYCZNE-STATUS.md`, sekcja R4.

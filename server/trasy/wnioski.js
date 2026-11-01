@@ -387,19 +387,13 @@ router.post(
     }
     if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
 
-    const czesci = String(konfiguracja.KANCELARIA.notariusz_mianownik || '').trim().split(/\s+/);
+    // D-086: test „czy plik jest podpisany” + porównanie z oryginałem; resztę sprawdza pracownik.
     const wynik = await walidacjaPodpisu.waliduj({
       plik: zad.file.buffer,
-      nazwa: zad.file.originalname,
       oryginal: { sha256: dokument.oryginal_sha256, dlugosc: dokument.oryginal_dlugosc },
-      oczekiwany: czesci.length > 1 ? { imie: czesci.slice(0, -1).join(' '), nazwisko: czesci[czesci.length - 1] } : null,
       atrapa: () => trybTestowy.wynikWalidatora(db()),
     });
     if (wynik.wynik === walidacjaPodpisu.WYNIKI.ODRZUCONY) throw bledneZadanie(wynik.komunikat, { walidacja: wynik });
-    if (wynik.typ && !formyPodpisu.ocenForme(formyPodpisu.DOKUMENTY.UMOWA_REJESTRU, wynik.typ, { notariusz: true }).dopuszczalna
-        && wynik.typ !== 'niekwalifikowany') {
-      throw bledneZadanie('Notariusz podpisuje umowę podpisem kwalifikowanym (QES).');
-    }
 
     const katalog = path.join(konfiguracja.KATALOG_DOKUMENTOW, `wniosek_${wniosek.id}`, 'dokumenty', 'notariusz');
     fs.mkdirSync(katalog, { recursive: true });

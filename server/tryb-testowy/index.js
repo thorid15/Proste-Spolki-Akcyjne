@@ -40,15 +40,12 @@ const KONTA_TESTOWE = [
   { aplikacja: 'portal', email: 'gamma.zarzad@example.com', opis: 'Wnioskodawca — dokumenty do podpisu (Gamma Zgłoszeniowa)' },
 ];
 
-/** Wyniki atrapy walidatora podpisu (T5) — podpinane w Fazie 2. */
+/** Wyniki atrapy podstawowego testu podpisu (T5, D-086). */
 const WYNIKI_WALIDATORA = {
-  qes_poprawny: 'QES poprawny',
-  pz: 'Podpis zaufany (PZ)',
-  po: 'Podpis osobisty (PO)',
-  zaawansowany: 'Podpis zaawansowany (niekwalifikowany)',
-  brak_podpisu: 'Brak podpisu (np. skan)',
-  plik_zmieniony: 'Plik zmieniony po pobraniu',
-  inna_osoba: 'Podpis innej osoby',
+  podpisany: 'Każdy plik jako podpisany (do weryfikacji przez pracownika)',
+  brak_podpisu: 'Każdy plik jako niepodpisany (np. skan) — odrzucenie',
+  zmieniony: 'Każdy plik jako różny od oryginału — odrzucenie',
+  plik: 'Sprawdź plik jak na produkcji (czy ma podpis elektroniczny)',
 };
 
 class BladTrybuTestowego extends Error {
@@ -150,7 +147,7 @@ function ustawWynikWalidatora(db, wynik) {
 /** Wynik atrapy walidatora (T5) — dla adaptera walidacji z Fazy 2. */
 function wynikWalidatora(db) {
   const w = db.prepare('SELECT walidator_wynik FROM psa_baza_testowa WHERE id = 1').get();
-  return w ? w.walidator_wynik : 'qes_poprawny';
+  return w && WYNIKI_WALIDATORA[w.walidator_wynik] ? w.walidator_wynik : 'podpisany';
 }
 
 /**

@@ -283,13 +283,8 @@ async function zatwierdz(db, id, { bufor, nazwa, atrapa }) {
   const p = wczytaj(db, id);
   if (!p) throw new BladPrzeniesienia('Nie odnaleziono przeniesienia.');
   if (!p.protokol_sha256) throw new BladPrzeniesienia('Najpierw wygeneruj protokół przejęcia (PDF), który podpisze notariusz.');
-  const czesci = String(ustawienia.kancelaria(db).notariusz_mianownik || '').trim().split(/\s+/);
-  const wynik = await walidacjaPodpisu.waliduj({
-    plik: bufor, nazwa,
-    oryginal: { sha256: p.protokol_sha256, dlugosc: p.protokol_dlugosc },
-    oczekiwany: czesci.length > 1 ? { imie: czesci.slice(0, -1).join(' '), nazwisko: czesci[czesci.length - 1] } : null,
-    atrapa,
-  });
+  // D-086: test „czy plik jest podpisany” + porównanie z protokołem; resztę sprawdza pracownik.
+  const wynik = await walidacjaPodpisu.waliduj({ plik: bufor, oryginal: { sha256: p.protokol_sha256, dlugosc: p.protokol_dlugosc }, atrapa });
   if (wynik.wynik === walidacjaPodpisu.WYNIKI.ODRZUCONY) throw new BladPrzeniesienia(wynik.komunikat, { walidacja: wynik });
   fs.mkdirSync(katalog(id), { recursive: true });
   const pelna = path.join(katalog(id), `protokol-podpisany-${crypto.randomUUID()}.pdf`);

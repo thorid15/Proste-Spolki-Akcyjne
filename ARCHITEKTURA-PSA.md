@@ -114,7 +114,7 @@ planu — dziś martwe, nieużywane przez bieżący kod. Patrz też `DECYZJE.md`
 | Plik | Opis |
 |---|---|
 | `scenariusz-e2e.js` | Skrypt E2E przechodzący całą ścieżkę od zgłoszenia klienta po pierwsze zawiadomienie, przez realne trasy HTTP z dwoma osobnymi sesjami (portal + kancelaria). `--tryb-testowy` → `scenariusz-e2e-testowy.js` (sekcja 9). |
-| `scenariusz-e2e-testowy.js` | Tryb testowy: `test:seed`, serwer w procesie, konta testowe, skrzynka testowa, atrapy; 5 scenariuszy, 37 kontroli (`npm run scenariusz:testowy`). |
+| `scenariusz-e2e-testowy.js` | Tryb testowy: `test:seed`, serwer w procesie, konta testowe, skrzynka testowa, atrapy; 5 scenariuszy, 34 kontrole (`npm run scenariusz:testowy`). |
 | `test-seed.js` | `npm run test:seed` — baza testowa z danymi fikcyjnymi przez zwykłe API (D-074). |
 | `dokumentacja-baza.js` | Generuje `testy-audyt/schemat-bazy.txt` z realnego schematu bazy (część `npm run dokumentacja`). |
 | `dokumentacja-endpointy.js` | Generuje `testy-audyt/endpointy-api.md` przez introspekcję żywych routerów Express (część `npm run dokumentacja`). |
@@ -534,7 +534,7 @@ Raport i status pozycji: `WYTYCZNE-STATUS.md`. Poniżej tylko to, co zmienia map
 | `server/tryb-testowy/{index,trasy,skrzynka,krs-atrapa}.js`, `klient/pasek.js` | Tryb testowy (D-074): oznaczenie bazy, odmowa startu w produkcji, panel `/test` (data symulowana, atrapa walidatora, atrapa tpay z ITN), skrzynka `.eml`, pasek na każdym ekranie. Poza trybem `/test/*` → 404. |
 | `server/pomocnicze/czas.js` | `teraz()` z przesunięciem — jedyne źródło „dziś” (także bramki 18.02.2027). |
 | `server/logika/formy-podpisu.js` | Tabela § 2: formy podpisu per typ dokumentu, formy zgody na wpis (art. 300(34) § 3 zd. 2 KSH). |
-| `server/logika/walidacja-podpisu.js` | Format, `/ByteRange`, oryginał (skrót prefiksu PAdES / dokument XAdES), PESEL z PNOPL, adapter REST DSS; bez DSS nigdy automatycznej akceptacji. |
+| `server/logika/walidacja-podpisu.js` | Podstawowy test po wgraniu (D-086): czy plik ma podpis (PAdES `/ByteRange`, XAdES, CAdES) i porównanie z oryginałem (skrót prefiksu PAdES / dokument XAdES); resztę sprawdza pracownik. |
 | `server/listy.js`, `server/trasy/listy.js` | Kolejka listów do osób bez zgody na e-mail (D-081): adres z rejestru, druk, nadanie (data, numer, skan). |
 | `server/informacje.js`, `server/trasy/informacje.js` | Numer `INF/RRRR/NNNN`, wynagrodzenie z VAT, dziennik informacji, informacja dla organu (bez opłaty). |
 | `server/eksport.js` | Eksport ZIP całego rejestru z dokumentami (D-080). |
@@ -543,15 +543,15 @@ Raport i status pozycji: `WYTYCZNE-STATUS.md`. Poniżej tylko to, co zmienia map
 
 ### Tabele (migracje 61–65)
 
-61 `psa_baza_testowa`, dziennik logowań testowych · 62–63 oryginał dokumentu (ID, SHA-256, długość), wynik walidacji,
+61 `psa_baza_testowa`, dziennik logowań testowych · 62–63 oryginał dokumentu (ID, SHA-256, długość), wynik testu pliku,
 forma, podpis notariusza, „oryginał pocztą” · 64 `psa_oswiadczenia`, `psa_listy`, `psa_stawki_wersje`, numer informacji
 · 65 `psa_przeniesienia` (+ historia, dokumenty, archiwum — append-only), szablony pism `przeniesienie_*`, zdarzenie `przejecie`.
 
 ### Przepływy
 
 - **Podpis dokumentu wniosku:** wystawienie (ID, SHA-256) → portal: pobierz → mObywatel → wgraj → `walidacja-podpisu`
-  (w trybie testowym — atrapa) → odrzucony: 400 z komunikatem dla klienta; poprawny / do weryfikacji: „Do zrobienia →
-  podpisy” → potwierdza człowiek (D-052) → podpis notariusza po podpisie spółki.
+  (czy podpisany, czy = oryginał; w trybie testowym — atrapa) → odrzucony: 400 z komunikatem dla klienta; inaczej
+  „Do zrobienia → podpisy” → pracownik sprawdza podpis i wskazuje formę (D-052, D-086) → podpis notariusza po podpisie spółki.
 - **Wpis bez zgody:** `blokadaWpisu()` → powiadomienie: e-mail przy zgodzie potwierdzonej, inaczej `psa_listy` →
   nadanie listu ustawia `powiadomienie_wyslano` → wpis dozwolony.
 - **Przeniesienie:** zgłoszenie (wariant) → wniosek (klauzula § 7.4) → przyjęcie wniosku wiąże spółkę →
@@ -561,7 +561,7 @@ forma, podpis notariusza, „oryginał pocztą” · 64 `psa_oswiadczenia`, `psa
 ### Niezmienniki dopisane
 
 - E-mail do akcjonariusza tylko przy `zgoda_email_status = 'potwierdzona'`; portal akcjonariusza tylko z tą zgodą (D-083).
-- Brak automatycznej akceptacji podpisu bez DSS; skan nigdy nie jest podpisem.
+- Brak automatycznej akceptacji podpisu — po teście pliku zawsze pracownik (D-086); skan nigdy nie jest podpisem.
 - Formularz publiczny nie ujawnia, czy kancelaria prowadzi rejestr spółki (D-079).
 - Tryb testowy nigdy na produkcji ani na bazie nieoznaczonej; w trybie testowym żaden e-mail nie wychodzi.
 - Stawki stałe do zmiany przez notariusza; wersje stawek to ślad, nie podstawa rozliczeń (D-085).

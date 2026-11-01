@@ -1,69 +1,22 @@
 'use strict';
 
 /**
- * Faza 2 (D-075, D-076): formy podpisu w jednym miejscu i walidacja podpisu.
- * Usługa DSS zastąpiona lokalną atrapą HTTP (kształt odpowiedzi REST DSS).
+ * Formy podpisu (D-075, D-076) i podstawowy test pliku po wgraniu (D-086):
+ * system sprawdza tylko, czy plik JEST podpisany — resztę sprawdza pracownik.
  */
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
 
-const konfiguracja = require('../server/konfiguracja');
 const formy = require('../server/logika/formy-podpisu');
 const walidacja = require('../server/logika/walidacja-podpisu');
 
 const ORYGINAL = Buffer.from('%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n');
 const SLOWNIK_PODPISU = '\n9 0 obj << /Type /Sig /SubFilter /ETSI.CAdES.detached /ByteRange [0 1 2 3] /Contents <00> >> endobj\n%%EOF\n';
 const PODPISANY = Buffer.concat([ORYGINAL, Buffer.from(SLOWNIK_PODPISU)]);
-const odcisk = { sha256: crypto.createHash('sha256').update(ORYGINAL).digest('hex'), dlugosc: ORYGINAL.length };
-const ANNA = { imie: 'Anna', nazwisko: 'Testowa', pesel: '85031502488' };
-
-/** Raport DSS w kształcie `validateSignature` (simpleReport + diagnosticData). */
-function raportDss({ wskazanie = 'TOTAL_PASSED', poziom = 'QESig', pesel = ANNA.pesel, nazwisko = 'TESTOWA' } = {}) {
-  return {
-    simpleReport: {
-      signatureOrTimestampOrEvidenceRecord: [{
-        Signature: { Id: 'S-1', Indication: wskazanie, SignatureLevel: { value: poziom }, SignedBy: `ANNA ${nazwisko}`, SignatureFormat: 'PAdES-BASELINE-B' },
-      }],
-    },
-    diagnosticData: {
-      Signature: [{ Id: 'S-1', SigningCertificate: { Certificate: 'C-1' } }],
-      UsedCertificate: [{
-        Id: 'C-1',
-        SubjectDistinguishedName: [{ Format: 'RFC2253', value: `SERIALNUMBER=PNOPL-${pesel},GIVENNAME=ANNA,SURNAME=${nazwisko},CN=ANNA ${nazwisko},C=PL` }],
-      }],
-    },
-  };
-}
-
-let serwerDss;
-let odpowiedzDss = raportDss();
-test.before(async () => {
-  serwerDss = http.createServer((zad, odp) => {
-    let c = '';
-    zad.on('data', (x) => { c += x; });
-    zad.on('end', () => {
-      if (zad.url !== '/services/rest/validation/validateSignature') { odp.writeHead(404); return odp.end(); }
-      if (odpowiedzDss === 500) { odp.writeHead(500); return odp.end(); }
-      odp.writeHead(200, { 'Content-Type': 'application/json' });
-      odp.end(JSON.stringify(odpowiedzDss));
-    });
-  }).listen(0);
-  await new Promise((r) => serwerDss.once('listening', r));
-});
-test.after(() => serwerDss.close());
-
-function zDss(fn) {
-  return async () => {
-    const przed = konfiguracja.PODPIS.dss_url;
-    konfiguracja.PODPIS.dss_url = `http://127.0.0.1:${serwerDss.address().port}`;
-    try { await fn(); } finally { konfiguracja.PODPIS.dss_url = przed; odpowiedzDss = raportDss(); }
-  };
-}
+const odcisk = { sha256: require('node:crypto').createHash('sha256').update(ORYGINAL).digest('hex'), dlugosc: ORYGINAL.length };
 
 test('W2.1/W2.2: formy z tabeli § 2 — skan nigdy, zgoda na wpis bez zwykłego oryginału', () => {
   for (const typ of Object.values(formy.DOKUMENTY)) {
@@ -79,80 +32,62 @@ test('W2.1/W2.2: formy z tabeli § 2 — skan nigdy, zgoda na wpis bez zwykłego
   assert.equal(formy.ocenForme(formy.DOKUMENTY.UMOWA_REJESTRU, 'pz', { notariusz: true }).dopuszczalna, false, 'notariusz: tylko QES');
 });
 
-test('W2.4: obraz (skan) i PDF bez podpisu — odrzucone z komunikatem dla laika', async () => {
-  const jpg = await walidacja.waliduj({ plik: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 1]), oryginal: odcisk });
-  assert.equal(jpg.wynik, 'odrzucony');
-  assert.match(jpg.komunikat, /skan/);
-  const pdf = await walidacja.waliduj({ plik: ORYGINAL, oryginal: odcisk });
-  assert.equal(pdf.wynik, 'odrzucony');
-  assert.equal(pdf.typ, 'brak');
+test('W2.4: skan (JPG/PNG), PDF bez podpisu, zwykły XML i inny plik — odrzucone z komunikatem dla laika', async () => {
+  const pliki = [
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 1]),
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    ORYGINAL,
+    Buffer.from('<?xml version="1.0"?><dokument>bez podpisu</dokument>'),
+    Buffer.from('zwykły tekst'),
+  ];
+  for (const plik of pliki) {
+    const w = await walidacja.waliduj({ plik });
+    assert.equal(w.wynik, 'odrzucony');
+    assert.match(w.komunikat, /Skanu nie przyjmujemy/);
+  }
 });
 
-test('W3.4: plik zmieniony po pobraniu (inny początek) — odrzucony; XAdES z osadzonym oryginałem porównywany', async () => {
+test('D-086: plik podpisany (PAdES, XAdES, CAdES) → do weryfikacji przez pracownika, bez dalszych kontroli', async () => {
+  const xades = Buffer.from('<?xml version="1.0"?><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo/></ds:Signature>');
+  const cades = Buffer.concat([Buffer.from([0x30, 0x80]), Buffer.from([0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02]), Buffer.alloc(16)]);
+  for (const [plik, typ] of [[PODPISANY, 'pades'], [xades, 'xades'], [cades, 'cades']]) {
+    const w = await walidacja.waliduj({ plik });
+    assert.equal(w.wynik, 'do_weryfikacji', typ);
+    assert.equal(w.typ, typ);
+  }
+});
+
+test('W3.4: porównanie z oryginałem — zgodny przechodzi, zmieniony odrzucony, bez skrótu bez blokady', async () => {
+  assert.equal((await walidacja.waliduj({ plik: PODPISANY, oryginal: odcisk })).wynik, 'do_weryfikacji');
   const zmieniony = Buffer.concat([Buffer.from('%PDF-1.7\n2'), PODPISANY.slice(10)]);
   const w = await walidacja.waliduj({ plik: zmieniony, oryginal: odcisk });
   assert.equal(w.wynik, 'odrzucony');
   assert.match(w.komunikat, /różni się od dokumentu pobranego/);
+  assert.equal((await walidacja.waliduj({ plik: zmieniony })).wynik, 'do_weryfikacji', 'brak skrótu oryginału — sprawdza pracownik');
   const xades = Buffer.from(`<?xml version="1.0"?><ds:Signature xmlns:ds="x"><ds:Object>${ORYGINAL.toString('base64')}</ds:Object></ds:Signature>`);
   assert.equal(walidacja.sprawdzOryginal(xades, 'xades', odcisk).zgodny, true);
   const xadesInny = Buffer.from(`<ds:Signature><ds:Object>${Buffer.from('inny').toString('base64')}AAAA</ds:Object></ds:Signature>`);
   assert.equal(walidacja.sprawdzOryginal(xadesInny, 'xades', odcisk).zgodny, false);
 });
 
-test('bez usługi DSS — zawsze weryfikacja ręczna, nigdy automatyczna akceptacja', async () => {
-  const w = await walidacja.waliduj({ plik: PODPISANY, oryginal: odcisk, oczekiwany: ANNA });
-  assert.equal(w.wynik, 'do_weryfikacji');
-});
-
-test('W3.3/W3.5: DSS — QES TOTAL_PASSED, oryginał i PESEL zgodne → poprawny', zDss(async () => {
-  const w = await walidacja.waliduj({ plik: PODPISANY, oryginal: odcisk, oczekiwany: ANNA });
-  assert.equal(w.wynik, 'poprawny');
-  assert.equal(w.typ, 'qes');
-  assert.equal(w.podpisujacy.pesel, ANNA.pesel);
-}));
-
-test('W3.5: inny PESEL w certyfikacie → odrzucony; brak PESEL osoby → weryfikacja ręczna', zDss(async () => {
-  odpowiedzDss = raportDss({ pesel: '90010112345' });
-  assert.equal((await walidacja.waliduj({ plik: PODPISANY, oryginal: odcisk, oczekiwany: ANNA })).wynik, 'odrzucony');
-  odpowiedzDss = raportDss();
-  assert.equal((await walidacja.waliduj({ plik: PODPISANY, oryginal: odcisk, oczekiwany: { ...ANNA, pesel: null } })).wynik, 'do_weryfikacji');
-}));
-
-test('PZ/PO (poziom niekwalifikowany) nie są odrzucane jako zaawansowane; INDETERMINATE i awaria DSS → ręcznie', zDss(async () => {
-  odpowiedzDss = raportDss({ poziom: 'AdESig' });
-  const nk = await walidacja.waliduj({ plik: PODPISANY, oryginal: odcisk, oczekiwany: ANNA });
-  assert.equal(nk.wynik, 'do_weryfikacji');
-  odpowiedzDss = raportDss({ wskazanie: 'INDETERMINATE' });
-  assert.equal((await walidacja.waliduj({ plik: PODPISANY, oryginal: odcisk, oczekiwany: ANNA })).wynik, 'do_weryfikacji');
-  odpowiedzDss = raportDss({ wskazanie: 'TOTAL_FAILED' });
-  assert.equal((await walidacja.waliduj({ plik: PODPISANY, oryginal: odcisk, oczekiwany: ANNA })).wynik, 'odrzucony');
-  odpowiedzDss = 500;
-  assert.equal((await walidacja.waliduj({ plik: PODPISANY, oryginal: odcisk, oczekiwany: ANNA })).wynik, 'do_weryfikacji');
-}));
-
-test('próbki prawdziwych podpisów (testy/fixtures/podpisy) — parametryzowane po plikach', async (t) => {
+test('próbki prawdziwych podpisów (testy/fixtures/podpisy, tylko lokalnie) — rozpoznane jako podpisane', async (t) => {
   const katalog = path.join(__dirname, 'fixtures', 'podpisy');
-  const probki = fs.existsSync(katalog) ? fs.readdirSync(katalog).filter((n) => /__(qes|pz|po)\.(pdf|xml)$/.test(n)) : [];
+  const probki = fs.existsSync(katalog) ? fs.readdirSync(katalog).filter((n) => /__(qes|pz|po)\.(pdf|xml|xades|p7s|sig)$/.test(n)) : [];
   if (probki.length === 0) {
-    t.skip('Brak próbek w testy/fixtures/podpisy — Łukasz dostarczy 4 dostawców mObywatela, PZ i PO (README w katalogu).');
+    t.skip('Brak próbek w testy/fixtures/podpisy (pliki z danymi osobowymi trzymamy tylko lokalnie).');
     return;
   }
   for (const nazwa of probki) {
     await t.test(nazwa, async () => {
       const plik = fs.readFileSync(path.join(katalog, nazwa));
-      const [dostawca] = nazwa.split('__');
-      const plikOryginalu = path.join(katalog, `${dostawca}__oryginal.pdf`);
-      const oryginal = fs.existsSync(plikOryginalu)
-        ? (() => { const o = fs.readFileSync(plikOryginalu); return { sha256: crypto.createHash('sha256').update(o).digest('hex'), dlugosc: o.length }; })()
-        : null;
-      const w = await walidacja.waliduj({ plik, nazwa, oryginal });
-      assert.notEqual(w.typ, 'brak', 'podpis rozpoznany');
-      assert.ok(walidacja.pdfMaPodpis(plik) || walidacja.format(plik) === 'xades', 'słownik podpisu w pliku');
-      if (oryginal) {
-        assert.ok(!/różni się/.test(w.komunikat || ''), `${dostawca}: pierwsza rewizja = oryginał`);
-        // Kontrola negatywna: inny oryginał (np. dokument zmieniony przed podpisem) → odrzucenie.
-        const inny = await walidacja.waliduj({ plik, nazwa, oryginal: { ...oryginal, sha256: '0'.repeat(64) } });
-        assert.equal(inny.wynik, 'odrzucony', `${dostawca}: zmieniony dokument odrzucony`);
+      assert.equal((await walidacja.waliduj({ plik })).wynik, 'do_weryfikacji');
+      const sciezkaOryginalu = path.join(katalog, `${nazwa.split('__')[0]}__oryginal.pdf`);
+      if (fs.existsSync(sciezkaOryginalu)) {
+        const o = fs.readFileSync(sciezkaOryginalu);
+        assert.equal((await walidacja.waliduj({ plik: o })).wynik, 'odrzucony', 'oryginał bez podpisu');
+        const odc = { sha256: require('node:crypto').createHash('sha256').update(o).digest('hex'), dlugosc: o.length };
+        assert.equal(walidacja.sprawdzOryginal(plik, 'pdf', odc).zgodny, true, 'pierwsza wersja = oryginał');
+        assert.equal((await walidacja.waliduj({ plik, oryginal: { ...odc, sha256: '0'.repeat(64) } })).wynik, 'odrzucony', 'inny oryginał');
       }
     });
   }

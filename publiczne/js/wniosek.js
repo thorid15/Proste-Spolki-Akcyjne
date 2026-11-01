@@ -185,12 +185,7 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie, mobywatelUrl }) {
       )}
 
       {podpisany && walidacja && (
-        <Komunikat
-          odmiana={walidacja.wynik === 'poprawny' ? 'ok' : 'info'}
-          tresc={walidacja.wynik === 'poprawny'
-            ? 'Podpis kwalifikowany zweryfikowany automatycznie. Kancelaria potwierdzi dokument.'
-            : 'Plik przyjęty. Kancelaria sprawdzi podpis — jeśli będzie potrzebna poprawka, damy znać.'}
-        />
+        <Komunikat odmiana="info" tresc="Plik przyjęty. Kancelaria sprawdzi podpis — jeśli będzie potrzebna poprawka, damy znać." />
       )}
       {edytowalne && !podpisany && umowa && (
         <div className="podpowiedz">

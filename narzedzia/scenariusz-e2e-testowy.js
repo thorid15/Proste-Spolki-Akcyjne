@@ -10,7 +10,7 @@
  *    wiadomości ze skrzynki testowej (nic nie wychodzi na zewnątrz).
  * 3. Scenariusze (każdy kończy się kontrolami ✓/✗):
  *    A. zgłoszenie przeniesienia → zaproszenie ze skrzynki → wniosek → podpisy
- *       z KAŻDYM wynikiem atrapy walidatora → przyjęcie wniosku,
+ *       (podstawowy test pliku i atrapa — D-086) → przyjęcie wniosku,
  *    B. wpis zbycia bez zgody zbywcy → list do wysyłki → nadanie odblokowuje wpis,
  *    C. zgody akcjonariusza (oświadczenia w portalu, blokada portalu bez zgody),
  *    D. przeniesienie rejestru do statusu „Aktywny” (PRZEJĘCIE na początku łańcucha),
@@ -106,7 +106,7 @@ async function zaplacAtrapa(s, zamowienie) {
 // ─────────────────────────────────────────────────────────────
 
 async function scenariuszA(k) {
-  sekcja('A. Zgłoszenie przeniesienia → wniosek → podpisy (atrapa walidatora)');
+  sekcja('A. Zgłoszenie przeniesienia → wniosek → podpisy (test pliku, D-086)');
   const { db } = require('../server/baza');
   const skrzynka = require('../server/tryb-testowy/skrzynka');
   const tryb = require('../server/tryb-testowy');
@@ -147,11 +147,8 @@ async function scenariuszA(k) {
 
   const dokumenty = udost.dokumenty || [];
   const pierwszy = dokumenty[0];
-  const OCZEKIWANE = {
-    qes_poprawny: 'poprawny', pz: 'do_weryfikacji', po: 'do_weryfikacji', zaawansowany: 'odrzucony',
-    brak_podpisu: 'odrzucony', plik_zmieniony: 'odrzucony', inna_osoba: 'odrzucony',
-  };
-  for (const wynik of Object.keys(tryb.WYNIKI_WALIDATORA)) {
+  const OCZEKIWANE = { podpisany: 'do_weryfikacji', brak_podpisu: 'odrzucony', zmieniony: 'odrzucony' };
+  for (const wynik of Object.keys(OCZEKIWANE)) {
     await ustawWalidator(wynik);
     const odp = await zapytaj(beta, 'POST', `/api/psa/portal/wniosek/dokumenty/${pierwszy.id}/podpis`,
       plik(`podpisany-${wynik}.pdf`), { oczekiwanyBlad: true });
@@ -161,7 +158,11 @@ async function scenariuszA(k) {
       `atrapa „${tryb.WYNIKI_WALIDATORA[wynik]}” → ${OCZEKIWANE[wynik]}${kod === 400 ? ' (plik nie przyjęty, komunikat dla klienta)' : ''}`,
       `HTTP ${odp.status}, wynik ${walidacja.wynik}`);
   }
-  await ustawWalidator('qes_poprawny');
+  // Test jak na produkcji (D-086): plik bez podpisu odrzucony; „podpisany” bez oryginału z portalu — też (inny dokument).
+  await ustawWalidator('plik');
+  const bezPodpisu = await zapytaj(beta, 'POST', `/api/psa/portal/wniosek/dokumenty/${pierwszy.id}/podpis`, plik('skan.pdf'), { oczekiwanyBlad: true });
+  sprawdz(bezPodpisu.status === 400 && /Skanu nie przyjmujemy/.test(JSON.stringify(bezPodpisu.dane)), 'test pliku: PDF bez podpisu odrzucony');
+  await ustawWalidator('podpisany');
   for (const d of dokumenty) await zapytaj(beta, 'POST', `/api/psa/portal/wniosek/dokumenty/${d.id}/podpis`, plik(`podpisany-${d.typ}.pdf`));
   await zapytaj(beta, 'POST', '/api/psa/portal/wniosek/odeslij');
 
@@ -169,7 +170,7 @@ async function scenariuszA(k) {
   for (const a of szczegoly.akcjonariusze) {
     await zapytaj(k, 'POST', `/api/psa/wnioski/${wniosekId}/akcjonariusze/${a.id}/zweryfikuj`, { zweryfikowano: true });
   }
-  for (const d of szczegoly.dokumenty) await zapytaj(k, 'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${d.id}/podpis-potwierdz`, {});
+  for (const d of szczegoly.dokumenty) await zapytaj(k, 'POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${d.id}/podpis-potwierdz`, { forma: 'qes' });
   const przyjecie = await zapytaj(k, 'POST', `/api/psa/wnioski/${wniosekId}/przyjmij`, {});
   const zdarzen = db().prepare('SELECT COUNT(*) AS n FROM psa_zdarzenia WHERE spolka_id = ?').get(przyjecie.spolka_id).n;
   sprawdz(Boolean(przyjecie.spolka_id) && zdarzen === 0, 'wniosek przyjęty — spółka założona, rejestru jeszcze nie otwarto (Etap 7)');
@@ -254,11 +255,11 @@ async function scenariuszD(k, { beta, spolkaId }) {
   });
   const pdf = Buffer.from(await protokol.arrayBuffer());
   sprawdz(protokol.ok && pdf.subarray(0, 4).toString() === '%PDF', 'protokół przejęcia (PDF) do podpisu notariusza');
-  await ustawWalidator('qes_poprawny');
+  await ustawWalidator('podpisany');
   const f = new FormData();
   f.append('plik', new Blob([pdf], { type: 'application/pdf' }), 'protokol-podpisany.pdf');
   const zatw = await zapytaj(k, 'POST', `/api/psa/przeniesienia/${p.id}/zatwierdzenie`, f);
-  sprawdz(Boolean(zatw.przeniesienie.zatwierdzono), 'protokół zatwierdzony podpisem kwalifikowanym (atrapa: QES poprawny)');
+  sprawdz(Boolean(zatw.przeniesienie.zatwierdzono), 'protokół przyjęty (atrapa: plik podpisany) — podpis sprawdza pracownik');
 
   const osoba = (await zapytaj(k, 'POST', '/api/psa/osoby', {
     typ: 'fizyczna', kraj: 'Polska', aml_status: 'wykonane', imie: 'Barbara', nazwisko: 'Betowska',

@@ -127,7 +127,7 @@ function zdarzenie(id, typ, data, dane) {
 /**
  * „Podpisany" plik dokumentu z kompletu wniosku (D-075): oryginał wystawiony
  * przez kancelarię + dopisany na końcu słownik podpisu (jak podpis
- * przyrostowy PAdES). Bez usługi DSS walidator daje „do weryfikacji ręcznej"
+ * przyrostowy PAdES). Walidator (D-086) daje „do weryfikacji” przez pracownika
  * — plik zostaje przyjęty. Prawdziwego podpisu tu nie ma.
  */
 function podpisanyPdf(db, dokumentId, dopisek = '') {

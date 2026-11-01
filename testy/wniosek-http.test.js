@@ -597,7 +597,7 @@ test('POST /api/psa/portal/wniosek/umowa-podpisana: odmawia przed udostepnieniem
   });
   assert.equal(odp.status, 201);
   const dane = await odp.json();
-  assert.equal(dane.walidacja.wynik, 'do_weryfikacji', 'bez usługi DSS — weryfikacja ręczna, nigdy automatyczna akceptacja');
+  assert.equal(dane.walidacja.wynik, 'do_weryfikacji', 'D-086: plik podpisany — sprawdza pracownik, nigdy automatyczna akceptacja');
   // Samo wgranie umowy nie stawia wniosku w kolejce kancelarii — robi to
   // dopiero odeslanie calego kompletu (`POST /wniosek/odeslij`).
   assert.equal(dane.wniosek.status, 'umowa_wygenerowana');

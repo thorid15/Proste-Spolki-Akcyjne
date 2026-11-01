@@ -396,7 +396,7 @@ async function main() {
   // Sam fakt odeslania skanu nie przesadza, ze podpis jest prawidlowy —
   // ktos musi na niego spojrzec. Bez tego przyjecie wniosku jest zablokowane.
   for (const d of szczegoly.dokumenty) {
-    await zapytaj(kancelaria, 'POST', `/api/psa/wnioski/${wniosek.id}/dokumenty/${d.id}/podpis-potwierdz`, {});
+    await zapytaj(kancelaria, 'POST', `/api/psa/wnioski/${wniosek.id}/dokumenty/${d.id}/podpis-potwierdz`, { forma: 'qes' });
   }
   info(`potwierdzono podpisy pod ${szczegoly.dokumenty.length} dokumentami`);
 

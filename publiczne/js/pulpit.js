@@ -86,11 +86,10 @@ function pozycjeDoZrobienia({ sprawy, zgloszenia, wnioski, zawiadomienia, podpis
       data: p.kiedy,
       ikona: 'dokument',
       tytul: p.nazwa,
-      podtytul: `${p.wniosek_nazwa || 'wniosek'} — ${p.walidacja_wynik === 'poprawny'
-        ? 'podpis kwalifikowany zweryfikowany, potwierdź'
-        : p.oryginal_poczta_zadeklarowano && !p.walidacja_wynik ? 'oryginał pocztą — odnotuj otrzymanie' : 'podpis do weryfikacji ręcznej'}`,
+      podtytul: `${p.wniosek_nazwa || 'wniosek'} — ${p.oryginal_poczta_zadeklarowano && !p.walidacja_wynik
+        ? 'oryginał pocztą — odnotuj otrzymanie' : 'sprawdź podpis i dokument'}`,
       przyKlik: () => idz(`/wnioski/${p.wniosek_id}`),
-      prawo: <Pigulka odmiana={p.walidacja_wynik === 'poprawny' ? 'rejestr' : 'sygnal'}>podpis</Pigulka>,
+      prawo: <Pigulka odmiana="sygnal">podpis</Pigulka>,
     });
   }
   for (const l of listy) {

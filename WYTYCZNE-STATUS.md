@@ -21,7 +21,7 @@ https://github.com/thorid15/Proste-Spolki-Akcyjne/pull/13 (do `claude/Main` — 
 K6 rozstrzygnięte po STOP Fazy 2 — D-079.
 
 **Następny krok:** przegląd raportu przez Łukasza, testy ręczne (R4), odpowiedzi R2, akceptacja szablonów (R3); merge PR #13.
-Po STOP Fazy 4 — D-085 (stałe stawki, obciążenia płatne, bez opłaty za przejęcie).
+Po STOP Fazy 4 — D-085 (stałe stawki, obciążenia płatne, bez opłaty za przejęcie). Po raporcie — D-086 (podpisy: test pliku + pracownik).
 
 Stan wejściowy testów: `npm test` — 534/534 zielone (przed zmianami).
 
@@ -29,17 +29,17 @@ Stan wejściowy testów: `npm test` — 534/534 zielone (przed zmianami).
 
 ## RAPORT KOŃCOWY (Faza 5, 1.11.2026)
 
-**Wynik: 46 pozycji wytycznych — WDROŻONE 23 · POPRAWIONE 19 · BYŁO 2 · CZĘŚCIOWO 2 · DO DECYZJI 0 · POMINIĘTE 0.**
+**Wynik: 46 pozycji wytycznych — WDROŻONE 23 · POPRAWIONE 19 · BYŁO 2 · CZĘŚCIOWO 0 · DO DECYZJI 0 · POMINIĘTE 2 (D-086).**
 Przed sesją (sekcja 1, policzone ponownie z tabel): JEST 3 · CZĘŚCIOWO 14 · BRAK 23 · SPRZECZNE 6 (podsumowanie
 Fazy 0 podawało 17/8 — błąd sumowania, tabele były poprawne).
 
-Weryfikacja: `npm test` **582/582** (wejście 534/534) · `npm run scenariusz:testowy` **37/37 kontroli**
+Weryfikacja: `npm test` **579/579** (wejście 534/534) · `npm run scenariusz:testowy` **34/34 kontroli**
 (5 scenariuszy, sekcja R4) · pierwotny `npm run scenariusz` przechodzi całą ścieżkę na serwerze testowym.
-Decyzje sesji: D-074–D-085 (`DECYZJE.md`). Migracje 61–65. Szczegóły „jak” — sekcje 3–6.
+Decyzje sesji: D-074–D-086 (`DECYZJE.md`); D-086 — podpisy: tylko podstawowy test pliku, resztę sprawdza pracownik. Migracje 61–65. Szczegóły „jak” — sekcje 3–6.
 
 ### R1. Pozycje wytycznych
 
-Wynik: **BYŁO** (zgodne, bez zmian) · **POPRAWIONE** (istniało, sprzeczne/niepełne — naprawione) · **WDROŻONE** (nowe) · **CZĘŚCIOWO**.
+Wynik: **BYŁO** (zgodne, bez zmian) · **POPRAWIONE** (istniało, sprzeczne/niepełne — naprawione) · **WDROŻONE** (nowe) · **POMINIĘTE** (decyzja Łukasza).
 
 | ID | Wymóg | Przed | Wynik | Jak |
 |---|---|---|---|---|
@@ -47,20 +47,20 @@ Wynik: **BYŁO** (zgodne, bez zmian) · **POPRAWIONE** (istniało, sprzeczne/nie
 | T2 | Logowanie bez poczty | BRAK | WDROŻONE | lista kont testowych na ekranach logowania (hasło testowe), dziennik logowań |
 | T3 | Baza testowa + atrapa KRS | BRAK | WDROŻONE | `npm run test:seed` przez zwykłe API, oznaczenie bazy, atrapa KRS |
 | T4 | Symulowana data | BRAK | WDROŻONE | `czas.teraz()` z przesunięciem, panel `/test`, blokada cofania przed ostatnie zdarzenie |
-| T5 | Atrapy walidatora i ITN tpay | CZĘŚCIOWO | WDROŻONE | 7 wyników walidatora, kasa tpay z ITN w aplikacji |
+| T5 | Atrapy walidatora i ITN tpay | CZĘŚCIOWO | WDROŻONE | atrapa testu pliku (podpisany / brak podpisu / różny od oryginału / jak na produkcji), kasa tpay z ITN |
 | T6 | Zabezpieczenia trybu testowego | BRAK | WDROŻONE | odmowa startu w produkcji / na bazie nieoznaczonej, `/test` → 404 poza trybem, pasek |
 | W2.1 | Formy podpisu per dokument, skan odrzucany | SPRZECZNE | POPRAWIONE | `logika/formy-podpisu.js` (tabela § 2), portal odrzuca skan (D-075) |
 | W2.2 | Zgoda na wpis tylko w formach z tabeli | SPRZECZNE | POPRAWIONE | kod formy z art. 300(34) § 3 zd. 2; skan → 400 |
 | W2.3 | Brak zgody → powiadomienie przed wpisem | BRAK | WDROŻONE | `blokadaWpisu()`; nadanie listu odblokowuje |
-| W2.4 | Automatyczna walidacja po wgraniu | BRAK | WDROŻONE | `logika/walidacja-podpisu.js` — format, ByteRange, PZ/PO → ręcznie |
+| W2.4 | Automatyczna walidacja po wgraniu | BRAK | WDROŻONE | D-086: tylko podstawowy test — czy plik ma podpis (PAdES/XAdES/CAdES); skan → odrzucenie |
 | W2.5 | Spółka pierwsza, notariusz ostatni; uchwała + reprezentacja | CZĘŚCIOWO | POPRAWIONE | podpis notariusza dopiero po podpisie spółki (D-078: przyjęcie wniosku bez niego) |
 | W3.1 | PDF < 5 MB, ID w stopce, SHA-256 | CZĘŚCIOWO | POPRAWIONE | ID na każdej stronie, skrót i długość oryginału, limit 5 MB |
 | W3.2 | Ekran „Podpisz dokument” + instrukcja | BRAK | WDROŻONE | Pobierz → mObywatel → Wgraj; instrukcja dosłownie z § 3 |
-| W3.3 | Walidacja QES przez DSS | BRAK | **CZĘŚCIOWO** | adapter REST gotowy i testowany na atrapie; **usługi DSS nie zainstalowano** → każdy QES „do weryfikacji ręcznej” |
-| W3.4 | Pierwsza wersja = oryginał | BRAK | WDROŻONE | PAdES: skrót prefiksu; XAdES: dokument osadzony; potwierdzone na 3 próbkach |
-| W3.5 | Podpisujący = oczekiwana osoba | BRAK | WDROŻONE | PESEL z PNOPL; inny → odrzucenie; brak → ręcznie |
-| W3.6 | Wynik w „Do zrobienia”, potwierdza człowiek | CZĘŚCIOWO | POPRAWIONE | pulpit → „podpisy” |
-| W3.7 | Kilku podpisujących; zgoda osobno | BRAK | **CZĘŚCIOWO** | kolejny podpis — kontrola oryginału; wielu pod uchwałą — bez oczekiwanej osoby (ręcznie) |
+| W3.3 | Walidacja QES przez DSS | BRAK | **POMINIĘTE** | D-086: bez usługi DSS — ważność podpisu sprawdza pracownik |
+| W3.4 | Pierwsza wersja = oryginał | BRAK | WDROŻONE | PAdES: skrót prefiksu; XAdES: dokument osadzony; zmieniony → odrzucenie (zostaje wg D-086); potwierdzone na próbkach |
+| W3.5 | Podpisujący = oczekiwana osoba | BRAK | **POMINIĘTE** | D-086: osobę podpisującą sprawdza pracownik (bez automatycznego PESEL) |
+| W3.6 | Wynik w „Do zrobienia”, potwierdza człowiek | CZĘŚCIOWO | POPRAWIONE | pulpit → „podpisy”; pracownik wskazuje formę i potwierdza |
+| W3.7 | Kilku podpisujących; zgoda osobno | BRAK | WDROŻONE | kolejny podpis — kontrola oryginału; zgoda = osobny dokument (formy § 2); osoby — pracownik (D-086) |
 | W3.8 | Ścieżki alternatywne, podpowiedź dla zarządu | BRAK | WDROŻONE | „oryginał pocztą”, podpowiedź przy umowie, PZ w instrukcji |
 | W4.1 | Dwa oświadczenia składane osobiście | SPRZECZNE | POPRAWIONE | „Moje oświadczenia” w portalu; zgoda e-mail przez żądanie wpisu |
 | W4.2 | Cofnięcie obu oświadczeń | BRAK | WDROŻONE | bezpłatne (D-083) |
@@ -92,12 +92,9 @@ Wynik: **BYŁO** (zgodne, bez zmian) · **POPRAWIONE** (istniało, sprzeczne/nie
 
 ### R2. Otwarte pytania do Łukasza
 
-1. **DSS (W3.3)** — gdzie uruchomić usługę walidacji (serwer kancelarii / Docker)? Bez niej żaden QES nie jest
-   akceptowany automatycznie. Ścieżkę endpointu (`/services/rest/validation/validateSignature`) zweryfikować przy instalacji.
-2. **Uchwała z wieloma podpisami (W3.7)** — wystarczy weryfikacja ręczna osób podpisujących?
-3. **Szablony PROJEKT** (R3) — akceptacja i poprawki na końcu prac (D-085).
-4. **`PRZEPISY-PSA.md` § 10** — KC art. 89 i art. 17 § 1 KSH oznaczone „do sprawdzenia” (nie są podstawą blokad).
-5. 15 pytań z `testy-audyt/PYTANIA-DO-LUKASZA.md` (sprzed tej sesji) — nadal bez odpowiedzi.
+1. **Szablony PROJEKT** (R3) — akceptacja i poprawki na końcu prac (D-085).
+2. **`PRZEPISY-PSA.md` § 10** — KC art. 89 i art. 17 § 1 KSH oznaczone „do sprawdzenia” (nie są podstawą blokad).
+3. 15 pytań z `testy-audyt/PYTANIA-DO-LUKASZA.md` (sprzed tej sesji) — nadal bez odpowiedzi.
 
 ### R3. Pisma „PROJEKT — do akceptacji Łukasza”
 
@@ -112,12 +109,12 @@ dosłownie z wytycznych, nie PROJEKT.
 
 Start: w `.env` `PSA_TRYB_TESTOWY=1` → `npm run test:seed` → `npm start` → http://localhost:3005 (czerwony pasek
 „TRYB TESTOWY”). Hasło wszystkich kont: `Test-Haslo-2026`. Panel: http://localhost:3005/test, poczta: `/test/skrzynka`.
-Automatycznie to samo sprawdza `npm run scenariusz:testowy` (37 kontroli; nadpisuje bazę testową).
+Automatycznie to samo sprawdza `npm run scenariusz:testowy` (34 kontrole; nadpisuje bazę testową).
 
 | # | Konto | Kroki | Oczekiwany wynik |
 |---|---|---|---|
-| 1 | notariusz@ → gamma.zarzad@ (portal) | `/test`: walidator „Brak podpisu” → portal: Wniosek → Wgraj podpisany dokument | komunikat „Skanu nie przyjmujemy…”, plik nieprzyjęty |
-| 2 | j.w. | walidator „QES poprawny” (potem „PZ”, „Podpis innej osoby”) → wgraj ponownie | QES: przyjęty; PZ: „do weryfikacji” w „Do zrobienia → podpisy”; inna osoba: odrzucony z nazwiskiem |
+| 1 | notariusz@ → gamma.zarzad@ (portal) | `/test`: atrapa „Każdy plik jako niepodpisany” → portal: Wniosek → Wgraj podpisany dokument | komunikat „Skanu nie przyjmujemy…”, plik nieprzyjęty |
+| 2 | j.w. | atrapa „Każdy plik jako podpisany” → wgraj; potem „różny od oryginału” | przyjęty → „Do zrobienia → podpisy”, pracownik wskazuje formę i potwierdza; różny — komunikat „plik różni się od pobranego” |
 | 3 | notariusz@ | Sprawy → zbycie (zbywca Bartosz Próbny, bez zgody) | „Dokonaj wpisu” nieaktywny z przyczyną (art. 300(34) § 3) |
 | 4 | notariusz@ | Listy do wysyłki → Drukuj pismo → Odnotuj nadanie (data, numer, skan) | pismo z adresem z rejestru; wpis w sprawie odblokowany |
 | 5 | anna.zgoda@ (portal) | Konto → Moje oświadczenia → cofnij zgodę na e-mail | w kancelarii nowa sprawa, bezpłatna; po wpisaniu cofnięcia w kartotece logowanie Anny zablokowane z pouczeniem o poczcie |
@@ -131,11 +128,11 @@ Automatycznie to samo sprawdza `npm run scenariusz:testowy` (37 kontroli; nadpis
 | 13 | notariusz@ | `/test`: data 2027-02-20 → Pulpit; Przeniesienia → pisma | zadania nowelizacji (KRS do 18.05.2027, zawiadomienie sądu 7 dni); pismo „Zgłoszenie do KRS” dostępne. Daty nie da się potem cofnąć przed ostatni wpis |
 | 14 | notariusz@ | Spółki → Alfa Testowa → Wydruk → Eksport całego rejestru (ZIP) | README, informacja, historia z łańcuchem SHA-256, dokumenty |
 
-### R5. Próbki podpisów — jeszcze potrzebne
+### R5. Próbki podpisów
 
-Mam: SimplySign, CENCERT, EUROCERT (oryginał zgodny), Szafir (inny wydruk). **Potrzebne:** Sigillum (PWPW),
-podpis zaufany (PZ), podpis osobisty (PO), Szafir na tym samym oryginale co pozostałe. Pliki tylko lokalnie
-(`testy/fixtures/podpisy/`, poza repozytorium — dane osobowe).
+Po D-086 nie są potrzebne do działania. Mam: SimplySign, CENCERT, EUROCERT, Szafir — wszystkie rozpoznane jako
+podpisane, oryginał zgodny. Opcjonalnie: podpis zaufany (PZ) i osobisty (PO) — potwierdzą, że test je rozpoznaje.
+Pliki tylko lokalnie (`testy/fixtures/podpisy/`, poza repozytorium — dane osobowe).
 
 ---
 

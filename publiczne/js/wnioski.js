@@ -1233,23 +1233,15 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
   );
 }
 
-/** Wynik automatycznej walidacji podpisu (W2.4) — podpowiedź, nie decyzja. */
+/** Wynik podstawowego testu po wgraniu (W2.4, D-086) — czy plik ma podpis; resztę sprawdza pracownik. */
 function WynikWalidacji({ walidacja }) {
   if (!walidacja) return null;
-  const odmiana = walidacja.wynik === 'poprawny' ? 'ok' : walidacja.wynik === 'odrzucony' ? 'blad' : 'uwaga';
-  const tytul = walidacja.wynik === 'poprawny'
-    ? 'Walidacja automatyczna: podpis kwalifikowany poprawny'
-    : walidacja.wynik === 'odrzucony' ? 'Walidacja automatyczna: odrzucony' : 'Do weryfikacji ręcznej';
-  const osoba = walidacja.podpisujacy
-    ? [walidacja.podpisujacy.imie, walidacja.podpisujacy.nazwisko].filter(Boolean).join(' ') || walidacja.podpisujacy.nazwa
-    : null;
+  const odrzucony = walidacja.wynik === 'odrzucony';
   return (
     <Komunikat
-      odmiana={odmiana}
-      tytul={`${tytul}${walidacja.atrapa ? ' (atrapa trybu testowego)' : ''}`}
-      tresc={[walidacja.komunikat, osoba ? `Podpisujący wg certyfikatu: ${osoba}${walidacja.podpisujacy.pesel ? ` (PESEL ${walidacja.podpisujacy.pesel})` : ''}.` : null]
-        .filter(Boolean).join(' ')}
-      lista={walidacja.kontrole}
+      odmiana={odrzucony ? 'blad' : 'uwaga'}
+      tytul={`${odrzucony ? 'Plik bez podpisu elektronicznego' : 'Plik podpisany — sprawdź podpis i dokument'}${walidacja.atrapa ? ' (atrapa trybu testowego)' : ''}`}
+      tresc={walidacja.komunikat}
     />
   );
 }
@@ -1351,7 +1343,6 @@ function PozycjaDokumentuKancelarii({ wniosekId, dokument, dlaKogo, przyOtwarciu
         {dokument.brakujace.length > 0 && (
           <Pigulka odmiana="sygnal">{opisPustychMiejsc(dokument.brakujace.length)}</Pigulka>
         )}
-        {dokument.walidacja_wynik === 'poprawny' && <Pigulka odmiana="rejestr">QES zweryfikowany</Pigulka>}
         {dokument.walidacja_wynik === 'do_weryfikacji' && <Pigulka odmiana="sygnal">podpis do weryfikacji</Pigulka>}
         {dokument.oryginal_poczta_zadeklarowano && !dokument.oryginal_otrzymano && <Pigulka odmiana="mosiadz">oryginał pocztą</Pigulka>}
         {podpisany ? (

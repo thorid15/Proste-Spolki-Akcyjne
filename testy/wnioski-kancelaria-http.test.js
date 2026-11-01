@@ -858,6 +858,6 @@ test('D-075: ID w stopce i skrót przy generowaniu; oryginał pocztą; podpis no
   const po = await zNotariuszem();
   assert.equal(po.status, 201);
   const cialo = await po.json();
-  assert.equal(cialo.walidacja.wynik, 'do_weryfikacji', 'bez DSS — ręcznie');
+  assert.equal(cialo.walidacja.wynik, 'do_weryfikacji', 'D-086: sprawdza pracownik');
   assert.ok(cialo.dokumenty.find((d) => d.id === umowa.id).notariusz_podpis_wgrano);
 });
