@@ -615,6 +615,18 @@ body {
   margin-bottom: var(--od-16);
 }
 .karta.scisla { padding: 0; overflow: hidden; }
+
+/* ── Lista „etykieta — wartość” (R4 P1/K2) ── */
+.lista-danych {
+  display: grid; grid-template-columns: minmax(7rem, 40%) 1fr;
+  column-gap: var(--od-16); row-gap: var(--od-8); margin: 0;
+}
+.lista-danych dt { color: var(--atrament-2); overflow-wrap: anywhere; }
+.lista-danych dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 420px) {
+  .lista-danych { grid-template-columns: 1fr; row-gap: 0; }
+  .lista-danych dd { margin-bottom: var(--od-12); }
+}
 .karta-naglowek {
   display: flex; align-items: center; justify-content: space-between; gap: var(--od-16);
   padding: var(--od-16) var(--od-24);

@@ -135,6 +135,23 @@ function Spinner({ wierszy = 4 }) {
 }
 
 /** `scisla` (dawniej `tight`) — karta bez wewnętrznego marginesu, pod tabelę. */
+/**
+ * Lista „etykieta — wartość” (R4 P1, K2): siatka minmax(7rem, 40%) 1fr, etykiety zawijane;
+ * poniżej 420 px etykieta nad wartością. `pary`: [[etykieta, wartość], ...]; null/undefined pomijane.
+ */
+function ListaDanych({ pary }) {
+  return (
+    <dl className="lista-danych">
+      {(pary || []).filter(Boolean).map(([etykieta, wartosc], i) => (
+        <React.Fragment key={i}>
+          <dt>{etykieta}</dt>
+          <dd>{wartosc == null || wartosc === '' ? '—' : wartosc}</dd>
+        </React.Fragment>
+      ))}
+    </dl>
+  );
+}
+
 function Karta({ tytul, akcje, scisla, tight, dzieci, children }) {
   const tresc = children ?? dzieci;
   if (scisla || tight) {
@@ -1790,6 +1807,7 @@ window.ZwijanaSekcja = ZwijanaSekcja;
 window.Przelacznik = Przelacznik;
 window.Spinner = Spinner;
 window.Karta = Karta;
+window.ListaDanych = ListaDanych;
 window.Pigulka = Pigulka;
 window.Komunikat = Komunikat;
 window.Pusto = Pusto;

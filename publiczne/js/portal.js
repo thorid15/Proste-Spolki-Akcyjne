@@ -1222,15 +1222,15 @@ function EkranRejestrPortal({ spolkaId }) {
       {ladowanie && <Spinner />}
       {s && (
         <>
-          <Karta tight tytul="Dane spółki">
-            <dl className="pary">
-              <dt>Firma</dt><dd>{s.nazwa}</dd>
-              <dt>KRS</dt><dd>{s.krs || '—'}</dd>
-              <dt>Siedziba i adres</dt><dd>{adres || '—'}</dd>
-              <dt>Sąd rejestrowy</dt><dd>{[s.sad_rejestrowy, s.wydzial].filter(Boolean).join(', ') || '—'}</dd>
-              <dt>Data rejestracji spółki</dt><dd>{s.data_utworzenia_spolki ? fmt.data(s.data_utworzenia_spolki) : '—'}</dd>
-              <dt>Rejestr akcjonariuszy prowadzony od</dt><dd>{s.data_otwarcia_rejestru ? fmt.data(s.data_otwarcia_rejestru) : '—'}</dd>
-            </dl>
+          <Karta tytul="Dane spółki">
+            <ListaDanych pary={[
+              ['Firma', s.nazwa],
+              ['KRS', s.krs],
+              ['Siedziba i adres', adres],
+              ['Sąd rejestrowy', [s.sad_rejestrowy, s.wydzial].filter(Boolean).join(', ')],
+              ['Data rejestracji spółki', s.data_utworzenia_spolki ? fmt.data(s.data_utworzenia_spolki) : null],
+              ['Rejestr akcjonariuszy prowadzony od', s.data_otwarcia_rejestru ? fmt.data(s.data_otwarcia_rejestru) : null],
+            ]} />
           </Karta>
           <Karta tight>
             <Komunikat
