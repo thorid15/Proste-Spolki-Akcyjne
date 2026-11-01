@@ -10,7 +10,7 @@
 | 0 — Inwentarz | ZROBIONA (1.11.2026) | patrz `git log` — „Faza 0” |
 | 1 — Tryb testowy (T1–T6) | ZROBIONA — sekcja 3 | patrz `git log` — „Faza 1” |
 | 2 — Podpisy (§ 2–3) | ZROBIONA — sekcja 4; STOP | patrz `git log` — „Faza 2” |
-| 3 — Zgody, dostęp, informacje | — | — |
+| 3 — Zgody, dostęp, informacje (§ 4–6) | ZROBIONA — sekcja 5; STOP (QW1–QW3) | patrz `git log` — „Faza 3” |
 | 4 — Przeniesienie rejestru | — | — |
 | 5 — Raport końcowy | — | — |
 
@@ -20,7 +20,7 @@ propozycja uzupełnienia `PRZEPISY-PSA.md` (P1–P9) przyjęta i dopisana; Faza 
 https://github.com/thorid15/Proste-Spolki-Akcyjne/pull/13 (do `claude/Main` — w repozytorium nie ma `main`).
 K6 rozstrzygnięte po STOP Fazy 2 — D-079.
 
-**Następny krok:** akceptacja STOP Fazy 2 (sekcja 4), potem Faza 3.
+**Następny krok:** odpowiedzi na QW1–QW3 (sekcja 5) i akceptacja STOP Fazy 3, potem Faza 4 (propozycja podziału 4a/4b — sekcja 2.3).
 
 Stan wejściowy testów: `npm test` — 534/534 zielone (przed zmianami).
 
@@ -245,3 +245,50 @@ Pełny zestaw testów: **561/561**.
   sprawie wymaga ważnej zgody. W trybie testowym (skrzynka) powiadomienie liczy się jako wysłane.
 - Przyjęcie wniosku nie wymaga podpisu notariusza — potwierdzone (D-078).
 - Katalog próbek: `testy/fixtures/podpisy/` (konwencja repozytorium `testy/`, nie `test/`).
+
+---
+
+## 5. Faza 3 — zgody, powiadomienia, dostęp, informacje (§ 4–6) — WDROŻONE
+
+Decyzje: **D-080** (eksport ZIP), **D-081** (komunikacja: e-mail tylko przy zgodzie osobistej, inaczej list),
+**D-082** (informacje: numer, VAT, organy; wersje stawek, gwarancja). Realizacja **D-076** (PESEL albo data
+urodzenia) i **D-077** (zakładka „Rejestr”). Migracja 64. Testy: `testy/faza3-http.test.js` (9) + zmiany
+w `portal-http`, `blok-d-http`, `sprint5`, `informacja-dokument`. Pełny zestaw: **571/571**.
+
+| ID | Wynik | Jak |
+|---|---|---|
+| W4.1 | WDROŻONE | portal → Konto → „Moje oświadczenia” (`GET/POST /api/psa/portal/oswiadczenia`), tylko rola akcjonariusza (nie zarząd); zgoda e-mail → żądanie wpisu `zmiana_danych_akcjonariusza` (ta sama droga co „Zgłoś zmianę”); `psa_oswiadczenia` append-only, z datą |
+| W4.2 | WDROŻONE | cofnięcie obu oświadczeń (zgoda — przez żądanie wpisu; powiadomienia — od razu) |
+| W4.3 | WDROŻONE | `server/listy.js` + „Listy do wysyłki”: adres z rejestru, druk, data i numer nadania, skan potwierdzenia; e-mail tylko przy zgodzie `potwierdzona`; nadanie powiadomienia = `powiadomienie_wyslano` (odblokowuje W2.3) |
+| W4.4 | WDROŻONE | adres zbywcy wyłącznie z rekordu kartoteki; pola adresu/e-maila w żądaniu ignorowane — test; panel powiadomienia nie ma pola adresu (wybór osoby z kartoteki) |
+| W4.5 | WDROŻONE | odmowa — także do spółki; bez opłaty (test) |
+| W5.1 | WDROŻONE | D-077: `GET /portal/rejestr/:id` zwraca tylko dane spółki (test API — brak akcjonariatu i PESEL); ekran z przyciskiem „Zamów informację” |
+| W5.2 | BYŁO | `portal.js` informacja tylko dla konta spółki/akcjonariusza z dostępem (test istniejący) |
+| W5.3 | WDROŻONE | „Wydaj informację organowi” (`POST /api/psa/informacje/organ`): odbiorca, sygnatura (obowiązkowa), numer, dziennik dostępu; bez automatycznej opłaty |
+| W5.4 | POPRAWIONE | maskowanie działało (biała lista); informacja pokazuje teraz PESEL albo datę urodzenia w wersji pełnej (spółka), a akcjonariuszowi zasłania u innych — test API (`portal-http`) |
+| W5.5 | WDROŻONE | sekcja „Wynagrodzenie” na każdej informacji: netto, VAT, brutto, podstawa z `PRZEPISY-PSA.md` (`PODSTAWY.WYNAGRODZENIE_INFORMACJI`) |
+| W5.6 | WDROŻONE | „Dziennik informacji” (`GET /api/psa/informacje`): numer `INF/RRRR/NNNN`, data, spółka, odbiorca, sygnatura, opłata |
+| W5.7 | WDROŻONE / CZĘŚCIOWO | `psa_stawki_wersje` — każda zmiana stawek to wersja z datą; spółka w gwarancji rozliczana wg wersji z dnia umowy (test); parametr `gwarancja_ceny_lat` w API ustawień — **pola w ekranie „Stawki i terminy” jeszcze nie ma** |
+| W6.1 | WDROŻONE | D-076: walidacja wpisu — osoba fizyczna nabywca/obejmujący/zastawnik bez PESEL i daty urodzenia → błąd (od dziś, bez bramki) |
+| W6.2 | WDROŻONE (ZA BRAMKĄ) | zadanie z terminem 7 dni w „Do zrobienia” po rozwiązaniu/przekazaniu (od 18.02.2027); projekt przez istniejący generator |
+| W6.3 | WDROŻONE | D-080: eksport ZIP (README, informacja, historia z łańcuchem, dokumenty) — przycisk przy „Eksport CSV” |
+| W6.4 | BYŁO + test | test regresyjny: usuwanie plików tylko w znanych miejscach wywoływanych przez użytkownika; harmonogram niczego nie usuwa |
+| W6.5 | WDROŻONE (ZA BRAMKĄ) | zadanie „Przypomnij o zgłoszeniu do KRS” (termin 18.05.2027) + projekt pisma „PROJEKT — do akceptacji Łukasza” |
+
+### Pytania QW1–QW3 (do decyzji — logiki nie zmieniałem)
+
+- **QW1 — opłata za zmianę/cofnięcie zgody e-mail.** Dziś typ `zmiana_danych_akcjonariusza` ma
+  `odplatne: true` → opłata za wpis (stawka „wpis”, 100 zł netto). Oświadczenie w portalu zakłada takie
+  żądanie, więc jest odpłatne (przy włączonych płatnościach żądanie czeka na zapłatę). Czy ma być bezpłatne?
+- **QW2 — kanał powiadomień przed 18.02.2027 przy żądaniu automatycznych powiadomień.** Dziś żądanie jest
+  zapisywane, ale kanał zależy wyłącznie od zgody e-mail (e-mail albo list). Propozycja zgodna z domyślną:
+  przy żądaniu — dodatkowo kopia pisma w zakładce „Dokumenty” portalu (kanał `portal`), bez zastępowania
+  e-maila/listu. Do potwierdzenia.
+- **QW3 — zaproszenie do portalu akcjonariusza bez zgody e-mail.** Dziś pracownik w kartotece „Zaproś do
+  portalu” podaje adres e-mail konta (kanał operacyjny, odrębny od e-maila w rejestrze) i link idzie
+  e-mailem (albo do przekazania ręcznie). Propozycja: list z jednorazowym kodem aktywacyjnym (np. 8 znaków,
+  ważny 30 dni) do kolejki listów na adres z rejestru; aktywacja kodem → akcjonariusz sam składa oświadczenia.
+
+**Uwagi:** zgoda e-mail jest polem osoby w kartotece (wspólnej dla rejestrów) — oświadczenie wskazuje spółkę,
+żądanie wpisu powstaje w jej rejestrze; przy kilku spółkach akcjonariusz składa oświadczenie w każdej
+(do rozważenia przy QW1). Organy: opłata za informację — do decyzji (dziś „nie pobrano”).

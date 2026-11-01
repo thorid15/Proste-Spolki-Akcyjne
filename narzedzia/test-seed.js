@@ -199,11 +199,23 @@ async function main() {
   });
   await zapytaj(kancelaria, 'PATCH', `/api/psa/sprawy/${sprawa.id}`, { akcja: 'weryfikuj' });
   console.log(`[test:seed] sprawa ${sprawa.numer}: zbycie bez zgody zbywcy (weryfikacja)`);
+  // Faza 3 (W4.3): zbywca bez zgody na e-mail — powiadomienie trafia do kolejki listów.
+  const powiadomienie = await zapytaj(kancelaria, 'POST', `/api/psa/sprawy/${sprawa.id}/powiadomienie`, { osoba_id: bartosz.id });
+  console.log(`[test:seed] powiadomienie zbywcy: ${powiadomienie.wysylka.status === 'list' ? 'list do nadania (Listy do wysyłki)' : powiadomienie.wysylka.status}`);
+  // Faza 3 (W5.3): informacja dla organu — pozycja w dzienniku wydanych informacji.
+  const dlaOrganu = await zapytaj(kancelaria, 'POST', '/api/psa/informacje/organ', {
+    spolka_id: spolka.id, organ: 'Komornik Sądowy przy Sądzie Rejonowym (dane fikcyjne)', sygnatura: 'KM 1/26',
+  });
+  console.log(`[test:seed] informacja dla organu ${dlaOrganu.numer}`);
 
   // ── Wydana informacja z rejestru (atrapa tpay + ITN) ────────────────────
   const akcjonariusz = sesja();
   await zapytaj(akcjonariusz, 'POST', '/api/psa/portal/login', {
     email: 'anna.zgoda@example.com', haslo: trybTestowy.HASLO_TESTOWE, droga_testowa: 'formularz',
+  });
+  // Faza 3 (W4.2): Anna żąda automatycznych powiadomień (oświadczenie w portalu).
+  await zapytaj(akcjonariusz, 'POST', '/api/psa/portal/oswiadczenia', {
+    spolka_id: spolka.id, rodzaj: 'powiadomienia_automatyczne', zlozone: true,
   });
   const zamowienie = await zapytaj(akcjonariusz, 'POST', '/api/psa/portal/informacja/zamow', { spolka_id: spolka.id });
   if (!zamowienie.oplacona) {

@@ -84,6 +84,22 @@ Uruchomienie do testów (nie instalujemy jej na produkcji w tej sesji):
 
 Próbki prawdziwych podpisów do testu: `testy/fixtures/podpisy/` (README w katalogu; pliki w `.gitignore`).
 
+## Zgody, listy, informacje, eksport — D-076–D-082 (Faza 3)
+
+- **Oświadczenia akcjonariusza** (portal → Konto → „Moje oświadczenia”): zgoda na komunikację e-mail
+  (dana rejestru — zakłada żądanie wpisu) i żądanie automatycznych powiadomień; z datą, odwołalne,
+  wyłącznie osobiście (nie przez zarząd).
+- **Listy do wysyłki** (kancelaria): pisma do osób bez zgody na e-mail — druk z adresem z rejestru,
+  data i numer nadania, skan potwierdzenia nadania. Nadanie powiadomienia odblokowuje wpis.
+- **Zakładka „Rejestr” w portalu** — tylko dane spółki; akcjonariat w płatnej informacji z rejestru.
+- **Dziennik informacji** (kancelaria): numer, data, odbiorca, opłata; „Wydaj informację organowi”
+  (sygnatura obowiązkowa). Każda informacja: numer `INF/RRRR/NNNN`, wynagrodzenie, VAT i podstawa.
+- **Stawki** wersjonowane z datą; gwarancja ceny (`gwarancja_ceny_lat`, domyślnie 3 lata od umowy).
+- **PESEL albo data urodzenia** wymagane przy nowym wpisie osoby fizycznej (D-076).
+- **Do zrobienia** (od 18.02.2027): zawiadomienie sądu o rozwiązaniu umowy w 7 dni, przypomnienie
+  o zgłoszeniu do KRS do 18.05.2027 (projekt pisma). Zgłoszenia składa się przez PRS — bez automatu.
+- **Eksport całego rejestru** (wydruk spółki → „Eksport całego rejestru (ZIP)”).
+
 ## Tryb testowy (bez poczty, dane fikcyjne) — D-074
 
 Do przejścia każdego przepływu kancelarii i portalu bez skonfigurowanej poczty. Działa na **osobnej
@@ -109,9 +125,9 @@ uprawnienia, izolacja spółek i ważność sesji. Link z wiersza poleceń:
 aktywne → adres logowania). Każde logowanie w trybie testowym trafia do `psa_dziennik_logowan`.
 
 **Dane z `test:seed`:** spółka z aktywnym rejestrem (KRS `0000990001` z atrapy KRS), akcjonariusze
-ze zgodą e-mail i bez niej, żądanie wpisu zbycia bez zgody zbywcy (sprawa w weryfikacji), wydana
-informacja z rejestru (zapłacona przez atrapę tpay), zgłoszenie z formularza publicznego (zaproszenie
-w skrzynce). Atrapa KRS odpowiada dla `0000990001`–`0000990003`; inne numery idą do prawdziwego API.
+ze zgodą e-mail i bez niej, żądanie wpisu zbycia bez zgody zbywcy (sprawa w weryfikacji) z powiadomieniem
+zbywcy w kolejce listów, informacja dla organu, wydana informacja z rejestru (zapłacona przez atrapę tpay),
+oświadczenie akcjonariusza, zgłoszenie z formularza publicznego, wniosek z dokumentami do podpisu. Atrapa KRS odpowiada dla `0000990001`–`0000990003`; inne numery idą do prawdziwego API.
 
 **Skrzynka testowa** — `http://localhost:3005/test/skrzynka` (bez logowania): każda wiadomość zapisana
 jako `.eml` w `dane-testowe/skrzynka/`, lista, podgląd z klikalnymi linkami, status „testowa —

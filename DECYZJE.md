@@ -1321,6 +1321,44 @@
 
 ---
 
+### D-080 — Eksport całego rejestru z dokumentami (W6.3) — zastępuje „pakietu eksportu nie budujemy” z D-068
+
+- Data: 2026-11-01 (SESJA-PSA-WYTYCZNE.md, Faza 3)
+- Obszar: rejestr / akta
+- Decyzja: `GET /api/psa/spolki/:id/eksport.zip` — README, pełna informacja z rejestru (HTML), historia
+  zdarzeń (CSV i JSON z łańcuchem SHA-256), dokumenty (sprawy, akta spółki, wniosek, wydane pisma,
+  potwierdzenia nadania). Ślad w dzienniku dostępu (`eksport`). Nic nie jest usuwane (W6.4 — test
+  regresyjny pilnuje miejsc usuwania plików).
+- Podstawa: art. 90a PrNot (PRZEPISY-PSA.md § 8).
+
+### D-081 — Komunikacja z akcjonariuszem: e-mail tylko przy zgodzie złożonej osobiście, inaczej list
+
+- Data: 2026-11-01 (Faza 3, W4.1–W4.5)
+- Obszar: zawiadomienia / powiadomienia / portal
+- Decyzja: pismo do osoby (zawiadomienie o wpisie, odmowie, wezwanie, powiadomienie uprzednie) idzie
+  e-mailem wyłącznie przy `zgoda_email_status = 'potwierdzona'`; `zadeklarowana` (deklaracja zarządu we
+  wniosku) nie jest zgodą. W pozostałych przypadkach — kolejka listów: adres z rejestru (kopia w chwili
+  wystawienia, nigdy z żądania), data i numer nadania, skan potwierdzenia; powiadomienie uprzednie jest
+  „wysłane” z dniem nadania. Odmowa — także do spółki (bezpłatnie). Oświadczenia akcjonariusza (zgoda
+  e-mail, żądanie automatycznych powiadomień) składa on sam w portalu; zgoda e-mail jako dana rejestru
+  idzie przez żądanie wpisu `zmiana_danych_akcjonariusza` (opłata jak dziś — QW1 otwarte).
+- Skutek w kodzie: `server/listy.js`, `server/trasy/listy.js`, `server/zawiadomienia.js`,
+  `server/trasy/portal.js` (`/oswiadczenia`), migracja 64.
+
+### D-082 — Informacje z rejestru: numer, wynagrodzenie z VAT, organy; wersje stawek i gwarancja ceny
+
+- Data: 2026-11-01 (Faza 3, W5.3–W5.7)
+- Obszar: informacje / opłaty
+- Decyzja: każda informacja ma numer `INF/RRRR/NNNN` i sekcję „Wynagrodzenie” (netto, VAT, brutto,
+  podstawa: § 15b ust. 3 rozporządzenia, art. 300³⁵ § 3 KSH, art. 89 § 2 PrNot). Informację organowi
+  (art. 300³⁵ § 4) wydaje kancelaria z sygnaturą sprawy — bez automatycznej opłaty („nie pobrano”, do
+  decyzji kancelarii). Dziennik wydanych informacji: numer, data, odbiorca, opłata. Zmiana stawek tworzy
+  wersję z datą (`psa_stawki_wersje`); spółka w okresie gwarancji ceny (`gwarancja_ceny_lat`, domyślnie 3,
+  liczone od `data_umowy`) rozliczana według wersji z dnia umowy. Informacja dla spółki pokazuje PESEL
+  albo datę urodzenia (D-076); akcjonariusz nie widzi ich u innych.
+
+---
+
 ## Decyzje otwarte
 
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w
