@@ -19,3 +19,7 @@ __pycache__/
 
 # Tryb testowy (D-074): baza testowa, dokumenty i skrzynka testowa
 dane-testowe/
+
+# Probki podpisow z danymi osobowymi (testy/fixtures/podpisy/README.md)
+testy/fixtures/podpisy/*.pdf
+testy/fixtures/podpisy/*.xml

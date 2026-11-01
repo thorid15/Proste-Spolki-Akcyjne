@@ -11,6 +11,7 @@ const rejestr = require('../rejestr');
 const widoki = require('../widoki');
 const dokumentyTresc = require('../logika/dokumenty-tresc');
 const przepisy = require('../logika/przepisy');
+const formyPodpisu = require('../logika/formy-podpisu');
 const typyZdarzen = require('../logika/typy-zdarzen');
 const terminy = require('../logika/terminy');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
@@ -130,6 +131,10 @@ router.get(
       charakter_wpisu: przepisy.CHARAKTER_WPISU,
       podstawy: przepisy.PODSTAWY,
       pola_wrazliwe: przepisy.POLA_WRAZLIWE,
+      // W2.2 — formy zgody na wpis z jednego źródła (formy-podpisu.js).
+      formy_zgody_na_wpis: formyPodpisu.regula(formyPodpisu.DOKUMENTY.ZGODA_NA_WPIS).formy
+        .map((kod) => ({ kod, nazwa: formyPodpisu.NAZWY_FORM[kod] })),
+      uwaga_zgody_na_wpis: formyPodpisu.regula(formyPodpisu.DOKUMENTY.ZGODA_NA_WPIS).uwaga,
       dzisiaj: czas.dzisIso(),
     });
   })
@@ -282,6 +287,21 @@ router.get(
       )
       .all();
 
+    // W3.6 — wynik walidacji podpisu trafia do „Do zrobienia”: podpisy wgrane
+    // (albo oryginały zadeklarowane) czekające na ręczne potwierdzenie (D-052).
+    const podpisyWiersze = db()
+      .prepare(
+        `SELECT d.id, d.wniosek_id, d.nazwa, d.walidacja_wynik, d.oryginal_poczta_zadeklarowano,
+                COALESCE(d.walidacja_kiedy, d.podpis_wgrano, d.oryginal_poczta_zadeklarowano) AS kiedy,
+                w.nazwa AS wniosek_nazwa
+           FROM psa_wnioski_dokumenty d JOIN psa_wnioski w ON w.id = d.wniosek_id
+          WHERE d.podpis_potwierdzono IS NULL
+            AND (d.podpis_sciezka IS NOT NULL OR d.oryginal_poczta_zadeklarowano IS NOT NULL)
+            AND w.status NOT IN ('przyjety', 'odrzucony')
+          ORDER BY kiedy ASC`
+      )
+      .all();
+
     odp.json({
       spolki,
       liczniki: { ...liczniki, sprawy_w_toku: sprawy.length },
@@ -294,6 +314,7 @@ router.get(
       zgloszenia: zgloszeniaWiersze,
       wnioski: wnioskiWiersze,
       zawiadomienia: zawiadomieniaWiersze,
+      podpisy: podpisyWiersze,
       dzisiaj: dzis,
     });
   })

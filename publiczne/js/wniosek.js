@@ -39,19 +39,24 @@ function etykietaDokumentu(nazwaPliku) {
     .replace(/\s+—\s+KRS\s+\d+$/i, '');
 }
 
+/** Formy papierowe dopuszczalne dla dokumentu (bez „w kancelarii”). */
+function oryginalDopuszczalny(dokument) {
+  return (dokument.formy_dopuszczalne || []).some((f) => f.kod === 'oryginal' || f.kod === 'oryginal_poswiadczony');
+}
+
 /**
- * Jedna pozycja listy „Dokumenty do podpisu": wystawiony dokument do
- * pobrania i miejsce na jego podpisany skan.
- *
- * Slot na skan siedzi PRZY dokumencie, a nie w osobnym formularzu na dole
- * ekranu: klient odsyła kilka plików, każdy do czego innego, i bez tego
- * powiązania musiałby pamiętać, co czym jest — a kancelaria zgadywać.
+ * Jedna pozycja listy — ekran „Podpisz dokument” (W3.2, D-075):
+ * 1. Pobierz → 2. Podpisz w mObywatelu (nowa karta) → 3. Wgraj podpisany plik.
+ * Skanu nie przyjmujemy; ścieżka alternatywna — oryginał pocztą (W3.8).
  */
-function PozycjaDokumentu({ dokument, edytowalne, przyZmianie }) {
+function PozycjaDokumentu({ dokument, edytowalne, przyZmianie, mobywatelUrl }) {
   const [wysylanie, ustawWysylanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
   const wejscie = useRef(null);
   const podpisany = Boolean(dokument.podpis_nazwa_pliku);
+  const poczta = Boolean(dokument.oryginal_poczta_zadeklarowano);
+  const umowa = dokument.typ === 'umowa_rejestru';
+  const walidacja = dokument.walidacja;
 
   async function wyslij(plik) {
     if (!plik) return;
@@ -76,7 +81,7 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie }) {
   }
 
   async function usun() {
-    if (!window.confirm('Usunąć przesłany skan tego dokumentu?')) return;
+    if (!window.confirm('Usunąć przesłany plik tego dokumentu?')) return;
     ustawWysylanie(true);
     ustawBlad(null);
     try {
@@ -88,80 +93,154 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie }) {
     }
   }
 
+  async function oryginalPoczta(wysylam) {
+    ustawWysylanie(true);
+    ustawBlad(null);
+    try {
+      przyZmianie(await API.post(`/api/psa/portal/wniosek/dokumenty/${dokument.id}/oryginal-poczta`, { wysylam }));
+    } catch (e) {
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zapisać wyboru.');
+    } finally {
+      ustawWysylanie(false);
+    }
+  }
+
   return (
-    <div className={`dokument-pozycja ${podpisany ? 'dokument-pozycja-gotowa' : ''}`}>
+    <div className={`dokument-pozycja ${podpisany || poczta ? 'dokument-pozycja-gotowa' : ''}`}>
       <div className="dokument-pozycja-glowna">
         <Ikona nazwa="pobierz" rozmiar={17} />
-        <a
-          className="dokument-pozycja-nazwa"
-          href={`/api/psa/portal/wniosek/dokumenty/${dokument.id}`}
-          target="_blank"
-          rel="noopener"
-        >
-          {etykietaDokumentu(dokument.nazwa_pliku)}
-        </a>
-        {/* B6 — dokument, którego klient jeszcze nie otworzył (kolumna
-            ustawia się przy pierwszym pobraniu, `pakiet-wniosku.js`). */}
+        <span className="dokument-pozycja-nazwa">{etykietaDokumentu(dokument.nazwa_pliku)}</span>
         {!dokument.otwarto_w_portalu && <Pigulka odmiana="mosiadz">nowy</Pigulka>}
         <span className="dokument-pozycja-rozmiar">
           {Math.max(1, Math.round((dokument.rozmiar || 0) / 1024))} kB
         </span>
       </div>
+      {dokument.id_dokumentu && (
+        <div className="przyciemnione" style={{ fontSize: '0.8em' }}>ID dokumentu: {dokument.id_dokumentu}</div>
+      )}
 
-      <div className="dokument-pozycja-podpis">
-        {podpisany ? (
-          <>
-            <Pigulka odmiana="rejestr">podpisany</Pigulka>
-            <a
-              className="dokument-pozycja-skan"
-              href={`/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`}
-              target="_blank"
-              rel="noopener"
-            >
-              {dokument.podpis_nazwa_pliku}
+      {podpisany ? (
+        <div className="dokument-pozycja-podpis">
+          <Pigulka odmiana="rejestr">podpisany</Pigulka>
+          <a
+            className="dokument-pozycja-skan"
+            href={`/api/psa/portal/wniosek/dokumenty/${dokument.id}/podpis`}
+            target="_blank"
+            rel="noopener"
+          >
+            {dokument.podpis_nazwa_pliku}
+          </a>
+          {edytowalne && (
+            <button className="btn btn-sm" onClick={usun} disabled={wysylanie}>
+              {wysylanie ? 'Usuwanie…' : 'Usuń'}
+            </button>
+          )}
+        </div>
+      ) : poczta ? (
+        <div className="dokument-pozycja-podpis">
+          <Pigulka odmiana="mosiadz">oryginał pocztą</Pigulka>
+          <span className="dokument-pozycja-czeka">czeka na oryginał w kancelarii</span>
+          {edytowalne && (
+            <button className="btn btn-sm" onClick={() => oryginalPoczta(false)} disabled={wysylanie}>
+              Jednak podpiszę elektronicznie
+            </button>
+          )}
+        </div>
+      ) : edytowalne ? (
+        <ol className="kroki-podpisu" style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--od-2)', listStyle: 'none', padding: 0, margin: 'var(--od-2) 0 0' }}>
+          <li>
+            <a className="btn btn-maly" href={`/api/psa/portal/wniosek/dokumenty/${dokument.id}`} target="_blank" rel="noopener">
+              1. Pobierz dokument
             </a>
-            {edytowalne && (
-              <button className="btn btn-sm" onClick={usun} disabled={wysylanie}>
-                {wysylanie ? 'Usuwanie…' : 'Usuń'}
-              </button>
-            )}
-          </>
-        ) : (
-          <>
-            <span className="dokument-pozycja-czeka">czeka na podpisany skan</span>
-            {edytowalne && (
-              <>
-                {/* Systemowe „Choose File / No file chosen" jest po angielsku
-                    i wygląda inaczej w każdej przeglądarce — w komplecie
-                    ośmiu dokumentów robiło z listy zbieraninę. Pole zostaje
-                    ukryte, klika się przycisk aplikacji. */}
-                <input
-                  ref={wejscie}
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  disabled={wysylanie}
-                  onChange={(z) => wyslij(z.target.files[0])}
-                  className="pole-pliku-ukryte"
-                />
-                <button
-                  type="button"
-                  className="btn btn-maly"
-                  disabled={wysylanie}
-                  onClick={() => wejscie.current && wejscie.current.click()}
-                >
-                  {wysylanie ? 'Przesyłanie…' : 'Wgraj podpisany skan'}
-                </button>
-              </>
-            )}
-          </>
-        )}
-      </div>
+          </li>
+          <li>
+            <a className="btn btn-maly" href={mobywatelUrl} target="_blank" rel="noopener noreferrer">
+              2. Podpisz w mObywatelu
+            </a>
+          </li>
+          <li>
+            {/* Systemowe pole pliku jest ukryte — klika się przycisk aplikacji. */}
+            <input
+              ref={wejscie}
+              type="file"
+              accept=".pdf,.xml,.xades"
+              disabled={wysylanie}
+              onChange={(z) => wyslij(z.target.files[0])}
+              className="pole-pliku-ukryte"
+            />
+            <button
+              type="button"
+              className="btn btn-glowny btn-maly"
+              disabled={wysylanie}
+              onClick={() => wejscie.current && wejscie.current.click()}
+            >
+              {wysylanie ? 'Sprawdzanie podpisu…' : '3. Wgraj podpisany dokument'}
+            </button>
+          </li>
+        </ol>
+      ) : (
+        <div className="dokument-pozycja-podpis">
+          <span className="dokument-pozycja-czeka">czeka na podpis</span>
+        </div>
+      )}
+
+      {podpisany && walidacja && (
+        <Komunikat
+          odmiana={walidacja.wynik === 'poprawny' ? 'ok' : 'info'}
+          tresc={walidacja.wynik === 'poprawny'
+            ? 'Podpis kwalifikowany zweryfikowany automatycznie. Kancelaria potwierdzi dokument.'
+            : 'Plik przyjęty. Kancelaria sprawdzi podpis — jeśli będzie potrzebna poprawka, damy znać.'}
+        />
+      )}
+      {edytowalne && !podpisany && umowa && (
+        <div className="podpowiedz">
+          Podpisujesz za spółkę: najlepiej własnym podpisem kwalifikowanym (np. z karty lub chmury) albo odeślij
+          oryginał pocztą. Podpis kwalifikowany z mObywatela też przyjmiemy.
+        </div>
+      )}
+      {edytowalne && !podpisany && !poczta && oryginalDopuszczalny(dokument) && (
+        <button type="button" className="btn btn-pelny btn-sm" onClick={() => oryginalPoczta(true)} disabled={wysylanie}>
+          Wolę wysłać podpisany oryginał pocztą
+        </button>
+      )}
       <Komunikat odmiana="blad" tresc={blad} />
     </div>
   );
 }
 
-/** Adres zamieszkania albo siedziby złożony z pól formularza — jedną linią. */
+/** Instrukcja dla klienta — dosłownie z § 3 wytycznych „Rejestr akcjonariuszy PSA online”. */
+function InstrukcjaMobywatel({ mobywatelUrl }) {
+  return (
+    <details className="instrukcja-podpisu" open>
+      <summary className="instrukcja-podpisu-tytul">Jak podpisać dokument w mObywatelu (bezpłatnie)</summary>
+      <p>Potrzebujesz:</p>
+      <ul className="instrukcja-podpisu-lista">
+        <li>telefonu z NFC i aktualnej aplikacji mObywatel z mDowodem,</li>
+        <li>dowodu osobistego z warstwą elektroniczną (wydanego po 4.03.2019),</li>
+        <li>numeru CAN (6 cyfr w prawym dolnym rogu dowodu) i PIN-u do dowodu.</li>
+      </ul>
+      <ol className="instrukcja-podpisu-lista">
+        <li>Kliknij <strong>Pobierz dokument</strong> i zapisz plik na komputerze.</li>
+        <li>
+          Wejdź na <a href={mobywatelUrl} target="_blank" rel="noopener noreferrer"><strong>podpis.mObywatel.gov.pl</strong></a>,
+          wybierz dowolnego dostawcę i wgraj pobrany plik.
+        </li>
+        <li>Potwierdź podpis w aplikacji mObywatel: wpisz CAN i PIN, przyłóż dowód do telefonu.</li>
+        <li>Pobierz podpisany plik i wgraj go tutaj przyciskiem <strong>Wgraj podpisany dokument</strong>.</li>
+      </ol>
+      <p>
+        <strong>Ważne:</strong> nie otwieraj i nie zapisuj ponownie pobranego pliku w innym programie, bo system odrzuci
+        zmieniony dokument. Bezpłatnie możesz podpisać 5 dokumentów miesięcznie.
+      </p>
+      <p>Wolisz podpisać na telefonie? W aplikacji wybierz Usługi → Podpis kwalifikowany.</p>
+      <p className="przyciemnione">
+        Nie masz e-dowodu albo telefonu z NFC? Podpisz plik podpisem zaufanym na gov.pl albo odeślij podpisany oryginał
+        pocztą. Skanów i zdjęć podpisanych dokumentów nie przyjmujemy.
+      </p>
+    </details>
+  );
+}
+
 function adresAkcjonariusza(a) {
   return formatujAdres(a) || null;
 }
@@ -498,6 +577,7 @@ function EkranWniosku() {
   const [pobieranieKrs, ustawPobieranieKrs] = useState(false);
   const [komunikatKrs, ustawKomunikatKrs] = useState(null);
   const [akcjonariusze, ustawAkcjonariusze] = useState([]);
+  const [mobywatelUrl, ustawMobywatelUrl] = useState('https://podpis.mobywatel.gov.pl');
   const [dodawanieAkcjonariusza, ustawDodawanieAkcjonariusza] = useState(false);
   const [bladAkcjonariuszy, ustawBladAkcjonariuszy] = useState(null);
   const [skladanie, ustawSkladanie] = useState(false);
@@ -525,6 +605,7 @@ function EkranWniosku() {
         ustawDane(w.wniosek);
         ustawAkcjonariusze(a.akcjonariusze);
         ustawDokumenty(d.dokumenty || []);
+        if (d.podpis && d.podpis.mobywatel_url) ustawMobywatelUrl(d.podpis.mobywatel_url);
         // Złożony wniosek nie przyjmuje już zmian, więc trzy pierwsze kroki
         // nie mają czego od klienta chcieć — a przeklikiwanie ich po raz
         // drugi tylko odsuwa go od tego, po co wrócił: dokumentów do
@@ -562,7 +643,7 @@ function EkranWniosku() {
   const dokumentyWidoczne = Boolean(dane)
     && ['umowa_wygenerowana', 'umowa_podpisana'].includes(dane.status)
     && dokumenty.length > 0;
-  const podpisanych = dokumenty.filter((d) => d.podpis_nazwa_pliku).length;
+  const podpisanych = dokumenty.filter((d) => d.podpis_nazwa_pliku || d.oryginal_poczta_zadeklarowano).length;
   // Skany zalacza sie po kolei i wymienia do woli; do kancelarii ida dopiero
   // po kliknieciu „Odeslij komplet". Dotad wgranie samej umowy — zwykle
   // pierwszego z osmiu plikow — stawialo wniosek w kolejce kancelarii.
@@ -1128,9 +1209,9 @@ function EkranWniosku() {
                   odmiana="ok"
                   tresc={kompletOdeslany
                     ? 'Komplet podpisanych dokumentów wrócił do kancelarii.'
-                    : 'Kancelaria sprawdziła dane i przygotowała komplet dokumentów. Pobierz wszystkie pozycje, '
-                      + 'zbierz podpisy i załącz skany. Do kancelarii pójdą dopiero, gdy klikniesz „Odeślij komplet” '
-                      + '— do tego czasu możesz je wymieniać.'}
+                    : 'Kancelaria sprawdziła dane i przygotowała komplet dokumentów. Przy każdym dokumencie: pobierz go, '
+                      + 'podpisz w mObywatelu (albo podpisem zaufanym lub osobistym) i wgraj podpisany plik. Do kancelarii '
+                      + 'pójdą dopiero, gdy klikniesz „Odeślij komplet” — do tego czasu możesz je wymieniać.'}
                 />
                 <Komunikat
                   odmiana="info"
@@ -1142,6 +1223,7 @@ function EkranWniosku() {
                       key={d.id}
                       dokument={d}
                       edytowalne={dokumentyWidoczne && !kompletOdeslany}
+                      mobywatelUrl={mobywatelUrl}
                       przyZmianie={(wynik) => {
                         if (wynik.dokumenty) ustawDokumenty(wynik.dokumenty);
                         if (wynik.wniosek) ustawDane(wynik.wniosek);
@@ -1162,8 +1244,8 @@ function EkranWniosku() {
                       <Komunikat
                         odmiana={kompletZalaczony ? 'ok' : 'info'}
                         tresc={kompletZalaczony
-                          ? 'Wszystkie dokumenty mają załączony skan. Sprawdź je jeszcze raz i odeślij komplet.'
-                          : `Załączono ${podpisanych} z ${dokumenty.length} skanów. Komplet odsyła się w całości, `
+                          ? 'Wszystkie dokumenty są podpisane albo czekają na oryginał pocztą. Sprawdź je jeszcze raz i odeślij komplet.'
+                          : `Gotowe ${podpisanych} z ${dokumenty.length} dokumentów. Komplet odsyła się w całości, `
                             + 'jednym kliknięciem — nic nie idzie do kancelarii wcześniej.'}
                       />
                       <button
@@ -1177,24 +1259,7 @@ function EkranWniosku() {
                   )}
                 </div>
 
-                <details className="instrukcja-podpisu">
-                  <summary className="instrukcja-podpisu-tytul">Jak podpisać dokumenty</summary>
-                  <ul className="instrukcja-podpisu-lista">
-                    <li>
-                      <strong>Podpisem własnoręcznym</strong> — wydrukuj dokument, podpisz go odręcznie,
-                      a następnie zeskanuj albo zrób czytelne zdjęcie każdej strony.
-                    </li>
-                    <li>
-                      <strong>Kwalifikowanym podpisem elektronicznym</strong> — podpisz plik PDF bez
-                      drukowania; podpis kwalifikowany jest równoważny podpisowi własnoręcznemu
-                      (art. 78<sup>1</sup> § 2 Kodeksu cywilnego).
-                    </li>
-                    <li>
-                      <strong>Podpisem zaufanym albo osobistym</strong> (profil zaufany, e-dowód) —
-                      dokument podpisany w ten sposób również przyjmujemy.
-                    </li>
-                  </ul>
-                </details>
+                <InstrukcjaMobywatel mobywatelUrl={mobywatelUrl} />
               </>
             )}
 

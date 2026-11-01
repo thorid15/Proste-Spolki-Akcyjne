@@ -806,3 +806,58 @@ test('B9: zgłoszenie nieprawidłowości — odrębne od żądania wpisu, kancel
   const sprawy = db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy WHERE spolka_id = ?').get(spolkaId);
   assert.equal(sprawy.n, 0, 'kwalifikacja jako sprostowanie NIE zakłada automatycznie sprawy — robi to pracownik w kreatorze');
 });
+
+test('D-075: ID w stopce i skrót przy generowaniu; oryginał pocztą; podpis notariusza dopiero po spółce; „Do zrobienia”', async () => {
+  const { wniosekId, ciastkoKlienta } = await wnioskGotowyDoWeryfikacji('podpisy-d075@example.pl', { bezSkanow: true });
+  const wiersze = db().prepare('SELECT * FROM psa_wnioski_dokumenty WHERE wniosek_id = ?').all(wniosekId);
+  const fsMod = require('node:fs');
+  const pathMod = require('node:path');
+  const cryptoMod = require('node:crypto');
+  const konf = require('../server/konfiguracja');
+  for (const w of wiersze) {
+    // W3.1 — unikalne ID, skrót SHA-256 i długość zapisane przy generowaniu.
+    assert.match(w.id_dokumentu, /^PSA-W\d+-[0-9A-F]{8}$/);
+    const plik = fsMod.readFileSync(pathMod.join(konf.KATALOG_DOKUMENTOW, w.sciezka));
+    assert.equal(w.oryginal_dlugosc, plik.length);
+    assert.equal(w.oryginal_sha256, cryptoMod.createHash('sha256').update(plik).digest('hex'));
+    assert.ok(plik.length < 5 * 1024 * 1024, 'poniżej limitu mObywatela');
+  }
+  assert.equal(new Set(wiersze.map((w) => w.id_dokumentu)).size, wiersze.length, 'ID unikalne');
+
+  // W3.8 — oświadczenie: „wyślę oryginał pocztą”, kancelaria odnotowuje otrzymanie i formę.
+  const oswiadczenie = wiersze.find((w) => w.typ !== 'umowa_rejestru' && w.typ !== 'uchwala_wyboru_projekt');
+  const [stDekl] = await zapytaj('POST', `/api/psa/portal/wniosek/dokumenty/${oswiadczenie.id}/oryginal-poczta`, { wysylam: true }, ciastkoKlienta);
+  assert.equal(stDekl, 200);
+  const [, pulpit] = await zapytaj('GET', '/api/psa/pulpit', undefined, ciastkoPracownik);
+  assert.ok(pulpit.podpisy.some((p) => p.id === oswiadczenie.id), 'W3.6: pozycja w „Do zrobienia”');
+  const [stSkan, skan] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${oswiadczenie.id}/podpis-potwierdz`, { forma: 'skan' }, ciastkoPracownik);
+  assert.equal(stSkan, 400);
+  assert.match(skan.blad, /nie jest dopuszczalną formą/);
+  const [stPap, pap] = await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${oswiadczenie.id}/podpis-potwierdz`,
+    { forma: 'oryginal', oryginal_otrzymano: '2026-11-01' }, ciastkoPracownik);
+  assert.equal(stPap, 200);
+  assert.equal(pap.dokument.forma_podpisu, 'oryginal');
+  assert.equal(pap.dokument.oryginal_otrzymano, '2026-11-01');
+
+  // W2.5 — podpis notariusza zablokowany do ważnego podpisu spółki.
+  const umowa = wiersze.find((w) => w.typ === 'umowa_rejestru');
+  const zNotariuszem = () => {
+    const f = new FormData();
+    f.append('plik', new Blob([podpisanyPdf(db(), umowa.id, 'notariusz')], { type: 'application/pdf' }), 'umowa-notariusz.pdf');
+    return fetch(`${baza}/api/psa/wnioski/${wniosekId}/dokumenty/${umowa.id}/podpis-notariusza`, { method: 'POST', headers: { Cookie: ciastkoPracownik }, body: f });
+  };
+  const przed = await zNotariuszem();
+  assert.equal(przed.status, 400);
+  assert.match((await przed.json()).blad, /dopiero po ważnym podpisie spółki/);
+
+  const f = new FormData();
+  f.append('plik', new Blob([podpisanyPdf(db(), umowa.id)], { type: 'application/pdf' }), 'umowa-spolka.pdf');
+  const wgrana = await fetch(`${baza}/api/psa/portal/wniosek/dokumenty/${umowa.id}/podpis`, { method: 'POST', headers: { Cookie: ciastkoKlienta }, body: f });
+  assert.equal(wgrana.status, 201);
+  await zapytaj('POST', `/api/psa/wnioski/${wniosekId}/dokumenty/${umowa.id}/podpis-potwierdz`, { forma: 'qes' }, ciastkoPracownik);
+  const po = await zNotariuszem();
+  assert.equal(po.status, 201);
+  const cialo = await po.json();
+  assert.equal(cialo.walidacja.wynik, 'do_weryfikacji', 'bez DSS — ręcznie');
+  assert.ok(cialo.dokumenty.find((d) => d.id === umowa.id).notariusz_podpis_wgrano);
+});

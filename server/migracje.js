@@ -2340,6 +2340,16 @@ const MIGRACJE = [
       ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_walidacja_json TEXT;
     `,
   },
+  {
+    wersja: 63,
+    nazwa: 'D-075: deklaracja klienta - oryginal pocztą zamiast pliku z podpisem elektronicznym',
+    sql: `
+      -- W3.8: sciezka alternatywna. Klient deklaruje, ze odsyla podpisany
+      -- ORYGINAL pocztą; otrzymanie i rodzaj podpisu odnotowuje kancelaria
+      -- (forma_podpisu, oryginal_otrzymano — migracja 62).
+      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_poczta_zadeklarowano TEXT;
+    `,
+  },
 ];
 
 /**

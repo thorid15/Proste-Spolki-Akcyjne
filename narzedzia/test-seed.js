@@ -220,6 +220,30 @@ async function main() {
   });
   console.log('[test:seed] zgłoszenie Gamma Zgłoszeniowa P.S.A. — zaproszenie w skrzynce testowej');
 
+  // ── Faza 2: wniosek z dokumentami do podpisu (ekran „Podpisz dokument”) ──
+  const kontoGamma = db().prepare("SELECT * FROM psa_konta WHERE email = 'gamma.zarzad@example.com'").get();
+  const klient = sesja();
+  await zapytaj(klient, 'POST', `/api/psa/portal/aktywacja/${kontoGamma.token_aktywacji}`, { haslo: trybTestowy.HASLO_TESTOWE });
+  await zapytaj(klient, 'POST', '/api/psa/portal/rodo');
+  await zapytaj(klient, 'PUT', '/api/psa/portal/wniosek', {
+    nazwa: 'Gamma Zgłoszeniowa P.S.A.', forma_prawna: 'PROSTA SPÓŁKA AKCYJNA', krs: '0000990003',
+    kraj: 'Polska', kod_pocztowy: '80-003', miejscowosc: 'Sopot', ulica: 'Testowa', nr_domu: '3',
+    email: 'gamma.zarzad@example.com', data_zawarcia_umowy_spolki: '2026-06-01',
+    reprezentant_imie_nazwisko: 'Grzegorz Gammowski', reprezentant_funkcja: 'Prezes zarządu',
+    reprezentant_reprezentacja: 'samodzielnie', reprezentant_email: 'gamma.zarzad@example.com',
+    reprezentant_pesel: pesel('800505', '1113'),
+  });
+  await zapytaj(klient, 'POST', '/api/psa/portal/wniosek/akcjonariusze', {
+    typ: 'fizyczna', imie: 'Grzegorz', nazwisko: 'Gammowski', pesel: pesel('800505', '1113'), data_urodzenia: '1980-05-05',
+    plec: 'mezczyzna', kod_pocztowy: '80-003', miejscowosc: 'Sopot', ulica: 'Testowa', nr_domu: '3',
+    rodzaj_adresu_rejestrowego: 'zamieszkania', email: 'gamma.zarzad@example.com', zgoda_email_status: 'zadeklarowana',
+  });
+  await zapytaj(klient, 'POST', '/api/psa/portal/wniosek/zloz', {});
+  const wniosekGamma = db().prepare('SELECT id FROM psa_wnioski WHERE konto_id = ?').get(kontoGamma.id);
+  await zapytaj(kancelaria, 'POST', `/api/psa/wnioski/${wniosekGamma.id}/dokumenty/wystaw`, {});
+  await zapytaj(kancelaria, 'POST', `/api/psa/wnioski/${wniosekGamma.id}/dokumenty/udostepnij`, {});
+  console.log('[test:seed] wniosek Gamma — komplet dokumentów do podpisu udostępniony (portal: gamma.zarzad@example.com)');
+
   serwer.close();
   console.log(`\n[test:seed] Gotowe: ${PLIK}`);
   console.log(`[test:seed] Konta (hasło ${trybTestowy.HASLO_TESTOWE}): ${trybTestowy.KONTA_TESTOWE.map((k) => k.email).join(', ')}`);

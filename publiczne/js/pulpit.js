@@ -19,7 +19,7 @@
     ustawowego w tym systemie, więc czas oczekiwania jest tu jego zastępstwem). */
 const PRIORYTET_DO_ZROBIENIA = { sprawa_po_terminie: 0, sprawa_po_celu: 1, inne: 2, sprawa_w_celu: 3 };
 
-function pozycjeDoZrobienia({ sprawy, zgloszenia, wnioski, zawiadomienia }) {
+function pozycjeDoZrobienia({ sprawy, zgloszenia, wnioski, zawiadomienia, podpisy = [] }) {
   const pozycje = [];
   for (const s of sprawy) {
     const priorytet = s.termin && s.termin.po_terminie
@@ -79,6 +79,20 @@ function pozycjeDoZrobienia({ sprawy, zgloszenia, wnioski, zawiadomienia }) {
       prawo: <Pigulka odmiana="mosiadz">zawiadomienie</Pigulka>,
     });
   }
+  for (const p of podpisy) {
+    pozycje.push({
+      klucz: `podpis-${p.id}`,
+      priorytet: PRIORYTET_DO_ZROBIENIA.inne,
+      data: p.kiedy,
+      ikona: 'dokument',
+      tytul: p.nazwa,
+      podtytul: `${p.wniosek_nazwa || 'wniosek'} — ${p.walidacja_wynik === 'poprawny'
+        ? 'podpis kwalifikowany zweryfikowany, potwierdź'
+        : p.oryginal_poczta_zadeklarowano && !p.walidacja_wynik ? 'oryginał pocztą — odnotuj otrzymanie' : 'podpis do weryfikacji ręcznej'}`,
+      przyKlik: () => idz(`/wnioski/${p.wniosek_id}`),
+      prawo: <Pigulka odmiana={p.walidacja_wynik === 'poprawny' ? 'rejestr' : 'sygnal'}>podpis</Pigulka>,
+    });
+  }
   return pozycje.sort((a, b) => (a.priorytet - b.priorytet) || (new Date(a.data) - new Date(b.data)));
 }
 
@@ -136,13 +150,13 @@ function EkranPulpitu() {
   if (ladowanie) return <Spinner />;
   if (blad) return <Komunikat odmiana="blad" tytul="Nie udało się wczytać pulpitu" tresc={blad.message} />;
 
-  const { spolki, integralnosc, sprawy, zgloszenia, wnioski, zawiadomienia } = dane;
+  const { spolki, integralnosc, sprawy, zgloszenia, wnioski, zawiadomienia, podpisy } = dane;
   const wToku = sprawy.pozycje || [];
   const poTerminie = wToku.filter((s) => s.termin && s.termin.po_terminie).length;
   // Wczesny sygnal to przekroczenie CELU wewnetrznego, nie zblizanie sie do
   // siodmego dnia - po to cel istnieje, zeby ostrzegal wczesniej niz ustawa.
   const poCelu = wToku.filter((s) => s.termin && s.termin.po_celu && !s.termin.po_terminie).length;
-  const doZrobienia = pozycjeDoZrobienia({ sprawy: wToku, zgloszenia, wnioski, zawiadomienia });
+  const doZrobienia = pozycjeDoZrobienia({ sprawy: wToku, zgloszenia, wnioski, zawiadomienia, podpisy });
 
   return (
     <>

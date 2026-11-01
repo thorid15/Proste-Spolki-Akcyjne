@@ -43,7 +43,7 @@ const KOLUMNY_WIDOKU = `id, typ, nazwa, nazwa_pliku, rozmiar, akcjonariusz_id, k
         otwarto_w_portalu,
         id_dokumentu, oryginal_sha256, oryginal_dlugosc,
         walidacja_wynik, walidacja_typ, walidacja_json, walidacja_kiedy,
-        forma_podpisu, oryginal_otrzymano,
+        forma_podpisu, oryginal_otrzymano, oryginal_poczta_zadeklarowano,
         notariusz_podpis_wgrano, notariusz_walidacja_wynik, notariusz_walidacja_json,
         (tresc_bloki IS NOT NULL) AS edytowalny`;
 
@@ -76,7 +76,8 @@ function widokDokumentu(wiersz) {
     walidacja: zJson(wj),
     notariusz_walidacja: zJson(nj),
     // W2.1 — formy dopuszczalne dla tego dokumentu (jedno źródło: formy-podpisu.js).
-    formy_dopuszczalne: formyPodpisu.regula(formyPodpisu.typDlaDokumentuWniosku(wiersz.typ)).formy,
+    formy_dopuszczalne: formyPodpisu.regula(formyPodpisu.typDlaDokumentuWniosku(wiersz.typ)).formy
+      .map((kod) => ({ kod, nazwa: formyPodpisu.NAZWY_FORM[kod] })),
   };
 }
 

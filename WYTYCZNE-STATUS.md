@@ -9,13 +9,18 @@
 |---|---|---|
 | 0 — Inwentarz | ZROBIONA (1.11.2026) | patrz `git log` — „Faza 0” |
 | 1 — Tryb testowy (T1–T6) | ZROBIONA — sekcja 3 | patrz `git log` — „Faza 1” |
-| 2 — Podpisy | CZEKA na akceptację STOP (konflikty K1–K4) | — |
+| 2 — Podpisy (§ 2–3) | ZROBIONA — sekcja 4; STOP | patrz `git log` — „Faza 2” |
 | 3 — Zgody, dostęp, informacje | — | — |
 | 4 — Przeniesienie rejestru | — | — |
 | 5 — Raport końcowy | — | — |
 
-**Następny krok:** decyzje Łukasza w sekcji „Konflikty” (K1–K10) i akceptacja propozycji uzupełnienia
-`PRZEPISY-PSA.md`, potem Faza 2.
+**Decyzje Łukasza (STOP Fazy 1, 1.11.2026):** K1/K2 — forma zgody i PESEL albo data urodzenia według
+nowelizacji **od dziś** (D-076); K5 — zakładka „Rejestr” w portalu tylko z danymi spółki (D-077, Faza 3);
+propozycja uzupełnienia `PRZEPISY-PSA.md` (P1–P9) przyjęta i dopisana; Faza 1 zaakceptowana, PR
+https://github.com/thorid15/Proste-Spolki-Akcyjne/pull/13 (do `claude/Main` — w repozytorium nie ma `main`).
+Otwarte: K6 (formularz publiczny zdradza, czy spółka jest klientem).
+
+**Następny krok:** akceptacja STOP Fazy 2 (sekcja 4), potem Faza 3.
 
 Stan wejściowy testów: `npm test` — 534/534 zielone (przed zmianami).
 
@@ -186,3 +191,42 @@ aktywacyjnym (D-074 pkt 2). `ARCHITEKTURA-PSA.md` zaktualizuję w Fazie 5 (zasad
 2. `npm run test:seed`
 3. `npm start` → `http://localhost:3005/` (kancelaria) lub `/portal.html` (portal) → kliknij konto pod
    „Tryb testowy — konta testowe”. Skrzynka: `/test/skrzynka`, symulowana data i atrapy: `/test`.
+
+---
+
+## 4. Faza 2 — podpisy i dokumenty (§ 2–3) — WDROŻONE
+
+Decyzje: **D-075** (polityka podpisów, zastępuje D-054 w zakresie mechanizmu), **D-076** (K1/K2, zastępuje
+D-026), **D-077** (K5). Migracje 62–63. Testy: `testy/podpisy.test.js` (8, w tym 1 pominięty — brak próbek),
+nowy test HTTP w `testy/wnioski-kancelaria-http.test.js`, rozszerzone `sprawy-http`, `wniosek-http`.
+Pełny zestaw: **556 zielonych, 1 pominięty** (próbki podpisów).
+
+| ID | Wynik | Jak |
+|---|---|---|
+| W2.1 | WDROŻONE | reguły form dosłownie wg tabeli § 2 w jednym miejscu (`server/logika/formy-podpisu.js`); portal odrzuca skan; kancelaria zaznacza formę i — przy oryginale — datę otrzymania (`potwierdzPodpis`, `pakiet-wniosku.js`) |
+| W2.2 | WDROŻONE | `POST /sprawy/:id/zgoda` przyjmuje kod formy z art. 300³⁴ § 3 zd. 2; skan i zwykły oryginał → 400 „to nie jest ważna zgoda”; UI — lista form z `/meta` |
+| W2.3 | WDROŻONE | `blokadaWpisu()` (`trasy/sprawy.js`) — bez ważnej zgody i bez powiadomienia 400 z przyczyną; w UI przycisk nieaktywny, przyczyna i „Uzupełnij” obok |
+| W2.4 | WDROŻONE | `server/logika/walidacja-podpisu.js` — format (obraz/PDF bez `/ByteRange` → odrzucenie z komunikatem dla laika), PZ/PO i niekwalifikowane → ręcznie |
+| W2.5 | WDROŻONE | podpis notariusza `POST /wnioski/:id/dokumenty/:d/podpis-notariusza` — dopiero po potwierdzonym podpisie spółki (test); checklista otwarcia + „reprezentacja wg KRS” |
+| W3.1 | WDROŻONE | ID w stopce każdej strony (`pdf.js`), SHA-256 + długość przy wystawieniu i po poprawce treści, kontrola 5 MB (`PODPIS_LIMIT_BAJTOW`) |
+| W3.2 | WDROŻONE | portal: Pobierz → Podpisz w mObywatelu (`PODPIS_MOBYWATEL_URL`, nowa karta) → Wgraj podpisany dokument; instrukcja dosłownie z § 3 (`publiczne/js/wniosek.js: InstrukcjaMobywatel`) |
+| W3.3 | WDROŻONE (bez usługi) | adapter REST DSS, odporny na wersje raportu; DSS niedostępna/błąd → ręcznie; test na atrapie HTTP DSS. **Usługi DSS nie zainstalowano** — instrukcja w README |
+| W3.4 | WDROŻONE | PAdES: skrót prefiksu o długości oryginału; XAdES: skrót dokumentu osadzonego; niezgodność → odrzucenie |
+| W3.5 | WDROŻONE | PESEL z `PNOPL-…`; inny PESEL → odrzucenie; brak PESEL po którejkolwiek stronie → ręcznie |
+| W3.6 | WDROŻONE | wynik w „Do zrobienia” (`/pulpit` → `podpisy`); potwierdza człowiek |
+| W3.7 | CZĘŚCIOWO | kolejny podpisujący (notariusz) — kontrola pierwszej wersji = oryginał; wielu podpisujących pod uchwałą: walidacja bez oczekiwanej osoby (ręcznie). Zgoda na wpis = osobny dokument jednej osoby — reguła `jedenPodpisujacy` w tabeli, wymuszenie w sprawach w Fazie 3 (dokumenty żądań) |
+| W3.8 | WDROŻONE | „Wolę wysłać podpisany oryginał pocztą” (migracja 63), podpowiedź dla zarządu przy umowie (własny QES albo oryginał; QES z mObywatela nie blokowany), PZ na gov.pl w instrukcji |
+| T5 | WDROŻONE | atrapa walidatora podpięta: w trybie testowym wynik z panelu `/test` (portal i podpis notariusza) |
+
+**Próbki podpisów:** brak — `testy/fixtures/podpisy/` pusty, test parametryzowany pominięty z komunikatem.
+Do dostarczenia: PDF podpisany w mObywatelu u 4 dostawców (Sigillum, SimplySign, mSzafir, Cencert), PZ, PO,
+każdy z oryginałem przed podpisem. Rozpoznanie PZ/PO i zachowanie oryginału jako pierwszej rewizji —
+do ustalenia na próbkach (do tego czasu PZ/PO → ręcznie; kontroli oryginału nie luzowałem).
+
+**Uwagi:**
+- Ścieżka endpointu DSS (`/services/rest/validation/validateSignature`) przyjęta z pamięci — zweryfikować
+  przy instalacji usługi (README).
+- Do Fazy 3 (kolejka listów W4.3) powiadomienie bez e-maila nie oznacza się jako wysłane — wpis w takiej
+  sprawie wymaga ważnej zgody. W trybie testowym (skrzynka) powiadomienie liczy się jako wysłane.
+- Przyjęcie wniosku nie wymaga podpisu notariusza (nie było w wytycznych) — do decyzji, czy blokować.
+- Katalog próbek: `testy/fixtures/podpisy/` (konwencja repozytorium `testy/`, nie `test/`).

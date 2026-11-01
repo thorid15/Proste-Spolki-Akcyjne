@@ -479,7 +479,7 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
   const meta = useDane('/api/psa/meta');
 
   return (
-    <Karta tytul="Uprzednie powiadomienie (art. 300(34) § 3 KSH)">
+    <div id="panel-powiadomienia"><Karta tytul="Uprzednie powiadomienie (art. 300(34) § 3 KSH)">
       <Komunikat
         odmiana="uwaga"
         tresc="Przed wpisem należy powiadomić osobę, której uprawnienia mają być wykreślone, zmienione lub obciążone — chyba że wyraziła zgodę."
@@ -488,7 +488,12 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
         <Komunikat odmiana="ok" tresc={`Powiadomienie wysłano ${fmt.dataCzas(sprawa.powiadomienie_wyslano)}${stanTrybuTestowego() ? ' — testowa, niewysłana (skrzynka testowa)' : ''}.`} />
       )}
       {sprawa.zgoda_forma && (
-        <Komunikat odmiana="ok" tresc={`Odnotowano zgodę (${sprawa.zgoda_forma}) z dnia ${fmt.data(sprawa.zgoda_data)}.`} />
+        <Komunikat
+          odmiana={sprawa.zgoda_wazna ? 'ok' : 'uwaga'}
+          tresc={sprawa.zgoda_wazna
+            ? `Odnotowano zgodę (${sprawa.zgoda_forma_nazwa}) z dnia ${fmt.data(sprawa.zgoda_data)}.`
+            : `Odnotowana zgoda („${sprawa.zgoda_forma_nazwa}”) nie jest w dopuszczalnej formie — przed wpisem wyślij powiadomienie.`}
+        />
       )}
       <Komunikat odmiana="blad" tresc={blad} />
 
@@ -502,20 +507,23 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
           </button>
         </div>
         <div>
-          <Pole etykieta="Albo odnotuj zgodę (opisz, w jaki sposób ją uzyskano)">
-            <input
-              type="text"
-              value={forma}
-              onChange={(z) => ustawForme(z.target.value)}
-              placeholder="np. oświadczenie e-mail z dnia…"
-            />
+          <Pole
+            etykieta="Albo odnotuj zgodę — forma (art. 300(34) § 3 zd. 2 KSH)"
+            podpowiedz={meta.dane ? meta.dane.uwaga_zgody_na_wpis : null}
+          >
+            <select value={forma} onChange={(z) => ustawForme(z.target.value)}>
+              <option value="">— wybierz formę zgody —</option>
+              {((meta.dane && meta.dane.formy_zgody_na_wpis) || []).map((f) => (
+                <option key={f.kod} value={f.kod}>{f.nazwa}</option>
+              ))}
+            </select>
           </Pole>
-          <button className="btn btn-sm" disabled={!forma.trim() || wysylanie} onClick={odnotujZgode}>
+          <button className="btn btn-sm" disabled={!forma || wysylanie} onClick={odnotujZgode}>
             Odnotuj zgodę
           </button>
         </div>
       </div>
-    </Karta>
+    </Karta></div>
   );
 }
 
@@ -837,7 +845,14 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
           ) : (
             <>
               <button className="btn" onClick={wczytajPodglad} disabled={ladowaniePodgladu}>Przelicz podgląd</button>
-              <button className="btn btn-glowny btn-lg" disabled={!mozeWpisac || zapisywanie} onClick={dokonajWpisu}>
+              {/* W2.3 — przyczyna blokady obok przycisku (D-052: z odnośnikiem do miejsca naprawy). */}
+              {sprawa.blokada_wpisu && (
+                <span className="podpowiedz" style={{ maxWidth: '28rem' }}>
+                  {sprawa.blokada_wpisu.przyczyna}{' '}
+                  <a href="#panel-powiadomienia">Uzupełnij</a>
+                </span>
+              )}
+              <button className="btn btn-glowny btn-lg" disabled={!mozeWpisac || zapisywanie || Boolean(sprawa.blokada_wpisu)} onClick={dokonajWpisu}>
                 {zapisywanie ? 'Zapisywanie…' : 'Dokonaj wpisu'}
               </button>
             </>

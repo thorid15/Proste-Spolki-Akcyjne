@@ -54,6 +54,7 @@ const { pobierzZKrs } = require('./krs');
 const osobyModul = require('./osoby');
 const trybTestowy = require('../tryb-testowy');
 const walidacjaPodpisu = require('../logika/walidacja-podpisu');
+const formyPodpisu = require('../logika/formy-podpisu');
 
 const router = express.Router();
 
@@ -938,8 +939,10 @@ router.get(
   wymagajWnioskodawcy,
   asy((zad, odp) => {
     const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
-    if (!wniosek) return odp.json({ dokumenty: [] });
-    odp.json({ dokumenty: wczytajDokumentyWniosku(wniosek.id) });
+    // Adres usługi podpisu — parametr konfiguracji (W3.2), nie stała w widoku.
+    const podpis = { mobywatel_url: konfiguracja.PODPIS.mobywatel_url };
+    if (!wniosek) return odp.json({ dokumenty: [], podpis });
+    odp.json({ dokumenty: wczytajDokumentyWniosku(wniosek.id), podpis });
   })
 );
 
@@ -1178,14 +1181,17 @@ router.post(
     if (dokumenty.length === 0) {
       throw bledneZadanie('Kancelaria nie udostępniła jeszcze dokumentów do podpisu.');
     }
-    const bezSkanu = dokumenty.filter((d) => !d.podpis_nazwa_pliku);
+    // D-075: pozycja jest gotowa, gdy ma plik z podpisem elektronicznym albo
+    // klient zadeklarowal odeslanie oryginalu pocztą (W3.8).
+    const bezSkanu = dokumenty.filter((d) => !d.podpis_nazwa_pliku && !d.oryginal_poczta_zadeklarowano);
     if (bezSkanu.length > 0) {
       throw bledneZadanie(
-        'Komplet jest niepełny — brakuje podpisanych skanów.',
+        'Komplet jest niepełny — przy każdym dokumencie wgraj plik z podpisem albo zaznacz „Wyślę oryginał pocztą”.',
         bezSkanu.map((d) => d.nazwa_pliku)
       );
     }
-    if (!wniosek.umowa_podpisana_sciezka) {
+    const umowaPoczta = dokumenty.some((d) => d.typ === dokumentyWniosku.TYPY.UMOWA_REJESTRU && d.oryginal_poczta_zadeklarowano);
+    if (!wniosek.umowa_podpisana_sciezka && !umowaPoczta) {
       throw bledneZadanie('Brakuje podpisanej umowy o prowadzenie rejestru.');
     }
 
@@ -1386,6 +1392,37 @@ router.delete(
         .run(czas.terazIso(), wniosek.id);
     }
 
+    odp.json({
+      wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
+      dokumenty: wczytajDokumentyWniosku(wniosek.id),
+    });
+  })
+);
+
+/**
+ * W3.8 — „Wyślę oryginał pocztą” zamiast pliku z podpisem elektronicznym.
+ * Tylko przy dokumentach, dla ktorych oryginal jest dopuszczalna forma
+ * (formy-podpisu.js); otrzymanie i rodzaj podpisu odnotowuje kancelaria.
+ */
+router.post(
+  '/wniosek/dokumenty/:id/oryginal-poczta',
+  wymagajWnioskodawcy,
+  asy((zad, odp) => {
+    const wniosek = wczytajOtwartyWniosekKonta(zad.konto.id);
+    if (!wniosek) throw nieZnaleziono('Nie odnaleziono wniosku.');
+    if (!STATUSY_PRZYJMUJACE_PODPISY.has(wniosek.status)) {
+      throw bledneZadanie(`Wniosek ma status „${wniosek.status}” — nie można już zmieniać przesłanych dokumentów.`);
+    }
+    const dokument = db()
+      .prepare('SELECT * FROM psa_wnioski_dokumenty WHERE id = ? AND wniosek_id = ? AND udostepniono IS NOT NULL')
+      .get(Number(zad.params.id), wniosek.id);
+    if (!dokument) throw nieZnaleziono('Nie odnaleziono dokumentu.');
+    const papierowe = formyPodpisu.formyPapierowe(formyPodpisu.typDlaDokumentuWniosku(dokument.typ))
+      .filter((f) => f !== formyPodpisu.FORMY.W_KANCELARII);
+    if (papierowe.length === 0) throw bledneZadanie('Ten dokument trzeba podpisać elektronicznie.');
+    const wysylam = (zad.body || {}).wysylam !== false;
+    db().prepare('UPDATE psa_wnioski_dokumenty SET oryginal_poczta_zadeklarowano = ? WHERE id = ?')
+      .run(wysylam ? czas.terazIso() : null, dokument.id);
     odp.json({
       wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wniosek.id),
       dokumenty: wczytajDokumentyWniosku(wniosek.id),

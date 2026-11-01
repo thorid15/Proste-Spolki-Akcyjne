@@ -49,6 +49,41 @@ TypeScriptu, bez Tailwinda, bez bibliotek PDF.
 
 ---
 
+## Podpisy dokumentów — D-075, D-076
+
+Polityka (`server/logika/formy-podpisu.js`, tabela § 2 wytycznych): **skanów nie przyjmujemy**; podpis
+kwalifikowany (mObywatel), zaufany, osobisty albo oryginał pocztą (zgoda na wpis — wyłącznie
+z podpisem notarialnie poświadczonym) albo podpis w kancelarii. Forma zgody według art. 300³⁴ § 3
+zd. 2 KSH obowiązuje już teraz (D-076).
+
+- **Generowanie:** każdy PDF do podpisu ma unikalne ID w stopce; przy wystawieniu zapisuje się SHA-256
+  i długość pliku; limit 5 MB (`PODPIS_LIMIT_BAJTOW`).
+- **Portal — „Podpisz dokument”:** Pobierz → Podpisz w mObywatelu (`PODPIS_MOBYWATEL_URL`, nowa
+  karta) → Wgraj podpisany dokument; instrukcja dosłownie z § 3; „Wolę wysłać podpisany oryginał
+  pocztą”.
+- **Walidacja po wgraniu** (`server/logika/walidacja-podpisu.js`): obraz / PDF bez podpisu → odrzucenie
+  z komunikatem dla laika; początek pliku ≠ oryginał → odrzucenie („plik zmieniono po pobraniu”);
+  usługa DSS → typ podpisu i podpisujący (PESEL z `PNOPL-…`); wszystko niepewne (brak DSS, awaria,
+  ostrzeżenie, podpis niekwalifikowany — w tym PZ/PO, brak PESEL) → **do weryfikacji ręcznej**.
+  Nigdy automatycznej akceptacji bez udanej walidacji. Wynik trafia do „Do zrobienia”; formę
+  i potwierdzenie zaznacza pracownik (D-052).
+- **Umowa o prowadzenie rejestru:** spółka podpisuje pierwsza; podpis notariusza (QES) można wgrać
+  dopiero po potwierdzeniu ważnego podpisu spółki. Checklista otwarcia: „reprezentacja wg KRS”.
+- **Wpis bez ważnej zgody** — „Dokonaj wpisu” zablokowane do wysłania powiadomienia
+  (art. 300³⁴ § 3 zd. 1 KSH), z przyczyną obok przycisku.
+
+**Usługa DSS** (biblioteka Komisji Europejskiej) działa jako **osobny proces** — Node nie dostaje żadnej
+biblioteki kryptograficznej ani PDF. Bez `DSS_URL` każdy podpis idzie do weryfikacji ręcznej.
+Uruchomienie do testów (nie instalujemy jej na produkcji w tej sesji):
+1. Pobierz gotową aplikację demonstracyjną DSS (*DSS demonstration webapp / bundle*) ze strony projektu
+   DSS Komisji Europejskiej (Digital Building Blocks) — wymaga Javy w wersji podanej w jej dokumentacji.
+2. Uruchom ją lokalnie (domyślnie Tomcat na porcie 8080) i sprawdź w jej dokumentacji ścieżkę REST
+   walidacji — adapter woła `POST {DSS_URL}/services/rest/validation/validateSignature`
+   (JSON: `signedDocument.bytes` w base64); przy innej ścieżce popraw `zapytajDss()`.
+3. W `.env`: `DSS_URL=http://localhost:8080` (adres bez ścieżki), opcjonalnie `DSS_LIMIT_MS=30000`.
+
+Próbki prawdziwych podpisów do testu: `testy/fixtures/podpisy/` (README w katalogu; pliki w `.gitignore`).
+
 ## Tryb testowy (bez poczty, dane fikcyjne) — D-074
 
 Do przejścia każdego przepływu kancelarii i portalu bez skonfigurowanej poczty. Działa na **osobnej
@@ -68,7 +103,7 @@ skrzynki i panelu. Wyłączenie: usuń `PSA_TRYB_TESTOWY` z `.env`.
 **Konta** (hasło wszystkich: `Test-Haslo-2026`): `notariusz@example.com` (administrator),
 `pracownik@example.com`, `zarzad@example.com` (konto spółki Alfa Testowa P.S.A.),
 `anna.zgoda@example.com` (akcjonariusz ze zgodą e-mail), `bartosz.bezzgody@example.com`
-(akcjonariusz bez zgody). Lista na ekranie logowania woła **zwykły** endpoint logowania — te same
+(akcjonariusz bez zgody), `gamma.zarzad@example.com` (wnioskodawca z dokumentami do podpisu). Lista na ekranie logowania woła **zwykły** endpoint logowania — te same
 uprawnienia, izolacja spółek i ważność sesji. Link z wiersza poleceń:
 `npm run test:link -- <e-mail>` (konto nieaktywne → link aktywacyjny, ten sam co w zaproszeniu;
 aktywne → adres logowania). Każde logowanie w trybie testowym trafia do `psa_dziennik_logowan`.
@@ -95,6 +130,10 @@ niewysłana”. Nic nie wychodzi z serwera. Po wysłaniu zaproszenia ekran pokaz
 **odmawia startu**; poza trybem testowym `/test/*` to 404, a skrzynka i atrapy są niedostępne.
 Kopię bazy prototypu oznacza się jako testową poleceniem `npm run test:oznacz -- <ścieżka>`
 (z potwierdzeniem „TAK”; odmawia dla pliku z `WSPOLNA_BAZA`), potem `PSA_BAZA_TESTOWA=<ścieżka>`.
+
+**Podpisy w trybie testowym:** konto `gamma.zarzad@example.com` ma wniosek z kompletem dokumentów do
+podpisu — w portalu „Podpisz dokumenty do wniosku”. Wgraj dowolny PDF: wynik ustala atrapa walidatora
+z panelu `/test` (QES / PZ / PO / zaawansowany / brak podpisu / plik zmieniony / inna osoba).
 
 **Poczta produkcyjna:** jeden punkt `server/poczta.js: wyslij()` z wymiennym transportem
 (`POCZTA_TRANSPORT`, domyślnie `smtp`). Microsoft 365 (`biuro@notariusz.gdansk.pl`) podłącza się przez

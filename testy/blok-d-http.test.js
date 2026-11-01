@@ -190,6 +190,9 @@ test('D3: manifest tras portalu — nowa trasa musi byc tu swiadomie dopisana', 
     'POST /wniosek/dokumenty/:id/podpis',
     'GET /wniosek/dokumenty/:id/podpis',
     'DELETE /wniosek/dokumenty/:id/podpis',
+    // D-075 (W3.8): „wyślę oryginał pocztą” — ten sam wzór izolacji co wyżej
+    // (dokument szukany razem z wniosek_id wniosku z sesji).
+    'POST /wniosek/dokumenty/:id/oryginal-poczta',
     'POST /zadania',
     'POST /zadania/:id/dokumenty',
     // B9: zgloszenie nieprawidlowosci we wpisie. `GET` (wlasna lista) dziala
