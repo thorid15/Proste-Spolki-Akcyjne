@@ -228,6 +228,11 @@ function EkranZgloszenieWstepne() {
   const [email, ustawEmail] = useState('');
   const [krs, ustawKrs] = useState('');
   const [nazwaSpolki, ustawNazwaSpolki] = useState('');
+  // W7.1 — wariant „Przenoszę rejestr od innego podmiotu” (opis neutralny, bez porównań).
+  const [przenosze, ustawPrzenosze] = useState(false);
+  const [poprzednikTyp, ustawPoprzednikTyp] = useState('dom_maklerski');
+  const [poprzednikNazwa, ustawPoprzednikNazwa] = useState('');
+  const [okresWypowiedzenia, ustawOkres] = useState('');
   const [wysylanie, ustawWysylanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
   const [gotowe, ustawGotowe] = useState(false);
@@ -245,6 +250,10 @@ function EkranZgloszenieWstepne() {
         email: email.trim(),
         krs: krsCyfry,
         nazwa_spolki: nazwaSpolki.trim() || undefined,
+        przeniesienie: przenosze ? {
+          poprzednik_typ: poprzednikTyp, poprzednik_nazwa: poprzednikNazwa.trim() || undefined,
+          okres_wypowiedzenia: okresWypowiedzenia.trim() || undefined,
+        } : undefined,
       });
       ustawGotowe(wynik);
     } catch (e) {
@@ -310,6 +319,27 @@ function EkranZgloszenieWstepne() {
         <Pole etykieta="Nazwa spółki">
           <input type="text" value={nazwaSpolki} onChange={(z) => ustawNazwaSpolki(z.target.value)} />
         </Pole>
+        <Przelacznik
+          wlaczony={przenosze}
+          przyZmianie={ustawPrzenosze}
+          etykieta="Przenoszę rejestr od innego podmiotu"
+          opis="Spółka ma już rejestr akcjonariuszy prowadzony przez inny podmiot (dom maklerski, bank albo notariusza) i chce przenieść jego prowadzenie."
+        />
+        {przenosze && (
+          <>
+            <Pole etykieta="Kto dotąd prowadzi rejestr" wymagane>
+              <select value={poprzednikTyp} onChange={(z) => ustawPoprzednikTyp(z.target.value)}>
+                <option value="dom_maklerski">dom maklerski / bank</option>
+                <option value="notariusz">notariusz</option>
+                <option value="rada_izby">notariusz, który zakończył działalność (rada izby notarialnej)</option>
+              </select>
+            </Pole>
+            <Pole etykieta="Nazwa dotychczasowego podmiotu"><input value={poprzednikNazwa} onChange={(z) => ustawPoprzednikNazwa(z.target.value)} /></Pole>
+            <Pole etykieta="Okres wypowiedzenia dotychczasowej umowy (jeśli znany)" podpowiedz="Informacyjnie — datę przejęcia ustalimy po zawiadomieniu o rozwiązaniu umowy.">
+              <input value={okresWypowiedzenia} onChange={(z) => ustawOkres(z.target.value)} placeholder="np. 3 miesiące" />
+            </Pole>
+          </>
+        )}
 
       <button
         className="btn btn-glowny btn-duzy"
@@ -919,6 +949,59 @@ function pozycjeDoZrobieniaPortal({ wniosek, sprawy, oplaty }) {
   return pozycje.sort((a, b) => a.priorytet - b.priorytet);
 }
 
+/**
+ * Faza 4 — przeniesienie rejestru widziane przez spółkę: status (§ 7.3),
+ * przypomnienia (W7.5), dokumenty startowe (W7.2), wzór uchwały i pakiet pism (W7.4).
+ */
+function PrzeniesieniePortal() {
+  const { dane, odswiez } = useDane('/api/psa/portal/przeniesienie');
+  const [typ, ustawTyp] = useState('umowa_spolki');
+  const [blad, ustawBlad] = useState(null);
+  const plik = useRef(null);
+  if (!dane || !dane.przeniesienie) return null;
+  const p = dane.przeniesienie;
+  async function wyslij() {
+    ustawBlad(null);
+    const f = new FormData();
+    f.append('typ', typ);
+    f.append('plik', plik.current.files[0]);
+    const odp = await fetch('/api/psa/portal/przeniesienie/dokumenty', { method: 'POST', body: f });
+    if (!odp.ok) { const t = await odp.json().catch(() => ({})); ustawBlad(t.blad || 'Nie udało się przesłać pliku.'); return; }
+    plik.current.value = '';
+    odswiez();
+  }
+  return (
+    <Karta tytul="Przeniesienie rejestru">
+      <p><strong>{p.nazwa_statusu}</strong> — dotychczasowy podmiot: {p.poprzednik_nazwa || p.poprzednik_opis}.</p>
+      {p.data_zawarcia_umowy && <p>Umowa zawarta {fmt.data(p.data_zawarcia_umowy)}; termin ostateczny warunku: {fmt.data(p.termin_warunku)}.</p>}
+      {p.data_skutecznosci && <p>Rejestr prowadzimy od {fmt.data(p.data_skutecznosci)}.</p>}
+      {p.przypomnienia.map((pr) => <Komunikat key={pr.rodzaj} odmiana="uwaga" tresc={pr.tresc} />)}
+      {p.status === 'umowa_warunkowa' && (
+        <Komunikat odmiana="info" tresc="W ostatnim tygodniu przed rozwiązaniem dotychczasowej umowy nie składaj nowych żądań u dotychczasowego podmiotu. Zawiadom nas o dacie rozwiązania — wgraj wypowiedzenie z potwierdzeniem doręczenia albo potwierdzenie od dotychczasowego podmiotu." />
+      )}
+      <Komunikat odmiana="blad" tresc={blad} />
+      <div className="row-g" style={{ flexWrap: 'wrap' }}>
+        <select value={typ} onChange={(z) => ustawTyp(z.target.value)}>
+          <option value="umowa_spolki">aktualny tekst umowy spółki</option>
+          <option value="informacja_poprzednika">informacja z dotychczasowego rejestru</option>
+          <option value="uchwala">podpisana uchwała akcjonariuszy</option>
+          <option value="wypowiedzenie">wypowiedzenie z potwierdzeniem doręczenia</option>
+          <option value="potwierdzenie_rozwiazania">potwierdzenie daty rozwiązania od poprzednika</option>
+        </select>
+        <input type="file" ref={plik} />
+        <button className="btn btn-maly" onClick={wyslij}>Wgraj dokument</button>
+      </div>
+      {p.dokumenty.length > 0 && <ul>{p.dokumenty.map((d) => <li key={d.id}>{d.nazwa_pliku} <span className="przyciemnione">({d.typ})</span></li>)}</ul>}
+      {p.pisma.length > 0 && (
+        <>
+          <p><strong>Dokumenty do pobrania</strong></p>
+          <ul>{p.pisma.map((x) => <li key={x.kod}><a href={`/api/psa/portal/przeniesienie/pisma/${x.kod}`} target="_blank" rel="noopener">{x.tytul}</a></li>)}</ul>
+        </>
+      )}
+    </Karta>
+  );
+}
+
 function EkranStart() {
   const { dane: moje, ladowanie: ladowanieMoje } = useDane('/api/psa/portal/moje');
   const { dane: zadania, ladowanie: ladowanieZadania } = useDane(
@@ -941,6 +1024,7 @@ function EkranStart() {
 
   return (
     <div className="pion" style={{ gap: 16 }}>
+      <PrzeniesieniePortal />
       <Karta tytul="Do zrobienia">
         {pozycje.length === 0 ? (
           <Pusto ikona="sprawdz" tytul="Wszystko załatwione" opis="Nic teraz nie wymaga Twojej uwagi." />

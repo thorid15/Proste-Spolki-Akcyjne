@@ -37,6 +37,8 @@ const MENU = [
       { sciezka: '/zawiadomienia', nazwa: 'Zawiadomienia', ikona: 'szablony', licznik: 'zawiadomienia' },
       // W4.3 — pisma do osób bez zgody na komunikację e-mail (adres z rejestru).
       { sciezka: '/listy', nazwa: 'Listy do wysyłki', ikona: 'szablony', licznik: 'listy' },
+      // Faza 4 — przeniesienie rejestru od innego podmiotu (§ 7 wytycznych).
+      { sciezka: '/przeniesienia', nazwa: 'Przeniesienia', ikona: 'spolki' },
     ],
   },
   {
@@ -247,6 +249,7 @@ function opisTrasy(segmenty) {
     zgloszenia: { tytul: 'Zgłoszenia', podtytul: 'Pierwszy kontakt z publicznego formularza portalu — do oceny przed wysłaniem zaproszenia.' },
     wnioski: { tytul: 'Wnioski', podtytul: 'Wnioski o prowadzenie rejestru złożone przez portal klienta — porównanie z KRS i akceptacja.' },
     zawiadomienia: { tytul: 'Zawiadomienia', podtytul: 'Wpisy dokonane, o których nie zawiadomiono jeszcze żądającego i spółki (art. 300³⁴ § 7 KSH).' },
+    przeniesienia: { tytul: 'Przeniesienia rejestru', podtytul: 'Przejęcie rejestru od domu maklerskiego, banku albo notariusza — statusy § 7.3 wytycznych.' },
     listy: { tytul: 'Listy do wysyłki', podtytul: 'Pisma do osób bez zgody na komunikację e-mail — adres z rejestru, data i numer nadania (art. 300³³ § 1 pkt 5 KSH).' },
     informacje: { tytul: 'Dziennik wydanych informacji', podtytul: 'Informacje z rejestru (art. 300³⁵ KSH): numer, data, odbiorca, opłata.' },
     oplaty: { tytul: 'Opłaty', podtytul: 'Naliczenia za czynności rejestrowe i prowadzenie rejestru.' },
@@ -350,6 +353,12 @@ function Aplikacja() {
     if (segmenty[0] === 'zgloszenia') return <EkranZgloszenWstepnych />;
     if (segmenty[0] === 'zawiadomienia') return <EkranZawiadomien />;
     if (segmenty[0] === 'listy') return <EkranListow />;
+    if (segmenty[0] === 'przeniesienia') {
+      if (segmenty.length === 1) return <EkranPrzeniesien />;
+      const id = Number(segmenty[1]);
+      if (!Number.isInteger(id)) return <NieZnaleziono />;
+      return <EkranPrzeniesienia id={id} />;
+    }
     if (segmenty[0] === 'informacje') return <EkranDziennikaInformacji />;
     if (segmenty[0] === 'wnioski') {
       if (segmenty.length === 1) return <EkranWnioski />;

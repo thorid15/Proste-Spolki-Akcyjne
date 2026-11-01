@@ -256,6 +256,86 @@ async function main() {
   await zapytaj(kancelaria, 'POST', `/api/psa/wnioski/${wniosekGamma.id}/dokumenty/udostepnij`, {});
   console.log('[test:seed] wniosek Gamma — komplet dokumentów do podpisu udostępniony (portal: gamma.zarzad@example.com)');
 
+  // ── Faza 4: przeniesienie rejestru — spółka w każdym statusie § 7.3 ────
+  await zapytaj(sesja(), 'POST', '/api/psa/portal/zgloszenia', {
+    email: 'beta.zarzad@example.com', krs: '0000990002', telefon: '500000002',
+    przeniesienie: { poprzednik_typ: 'dom_maklerski', poprzednik_nazwa: 'Dom Maklerski Fikcja S.A.', okres_wypowiedzenia: '3 miesiące' },
+  });
+  console.log('[test:seed] przeniesienie Beta Przenoszona P.S.A. — „Zgłoszone” (do przejścia w trybie testowym)');
+  const przeniesieniaModul = require('../server/przeniesienia');
+  const pdf = (t) => Buffer.from(`%PDF-1.4\n${t}\n%%EOF\n`);
+  async function plikPrzen(id, typ, zrodlo, nazwa) {
+    const f = new FormData();
+    f.append('typ', typ); f.append('zrodlo', zrodlo);
+    f.append('plik', new Blob([pdf(nazwa)], { type: 'application/pdf' }), nazwa);
+    const odp = await fetch(`${ADRES}/api/psa/przeniesienia/${id}/dokumenty`, {
+      method: 'POST', headers: { Cookie: Object.entries(kancelaria.ciastka).map(([k, v]) => `${k}=${v}`).join('; ') }, body: f,
+    });
+    if (!odp.ok) throw new Error(`dokument przeniesienia: ${await odp.text()}`);
+  }
+  const KOLEJNOSC = ['weryfikacja', 'umowa_warunkowa', 'oczekuje_na_przekazanie', 'uzgodnienie'];
+  async function przeniesienieDo(nazwa, krs, cel) {
+    const id = przeniesieniaModul.utworzZeZgloszenia(db(), {
+      zgloszenieId: null, krs, nazwa, poprzednikTyp: 'notariusz', poprzednikNazwa: 'Notariusz Fikcyjny (dane testowe)',
+    });
+    const spolkaP = (await zapytaj(kancelaria, 'POST', '/api/psa/spolki', { krs, nazwa, email: `${krs}@example.com`, status: 'aktywna' })).spolka;
+    db().prepare('UPDATE psa_przeniesienia SET spolka_id = ? WHERE id = ?').run(spolkaP.id, id);
+    const etapy = cel === 'wygasla' ? ['weryfikacja', 'umowa_warunkowa'] : KOLEJNOSC.slice(0, Math.max(0, KOLEJNOSC.indexOf(cel === 'wstrzymane_rozbieznosci' ? 'uzgodnienie' : cel) + 1));
+    for (const na of etapy) {
+      if (na === 'umowa_warunkowa') {
+        await plikPrzen(id, 'uchwala', 'klient', 'uchwala.pdf');
+        await plikPrzen(id, 'umowa_spolki', 'klient', 'umowa-spolki.pdf');
+        await zapytaj(kancelaria, 'PUT', `/api/psa/przeniesienia/${id}/checklista/weryfikacji`, {
+          zaznaczone: { reprezentacja: true, uchwala: true, umowa_spolki: true, aml: true, liczba_akcji: true },
+        });
+      }
+      if (na === 'oczekuje_na_przekazanie') await plikPrzen(id, 'wypowiedzenie', 'klient', 'wypowiedzenie.pdf');
+      if (na === 'uzgodnienie') await plikPrzen(id, 'dane_poprzednika', 'poprzednik', 'rejestr-poprzednika.pdf');
+      await zapytaj(kancelaria, 'POST', `/api/psa/przeniesienia/${id}/przejscie`, {
+        na, data_zawarcia_umowy: czas.dzisIso(), data_skutecznosci: czas.dzisIso(),
+      });
+    }
+    if (cel === 'wstrzymane_rozbieznosci') {
+      await zapytaj(kancelaria, 'POST', `/api/psa/przeniesienia/${id}/przejscie`, { na: cel, uwagi: 'Liczba akcji serii A w rejestrze poprzednika (90) różni się od KRS (100).' });
+    }
+    if (cel === 'wygasla') {
+      // Dane testowe: umowa zawarta 13 miesięcy temu, warunek się nie ziścił.
+      db().prepare('UPDATE psa_przeniesienia SET data_zawarcia_umowy = ? WHERE id = ?').run(require('../server/logika/przeniesienie').dodajMiesiace(czas.dzisIso(), -13), id);
+      przeniesieniaModul.zastosujWygasniecia(db());
+    }
+    console.log(`[test:seed] przeniesienie ${nazwa} — ${przeniesieniaModul.wczytaj(db(), id).nazwa_statusu}`);
+    return { id, spolkaId: spolkaP.id };
+  }
+  await przeniesienieDo('Epsilon Weryfikowana P.S.A.', '0000990011', 'weryfikacja');
+  await przeniesienieDo('Zeta Warunkowa P.S.A.', '0000990012', 'umowa_warunkowa');
+  await przeniesienieDo('Eta Oczekująca P.S.A.', '0000990013', 'oczekuje_na_przekazanie');
+  await przeniesienieDo('Theta Uzgadniana P.S.A.', '0000990014', 'uzgodnienie');
+  await przeniesienieDo('Jota Wstrzymana P.S.A.', '0000990015', 'wstrzymane_rozbieznosci');
+  await przeniesienieDo('Kappa Wygasła P.S.A.', '0000990016', 'wygasla');
+  // „Aktywny”: pełny Etap 6–7 — checklista odbioru, protokół z podpisem (atrapa walidatora), otwarcie PRZEJĘCIE.
+  const lambda = await przeniesienieDo('Lambda Przejęta P.S.A.', '0000990017', 'uzgodnienie');
+  await zapytaj(kancelaria, 'PUT', `/api/psa/przeniesienia/${lambda.id}/checklista/odbioru`, {
+    zaznaczone: { kompletnosc: true, liczba_akcji: true, pokrycie: true, obciazenia: true, lista_krs: true, rozbieznosci: true },
+  });
+  const ciastkoK = Object.entries(kancelaria.ciastka).map(([k, v]) => `${k}=${v}`).join('; ');
+  const protokol = Buffer.from(await (await fetch(`${ADRES}/api/psa/przeniesienia/${lambda.id}/protokol.pdf`, { headers: { Cookie: ciastkoK } })).arrayBuffer());
+  const fz = new FormData();
+  fz.append('plik', new Blob([protokol], { type: 'application/pdf' }), 'protokol-podpisany.pdf');
+  await fetch(`${ADRES}/api/psa/przeniesienia/${lambda.id}/zatwierdzenie`, { method: 'POST', headers: { Cookie: ciastkoK }, body: fz });
+  const lambdaOsoba = await osoba({
+    imie: 'Leon', nazwisko: 'Przejęty', pesel: pesel('700101', '1112'), data_urodzenia: '1970-01-01', plec: 'mezczyzna',
+    kod_pocztowy: '80-017', miejscowosc: 'Gdańsk', ulica: 'Przejęcia', nr_domu: '17', zgoda_email_status: 'brak',
+  });
+  await zapytaj(kancelaria, 'POST', `/api/psa/spolki/${lambda.spolkaId}/otworz-rejestr`, {
+    checklista: { forma: true, wpis_krs: true, uchwala: true, reprezentacja: true, umowa: true, jedna_umowa: true, dane_z_umowy: true, ograniczenia: true, bilans: true, zakres_danych: true, aml: true },
+    zdarzenia: [
+      { typ: 'emisja', klucz_tymczasowy: 'e1', dane: { seria: 'A', nr_pierwszy: 1, ilosc: 500, data_wpisu_krs: '2025-03-15', rodzaj_akcji: 'zwykla' } },
+      { typ: 'objecie', dane: { emisja_zdarzenie_id: { __odwolanie_do_partii: 'e1' }, pozycje: [{ osoba_id: lambdaOsoba.id, ilosc: 500, pokryta: 'tak' }] } },
+    ],
+    archiwum: 'Historia wpisów poprzednika (dane testowe): 4 wpisy 2025–2026.',
+  });
+  console.log(`[test:seed] przeniesienie Lambda Przejęta P.S.A. — ${przeniesieniaModul.wczytaj(db(), lambda.id).nazwa_statusu}`);
+
   serwer.close();
   console.log(`\n[test:seed] Gotowe: ${PLIK}`);
   console.log(`[test:seed] Konta (hasło ${trybTestowy.HASLO_TESTOWE}): ${trybTestowy.KONTA_TESTOWE.map((k) => k.email).join(', ')}`);
