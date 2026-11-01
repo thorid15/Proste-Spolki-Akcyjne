@@ -639,8 +639,11 @@ body {
 .kolumna-sprawy > * { margin-top: 0; margin-bottom: 0; }
 .pasek-akcji { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--od-8); }
 @media (max-width: 600px) {
-  .pasek-akcji { flex-direction: column-reverse; align-items: stretch; }
+  /* Telefon: pełna szerokość minus 16 px marginesów (treść aplikacji ma 40 px) [domyślne]. */
+  .kolumna-sprawy { margin-inline: calc(var(--od-16) - var(--od-40)); }
+  .pasek-akcji { flex-direction: column; align-items: stretch; }
   .pasek-akcji > .btn { width: 100%; }
+  .pasek-akcji > .btn-glowny { order: -1; }
 }
 
 /* ── Lista „etykieta — wartość” (R4 P1/K2) ── */
@@ -2564,3 +2567,12 @@ h1.topbar-tytul, h1.brama-tytul { margin: 0; font-weight: inherit; }
 @media (max-width: 900px) { .topbar-nawigacja { max-width: 100vw; min-width: 0; position: relative; } }
 /* Tekst dla czytnika w liczniku nie może uciec z przewijanego paska. */
 .licznik { position: relative; }
+
+/* ── R4 STOP 1 — WCAG 2.5.5: cel dotyku ≥ 44 px na telefonie ── */
+@media (max-width: 600px) {
+  .btn, select, .data-segmenty, .kalendarz-kotwica .btn,
+  input:not([type="checkbox"]):not([type="radio"]):not(.data-segment) { min-height: 44px; }
+  .kalendarz-kotwica .btn { min-width: 44px; }
+  .okruszki button { min-height: 44px; }
+  .zakladka { min-width: 44px; min-height: 44px; }
+}

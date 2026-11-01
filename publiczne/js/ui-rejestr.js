@@ -922,7 +922,13 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
   return (
     <>
       <div className="pole-daty">
-        <div className={`data-segmenty ${blad || niepoprawne ? 'bledne' : ''} ${wylaczone ? 'wylaczone' : ''}`} onPaste={wklej} role="group">
+        <div
+          className={`data-segmenty ${blad || niepoprawne ? 'bledne' : ''} ${wylaczone ? 'wylaczone' : ''}`}
+          onPaste={wklej}
+          role="group"
+          // R4 STOP 1 (WCAG 2.5.5): cała ramka pola jest celem dotyku — klik obok cyfr ustawia kursor w dniu.
+          onClick={(z) => { if (z.target === z.currentTarget && refDzien.current && !wylaczone) refDzien.current.focus(); }}
+        >
           <input
             ref={refDzien} className="data-segment" data-szer="2" inputMode="numeric" id={id}
             aria-describedby={opis} aria-invalid={niepoprawne}

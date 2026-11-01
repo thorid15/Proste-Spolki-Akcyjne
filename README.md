@@ -119,6 +119,16 @@ podpisy (test pliku i atrapa, D-086), wpis bez zgody → list do wysyłki, zgody
 rejestru do „Aktywny”, informacja z rejestru w wersji dla spółki i akcjonariusza na dacie 2027-02-20. Kod wyjścia 1
 przy błędzie. Pierwotny `npm run scenariusz -- --haslo …` działa też na serwerze w trybie testowym (link aktywacyjny
 ze skrzynki testowej). Testy ręczne dla notariusza: `WYTYCZNE-STATUS.md`, sekcja R4.
+## Zrzuty ekranów i kontrola układu — R4
+
+```bash
+npm run zrzuty
+```
+
+Uruchamia serwer w trybie testowym na **osobnej** bazie (`dane-testowe/zrzuty/`, nie nadpisuje bazy testowej),
+robi zrzuty ekranów z sesji R4 (390 i 1440 px) do `testy/e2e/zrzuty/` i sprawdza układ (`sprawdzUklad`:
+poziomy scroll, ucięty tekst, tekst przy krawędzi karty). Na nowym komputerze raz: `npx playwright install chromium`.
+
 ## Tryb testowy (bez poczty, dane fikcyjne) — D-074
 
 Do przejścia każdego przepływu kancelarii i portalu bez skonfigurowanej poczty. Działa na **osobnej

@@ -1485,6 +1485,29 @@
   kod konkretnej formy nadal przyjmowany i sprawdzany. Upraszcza D-076 w części formularza.
 - Skutek w kodzie: `server/trasy/sprawy.js`, `publiczne/js/sprawy.js`, `testy/sprawy-http.test.js`. Bez migracji.
 
+### D-093 — Runda 4, faza 1: Start portalu, układ sprawy, pola dat, druk informacji (SESJA-PSA-POPRAWKI-R4)
+
+- Data: 2026-11-01
+- Obszar: portal / kancelaria / informacja z rejestru
+- Decyzja:
+  1. **Start portalu (P2):** baner bieżącego kroku wniosku (jeden przycisk) i karta **„Do zapłaty”** — tylko
+     nieopłacone opłaty, kwota brutto, przycisk „Zapłać”. Terminy zgłoszeń nie są już na Start (zakładka
+     „Zgłoszenia”). **[domyślne — do potwierdzenia przez Łukasza]** brak pozycji → karta się nie pokazuje.
+  2. **Rejestr w portalu (P1, P3, P4):** „Dane spółki” na wspólnym `ListaDanych`; tekst: „Stan akcjonariatu
+     (akcjonariusze, akcje, obciążenia) jest dostępny w pełnej informacji z rejestru akcjonariuszy.”;
+     „Zgłoś błąd we wpisie” — przycisk drugorzędny obok „Zamów informację z rejestru”.
+  3. **Pola dat (P5):** `PoleDaty` obejmuje tylko datę, kalendarz obok — jeden wzorzec dla wszystkich pól dat.
+  4. **Sprawa (K1):** jedna kolumna (`KolumnaSprawy`) i jeden pasek akcji (`PasekAkcji`); „Popraw podstawę
+     wpisu” i „Wystaw żądanie wpisu” w pasku; nazwy plików bez UUID (`nazwaPlikuDoWyswietlenia`).
+     **[domyślne — do potwierdzenia przez Łukasza]** szerokość kolumny 48rem; na telefonie pełna szerokość
+     minus 16 px.
+  5. **Informacja z rejestru (K4):** emisje jako blok na serię (więcej niż 5 kolumn), numery łamane po
+     przecinkach i myślnikach, czcionka 1 pt mniejsza od tekstu — mieści się w marginesach A4.
+  6. **Telefon (WCAG 2.5.5):** przyciski, pola i zakładki ≥ 44 px wysokości.
+- Narzędzie: `npm run zrzuty` (Playwright, tryb testowy, osobna baza `dane-testowe/zrzuty/`), `sprawdzUklad`.
+- Testy: `testy/{portal-start,nazwy-plikow,informacja-emisje-uklad,zrzuty-start}.test.js`,
+  `testy/e2e/{uklad,uklad-ekrany}.spec.js`.
+
 ---
 
 ## Decyzje otwarte

@@ -472,10 +472,6 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
 
   return (
     <div id="panel-powiadomienia"><Karta tytul="Uprzednie powiadomienie (art. 300(34) § 3 KSH)">
-      <Komunikat
-        odmiana="uwaga"
-        tresc="Przed wpisem należy powiadomić osobę, której uprawnienia mają być wykreślone, zmienione lub obciążone — chyba że wyraziła zgodę."
-      />
       {sprawa.powiadomienie_wyslano && (
         <Komunikat odmiana="ok" tresc={`Powiadomienie wysłano ${fmt.dataCzas(sprawa.powiadomienie_wyslano)}${stanTrybuTestowego() ? ' — testowa, niewysłana (skrzynka testowa)' : ''}.`} />
       )}
