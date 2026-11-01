@@ -46,7 +46,7 @@ const PACZKI = {
   ],
   'portal.js': [
     'rdzen.js', 'formaty.js', 'ui-rejestr.js', 'kraje.js', 'pola.js', 'prawne.js', 'pesel.js', 'formularz-osoby.js', 'tryb-testowy.js',
-    'wniosek.js', 'portal.js',
+    'wniosek.js', 'portal-start.js', 'portal.js',
   ],
 };
 

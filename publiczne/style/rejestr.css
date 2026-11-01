@@ -616,6 +616,17 @@ body {
 }
 .karta.scisla { padding: 0; overflow: hidden; }
 
+/* ── Start portalu: baner kroku i „Do zapłaty” (R4 P2) ── */
+.baner-kroku { display: flex; align-items: center; justify-content: space-between; gap: var(--od-16); flex-wrap: wrap; }
+.wiersz-zaplaty { display: flex; align-items: center; gap: var(--od-12); padding: var(--od-12) 0; border-top: 1px solid var(--linia-2); }
+.wiersz-zaplaty:first-child { border-top: 0; padding-top: 0; }
+.wiersz-zaplaty-opis { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.wiersz-zaplaty-kwota { white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 420px) {
+  .wiersz-zaplaty { flex-wrap: wrap; }
+  .wiersz-zaplaty-opis { flex-basis: 100%; }
+}
+
 /* ── Lista „etykieta — wartość” (R4 P1/K2) ── */
 .lista-danych {
   display: grid; grid-template-columns: minmax(7rem, 40%) 1fr;

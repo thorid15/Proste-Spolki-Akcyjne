@@ -910,43 +910,20 @@ const STAN_WNIOSKU_ETYKIETA = {
    START — „Co dalej" (Faza 4 pkt 1)
    ───────────────────────────────────────────────────── */
 
-/** Pozycje „Do zrobienia" złożone z trzech źródeł, ta sama zasada co K1 (kancelaria): jedno miejsce, jeden przycisk na pozycję. */
-function pozycjeDoZrobieniaPortal({ wniosek, sprawy, oplaty }) {
-  const pozycje = [];
-
-  if (wniosek && ['w_przygotowaniu', 'do_uzupelnienia', 'umowa_wygenerowana'].includes(wniosek.status)) {
-    pozycje.push({
-      klucz: `wniosek-${wniosek.id || 0}`,
-      priorytet: wniosek.status === 'umowa_wygenerowana' ? 0 : 1,
-      tytul: wniosek.status === 'umowa_wygenerowana' ? 'Podpisz dokumenty do wniosku' : 'Dokończ wniosek o prowadzenie rejestru',
-      podtytul: wniosek.nazwa || STAN_WNIOSKU_ETYKIETA[wniosek.status] || wniosek.status,
-      przyKlik: () => idz('/wniosek'),
-    });
+/**
+ * R4 P2: rozpoczęcie płatności z karty „Do zapłaty”. Nowa karta otwiera się w obsłudze kliknięcia —
+ * po `await` przeglądarka zablokowałaby ją jak wyskakujące okienko.
+ */
+async function zaplacOplatePortal(idOplaty) {
+  const okno = window.open('', '_blank');
+  try {
+    const wynik = await API.post(`/api/psa/portal/oplaty/${idOplaty}/zaplac`, {});
+    if (okno && !okno.closed) okno.location = wynik.link;
+    return null;
+  } catch (e) {
+    if (okno && !okno.closed) okno.close();
+    return e instanceof BladApi ? e.message : 'Nie udało się rozpocząć płatności.';
   }
-
-  for (const s of sprawy || []) {
-    if (!s.termin || (!s.termin.pilny && !s.termin.po_terminie)) continue;
-    pozycje.push({
-      klucz: `sprawa-${s.id}`,
-      priorytet: s.termin.po_terminie ? 0 : 1,
-      tytul: `${s.typ_nazwa} — ${s.spolka_nazwa}`,
-      podtytul: s.termin.po_terminie ? 'termin minął' : `termin za ${s.termin.dni_pozostale} dni`,
-      przyKlik: () => idz(`/spolka/${s.spolka_id}?zakladka=zgloszenia`),
-    });
-  }
-
-  const doZaplaty = (oplaty || []).filter((o) => o.status !== 'oplacona');
-  for (const o of doZaplaty) {
-    pozycje.push({
-      klucz: `oplata-${o.id}`,
-      priorytet: 2,
-      tytul: `${o.opis} — ${fmt.zlote(o.kwota_grosze)}`,
-      podtytul: o.spolka_nazwa,
-      przyKlik: () => idz(`/spolka/${o.spolka_id}?zakladka=oplaty`),
-    });
-  }
-
-  return pozycje.sort((a, b) => a.priorytet - b.priorytet);
 }
 
 /**
@@ -1004,40 +981,57 @@ function PrzeniesieniePortal() {
 
 function EkranStart() {
   const { dane: moje, ladowanie: ladowanieMoje } = useDane('/api/psa/portal/moje');
-  const { dane: zadania, ladowanie: ladowanieZadania } = useDane(
-    moje && moje.rola !== 'wnioskodawca' ? '/api/psa/portal/zadania' : null
-  );
   const { dane: rozliczenia, ladowanie: ladowanieOplat } = useDane(
     moje && moje.rola !== 'wnioskodawca' ? '/api/psa/portal/oplaty' : null
   );
+  const [wysylanie, ustawWysylanie] = useState(null);
+  const [bladPlatnosci, ustawBladPlatnosci] = useState(null);
 
-  if (ladowanieMoje || (moje && moje.rola !== 'wnioskodawca' && (ladowanieZadania || ladowanieOplat))) {
-    return <Spinner />;
-  }
+  if (ladowanieMoje || (moje && moje.rola !== 'wnioskodawca' && ladowanieOplat)) return <Spinner />;
   if (!moje) return null;
 
-  const pozycje = pozycjeDoZrobieniaPortal({
-    wniosek: moje.wniosek,
-    sprawy: zadania ? zadania.sprawy : [],
-    oplaty: rozliczenia ? rozliczenia.oplaty : [],
-  });
+  // R4 P2: na Start tylko to, co klient ma zrobić — bieżący krok wniosku i opłaty do zapłaty.
+  const baner = banerKrokuWniosku({ wniosek: moje.wniosek });
+  const doZaplaty = pozycjeDoZaplatyPortal({ oplaty: rozliczenia ? rozliczenia.oplaty : [] });
+
+  async function zaplac(idOplaty) {
+    ustawWysylanie(idOplaty);
+    ustawBladPlatnosci(await zaplacOplatePortal(idOplaty));
+    ustawWysylanie(null);
+  }
 
   return (
     <div className="pion" style={{ gap: 16 }}>
+      {baner && (
+        <div className="karta baner-kroku">
+          <span>{baner.tekst}</span>
+          <button className="btn btn-glowny" onClick={() => idz(baner.akcja.adres)}>{baner.akcja.etykieta}</button>
+        </div>
+      )}
       <PrzeniesieniePortal />
-      <Karta tytul="Do zrobienia">
-        {pozycje.length === 0 ? (
-          <Pusto ikona="sprawdz" tytul="Wszystko załatwione" opis="Nic teraz nie wymaga Twojej uwagi." />
-        ) : (
-          <div className="lista-wierszy">
-            {pozycje.map((p) => (
-              <WierszListy key={p.klucz} tytul={p.tytul} podtytul={p.podtytul} przyKlik={p.przyKlik} />
+      {doZaplaty.length > 0 && (
+        <Karta tytul="Do zapłaty">
+          <Komunikat odmiana="blad" tresc={bladPlatnosci} />
+          <div className="lista-zaplaty">
+            {doZaplaty.map((p) => (
+              <div key={p.idOplaty} className="wiersz-zaplaty">
+                <span className="wiersz-zaplaty-opis">{p.opis}</span>
+                <span className="wiersz-zaplaty-kwota">{fmt.zlote(p.kwotaBrutto)}</span>
+                <button className="btn btn-glowny btn-sm" onClick={() => zaplac(p.idOplaty)} disabled={wysylanie === p.idOplaty}>
+                  {wysylanie === p.idOplaty ? 'Otwieranie…' : 'Zapłać'}
+                </button>
+              </div>
             ))}
           </div>
-        )}
-      </Karta>
-      {moje.rola === 'wnioskodawca' && !pozycje.some((p) => p.klucz.startsWith('wniosek-')) && (
-        <Komunikat odmiana="info" tresc="Sprawa jest w toku po stronie kancelarii — napiszemy, gdy będzie coś do zrobienia." />
+        </Karta>
+      )}
+      {!baner && doZaplaty.length === 0 && (
+        <Komunikat
+          odmiana="info"
+          tresc={moje.rola === 'wnioskodawca'
+            ? 'Sprawa jest w toku po stronie kancelarii — napiszemy, gdy będzie coś do zrobienia.'
+            : 'Nic teraz nie wymaga Twojej uwagi.'}
+        />
       )}
     </div>
   );
