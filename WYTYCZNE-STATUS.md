@@ -20,8 +20,9 @@ propozycja uzupełnienia `PRZEPISY-PSA.md` (P1–P9) przyjęta i dopisana; Faza 
 https://github.com/thorid15/Proste-Spolki-Akcyjne/pull/13 (do `claude/Main` — w repozytorium nie ma `main`).
 K6 rozstrzygnięte po STOP Fazy 2 — D-079.
 
-**Następny krok:** przegląd raportu przez Łukasza, testy ręczne (R4), odpowiedzi R2, akceptacja szablonów (R3); merge PR #13.
-Po STOP Fazy 4 — D-085 (stałe stawki, obciążenia płatne, bez opłaty za przejęcie). Po raporcie — D-086 (podpisy: test pliku + pracownik), D-087 (5 równorzędnych sposobów podpisu).
+**Sesja zamknięta (1.11.2026)** — PR #13 scalony do `claude/Main`. Po raporcie: D-085 (stawki), D-086 (podpisy: test
+pliku + pracownik), D-087 (5 równorzędnych sposobów podpisu, domyślnie podpis zaufany), D-088 (zgoda na wpis jednym polem).
+Do zrobienia poza sesją: akceptacja szablonów PROJEKT (R3), testy ręczne (R4), pytania R2.
 
 Stan wejściowy testów: `npm test` — 534/534 zielone (przed zmianami).
 
