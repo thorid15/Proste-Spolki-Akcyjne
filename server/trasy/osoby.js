@@ -355,9 +355,11 @@ router.get(
         `SELECT s.id, s.nazwa, s.krs, s.status, s.stosuje_procedure_aml,
                 SUM(sa.ilosc) AS ilosc_akcji,
                 COUNT(DISTINCT sa.emisja_id) AS liczba_serii,
+                GROUP_CONCAT(DISTINCT e.seria) AS serie,
                 MIN(sa.data_od) AS akcjonariusz_od
            FROM psa_stan_akcji sa
            JOIN psa_spolki s ON s.id = sa.spolka_id
+           LEFT JOIN psa_emisje e ON e.id = sa.emisja_id
           WHERE sa.osoba_id = ? AND sa.data_do IS NULL AND sa.kategoria = 'akcjonariusz'
           GROUP BY s.id
           ORDER BY s.nazwa COLLATE NOCASE`

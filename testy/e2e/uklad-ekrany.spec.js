@@ -144,3 +144,15 @@ test('P8: cofnięcie zgody na e-mail — ostrzeżenie; „Zostaw zgodę” i Esc
   await zgoda.click(); // P7: ponowne złożenie w tej samej sesji
   await expect(zgoda).toBeChecked();
 });
+
+for (const szerokosc of [1440, 390]) {
+  test(`K2: kartoteka osoby ${szerokosc} px — jeden widok, sekcje w kolejności, bez kafelka „Sprawy”, układ bez problemów`, async ({ page }) => {
+    await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/osoby/2', czekaj: '.kartoteka-osoby', szerokosc });
+    const naglowki = await page.locator('.kartoteka-osoby .kartoteka-sekcja-tytul').allTextContents();
+    expect(naglowki).toEqual(['Identyfikacja', 'Adresy', 'Kontakt i oświadczenia', 'AML', 'Akcje w spółkach', 'Sprawy']);
+    await expect(page.locator('.karta-tytul', { hasText: /^Sprawy$/ })).toHaveCount(0);
+    await expect(page.getByText('Brak zgody — konieczne powiadomienie listem').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edytuj dane' })).toBeVisible();
+    expect(await sprawdzUklad(page, '.kartoteka-osoby')).toEqual([]);
+  });
+}
