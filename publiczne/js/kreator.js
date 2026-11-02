@@ -63,6 +63,7 @@ function PozycjaKreatora({
           wyklucz={wyklucz}
           przyZmianie={(id) => ustawPozycje({ ...pozycja, [kluczOsoby]: id })}
         />
+        <ZnacznikKontaktuOsoby osobaId={pozycja[kluczOsoby]} />
       </Pole>
 
       <Pole etykieta="Liczba akcji" wymagane>
@@ -430,7 +431,7 @@ function KrokPrzeniesienie({ dane, ustawDane, spolka }) {
 
       {dane.emisja_zdarzenie_id && (
         <>
-          <Pole etykieta="Zbywca" wymagane>
+          <div className="pole-zbywcy"><Pole etykieta="Zbywca" wymagane>
             {wSerii.length === 0 ? (
               <Komunikat odmiana="uwaga" tresc="W tej serii nikt nie ma jeszcze akcji." />
             ) : (
@@ -447,7 +448,8 @@ function KrokPrzeniesienie({ dane, ustawDane, spolka }) {
                 ))}
               </select>
             )}
-          </Pole>
+            {zbywca && <ZnacznikKontaktu osoba={zbywca.osoba} />}
+          </Pole></div>
 
           {zbywca && (
             <Komunikat
@@ -1545,6 +1547,7 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, osobaPocz
                   podpowiedz="Spółka albo inna osoba mająca interes prawny — art. 300(34) § 1 KSH. Kogoś spoza kartoteki najpierw się do niej dopisuje."
                 >
                   <WyborZKartoteki wartosc={zadajacyOsobaId} przyZmianie={ustawZadajacegoOsobaId} />
+                  <ZnacznikKontaktuOsoby osobaId={zadajacyOsobaId} />
                 </Pole>
                 <Pole
                   etykieta="W jakim charakterze"

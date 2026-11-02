@@ -2547,6 +2547,15 @@ const MIGRACJE = [
 <p>{{notariusz}}, {{kancelaria_nazwa}}</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(32) § 3 KSH (🔵)', 1, 1, 'system', '2026-11-01T00:00:00Z');
     `,
   },
+  {
+    wersja: 66,
+    nazwa: 'D-092: oświadczenia osób (zgoda e-mail, powiadomienia) w kartotece — źródło i autor, poza łańcuchem rejestru',
+    sql: `
+      ALTER TABLE psa_oswiadczenia ADD COLUMN zrodlo TEXT NOT NULL DEFAULT 'portal'
+        CHECK (zrodlo IN ('portal', 'kancelaria', 'pismo'));
+      ALTER TABLE psa_oswiadczenia ADD COLUMN autor TEXT;
+    `,
+  },
 ];
 
 /**

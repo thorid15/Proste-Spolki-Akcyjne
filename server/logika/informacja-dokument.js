@@ -597,7 +597,8 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
     }
     if (!pusty(adres)) opisy.push(esc(adres));
     else if (osoba && osoba.zamaskowane) opisy.push('PESEL, data urodzenia i adres zamieszkania nie są udostępniane');
-    if (email) opisy.push(`${esc(email)} — zgoda na komunikację elektroniczną`);
+    // D-092: w informacji tylko adres e-mail (art. 300(33) § 1 pkt 5 KSH) — bez wzmianki o zgodzie.
+    if (email) opisy.push(esc(email));
     if (a.wspolwlasnosc) opisy.push('akcje we współwłasności ułamkowej');
 
     return [

@@ -35,7 +35,7 @@ function WierszListu({ list, odswiez }) {
     <tr>
       <td>{fmt.data(list.utworzono)}</td>
       <td>{list.rodzaj_nazwa}<div className="przyciemnione">{list.spolka_nazwa}{list.sprawa_numer ? ` · ${list.sprawa_numer}` : ''}</div></td>
-      <td><strong>{list.odbiorca_nazwa}</strong><div>{list.adres}</div></td>
+      <td><strong>{list.odbiorca_nazwa}</strong><div>{list.adres}</div><ZnacznikKontaktu zawsze /></td>
       <td>
         {list.status === 'nadany' ? (
           <>

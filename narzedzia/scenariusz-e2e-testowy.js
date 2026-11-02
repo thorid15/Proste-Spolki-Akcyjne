@@ -204,10 +204,12 @@ async function scenariuszC(k) {
   const spolka = osw.spolki[0];
   sprawdz(spolka && spolka.powiadomienia_automatyczne && spolka.powiadomienia_automatyczne.zlozone === 1,
     'oświadczenie o automatycznych powiadomieniach złożone osobiście w portalu');
+  const sprawPrzed = db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy').get().n;
   const cofniecie = await zapytaj(anna, 'POST', '/api/psa/portal/oswiadczenia', { spolka_id: spolka.spolka_id, rodzaj: 'zgoda_email', zlozone: false });
-  const sprawa = (await zapytaj(k, 'GET', `/api/psa/sprawy/${cofniecie.sprawa_id}`)).sprawa;
-  sprawdz(sprawa.typ_zdarzenia === 'zmiana_danych_akcjonariusza' && sprawa.odplatne === false,
-    'cofnięcie zgody → sprawa w kancelarii, bezpłatna (D-083)');
+  sprawdz(cofniecie.stan && cofniecie.stan.zgodaEmail === false && db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy').get().n === sprawPrzed,
+    'cofnięcie zgody działa od razu — dane kartoteki, bez wpisu i opłaty (D-092)');
+  const ponownie = await zapytaj(anna, 'POST', '/api/psa/portal/oswiadczenia', { spolka_id: spolka.spolka_id, rodzaj: 'zgoda_email', zlozone: true, email: 'anna.zgoda@example.com' });
+  sprawdz(ponownie.stan && ponownie.stan.zgodaEmail === true, 'ponowne złożenie zgody w tej samej sesji (P7)');
 
   // Konto akcjonariusza bez zgody (dane testowe) — portal zamknięty (QW3 / D-083).
   const celina = db().prepare("SELECT id FROM psa_osoby WHERE email = 'celina.nabywca@example.com'").get();
@@ -303,7 +305,7 @@ async function scenariuszE(k) {
     'wersja dla spółki: pełne dane akcjonariuszy (PESEL, adres)');
   sprawdz(/VAT/.test(dlaSpolki), 'wynagrodzenie z VAT na informacji');
 
-  // Anna cofnęła zgodę w scenariuszu C, ale sprawa nie jest jeszcze wpisana — dostęp trwa.
+  // Anna w scenariuszu C cofnęła i ponownie złożyła zgodę — dostęp do portalu trwa.
   const dlaAkcj = await informacja(await zaloguj('anna.zgoda@example.com'));
   sprawdz(!dlaAkcj.includes(bartosz.pesel) && !dlaAkcj.includes(bartosz.data_urodzenia) && !dlaAkcj.includes('Fikcyjna'),
     'wersja dla akcjonariusza: bez PESEL, daty urodzenia i adresu innych (art. 300(35) § 1(1) KSH)');

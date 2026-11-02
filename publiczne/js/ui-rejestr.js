@@ -152,6 +152,26 @@ function ListaDanych({ pary }) {
   );
 }
 
+/**
+ * R4 K5 (D-092): znacznik przy osobie bez zgody na e-mail albo bez adresu — korespondencja idzie listem.
+ * Przy zgodzie nic się nie pokazuje (bez pozytywnego znacznika). `zawsze` — np. w kolejce listów.
+ */
+function ZnacznikKontaktu({ osoba, zawsze = false }) {
+  if (!zawsze && (!osoba || !wymagaListu(osoba))) return null;
+  return (
+    <span className="znacznik-kontaktu" title={PODPOWIEDZ_ZNACZNIKA}>
+      <Pigulka odmiana="sygnal">{TEKST_ZNACZNIKA}</Pigulka>
+      <span className="sr-only">{PODPOWIEDZ_ZNACZNIKA}</span>
+    </span>
+  );
+}
+
+/** Znacznik dla osoby wskazanej tylko identyfikatorem (wybór z kartoteki, żądający w sprawie). */
+function ZnacznikKontaktuOsoby({ osobaId }) {
+  const { dane } = useDane(osobaId ? `/api/psa/osoby/${osobaId}` : null, [osobaId]);
+  return osobaId && dane ? <ZnacznikKontaktu osoba={dane.osoba} /> : null;
+}
+
 /** R4 K1: jedna kolumna sprawy — wszystkie karty i kroki tej samej szerokości (48rem; na telefonie pełna). */
 function KolumnaSprawy({ children }) {
   return <div className="kolumna-sprawy">{children}</div>;
@@ -1844,6 +1864,8 @@ window.Spinner = Spinner;
 window.Karta = Karta;
 window.ListaDanych = ListaDanych;
 window.KolumnaSprawy = KolumnaSprawy;
+window.ZnacznikKontaktu = ZnacznikKontaktu;
+window.ZnacznikKontaktuOsoby = ZnacznikKontaktuOsoby;
 window.PasekAkcji = PasekAkcji;
 window.Pigulka = Pigulka;
 window.Komunikat = Komunikat;

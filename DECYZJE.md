@@ -1508,6 +1508,33 @@
 - Testy: `testy/{portal-start,nazwy-plikow,informacja-emisje-uklad,zrzuty-start}.test.js`,
   `testy/e2e/{uklad,uklad-ekrany}.spec.js`.
 
+### D-092 — Oświadczenia osób (zgoda e-mail, powiadomienia) to dane kartoteki, nie rejestru (Łukasz, 1.11.2026; R4 K5)
+
+- Data: 2026-11-02 (SESJA-PSA-POPRAWKI-R4, zadanie 7)
+- Obszar: kartoteka / portal / informacja z rejestru / sprawy
+- Decyzja Łukasza: złożenie i cofnięcie zgody na komunikację e-mail oraz żądania powiadomień automatycznych
+  nie jest informacją w rejestrze ani w informacji z rejestru — to dane kartoteki osoby. Przy każdej
+  czynności z udziałem osoby bez zgody system to sygnalizuje.
+- Przepis (`PRZEPISY-PSA.md`, art. 300(33) § 1 pkt 5 KSH): rejestr zawiera adres poczty elektronicznej,
+  **jeżeli akcjonariusz wyraził zgodę** na komunikację e-mail → w informacji z rejestru pokazujemy sam
+  adres (gdy zgoda aktywna), bez żadnej pozycji o zgodzie lub jej cofnięciu; cofnięcie = adres znika,
+  bez opłaty (D-083).
+- Skutek:
+  1. Jedno źródło stanu `stanOswiadczen` (`server/oswiadczenia.js`); oświadczenie z portalu działa **od
+     razu** — bez sprawy wpisu, zdarzenia w łańcuchu i opłaty (zastępuje D-083 pkt QW1 w części „cofnięcie
+     przez żądanie wpisu”). Zmiana zgody w kartotece przez kancelarię też trafia do historii.
+  2. Historia (data, źródło: portal / kancelaria / pismo, kto) — `psa_oswiadczenia` (append-only, poza
+     łańcuchem; migracja 66).
+  3. Kreator „zmiana danych akcjonariusza” nie przyjmuje już pola zgody. Historyczne zdarzenia dotyczące
+     wyłącznie zgody zostają w łańcuchu, ale nie są pokazywane w widoku rejestru (filtr); w zdarzeniach
+     mieszanych pole zgody jest pomijane w opisie. Eksport ZIP zostawia łańcuch w całości (weryfikacja
+     skrótów). W tym środowisku nie ma bazy innej niż testowa — liczby takich zdarzeń w bazie kancelarii
+     nie sprawdzono.
+  4. Znacznik „Brak zgody — konieczne powiadomienie listem” (`ZnacznikKontaktu`, liczy się stan bieżący:
+     zgoda potwierdzona i adres) — przy wyborze zbywcy, nabywcy i żądającego w kreatorach, przy żądającym
+     w nagłówku sprawy, na liście akcjonariuszy spółki, w kolejce listów (kartoteka — zadanie 12).
+- Testy: `testy/oswiadczenia-k5.test.js`, `testy/faza3-http.test.js` (W4.1/W4.2), e2e K5.
+
 ---
 
 ## Decyzje otwarte

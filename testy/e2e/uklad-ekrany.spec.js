@@ -91,3 +91,15 @@ for (const szerokosc of [1440, 390]) {
     expect(tekst).not.toMatch(/[0-9a-f]{4,8}(-[0-9a-f]{4}){1,3}-[0-9a-f]{12}/i);
   });
 }
+
+test('K5: kreator przeniesienia — zbywca bez zgody na e-mail ma znacznik „list”', async ({ page }) => {
+  await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/sprawy/1', czekaj: 'text=Co się zmienia', szerokosc: 1440 });
+  const seria = page.locator('select', { has: page.locator('option', { hasText: 'wybierz serię' }) });
+  await seria.selectOption({ index: 1 });
+  const zbywca = page.locator('select', { has: page.locator('option', { hasText: 'wybierz akcjonariusza' }) });
+  await zbywca.selectOption(await zbywca.locator('option', { hasText: 'Próbny' }).getAttribute('value'));
+  await expect(page.getByText('Brak zgody — konieczne powiadomienie listem').first()).toBeVisible();
+  // Zbywca ze zgodą (Anna) — bez znacznika przy polu zbywcy.
+  await zbywca.selectOption(await zbywca.locator('option', { hasText: 'Testowa Anna' }).getAttribute('value'));
+  await expect(page.locator('.pole-zbywcy .znacznik-kontaktu')).toHaveCount(0);
+});

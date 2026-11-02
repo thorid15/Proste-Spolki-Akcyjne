@@ -232,8 +232,20 @@ function lacznieNaOsobe(pozycje) {
 }
 
 /** Historia zdarzen spolki - os czasu w kokpicie. */
+/**
+ * D-092 (R4 K5): zgoda na e-mail nie jest informacją w rejestrze. Historyczne zdarzenia zmiany danych,
+ * które dotyczyły wyłącznie zgody, zostają w łańcuchu (append-only), ale nie trafiają do widoku rejestru;
+ * w zdarzeniach mieszanych pole zgody jest pomijane w opisie.
+ */
+const POLA_OSWIADCZEN = new Set(['zgoda_email', 'zgoda_email_status']);
+function tylkoOswiadczenie(z) {
+  if (z.typ !== 'zmiana_danych_akcjonariusza') return false;
+  const pola = (z.dane && z.dane.zmienione_pola) || [];
+  return pola.length > 0 && pola.every((p) => POLA_OSWIADCZEN.has(p));
+}
+
 function widokZdarzen(db, spolkaId, { limit = null } = {}) {
-  const zdarzenia = rejestr.wczytajZdarzenia(db, spolkaId);
+  const zdarzenia = rejestr.wczytajZdarzenia(db, spolkaId).filter((z) => !tylkoOswiadczenie(z));
   const osoby = rejestr.wczytajOsobySpolki(db, spolkaId);
 
   // Etap 5.1: link DWUKIERUNKOWY - sprostowanie juz zna zdarzenie_prostowane_id
@@ -332,7 +344,7 @@ function podsumujZdarzenie(z, osoby) {
           }.`;
     case 'zmiana_danych_akcjonariusza':
       return `Zmiana danych akcjonariusza ${nazwa(d.osoba_id)}: ${
-        (d.zmienione_pola || []).join(', ') || 'bez wskazania pól'
+        (d.zmienione_pola || []).filter((p) => !POLA_OSWIADCZEN.has(p)).join(', ') || 'bez wskazania pól'
       }.`;
     case 'zobowiazanie':
       return `Oświadczenie ${nazwa(d.akcjonariusz_osoba_id)} o zobowiązaniu do ${d.rodzaj || 'przeniesienia'} akcji${

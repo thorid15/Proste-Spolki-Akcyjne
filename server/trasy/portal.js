@@ -2149,34 +2149,22 @@ router.get('/oswiadczenia', asy((zad, odp) => {
 router.post('/oswiadczenia', asy((zad, odp) => {
   wymagajAkcjonariuszaPortalu(zad);
   const cialo = zad.body || {};
-  const spolkaId = Number(cialo.spolka_id);
+  const spolkaId = Number(cialo.spolka_id) || null;
   const rodzaj = String(cialo.rodzaj || '');
   const zlozone = cialo.zlozone !== false;
   if (!['zgoda_email', 'powiadomienia_automatyczne'].includes(rodzaj)) throw bledneZadanie('Nieznany rodzaj oświadczenia.');
-  const teraz = czas.terazIso();
   const konto = zad.konto;
-
-  let sprawaId = null;
+  // D-092 (R4 K5): oświadczenie to dane kartoteki — działa od razu, bez wpisu w rejestrze i bez opłaty.
   let email = null;
-  if (rodzaj === 'zgoda_email') {
-    email = zlozone ? String(cialo.email || '').trim().toLowerCase() : null;
-    if (zlozone && !WZORZEC_EMAIL_OSW.test(email || '')) throw bledneZadanie('Podaj adres e-mail, na który mamy kierować korespondencję.');
-    const przechwyt = { kod: 200, tresc: null, status(k) { this.kod = k; return this; }, json(t) { this.tresc = t; return this; } };
-    zalozZadaniePortalowe(konto, {
-      spolka_id: spolkaId,
-      typ_zdarzenia: 'zmiana_danych_akcjonariusza',
-      opis: zlozone
-        ? `Oświadczenie złożone osobiście w portalu (${teraz}): zgoda na komunikację ze spółką i podmiotem prowadzącym rejestr przy wykorzystaniu poczty elektronicznej — adres ${email} (art. 300(33) § 1 pkt 5 KSH).`
-        : `Oświadczenie złożone osobiście w portalu (${teraz}): cofnięcie zgody na komunikację przy wykorzystaniu poczty elektronicznej (art. 300(33) § 1 pkt 5 KSH).`,
-    }, przechwyt);
-    sprawaId = przechwyt.tresc && przechwyt.tresc.sprawa ? przechwyt.tresc.sprawa.id : null;
+  if (rodzaj === 'zgoda_email' && zlozone) {
+    email = String(cialo.email || '').trim().toLowerCase()
+      || (db().prepare('SELECT email FROM psa_osoby WHERE id = ?').get(konto.osoba_id) || {}).email || '';
+    if (!WZORZEC_EMAIL_OSW.test(email)) throw bledneZadanie('Podaj adres e-mail, na który mamy kierować korespondencję.');
   }
-
-  db().prepare(
-    `INSERT INTO psa_oswiadczenia (osoba_id, spolka_id, rodzaj, zlozone, email, konto_id, sprawa_id, utworzono)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(konto.osoba_id, spolkaId, rodzaj, zlozone ? 1 : 0, email, konto.id, sprawaId, teraz);
-  odp.status(201).json({ ok: true, sprawa_id: sprawaId, utworzono: teraz });
+  const stan = require('../oswiadczenia').zapiszOswiadczenie(db(), {
+    osobaId: konto.osoba_id, rodzaj, zlozone, email, zrodlo: 'portal', autor: `Portal — ${konto.email}`, kontoId: konto.id, spolkaId,
+  });
+  odp.status(201).json({ ok: true, stan, utworzono: czas.terazIso() });
 }));
 
 // ─────────────────────────────────────────────────────────────

@@ -170,6 +170,7 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje, lacznie = [], spolka
             >
               <td>
                 <div style={{ fontWeight: 500 }}>{a.osoba ? a.osoba.oznaczenie : `osoba #${a.osoba_id}`}</div>
+                {pierwszaDlaPozycji && <ZnacznikKontaktu osoba={a.osoba} />}
                 <div className="wiersz-podtytul">
                   {a.osoba && a.osoba.jawny_identyfikator ? a.osoba.jawny_identyfikator : ''}
                 </div>

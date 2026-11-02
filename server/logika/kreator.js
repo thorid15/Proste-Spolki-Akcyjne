@@ -676,7 +676,8 @@ const PRZYGOTOWANIA = {
     const dozwolone = [
       'nazwisko', 'imie', 'nazwa',
       'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu', 'nr_lokalu',
-      'adres_doreczen', 'adres_edoreczen', 'email', 'telefon', 'zgoda_email',
+      // D-092: zgoda na e-mail to dane kartoteki (`server/oswiadczenia.js`), nie wpis w rejestrze.
+      'adres_doreczen', 'adres_edoreczen', 'email', 'telefon',
     ];
     const po = we.po && typeof we.po === 'object' ? we.po : {};
     const zmienione = Object.keys(po).filter(

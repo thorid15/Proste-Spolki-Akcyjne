@@ -159,20 +159,20 @@ test('W5.7 / D-085: stawki stałe do zmiany przez notariusza; każda zmiana zost
   await zapytaj('PUT', '/api/psa/ustawienia', { stawka_wpis: '' });
 });
 
-test('W4.1/W4.2: oświadczenia osobiste — automatyczne powiadomienia od razu, zgoda e-mail przez żądanie wpisu; odwołalne', async () => {
+test('W4.1/W4.2 (D-092): oświadczenia osobiste — działają od razu, bez wpisu w rejestrze i bez opłaty; odwołalne', async () => {
   const [st1] = await zapytaj('POST', '/api/psa/portal/oswiadczenia', { spolka_id: S.spolkaId, rodzaj: 'powiadomienia_automatyczne', zlozone: true }, S.portalZofia);
   assert.equal(st1, 201);
+  const sprawPrzed = db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy').get().n;
   const [st2, cof] = await zapytaj('POST', '/api/psa/portal/oswiadczenia', { spolka_id: S.spolkaId, rodzaj: 'zgoda_email', zlozone: false }, S.portalZofia);
   assert.equal(st2, 201);
-  const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(cof.sprawa_id);
-  assert.equal(sprawa.typ_zdarzenia, 'zmiana_danych_akcjonariusza');
-  assert.equal(sprawa.zadajacy_osoba_id, S.zeZgoda);
-  assert.match(sprawa.notatka, /cofnięcie zgody/);
-  // QW1 / D-083: zmiana albo cofnięcie zgody e-mail jest bezpłatne.
-  assert.equal(db().prepare("SELECT COUNT(*) AS n FROM psa_oplaty WHERE sprawa_id = ?").get(cof.sprawa_id).n, 0);
+  assert.equal(cof.stan.zgodaEmail, false, 'cofnięcie działa od razu (dane kartoteki)');
+  assert.equal(db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy').get().n, sprawPrzed, 'bez sprawy wpisu');
   const [, stan] = await zapytaj('GET', '/api/psa/portal/oswiadczenia', undefined, S.portalZofia);
   assert.equal(stan.spolki[0].powiadomienia_automatyczne.zlozone, 1);
   assert.throws(() => db().prepare('DELETE FROM psa_oswiadczenia').run(), /append-only/);
+  // Przywrócenie zgody (kolejne testy zakładają, że Zofia ma zgodę).
+  const [st3] = await zapytaj('POST', '/api/psa/portal/oswiadczenia', { spolka_id: S.spolkaId, rodzaj: 'zgoda_email', zlozone: true, email: 'zofia@example.pl' }, S.portalZofia);
+  assert.equal(st3, 201);
 });
 
 test('W6.2/W6.5: zadania z terminem dopiero od 18.02.2027 (symulowana data); projekt przypomnienia o KRS', async () => {

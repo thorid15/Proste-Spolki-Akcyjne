@@ -1054,6 +1054,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
             {!zakonczona && !wlasnieWpisano && <ZnacznikTerminu termin={sprawa.termin} />}
             {/* Z-202/P-014: sygnal, nie blokada - sprawa idzie dalej normalnie. */}
             <ZnacznikPrzegladuAml wymaga={sprawa.zadajacy_wymaga_przegladu_aml} />
+            {sprawa.zadajacy_osoba_id && <ZnacznikKontaktuOsoby osobaId={sprawa.zadajacy_osoba_id} />}
           </div>
         </div>
       </div>
