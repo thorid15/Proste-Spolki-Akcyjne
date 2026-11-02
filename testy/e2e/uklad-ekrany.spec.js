@@ -103,3 +103,15 @@ test('K5: kreator przeniesienia — zbywca bez zgody na e-mail ma znacznik „li
   await zbywca.selectOption(await zbywca.locator('option', { hasText: 'Testowa Anna' }).getAttribute('value'));
   await expect(page.locator('.pole-zbywcy .znacznik-kontaktu')).toHaveCount(0);
 });
+
+test('P7: „Moje oświadczenia” — powiadomienia: odznacz i zaznacz ponownie; checkbox zgody dostępny', async ({ page }) => {
+  await otworz(page, { konto: 'anna.zgoda@example.com', aplikacja: 'portal', adres: '/portal.html#/konto', czekaj: 'text=Moje oświadczenia', szerokosc: 1440 });
+  const pow = page.getByRole('checkbox', { name: /automatycznych powiadomień/ });
+  await expect(pow).toBeChecked();
+  // Pole kontrolowane — stan zmienia się po zapisie w API (dlatego klik + oczekiwanie, nie uncheck()).
+  await pow.click();
+  await expect(pow).not.toBeChecked();
+  await pow.click();
+  await expect(pow).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: /Wyrażam zgodę na komunikację/ })).toBeEnabled();
+});

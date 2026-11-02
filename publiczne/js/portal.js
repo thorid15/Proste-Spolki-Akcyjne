@@ -1952,84 +1952,68 @@ function FormularzZmianyHaslaPortal() {
   );
 }
 
-const NAZWY_ZGODY = {
-  brak: 'nie wyrażono',
-  zadeklarowana: 'zadeklarowana we wniosku (bez Twojego oświadczenia)',
-  potwierdzona: 'wyrażona — wpisana do rejestru',
-};
-
 /**
- * W4.1/W4.2 — dwa odrębne oświadczenia składane osobiście: zgoda na komunikację
- * e-mail (dana rejestru — przez żądanie wpisu) i żądanie automatycznych
- * powiadomień (oświadczenie w portalu). Każde z datą, każde można cofnąć.
+ * W4.1/W4.2, D-092, R4 P7 — dwa odrębne oświadczenia składane osobiście: zgoda na komunikację e-mail
+ * i żądanie automatycznych powiadomień. To dane kartoteki (nie wpis w rejestrze) — działają od razu
+ * i można je cofnąć oraz złożyć ponownie, dopóki konto jest aktywne.
  */
 function OswiadczeniaAkcjonariusza() {
   const { dane, odswiez } = useDane('/api/psa/portal/oswiadczenia');
-  const [email, ustawEmail] = useState('');
+  const [email, ustawEmail] = useState(null);
   const [blad, ustawBlad] = useState(null);
-  const [komunikat, ustawKomunikat] = useState(null);
+  const [wysylanie, ustawWysylanie] = useState(false);
 
-  async function zloz(spolkaId, rodzaj, zlozone) {
+  async function zloz(rodzaj, zlozone) {
     ustawBlad(null);
-    ustawKomunikat(null);
+    ustawWysylanie(true);
     try {
-      const odp = await API.post('/api/psa/portal/oswiadczenia', { spolka_id: spolkaId, rodzaj, zlozone, email });
-      ustawKomunikat(odp.sprawa_id
-        ? 'Oświadczenie złożone. Zgoda na e-mail jest daną rejestru — utworzyliśmy żądanie wpisu, które sprawdzi kancelaria.'
-        : 'Oświadczenie zapisane.');
+      const adres = email ?? (dane.stan.email || '');
+      await API.post('/api/psa/portal/oswiadczenia', { spolka_id: (dane.spolki[0] || {}).spolka_id || null, rodzaj, zlozone, email: adres });
       odswiez();
     } catch (e) {
       ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się złożyć oświadczenia.');
+    } finally {
+      ustawWysylanie(false);
     }
   }
 
   if (!dane) return null;
-  const zgoda = dane.zgoda_email;
+  const stan = dane.stan;
+  const adres = email ?? (stan.email || '');
   return (
     <Karta tytul="Moje oświadczenia">
       <Komunikat odmiana="blad" tresc={blad} />
-      <Komunikat odmiana="ok" tresc={komunikat} />
       <div className="podpowiedz">
-        Oświadczenia składasz osobiście — zarząd spółki nie może złożyć ich w Twoim imieniu. Bez zgody na e-mail
-        korespondencja z rejestru przychodzi listem na adres z rejestru, żądania wpisu składa się pocztą albo
-        w kancelarii, a dostęp do portalu wygasa po wpisaniu cofnięcia zgody.
+        Oświadczenia składasz osobiście — zarząd spółki nie może złożyć ich w Twoim imieniu.
       </div>
-      <p>
-        <strong>Zgoda na komunikację e-mail</strong> (art. 300³³ § 1 pkt 5 KSH): {NAZWY_ZGODY[zgoda.status] || zgoda.status}
-        {zgoda.status === 'potwierdzona' && zgoda.email ? ` (${zgoda.email})` : ''}.
-      </p>
       <Pole etykieta="Adres e-mail do korespondencji z rejestru">
-        <input type="email" value={email} onChange={(z) => ustawEmail(z.target.value)} placeholder="np. jan@example.com" />
+        <input type="email" value={adres} onChange={(z) => ustawEmail(z.target.value)} placeholder="np. jan@example.com" />
       </Pole>
-      {dane.spolki.map((s) => {
-        const pow = s.powiadomienia_automatyczne;
-        const powAktywne = Boolean(pow && pow.zlozone);
-        return (
-          <div key={s.spolka_id} className="karta" style={{ marginTop: 'var(--od-4)' }}>
-            <strong>{s.nazwa}</strong>
-            <div className="row-g" style={{ flexWrap: 'wrap', marginTop: 'var(--od-2)' }}>
-              <button className="btn btn-maly" disabled={!email.trim()} onClick={() => zloz(s.spolka_id, 'zgoda_email', true)}>
-                Wyrażam zgodę na e-mail
-              </button>
-              <button className="btn btn-maly" disabled={zgoda.status !== 'potwierdzona'} onClick={() => zloz(s.spolka_id, 'zgoda_email', false)}>
-                Cofam zgodę na e-mail
-              </button>
-            </div>
-            {s.zgoda_email_ostatnie && (
-              <div className="przyciemnione">
-                Ostatnie oświadczenie: {s.zgoda_email_ostatnie.zlozone ? 'zgoda' : 'cofnięcie'} z {fmt.dataCzas(s.zgoda_email_ostatnie.utworzono)}
-                {s.zgoda_email_ostatnie.sprawa_id ? ' — żądanie wpisu w kancelarii' : ''}.
-              </div>
-            )}
-            <p style={{ marginTop: 'var(--od-4)' }}>
-              <strong>Automatyczne powiadomienia</strong> (art. 300³⁴ § 9 KSH): {powAktywne ? `żądanie złożone ${fmt.dataCzas(pow.utworzono)}` : 'nie złożono'}.
-            </p>
-            <button className="btn btn-maly" onClick={() => zloz(s.spolka_id, 'powiadomienia_automatyczne', !powAktywne)}>
-              {powAktywne ? 'Cofam żądanie powiadomień' : 'Żądam automatycznych powiadomień'}
-            </button>
-          </div>
-        );
-      })}
+      <label className="chk">
+        <input
+          type="checkbox"
+          checked={stan.zgodaEmail}
+          disabled={wysylanie || (!stan.zgodaEmail && !adres.trim())}
+          onChange={(z) => zloz('zgoda_email', z.target.checked)}
+        />
+        <span className="chk-tresc">
+          Wyrażam zgodę na komunikację ze spółką i podmiotem prowadzącym rejestr przy wykorzystaniu poczty elektronicznej
+          <div className="podstawa-prawna">art. 300³³ § 1 pkt 5 KSH</div>
+        </span>
+      </label>
+      <label className="chk">
+        <input
+          type="checkbox"
+          checked={stan.powiadomieniaAutomatyczne}
+          disabled={wysylanie}
+          onChange={(z) => zloz('powiadomienia_automatyczne', z.target.checked)}
+        />
+        <span className="chk-tresc">
+          Żądam automatycznych powiadomień o wpisach dotyczących moich akcji
+          <div className="podstawa-prawna">art. 300³⁴ § 9 KSH</div>
+        </span>
+      </label>
+      {stan.zmieniono && <div className="przyciemnione">Ostatnia zmiana: {fmt.dataCzas(stan.zmieniono)}.</div>}
     </Karta>
   );
 }

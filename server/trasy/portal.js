@@ -2136,6 +2136,8 @@ router.get('/oswiadczenia', asy((zad, odp) => {
       WHERE sa.osoba_id = ? AND sa.data_do IS NULL ORDER BY s.nazwa`
   ).all(zad.konto.osoba_id);
   odp.json({
+    // D-092 / P7: jeden stan oświadczeń osoby (kartoteka) — ekran pokazuje go wprost.
+    stan: require('../oswiadczenia').stanOswiadczen(db(), osoba.id),
     zgoda_email: { email: osoba.email, status: osoba.zgoda_email_status },
     spolki: spolki.map((s) => ({
       spolka_id: s.id,

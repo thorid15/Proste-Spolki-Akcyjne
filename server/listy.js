@@ -36,13 +36,11 @@ function adresZRejestru(osoba) {
   return [ulica, miasto, kraj].filter(Boolean).join(', ');
 }
 
-/** QW2 — czy osoba żąda automatycznych powiadomień w tej spółce (ostatnie oświadczenie). */
-function zadaPowiadomienAutomatycznych(db, osobaId, spolkaId) {
-  const w = db.prepare(
-    `SELECT zlozone FROM psa_oswiadczenia WHERE osoba_id = ? AND spolka_id = ? AND rodzaj = 'powiadomienia_automatyczne'
-      ORDER BY id DESC LIMIT 1`
-  ).get(osobaId, spolkaId);
-  return Boolean(w && w.zlozone);
+/** QW2 — czy osoba żąda automatycznych powiadomień (ostatnie oświadczenie osoby). */
+function zadaPowiadomienAutomatycznych(db, osobaId, spolkaId) { // eslint-disable-line no-unused-vars
+  // D-092 / P7: jedno aktywne oświadczenie na rodzaj — stan osoby z kartoteki (`stanOswiadczen`).
+  const stan = require('./oswiadczenia').stanOswiadczen(db, osobaId);
+  return Boolean(stan && stan.powiadomieniaAutomatyczne);
 }
 
 function dodaj(db, { wydanyDokumentId, spolkaId, sprawaId, osoba, rodzajPisma }) {

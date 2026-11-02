@@ -107,3 +107,25 @@ test('znacznik „list”: brak zgody albo brak adresu (stan bieżący, nie hist
   assert.equal(wymagaListu({ email: null, zgoda_email_status: 'potwierdzona' }), true, 'historyczna zgoda bez adresu');
   assert.equal(wymagaListu({ email: 'a@example.pl', zgoda_email_status: 'zadeklarowana' }), true);
 });
+
+test('P7: złożenie → cofnięcie → ponowne złożenie (oba rodzaje) — stan aktywny, jedno aktywne oświadczenie na rodzaj', async () => {
+  const { zadaPowiadomienAutomatycznych } = require('../server/listy');
+  const historia = () => liczba('SELECT COUNT(*) AS n FROM psa_oswiadczenia WHERE osoba_id = ?', S.zofia);
+  for (const zlozone of [true, false, true]) {
+    const [st, odp] = await zapytaj('POST', '/api/psa/portal/oswiadczenia', { spolka_id: S.spolkaId, rodzaj: 'powiadomienia_automatyczne', zlozone }, S.portal);
+    assert.equal(st, 201, JSON.stringify(odp));
+  }
+  assert.equal(stanOswiadczen(db(), S.zofia).powiadomieniaAutomatyczne, true);
+  assert.equal(zadaPowiadomienAutomatycznych(db(), S.zofia, S.spolkaId), true);
+  const przed = historia();
+  await zapytaj('POST', '/api/psa/portal/oswiadczenia', { spolka_id: S.spolkaId, rodzaj: 'powiadomienia_automatyczne', zlozone: true }, S.portal);
+  assert.equal(historia(), przed, 'to samo oświadczenie drugi raz — bez drugiego aktywnego wpisu');
+
+  // Zgoda: Zofia cofnęła ją w poprzednim teście — ponowne złożenie w tej samej sesji, adres z kartoteki.
+  const [st2, odp2] = await zapytaj('POST', '/api/psa/portal/oswiadczenia', { spolka_id: S.spolkaId, rodzaj: 'zgoda_email', zlozone: true }, S.portal);
+  assert.equal(st2, 201, JSON.stringify(odp2));
+  assert.equal(stanOswiadczen(db(), S.zofia).zgodaEmail, true);
+  const [, ekran] = await zapytaj('GET', '/api/psa/portal/oswiadczenia', undefined, S.portal);
+  assert.equal(ekran.zgoda_email.status, 'potwierdzona');
+  assert.equal(ekran.stan.powiadomieniaAutomatyczne, true);
+});
