@@ -1933,7 +1933,6 @@ function FormularzZmianyHaslaPortal() {
  */
 function OswiadczeniaAkcjonariusza() {
   const { dane, odswiez } = useDane('/api/psa/portal/oswiadczenia');
-  const [email, ustawEmail] = useState(null);
   const [blad, ustawBlad] = useState(null);
   const [wysylanie, ustawWysylanie] = useState(false);
   const [pytanieOCofniecie, ustawPytanieOCofniecie] = useState(false);
@@ -1942,8 +1941,7 @@ function OswiadczeniaAkcjonariusza() {
     ustawBlad(null);
     ustawWysylanie(true);
     try {
-      const adres = email ?? (dane.stan.email || '');
-      await API.post('/api/psa/portal/oswiadczenia', { spolka_id: (dane.spolki[0] || {}).spolka_id || null, rodzaj, zlozone, email: adres });
+      await API.post('/api/psa/portal/oswiadczenia', { spolka_id: (dane.spolki[0] || {}).spolka_id || null, rodzaj, zlozone });
       odswiez();
     } catch (e) {
       ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się złożyć oświadczenia.');
@@ -1954,15 +1952,18 @@ function OswiadczeniaAkcjonariusza() {
 
   if (!dane) return null;
   const stan = dane.stan;
-  const adres = email ?? (stan.email || '');
+  const adres = stan.email || '';
   return (
     <Karta tytul="Moje oświadczenia">
       <Komunikat odmiana="blad" tresc={blad} />
       <div className="podpowiedz">
         Oświadczenia składasz osobiście — zarząd spółki nie może złożyć ich w Twoim imieniu.
       </div>
-      <Pole etykieta="Adres e-mail do korespondencji z rejestru">
-        <input type="email" value={adres} onChange={(z) => ustawEmail(z.target.value)} placeholder="np. jan@example.com" />
+      <Pole
+        etykieta="Adres e-mail do korespondencji z rejestru"
+        podpowiedz="Adres z rejestru. Zmiana adresu to zmiana danych — złóż żądanie w zakładce „Zgłoszenia” albo w kancelarii."
+      >
+        <input type="email" value={adres} readOnly />
       </Pole>
       <label className="chk">
         <input

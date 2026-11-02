@@ -315,6 +315,9 @@ router.put(
       sprawdzBeneficjenta(dane.beneficjent_rzeczywisty_id, id, scalone.typ);
     }
 
+    // D-092 (przegląd R4 #2): dawna flaga `zgoda_email` to ten sam stan co status — jedna reguła.
+    if ('zgoda_email' in dane && !('zgoda_email_status' in dane)) dane.zgoda_email_status = Number(dane.zgoda_email) ? 'potwierdzona' : 'brak';
+    if ('zgoda_email_status' in dane) dane.zgoda_email = dane.zgoda_email_status === 'potwierdzona' ? 1 : 0;
     // D-092: zmiana zgody na e-mail przez kancelarię — przez `oswiadczenia` (historia: źródło, kto).
     const zgodaPrzed = biezaca.zgoda_email_status === 'potwierdzona';
     const zgodaPo = 'zgoda_email_status' in dane ? dane.zgoda_email_status === 'potwierdzona' : zgodaPrzed;

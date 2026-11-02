@@ -269,9 +269,13 @@ const POLA_TOZSAMOSCI = [
   'plec',
   'rodzaj_adresu_rejestrowego',
   'bez_pesel',
-  'zgoda_email',
-  'zgoda_email_status',
 ];
+
+/**
+ * D-092 (przegląd R4 #9): stan zgody na e-mail to dane kartoteki — nie dla innych akcjonariuszy.
+ * Spółka i organ dostają go (spółka potrzebuje go, żeby w informacji pokazać adres e-mail).
+ */
+const POLA_OSWIADCZEN = ['zgoda_email', 'zgoda_email_status'];
 
 /**
  * Dane AML/PEP i ocena ryzyka kancelarii - naprawa Z-150. NIGDY nie wychodza
@@ -343,8 +347,8 @@ const ROLE_PELNY_DOSTEP = [
 const BIALE_LISTY = {
   [ROLE_ODBIORCY.KANCELARIA]: null,
   [ROLE_ODBIORCY.WLASCICIEL_DANYCH]: null,
-  [ROLE_ODBIORCY.SPOLKA]: [...POLA_TOZSAMOSCI, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
-  [ROLE_ODBIORCY.ORGAN]: [...POLA_TOZSAMOSCI, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
+  [ROLE_ODBIORCY.SPOLKA]: [...POLA_TOZSAMOSCI, ...POLA_OSWIADCZEN, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
+  [ROLE_ODBIORCY.ORGAN]: [...POLA_TOZSAMOSCI, ...POLA_OSWIADCZEN, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
   [ROLE_ODBIORCY.AKCJONARIUSZ]: POLA_TOZSAMOSCI,
 };
 

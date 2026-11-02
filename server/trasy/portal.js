@@ -2152,11 +2152,18 @@ router.post('/oswiadczenia', asy((zad, odp) => {
   if (!['zgoda_email', 'powiadomienia_automatyczne'].includes(rodzaj)) throw bledneZadanie('Nieznany rodzaj oświadczenia.');
   const konto = zad.konto;
   // D-092 (R4 K5): oświadczenie to dane kartoteki — działa od razu, bez wpisu w rejestrze i bez opłaty.
+  // Przegląd R4 #1: zgoda tylko na adres z kartoteki — adres e-mail jest daną rejestru
+  // (art. 300(33) § 1 pkt 5 KSH), jego zmiana idzie żądaniem zmiany danych, nie oświadczeniem.
   let email = null;
   if (rodzaj === 'zgoda_email' && zlozone) {
-    email = String(cialo.email || '').trim().toLowerCase()
-      || (db().prepare('SELECT email FROM psa_osoby WHERE id = ?').get(konto.osoba_id) || {}).email || '';
-    if (!WZORZEC_EMAIL_OSW.test(email)) throw bledneZadanie('Podaj adres e-mail, na który mamy kierować korespondencję.');
+    email = String((db().prepare('SELECT email FROM psa_osoby WHERE id = ?').get(konto.osoba_id) || {}).email || '').trim().toLowerCase();
+    const podany = String(cialo.email || '').trim().toLowerCase();
+    if (podany && podany !== email) {
+      throw bledneZadanie('Zmiana adresu e-mail to zmiana danych w rejestrze — złóż żądanie zmiany danych (zakładka „Zgłoszenia”) albo w kancelarii.');
+    }
+    if (!WZORZEC_EMAIL_OSW.test(email)) {
+      throw bledneZadanie('W kartotece nie ma Twojego adresu e-mail — złóż żądanie zmiany danych (zakładka „Zgłoszenia”) albo w kancelarii.');
+    }
   }
   const stan = require('../oswiadczenia').zapiszOswiadczenie(db(), {
     osobaId: konto.osoba_id, rodzaj, zlozone, email, zrodlo: 'portal', autor: `Portal — ${konto.email}`, kontoId: konto.id, spolkaId,

@@ -1533,6 +1533,12 @@
   4. Znacznik „Brak zgody — konieczne powiadomienie listem” (`ZnacznikKontaktu`, liczy się stan bieżący:
      zgoda potwierdzona i adres) — przy wyborze zbywcy, nabywcy i żądającego w kreatorach, przy żądającym
      w nagłówku sprawy, na liście akcjonariuszy spółki, w kolejce listów (kartoteka — zadanie 12).
+  5. Po przeglądzie kodu: zgoda w portalu tylko na **adres z kartoteki** (zmiana adresu = żądanie zmiany
+     danych); jedna reguła „zgoda aktywna” (status „potwierdzona” i adres) w informacji, stanie i znaczniku
+     — migracja 68 podnosi dawną flagę `zgoda_email` ustawioną przez kancelarię do statusu „potwierdzona”;
+     stan zgody innych osób nie trafia do akcjonariusza (tylko spółka i organ).
+  6. Sprawy o zgodę złożone dawnym trybem (żądanie wpisu „zmiana danych akcjonariusza” z polem zgody) —
+     kreator już ich nie wpisze; kancelaria zamyka je, odnotowując zgodę w kartotece (bez wpisu).
 - Testy: `testy/oswiadczenia-k5.test.js`, `testy/faza3-http.test.js` (W4.1/W4.2), e2e K5.
 
 ### D-094 — Runda 4, faza 2: oświadczenia w portalu, bez nowej spółki z konta, usuwanie listów, kartoteka (SESJA-PSA-POPRAWKI-R4)

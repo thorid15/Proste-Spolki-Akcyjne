@@ -129,3 +129,41 @@ test('P7: złożenie → cofnięcie → ponowne złożenie (oba rodzaje) — sta
   assert.equal(ekran.zgoda_email.status, 'potwierdzona');
   assert.equal(ekran.stan.powiadomieniaAutomatyczne, true);
 });
+
+test('przegląd #1: portal nie zmienia adresu e-mail z rejestru — zgoda tylko na adres z kartoteki', async () => {
+  const przed = db().prepare('SELECT email FROM psa_osoby WHERE id = ?').get(S.zofia).email;
+  const [st, odp] = await zapytaj('POST', '/api/psa/portal/oswiadczenia', { spolka_id: S.spolkaId, rodzaj: 'zgoda_email', zlozone: true, email: 'inny-adres@example.pl' }, S.portal);
+  assert.equal(st, 400, JSON.stringify(odp));
+  assert.match(odp.blad, /zmian/i);
+  assert.equal(db().prepare('SELECT email FROM psa_osoby WHERE id = ?').get(S.zofia).email, przed, 'adres w kartotece bez zmian');
+});
+
+test('przegląd #2: jedna reguła zgody — informacja z rejestru, stan i znacznik zgodne', async () => {
+  const { emailDoRejestru } = require('../server/logika/informacja-dokument');
+  const flagaBezStatusu = { email: 'x@example.pl', zgoda_email: 1, zgoda_email_status: 'zadeklarowana' };
+  assert.equal(emailDoRejestru(flagaBezStatusu), null, 'sama flaga bez potwierdzonego statusu — bez adresu w informacji');
+  assert.equal(wymagaListu(flagaBezStatusu), true);
+  // Kancelaria zaznacza dawną flagę `zgoda_email` → status i historia (jedno źródło stanu).
+  const osobaId = Number(db().prepare(
+    `INSERT INTO psa_osoby (typ, imie, nazwisko, data_urodzenia, kod_pocztowy, miejscowosc, ulica, nr_domu, email, zgoda_email_status, aml_status, utworzono)
+     VALUES ('fizyczna', 'Flaga', 'Testowa', '1980-01-01', '80-001', 'Gdańsk', 'Rejestrowa', '9', 'flaga@example.pl', 'brak', 'wykonane', ?)`
+  ).run(czas.terazIso()).lastInsertRowid);
+  const hash = await hasla.hashuj('HasloTestowe123');
+  db().prepare(`INSERT INTO psa_uzytkownicy (imie, email, hash_hasla, rola, aktywny, utworzono) VALUES ('B', 'b-k5@example.pl', ?, 'admin', 1, ?)`).run(hash, czas.terazIso());
+  const l = await fetch(`${ADRES}/api/psa/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'b-k5@example.pl', haslo: 'HasloTestowe123' }) });
+  const [st] = await zapytaj('PUT', `/api/psa/osoby/${osobaId}`, { zgoda_email: 1 }, ciastko(l));
+  assert.equal(st, 200);
+  assert.equal(db().prepare('SELECT zgoda_email_status FROM psa_osoby WHERE id = ?').get(osobaId).zgoda_email_status, 'potwierdzona');
+  assert.equal(stanOswiadczen(db(), osobaId).zgodaEmail, true);
+  assert.equal(liczba("SELECT COUNT(*) AS n FROM psa_oswiadczenia WHERE osoba_id = ? AND zrodlo = 'kancelaria'", osobaId), 1);
+});
+
+test('przegląd #9: status zgody innych osób nie trafia do akcjonariusza; spółka go dostaje (adres e-mail w informacji)', () => {
+  const { zamaskujOsobe } = require('../server/logika/maskowanie');
+  const przepisy = require('../server/logika/przepisy');
+  const osoba = { id: 99, typ: 'fizyczna', imie: 'A', nazwisko: 'B', email: 'a@example.pl', zgoda_email: 1, zgoda_email_status: 'potwierdzona' };
+  const dlaAkcjonariusza = zamaskujOsobe(osoba, przepisy.ROLE_ODBIORCY.AKCJONARIUSZ, 1);
+  assert.ok(!('zgoda_email_status' in dlaAkcjonariusza) || dlaAkcjonariusza.zgoda_email_status === undefined);
+  assert.ok(!('zgoda_email' in dlaAkcjonariusza) || dlaAkcjonariusza.zgoda_email === undefined);
+  assert.equal(zamaskujOsobe(osoba, przepisy.ROLE_ODBIORCY.SPOLKA).zgoda_email_status, 'potwierdzona');
+});

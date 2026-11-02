@@ -551,7 +551,8 @@ function adresAkcjonariusza(osoba) {
  */
 function emailDoRejestru(osoba) {
   if (!osoba || pusty(osoba.email)) return null;
-  if (osoba.zgoda_email_status !== 'potwierdzona' && !Number(osoba.zgoda_email)) return null;
+  // D-092 (przegląd R4 #2): ta sama reguła co `stanOswiadczen` i znacznik — status „potwierdzona”.
+  if (osoba.zgoda_email_status !== 'potwierdzona') return null;
   return osoba.email;
 }
 

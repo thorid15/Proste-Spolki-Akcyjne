@@ -2590,6 +2590,15 @@ const MIGRACJE = [
       CREATE INDEX IF NOT EXISTS psa_ix_listy_status ON psa_listy (status);
     `,
   },
+  {
+    wersja: 68,
+    nazwa: 'D-092 (przegląd R4 #2): jedna reguła zgody na e-mail — flaga ustawiona przez kancelarię = status potwierdzona',
+    sql: `
+      UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona'
+        WHERE zgoda_email = 1 AND COALESCE(zgoda_email_status, '') <> 'potwierdzona';
+      UPDATE psa_osoby SET zgoda_email = CASE WHEN zgoda_email_status = 'potwierdzona' THEN 1 ELSE 0 END;
+    `,
+  },
 ];
 
 /**
