@@ -1962,6 +1962,7 @@ function OswiadczeniaAkcjonariusza() {
   const [email, ustawEmail] = useState(null);
   const [blad, ustawBlad] = useState(null);
   const [wysylanie, ustawWysylanie] = useState(false);
+  const [pytanieOCofniecie, ustawPytanieOCofniecie] = useState(false);
 
   async function zloz(rodzaj, zlozone) {
     ustawBlad(null);
@@ -1994,7 +1995,8 @@ function OswiadczeniaAkcjonariusza() {
           type="checkbox"
           checked={stan.zgodaEmail}
           disabled={wysylanie || (!stan.zgodaEmail && !adres.trim())}
-          onChange={(z) => zloz('zgoda_email', z.target.checked)}
+          // R4 P8: cofnięcie dopiero po potwierdzeniu w oknie ostrzeżenia.
+          onChange={(z) => (z.target.checked ? zloz('zgoda_email', true) : ustawPytanieOCofniecie(true))}
         />
         <span className="chk-tresc">
           Wyrażam zgodę na komunikację ze spółką i podmiotem prowadzącym rejestr przy wykorzystaniu poczty elektronicznej
@@ -2014,6 +2016,23 @@ function OswiadczeniaAkcjonariusza() {
         </span>
       </label>
       {stan.zmieniono && <div className="przyciemnione">Ostatnia zmiana: {fmt.dataCzas(stan.zmieniono)}.</div>}
+      {pytanieOCofniecie && (
+        <Modal
+          tytul="Cofnąć zgodę na e-mail?"
+          przyZamknieciu={() => ustawPytanieOCofniecie(false)}
+          stopka={(
+            <>
+              <button className="btn" onClick={() => { ustawPytanieOCofniecie(false); zloz('zgoda_email', false); }}>Cofam zgodę</button>
+              <button className="btn btn-glowny" data-autofocus onClick={() => ustawPytanieOCofniecie(false)}>Zostaw zgodę</button>
+            </>
+          )}
+        >
+          <p>
+            Bez zgody na e-mail postępowanie potrwa dłużej: powiadomienie o zamiarze wpisu i zawiadomienie o dokonanym
+            wpisie wyślemy listem, a dostęp do portalu wygaśnie.
+          </p>
+        </Modal>
+      )}
     </Karta>
   );
 }

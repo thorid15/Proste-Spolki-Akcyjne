@@ -115,3 +115,32 @@ test('P7: „Moje oświadczenia” — powiadomienia: odznacz i zaznacz ponownie
   await expect(pow).toBeChecked();
   await expect(page.getByRole('checkbox', { name: /Wyrażam zgodę na komunikację/ })).toBeEnabled();
 });
+
+test('P8: cofnięcie zgody na e-mail — ostrzeżenie; „Zostaw zgodę” i Esc bez żądania, „Cofam zgodę” jedno żądanie', async ({ page }) => {
+  await otworz(page, { konto: 'anna.zgoda@example.com', aplikacja: 'portal', adres: '/portal.html#/konto', czekaj: 'text=Moje oświadczenia', szerokosc: 390 });
+  const zadania = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && r.url().includes('/api/psa/portal/oswiadczenia')) zadania.push(r.postDataJSON()); });
+  const zgoda = page.getByRole('checkbox', { name: /Wyrażam zgodę na komunikację/ });
+  await expect(zgoda).toBeChecked();
+
+  await zgoda.click();
+  const okno = page.getByRole('dialog', { name: 'Cofnąć zgodę na e-mail?' });
+  await expect(okno).toBeVisible();
+  await expect(okno).toContainText('Bez zgody na e-mail postępowanie potrwa dłużej: powiadomienie o zamiarze wpisu i zawiadomienie o dokonanym wpisie wyślemy listem, a dostęp do portalu wygaśnie.');
+  await expect(okno.getByRole('button', { name: 'Zostaw zgodę' })).toBeFocused();
+  await okno.getByRole('button', { name: 'Zostaw zgodę' }).click();
+  await expect(okno).toHaveCount(0);
+  await zgoda.click();
+  await page.keyboard.press('Escape');
+  await expect(okno).toHaveCount(0);
+  expect(zadania).toHaveLength(0);
+  await expect(zgoda).toBeChecked();
+
+  await zgoda.click();
+  await okno.getByRole('button', { name: 'Cofam zgodę' }).click();
+  await expect(zgoda).not.toBeChecked();
+  expect(zadania).toHaveLength(1);
+  expect(zadania[0]).toMatchObject({ rodzaj: 'zgoda_email', zlozone: false });
+  await zgoda.click(); // P7: ponowne złożenie w tej samej sesji
+  await expect(zgoda).toBeChecked();
+});

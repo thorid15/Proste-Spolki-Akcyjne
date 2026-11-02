@@ -355,7 +355,9 @@ function Modal({ tytul, children, stopka, przyZamknieciu, szerokosc, panel = fal
   // Fokus wchodzi do okna, a po zamknięciu wraca tam, skąd przyszedł.
   useEffect(() => {
     const poprzedni = document.activeElement;
-    const pierwsze = ref.current && ref.current.querySelector('input:not([type=hidden]):not([disabled]), select, textarea, button');
+    // R4 P8: element oznaczony `data-autofocus` (np. bezpieczny przycisk domyślny) ma pierwszeństwo.
+    const pierwsze = ref.current && (ref.current.querySelector('[data-autofocus]')
+      || ref.current.querySelector('input:not([type=hidden]):not([disabled]), select, textarea, button'));
     if (pierwsze) pierwsze.focus({ preventScroll: true });
     return () => { if (poprzedni && poprzedni.focus) poprzedni.focus({ preventScroll: true }); };
   }, []);
