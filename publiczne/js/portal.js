@@ -851,25 +851,11 @@ function EkranWnioski() {
 }
 
 /**
- * „Dodaj spółkę" (B8) — nowy wniosek zakłada się jednym kliknięciem, bez
- * przechodzenia przez publiczny formularz zgłoszenia: to konto już jest
- * zweryfikowanym klientem kancelarii. Gdy wniosek o kolejną spółkę jest już
- * w toku, przycisk zamienia się w „Kontynuuj wniosek" — jedna czynność do
- * końca (0.4 pkt 5), bez ryzyka próby założenia drugiego naraz.
+ * R4 P6 (wycofuje „Dodaj spółkę” z B8): kolejnej spółki nie zakłada się z konta spółki — każdą zgłasza się
+ * osobno standardowym trybem (zgłoszenie → zaproszenie → wniosek). Wniosek w toku założony wcześniej
+ * konto dokańcza normalnie („Kontynuuj wniosek”).
  */
 function PrzyciskDodajSpolke({ wniosekWToku }) {
-  const [zakladanie, ustawZakladanie] = useState(null);
-
-  async function dodaj() {
-    ustawZakladanie(null);
-    try {
-      await API.post('/api/psa/portal/wniosek/nowy', {});
-      idz('/wniosek');
-    } catch (e) {
-      ustawZakladanie(e instanceof BladApi ? e.message : 'Nie udało się założyć nowego wniosku.');
-    }
-  }
-
   if (wniosekWToku) {
     return (
       <Karta tytul="Wniosek o kolejną spółkę">
@@ -883,19 +869,7 @@ function PrzyciskDodajSpolke({ wniosekWToku }) {
       </Karta>
     );
   }
-
-  return (
-    <Karta>
-      <div className="rzad-rozdzielony">
-        <div>
-          <div style={{ fontWeight: 600 }}>Prowadzisz u nas kolejną prostą spółkę akcyjną?</div>
-          <div className="podpowiedz">Dodajesz ją bez ponownego wypełniania zgłoszenia — od razu wniosek z pobraniem danych z KRS.</div>
-        </div>
-        <button className="btn btn-glowny" onClick={dodaj}>+ Dodaj spółkę</button>
-      </div>
-      <Komunikat odmiana="blad" tresc={zakladanie} />
-    </Karta>
-  );
+  return <div className="podpowiedz">Kolejną spółkę zgłasza się osobno — przez zgłoszenie na stronie rejestru.</div>;
 }
 
 const STAN_WNIOSKU_ETYKIETA = {

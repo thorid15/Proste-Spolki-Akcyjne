@@ -684,7 +684,7 @@ test('B6: pobranie dokumentu przez klienta ustawia ślad pierwszego otwarcia (ot
   );
 });
 
-test('B8: konto "spolka" po przyjęciu wniosku zakłada KOLEJNY wniosek o drugą spółkę', async () => {
+test('B8 → R4 P6: konto "spolka" po przyjęciu wniosku NIE zakłada kolejnego wniosku (403)', async () => {
   const email = 'b8-druga-spolka@example.pl';
   const { wniosekId, ciastkoKlienta } = await wnioskGotowyDoWeryfikacji(email, {
     dodatkowePola: { nazwa: 'Pierwsza B8 P.S.A.', krs: '0001112201' },
@@ -704,39 +704,12 @@ test('B8: konto "spolka" po przyjęciu wniosku zakłada KOLEJNY wniosek o drugą
   assert.equal(mojePrzed.spolki.length, 1);
   assert.equal(mojePrzed.wniosek, null, 'bez wniosku w toku, dopoki nikt nie kliknie "Dodaj spółkę"');
 
-  // "Dodaj spółkę" — nowy wniosek, konto zostaje w roli "spolka".
+  // R4 P6: „Dodaj spółkę” wycofane — kolejną spółkę zgłasza się od nowa standardowym trybem.
   const [statusNowy, nowy] = await zapytaj('POST', '/api/psa/portal/wniosek/nowy', {}, ciastkoKlienta);
-  assert.equal(statusNowy, 201, JSON.stringify(nowy));
-  assert.equal(nowy.wniosek.status, 'w_przygotowaniu');
-  assert.notEqual(nowy.wniosek.id, wniosekId, 'to NOWY wiersz, nie ten sam co pierwsza spółka');
-
-  // GET /wniosek (l. pojedyncza — "aktywny" wniosek) trafia w NOWY, nie w stary/przyjęty.
-  const [, aktywny] = await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastkoKlienta);
-  assert.equal(aktywny.wniosek.id, nowy.wniosek.id);
-
-  // GET /wnioski (l. mnoga) — obie spółki, z ich statusami.
+  assert.equal(statusNowy, 403, JSON.stringify(nowy));
+  assert.match(nowy.blad, /Każdą spółkę zgłasza się osobno/);
   const [, lista] = await zapytaj('GET', '/api/psa/portal/wnioski', undefined, ciastkoKlienta);
-  assert.equal(lista.wnioski.length, 2);
-  const statusy = lista.wnioski.map((w) => w.status).sort();
-  assert.deepEqual(statusy, ['przyjety', 'w_przygotowaniu']);
-  const stary = lista.wnioski.find((w) => w.id === wniosekId);
-  assert.equal(stary.reprezentant_imie_nazwisko, 'Jan Kowalski', 'dane reprezentanta z pierwszego wniosku dostępne do skopiowania');
-
-  // Drugi "Dodaj spółkę" naraz jest odrzucany — dokończ, zanim zaczniesz kolejny.
-  const [statusDrugi, drugi] = await zapytaj('POST', '/api/psa/portal/wniosek/nowy', {}, ciastkoKlienta);
-  assert.equal(statusDrugi, 400, JSON.stringify(drugi));
-
-  // Nowy wniosek jest edytowalny — PUT nie odbija się o stary, przyjęty wiersz.
-  const [statusPut, poPut] = await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Druga B8 P.S.A.' }, ciastkoKlienta);
-  assert.equal(statusPut, 200, JSON.stringify(poPut));
-  assert.equal(poPut.wniosek.id, nowy.wniosek.id);
-  assert.equal(poPut.wniosek.nazwa, 'Druga B8 P.S.A.');
-
-  // "Moje spółki" widzi teraz wniosek w toku obok istniejącej spółki.
-  const [, mojePo] = await zapytaj('GET', '/api/psa/portal/moje', undefined, ciastkoKlienta);
-  assert.equal(mojePo.spolki.length, 1);
-  assert.ok(mojePo.wniosek, 'wniosek o drugą spółkę widoczny jako "w toku"');
-  assert.equal(mojePo.wniosek.id, nowy.wniosek.id);
+  assert.equal(lista.wnioski.length, 1, 'bez nowego wniosku');
 });
 
 test('B8: wnioskodawca (jeszcze bez żadnej spółki) nie może użyć "Dodaj spółkę"', async () => {

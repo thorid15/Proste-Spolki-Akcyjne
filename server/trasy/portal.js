@@ -704,14 +704,9 @@ router.post(
     if (zad.konto.rola !== 'spolka') {
       throw bledneZadanie('To konto ma już otwarty wniosek — kontynuuj go w zakładce „Wniosek".');
     }
-    const otwarty = wczytajOtwartyWniosekKonta(zad.konto.id);
-    if (otwarty) {
-      throw bledneZadanie('Masz już wniosek w toku — dokończ go, zanim dodasz kolejną spółkę.');
-    }
-    const wynik = db()
-      .prepare('INSERT INTO psa_wnioski (konto_id, utworzono) VALUES (?, ?)')
-      .run(zad.konto.id, czas.terazIso());
-    odp.status(201).json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wynik.lastInsertRowid) });
+    // R4 P6: kolejną spółkę zgłasza się od nowa standardowym trybem (zgłoszenie → zaproszenie → wniosek),
+    // nie z konta spółki z przyjętym wnioskiem. Wniosek w toku (sprzed tej zmiany) konto dokańcza normalnie.
+    odp.status(403).json({ blad: 'Każdą spółkę zgłasza się osobno. Aby dodać kolejną spółkę, wypełnij zgłoszenie na stronie rejestru.' });
   })
 );
 
