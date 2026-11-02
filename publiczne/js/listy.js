@@ -9,7 +9,21 @@ function WierszListu({ list, odswiez }) {
   const [numer, ustawNumer] = useState('');
   const [blad, ustawBlad] = useState(null);
   const [zapis, ustawZapis] = useState(false);
+  const [usuwanie, ustawUsuwanie] = useState(false);
   const plik = useRef(null);
+
+  /** R4 K3: usunięcie z wysyłki przed nadaniem — z powodem (min. 5 znaków, sprawdza serwer). */
+  async function usun(powod) {
+    ustawBlad(null);
+    try {
+      await API.post(`/api/psa/listy/${list.id}/usun-z-wysylki`, { powod });
+      ustawUsuwanie(false);
+      odswiez();
+    } catch (e) {
+      ustawUsuwanie(false);
+      ustawBlad(e.message);
+    }
+  }
 
   async function nadaj() {
     ustawZapis(true);
@@ -37,7 +51,12 @@ function WierszListu({ list, odswiez }) {
       <td>{list.rodzaj_nazwa}<div className="przyciemnione">{list.spolka_nazwa}{list.sprawa_numer ? ` · ${list.sprawa_numer}` : ''}</div></td>
       <td><strong>{list.odbiorca_nazwa}</strong><div>{list.adres}</div><ZnacznikKontaktu zawsze /></td>
       <td>
-        {list.status === 'nadany' ? (
+        {list.status === 'usuniety' ? (
+          <>
+            <Pigulka odmiana="wyciszona">usunięty z wysyłki {fmt.data(list.usunieto)}</Pigulka>
+            <div className="przyciemnione">{list.usuniecie_powod}{list.usunal ? ` — ${list.usunal}` : ''}</div>
+          </>
+        ) : list.status === 'nadany' ? (
           <>
             <Pigulka odmiana="rejestr">nadany {fmt.data(list.data_nadania)}</Pigulka>
             <div className="przyciemnione">nr {list.numer_nadania}</div>
@@ -55,10 +74,17 @@ function WierszListu({ list, odswiez }) {
             </span>
           </div>
         ) : (
-          <span className="row-g">
-            <a className="btn btn-maly" href={`/api/psa/listy/${list.id}/pismo`} target="_blank" rel="noopener">Drukuj pismo</a>
-            <button className="btn btn-maly btn-glowny" onClick={() => ustawOtwarty(true)}>Nadano</button>
-          </span>
+          <>
+            <Komunikat odmiana="blad" tresc={blad} />
+            <span className="row-g">
+              <button className="btn btn-maly" onClick={() => ustawUsuwanie(true)}>Usuń z wysyłki</button>
+              <a className="btn btn-maly" href={`/api/psa/listy/${list.id}/pismo`} target="_blank" rel="noopener">Drukuj pismo</a>
+              <button className="btn btn-maly btn-glowny" onClick={() => ustawOtwarty(true)}>Nadano</button>
+            </span>
+          </>
+        )}
+        {usuwanie && (
+          <ModalPowod tytul="Usuń list z wysyłki" etykieta="Powód" przyZamknieciu={() => ustawUsuwanie(false)} przyZapisie={usun} />
         )}
       </td>
     </tr>

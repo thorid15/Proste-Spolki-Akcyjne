@@ -2556,6 +2556,40 @@ const MIGRACJE = [
       ALTER TABLE psa_oswiadczenia ADD COLUMN autor TEXT;
     `,
   },
+  {
+    wersja: 67,
+    nazwa: 'R4 K3: listy — status „usunięty z wysyłki” z powodem, autorem i datą (pismo zostaje)',
+    sql: `
+      CREATE TABLE psa_listy_nowa (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        wydany_dokument_id  INTEGER NOT NULL REFERENCES psa_wydane_dokumenty(id),
+        spolka_id           INTEGER NOT NULL REFERENCES psa_spolki(id),
+        sprawa_id           INTEGER REFERENCES psa_sprawy(id),
+        odbiorca_osoba_id   INTEGER REFERENCES psa_osoby(id),
+        odbiorca_nazwa      TEXT NOT NULL,
+        adres               TEXT NOT NULL,
+        rodzaj_pisma        TEXT NOT NULL,
+        status              TEXT NOT NULL DEFAULT 'do_wyslania' CHECK (status IN ('do_wyslania', 'nadany', 'usuniety')),
+        data_nadania        TEXT,
+        numer_nadania       TEXT,
+        potwierdzenie_sciezka TEXT,
+        potwierdzenie_nazwa TEXT,
+        nadal               TEXT,
+        usuniecie_powod     TEXT,
+        usunal              TEXT,
+        usunieto            TEXT,
+        utworzono           TEXT NOT NULL
+      );
+      INSERT INTO psa_listy_nowa (id, wydany_dokument_id, spolka_id, sprawa_id, odbiorca_osoba_id, odbiorca_nazwa, adres,
+        rodzaj_pisma, status, data_nadania, numer_nadania, potwierdzenie_sciezka, potwierdzenie_nazwa, nadal, utworzono)
+        SELECT id, wydany_dokument_id, spolka_id, sprawa_id, odbiorca_osoba_id, odbiorca_nazwa, adres,
+          rodzaj_pisma, status, data_nadania, numer_nadania, potwierdzenie_sciezka, potwierdzenie_nazwa, nadal, utworzono
+          FROM psa_listy;
+      DROP TABLE psa_listy;
+      ALTER TABLE psa_listy_nowa RENAME TO psa_listy;
+      CREATE INDEX IF NOT EXISTS psa_ix_listy_status ON psa_listy (status);
+    `,
+  },
 ];
 
 /**

@@ -85,6 +85,37 @@ async function sprawaZbycia() {
   return z.sprawa.id;
 }
 
+test('R4 K3: „Usuń z wysyłki” — przed nadaniem: status usunięty, pismo zostaje, wpis dalej zablokowany; po nadaniu 409', async () => {
+  const sprawaId = await sprawaZbycia();
+  const [, wynik] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/powiadomienie`, { osoba_id: S.bezZgody });
+  const listId = wynik.wysylka.list_id;
+  const [stKrotki] = await zapytaj('POST', `/api/psa/listy/${listId}/usun-z-wysylki`, { powod: 'abc' });
+  assert.equal(stKrotki, 400, 'powód min. 5 znaków');
+  const [st, odp] = await zapytaj('POST', `/api/psa/listy/${listId}/usun-z-wysylki`, { powod: 'Błędnie zaznaczony brak zgody' });
+  assert.equal(st, 200, JSON.stringify(odp));
+  assert.equal(odp.list.status, 'usuniety');
+  assert.equal(odp.list.usuniecie_powod, 'Błędnie zaznaczony brak zgody');
+  assert.ok(odp.list.usunal && odp.list.usunieto);
+  assert.ok(db().prepare('SELECT 1 FROM psa_wydane_dokumenty WHERE id = ?').get(odp.list.wydany_dokument_id), 'pismo zostaje');
+  const [stPismo] = await zapytaj('GET', `/api/psa/listy/${listId}/pismo`);
+  assert.equal(stPismo, 200);
+  const [, sprawa] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
+  assert.ok(sprawa.sprawa.blokada_wpisu, 'usunięte powiadomienie → wpis zablokowany');
+  assert.ok(!sprawa.sprawa.powiadomienie_wyslano);
+  const [, doWyslania] = await zapytaj('GET', '/api/psa/listy?status=do_wyslania');
+  assert.ok(!doWyslania.listy.some((l) => l.id === listId), 'poza kolejką do wysłania');
+
+  const sprawa2 = await sprawaZbycia();
+  const [, w2] = await zapytaj('POST', `/api/psa/sprawy/${sprawa2}/powiadomienie`, { osoba_id: S.bezZgody });
+  const f = new FormData();
+  f.append('data_nadania', czas.dzisIso());
+  f.append('numer_nadania', 'RR000000077PL');
+  await fetch(`${ADRES}/api/psa/listy/${w2.wysylka.list_id}/nadanie`, { method: 'POST', headers: { Cookie: prac }, body: f });
+  const [st409, odp409] = await zapytaj('POST', `/api/psa/listy/${w2.wysylka.list_id}/usun-z-wysylki`, { powod: 'Za późno, już nadany' });
+  assert.equal(st409, 409);
+  assert.equal(odp409.blad, 'List został nadany — nie można go usunąć z wysyłki.');
+});
+
 test('W4.3/W4.4: powiadomienie zbywcy bez zgody → list na adres z rejestru (nie z żądania); nadanie odblokowuje wpis', async () => {
   const sprawaId = await sprawaZbycia();
   const [st, wynik] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/powiadomienie`, {

@@ -76,6 +76,7 @@ function wczytaj(db, id) {
 function oznaczNadanie(db, id, { dataNadania, numerNadania, potwierdzenie, autor }) {
   const list = wczytaj(db, id);
   if (!list) return null;
+  if (list.status === 'usuniety') throw new BladListu('List został usunięty z wysyłki — nie można go nadać.', 409);
   db.transaction(() => {
     db.prepare(
       `UPDATE psa_listy SET status = 'nadany', data_nadania = ?, numer_nadania = ?, nadal = ?,
@@ -94,4 +95,45 @@ function oznaczNadanie(db, id, { dataNadania, numerNadania, potwierdzenie, autor
   return wczytaj(db, id);
 }
 
-module.exports = { kanalDlaOsoby, adresZRejestru, oznaczenie, dodaj, lista, wczytaj, oznaczNadanie, zadaPowiadomienAutomatycznych };
+class BladListu extends Error {
+  constructor(komunikat, kod = 400) {
+    super(komunikat);
+    this.kod = kod;
+  }
+}
+
+/**
+ * R4 K3: „Usuń z wysyłki” — tylko przed nadaniem. Pismo zostaje (bez fizycznego kasowania), powód, kto
+ * i kiedy w rekordzie listu oraz w notatce sprawy. Usunięte powiadomienie przed wpisem → sprawa „bez
+ * powiadomienia” (wpis zablokowany, art. 300(34) § 3 KSH), o ile nie nadano innego powiadomienia.
+ */
+function usunZWysylki(db, id, { powod, autor }) {
+  const list = wczytaj(db, id);
+  if (!list) return null;
+  const tekst = String(powod || '').trim();
+  if (list.status === 'nadany') throw new BladListu('List został nadany — nie można go usunąć z wysyłki.', 409);
+  if (list.status === 'usuniety') throw new BladListu('List został już usunięty z wysyłki.', 409);
+  if (tekst.length < 5) throw new BladListu('Podaj powód usunięcia z wysyłki (co najmniej 5 znaków).');
+  const teraz = czas.terazIso();
+  db.transaction(() => {
+    db.prepare(`UPDATE psa_listy SET status = 'usuniety', usuniecie_powod = ?, usunal = ?, usunieto = ? WHERE id = ?`)
+      .run(tekst, autor || null, teraz, id);
+    if (list.sprawa_id) {
+      if (list.rodzaj_pisma === 'powiadomienie') {
+        const inneNadane = db.prepare(
+          `SELECT 1 FROM psa_listy WHERE sprawa_id = ? AND rodzaj_pisma = 'powiadomienie' AND status = 'nadany' AND id <> ?`
+        ).get(list.sprawa_id, id);
+        if (!inneNadane) db.prepare('UPDATE psa_sprawy SET powiadomienie_wyslano = NULL WHERE id = ?').run(list.sprawa_id);
+      }
+      db.prepare(
+        `UPDATE psa_sprawy SET notatka = COALESCE(notatka || char(10), '') || ?, zaktualizowano = ? WHERE id = ?`
+      ).run(`[${teraz.slice(0, 10)}] List (${list.rodzaj_pisma}) do ${list.odbiorca_nazwa} usunięty z wysyłki: ${tekst} (${autor || '—'})`, teraz, list.sprawa_id);
+    }
+  })();
+  return wczytaj(db, id);
+}
+
+module.exports = {
+  kanalDlaOsoby, adresZRejestru, oznaczenie, dodaj, lista, wczytaj, oznaczNadanie, zadaPowiadomienAutomatycznych,
+  usunZWysylki, BladListu,
+};
