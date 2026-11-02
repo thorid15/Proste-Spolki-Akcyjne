@@ -156,3 +156,8 @@ for (const szerokosc of [1440, 390]) {
     expect(await sprawdzUklad(page, '.kartoteka-osoby')).toEqual([]);
   });
 }
+
+test('K3/K5: kolejka listów przy 390 px — znacznik „list” i przyciski mieszczą się w karcie', async ({ page }) => {
+  await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/listy', czekaj: 'text=Usuń z wysyłki', szerokosc: 390 });
+  expect(await sprawdzUklad(page, '.karta')).toEqual([]);
+});

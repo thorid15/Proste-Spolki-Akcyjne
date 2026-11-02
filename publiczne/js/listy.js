@@ -49,7 +49,8 @@ function WierszListu({ list, odswiez }) {
     <tr>
       <td>{fmt.data(list.utworzono)}</td>
       <td>{list.rodzaj_nazwa}<div className="przyciemnione">{list.spolka_nazwa}{list.sprawa_numer ? ` · ${list.sprawa_numer}` : ''}</div></td>
-      <td><strong>{list.odbiorca_nazwa}</strong><div>{list.adres}</div><ZnacznikKontaktu zawsze /></td>
+      {/* Jeden blok w komórce — na telefonie komórka tabeli jest wierszem flex. */}
+      <td><div><strong>{list.odbiorca_nazwa}</strong><div>{list.adres}</div><ZnacznikKontaktu zawsze /></div></td>
       <td>
         {list.status === 'usuniety' ? (
           <>

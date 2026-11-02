@@ -1535,6 +1535,27 @@
      w nagłówku sprawy, na liście akcjonariuszy spółki, w kolejce listów (kartoteka — zadanie 12).
 - Testy: `testy/oswiadczenia-k5.test.js`, `testy/faza3-http.test.js` (W4.1/W4.2), e2e K5.
 
+### D-094 — Runda 4, faza 2: oświadczenia w portalu, bez nowej spółki z konta, usuwanie listów, kartoteka (SESJA-PSA-POPRAWKI-R4)
+
+- Data: 2026-11-02
+- Obszar: portal / listy / kartoteka
+- Decyzja:
+  1. **P7:** „Moje oświadczenia” — dwa checkboxy na jednym stanie osoby (`stanOswiadczen`, D-092); oświadczenie
+     można cofnąć i złożyć ponownie, dopóki konto jest aktywne; adres e-mail podpowiadany z kartoteki.
+     Powiadomienia automatyczne liczone na osobę (jedno aktywne oświadczenie na rodzaj), nie na spółkę.
+  2. **P8:** odznaczenie zgody na e-mail otwiera okno „Cofnąć zgodę na e-mail?” z ostrzeżeniem (list zamiast
+     e-maila, wygaśnięcie dostępu do portalu); „Zostaw zgodę” domyślne (fokus, Esc), „Cofam zgodę” wysyła.
+  3. **P6 (wycofuje „Dodaj spółkę” z B8):** konto spółki nie zakłada kolejnego wniosku — `POST
+     /portal/wniosek/nowy` → 403 „Każdą spółkę zgłasza się osobno. Aby dodać kolejną spółkę, wypełnij
+     zgłoszenie na stronie rejestru.”; wniosek w toku założony wcześniej konto dokańcza.
+  4. **K3:** „Usuń z wysyłki” przy nienadanym liście — powód (min. 5 znaków), kto, kiedy; pismo zostaje,
+     wpis w notatce sprawy; po nadaniu 409; usunięte powiadomienie przed wpisem → wpis zablokowany
+     (art. 300(34) § 3 KSH). Migracja 67.
+  5. **K2:** kartoteka osoby w jednym widoku: Identyfikacja → Adresy → Kontakt i oświadczenia (stan, znacznik,
+     historia) → AML → Akcje w spółkach (z seriami) → Sprawy (5 ostatnich + „Pokaż wszystkie”).
+- Testy: `testy/{oswiadczenia-k5,p6-nowa-spolka}.test.js`, `testy/faza3-http.test.js` (K3),
+  `testy/wnioski-kancelaria-http.test.js` (B8 → P6), e2e P7, P8, K2, K5.
+
 ---
 
 ## Decyzje otwarte

@@ -646,6 +646,10 @@ body {
   .pasek-akcji > .btn-glowny { order: -1; }
 }
 
+/* ── Znacznik „list” (R4 K5): długi tekst zawija się zamiast wychodzić poza kartę ── */
+.znacznik-kontaktu { display: inline-block; max-width: 100%; vertical-align: middle; }
+.znacznik-kontaktu .pigulka { white-space: normal; text-align: left; max-width: 100%; }
+
 /* ── Kartoteka osoby w jednym widoku (R4 K2) ── */
 .kartoteka-osoby { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--od-24) var(--od-40); }
 .kartoteka-sekcja { min-width: 0; }
