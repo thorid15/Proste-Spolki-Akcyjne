@@ -379,7 +379,7 @@ function ModalOdmowy({ przyZamknieciu, przyZapisie }) {
  * R4 K1: wszystkie akcje sprawy w jednym pasku (PasekAkcji) — podstawa wpisu i żądanie wpisu jako
  * drugorzędne, przycisk główny zależny od stanu (rozpocznij weryfikację / wznów).
  */
-function PasekAkcjiSprawy({ sprawa, odswiez, zakonczona, przyPodstawie, przyZadaniu }) {
+function PasekAkcjiSprawy({ sprawa, odswiez, zakonczona, przyPodstawie, przyZadaniu, nowyPrzebieg = false }) {
   const [modal, ustawModal] = useState(null);
   const [bladAkcji, ustawBladAkcji] = useState(null);
 
@@ -396,13 +396,14 @@ function PasekAkcjiSprawy({ sprawa, odswiez, zakonczona, przyPodstawie, przyZada
 
   const stan = sprawa.stan;
   const akcje = [
-    !zakonczona && { etykieta: sprawa.dokument_rodzaj ? 'Popraw podstawę wpisu' : 'Ustal podstawę wpisu', przyKlik: przyPodstawie },
+    // D-091: w nowym przebiegu zbycia podstawa to krok 2 kreatora, a weryfikacja zaczyna się sama.
+    !zakonczona && !nowyPrzebieg && { etykieta: sprawa.dokument_rodzaj ? 'Popraw podstawę wpisu' : 'Ustal podstawę wpisu', przyKlik: przyPodstawie },
     { etykieta: 'Wystaw żądanie wpisu', przyKlik: przyZadaniu },
     stan === 'weryfikacja' && { etykieta: 'Wstrzymaj', przyKlik: () => ustawModal('wstrzymaj') },
     ['weryfikacja', 'wstrzymana'].includes(stan) && { etykieta: 'Odmów wpisu', przyKlik: () => ustawModal('odmow'), niebezpieczna: true },
     !zakonczona && { etykieta: 'Anuluj sprawę', przyKlik: () => ustawModal('anuluj') },
     // Sprawa z portalu wpada w stan „nowa”; kreator wpisu otwiera się dopiero w „weryfikacji”.
-    stan === 'nowa' && { etykieta: 'Rozpocznij weryfikację', przyKlik: () => wykonaj('weryfikuj'), glowna: true },
+    stan === 'nowa' && !nowyPrzebieg && { etykieta: 'Rozpocznij weryfikację', przyKlik: () => wykonaj('weryfikuj'), glowna: true },
     stan === 'wstrzymana' && { etykieta: 'Wznów', przyKlik: () => wykonaj('wznow'), glowna: true },
   ];
 
@@ -1038,6 +1039,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
   const { sprawa, spolka, zadajacy, dokumenty, wydane_dokumenty } = dane;
   const definicjaTypu = meta.dane.typy_zdarzen.find((t) => t.kod === sprawa.typ_zdarzenia);
   const zakonczona = ['wpisana', 'odmowa', 'anulowana'].includes(sprawa.stan);
+  const nowyPrzebieg = sprawa.typ_zdarzenia === 'przeniesienie' && !zakonczona; // R4 zad. 15 (D-091)
 
   return (
     <KolumnaSprawy>
@@ -1082,14 +1084,19 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
           zakonczona={zakonczona}
           przyPodstawie={() => ustawEdycjePodstawy(true)}
           przyZadaniu={() => ustawWystawianieZadania(true)}
+          nowyPrzebieg={nowyPrzebieg}
         />
+      )}
+
+      {nowyPrzebieg && !wlasnieWpisano && (
+        <KreatorZbycia spolkaId={sprawa.spolka_id} sprawa={sprawa} odswiezSprawe={odswiez} definicjaTypu={definicjaTypu} />
       )}
 
       {!zakonczona && edycjaPodstawy && (
         <PodstawaWpisu sprawa={sprawa} typy={meta.dane.typy_zdarzen} odswiez={odswiez} przyZamknieciu={() => ustawEdycjePodstawy(false)} />
       )}
 
-      {!wlasnieWpisano && definicjaTypu && definicjaTypu.wymaga_powiadomienia === true && !zakonczona && (
+      {!wlasnieWpisano && !nowyPrzebieg && definicjaTypu && definicjaTypu.wymaga_powiadomienia === true && !zakonczona && (
         <PanelPowiadomienia sprawa={sprawa} spolka={spolka} odswiez={odswiez} />
       )}
 
@@ -1130,7 +1137,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
         </Sekcja>
       )}
 
-      {!zakonczona && sprawa.stan === 'weryfikacja' && (
+      {!zakonczona && !nowyPrzebieg && sprawa.stan === 'weryfikacja' && (
         <KreatorSprawy
             sprawa={sprawa}
             spolka={spolkaBogata.dane}

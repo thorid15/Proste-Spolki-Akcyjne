@@ -1511,7 +1511,11 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, osobaPocz
                       <button
                         key={t.kod}
                         className={`kafelek-wyboru ${typ === t.kod ? 'wybrany' : ''}`}
-                        onClick={() => { ustawTyp(t.kod); ustawKrok(1); }}
+                        onClick={() => {
+                          // R4 zad. 15 (D-091): zbycie akcji ma własny przebieg.
+                          if (t.kod === 'przeniesienie' && !zPodstawySprawy) { idz(`/spolki/${spolkaId}/zdarzenie?typ=przeniesienie`); return; }
+                          ustawTyp(t.kod); ustawKrok(1);
+                        }}
                       >
                         <Ikona nazwa={IKONY_ZDARZEN[t.kod] || 'zdarzenie'} rozmiar={20} />
                         <span className="kafelek-wyboru-tytul">{t.opis_zdarzeniem}</span>
