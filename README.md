@@ -119,6 +119,14 @@ podpisy (test pliku i atrapa, D-086), wpis bez zgody → list do wysyłki, zgody
 rejestru do „Aktywny”, informacja z rejestru w wersji dla spółki i akcjonariusza na dacie 2027-02-20. Kod wyjścia 1
 przy błędzie. Pierwotny `npm run scenariusz -- --haslo …` działa też na serwerze w trybie testowym (link aktywacyjny
 ze skrzynki testowej). Testy ręczne dla notariusza: `WYTYCZNE-STATUS.md`, sekcja R4.
+## Zbycie akcji — nowy przebieg (R4, D-091)
+
+Kokpit spółki → wpis „Przeniesienie akcji” (albo sprawa z portalu) → **Co się zbywa** (zbywca z akcjonariuszy,
+liczba akcji — numery dobiera aplikacja, nabywca z kartoteki albo nowy z minimum danych) → **Podstawa** (data
+umowy, plik, kto żąda, tytuł) → **Sprawdzenie i wpis** (podgląd, pola warunkowe: zgoda spółki / pierwszeństwo /
+pokrycie, powiadomienie zbywcy albo zgoda, checklista, „Dokonaj wpisu”). Sprawa powstaje po kroku „Podstawa”;
+do kroku 3 można wrócić po nadaniu listu. Raport sesji: `SESJA-PSA-POPRAWKI-R4-RAPORT.md`.
+
 ## Zrzuty ekranów i kontrola układu — R4
 
 ```bash
