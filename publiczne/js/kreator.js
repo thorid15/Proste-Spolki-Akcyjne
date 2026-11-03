@@ -63,6 +63,7 @@ function PozycjaKreatora({
           wyklucz={wyklucz}
           przyZmianie={(id) => ustawPozycje({ ...pozycja, [kluczOsoby]: id })}
         />
+        <ZnacznikKontaktuOsoby osobaId={pozycja[kluczOsoby]} />
       </Pole>
 
       <Pole etykieta="Liczba akcji" wymagane>
@@ -430,7 +431,7 @@ function KrokPrzeniesienie({ dane, ustawDane, spolka }) {
 
       {dane.emisja_zdarzenie_id && (
         <>
-          <Pole etykieta="Zbywca" wymagane>
+          <div className="pole-zbywcy"><Pole etykieta="Zbywca" wymagane>
             {wSerii.length === 0 ? (
               <Komunikat odmiana="uwaga" tresc="W tej serii nikt nie ma jeszcze akcji." />
             ) : (
@@ -447,13 +448,35 @@ function KrokPrzeniesienie({ dane, ustawDane, spolka }) {
                 ))}
               </select>
             )}
-          </Pole>
+            {zbywca && <ZnacznikKontaktu osoba={zbywca.osoba} />}
+          </Pole></div>
 
           {zbywca && (
             <Komunikat
               odmiana="info"
               tresc={`Zbywca posiada ${fmt.AKCJE(zbywca.ilosc)} serii ${zbywca.seria}, numery ${zbywca.numery}.`}
             />
+          )}
+
+          {zbywca && zbywca.pokryta !== 'tak' && (
+            <>
+              {/* D-089: akcje bez pełnego pokrycia (także „brak informacji”) — przypomnienie o zgodzie spółki. */}
+              <label className="chk">
+                <input
+                  type="checkbox"
+                  checked={Boolean(dane.zgoda_spolki_niepelne_pokrycie)}
+                  onChange={(z) => ustawDane({ ...dane, zgoda_spolki_niepelne_pokrycie: z.target.checked })}
+                />
+                <span className="chk-tresc">
+                  Uzyskano zgodę spółki na zbycie akcji nie w pełni pokrytych
+                  <div className="podstawa-prawna">art. 300⁴⁰ § 1 KSH — zgoda w formie dokumentowej, chyba że umowa spółki stanowi inaczej.</div>
+                </span>
+              </label>
+              <Komunikat
+                odmiana="uwaga"
+                tresc="Nabywca akcji nie w pełni pokrytej odpowiada wobec spółki solidarnie ze zbywcą za wniesienie pozostałej części wkładu (art. 300⁴⁰ § 3 KSH)."
+              />
+            </>
           )}
 
           <Pole etykieta="Tytuł przejścia akcji">
@@ -1488,7 +1511,11 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, osobaPocz
                       <button
                         key={t.kod}
                         className={`kafelek-wyboru ${typ === t.kod ? 'wybrany' : ''}`}
-                        onClick={() => { ustawTyp(t.kod); ustawKrok(1); }}
+                        onClick={() => {
+                          // R4 zad. 15 (D-091): zbycie akcji ma własny przebieg.
+                          if (t.kod === 'przeniesienie' && !zPodstawySprawy) { idz(`/spolki/${spolkaId}/zdarzenie?typ=przeniesienie`); return; }
+                          ustawTyp(t.kod); ustawKrok(1);
+                        }}
                       >
                         <Ikona nazwa={IKONY_ZDARZEN[t.kod] || 'zdarzenie'} rozmiar={20} />
                         <span className="kafelek-wyboru-tytul">{t.opis_zdarzeniem}</span>
@@ -1545,6 +1572,7 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, osobaPocz
                   podpowiedz="Spółka albo inna osoba mająca interes prawny — art. 300(34) § 1 KSH. Kogoś spoza kartoteki najpierw się do niej dopisuje."
                 >
                   <WyborZKartoteki wartosc={zadajacyOsobaId} przyZmianie={ustawZadajacegoOsobaId} />
+                  <ZnacznikKontaktuOsoby osobaId={zadajacyOsobaId} />
                 </Pole>
                 <Pole
                   etykieta="W jakim charakterze"

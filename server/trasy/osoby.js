@@ -291,7 +291,12 @@ router.get(
   asy((zad, odp) => {
     const osoba = db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(Number(zad.params.id));
     if (!osoba) throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
-    odp.json({ osoba: zOznaczeniem(osoba) });
+    const oswiadczenia = require('../oswiadczenia');
+    odp.json({
+      osoba: zOznaczeniem(osoba),
+      // D-092: zgoda e-mail i powiadomienia — dane kartoteki, historia poza łańcuchem rejestru.
+      oswiadczenia: { stan: oswiadczenia.stanOswiadczen(db(), osoba.id), historia: oswiadczenia.historiaOswiadczen(db(), osoba.id) },
+    });
   })
 );
 
@@ -310,14 +315,30 @@ router.put(
       sprawdzBeneficjenta(dane.beneficjent_rzeczywisty_id, id, scalone.typ);
     }
 
-    db()
-      .prepare(
-        `UPDATE psa_osoby
-            SET ${Object.keys(dane).map((k) => `${k} = @${k}`).join(', ')},
-                zaktualizowano = @zaktualizowano
-          WHERE id = @id`
-      )
-      .run({ ...dane, id, zaktualizowano: czas.terazIso() });
+    // D-092 (przegląd R4 #2): dawna flaga `zgoda_email` to ten sam stan co status — jedna reguła.
+    if ('zgoda_email' in dane && !('zgoda_email_status' in dane)) dane.zgoda_email_status = Number(dane.zgoda_email) ? 'potwierdzona' : 'brak';
+    if ('zgoda_email_status' in dane) dane.zgoda_email = dane.zgoda_email_status === 'potwierdzona' ? 1 : 0;
+    // D-092: zmiana zgody na e-mail przez kancelarię — przez `oswiadczenia` (historia: źródło, kto).
+    const zgodaPrzed = biezaca.zgoda_email_status === 'potwierdzona';
+    const zgodaPo = 'zgoda_email_status' in dane ? dane.zgoda_email_status === 'potwierdzona' : zgodaPrzed;
+    // Przegląd R4 #3: zmiana danych i wpis historii oświadczeń — jedna transakcja.
+    db().transaction(() => {
+      db()
+        .prepare(
+          `UPDATE psa_osoby
+              SET ${Object.keys(dane).map((k) => `${k} = @${k}`).join(', ')},
+                  zaktualizowano = @zaktualizowano
+            WHERE id = @id`
+        )
+        .run({ ...dane, id, zaktualizowano: czas.terazIso() });
+      if (zgodaPrzed !== zgodaPo) {
+        const zrodlo = (zad.body || {}).zrodlo_oswiadczenia === 'pismo' ? 'pismo' : 'kancelaria';
+        db().prepare(
+          `INSERT INTO psa_oswiadczenia (osoba_id, rodzaj, zlozone, email, zrodlo, autor, utworzono)
+           VALUES (?, 'zgoda_email', ?, ?, ?, ?, ?)`
+        ).run(id, zgodaPo ? 1 : 0, zgodaPo ? (dane.email ?? biezaca.email) : null, zrodlo, autor(zad), czas.terazIso());
+      }
+    })();
 
     odp.json({
       osoba: zOznaczeniem(db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(id)),
@@ -340,9 +361,11 @@ router.get(
         `SELECT s.id, s.nazwa, s.krs, s.status, s.stosuje_procedure_aml,
                 SUM(sa.ilosc) AS ilosc_akcji,
                 COUNT(DISTINCT sa.emisja_id) AS liczba_serii,
+                GROUP_CONCAT(DISTINCT e.seria) AS serie,
                 MIN(sa.data_od) AS akcjonariusz_od
            FROM psa_stan_akcji sa
            JOIN psa_spolki s ON s.id = sa.spolka_id
+           LEFT JOIN psa_emisje e ON e.id = sa.emisja_id
           WHERE sa.osoba_id = ? AND sa.data_do IS NULL AND sa.kategoria = 'akcjonariusz'
           GROUP BY s.id
           ORDER BY s.nazwa COLLATE NOCASE`
@@ -373,7 +396,8 @@ router.get(
           ORDER BY sp.data_wplywu DESC`
       )
       .all(id);
-    odp.json({ sprawy: wiersze });
+    const typy = require('../logika/typy-zdarzen');
+    odp.json({ sprawy: wiersze.map((w) => ({ ...w, typ_nazwa: typy.istnieje(w.typ_zdarzenia) ? typy.typ(w.typ_zdarzenia).nazwa : w.typ_zdarzenia })) });
   })
 );
 

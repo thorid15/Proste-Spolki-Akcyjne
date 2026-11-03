@@ -81,7 +81,7 @@ function SekcjaSkanowAml({ osobaId, spolkaId }) {
           {skany.map((s) => (
             <li key={s.id}>
               <a href={`/api/psa/osoby/${osobaId}/aml-skany/${s.id}/plik`} target="_blank" rel="noopener">
-                {s.nazwa_pliku}
+                {nazwaPlikuDoWyswietlenia({ nazwaOryginalna: s.nazwa_pliku, rodzaj: 'skan-aml', data: s.utworzono })}
               </a>{' '}
               <span className="podpowiedz">
                 ({TYPY_DOKUMENTU_AML.find((t) => t.wartosc === s.typ_dokumentu)?.etykieta || s.typ_dokumentu}
@@ -577,17 +577,38 @@ function EkranOsob() {
  * i odnośnikiem do kokpitu) i sprawy, w których osoba jest żądającą.
  * Edycja zostaje tym samym `PanelOsoby`, otwieranym stąd.
  */
+const NAZWY_ZRODLA_OSWIADCZENIA = { portal: 'portal', kancelaria: 'kancelaria', pismo: 'pismo' };
+const NAZWY_RODZAJU_OSWIADCZENIA = { zgoda_email: 'zgoda na e-mail', powiadomienia_automatyczne: 'powiadomienia automatyczne' };
+
+function SekcjaKartoteki({ tytul, children }) {
+  return (
+    <section className="kartoteka-sekcja">
+      <h3 className="kartoteka-sekcja-tytul">{tytul}</h3>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * R4 K2: kartoteka osoby w jednym, zwartym widoku — Identyfikacja → Adresy → Kontakt i oświadczenia
+ * (D-092: stan, znacznik „list”, historia) → AML → Akcje w spółkach → Sprawy (5 ostatnich).
+ */
 function EkranProfiluOsoby({ osobaId }) {
   const { dane, ladowanie, blad, odswiez } = useDane(`/api/psa/osoby/${osobaId}`);
   const spolki = useDane(`/api/psa/osoby/${osobaId}/spolki`);
   const sprawy = useDane(`/api/psa/osoby/${osobaId}/sprawy`);
   const [edycja, ustawEdycje] = useState(false);
+  const [wszystkieSprawy, ustawWszystkieSprawy] = useState(false);
 
   if (ladowanie) return <Spinner />;
   if (blad || !dane) {
     return <Komunikat odmiana="blad" tresc={blad ? blad.message : 'Nie odnaleziono osoby w kartotece.'} />;
   }
   const osoba = dane.osoba;
+  const osw = dane.oswiadczenia || { stan: {}, historia: [] };
+  const listaSpraw = (sprawy.dane && sprawy.dane.sprawy) || [];
+  const widoczneSprawy = wszystkieSprawy ? listaSpraw : listaSpraw.slice(0, 5);
+  const takNie = (v) => (v ? 'tak' : 'nie');
 
   return (
     <>
@@ -601,89 +622,81 @@ function EkranProfiluOsoby({ osobaId }) {
         akcje={<button className="btn btn-glowny" onClick={() => ustawEdycje(true)}>Edytuj dane</button>}
       />
 
-      <div className="siatka-tresc">
-        <div style={{ minWidth: 0 }}>
-          <Karta scisla tytul="Spółki" akcje={<span className="male drugorzedny">{(spolki.dane && spolki.dane.spolki.length) || 0}</span>}>
-            {spolki.ladowanie ? (
-              <Spinner />
-            ) : !spolki.dane || spolki.dane.spolki.length === 0 ? (
-              <Pusto tytul="Bez akcji" opis="Ta osoba nie jest dziś akcjonariuszem żadnej spółki." />
-            ) : (
-              <table className="tabela">
-                <thead>
-                  <tr>
-                    <th>Spółka</th>
-                    <th className="do-prawej">Akcje</th>
-                    <th>Akcjonariusz od</th>
-                    <th className="kol-strzalka" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {spolki.dane.spolki.map((s) => (
-                    <tr key={s.id} className="klikalna" onClick={() => idz(`/spolki/${s.id}`)}>
-                      <td>
-                        <div style={{ fontWeight: 500 }}>{s.nazwa}</div>
-                        <div className="wiersz-podtytul">{s.krs ? `KRS ${s.krs}` : 'bez numeru KRS'}</div>
-                      </td>
-                      <td className="do-prawej">{fmt.liczba(s.ilosc_akcji)}</td>
-                      <td className="kol-dane wyciszony">{fmt.data(s.akcjonariusz_od)}</td>
-                      <td className="kol-strzalka"><Ikona nazwa="strzalkaPrawo" rozmiar={15} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </Karta>
+      <div className="karta kartoteka-osoby">
+        <SekcjaKartoteki tytul="Identyfikacja">
+          <ListaDanych pary={osoba.typ === 'prawna' ? [
+            ['Nazwa', osoba.nazwa],
+            ['Numer w rejestrze', osoba.numer_w_rejestrze],
+            ['NIP', osoba.nip],
+          ] : [
+            ['Imię i nazwisko', [osoba.imie, osoba.nazwisko].filter(Boolean).join(' ')],
+            ['PESEL', osoba.pesel],
+            ['Data urodzenia', osoba.data_urodzenia ? fmt.data(osoba.data_urodzenia) : null],
+          ]} />
+        </SekcjaKartoteki>
 
-          <Karta scisla tytul="Sprawy" akcje={<span className="male drugorzedny">{(sprawy.dane && sprawy.dane.sprawy.length) || 0}</span>}>
-            {sprawy.ladowanie ? (
-              <Spinner />
-            ) : !sprawy.dane || sprawy.dane.sprawy.length === 0 ? (
-              <Pusto tytul="Bez spraw" opis="Ta osoba nie żądała jeszcze żadnego wpisu." />
-            ) : (
-              <div className="lista-wierszy">
-                {sprawy.dane.sprawy.map((s) => (
-                  <WierszListy
-                    key={s.id}
-                    ikona="sprawy"
-                    tytul={s.typ_zdarzenia}
-                    podtytul={s.spolka_nazwa}
-                    przyKlik={() => idz(`/sprawy/${s.id}`)}
-                    prawo={<Pigulka>{s.stan}</Pigulka>}
-                    data={fmt.data(s.data_wplywu)}
-                  />
-                ))}
-              </div>
-            )}
-          </Karta>
-        </div>
+        <SekcjaKartoteki tytul="Adresy">
+          <ListaDanych pary={[
+            [osoba.typ === 'prawna' ? 'Siedziba' : 'Adres zamieszkania', formatujAdres(osoba)],
+            osoba.adres_doreczen ? ['Adres do doręczeń', osoba.adres_doreczen] : null,
+            osoba.adres_edoreczen ? ['Adres do e-doręczeń', osoba.adres_edoreczen] : null,
+          ]} />
+        </SekcjaKartoteki>
 
-        <aside className="siatka-tresc-prawa bez-druku">
-          <Karta tytul="Dane">
-            <div className="metryka-pion">
-              {osoba.typ === 'prawna' ? (
-                <MetrykaPoz etykieta="Numer w rejestrze" wartosc={osoba.numer_w_rejestrze} dane />
-              ) : (
-                <>
-                  <MetrykaPoz etykieta="PESEL" wartosc={osoba.pesel} dane />
-                  <MetrykaPoz etykieta="Data urodzenia" wartosc={fmt.data(osoba.data_urodzenia)} dane />
-                </>
+        <SekcjaKartoteki tytul="Kontakt i oświadczenia">
+          <ListaDanych pary={[
+            ['E-mail', osoba.email],
+            ['Telefon', osoba.telefon],
+            ['Zgoda na e-mail', <>{takNie(osw.stan.zgodaEmail)} <ZnacznikKontaktu osoba={osoba} /></>],
+            ['Powiadomienia automatyczne', takNie(osw.stan.powiadomieniaAutomatyczne)],
+            ['Ostatnia zmiana', osw.stan.zmieniono ? fmt.dataCzas(osw.stan.zmieniono) : null],
+          ]} />
+          {osw.historia.length > 0 && (
+            <details className="kartoteka-historia">
+              <summary>Historia oświadczeń ({osw.historia.length})</summary>
+              <ListaDanych pary={osw.historia.map((h) => [
+                fmt.dataCzas(h.utworzono),
+                `${NAZWY_RODZAJU_OSWIADCZENIA[h.rodzaj] || h.rodzaj}: ${h.zlozone ? 'złożone' : 'cofnięte'} · ${NAZWY_ZRODLA_OSWIADCZENIA[h.zrodlo] || h.zrodlo}${h.autor ? ` · ${h.autor}` : ''}`,
+              ])} />
+            </details>
+          )}
+        </SekcjaKartoteki>
+
+        <SekcjaKartoteki tytul="AML">
+          <ListaDanych pary={[
+            ['Status', <StatusAml status={osoba.aml_status} />],
+            ['Data weryfikacji', osoba.aml_data ? fmt.data(osoba.aml_data) : null],
+          ]} />
+        </SekcjaKartoteki>
+
+        <SekcjaKartoteki tytul="Akcje w spółkach">
+          {spolki.ladowanie ? <Spinner /> : !spolki.dane || spolki.dane.spolki.length === 0 ? (
+            <div className="przyciemnione">Ta osoba nie jest dziś akcjonariuszem żadnej spółki.</div>
+          ) : (
+            <ListaDanych pary={spolki.dane.spolki.map((s) => [
+              <a href={`#/spolki/${s.id}`} onClick={(z) => { z.preventDefault(); idz(`/spolki/${s.id}`); }}>{s.nazwa}</a>,
+              `${fmt.liczba(s.ilosc_akcji)} akcji${s.serie ? ` · seria ${s.serie.split(',').join(', ')}` : ''}`,
+            ])} />
+          )}
+        </SekcjaKartoteki>
+
+        <SekcjaKartoteki tytul="Sprawy">
+          {sprawy.ladowanie ? <Spinner /> : listaSpraw.length === 0 ? (
+            <div className="przyciemnione">Ta osoba nie żądała jeszcze żadnego wpisu.</div>
+          ) : (
+            <>
+              <ListaDanych pary={widoczneSprawy.map((s) => [
+                fmt.data(s.data_wplywu),
+                <a href={`#/sprawy/${s.id}`} onClick={(z) => { z.preventDefault(); idz(`/sprawy/${s.id}`); }}>
+                  {s.typ_nazwa || s.typ_zdarzenia} · {s.spolka_nazwa} · {NAZWY_STANU_SPRAWY[s.stan] || s.stan}
+                </a>,
+              ])} />
+              {!wszystkieSprawy && listaSpraw.length > 5 && (
+                <button className="btn btn-sm" onClick={() => ustawWszystkieSprawy(true)}>Pokaż wszystkie ({listaSpraw.length})</button>
               )}
-              <MetrykaPoz etykieta="Adres" wartosc={formatujAdres(osoba)} />
-              <MetrykaPoz etykieta="E-mail" wartosc={osoba.email} dane />
-              <MetrykaPoz etykieta="Telefon" wartosc={osoba.telefon} dane />
-            </div>
-          </Karta>
-          <Karta tytul="AML">
-            <div className="metryka-pion">
-              <div className="metryka-pion-poz">
-                <div className="metryka-pion-etykieta">Status</div>
-                <StatusAml status={osoba.aml_status} />
-              </div>
-              <MetrykaPoz etykieta="Data weryfikacji" wartosc={fmt.data(osoba.aml_data)} dane />
-            </div>
-          </Karta>
-        </aside>
+            </>
+          )}
+        </SekcjaKartoteki>
       </div>
 
       {edycja && (

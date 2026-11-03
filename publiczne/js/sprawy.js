@@ -220,7 +220,7 @@ function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
                 <tr key={d.id}>
                   <td>
                     <a href={`/api/psa/sprawy/${sprawaId}/dokumenty/${d.id}`} target="_blank" rel="noreferrer">
-                      {d.nazwa_pliku}
+                      {nazwaPlikuDoWyswietlenia({ nazwaOryginalna: d.nazwa_pliku, rodzaj: d.typ_dokumentu, data: d.utworzono })}
                     </a>
                   </td>
                   <td className="przyciemnione">{d.typ_dokumentu}</td>
@@ -264,8 +264,26 @@ function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
 /* ─────────────────────────────────────────────────────
    AKCJE WORKFLOW (wstrzymaj / wznów / odmów / anuluj)
    ───────────────────────────────────────────────────── */
-function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie }) {
+/**
+ * Okno z powodem. `minDlugosc` — ta sama granica co na serwerze (przycisk aktywny dopiero po niej).
+ * Błąd z `przyZapisie` (rzucony wyjątek) zostaje w oknie razem z wpisanym tekstem.
+ */
+function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie, minDlugosc = 1 }) {
   const [powod, ustawPowod] = useState('');
+  const [blad, ustawBlad] = useState(null);
+  const [zapis, ustawZapis] = useState(false);
+  const zaKrotki = powod.trim().length < minDlugosc;
+  async function zatwierdz() {
+    ustawBlad(null);
+    ustawZapis(true);
+    try {
+      await przyZapisie(powod.trim());
+    } catch (e) {
+      ustawBlad(e.message || 'Nie udało się zapisać.');
+    } finally {
+      ustawZapis(false);
+    }
+  }
   return (
     <Modal
       tytul={tytul}
@@ -273,13 +291,14 @@ function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie }) {
       stopka={
         <>
           <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-          <button className="btn btn-glowny" disabled={!powod.trim()} onClick={() => przyZapisie(powod.trim())}>
+          <button className="btn btn-glowny" disabled={zaKrotki || zapis} onClick={zatwierdz}>
             Potwierdź
           </button>
         </>
       }
     >
-      <Pole etykieta={etykieta} wymagane>
+      <Komunikat odmiana="blad" tresc={blad} />
+      <Pole etykieta={etykieta} wymagane podpowiedz={minDlugosc > 1 ? `Co najmniej ${minDlugosc} znaków.` : undefined}>
         <textarea value={powod} onChange={(z) => ustawPowod(z.target.value)} autoFocus />
       </Pole>
     </Modal>
@@ -375,7 +394,11 @@ function ModalOdmowy({ przyZamknieciu, przyZapisie }) {
   );
 }
 
-function AkcjeSprawy({ sprawa, odswiez }) {
+/**
+ * R4 K1: wszystkie akcje sprawy w jednym pasku (PasekAkcji) — podstawa wpisu i żądanie wpisu jako
+ * drugorzędne, przycisk główny zależny od stanu (rozpocznij weryfikację / wznów).
+ */
+function PasekAkcjiSprawy({ sprawa, odswiez, zakonczona, przyPodstawie, przyZadaniu, nowyPrzebieg = false }) {
   const [modal, ustawModal] = useState(null);
   const [bladAkcji, ustawBladAkcji] = useState(null);
 
@@ -390,41 +413,28 @@ function AkcjeSprawy({ sprawa, odswiez }) {
     }
   }
 
-  if (['wpisana', 'odmowa', 'anulowana'].includes(sprawa.stan)) return null;
+  const stan = sprawa.stan;
+  const akcje = [
+    // D-091: w nowym przebiegu zbycia podstawa to krok 2 kreatora, a weryfikacja zaczyna się sama.
+    !zakonczona && !nowyPrzebieg && { etykieta: sprawa.dokument_rodzaj ? 'Popraw podstawę wpisu' : 'Ustal podstawę wpisu', przyKlik: przyPodstawie },
+    { etykieta: 'Wystaw żądanie wpisu', przyKlik: przyZadaniu },
+    stan === 'weryfikacja' && { etykieta: 'Wstrzymaj', przyKlik: () => ustawModal('wstrzymaj') },
+    ['weryfikacja', 'wstrzymana'].includes(stan) && { etykieta: 'Odmów wpisu', przyKlik: () => ustawModal('odmow'), niebezpieczna: true },
+    !zakonczona && { etykieta: 'Anuluj sprawę', przyKlik: () => ustawModal('anuluj') },
+    // Sprawa z portalu wpada w stan „nowa”; kreator wpisu otwiera się dopiero w „weryfikacji”.
+    stan === 'nowa' && !nowyPrzebieg && { etykieta: 'Rozpocznij weryfikację', przyKlik: () => wykonaj('weryfikuj'), glowna: true },
+    stan === 'wstrzymana' && { etykieta: 'Wznów', przyKlik: () => wykonaj('wznow'), glowna: true },
+  ];
 
   return (
-    <div className="row-g bez-druku" style={{ flexWrap: 'wrap' }}>
+    <>
       <Komunikat odmiana="blad" tresc={bladAkcji} />
-      {/* Sprawa zgloszona przez portal wpada w stan „nowa" i bez tego
-          przycisku nie da sie jej ruszyc: kreator wpisu otwiera sie dopiero
-          w stanie „weryfikacja". Dotad jedyna widoczna akcja bylo anulowanie. */}
-      {sprawa.stan === 'nowa' && (
-        <button className="btn btn-sm btn-glowny" onClick={() => wykonaj('weryfikuj')}>
-          Rozpocznij weryfikację
-        </button>
-      )}
-      {sprawa.stan === 'weryfikacja' && (
-        <button className="btn btn-sm" onClick={() => ustawModal('wstrzymaj')}>Wstrzymaj</button>
-      )}
-      {sprawa.stan === 'wstrzymana' && (
-        <button className="btn btn-sm btn-glowny" onClick={() => wykonaj('wznow')}>Wznów</button>
-      )}
-      {['weryfikacja', 'wstrzymana'].includes(sprawa.stan) && (
-        <button className="btn btn-sm btn-danger" onClick={() => ustawModal('odmow')}>Odmów wpisu</button>
-      )}
-      <button className="btn btn-sm" onClick={() => ustawModal('anuluj')}>Anuluj sprawę</button>
-
+      <PasekAkcji akcje={akcje} />
       {modal === 'wstrzymaj' && (
-        <ModalWstrzymania
-          przyZamknieciu={() => ustawModal(null)}
-          przyZapisie={(dane) => wykonaj('wstrzymaj', dane)}
-        />
+        <ModalWstrzymania przyZamknieciu={() => ustawModal(null)} przyZapisie={(dane) => wykonaj('wstrzymaj', dane)} />
       )}
       {modal === 'odmow' && (
-        <ModalOdmowy
-          przyZamknieciu={() => ustawModal(null)}
-          przyZapisie={(dane) => wykonaj('odmow', dane)}
-        />
+        <ModalOdmowy przyZamknieciu={() => ustawModal(null)} przyZapisie={(dane) => wykonaj('odmow', dane)} />
       )}
       {modal === 'anuluj' && (
         <ModalPowod
@@ -434,15 +444,20 @@ function AkcjeSprawy({ sprawa, odswiez }) {
           przyZapisie={(powod) => wykonaj('anuluj', { powod })}
         />
       )}
-    </div>
+    </>
   );
 }
 
 /* ─────────────────────────────────────────────────────
    POWIADOMIENIE / ZGODA (art. 300(34) § 3 KSH)
    ───────────────────────────────────────────────────── */
-function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
-  const [osobaId, ustawOsobeId] = useState(null);
+/**
+ * D-090: ścieżką domyślną jest powiadomienie (e-mail przy zgodzie na e-mail, inaczej list — znacznik przy
+ * adresacie); zgoda na wpis — jedno opcjonalne pole (D-088). `domyslnyOdbiorca` — np. zbywca z kreatora.
+ */
+function PanelPowiadomienia({ sprawa, spolka, odswiez, domyslnyOdbiorca = null }) {
+  const [osobaId, ustawOsobeId] = useState(domyslnyOdbiorca);
+  useEffect(() => { if (domyslnyOdbiorca) ustawOsobeId(domyslnyOdbiorca); }, [domyslnyOdbiorca]);
   const [wysylanie, ustawWysylanie] = useState(false);
   const [zgodaOk, ustawZgodaOk] = useState(false);
   const [dataZgody, ustawDateZgody] = useState(dzisIso());
@@ -482,10 +497,6 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
 
   return (
     <div id="panel-powiadomienia"><Karta tytul="Uprzednie powiadomienie (art. 300(34) § 3 KSH)">
-      <Komunikat
-        odmiana="uwaga"
-        tresc="Przed wpisem należy powiadomić osobę, której uprawnienia mają być wykreślone, zmienione lub obciążone — chyba że wyraziła zgodę."
-      />
       {sprawa.powiadomienie_wyslano && (
         <Komunikat odmiana="ok" tresc={`Powiadomienie wysłano ${fmt.dataCzas(sprawa.powiadomienie_wyslano)}${stanTrybuTestowego() ? ' — testowa, niewysłana (skrzynka testowa)' : ''}.`} />
       )}
@@ -499,33 +510,36 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
       )}
       <Komunikat odmiana="blad" tresc={blad} />
 
-      <div className="siatka-2">
-        <div>
-          <Pole etykieta="Wyślij powiadomienie">
-            <WyborZKartoteki wartosc={osobaId} przyZmianie={ustawOsobeId} />
-          </Pole>
-          <button className="btn btn-sm" disabled={!osobaId || wysylanie} onClick={wyslij}>
-            {wysylanie ? 'Wysyłanie…' : 'Wyślij powiadomienie'}
-          </button>
-        </div>
-        <div>
-          <Pole etykieta="Albo odnotuj zgodę (art. 300(34) § 3 zd. 2 KSH)">
-            <label style={{ display: 'flex', gap: 'var(--od-2)', alignItems: 'flex-start' }}>
-              <input type="checkbox" checked={zgodaOk} onChange={(z) => ustawZgodaOk(z.target.checked)} />
-              <span>
-                Zgoda jest w dopuszczalnej formie: podpis zaufany, kwalifikowany, osobisty, notarialnie poświadczony
-                albo złożony w kancelarii. <span className="przyciemnione">Skan i zwykły oryginał — nie (wtedy wyślij powiadomienie).</span>
-              </span>
-            </label>
-          </Pole>
-          <Pole etykieta="Data zgody">
-            <input type="date" value={dataZgody} onChange={(z) => ustawDateZgody(z.target.value)} />
-          </Pole>
-          <button className="btn btn-sm" disabled={!zgodaOk || wysylanie} onClick={odnotujZgode}>
-            Odnotuj zgodę
-          </button>
-        </div>
+      <Pole etykieta="Kogo powiadomić (osoba, której prawa zmienia wpis)">
+        <WyborZKartoteki wartosc={osobaId} przyZmianie={ustawOsobeId} />
+        <ZnacznikKontaktuOsoby osobaId={osobaId} />
+      </Pole>
+      <div className="przyciski-karty">
+        <button className="btn btn-glowny" disabled={!osobaId || wysylanie} onClick={wyslij}>
+          {wysylanie ? 'Wysyłanie…' : 'Wyślij powiadomienie'}
+        </button>
       </div>
+
+      <label className="chk" style={{ marginTop: 'var(--od-16)' }}>
+        <input type="checkbox" checked={zgodaOk} onChange={(z) => ustawZgodaOk(z.target.checked)} />
+        <span className="chk-tresc">
+          Osoba wyraziła zgodę na wpis w dopuszczalnej formie — wpis bez powiadomienia
+          <div className="podstawa-prawna">
+            art. 300(34) § 3 zd. 2 KSH: podpis zaufany, kwalifikowany, osobisty, notarialnie poświadczony albo złożony
+            w kancelarii. Skan i zwykły oryginał — nie.
+          </div>
+        </span>
+      </label>
+      {zgodaOk && (
+        <div className="siatka-2">
+          <Pole etykieta="Data zgody">
+            <PoleDaty wartosc={dataZgody} przyZmianie={(v) => ustawDateZgody(v || '')} />
+          </Pole>
+          <div className="przyciski-karty" style={{ alignSelf: 'end' }}>
+            <button className="btn" disabled={wysylanie} onClick={odnotujZgode}>Odnotuj zgodę</button>
+          </div>
+        </div>
+      )}
     </Karta></div>
   );
 }
@@ -657,7 +671,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
 
   if (wynik) {
     return (
-      <div style={{ maxWidth: 'var(--tresc-waska)' }}>
+      <div>{/* R4 K1: szerokość wyznacza KolumnaSprawy */}
         <Karta>
           <Komunikat
             odmiana="ok"
@@ -716,7 +730,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   const KrokTresci = KROKI_TRESCI[sprawa.typ_zdarzenia];
 
   return (
-    <div style={{ maxWidth: 'var(--tresc-waska)' }}>
+    <div>{/* R4 K1: szerokość wyznacza KolumnaSprawy */}
       <Kroki kroki={['Podstawa', 'Co się zmienia', 'Weryfikacja i podgląd']} biezacy={krok - 1} />
       <Karta>
       {krok === 2 && (
@@ -943,8 +957,7 @@ function PrzydzialDoPotwierdzenia({ dane }) {
  * Zwinięte do jednego odnośnika: przy sprawie założonej w kancelarii oba
  * pola są już wypełnione w kreatorze i nie ma czego poprawiać.
  */
-function PodstawaWpisu({ sprawa, typy, odswiez }) {
-  const [otwarte, ustawOtwarte] = useState(false);
+function PodstawaWpisu({ sprawa, typy, odswiez, przyZamknieciu }) {
   const [typ, ustawTyp] = useState(sprawa.typ_zdarzenia);
   const [rodzaj, ustawRodzaj] = useState(sprawa.dokument_rodzaj || '');
   const [dataDokumentu, ustawDateDokumentu] = useState(sprawa.dokument_data || '');
@@ -966,7 +979,7 @@ function PodstawaWpisu({ sprawa, typy, odswiez }) {
         dokument_rodzaj: rodzaj || null,
         dokument_data: dataDokumentu || null,
       });
-      ustawOtwarte(false);
+      przyZamknieciu();
       odswiez();
     } catch (e) {
       ustawBlad(e.message);
@@ -975,19 +988,10 @@ function PodstawaWpisu({ sprawa, typy, odswiez }) {
     }
   }
 
-  if (!otwarte) {
-    return (
-      <div className="row-g bez-druku">
-        <button className="btn-tekstowy" onClick={() => ustawOtwarte(true)}>
-          {sprawa.dokument_rodzaj ? 'Popraw podstawę wpisu' : 'Ustal podstawę wpisu'}
-        </button>
-      </div>
-    );
-  }
 
   return (
     <Karta tytul="Podstawa wpisu">
-      <div className="pion" style={{ padding: '0 24px 20px', gap: 12 }}>
+      <div className="pion" style={{ gap: 12 }}>
         <Komunikat odmiana="blad" tresc={blad} />
         <Pole etykieta="Typ zdarzenia" wymagane>
           <select value={typ} onChange={(z) => ustawTyp(z.target.value)}>
@@ -1018,12 +1022,7 @@ function PodstawaWpisu({ sprawa, typy, odswiez }) {
           </button>
           <button
             className="btn btn-maly"
-            onClick={() => {
-              ustawOtwarte(false);
-              ustawTyp(sprawa.typ_zdarzenia);
-              ustawRodzaj(sprawa.dokument_rodzaj || '');
-              ustawDateDokumentu(sprawa.dokument_data || '');
-            }}
+            onClick={przyZamknieciu}
           >
             Anuluj
           </button>
@@ -1046,6 +1045,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
   // sprawa.stan==='weryfikacja').
   const [wlasnieWpisano, ustawWlasnieWpisano] = useState(false);
   const [wystawianieZadania, ustawWystawianieZadania] = useState(false);
+  const [edycjaPodstawy, ustawEdycjePodstawy] = useState(false);
   // Krok 3/4 kreatora potrzebuje "bogatego" widoku spółki (emisje, bilans,
   // akcjonariusze, obciążenia, uprawnienia, ograniczenia) — ten sam kształt,
   // co kokpit spółki. Endpoint sprawy zwraca tylko surowy rekord spółki.
@@ -1058,9 +1058,10 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
   const { sprawa, spolka, zadajacy, dokumenty, wydane_dokumenty } = dane;
   const definicjaTypu = meta.dane.typy_zdarzen.find((t) => t.kod === sprawa.typ_zdarzenia);
   const zakonczona = ['wpisana', 'odmowa', 'anulowana'].includes(sprawa.stan);
+  const nowyPrzebieg = sprawa.typ_zdarzenia === 'przeniesienie' && !zakonczona; // R4 zad. 15 (D-091)
 
   return (
-    <>
+    <KolumnaSprawy>
       <div className="okruszki">
         <button onClick={() => idz('/sprawy')}>Sprawy</button> →{' '}
         <button onClick={() => idz(`/spolki/${sprawa.spolka_id}`)}>{spolka.nazwa}</button> → sprawa #{sprawa.id}
@@ -1079,6 +1080,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
             {!zakonczona && !wlasnieWpisano && <ZnacznikTerminu termin={sprawa.termin} />}
             {/* Z-202/P-014: sygnal, nie blokada - sprawa idzie dalej normalnie. */}
             <ZnacznikPrzegladuAml wymaga={sprawa.zadajacy_wymaga_przegladu_aml} />
+            {sprawa.zadajacy_osoba_id && <ZnacznikKontaktuOsoby osobaId={sprawa.zadajacy_osoba_id} />}
           </div>
         </div>
       </div>
@@ -1094,26 +1096,31 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
         />
       )}
 
-      {!zakonczona && (
-        <PodstawaWpisu sprawa={sprawa} typy={meta.dane.typy_zdarzen} odswiez={odswiez} />
+      {!wlasnieWpisano && (
+        <PasekAkcjiSprawy
+          sprawa={sprawa}
+          odswiez={odswiez}
+          zakonczona={zakonczona}
+          przyPodstawie={() => ustawEdycjePodstawy(true)}
+          przyZadaniu={() => ustawWystawianieZadania(true)}
+          nowyPrzebieg={nowyPrzebieg}
+        />
       )}
 
-      {!wlasnieWpisano && <AkcjeSprawy sprawa={sprawa} odswiez={odswiez} />}
+      {nowyPrzebieg && !wlasnieWpisano && (
+        <KreatorZbycia spolkaId={sprawa.spolka_id} sprawa={sprawa} odswiezSprawe={odswiez} definicjaTypu={definicjaTypu} />
+      )}
 
-      {!wlasnieWpisano && definicjaTypu && definicjaTypu.wymaga_powiadomienia === true && !zakonczona && (
+      {!zakonczona && edycjaPodstawy && (
+        <PodstawaWpisu sprawa={sprawa} typy={meta.dane.typy_zdarzen} odswiez={odswiez} przyZamknieciu={() => ustawEdycjePodstawy(false)} />
+      )}
+
+      {!wlasnieWpisano && !nowyPrzebieg && definicjaTypu && definicjaTypu.wymaga_powiadomienia === true && !zakonczona && (
         <PanelPowiadomienia sprawa={sprawa} spolka={spolka} odswiez={odswiez} />
       )}
 
       <PanelDokumentow sprawaId={sprawa.id} dokumenty={dokumenty} odswiez={odswiez} />
 
-      <Karta tytul="Żądanie dokonania wpisu">
-        <div className="metryka-pion" style={{ padding: '0 24px 20px' }}>
-          <div className="male wyciszony">Formalizuje żądanie z danymi żądającego, podstawą wpisu i załącznikami tej sprawy.</div>
-          <button className="btn btn-maly" onClick={() => ustawWystawianieZadania(true)}>
-            Wystaw żądanie wpisu
-          </button>
-        </div>
-      </Karta>
       {wystawianieZadania && (
         <ModalWystawDokumentu
           bazowyUrl={`/api/psa/sprawy/${sprawa.id}`}
@@ -1149,7 +1156,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
         </Sekcja>
       )}
 
-      {!zakonczona && sprawa.stan === 'weryfikacja' && (
+      {!zakonczona && !nowyPrzebieg && sprawa.stan === 'weryfikacja' && (
         <KreatorSprawy
             sprawa={sprawa}
             spolka={spolkaBogata.dane}
@@ -1185,7 +1192,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
           />
         </Karta>
       )}
-    </>
+    </KolumnaSprawy>
   );
 }
 

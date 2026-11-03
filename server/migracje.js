@@ -2547,6 +2547,81 @@ const MIGRACJE = [
 <p>{{notariusz}}, {{kancelaria_nazwa}}</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(32) § 3 KSH (🔵)', 1, 1, 'system', '2026-11-01T00:00:00Z');
     `,
   },
+  {
+    wersja: 66,
+    nazwa: 'D-092: oświadczenia osób (zgoda e-mail, powiadomienia) w kartotece — źródło i autor, poza łańcuchem rejestru',
+    sql: `
+      ALTER TABLE psa_oswiadczenia ADD COLUMN zrodlo TEXT NOT NULL DEFAULT 'portal'
+        CHECK (zrodlo IN ('portal', 'kancelaria', 'pismo'));
+      ALTER TABLE psa_oswiadczenia ADD COLUMN autor TEXT;
+    `,
+  },
+  {
+    wersja: 67,
+    nazwa: 'R4 K3: listy — status „usunięty z wysyłki” z powodem, autorem i datą (pismo zostaje)',
+    sql: `
+      CREATE TABLE psa_listy_nowa (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        wydany_dokument_id  INTEGER NOT NULL REFERENCES psa_wydane_dokumenty(id),
+        spolka_id           INTEGER NOT NULL REFERENCES psa_spolki(id),
+        sprawa_id           INTEGER REFERENCES psa_sprawy(id),
+        odbiorca_osoba_id   INTEGER REFERENCES psa_osoby(id),
+        odbiorca_nazwa      TEXT NOT NULL,
+        adres               TEXT NOT NULL,
+        rodzaj_pisma        TEXT NOT NULL,
+        status              TEXT NOT NULL DEFAULT 'do_wyslania' CHECK (status IN ('do_wyslania', 'nadany', 'usuniety')),
+        data_nadania        TEXT,
+        numer_nadania       TEXT,
+        potwierdzenie_sciezka TEXT,
+        potwierdzenie_nazwa TEXT,
+        nadal               TEXT,
+        usuniecie_powod     TEXT,
+        usunal              TEXT,
+        usunieto            TEXT,
+        utworzono           TEXT NOT NULL
+      );
+      INSERT INTO psa_listy_nowa (id, wydany_dokument_id, spolka_id, sprawa_id, odbiorca_osoba_id, odbiorca_nazwa, adres,
+        rodzaj_pisma, status, data_nadania, numer_nadania, potwierdzenie_sciezka, potwierdzenie_nazwa, nadal, utworzono)
+        SELECT id, wydany_dokument_id, spolka_id, sprawa_id, odbiorca_osoba_id, odbiorca_nazwa, adres,
+          rodzaj_pisma, status, data_nadania, numer_nadania, potwierdzenie_sciezka, potwierdzenie_nazwa, nadal, utworzono
+          FROM psa_listy;
+      DROP TABLE psa_listy;
+      ALTER TABLE psa_listy_nowa RENAME TO psa_listy;
+      CREATE INDEX IF NOT EXISTS psa_ix_listy_status ON psa_listy (status);
+    `,
+  },
+  {
+    wersja: 68,
+    nazwa: 'D-092 (przegląd R4 #2): jedna reguła zgody na e-mail — flaga ustawiona przez kancelarię = status potwierdzona',
+    sql: `
+      UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona'
+        WHERE zgoda_email = 1 AND COALESCE(zgoda_email_status, '') <> 'potwierdzona';
+      UPDATE psa_osoby SET zgoda_email = CASE WHEN zgoda_email_status = 'potwierdzona' THEN 1 ELSE 0 END;
+    `,
+  },
+  {
+    wersja: 69,
+    nazwa: 'D-092 pkt 6: dawne sprawy o zgodę na e-mail z portalu — oświadczenie w kartotece, sprawa anulowana (bez wpisu)',
+    sql: `
+      -- Najnowsze oświadczenie o zgodzie osoby, złożone dawnym trybem (z otwartą sprawą wpisu), trafia do kartoteki.
+      UPDATE psa_osoby
+         SET zgoda_email_status = CASE (SELECT o.zlozone FROM psa_oswiadczenia o WHERE o.osoba_id = psa_osoby.id
+                                          AND o.rodzaj = 'zgoda_email' ORDER BY o.utworzono DESC, o.id DESC LIMIT 1)
+                                  WHEN 1 THEN 'potwierdzona' ELSE 'brak' END,
+             email = COALESCE((SELECT o.email FROM psa_oswiadczenia o WHERE o.osoba_id = psa_osoby.id
+                                 AND o.rodzaj = 'zgoda_email' AND o.zlozone = 1 ORDER BY o.utworzono DESC, o.id DESC LIMIT 1), email)
+       WHERE id IN (SELECT o.osoba_id FROM psa_oswiadczenia o JOIN psa_sprawy s ON s.id = o.sprawa_id
+                     WHERE o.rodzaj = 'zgoda_email' AND s.stan IN ('nowa', 'weryfikacja', 'wstrzymana')
+                       AND o.id = (SELECT o2.id FROM psa_oswiadczenia o2 WHERE o2.osoba_id = o.osoba_id
+                                     AND o2.rodzaj = 'zgoda_email' ORDER BY o2.utworzono DESC, o2.id DESC LIMIT 1));
+      UPDATE psa_osoby SET zgoda_email = CASE WHEN zgoda_email_status = 'potwierdzona' THEN 1 ELSE 0 END;
+      UPDATE psa_sprawy
+         SET stan = 'anulowana', termin_do = NULL,
+             notatka = COALESCE(notatka || char(10), '') || 'Anulowano: D-092 — oświadczenie o zgodzie na e-mail zastosowane w kartotece, bez wpisu w rejestrze.'
+       WHERE stan IN ('nowa', 'weryfikacja', 'wstrzymana')
+         AND id IN (SELECT sprawa_id FROM psa_oswiadczenia WHERE rodzaj = 'zgoda_email' AND sprawa_id IS NOT NULL);
+    `,
+  },
 ];
 
 /**

@@ -119,6 +119,24 @@ podpisy (test pliku i atrapa, D-086), wpis bez zgody → list do wysyłki, zgody
 rejestru do „Aktywny”, informacja z rejestru w wersji dla spółki i akcjonariusza na dacie 2027-02-20. Kod wyjścia 1
 przy błędzie. Pierwotny `npm run scenariusz -- --haslo …` działa też na serwerze w trybie testowym (link aktywacyjny
 ze skrzynki testowej). Testy ręczne dla notariusza: `WYTYCZNE-STATUS.md`, sekcja R4.
+## Zbycie akcji — nowy przebieg (R4, D-091)
+
+Kokpit spółki → wpis „Przeniesienie akcji” (albo sprawa z portalu) → **Co się zbywa** (zbywca z akcjonariuszy,
+liczba akcji — numery dobiera aplikacja, nabywca z kartoteki albo nowy z minimum danych) → **Podstawa** (data
+umowy, plik, kto żąda, tytuł) → **Sprawdzenie i wpis** (podgląd, pola warunkowe: zgoda spółki / pierwszeństwo /
+pokrycie, powiadomienie zbywcy albo zgoda, checklista, „Dokonaj wpisu”). Sprawa powstaje po kroku „Podstawa”;
+do kroku 3 można wrócić po nadaniu listu. Raport sesji: `SESJA-PSA-POPRAWKI-R4-RAPORT.md`.
+
+## Zrzuty ekranów i kontrola układu — R4
+
+```bash
+npm run zrzuty
+```
+
+Uruchamia serwer w trybie testowym na **osobnej** bazie (`dane-testowe/zrzuty/`, nie nadpisuje bazy testowej),
+robi zrzuty ekranów z sesji R4 (390 i 1440 px) do `testy/e2e/zrzuty/` i sprawdza układ (`sprawdzUklad`:
+poziomy scroll, ucięty tekst, tekst przy krawędzi karty). Na nowym komputerze raz: `npx playwright install chromium`.
+
 ## Tryb testowy (bez poczty, dane fikcyjne) — D-074
 
 Do przejścia każdego przepływu kancelarii i portalu bez skonfigurowanej poczty. Działa na **osobnej
@@ -157,8 +175,8 @@ niewysłana”. Nic nie wychodzi z serwera. Po wysłaniu zaproszenia ekran pokaz
 **Panel** — `http://localhost:3005/test`:
 - *symulowana data* — jedna funkcja czasu (`czas.teraz()`) dla bramki 18.02.2027, terminów i chwil
   nowych zdarzeń; data wcześniejsza niż ostatnie zdarzenie w rejestrze jest odrzucana;
-- *atrapa walidatora podpisu* — wybór wyniku (QES / PZ / PO / zaawansowany / brak podpisu / plik
-  zmieniony / inna osoba); podpina go adapter walidacji z Fazy 2;
+- *atrapa testu podpisu* (D-086) — „każdy plik jako podpisany” (domyślnie), „jako niepodpisany”,
+  „jako różny od oryginału” albo „sprawdź plik jak na produkcji”;
 - *atrapa tpay* — gdy w `.env` nie ma danych tpay, „Zapłać” w portalu otwiera atrapę kasy, a ta wysyła
   powiadomienie ITN na zwykły adres `/api/psa/platnosci/tpay/itn`.
 

@@ -30,7 +30,7 @@ const NAZWY_PISM = {
 };
 
 router.get('/', asy((zad, odp) => {
-  const status = ['do_wyslania', 'nadany'].includes(zad.query.status) ? zad.query.status : null;
+  const status = ['do_wyslania', 'nadany', 'usuniety'].includes(zad.query.status) ? zad.query.status : null;
   odp.json({ listy: listy.lista(db(), { status }).map((l) => ({ ...l, rodzaj_nazwa: NAZWY_PISM[l.rodzaj_pisma] || l.rodzaj_pisma })) });
 }));
 
@@ -73,20 +73,39 @@ const upload = multer({
 });
 
 /** Nadanie listu — data i numer nadania wymagane, skan potwierdzenia nadania. */
+/** R4 K3: usunięcie z wysyłki (przed nadaniem), z powodem. */
+router.post('/:id/usun-z-wysylki', asy((zad, odp) => {
+  try {
+    const wynik = listy.usunZWysylki(db(), Number(zad.params.id), { powod: (zad.body || {}).powod, autor: autor(zad) });
+    if (!wynik) throw nieZnaleziono('Nie odnaleziono listu.');
+    odp.json({ list: wynik });
+  } catch (e) {
+    if (e instanceof listy.BladListu) return odp.status(e.kod).json({ blad: e.message });
+    throw e;
+  }
+}));
+
 router.post('/:id/nadanie', upload.single('potwierdzenie'), asy((zad, odp) => {
   const cialo = zad.body || {};
   const dataNadania = String(cialo.data_nadania || '').trim();
   const numerNadania = String(cialo.numer_nadania || '').trim();
   if (!czas.poprawnaData(dataNadania)) throw bledneZadanie('Podaj datę nadania (RRRR-MM-DD).');
   if (!numerNadania) throw bledneZadanie('Podaj numer nadania z potwierdzenia nadania.');
-  const wynik = listy.oznaczNadanie(db(), Number(zad.params.id), {
-    dataNadania,
-    numerNadania,
-    potwierdzenie: zad.file
-      ? { sciezka: path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path), nazwa: zad.file.originalname }
-      : null,
-    autor: autor(zad),
-  });
+  let wynik;
+  try {
+    wynik = listy.oznaczNadanie(db(), Number(zad.params.id), {
+      dataNadania,
+      numerNadania,
+      potwierdzenie: zad.file
+        ? { sciezka: path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path), nazwa: zad.file.originalname }
+        : null,
+      autor: autor(zad),
+    });
+  } catch (e) {
+    if (zad.file) fs.rmSync(zad.file.path, { force: true }); // przegląd R4 #6: bez osieroconego skanu
+    if (e instanceof listy.BladListu) return odp.status(e.kod).json({ blad: e.message });
+    throw e;
+  }
   if (!wynik) throw nieZnaleziono('Nie odnaleziono listu.');
   odp.json({ list: wynik });
 }));

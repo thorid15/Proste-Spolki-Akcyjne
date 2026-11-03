@@ -123,7 +123,8 @@ const NAZWY_POKRYCIA = {
   // nie wniesiono — dlatego nie „niepokryte". Nie jest to też „nieustalone":
   // tamto słowo czytało się jak usterka rejestru, choć opisuje wyłącznie brak
   // wzmianki, którą wpisuje się na podstawie oświadczenia zarządu.
-  nieustalone: 'brak wzmianki',
+  // D-089: domyślny stan — „brak informacji o pełnym pokryciu” (pokrycie może przyjść do 3 lat po wpisie spółki).
+  nieustalone: 'brak informacji o pełnym pokryciu',
 };
 
 const NAZWY_OBCIAZENIA = {
@@ -310,6 +311,15 @@ thead th:last-child, tbody td:last-child { padding-right: 0; }
 }
 tbody tr { break-inside: avoid; }
 
+/* ── Emisje (R4 K4): blok na serię albo tabela dopasowana do A4; czcionka 1 pt mniejsza od tekstu ── */
+.tabela-emisji { table-layout: fixed; }
+.tabela-emisji tbody td { font-size: 8.5pt; overflow-wrap: anywhere; }
+.seria-blok { break-inside: avoid; padding: 2mm 0; border-bottom: 0.5pt solid var(--linia); font-size: 8.5pt; }
+.seria-blok-tytul { font-size: 9.5pt; }
+.seria-blok-pary { display: grid; grid-template-columns: 38mm minmax(0, 1fr); gap: 0.5mm 4mm; margin: 1mm 0 0; }
+.seria-blok-pary dt { color: var(--atrament-2); }
+.seria-blok-pary dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
 /* ── Wiersz akcjonariusza ──
    Nazwisko, identyfikator i adresy to jedna dana z art. 300(33) § 1 pkt 5,
    więc stoją w jednej komórce, jedno pod drugim — a nie w pięciu kolumnach,
@@ -451,6 +461,46 @@ function pary(lista) {
   return wiersze ? `<dl class="pary">${wiersze}</dl>` : '';
 }
 
+/** Szerokość treści strony A4 przy marginesach `@page` 16 mm (mm). */
+const SZEROKOSC_TRESCI_A4_MM = 210 - 2 * 16;
+
+/**
+ * R4 K4: szerokości kolumn (mm) — minima kolumn, wolne miejsce wg wag; gdy minima się nie mieszczą,
+ * proporcjonalnie zmniejszone. Suma zawsze ≤ `dostepnaSzerokosc`.
+ * @param {Array<{min:number, waga?:number}>} kolumny
+ */
+function szerokosciKolumnEmisji(kolumny, dostepnaSzerokosc) {
+  const minima = kolumny.map((k) => Math.max(0, Number(k.min) || 0));
+  const wagi = kolumny.map((k) => Math.max(0, Number(k.waga ?? 1)) || 1);
+  const sumaMin = minima.reduce((a, b) => a + b, 0);
+  if (sumaMin >= dostepnaSzerokosc) return minima.map((m) => (m * dostepnaSzerokosc) / sumaMin);
+  const sumaWag = wagi.reduce((a, b) => a + b, 0);
+  const wolne = dostepnaSzerokosc - sumaMin;
+  return minima.map((m, i) => m + (wolne * wagi[i]) / sumaWag);
+}
+
+/** Numery akcji: miejsce łamania po przecinkach i myślnikach (R4 K4). */
+function zLamaniemNumerow(tekst) {
+  return esc(tekst).replace(/([,–-])/g, '$1<wbr>');
+}
+
+/**
+ * R4 K4: tabela emisji. Więcej niż 5 kolumn → układ pionowy (blok na serię: etykieta — wartość),
+ * inaczej tabela z szerokościami kolumn dopasowanymi do strony A4. Czcionka o 1 pt mniejsza od tekstu.
+ */
+function tabelaEmisji(kolumny, wiersze) {
+  if (!wiersze.length) return '';
+  if (kolumny.length > 5) {
+    return wiersze.map((komorki) => `<div class="seria-blok">
+      <div class="seria-blok-tytul">${komorki[0]}</div>
+      <dl class="seria-blok-pary">${kolumny.slice(1).map(([nazwa], i) => `<dt>${esc(nazwa)}</dt><dd>${komorki[i + 1]}</dd>`).join('')}</dl>
+    </div>`).join('');
+  }
+  const szerokosci = szerokosciKolumnEmisji(kolumny.map(([, , w]) => w || { min: 20 }), SZEROKOSC_TRESCI_A4_MM);
+  return `<table class="tabela-emisji"><colgroup>${szerokosci.map((w) => `<col style="width:${w.toFixed(1)}mm">`).join('')}</colgroup>`
+    + tabela(kolumny, wiersze).replace(/^<table>/, '');
+}
+
 function tabela(kolumny, wiersze) {
   if (!wiersze.length) return '';
   // W naglowku zostaje samo wyrownanie: `numery` to krój dla DANYCH,
@@ -502,7 +552,8 @@ function adresAkcjonariusza(osoba) {
  */
 function emailDoRejestru(osoba) {
   if (!osoba || pusty(osoba.email)) return null;
-  if (osoba.zgoda_email_status !== 'potwierdzona' && !Number(osoba.zgoda_email)) return null;
+  // D-092 (przegląd R4 #2): ta sama reguła co `stanOswiadczen` i znacznik — status „potwierdzona”.
+  if (osoba.zgoda_email_status !== 'potwierdzona') return null;
   return osoba.email;
 }
 
@@ -548,7 +599,8 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
     }
     if (!pusty(adres)) opisy.push(esc(adres));
     else if (osoba && osoba.zamaskowane) opisy.push('PESEL, data urodzenia i adres zamieszkania nie są udostępniane');
-    if (email) opisy.push(`${esc(email)} — zgoda na komunikację elektroniczną`);
+    // D-092: w informacji tylko adres e-mail (art. 300(33) § 1 pkt 5 KSH) — bez wzmianki o zgodzie.
+    if (email) opisy.push(esc(email));
     if (a.wspolwlasnosc) opisy.push('akcje we współwłasności ułamkowej');
 
     return [
@@ -597,7 +649,7 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
         + (pusty(e.tytul) ? '' : `<div class="akcjonariusz-wiersz">${esc(e.tytul)}</div>`)
         + (pusty(e.opis) ? '' : `<div class="akcjonariusz-wiersz">${esc(e.opis)}</div>`),
       esc(NAZWY_RODZAJU_AKCJI[e.rodzaj_akcji] || e.rodzaj_akcji || 'zwykła'),
-      `<span class="numery">${esc(e.zakres)}</span>`,
+      `<span class="numery">${zLamaniemNumerow(e.zakres)}</span>`,
       liczba(e.ilosc),
       liczba(b.umorzone || 0),
       b.w_obrocie == null ? ZASLONA : liczba(b.w_obrocie),
@@ -640,10 +692,11 @@ function informacjaZRejestru({ kancelaria, spolka, data, stan, odbiorca, sporzad
 
     sekcja({
       tytul: 'Emisje i serie akcji',
-      wnetrze: tabela(
-        [['Seria'], ['Rodzaj akcji'], ['Numery', 'numery'], ['Wyemitowane', 'do-prawej'],
-         ['Umorzone', 'do-prawej'], ['Istniejące', 'do-prawej'], ['Cena emisyjna', 'do-prawej'],
-         ['Data zarejestrowania emisji']],
+      wnetrze: tabelaEmisji(
+        [['Seria', null, { min: 14, waga: 1 }], ['Rodzaj akcji', null, { min: 18, waga: 1 }],
+         ['Numery', 'numery', { min: 40, waga: 4 }], ['Wyemitowane', 'do-prawej', { min: 18, waga: 1 }],
+         ['Umorzone', 'do-prawej', { min: 16, waga: 1 }], ['Istniejące', 'do-prawej', { min: 16, waga: 1 }],
+         ['Cena emisyjna', 'do-prawej', { min: 18, waga: 1 }], ['Data zarejestrowania emisji', null, { min: 20, waga: 1 }]],
         wierszeEmisji
     ),
       pusto: 'Rejestr nie wykazuje emisji akcji.',
@@ -825,4 +878,4 @@ function sekcjaWynagrodzenia(numer, w) {
   </section>`;
 }
 
-module.exports = { informacjaZRejestru, adresAkcjonariusza, emailDoRejestru, sekcjaWynagrodzenia };
+module.exports = { informacjaZRejestru, adresAkcjonariusza, emailDoRejestru, sekcjaWynagrodzenia, szerokosciKolumnEmisji };

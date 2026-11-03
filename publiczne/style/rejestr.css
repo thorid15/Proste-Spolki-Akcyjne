@@ -615,6 +615,64 @@ body {
   margin-bottom: var(--od-16);
 }
 .karta.scisla { padding: 0; overflow: hidden; }
+
+/* ── Start portalu: baner kroku i „Do zapłaty” (R4 P2) ── */
+.baner-kroku { display: flex; align-items: center; justify-content: space-between; gap: var(--od-16); flex-wrap: wrap; }
+.wiersz-zaplaty { display: flex; align-items: center; gap: var(--od-12); padding: var(--od-12) 0; border-top: 1px solid var(--linia-2); }
+.wiersz-zaplaty:first-child { border-top: 0; padding-top: 0; }
+.wiersz-zaplaty-opis { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.wiersz-zaplaty-kwota { white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Kwota netto (mniejsza) i brutto (wytłuszczona) — R4 drobne poprawki. */
+.kwota-nb { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.kwota-nb-netto { font-size: var(--st-13); color: var(--atrament-2); }
+.kwota-nb-brutto { font-weight: 600; color: var(--atrament); }
+@media (max-width: 420px) {
+  .wiersz-zaplaty { flex-wrap: wrap; }
+  .wiersz-zaplaty-opis { flex-basis: 100%; }
+}
+
+/* ── Rząd przycisków karty: główny pierwszy; na telefonie w pionie, pełna szerokość (R4 P3) ── */
+.przyciski-karty { display: flex; gap: var(--od-12); flex-wrap: wrap; align-items: center; }
+@media (max-width: 420px) {
+  .przyciski-karty { flex-direction: column; align-items: stretch; }
+  .przyciski-karty > .btn { width: 100%; }
+}
+
+/* ── Sprawa: jedna kolumna i jeden pasek akcji (R4 K1) ── */
+.kolumna-sprawy { max-width: 48rem; display: flex; flex-direction: column; gap: var(--od-16); }
+.kolumna-sprawy > * { margin-top: 0; margin-bottom: 0; }
+.pasek-akcji { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--od-8); }
+@media (max-width: 600px) {
+  /* Telefon: pełna szerokość minus 16 px marginesów (treść aplikacji ma 40 px) [domyślne]. */
+  .kolumna-sprawy { margin-inline: calc(var(--od-16) - var(--od-40)); }
+  .pasek-akcji { flex-direction: column; align-items: stretch; }
+  .pasek-akcji > .btn { width: 100%; }
+  .pasek-akcji > .btn-glowny { order: -1; }
+}
+
+/* ── Znacznik „list” (R4 K5): długi tekst zawija się zamiast wychodzić poza kartę ── */
+.znacznik-kontaktu { display: inline-block; max-width: 100%; vertical-align: middle; }
+.znacznik-kontaktu .pigulka { white-space: normal; text-align: left; max-width: 100%; }
+
+/* ── Kartoteka osoby w jednym widoku (R4 K2) ── */
+.kartoteka-osoby { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--od-24) var(--od-40); }
+.kartoteka-sekcja { min-width: 0; }
+.kartoteka-sekcja-tytul { font-family: var(--font-ui); font-size: var(--st-13); font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--atrament-2); margin: 0 0 var(--od-8); }
+.kartoteka-historia { margin-top: var(--od-8); }
+.kartoteka-historia summary { cursor: pointer; color: var(--rejestr); margin-bottom: var(--od-8); }
+
+/* ── Lista „etykieta — wartość” (R4 P1/K2) ── */
+.lista-danych {
+  display: grid; grid-template-columns: minmax(7rem, 40%) 1fr;
+  column-gap: var(--od-16); row-gap: var(--od-8); margin: 0;
+}
+.lista-danych dt { color: var(--atrament-2); overflow-wrap: anywhere; }
+.lista-danych dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 420px) {
+  .lista-danych { grid-template-columns: 1fr; row-gap: 0; }
+  .lista-danych dd { margin-bottom: var(--od-12); }
+}
 .karta-naglowek {
   display: flex; align-items: center; justify-content: space-between; gap: var(--od-16);
   padding: var(--od-16) var(--od-24);
@@ -822,11 +880,9 @@ select {
 
 /* Pole daty segmentowe DD.MM.RRRR */
 .pole-daty { display: flex; align-items: center; gap: var(--od-8); flex-wrap: wrap; }
-/* Ramka pola daty rozciąga się na całą kolumnę, tak jak sąsiednie pola
-   tekstowe. Same segmenty DD.MM.RRRR zostają wąskie i wyrównane do lewej —
-   chodzi o to, żeby para pól obok siebie miała jedną linię, a nie o to,
-   żeby rozstrzelić cyfry. */
-.pole-daty > .data-segmenty { flex: 1 1 auto; justify-content: flex-start; }
+/* R4 P5: ramka pola daty obejmuje tylko datę DD.MM.RRRR (jeden wzorzec dla wszystkich pól dat),
+   przycisk kalendarza tuż obok — pole nie rozciąga się na całą kolumnę. */
+.pole-daty > .data-segmenty { flex: 0 0 auto; justify-content: flex-start; }
 .data-segmenty {
   display: inline-flex; align-items: center;
   padding: var(--od-8) var(--od-12);
@@ -2527,3 +2583,12 @@ h1.topbar-tytul, h1.brama-tytul { margin: 0; font-weight: inherit; }
 @media (max-width: 900px) { .topbar-nawigacja { max-width: 100vw; min-width: 0; position: relative; } }
 /* Tekst dla czytnika w liczniku nie może uciec z przewijanego paska. */
 .licznik { position: relative; }
+
+/* ── R4 STOP 1 — WCAG 2.5.5: cel dotyku ≥ 44 px na telefonie ── */
+@media (max-width: 600px) {
+  .btn, select, .data-segmenty, .kalendarz-kotwica .btn,
+  input:not([type="checkbox"]):not([type="radio"]):not(.data-segment) { min-height: 44px; }
+  .kalendarz-kotwica .btn { min-width: 44px; }
+  .okruszki button { min-height: 44px; }
+  .zakladka { min-width: 44px; min-height: 44px; }
+}

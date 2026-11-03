@@ -704,14 +704,9 @@ router.post(
     if (zad.konto.rola !== 'spolka') {
       throw bledneZadanie('To konto ma już otwarty wniosek — kontynuuj go w zakładce „Wniosek".');
     }
-    const otwarty = wczytajOtwartyWniosekKonta(zad.konto.id);
-    if (otwarty) {
-      throw bledneZadanie('Masz już wniosek w toku — dokończ go, zanim dodasz kolejną spółkę.');
-    }
-    const wynik = db()
-      .prepare('INSERT INTO psa_wnioski (konto_id, utworzono) VALUES (?, ?)')
-      .run(zad.konto.id, czas.terazIso());
-    odp.status(201).json({ wniosek: db().prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(wynik.lastInsertRowid) });
+    // R4 P6: kolejną spółkę zgłasza się od nowa standardowym trybem (zgłoszenie → zaproszenie → wniosek),
+    // nie z konta spółki z przyjętym wnioskiem. Wniosek w toku (sprzed tej zmiany) konto dokańcza normalnie.
+    odp.status(403).json({ blad: 'Każdą spółkę zgłasza się osobno. Aby dodać kolejną spółkę, wypełnij zgłoszenie na stronie rejestru.' });
   })
 );
 
@@ -2106,11 +2101,11 @@ router.get('/przeniesienie/pisma/:kod', asy((zad, odp) => {
 // ─────────────────────────────────────────────────────────────
 // W4.1/W4.2 — oświadczenia akcjonariusza składane OSOBIŚCIE (konto albo link
 // z zaproszenia), nigdy przez zarząd w jego imieniu. Każde z datą, odwołalne
-// (tabela append-only `psa_oswiadczenia`).
-//   - zgoda na komunikację e-mail — dana rejestru (art. 300(33) § 1 pkt 5 KSH):
-//     złożenie i cofnięcie idą przez ŻĄDANIE WPISU, nie przez ustawienia konta;
-//   - żądanie automatycznego przesyłania powiadomień (art. 300(34) § 9 KSH,
-//     🔵) — oświadczenie w portalu, skuteczne od razu.
+// (tabela append-only `psa_oswiadczenia`). D-092: oba to dane KARTOTEKI osoby,
+// nie zdarzenia rejestru — historia poza łańcuchem, skuteczne od razu.
+//   - zgoda na komunikację e-mail — tylko dla adresu z kartoteki; zmiana samego
+//     adresu to zmiana danych w rejestrze (żądanie w zakładce „Zgłoszenia”);
+//   - żądanie automatycznego przesyłania powiadomień (art. 300(34) § 9 KSH, 🔵).
 // ─────────────────────────────────────────────────────────────
 
 const WZORZEC_EMAIL_OSW = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -2136,6 +2131,8 @@ router.get('/oswiadczenia', asy((zad, odp) => {
       WHERE sa.osoba_id = ? AND sa.data_do IS NULL ORDER BY s.nazwa`
   ).all(zad.konto.osoba_id);
   odp.json({
+    // D-092 / P7: jeden stan oświadczeń osoby (kartoteka) — ekran pokazuje go wprost.
+    stan: require('../oswiadczenia').stanOswiadczen(db(), osoba.id),
     zgoda_email: { email: osoba.email, status: osoba.zgoda_email_status },
     spolki: spolki.map((s) => ({
       spolka_id: s.id,
@@ -2149,34 +2146,29 @@ router.get('/oswiadczenia', asy((zad, odp) => {
 router.post('/oswiadczenia', asy((zad, odp) => {
   wymagajAkcjonariuszaPortalu(zad);
   const cialo = zad.body || {};
-  const spolkaId = Number(cialo.spolka_id);
+  const spolkaId = Number(cialo.spolka_id) || null;
   const rodzaj = String(cialo.rodzaj || '');
   const zlozone = cialo.zlozone !== false;
   if (!['zgoda_email', 'powiadomienia_automatyczne'].includes(rodzaj)) throw bledneZadanie('Nieznany rodzaj oświadczenia.');
-  const teraz = czas.terazIso();
   const konto = zad.konto;
-
-  let sprawaId = null;
+  // D-092 (R4 K5): oświadczenie to dane kartoteki — działa od razu, bez wpisu w rejestrze i bez opłaty.
+  // Przegląd R4 #1: zgoda tylko na adres z kartoteki — adres e-mail jest daną rejestru
+  // (art. 300(33) § 1 pkt 5 KSH), jego zmiana idzie żądaniem zmiany danych, nie oświadczeniem.
   let email = null;
-  if (rodzaj === 'zgoda_email') {
-    email = zlozone ? String(cialo.email || '').trim().toLowerCase() : null;
-    if (zlozone && !WZORZEC_EMAIL_OSW.test(email || '')) throw bledneZadanie('Podaj adres e-mail, na który mamy kierować korespondencję.');
-    const przechwyt = { kod: 200, tresc: null, status(k) { this.kod = k; return this; }, json(t) { this.tresc = t; return this; } };
-    zalozZadaniePortalowe(konto, {
-      spolka_id: spolkaId,
-      typ_zdarzenia: 'zmiana_danych_akcjonariusza',
-      opis: zlozone
-        ? `Oświadczenie złożone osobiście w portalu (${teraz}): zgoda na komunikację ze spółką i podmiotem prowadzącym rejestr przy wykorzystaniu poczty elektronicznej — adres ${email} (art. 300(33) § 1 pkt 5 KSH).`
-        : `Oświadczenie złożone osobiście w portalu (${teraz}): cofnięcie zgody na komunikację przy wykorzystaniu poczty elektronicznej (art. 300(33) § 1 pkt 5 KSH).`,
-    }, przechwyt);
-    sprawaId = przechwyt.tresc && przechwyt.tresc.sprawa ? przechwyt.tresc.sprawa.id : null;
+  if (rodzaj === 'zgoda_email' && zlozone) {
+    email = String((db().prepare('SELECT email FROM psa_osoby WHERE id = ?').get(konto.osoba_id) || {}).email || '').trim().toLowerCase();
+    const podany = String(cialo.email || '').trim().toLowerCase();
+    if (podany && podany !== email) {
+      throw bledneZadanie('Zmiana adresu e-mail to zmiana danych w rejestrze — złóż żądanie zmiany danych (zakładka „Zgłoszenia”) albo w kancelarii.');
+    }
+    if (!WZORZEC_EMAIL_OSW.test(email)) {
+      throw bledneZadanie('W kartotece nie ma Twojego adresu e-mail — złóż żądanie zmiany danych (zakładka „Zgłoszenia”) albo w kancelarii.');
+    }
   }
-
-  db().prepare(
-    `INSERT INTO psa_oswiadczenia (osoba_id, spolka_id, rodzaj, zlozone, email, konto_id, sprawa_id, utworzono)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(konto.osoba_id, spolkaId, rodzaj, zlozone ? 1 : 0, email, konto.id, sprawaId, teraz);
-  odp.status(201).json({ ok: true, sprawa_id: sprawaId, utworzono: teraz });
+  const stan = require('../oswiadczenia').zapiszOswiadczenie(db(), {
+    osobaId: konto.osoba_id, rodzaj, zlozone, email, zrodlo: 'portal', autor: `Portal — ${konto.email}`, kontoId: konto.id, spolkaId,
+  });
+  odp.status(201).json({ ok: true, stan, utworzono: czas.terazIso() });
 }));
 
 // ─────────────────────────────────────────────────────────────
@@ -2389,8 +2381,12 @@ const OPISY_TYPU_OPLATY = {
   informacja: 'Informacja z rejestru akcjonariuszy',
 };
 
-/** Klient widzi wylacznie BRUTTO (sekcja 2.1) - to jest kwota, ktora placi. */
+/**
+ * Klient widzi netto i brutto (R4 drobne poprawki); `kwota_grosze` zostaje BRUTTO —
+ * to jest kwota, ktora placi (sekcja 2.1), i tak licza ja przyciski „Zaplac”.
+ */
 function widokOplatyKlienta(w) {
+  const brutto = przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent);
   return {
     id: w.id,
     spolka_id: w.spolka_id,
@@ -2400,7 +2396,10 @@ function widokOplatyKlienta(w) {
     okres: w.okres,
     okres_od: w.okres_od,
     okres_do: w.okres_do,
-    kwota_grosze: przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent),
+    kwota_grosze: brutto,
+    kwota_brutto_grosze: brutto,
+    kwota_netto_grosze: w.kwota_grosze,
+    stawka_vat_procent: w.stawka_vat_procent,
     status: w.status,
     data_naliczenia: w.data_naliczenia,
     oplacona_kiedy: w.oplacona_kiedy,
@@ -2424,11 +2423,17 @@ router.get(
   '/cennik',
   asy((zad, odp) => {
     const brutto = (typ) => przepisy.obliczBrutto(ustawienia.stawkaGrosze(db(), typ), przepisy.STAWKA_VAT_PROCENT);
+    const netto = (typ) => ustawienia.stawkaGrosze(db(), typ);
     odp.json({
       stawki: {
         prowadzenie: brutto('prowadzenie'),
         wpis: brutto('wpis'),
         informacja: brutto('informacja'),
+      },
+      stawki_netto: {
+        prowadzenie: netto('prowadzenie'),
+        wpis: netto('wpis'),
+        informacja: netto('informacja'),
       },
       platnosci_wlaczone: tpay.skonfigurowany(),
     });
@@ -2456,13 +2461,13 @@ router.get(
       )
       .all(...warunek.parametry);
 
-    const doZaplaty = wiersze
-      .filter((w) => w.status !== 'oplacona')
-      .reduce((suma, w) => suma + przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent), 0);
+    const nieoplacone = wiersze.filter((w) => w.status !== 'oplacona');
+    const doZaplaty = nieoplacone.reduce((suma, w) => suma + przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent), 0);
 
     odp.json({
       oplaty: wiersze.map(widokOplatyKlienta),
       do_zaplaty_grosze: doZaplaty,
+      do_zaplaty_netto_grosze: nieoplacone.reduce((suma, w) => suma + w.kwota_grosze, 0),
       platnosci_wlaczone: tpay.skonfigurowany(),
     });
   })

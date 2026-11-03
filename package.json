@@ -14,6 +14,7 @@
     "test": "node --test \"testy/*.test.js\"",
     "scenariusz": "node narzedzia/scenariusz-e2e.js",
     "scenariusz:testowy": "node narzedzia/scenariusz-e2e.js --tryb-testowy",
+    "zrzuty": "playwright test -c testy/e2e/playwright.config.js",
     "dokumentacja": "node narzedzia/dokumentacja-baza.js && node narzedzia/dokumentacja-endpointy.js",
     "test:seed": "node narzedzia/test-seed.js",
     "test:link": "node narzedzia/test-link.js",
@@ -31,6 +32,7 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "esbuild": "0.28.2"
   }
 }

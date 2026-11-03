@@ -1485,6 +1485,113 @@
   kod konkretnej formy nadal przyjmowany i sprawdzany. Upraszcza D-076 w części formularza.
 - Skutek w kodzie: `server/trasy/sprawy.js`, `publiczne/js/sprawy.js`, `testy/sprawy-http.test.js`. Bez migracji.
 
+### D-093 — Runda 4, faza 1: Start portalu, układ sprawy, pola dat, druk informacji (SESJA-PSA-POPRAWKI-R4)
+
+- Data: 2026-11-01
+- Obszar: portal / kancelaria / informacja z rejestru
+- Decyzja:
+  1. **Start portalu (P2):** baner bieżącego kroku wniosku (jeden przycisk) i karta **„Do zapłaty”** — tylko
+     nieopłacone opłaty, kwota brutto, przycisk „Zapłać”. Terminy zgłoszeń nie są już na Start (zakładka
+     „Zgłoszenia”). Brak pozycji → karta się nie pokazuje (**potwierdzone przez Łukasza 3.11.2026**).
+  2. **Rejestr w portalu (P1, P3, P4):** „Dane spółki” na wspólnym `ListaDanych`; tekst: „Stan akcjonariatu
+     (akcjonariusze, akcje, obciążenia) jest dostępny w pełnej informacji z rejestru akcjonariuszy.”;
+     „Zgłoś błąd we wpisie” — przycisk drugorzędny obok „Zamów informację z rejestru”.
+  3. **Pola dat (P5):** `PoleDaty` obejmuje tylko datę, kalendarz obok — jeden wzorzec dla wszystkich pól dat.
+  4. **Sprawa (K1):** jedna kolumna (`KolumnaSprawy`) i jeden pasek akcji (`PasekAkcji`); „Popraw podstawę
+     wpisu” i „Wystaw żądanie wpisu” w pasku; nazwy plików bez UUID (`nazwaPlikuDoWyswietlenia`).
+     Szerokość kolumny 48rem; na telefonie pełna szerokość minus 16 px (**potwierdzone 3.11.2026**).
+  5. **Informacja z rejestru (K4):** emisje jako blok na serię (więcej niż 5 kolumn), numery łamane po
+     przecinkach i myślnikach, czcionka 1 pt mniejsza od tekstu — mieści się w marginesach A4.
+  6. **Telefon (WCAG 2.5.5):** przyciski, pola i zakładki ≥ 44 px wysokości.
+- Narzędzie: `npm run zrzuty` (Playwright, tryb testowy, osobna baza `dane-testowe/zrzuty/`), `sprawdzUklad`.
+- Testy: `testy/{portal-start,nazwy-plikow,informacja-emisje-uklad,zrzuty-start}.test.js`,
+  `testy/e2e/{uklad,uklad-ekrany}.spec.js`.
+
+### D-092 — Oświadczenia osób (zgoda e-mail, powiadomienia) to dane kartoteki, nie rejestru (Łukasz, 1.11.2026; R4 K5)
+
+- Data: 2026-11-02 (SESJA-PSA-POPRAWKI-R4, zadanie 7)
+- Obszar: kartoteka / portal / informacja z rejestru / sprawy
+- Decyzja Łukasza: złożenie i cofnięcie zgody na komunikację e-mail oraz żądania powiadomień automatycznych
+  nie jest informacją w rejestrze ani w informacji z rejestru — to dane kartoteki osoby. Przy każdej
+  czynności z udziałem osoby bez zgody system to sygnalizuje.
+- Przepis (`PRZEPISY-PSA.md`, art. 300(33) § 1 pkt 5 KSH): rejestr zawiera adres poczty elektronicznej,
+  **jeżeli akcjonariusz wyraził zgodę** na komunikację e-mail → w informacji z rejestru pokazujemy sam
+  adres (gdy zgoda aktywna), bez żadnej pozycji o zgodzie lub jej cofnięciu; cofnięcie = adres znika,
+  bez opłaty (D-083).
+- Skutek:
+  1. Jedno źródło stanu `stanOswiadczen` (`server/oswiadczenia.js`); oświadczenie z portalu działa **od
+     razu** — bez sprawy wpisu, zdarzenia w łańcuchu i opłaty (zastępuje D-083 pkt QW1 w części „cofnięcie
+     przez żądanie wpisu”). Zmiana zgody w kartotece przez kancelarię też trafia do historii.
+  2. Historia (data, źródło: portal / kancelaria / pismo, kto) — `psa_oswiadczenia` (append-only, poza
+     łańcuchem; migracja 66).
+  3. Kreator „zmiana danych akcjonariusza” nie przyjmuje już pola zgody. Historyczne zdarzenia dotyczące
+     wyłącznie zgody zostają w łańcuchu, ale nie są pokazywane w widoku rejestru (filtr); w zdarzeniach
+     mieszanych pole zgody jest pomijane w opisie. Eksport ZIP zostawia łańcuch w całości (weryfikacja
+     skrótów). W tym środowisku nie ma bazy innej niż testowa — liczby takich zdarzeń w bazie kancelarii
+     nie sprawdzono.
+  4. Znacznik „Brak zgody — konieczne powiadomienie listem” (`ZnacznikKontaktu`, liczy się stan bieżący:
+     zgoda potwierdzona i adres) — przy wyborze zbywcy, nabywcy i żądającego w kreatorach, przy żądającym
+     w nagłówku sprawy, na liście akcjonariuszy spółki, w kolejce listów (kartoteka — zadanie 12).
+  5. Po przeglądzie kodu: zgoda w portalu tylko na **adres z kartoteki** (zmiana adresu = żądanie zmiany
+     danych); jedna reguła „zgoda aktywna” (status „potwierdzona” i adres) w informacji, stanie i znaczniku
+     — migracja 68 podnosi dawną flagę `zgoda_email` ustawioną przez kancelarię do statusu „potwierdzona”;
+     stan zgody innych osób nie trafia do akcjonariusza (tylko spółka i organ).
+  6. Sprawy o zgodę złożone dawnym trybem (żądanie wpisu „zmiana danych akcjonariusza” z portalu) —
+     **obsługa automatyczna** (Łukasz, 3.11.2026 — nie ręcznie): migracja 69 stosuje oświadczenie w kartotece
+     (jeśli to najnowsze oświadczenie osoby) i anuluje otwartą sprawę z notatką „D-092 — bez wpisu”.
+- Testy: `testy/oswiadczenia-k5.test.js`, `testy/faza3-http.test.js` (W4.1/W4.2), e2e K5.
+
+### D-094 — Runda 4, faza 2: oświadczenia w portalu, bez nowej spółki z konta, usuwanie listów, kartoteka (SESJA-PSA-POPRAWKI-R4)
+
+- Data: 2026-11-02
+- Obszar: portal / listy / kartoteka
+- Decyzja:
+  1. **P7:** „Moje oświadczenia” — dwa checkboxy na jednym stanie osoby (`stanOswiadczen`, D-092); oświadczenie
+     można cofnąć i złożyć ponownie, dopóki konto jest aktywne; adres e-mail podpowiadany z kartoteki.
+     Powiadomienia automatyczne liczone na osobę (jedno aktywne oświadczenie na rodzaj), nie na spółkę
+     (**potwierdzone 3.11.2026**).
+  2. **P8:** odznaczenie zgody na e-mail otwiera okno „Cofnąć zgodę na e-mail?” z ostrzeżeniem (list zamiast
+     e-maila, wygaśnięcie dostępu do portalu); „Zostaw zgodę” domyślne (fokus, Esc), „Cofam zgodę” wysyła.
+  3. **P6 (wycofuje „Dodaj spółkę” z B8):** konto spółki nie zakłada kolejnego wniosku — `POST
+     /portal/wniosek/nowy` → 403 „Każdą spółkę zgłasza się osobno. Aby dodać kolejną spółkę, wypełnij
+     zgłoszenie na stronie rejestru.”; wniosek w toku założony wcześniej konto dokańcza.
+  4. **K3:** „Usuń z wysyłki” przy nienadanym liście — powód (min. 5 znaków), kto, kiedy; pismo zostaje,
+     wpis w notatce sprawy; po nadaniu 409; usunięte powiadomienie przed wpisem → wpis zablokowany
+     (art. 300(34) § 3 KSH). Migracja 67.
+  5. **K2:** kartoteka osoby w jednym widoku: Identyfikacja → Adresy → Kontakt i oświadczenia (stan, znacznik,
+     historia) → AML → Akcje w spółkach (z seriami) → Sprawy (5 ostatnich + „Pokaż wszystkie”).
+- Testy: `testy/{oswiadczenia-k5,p6-nowa-spolka}.test.js`, `testy/faza3-http.test.js` (K3),
+  `testy/wnioski-kancelaria-http.test.js` (B8 → P6), e2e P7, P8, K2, K5.
+
+### D-089 — Pokrycie akcji: nie blokuje otwarcia, wpis pokrycia bezpłatny (Łukasz, 3.11.2026)
+
+- Obszar: rejestr / kreator / opłaty
+- Podstawa (`PRZEPISY-PSA.md`): wzmianka o pokryciu w rejestrze (art. 300(33) § 1 pkt 9 KSH); wkłady wnosi się
+  w 3 lata od wpisu spółki (art. 300(9) § 1); zarząd stwierdza wniesienie wkładu uchwałą (art. 300(9) § 2); od
+  18.02.2027 zarząd zgłasza zmianę w 7 dni (art. 300(33) § 3); zbycie akcji nie w pełni pokrytej wymaga zgody
+  spółki, nabywca odpowiada solidarnie za resztę wkładu (art. 300(40) § 1 i § 3).
+- Decyzja: pokrycie nie blokuje otwarcia rejestru; stan domyślny „brak informacji o pełnym pokryciu”; wpis
+  „akcje pokryte w całości” na podstawie uchwały zarządu — bezpłatny (D-083), zwykłym kreatorem wpisu; przy
+  zbyciu akcji bez pełnego pokrycia kreator pokazuje pole „zgoda spółki” i informację o solidarnej
+  odpowiedzialności nabywcy.
+
+### D-090 — Zgoda na wpis: domyślnie powiadomienie (Łukasz, 3.11.2026)
+
+- Obszar: sprawy / kreator
+- Podstawa: art. 300(34) § 3 KSH — przed wpisem powiadomienie, chyba że osoba wyraziła zgodę.
+- Decyzja: ścieżką domyślną jest powiadomienie (e-mail przy zgodzie na e-mail, inaczej list); zgoda na wpis —
+  jedno opcjonalne pole (D-088), które pozwala wpisać od razu. Okresu oczekiwania po powiadomieniu
+  `PRZEPISY-PSA.md` nie przewiduje — nie wprowadzamy.
+
+### D-091 — Nowy przebieg wpisu zbycia akcji (Łukasz, 3.11.2026)
+
+- Obszar: sprawy / kreator (PLAN-POPRAWEK-4.md § 4)
+- Decyzja: jeden ekran, trzy kroki: „Co się zbywa” → „Podstawa” → „Sprawdzenie i wpis”; zbywca z akcjonariuszy
+  spółki; numery akcji dobierane automatycznie (ręcznie za przyciskiem); pola „zgoda spółki” i „prawo
+  pierwszeństwa wyczerpane” tylko gdy rejestr tego wymaga; z widoku znikają: rodzaj dokumentu jako osobne pole,
+  osobny krok „weryfikuj”, „osoba działająca przy wpisie” (domyślnie notariusz z ustawień); „Wystaw żądanie
+  wpisu” — akcja drugorzędna. Logika wpisu i walidacje art. 300(34) / 300(40) bez zmian.
+
 ---
 
 ## Decyzje otwarte

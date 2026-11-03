@@ -85,6 +85,58 @@ async function sprawaZbycia() {
   return z.sprawa.id;
 }
 
+test('R4 K3: „Usuń z wysyłki” — przed nadaniem: status usunięty, pismo zostaje, wpis dalej zablokowany; po nadaniu 409', async () => {
+  const sprawaId = await sprawaZbycia();
+  const [, wynik] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/powiadomienie`, { osoba_id: S.bezZgody });
+  const listId = wynik.wysylka.list_id;
+  const [stKrotki] = await zapytaj('POST', `/api/psa/listy/${listId}/usun-z-wysylki`, { powod: 'abc' });
+  assert.equal(stKrotki, 400, 'powód min. 5 znaków');
+  const [st, odp] = await zapytaj('POST', `/api/psa/listy/${listId}/usun-z-wysylki`, { powod: 'Błędnie zaznaczony brak zgody' });
+  assert.equal(st, 200, JSON.stringify(odp));
+  assert.equal(odp.list.status, 'usuniety');
+  assert.equal(odp.list.usuniecie_powod, 'Błędnie zaznaczony brak zgody');
+  assert.ok(odp.list.usunal && odp.list.usunieto);
+  assert.ok(db().prepare('SELECT 1 FROM psa_wydane_dokumenty WHERE id = ?').get(odp.list.wydany_dokument_id), 'pismo zostaje');
+  const [stPismo] = await zapytaj('GET', `/api/psa/listy/${listId}/pismo`);
+  assert.equal(stPismo, 200);
+  const [, sprawa] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
+  assert.ok(sprawa.sprawa.blokada_wpisu, 'usunięte powiadomienie → wpis zablokowany');
+  assert.ok(!sprawa.sprawa.powiadomienie_wyslano);
+  const [, doWyslania] = await zapytaj('GET', '/api/psa/listy?status=do_wyslania');
+  assert.ok(!doWyslania.listy.some((l) => l.id === listId), 'poza kolejką do wysłania');
+
+  const sprawa2 = await sprawaZbycia();
+  const [, w2] = await zapytaj('POST', `/api/psa/sprawy/${sprawa2}/powiadomienie`, { osoba_id: S.bezZgody });
+  const f = new FormData();
+  f.append('data_nadania', czas.dzisIso());
+  f.append('numer_nadania', 'RR000000077PL');
+  await fetch(`${ADRES}/api/psa/listy/${w2.wysylka.list_id}/nadanie`, { method: 'POST', headers: { Cookie: prac }, body: f });
+  const [st409, odp409] = await zapytaj('POST', `/api/psa/listy/${w2.wysylka.list_id}/usun-z-wysylki`, { powod: 'Za późno, już nadany' });
+  assert.equal(st409, 409);
+  assert.equal(odp409.blad, 'List został nadany — nie można go usunąć z wysyłki.');
+});
+
+test('R4 drobne: usunięcie listu nie kasuje powiadomienia wysłanego e-mailem; po 409 nie zostaje plik skanu', async () => {
+  const sprawaId = await sprawaZbycia();
+  const teraz = czas.terazIso();
+  db().prepare('UPDATE psa_sprawy SET powiadomienie_wyslano = ? WHERE id = ?').run(teraz, sprawaId); // e-mail do innej osoby
+  const [, w] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/powiadomienie`, { osoba_id: S.bezZgody });
+  await zapytaj('POST', `/api/psa/listy/${w.wysylka.list_id}/usun-z-wysylki`, { powod: 'Pomyłka przy wyborze adresata' });
+  assert.equal(db().prepare('SELECT powiadomienie_wyslano FROM psa_sprawy WHERE id = ?').get(sprawaId).powiadomienie_wyslano, teraz, 'e-mail zostaje');
+
+  const katalog = process.env.KATALOG_DOKUMENTOW;
+  const liczPliki = () => (fs.existsSync(katalog)
+    ? fs.readdirSync(katalog, { recursive: true }).filter((n) => fs.statSync(path.join(katalog, n)).isFile()).length : 0);
+  const przed = liczPliki();
+  const f = new FormData();
+  f.append('data_nadania', czas.dzisIso());
+  f.append('numer_nadania', 'RR000000099PL');
+  f.append('potwierdzenie', new Blob([Buffer.from('%PDF-1.4 skan')], { type: 'application/pdf' }), 'skan.pdf');
+  const odp = await fetch(`${ADRES}/api/psa/listy/${w.wysylka.list_id}/nadanie`, { method: 'POST', headers: { Cookie: prac }, body: f });
+  assert.equal(odp.status, 409);
+  assert.equal(liczPliki(), przed, 'skan odrzuconego nadania nie zostaje na dysku');
+});
+
 test('W4.3/W4.4: powiadomienie zbywcy bez zgody → list na adres z rejestru (nie z żądania); nadanie odblokowuje wpis', async () => {
   const sprawaId = await sprawaZbycia();
   const [st, wynik] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/powiadomienie`, {
@@ -159,20 +211,20 @@ test('W5.7 / D-085: stawki stałe do zmiany przez notariusza; każda zmiana zost
   await zapytaj('PUT', '/api/psa/ustawienia', { stawka_wpis: '' });
 });
 
-test('W4.1/W4.2: oświadczenia osobiste — automatyczne powiadomienia od razu, zgoda e-mail przez żądanie wpisu; odwołalne', async () => {
+test('W4.1/W4.2 (D-092): oświadczenia osobiste — działają od razu, bez wpisu w rejestrze i bez opłaty; odwołalne', async () => {
   const [st1] = await zapytaj('POST', '/api/psa/portal/oswiadczenia', { spolka_id: S.spolkaId, rodzaj: 'powiadomienia_automatyczne', zlozone: true }, S.portalZofia);
   assert.equal(st1, 201);
+  const sprawPrzed = db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy').get().n;
   const [st2, cof] = await zapytaj('POST', '/api/psa/portal/oswiadczenia', { spolka_id: S.spolkaId, rodzaj: 'zgoda_email', zlozone: false }, S.portalZofia);
   assert.equal(st2, 201);
-  const sprawa = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(cof.sprawa_id);
-  assert.equal(sprawa.typ_zdarzenia, 'zmiana_danych_akcjonariusza');
-  assert.equal(sprawa.zadajacy_osoba_id, S.zeZgoda);
-  assert.match(sprawa.notatka, /cofnięcie zgody/);
-  // QW1 / D-083: zmiana albo cofnięcie zgody e-mail jest bezpłatne.
-  assert.equal(db().prepare("SELECT COUNT(*) AS n FROM psa_oplaty WHERE sprawa_id = ?").get(cof.sprawa_id).n, 0);
+  assert.equal(cof.stan.zgodaEmail, false, 'cofnięcie działa od razu (dane kartoteki)');
+  assert.equal(db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy').get().n, sprawPrzed, 'bez sprawy wpisu');
   const [, stan] = await zapytaj('GET', '/api/psa/portal/oswiadczenia', undefined, S.portalZofia);
   assert.equal(stan.spolki[0].powiadomienia_automatyczne.zlozone, 1);
   assert.throws(() => db().prepare('DELETE FROM psa_oswiadczenia').run(), /append-only/);
+  // Przywrócenie zgody (kolejne testy zakładają, że Zofia ma zgodę).
+  const [st3] = await zapytaj('POST', '/api/psa/portal/oswiadczenia', { spolka_id: S.spolkaId, rodzaj: 'zgoda_email', zlozone: true, email: 'zofia@example.pl' }, S.portalZofia);
+  assert.equal(st3, 201);
 });
 
 test('W6.2/W6.5: zadania z terminem dopiero od 18.02.2027 (symulowana data); projekt przypomnienia o KRS', async () => {
@@ -215,6 +267,7 @@ test('W6.4: brak automatycznego usuwania — usuwanie plików tylko w znanych mi
     'trasy/sprawy.js', // sprzątanie po nieudanym uploadzie
     'trasy/osoby.js', // odrzucony upload skanu AML (treść ≠ rozszerzenie)
     'trasy/spolki.js', // odrzucony upload załącznika umowy (treść ≠ rozszerzenie)
+    'trasy/listy.js', // odrzucone nadanie (np. 409) — skan potwierdzenia nie zostaje bez listu
   ]);
   const katalog = path.join(__dirname, '..', 'server');
   const znalezione = [];

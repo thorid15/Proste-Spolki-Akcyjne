@@ -4,7 +4,7 @@
  * Kolejka listów (W4.3, SESJA-PSA-WYTYCZNE.md Faza 3).
  *
  * Pismo do osoby, która NIE wyraziła zgody na komunikację e-mail
- * (art. 300(33) § 1 pkt 5 KSH — zgoda jest daną rejestru), idzie pocztą na
+ * (D-092: zgoda to dana kartoteki; adres e-mail w rejestrze tylko przy zgodzie), idzie pocztą na
  * adres Z REJESTRU. Adres kopiujemy w chwili wystawienia pisma — nigdy nie
  * bierzemy go od żądającego wpisu (W4.4). Kancelaria drukuje pismo, wpisuje
  * datę i numer nadania, dołącza skan potwierdzenia nadania; dopiero wtedy
@@ -36,13 +36,11 @@ function adresZRejestru(osoba) {
   return [ulica, miasto, kraj].filter(Boolean).join(', ');
 }
 
-/** QW2 — czy osoba żąda automatycznych powiadomień w tej spółce (ostatnie oświadczenie). */
-function zadaPowiadomienAutomatycznych(db, osobaId, spolkaId) {
-  const w = db.prepare(
-    `SELECT zlozone FROM psa_oswiadczenia WHERE osoba_id = ? AND spolka_id = ? AND rodzaj = 'powiadomienia_automatyczne'
-      ORDER BY id DESC LIMIT 1`
-  ).get(osobaId, spolkaId);
-  return Boolean(w && w.zlozone);
+/** QW2 — czy osoba żąda automatycznych powiadomień (ostatnie oświadczenie osoby). */
+function zadaPowiadomienAutomatycznych(db, osobaId, spolkaId) { // eslint-disable-line no-unused-vars
+  // D-092 / P7: jedno aktywne oświadczenie na rodzaj — stan osoby z kartoteki (`stanOswiadczen`).
+  const stan = require('./oswiadczenia').stanOswiadczen(db, osobaId);
+  return Boolean(stan && stan.powiadomieniaAutomatyczne);
 }
 
 function dodaj(db, { wydanyDokumentId, spolkaId, sprawaId, osoba, rodzajPisma }) {
@@ -78,6 +76,7 @@ function wczytaj(db, id) {
 function oznaczNadanie(db, id, { dataNadania, numerNadania, potwierdzenie, autor }) {
   const list = wczytaj(db, id);
   if (!list) return null;
+  if (list.status === 'usuniety') throw new BladListu('List został usunięty z wysyłki — nie można go nadać.', 409);
   db.transaction(() => {
     db.prepare(
       `UPDATE psa_listy SET status = 'nadany', data_nadania = ?, numer_nadania = ?, nadal = ?,
@@ -96,4 +95,42 @@ function oznaczNadanie(db, id, { dataNadania, numerNadania, potwierdzenie, autor
   return wczytaj(db, id);
 }
 
-module.exports = { kanalDlaOsoby, adresZRejestru, oznaczenie, dodaj, lista, wczytaj, oznaczNadanie, zadaPowiadomienAutomatycznych };
+class BladListu extends Error {
+  constructor(komunikat, kod = 400) {
+    super(komunikat);
+    this.kod = kod;
+  }
+}
+
+/**
+ * R4 K3: „Usuń z wysyłki” — tylko przed nadaniem. Pismo zostaje (bez fizycznego kasowania), powód, kto
+ * i kiedy w rekordzie listu oraz w notatce sprawy. Usunięte powiadomienie nie liczy się jako wysłane —
+ * bez innego powiadomienia wpis pozostaje zablokowany (art. 300(34) § 3 KSH).
+ */
+function usunZWysylki(db, id, { powod, autor }) {
+  const list = wczytaj(db, id);
+  if (!list) return null;
+  const tekst = String(powod || '').trim();
+  if (list.status === 'nadany') throw new BladListu('List został nadany — nie można go usunąć z wysyłki.', 409);
+  if (list.status === 'usuniety') throw new BladListu('List został już usunięty z wysyłki.', 409);
+  if (tekst.length < 5) throw new BladListu('Podaj powód usunięcia z wysyłki (co najmniej 5 znaków).');
+  const teraz = czas.terazIso();
+  db.transaction(() => {
+    db.prepare(`UPDATE psa_listy SET status = 'usuniety', usuniecie_powod = ?, usunal = ?, usunieto = ? WHERE id = ?`)
+      .run(tekst, autor || null, teraz, id);
+    if (list.sprawa_id) {
+      // Nienadany list nigdy nie ustawił `powiadomienie_wyslano` (ustawia je dopiero nadanie), więc usunięcie
+      // nie zmienia flagi: bez innego powiadomienia wpis i tak jest zablokowany, a e-mail wysłany innej osobie
+      // zostaje w mocy (przegląd R4 #4).
+      db.prepare(
+        `UPDATE psa_sprawy SET notatka = COALESCE(notatka || char(10), '') || ?, zaktualizowano = ? WHERE id = ?`
+      ).run(`[${teraz.slice(0, 10)}] List (${list.rodzaj_pisma}) do ${list.odbiorca_nazwa} usunięty z wysyłki: ${tekst} (${autor || '—'})`, teraz, list.sprawa_id);
+    }
+  })();
+  return wczytaj(db, id);
+}
+
+module.exports = {
+  kanalDlaOsoby, adresZRejestru, oznaczenie, dodaj, lista, wczytaj, oznaczNadanie, zadaPowiadomienAutomatycznych,
+  usunZWysylki, BladListu,
+};

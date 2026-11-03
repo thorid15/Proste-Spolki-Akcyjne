@@ -1,0 +1,232 @@
+'use strict';
+
+/** Testy układu ekranów z SESJA-PSA-POPRAWKI-R4 (faza 1): `sprawdzUklad` → []. */
+
+const { test, expect } = require('@playwright/test');
+const { sprawdzUklad } = require('./pomocnicze/uklad');
+const { zaloguj } = require('./pomocnicze/ekrany');
+
+async function otworz(page, { konto, aplikacja, adres, czekaj, szerokosc }) {
+  await page.setViewportSize({ width: szerokosc, height: 900 });
+  await zaloguj(page, konto, aplikacja);
+  await page.goto(adres);
+  await page.locator(czekaj).first().waitFor({ timeout: 15000 });
+  await page.waitForTimeout(300);
+}
+
+test('P1: karta „Dane spółki” przy 390 px bez problemów układu', async ({ page }) => {
+  await otworz(page, { konto: 'zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/spolka/1', czekaj: 'text=Dane spółki', szerokosc: 390 });
+  const karta = page.locator('.karta', { hasText: 'Dane spółki' });
+  await karta.evaluate((el) => el.setAttribute('data-test', 'dane-spolki'));
+  expect(await sprawdzUklad(page, '[data-test="dane-spolki"]')).toEqual([]);
+});
+
+const TEKST_P4 = 'Stan akcjonariatu (akcjonariusze, akcje, obciążenia) jest dostępny w pełnej informacji z rejestru akcjonariuszy.';
+
+test('P3/P4: komunikat i dwa przyciski w jednym rzędzie (1440 px)', async ({ page }) => {
+  await otworz(page, { konto: 'zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/spolka/1', czekaj: 'text=Dane spółki', szerokosc: 1440 });
+  await expect(page.getByText(TEKST_P4, { exact: true })).toBeVisible();
+  const zamow = page.getByRole('button', { name: 'Zamów informację z rejestru' });
+  const blad = page.getByRole('button', { name: 'Zgłoś błąd we wpisie' });
+  await expect(blad).toBeVisible();
+  const [a, b] = [await zamow.boundingBox(), await blad.boundingBox()];
+  expect(Math.abs(a.y - b.y)).toBeLessThan(2);
+  const karta = page.locator('.karta', { has: zamow });
+  await expect(karta.getByRole('button', { name: 'Zgłoś błąd we wpisie' })).toHaveCount(1);
+});
+
+test('P3: na 390 px oba przyciski na pełną szerokość, główny wyżej; układ bez problemów', async ({ page }) => {
+  await otworz(page, { konto: 'zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/spolka/1', czekaj: 'text=Dane spółki', szerokosc: 390 });
+  const zamow = page.getByRole('button', { name: 'Zamów informację z rejestru' });
+  const blad = page.getByRole('button', { name: 'Zgłoś błąd we wpisie' });
+  const [a, b] = [await zamow.boundingBox(), await blad.boundingBox()];
+  expect(a.y).toBeLessThan(b.y);
+  expect(Math.abs(a.width - b.width)).toBeLessThan(2);
+  const karta = page.locator('.karta', { has: zamow });
+  await karta.evaluate((el) => el.setAttribute('data-test', 'informacja'));
+  expect(await sprawdzUklad(page, '[data-test="informacja"]')).toEqual([]);
+});
+
+test('P5: „Stan na dzień” — pole tylko na datę, kalendarz obok, układ bez problemów', async ({ page }) => {
+  await otworz(page, { konto: 'zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/informacja/1', czekaj: 'text=Stan na dzień', szerokosc: 1440 });
+  const segmenty = page.locator('.data-segmenty').first();
+  const kalendarz = page.locator('.pole-daty .kalendarz-kotwica button').first();
+  const [s, k] = [await segmenty.boundingBox(), await kalendarz.boundingBox()];
+  // Szerokość pola daty = sama data (DD.MM.RRRR + marginesy), nie cała kolumna — wzorzec ≤ 12rem.
+  expect(s.width).toBeLessThanOrEqual(192);
+  expect(k.x - (s.x + s.width)).toBeLessThan(24);
+  expect(Math.abs((k.y + k.height / 2) - (s.y + s.height / 2))).toBeLessThan(4);
+  const karta = page.locator('.karta', { has: segmenty });
+  await karta.evaluate((el) => el.setAttribute('data-test', 'zamowienie'));
+  expect(await sprawdzUklad(page, '[data-test="zamowienie"]')).toEqual([]);
+});
+
+test('K4: informacja z 3 seriami i długim zakresem — PDF bez wyjątku, emisje w marginesach A4', async ({ page }) => {
+  const { informacjaZTrzemaSeriami } = require('./pomocnicze/informacja-dluga');
+  await page.setViewportSize({ width: 794, height: 1123 });
+  await page.emulateMedia({ media: 'print' });
+  await page.setContent(informacjaZTrzemaSeriami());
+  const pdf = await page.pdf({ format: 'A4' });
+  expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+  const problemy = (await sprawdzUklad(page, '.arkusz')).filter((p) => /seria|Numery|000001/.test(p.selektor) || p.selektor === 'document');
+  expect(problemy).toEqual([]);
+  await page.screenshot({ path: require('node:path').join(__dirname, 'zrzuty', 'informacja-dluga-a4.png'), fullPage: true });
+});
+
+for (const szerokosc of [1440, 390]) {
+  test(`K1: sprawa przeniesienia ${szerokosc} px — jedna kolumna, jeden pasek akcji, układ bez problemów`, async ({ page }) => {
+    await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/sprawy/1', czekaj: 'text=Co się zbywa', szerokosc });
+    const kolumna = page.locator('.kolumna-sprawy');
+    await expect(kolumna).toHaveCount(1);
+    const szerokosci = await kolumna.evaluate((k) => [...k.children].filter((e) => e.offsetWidth > 0).map((e) => Math.round(e.getBoundingClientRect().width)));
+    expect(new Set(szerokosci).size).toBe(1);
+    if (szerokosc === 1440) expect(szerokosci[0]).toBeLessThanOrEqual(768);
+    // Jeden pasek akcji sprawy (bezpośrednio w kolumnie); nawigacja kroków kreatora ma własny pasek.
+    const pasek = page.locator('.kolumna-sprawy > .pasek-akcji');
+    await expect(pasek).toHaveCount(1);
+    await expect(pasek.getByRole('button', { name: 'Wystaw żądanie wpisu' })).toBeVisible();
+    // D-091: w zbyciu podstawa to krok 2 kreatora — bez osobnego przycisku i bez luźnego linku.
+    await expect(page.locator('.btn-tekstowy', { hasText: 'podstawę wpisu' })).toHaveCount(0);
+    expect(await sprawdzUklad(page, '.kolumna-sprawy .karta')).toEqual([]);
+    const tekst = await page.locator('.kolumna-sprawy').innerText();
+    expect(tekst).not.toMatch(/[0-9a-f]{4,8}(-[0-9a-f]{4}){1,3}-[0-9a-f]{12}/i);
+  });
+}
+
+test('K5: kreator przeniesienia — zbywca bez zgody na e-mail ma znacznik „list”', async ({ page }) => {
+  await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/sprawy/1', czekaj: 'text=Co się zbywa', szerokosc: 1440 });
+  const zbywca = page.locator('select', { has: page.locator('option', { hasText: 'wybierz akcjonariusza' }) });
+  await zbywca.selectOption(await zbywca.locator('option', { hasText: 'Próbny' }).getAttribute('value'));
+  await expect(page.getByText('Brak zgody — konieczne powiadomienie listem').first()).toBeVisible();
+});
+
+test('P7: „Moje oświadczenia” — powiadomienia: odznacz i zaznacz ponownie; checkbox zgody dostępny', async ({ page }) => {
+  await otworz(page, { konto: 'anna.zgoda@example.com', aplikacja: 'portal', adres: '/portal.html#/konto', czekaj: 'text=Moje oświadczenia', szerokosc: 1440 });
+  const pow = page.getByRole('checkbox', { name: /automatycznych powiadomień/ });
+  await expect(pow).toBeChecked();
+  // Pole kontrolowane — stan zmienia się po zapisie w API (dlatego klik + oczekiwanie, nie uncheck()).
+  await pow.click();
+  await expect(pow).not.toBeChecked();
+  await pow.click();
+  await expect(pow).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: /Wyrażam zgodę na komunikację/ })).toBeEnabled();
+});
+
+test('P8: cofnięcie zgody na e-mail — ostrzeżenie; „Zostaw zgodę” i Esc bez żądania, „Cofam zgodę” jedno żądanie', async ({ page }) => {
+  await otworz(page, { konto: 'anna.zgoda@example.com', aplikacja: 'portal', adres: '/portal.html#/konto', czekaj: 'text=Moje oświadczenia', szerokosc: 390 });
+  const zadania = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && r.url().includes('/api/psa/portal/oswiadczenia')) zadania.push(r.postDataJSON()); });
+  const zgoda = page.getByRole('checkbox', { name: /Wyrażam zgodę na komunikację/ });
+  await expect(zgoda).toBeChecked();
+
+  await zgoda.click();
+  const okno = page.getByRole('dialog', { name: 'Cofnąć zgodę na e-mail?' });
+  await expect(okno).toBeVisible();
+  await expect(okno).toContainText('Bez zgody na e-mail postępowanie potrwa dłużej: powiadomienie o zamiarze wpisu i zawiadomienie o dokonanym wpisie wyślemy listem, a dostęp do portalu wygaśnie.');
+  await expect(okno.getByRole('button', { name: 'Zostaw zgodę' })).toBeFocused();
+  await okno.getByRole('button', { name: 'Zostaw zgodę' }).click();
+  await expect(okno).toHaveCount(0);
+  await zgoda.click();
+  await page.keyboard.press('Escape');
+  await expect(okno).toHaveCount(0);
+  expect(zadania).toHaveLength(0);
+  await expect(zgoda).toBeChecked();
+
+  await zgoda.click();
+  await okno.getByRole('button', { name: 'Cofam zgodę' }).click();
+  await expect(zgoda).not.toBeChecked();
+  expect(zadania).toHaveLength(1);
+  expect(zadania[0]).toMatchObject({ rodzaj: 'zgoda_email', zlozone: false });
+  await zgoda.click(); // P7: ponowne złożenie w tej samej sesji
+  await expect(zgoda).toBeChecked();
+});
+
+for (const szerokosc of [1440, 390]) {
+  test(`K2: kartoteka osoby ${szerokosc} px — jeden widok, sekcje w kolejności, bez kafelka „Sprawy”, układ bez problemów`, async ({ page }) => {
+    await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/osoby/2', czekaj: '.kartoteka-osoby', szerokosc });
+    const naglowki = await page.locator('.kartoteka-osoby .kartoteka-sekcja-tytul').allTextContents();
+    expect(naglowki).toEqual(['Identyfikacja', 'Adresy', 'Kontakt i oświadczenia', 'AML', 'Akcje w spółkach', 'Sprawy']);
+    await expect(page.locator('.karta-tytul', { hasText: /^Sprawy$/ })).toHaveCount(0);
+    await expect(page.getByText('Brak zgody — konieczne powiadomienie listem').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edytuj dane' })).toBeVisible();
+    expect(await sprawdzUklad(page, '.kartoteka-osoby')).toEqual([]);
+  });
+}
+
+test('K3/K5: kolejka listów przy 390 px — znacznik „list” i przyciski mieszczą się w karcie', async ({ page }) => {
+  await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/listy', czekaj: 'text=Usuń z wysyłki', szerokosc: 390 });
+  expect(await sprawdzUklad(page, '.karta')).toEqual([]);
+});
+
+async function wypelnijDate(lokator, rrrr, mm, dd) {
+  const seg = lokator.locator('.data-segment');
+  await seg.nth(0).fill(dd);
+  await seg.nth(1).fill(mm);
+  await seg.nth(2).fill(rrrr);
+}
+
+async function zbycieDoKroku3(page, szerokosc = 1440) {
+  await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/sprawy/1', czekaj: 'text=Co się zbywa', szerokosc });
+  const zbywca = page.locator('select', { has: page.locator('option', { hasText: 'wybierz akcjonariusza' }) });
+  await zbywca.selectOption(await zbywca.locator('option', { hasText: 'Próbny' }).getAttribute('value'));
+  await page.locator('input[type=number]').first().fill('10');
+  await expect(page.getByText(/Akcje serii A, numery .* \(dobrane automatycznie\)/)).toBeVisible();
+  // Nabywca podpowiedziany z sprawy (żądająca — nabywczyni).
+  await expect(page.getByText(/Nabywczyni Celina/).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Dalej' }).click();
+  await wypelnijDate(page.locator('.pole-daty').first(), '2026', '11', '01');
+  await page.getByRole('button', { name: 'Dalej' }).click();
+  await expect(page.locator('#panel-powiadomienia')).toBeVisible();
+}
+
+test('D-090/D-091: krok 3 — powiadomienie domyślne (zbywca podpowiedziany), zgoda jednym polem; „Dokonaj wpisu” dopiero po zgodzie i checkliście', async ({ page }) => {
+  await zbycieDoKroku3(page);
+  const panel = page.locator('#panel-powiadomienia');
+  await expect(panel.getByRole('button', { name: 'Wyślij powiadomienie' })).toHaveClass(/btn-glowny/);
+  await expect(panel.getByText(/Próbny/).first()).toBeVisible(); // zbywca podpowiedziany jako adresat
+  const wpis = page.getByRole('button', { name: 'Dokonaj wpisu' });
+  await expect(wpis).toBeDisabled();
+  await expect(panel.getByText('Data zgody')).toHaveCount(0);
+  await panel.getByRole('checkbox', { name: /zgodę na wpis/ }).click();
+  await panel.getByRole('button', { name: 'Odnotuj zgodę' }).click();
+  await expect(panel.getByText(/Odnotowano zgodę/)).toBeVisible();
+  await expect(wpis).toBeDisabled(); // checklista jeszcze nie odhaczona (D-052)
+  for (const chk of await page.locator('.checklista input[type=checkbox]').all()) await chk.check();
+  await expect(wpis).toBeEnabled();
+});
+
+test('D-091: nowy nabywca z minimum danych zapisuje się w kartotece', async ({ page }) => {
+  await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/spolki/1/zdarzenie?typ=przeniesienie', czekaj: 'text=Co się zbywa', szerokosc: 1440 });
+  await page.getByRole('button', { name: 'Nowy nabywca (spoza kartoteki)' }).click();
+  const forma = page.locator('.nowy-nabywca');
+  await forma.getByLabel('Imię').fill('Nadia');
+  await forma.getByLabel('Nazwisko').fill('Nowonabywająca');
+  await wypelnijDate(forma.locator('.pole-daty'), '1990', '05', '05');
+  await forma.getByLabel('Kod pocztowy').fill('80-100');
+  await forma.getByLabel('Miejscowość').fill('Gdańsk');
+  await forma.locator('input').nth(-2).fill('12');
+  await forma.getByRole('button', { name: 'Zapisz w kartotece' }).click();
+  await expect(forma).toHaveCount(0);
+  const odp = await page.request.get('/api/psa/osoby?q=Nowonabywająca');
+  const dane = await odp.json();
+  expect(dane.osoby.some((o) => o.nazwisko === 'Nowonabywająca' && o.data_urodzenia === '1990-05-05')).toBe(true);
+});
+
+test('D-091: nowe zbycie z kokpitu — trzy kroki, powiadomienie e-mailem, wpis dokonany', async ({ page }) => {
+  await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/spolki/1/zdarzenie?typ=przeniesienie', czekaj: 'text=Co się zbywa', szerokosc: 1440 });
+  const zbywca = page.locator('select', { has: page.locator('option', { hasText: 'wybierz akcjonariusza' }) });
+  await zbywca.selectOption(await zbywca.locator('option', { hasText: 'Testowa Anna' }).getAttribute('value'));
+  await page.locator('input[type=number]').first().fill('5');
+  await page.locator('input[role=combobox]').first().fill('Nabywczyni');
+  await page.getByRole('option', { name: /Nabywczyni Celina/ }).click();
+  await page.getByRole('button', { name: 'Dalej' }).click();
+  await wypelnijDate(page.locator('.pole-daty').first(), '2026', '11', '01');
+  await page.getByRole('button', { name: 'Dalej' }).click();
+  await page.waitForURL(/#\/sprawy\/\d+/);
+  const panel = page.locator('#panel-powiadomienia');
+  await panel.getByRole('button', { name: 'Wyślij powiadomienie' }).click();
+  await expect(panel.getByText(/Powiadomienie wysłano/)).toBeVisible();
+  for (const chk of await page.locator('.checklista input[type=checkbox]').all()) await chk.check();
+  await page.getByRole('button', { name: 'Dokonaj wpisu' }).click();
+  await expect(page.getByText('Zbycie akcji — wpis dokonany')).toBeVisible();
+});

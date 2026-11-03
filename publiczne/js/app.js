@@ -302,6 +302,10 @@ function Aplikacja() {
       // co nowa spolka, wystartowany od razu na kroku akcjonariatu.
       if (segmenty[2] === 'otworz') return <EkranOtwarciaRejestru spolkaId={id} />;
       if (segmenty[2] === 'zdarzenie') {
+        // R4 zad. 15 (D-091): zbycie akcji — nowy przebieg w trzech krokach.
+        if (zapytanie.get('typ') === 'przeniesienie' && !zapytanie.get('zpodstawy')) {
+          return <EkranNowegoZbycia spolkaId={id} osobaPoczatkowa={zapytanie.get('osoba') || undefined} emisjaPoczatkowa={zapytanie.get('emisja') || undefined} />;
+        }
         // Przejście EMISJA → OBJĘCIE: typ i seria przychodzą z ekranu wyniku
         // wpisu emisji, żeby nie zakładać sprawy „od zera" (sprawy.js).
         return (

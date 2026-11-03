@@ -851,25 +851,11 @@ function EkranWnioski() {
 }
 
 /**
- * „Dodaj spółkę" (B8) — nowy wniosek zakłada się jednym kliknięciem, bez
- * przechodzenia przez publiczny formularz zgłoszenia: to konto już jest
- * zweryfikowanym klientem kancelarii. Gdy wniosek o kolejną spółkę jest już
- * w toku, przycisk zamienia się w „Kontynuuj wniosek" — jedna czynność do
- * końca (0.4 pkt 5), bez ryzyka próby założenia drugiego naraz.
+ * R4 P6 (wycofuje „Dodaj spółkę” z B8): kolejnej spółki nie zakłada się z konta spółki — każdą zgłasza się
+ * osobno standardowym trybem (zgłoszenie → zaproszenie → wniosek). Wniosek w toku założony wcześniej
+ * konto dokańcza normalnie („Kontynuuj wniosek”).
  */
 function PrzyciskDodajSpolke({ wniosekWToku }) {
-  const [zakladanie, ustawZakladanie] = useState(null);
-
-  async function dodaj() {
-    ustawZakladanie(null);
-    try {
-      await API.post('/api/psa/portal/wniosek/nowy', {});
-      idz('/wniosek');
-    } catch (e) {
-      ustawZakladanie(e instanceof BladApi ? e.message : 'Nie udało się założyć nowego wniosku.');
-    }
-  }
-
   if (wniosekWToku) {
     return (
       <Karta tytul="Wniosek o kolejną spółkę">
@@ -883,19 +869,7 @@ function PrzyciskDodajSpolke({ wniosekWToku }) {
       </Karta>
     );
   }
-
-  return (
-    <Karta>
-      <div className="rzad-rozdzielony">
-        <div>
-          <div style={{ fontWeight: 600 }}>Prowadzisz u nas kolejną prostą spółkę akcyjną?</div>
-          <div className="podpowiedz">Dodajesz ją bez ponownego wypełniania zgłoszenia — od razu wniosek z pobraniem danych z KRS.</div>
-        </div>
-        <button className="btn btn-glowny" onClick={dodaj}>+ Dodaj spółkę</button>
-      </div>
-      <Komunikat odmiana="blad" tresc={zakladanie} />
-    </Karta>
-  );
+  return <div className="podpowiedz">Kolejną spółkę zgłasza się osobno — przez zgłoszenie na stronie rejestru.</div>;
 }
 
 const STAN_WNIOSKU_ETYKIETA = {
@@ -910,43 +884,20 @@ const STAN_WNIOSKU_ETYKIETA = {
    START — „Co dalej" (Faza 4 pkt 1)
    ───────────────────────────────────────────────────── */
 
-/** Pozycje „Do zrobienia" złożone z trzech źródeł, ta sama zasada co K1 (kancelaria): jedno miejsce, jeden przycisk na pozycję. */
-function pozycjeDoZrobieniaPortal({ wniosek, sprawy, oplaty }) {
-  const pozycje = [];
-
-  if (wniosek && ['w_przygotowaniu', 'do_uzupelnienia', 'umowa_wygenerowana'].includes(wniosek.status)) {
-    pozycje.push({
-      klucz: `wniosek-${wniosek.id || 0}`,
-      priorytet: wniosek.status === 'umowa_wygenerowana' ? 0 : 1,
-      tytul: wniosek.status === 'umowa_wygenerowana' ? 'Podpisz dokumenty do wniosku' : 'Dokończ wniosek o prowadzenie rejestru',
-      podtytul: wniosek.nazwa || STAN_WNIOSKU_ETYKIETA[wniosek.status] || wniosek.status,
-      przyKlik: () => idz('/wniosek'),
-    });
+/**
+ * R4 P2: rozpoczęcie płatności z karty „Do zapłaty”. Nowa karta otwiera się w obsłudze kliknięcia —
+ * po `await` przeglądarka zablokowałaby ją jak wyskakujące okienko.
+ */
+async function zaplacOplatePortal(idOplaty) {
+  const okno = window.open('', '_blank');
+  try {
+    const wynik = await API.post(`/api/psa/portal/oplaty/${idOplaty}/zaplac`, {});
+    if (okno && !okno.closed) okno.location = wynik.link;
+    return null;
+  } catch (e) {
+    if (okno && !okno.closed) okno.close();
+    return e instanceof BladApi ? e.message : 'Nie udało się rozpocząć płatności.';
   }
-
-  for (const s of sprawy || []) {
-    if (!s.termin || (!s.termin.pilny && !s.termin.po_terminie)) continue;
-    pozycje.push({
-      klucz: `sprawa-${s.id}`,
-      priorytet: s.termin.po_terminie ? 0 : 1,
-      tytul: `${s.typ_nazwa} — ${s.spolka_nazwa}`,
-      podtytul: s.termin.po_terminie ? 'termin minął' : `termin za ${s.termin.dni_pozostale} dni`,
-      przyKlik: () => idz(`/spolka/${s.spolka_id}?zakladka=zgloszenia`),
-    });
-  }
-
-  const doZaplaty = (oplaty || []).filter((o) => o.status !== 'oplacona');
-  for (const o of doZaplaty) {
-    pozycje.push({
-      klucz: `oplata-${o.id}`,
-      priorytet: 2,
-      tytul: `${o.opis} — ${fmt.zlote(o.kwota_grosze)}`,
-      podtytul: o.spolka_nazwa,
-      przyKlik: () => idz(`/spolka/${o.spolka_id}?zakladka=oplaty`),
-    });
-  }
-
-  return pozycje.sort((a, b) => a.priorytet - b.priorytet);
 }
 
 /**
@@ -991,7 +942,7 @@ function PrzeniesieniePortal() {
         <input type="file" ref={plik} />
         <button className="btn btn-maly" onClick={wyslij}>Wgraj dokument</button>
       </div>
-      {p.dokumenty.length > 0 && <ul>{p.dokumenty.map((d) => <li key={d.id}>{d.nazwa_pliku} <span className="przyciemnione">({d.typ})</span></li>)}</ul>}
+      {p.dokumenty.length > 0 && <ul>{p.dokumenty.map((d) => <li key={d.id}>{nazwaPlikuDoWyswietlenia({ nazwaOryginalna: d.nazwa_pliku, rodzaj: d.typ, data: d.utworzono })} <span className="przyciemnione">({d.typ})</span></li>)}</ul>}
       {p.pisma.length > 0 && (
         <>
           <p><strong>Dokumenty do pobrania</strong></p>
@@ -1004,40 +955,57 @@ function PrzeniesieniePortal() {
 
 function EkranStart() {
   const { dane: moje, ladowanie: ladowanieMoje } = useDane('/api/psa/portal/moje');
-  const { dane: zadania, ladowanie: ladowanieZadania } = useDane(
-    moje && moje.rola !== 'wnioskodawca' ? '/api/psa/portal/zadania' : null
-  );
   const { dane: rozliczenia, ladowanie: ladowanieOplat } = useDane(
     moje && moje.rola !== 'wnioskodawca' ? '/api/psa/portal/oplaty' : null
   );
+  const [wysylanie, ustawWysylanie] = useState(null);
+  const [bladPlatnosci, ustawBladPlatnosci] = useState(null);
 
-  if (ladowanieMoje || (moje && moje.rola !== 'wnioskodawca' && (ladowanieZadania || ladowanieOplat))) {
-    return <Spinner />;
-  }
+  if (ladowanieMoje || (moje && moje.rola !== 'wnioskodawca' && ladowanieOplat)) return <Spinner />;
   if (!moje) return null;
 
-  const pozycje = pozycjeDoZrobieniaPortal({
-    wniosek: moje.wniosek,
-    sprawy: zadania ? zadania.sprawy : [],
-    oplaty: rozliczenia ? rozliczenia.oplaty : [],
-  });
+  // R4 P2: na Start tylko to, co klient ma zrobić — bieżący krok wniosku i opłaty do zapłaty.
+  const baner = banerKrokuWniosku({ wniosek: moje.wniosek });
+  const doZaplaty = pozycjeDoZaplatyPortal({ oplaty: rozliczenia ? rozliczenia.oplaty : [] });
+
+  async function zaplac(idOplaty) {
+    ustawWysylanie(idOplaty);
+    ustawBladPlatnosci(await zaplacOplatePortal(idOplaty));
+    ustawWysylanie(null);
+  }
 
   return (
     <div className="pion" style={{ gap: 16 }}>
+      {baner && (
+        <div className="karta baner-kroku">
+          <span>{baner.tekst}</span>
+          <button className="btn btn-glowny" onClick={() => idz(baner.akcja.adres)}>{baner.akcja.etykieta}</button>
+        </div>
+      )}
       <PrzeniesieniePortal />
-      <Karta tytul="Do zrobienia">
-        {pozycje.length === 0 ? (
-          <Pusto ikona="sprawdz" tytul="Wszystko załatwione" opis="Nic teraz nie wymaga Twojej uwagi." />
-        ) : (
-          <div className="lista-wierszy">
-            {pozycje.map((p) => (
-              <WierszListy key={p.klucz} tytul={p.tytul} podtytul={p.podtytul} przyKlik={p.przyKlik} />
+      {doZaplaty.length > 0 && (
+        <Karta tytul="Do zapłaty">
+          <Komunikat odmiana="blad" tresc={bladPlatnosci} />
+          <div className="lista-zaplaty">
+            {doZaplaty.map((p) => (
+              <div key={p.idOplaty} className="wiersz-zaplaty">
+                <span className="wiersz-zaplaty-opis">{p.opis}</span>
+                <span className="wiersz-zaplaty-kwota"><KwotaNettoBrutto netto={p.kwotaNetto} brutto={p.kwotaBrutto} /></span>
+                <button className="btn btn-glowny btn-sm" onClick={() => zaplac(p.idOplaty)} disabled={wysylanie === p.idOplaty}>
+                  {wysylanie === p.idOplaty ? 'Otwieranie…' : 'Zapłać'}
+                </button>
+              </div>
             ))}
           </div>
-        )}
-      </Karta>
-      {moje.rola === 'wnioskodawca' && !pozycje.some((p) => p.klucz.startsWith('wniosek-')) && (
-        <Komunikat odmiana="info" tresc="Sprawa jest w toku po stronie kancelarii — napiszemy, gdy będzie coś do zrobienia." />
+        </Karta>
+      )}
+      {!baner && doZaplaty.length === 0 && (
+        <Komunikat
+          odmiana="info"
+          tresc={moje.rola === 'wnioskodawca'
+            ? 'Sprawa jest w toku po stronie kancelarii — napiszemy, gdy będzie coś do zrobienia.'
+            : 'Nic teraz nie wymaga Twojej uwagi.'}
+        />
       )}
     </div>
   );
@@ -1222,26 +1190,23 @@ function EkranRejestrPortal({ spolkaId }) {
       {ladowanie && <Spinner />}
       {s && (
         <>
-          <Karta tight tytul="Dane spółki">
-            <dl className="pary">
-              <dt>Firma</dt><dd>{s.nazwa}</dd>
-              <dt>KRS</dt><dd>{s.krs || '—'}</dd>
-              <dt>Siedziba i adres</dt><dd>{adres || '—'}</dd>
-              <dt>Sąd rejestrowy</dt><dd>{[s.sad_rejestrowy, s.wydzial].filter(Boolean).join(', ') || '—'}</dd>
-              <dt>Data rejestracji spółki</dt><dd>{s.data_utworzenia_spolki ? fmt.data(s.data_utworzenia_spolki) : '—'}</dd>
-              <dt>Rejestr akcjonariuszy prowadzony od</dt><dd>{s.data_otwarcia_rejestru ? fmt.data(s.data_otwarcia_rejestru) : '—'}</dd>
-            </dl>
+          <Karta tytul="Dane spółki">
+            <ListaDanych pary={[
+              ['Firma', s.nazwa],
+              ['KRS', s.krs],
+              ['Siedziba i adres', adres],
+              ['Sąd rejestrowy', [s.sad_rejestrowy, s.wydzial].filter(Boolean).join(', ')],
+              ['Data rejestracji spółki', s.data_utworzenia_spolki ? fmt.data(s.data_utworzenia_spolki) : null],
+              ['Rejestr akcjonariuszy prowadzony od', s.data_otwarcia_rejestru ? fmt.data(s.data_otwarcia_rejestru) : null],
+            ]} />
           </Karta>
-          <Karta tight>
-            <Komunikat
-              odmiana="info"
-              tresc="Stan akcjonariatu (akcjonariusze, akcje, obciążenia) jest dostępny w informacji z rejestru akcjonariuszy (art. 300³⁵ § 3 KSH)."
-            />
-            <button className="btn btn-glowny" onClick={() => idz(`/informacja/${spolkaId}`)}>Zamów informację z rejestru</button>
-            <div style={{ marginTop: 'var(--od-4)' }}>
-              <a href={`#/zgloszenie-bledu/${spolkaId}`} onClick={(z) => { z.preventDefault(); idz(`/zgloszenie-bledu/${spolkaId}`); }}>
-                Zgłoś błąd we wpisie
-              </a>
+          <Karta>
+            <p style={{ margin: '0 0 var(--od-16)' }}>
+              Stan akcjonariatu (akcjonariusze, akcje, obciążenia) jest dostępny w pełnej informacji z rejestru akcjonariuszy.
+            </p>
+            <div className="przyciski-karty">
+              <button className="btn btn-glowny" onClick={() => idz(`/informacja/${spolkaId}`)}>Zamów informację z rejestru</button>
+              <button className="btn" onClick={() => idz(`/zgloszenie-bledu/${spolkaId}`)}>Zgłoś błąd we wpisie</button>
             </div>
           </Karta>
         </>
@@ -1704,6 +1669,7 @@ function EkranInformacjaPortal({ spolkaId }) {
   }
 
   const stawka = cennik && cennik.stawki ? cennik.stawki.informacja : null;
+  const stawkaNetto = cennik && cennik.stawki_netto ? cennik.stawki_netto.informacja : null;
 
   return (
     <div className="pion" style={{ gap: 16 }}>
@@ -1719,6 +1685,12 @@ function EkranInformacjaPortal({ spolkaId }) {
           <PoleDaty wartosc={data} przyZmianie={(v) => v && ustawData(v)} />
         </Pole>
 
+        {stawka != null && (
+          <div className="row-g" style={{ alignItems: 'center', marginBottom: 12 }}>
+            <span className="przyciemnione">Opłata:</span>
+            <KwotaNettoBrutto netto={stawkaNetto} brutto={stawka} />
+          </div>
+        )}
         <button className="btn btn-glowny" onClick={zamow} disabled={pracuje}>
           {pracuje ? 'Przygotowywanie…' : stawka != null ? `Zapłać ${fmt.zlote(stawka)}` : 'Zamów informację'}
         </button>
@@ -1850,7 +1822,7 @@ function EkranPlatnosciPortal({ spolkaId } = {}) {
             {` · naliczono ${fmt.data(o.data_naliczenia)}`}
           </div>
         </div>
-        <div className="pozycja-platnosci-kwota">{fmt.zlote(o.kwota_grosze)}</div>
+        <div className="pozycja-platnosci-kwota"><KwotaNettoBrutto netto={o.kwota_netto_grosze} brutto={o.kwota_grosze} /></div>
         <Pigulka odmiana={status.odmiana}>{status.tekst}</Pigulka>
         <div className="pozycja-platnosci-akcja">
           {o.status !== 'oplacona' && dane.platnosci_wlaczone && (
@@ -1893,7 +1865,10 @@ function EkranPlatnosciPortal({ spolkaId } = {}) {
           <div className="lista-platnosci">
             <div className="suma-platnosci">
               <span>Razem</span>
-              <strong>{fmt.zlote(spolkaId ? doZaplaty.reduce((s, o) => s + o.kwota_grosze, 0) : dane.do_zaplaty_grosze)}</strong>
+              <KwotaNettoBrutto
+                netto={spolkaId ? doZaplaty.reduce((s, o) => s + (o.kwota_netto_grosze || 0), 0) : dane.do_zaplaty_netto_grosze}
+                brutto={spolkaId ? doZaplaty.reduce((s, o) => s + o.kwota_grosze, 0) : dane.do_zaplaty_grosze}
+              />
             </div>
             {doZaplaty.map(wiersz)}
           </div>
@@ -1961,84 +1936,88 @@ function FormularzZmianyHaslaPortal() {
   );
 }
 
-const NAZWY_ZGODY = {
-  brak: 'nie wyrażono',
-  zadeklarowana: 'zadeklarowana we wniosku (bez Twojego oświadczenia)',
-  potwierdzona: 'wyrażona — wpisana do rejestru',
-};
-
 /**
- * W4.1/W4.2 — dwa odrębne oświadczenia składane osobiście: zgoda na komunikację
- * e-mail (dana rejestru — przez żądanie wpisu) i żądanie automatycznych
- * powiadomień (oświadczenie w portalu). Każde z datą, każde można cofnąć.
+ * W4.1/W4.2, D-092, R4 P7 — dwa odrębne oświadczenia składane osobiście: zgoda na komunikację e-mail
+ * i żądanie automatycznych powiadomień. To dane kartoteki (nie wpis w rejestrze) — działają od razu
+ * i można je cofnąć oraz złożyć ponownie, dopóki konto jest aktywne.
  */
 function OswiadczeniaAkcjonariusza() {
   const { dane, odswiez } = useDane('/api/psa/portal/oswiadczenia');
-  const [email, ustawEmail] = useState('');
   const [blad, ustawBlad] = useState(null);
-  const [komunikat, ustawKomunikat] = useState(null);
+  const [wysylanie, ustawWysylanie] = useState(false);
+  const [pytanieOCofniecie, ustawPytanieOCofniecie] = useState(false);
 
-  async function zloz(spolkaId, rodzaj, zlozone) {
+  async function zloz(rodzaj, zlozone) {
     ustawBlad(null);
-    ustawKomunikat(null);
+    ustawWysylanie(true);
     try {
-      const odp = await API.post('/api/psa/portal/oswiadczenia', { spolka_id: spolkaId, rodzaj, zlozone, email });
-      ustawKomunikat(odp.sprawa_id
-        ? 'Oświadczenie złożone. Zgoda na e-mail jest daną rejestru — utworzyliśmy żądanie wpisu, które sprawdzi kancelaria.'
-        : 'Oświadczenie zapisane.');
+      await API.post('/api/psa/portal/oswiadczenia', { spolka_id: (dane.spolki[0] || {}).spolka_id || null, rodzaj, zlozone });
       odswiez();
     } catch (e) {
       ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się złożyć oświadczenia.');
+    } finally {
+      ustawWysylanie(false);
     }
   }
 
   if (!dane) return null;
-  const zgoda = dane.zgoda_email;
+  const stan = dane.stan;
+  const adres = stan.email || '';
   return (
     <Karta tytul="Moje oświadczenia">
       <Komunikat odmiana="blad" tresc={blad} />
-      <Komunikat odmiana="ok" tresc={komunikat} />
       <div className="podpowiedz">
-        Oświadczenia składasz osobiście — zarząd spółki nie może złożyć ich w Twoim imieniu. Bez zgody na e-mail
-        korespondencja z rejestru przychodzi listem na adres z rejestru, żądania wpisu składa się pocztą albo
-        w kancelarii, a dostęp do portalu wygasa po wpisaniu cofnięcia zgody.
+        Oświadczenia składasz osobiście — zarząd spółki nie może złożyć ich w Twoim imieniu.
       </div>
-      <p>
-        <strong>Zgoda na komunikację e-mail</strong> (art. 300³³ § 1 pkt 5 KSH): {NAZWY_ZGODY[zgoda.status] || zgoda.status}
-        {zgoda.status === 'potwierdzona' && zgoda.email ? ` (${zgoda.email})` : ''}.
-      </p>
-      <Pole etykieta="Adres e-mail do korespondencji z rejestru">
-        <input type="email" value={email} onChange={(z) => ustawEmail(z.target.value)} placeholder="np. jan@example.com" />
+      <Pole
+        etykieta="Adres e-mail do korespondencji z rejestru"
+        podpowiedz="Adres z rejestru. Zmiana adresu to zmiana danych — złóż żądanie w zakładce „Zgłoszenia” albo w kancelarii."
+      >
+        <input type="email" value={adres} readOnly />
       </Pole>
-      {dane.spolki.map((s) => {
-        const pow = s.powiadomienia_automatyczne;
-        const powAktywne = Boolean(pow && pow.zlozone);
-        return (
-          <div key={s.spolka_id} className="karta" style={{ marginTop: 'var(--od-4)' }}>
-            <strong>{s.nazwa}</strong>
-            <div className="row-g" style={{ flexWrap: 'wrap', marginTop: 'var(--od-2)' }}>
-              <button className="btn btn-maly" disabled={!email.trim()} onClick={() => zloz(s.spolka_id, 'zgoda_email', true)}>
-                Wyrażam zgodę na e-mail
-              </button>
-              <button className="btn btn-maly" disabled={zgoda.status !== 'potwierdzona'} onClick={() => zloz(s.spolka_id, 'zgoda_email', false)}>
-                Cofam zgodę na e-mail
-              </button>
-            </div>
-            {s.zgoda_email_ostatnie && (
-              <div className="przyciemnione">
-                Ostatnie oświadczenie: {s.zgoda_email_ostatnie.zlozone ? 'zgoda' : 'cofnięcie'} z {fmt.dataCzas(s.zgoda_email_ostatnie.utworzono)}
-                {s.zgoda_email_ostatnie.sprawa_id ? ' — żądanie wpisu w kancelarii' : ''}.
-              </div>
-            )}
-            <p style={{ marginTop: 'var(--od-4)' }}>
-              <strong>Automatyczne powiadomienia</strong> (art. 300³⁴ § 9 KSH): {powAktywne ? `żądanie złożone ${fmt.dataCzas(pow.utworzono)}` : 'nie złożono'}.
-            </p>
-            <button className="btn btn-maly" onClick={() => zloz(s.spolka_id, 'powiadomienia_automatyczne', !powAktywne)}>
-              {powAktywne ? 'Cofam żądanie powiadomień' : 'Żądam automatycznych powiadomień'}
-            </button>
-          </div>
-        );
-      })}
+      <label className="chk">
+        <input
+          type="checkbox"
+          checked={stan.zgodaEmail}
+          disabled={wysylanie || (!stan.zgodaEmail && !adres.trim())}
+          // R4 P8: cofnięcie dopiero po potwierdzeniu w oknie ostrzeżenia.
+          onChange={(z) => (z.target.checked ? zloz('zgoda_email', true) : ustawPytanieOCofniecie(true))}
+        />
+        <span className="chk-tresc">
+          Wyrażam zgodę na komunikację ze spółką i podmiotem prowadzącym rejestr przy wykorzystaniu poczty elektronicznej
+          <div className="podstawa-prawna">art. 300³³ § 1 pkt 5 KSH</div>
+        </span>
+      </label>
+      <label className="chk">
+        <input
+          type="checkbox"
+          checked={stan.powiadomieniaAutomatyczne}
+          disabled={wysylanie}
+          onChange={(z) => zloz('powiadomienia_automatyczne', z.target.checked)}
+        />
+        <span className="chk-tresc">
+          Żądam automatycznych powiadomień o wpisach dotyczących moich akcji
+          <div className="podstawa-prawna">art. 300³⁴ § 9 KSH</div>
+        </span>
+      </label>
+      {stan.zmieniono && <div className="przyciemnione">Ostatnia zmiana: {fmt.dataCzas(stan.zmieniono)}.</div>}
+      {pytanieOCofniecie && (
+        <Modal
+          tytul="Cofnąć zgodę na e-mail?"
+          przyZamknieciu={() => ustawPytanieOCofniecie(false)}
+          stopka={(
+            <>
+              <button className="btn" onClick={() => { ustawPytanieOCofniecie(false); zloz('zgoda_email', false); }}>Cofam zgodę</button>
+              <button className="btn btn-glowny" data-autofocus onClick={() => ustawPytanieOCofniecie(false)}>Zostaw zgodę</button>
+            </>
+          )}
+        >
+          <p>
+            Bez zgody na e-mail postępowanie potrwa dłużej: powiadomienie o zamiarze wpisu i zawiadomienie o dokonanym
+            wpisie wyślemy listem, a dostęp do portalu wygaśnie.
+          </p>
+        </Modal>
+      )}
     </Karta>
   );
 }

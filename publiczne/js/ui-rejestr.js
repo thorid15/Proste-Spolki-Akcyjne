@@ -135,6 +135,85 @@ function Spinner({ wierszy = 4 }) {
 }
 
 /** `scisla` (dawniej `tight`) — karta bez wewnętrznego marginesu, pod tabelę. */
+/**
+ * Lista „etykieta — wartość” (R4 P1, K2): siatka minmax(7rem, 40%) 1fr, etykiety zawijane;
+ * poniżej 420 px etykieta nad wartością. `pary`: [[etykieta, wartość], ...]; null/undefined pomijane.
+ */
+function ListaDanych({ pary }) {
+  return (
+    <dl className="lista-danych">
+      {(pary || []).filter(Boolean).map(([etykieta, wartosc], i) => (
+        <React.Fragment key={i}>
+          <dt>{etykieta}</dt>
+          <dd>{wartosc == null || wartosc === '' ? '—' : wartosc}</dd>
+        </React.Fragment>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * Kwota opłaty: netto mniejsze, brutto wytłuszczone (R4 drobne poprawki) — jeden wzór
+ * w kancelarii i w portalu. Bez netto (np. stara odpowiedź API) — samo brutto.
+ */
+function KwotaNettoBrutto({ netto, brutto }) {
+  return (
+    <span className="kwota-nb">
+      {netto != null && <span className="kwota-nb-netto">{fmt.zlote(netto)} netto</span>}
+      <strong className="kwota-nb-brutto">{fmt.zlote(brutto)} brutto</strong>
+    </span>
+  );
+}
+
+/**
+ * R4 K5 (D-092): znacznik przy osobie bez zgody na e-mail albo bez adresu — korespondencja idzie listem.
+ * Przy zgodzie nic się nie pokazuje (bez pozytywnego znacznika). `zawsze` — np. w kolejce listów.
+ */
+function ZnacznikKontaktu({ osoba, zawsze = false }) {
+  if (!zawsze && (!osoba || !wymagaListu(osoba))) return null;
+  return (
+    <span className="znacznik-kontaktu" title={PODPOWIEDZ_ZNACZNIKA}>
+      <Pigulka odmiana="sygnal">{TEKST_ZNACZNIKA}</Pigulka>
+      <span className="sr-only">{PODPOWIEDZ_ZNACZNIKA}</span>
+    </span>
+  );
+}
+
+/** Znacznik dla osoby wskazanej tylko identyfikatorem (wybór z kartoteki, żądający w sprawie). */
+function ZnacznikKontaktuOsoby({ osobaId }) {
+  const { dane } = useDane(osobaId ? `/api/psa/osoby/${osobaId}` : null, [osobaId]);
+  return osobaId && dane ? <ZnacznikKontaktu osoba={dane.osoba} /> : null;
+}
+
+/** R4 K1: jedna kolumna sprawy — wszystkie karty i kroki tej samej szerokości (48rem; na telefonie pełna). */
+function KolumnaSprawy({ children }) {
+  return <div className="kolumna-sprawy">{children}</div>;
+}
+
+/**
+ * R4 K1: jeden pasek akcji — wyrównany do prawej, drugorzędne po lewej, jeden główny skrajny prawy;
+ * na telefonie w pionie, główny na górze. `akcje`: [{ etykieta, przyKlik, glowna?, niebezpieczna?, wylaczona? }].
+ */
+function PasekAkcji({ akcje }) {
+  const widoczne = (akcje || []).filter(Boolean);
+  if (!widoczne.length) return null;
+  const kolejnosc = [...widoczne.filter((a) => !a.glowna), ...widoczne.filter((a) => a.glowna).slice(0, 1)];
+  return (
+    <div className="pasek-akcji bez-druku">
+      {kolejnosc.map((a) => (
+        <button
+          key={a.etykieta}
+          className={`btn btn-sm${a.glowna ? ' btn-glowny' : ''}${a.niebezpieczna ? ' btn-danger' : ''}`}
+          onClick={a.przyKlik}
+          disabled={a.wylaczona}
+        >
+          {a.etykieta}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Karta({ tytul, akcje, scisla, tight, dzieci, children }) {
   const tresc = children ?? dzieci;
   if (scisla || tight) {
@@ -289,7 +368,9 @@ function Modal({ tytul, children, stopka, przyZamknieciu, szerokosc, panel = fal
   // Fokus wchodzi do okna, a po zamknięciu wraca tam, skąd przyszedł.
   useEffect(() => {
     const poprzedni = document.activeElement;
-    const pierwsze = ref.current && ref.current.querySelector('input:not([type=hidden]):not([disabled]), select, textarea, button');
+    // R4 P8: element oznaczony `data-autofocus` (np. bezpieczny przycisk domyślny) ma pierwszeństwo.
+    const pierwsze = ref.current && (ref.current.querySelector('[data-autofocus]')
+      || ref.current.querySelector('input:not([type=hidden]):not([disabled]), select, textarea, button'));
     if (pierwsze) pierwsze.focus({ preventScroll: true });
     return () => { if (poprzedni && poprzedni.focus) poprzedni.focus({ preventScroll: true }); };
   }, []);
@@ -876,7 +957,13 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
   return (
     <>
       <div className="pole-daty">
-        <div className={`data-segmenty ${blad || niepoprawne ? 'bledne' : ''} ${wylaczone ? 'wylaczone' : ''}`} onPaste={wklej} role="group">
+        <div
+          className={`data-segmenty ${blad || niepoprawne ? 'bledne' : ''} ${wylaczone ? 'wylaczone' : ''}`}
+          onPaste={wklej}
+          role="group"
+          // R4 STOP 1 (WCAG 2.5.5): cała ramka pola jest celem dotyku — klik obok cyfr ustawia kursor w dniu.
+          onClick={(z) => { if (z.target === z.currentTarget && refDzien.current && !wylaczone) refDzien.current.focus(); }}
+        >
           <input
             ref={refDzien} className="data-segment" data-szer="2" inputMode="numeric" id={id}
             aria-describedby={opis} aria-invalid={niepoprawne}
@@ -1790,6 +1877,11 @@ window.ZwijanaSekcja = ZwijanaSekcja;
 window.Przelacznik = Przelacznik;
 window.Spinner = Spinner;
 window.Karta = Karta;
+window.ListaDanych = ListaDanych;
+window.KolumnaSprawy = KolumnaSprawy;
+window.ZnacznikKontaktu = ZnacznikKontaktu;
+window.ZnacznikKontaktuOsoby = ZnacznikKontaktuOsoby;
+window.PasekAkcji = PasekAkcji;
 window.Pigulka = Pigulka;
 window.Komunikat = Komunikat;
 window.Pusto = Pusto;

@@ -86,7 +86,7 @@ const NAZWY_POKRYCIA_KOKPIT = {
   nie: 'niepokryte',
   czesciowo: 'częściowo',
 };
-const NAZWA_POKRYCIA_NIEUSTALONE = 'nieustalone';
+const NAZWA_POKRYCIA_NIEUSTALONE = 'brak informacji o pełnym pokryciu'; // D-089
 
 function opiszPokrycieKokpit(pokryta) {
   return NAZWY_POKRYCIA_KOKPIT[pokryta] || NAZWA_POKRYCIA_NIEUSTALONE;
@@ -170,6 +170,7 @@ function TabelaAkcjonariatu({ akcjonariusze, razem, emisje, lacznie = [], spolka
             >
               <td>
                 <div style={{ fontWeight: 500 }}>{a.osoba ? a.osoba.oznaczenie : `osoba #${a.osoba_id}`}</div>
+                {pierwszaDlaPozycji && <ZnacznikKontaktu osoba={a.osoba} />}
                 <div className="wiersz-podtytul">
                   {a.osoba && a.osoba.jawny_identyfikator ? a.osoba.jawny_identyfikator : ''}
                 </div>
