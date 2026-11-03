@@ -161,3 +161,13 @@ test('K3/K5: kolejka listów przy 390 px — znacznik „list” i przyciski mie
   await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/listy', czekaj: 'text=Usuń z wysyłki', szerokosc: 390 });
   expect(await sprawdzUklad(page, '.karta')).toEqual([]);
 });
+
+test('D-090: panel powiadomienia — powiadomienie domyślne (przycisk główny), zgoda jako jedno opcjonalne pole', async ({ page }) => {
+  await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/sprawy/1', czekaj: 'text=Uprzednie powiadomienie', szerokosc: 1440 });
+  const panel = page.locator('#panel-powiadomienia');
+  await expect(panel.getByRole('button', { name: 'Wyślij powiadomienie' })).toHaveClass(/btn-glowny/);
+  await expect(panel.getByText('Data zgody')).toHaveCount(0);
+  await panel.getByRole('checkbox', { name: /zgodę na wpis/ }).click();
+  await expect(panel.getByText('Data zgody')).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Odnotuj zgodę' })).toBeVisible();
+});

@@ -431,8 +431,13 @@ function PasekAkcjiSprawy({ sprawa, odswiez, zakonczona, przyPodstawie, przyZada
 /* ─────────────────────────────────────────────────────
    POWIADOMIENIE / ZGODA (art. 300(34) § 3 KSH)
    ───────────────────────────────────────────────────── */
-function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
-  const [osobaId, ustawOsobeId] = useState(null);
+/**
+ * D-090: ścieżką domyślną jest powiadomienie (e-mail przy zgodzie na e-mail, inaczej list — znacznik przy
+ * adresacie); zgoda na wpis — jedno opcjonalne pole (D-088). `domyslnyOdbiorca` — np. zbywca z kreatora.
+ */
+function PanelPowiadomienia({ sprawa, spolka, odswiez, domyslnyOdbiorca = null }) {
+  const [osobaId, ustawOsobeId] = useState(domyslnyOdbiorca);
+  useEffect(() => { if (domyslnyOdbiorca) ustawOsobeId(domyslnyOdbiorca); }, [domyslnyOdbiorca]);
   const [wysylanie, ustawWysylanie] = useState(false);
   const [zgodaOk, ustawZgodaOk] = useState(false);
   const [dataZgody, ustawDateZgody] = useState(dzisIso());
@@ -485,36 +490,36 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez }) {
       )}
       <Komunikat odmiana="blad" tresc={blad} />
 
-      <div className="siatka-2">
-        <div>
-          <Pole etykieta="Wyślij powiadomienie">
-            <WyborZKartoteki wartosc={osobaId} przyZmianie={ustawOsobeId} />
-          </Pole>
-          <button className="btn btn-sm" disabled={!osobaId || wysylanie} onClick={wyslij}>
-            {wysylanie ? 'Wysyłanie…' : 'Wyślij powiadomienie'}
-          </button>
-        </div>
-        <div>
-          <Pole etykieta="Albo odnotuj zgodę (art. 300(34) § 3 zd. 2 KSH)">
-            <label className="chk">
-              <input type="checkbox" checked={zgodaOk} onChange={(z) => ustawZgodaOk(z.target.checked)} />
-              <span className="chk-tresc">
-                Zgoda jest w dopuszczalnej formie
-                <div className="podstawa-prawna">
-                  Podpis zaufany, kwalifikowany, osobisty, notarialnie poświadczony albo złożony w kancelarii. Skan
-                  i zwykły oryginał — nie (wtedy wyślij powiadomienie).
-                </div>
-              </span>
-            </label>
-          </Pole>
+      <Pole etykieta="Kogo powiadomić (osoba, której prawa zmienia wpis)">
+        <WyborZKartoteki wartosc={osobaId} przyZmianie={ustawOsobeId} />
+        <ZnacznikKontaktuOsoby osobaId={osobaId} />
+      </Pole>
+      <div className="przyciski-karty">
+        <button className="btn btn-glowny" disabled={!osobaId || wysylanie} onClick={wyslij}>
+          {wysylanie ? 'Wysyłanie…' : 'Wyślij powiadomienie'}
+        </button>
+      </div>
+
+      <label className="chk" style={{ marginTop: 'var(--od-16)' }}>
+        <input type="checkbox" checked={zgodaOk} onChange={(z) => ustawZgodaOk(z.target.checked)} />
+        <span className="chk-tresc">
+          Osoba wyraziła zgodę na wpis w dopuszczalnej formie — wpis bez powiadomienia
+          <div className="podstawa-prawna">
+            art. 300(34) § 3 zd. 2 KSH: podpis zaufany, kwalifikowany, osobisty, notarialnie poświadczony albo złożony
+            w kancelarii. Skan i zwykły oryginał — nie.
+          </div>
+        </span>
+      </label>
+      {zgodaOk && (
+        <div className="siatka-2">
           <Pole etykieta="Data zgody">
             <PoleDaty wartosc={dataZgody} przyZmianie={(v) => ustawDateZgody(v || '')} />
           </Pole>
-          <button className="btn btn-sm" disabled={!zgodaOk || wysylanie} onClick={odnotujZgode}>
-            Odnotuj zgodę
-          </button>
+          <div className="przyciski-karty" style={{ alignSelf: 'end' }}>
+            <button className="btn" disabled={wysylanie} onClick={odnotujZgode}>Odnotuj zgodę</button>
+          </div>
         </div>
-      </div>
+      )}
     </Karta></div>
   );
 }
