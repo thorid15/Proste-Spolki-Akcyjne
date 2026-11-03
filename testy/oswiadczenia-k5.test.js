@@ -156,6 +156,11 @@ test('przegląd #2: jedna reguła zgody — informacja z rejestru, stan i znaczn
   assert.equal(db().prepare('SELECT zgoda_email_status FROM psa_osoby WHERE id = ?').get(osobaId).zgoda_email_status, 'potwierdzona');
   assert.equal(stanOswiadczen(db(), osobaId).zgodaEmail, true);
   assert.equal(liczba("SELECT COUNT(*) AS n FROM psa_oswiadczenia WHERE osoba_id = ? AND zrodlo = 'kancelaria'", osobaId), 1);
+  // Drobne R4: oświadczenie nadesłane pismem — kancelaria wybiera źródło „pismo”.
+  await zapytaj('PUT', `/api/psa/osoby/${osobaId}`, { zgoda_email_status: 'brak' }, ciastko(l));
+  const [st2] = await zapytaj('PUT', `/api/psa/osoby/${osobaId}`, { zgoda_email_status: 'potwierdzona', zrodlo_oswiadczenia: 'pismo' }, ciastko(l));
+  assert.equal(st2, 200);
+  assert.equal(liczba("SELECT COUNT(*) AS n FROM psa_oswiadczenia WHERE osoba_id = ? AND zrodlo = 'pismo' AND zlozone = 1", osobaId), 1);
 });
 
 test('przegląd #9: status zgody innych osób nie trafia do akcjonariusza; spółka go dostaje (adres e-mail w informacji)', () => {
@@ -190,4 +195,17 @@ test('D-092 pkt 6: dawne sprawy o zgodę — oświadczenie stosowane w kartotece
   const sprawa = db().prepare('SELECT stan, notatka FROM psa_sprawy WHERE id = ?').get(sprawaId);
   assert.equal(sprawa.stan, 'anulowana');
   assert.match(sprawa.notatka, /D-092/);
+});
+
+test('R4 drobne: oświadczenie z nieznaną spółką → 404 (nie 500); sprawy w kartotece z nazwą typu', async () => {
+  const [st, odp] = await zapytaj('POST', '/api/psa/portal/oswiadczenia', { spolka_id: 999999, rodzaj: 'powiadomienia_automatyczne', zlozone: true }, S.portal);
+  assert.equal(st, 404, JSON.stringify(odp)); // strażnik dostępu do spółki z treści żądania — nie 500
+  const hash = await hasla.hashuj('HasloTestowe123');
+  db().prepare(`INSERT INTO psa_uzytkownicy (imie, email, hash_hasla, rola, aktywny, utworzono) VALUES ('C', 'c-k5@example.pl', ?, 'admin', 1, ?)`).run(hash, czas.terazIso());
+  const l = await fetch(`${ADRES}/api/psa/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'c-k5@example.pl', haslo: 'HasloTestowe123' }) });
+  const teraz = czas.terazIso();
+  db().prepare(`INSERT INTO psa_sprawy (spolka_id, typ_zdarzenia, stan, zrodlo, zadajacy_osoba_id, data_wplywu, autor, utworzono, zaktualizowano)
+    VALUES (?, 'przeniesienie', 'weryfikacja', 'papier', ?, ?, 'Test', ?, ?)`).run(S.spolkaId, S.zofia, teraz.slice(0, 10), teraz, teraz);
+  const [, sprawy] = await zapytaj('GET', `/api/psa/osoby/${S.zofia}/sprawy`, undefined, ciastko(l));
+  assert.ok(sprawy.sprawy.some((x) => x.typ_nazwa === 'Przeniesienie akcji'), JSON.stringify(sprawy.sprawy[0]));
 });

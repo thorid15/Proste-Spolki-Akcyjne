@@ -295,17 +295,30 @@ test('portal: zamowienie informacji z rejestru nalicza oplate', async () => {
   assert.equal(listaOdp.oplaty[0].kwota_grosze, 5000);
   assert.equal(listaOdp.oplaty[0].stawka_vat_procent, 23);
   assert.equal(listaOdp.oplaty[0].kwota_brutto_grosze, 6150);
+  // Drobne R4: sumy wg spółek — netto i brutto (informacja nieopłacona, bez faktury).
+  const [, wgSpolek] = await zapytaj(ciastkoAdmina, 'GET', '/api/psa/oplaty/wg-spolek');
+  const grupa = wgSpolek.spolki.find((g) => g.spolka_id === spolkaId);
+  const nieoplacone = grupa.oplaty.filter((o) => o.status !== 'oplacona');
+  assert.equal(grupa.do_zaplaty_grosze, nieoplacone.reduce((s, o) => s + o.kwota_grosze, 0));
+  assert.equal(grupa.do_zaplaty_brutto_grosze, nieoplacone.reduce((s, o) => s + o.kwota_brutto_grosze, 0));
+  assert.ok(grupa.do_zaplaty_brutto_grosze > grupa.do_zaplaty_grosze);
+  assert.equal(typeof grupa.bez_faktury_brutto_grosze, 'number');
 
-  // Klient widzi WYLACZNIE brutto — cennik przed zamowieniem i lista platnosci.
+  // Klient placi brutto — cennik przed zamowieniem i lista platnosci (netto obok, mniejsze).
   const odpCennik = await fetch(`${baza}/api/psa/portal/cennik`, { headers: { Cookie: ciastkoPortal } });
   const cennik = await odpCennik.json();
   assert.equal(cennik.stawki.informacja, 6150);
+  assert.equal(cennik.stawki_netto.informacja, 5000);
 
   const odpOplatyPortal = await fetch(`${baza}/api/psa/portal/oplaty`, { headers: { Cookie: ciastkoPortal } });
   const oplatyPortal = await odpOplatyPortal.json();
   const pozycja = oplatyPortal.oplaty.find((o) => o.id === infOdp.oplata_id);
   assert.equal(pozycja.kwota_grosze, 6150, 'portal pokazuje brutto, nie netto z bazy');
   assert.equal(oplatyPortal.do_zaplaty_grosze, 6150);
+  // R4 drobne: klient widzi też netto — pole brutto i netto wprost, bez liczenia VAT w przeglądarce.
+  assert.equal(pozycja.kwota_brutto_grosze, 6150);
+  assert.equal(pozycja.kwota_netto_grosze, 5000);
+  assert.equal(oplatyPortal.do_zaplaty_netto_grosze, 5000);
 });
 
 test('stuby sadowe zwracaja 501 przed wejsciem w zycie nowelizacji', async () => {

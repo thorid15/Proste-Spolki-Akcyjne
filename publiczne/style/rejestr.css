@@ -622,6 +622,10 @@ body {
 .wiersz-zaplaty:first-child { border-top: 0; padding-top: 0; }
 .wiersz-zaplaty-opis { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .wiersz-zaplaty-kwota { white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Kwota netto (mniejsza) i brutto (wytłuszczona) — R4 drobne poprawki. */
+.kwota-nb { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.kwota-nb-netto { font-size: var(--st-13); color: var(--atrament-2); }
+.kwota-nb-brutto { font-weight: 600; color: var(--atrament); }
 @media (max-width: 420px) {
   .wiersz-zaplaty { flex-wrap: wrap; }
   .wiersz-zaplaty-opis { flex-basis: 100%; }

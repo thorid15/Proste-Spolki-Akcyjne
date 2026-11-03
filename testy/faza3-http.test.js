@@ -116,6 +116,27 @@ test('R4 K3: „Usuń z wysyłki” — przed nadaniem: status usunięty, pismo 
   assert.equal(odp409.blad, 'List został nadany — nie można go usunąć z wysyłki.');
 });
 
+test('R4 drobne: usunięcie listu nie kasuje powiadomienia wysłanego e-mailem; po 409 nie zostaje plik skanu', async () => {
+  const sprawaId = await sprawaZbycia();
+  const teraz = czas.terazIso();
+  db().prepare('UPDATE psa_sprawy SET powiadomienie_wyslano = ? WHERE id = ?').run(teraz, sprawaId); // e-mail do innej osoby
+  const [, w] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/powiadomienie`, { osoba_id: S.bezZgody });
+  await zapytaj('POST', `/api/psa/listy/${w.wysylka.list_id}/usun-z-wysylki`, { powod: 'Pomyłka przy wyborze adresata' });
+  assert.equal(db().prepare('SELECT powiadomienie_wyslano FROM psa_sprawy WHERE id = ?').get(sprawaId).powiadomienie_wyslano, teraz, 'e-mail zostaje');
+
+  const katalog = process.env.KATALOG_DOKUMENTOW;
+  const liczPliki = () => (fs.existsSync(katalog)
+    ? fs.readdirSync(katalog, { recursive: true }).filter((n) => fs.statSync(path.join(katalog, n)).isFile()).length : 0);
+  const przed = liczPliki();
+  const f = new FormData();
+  f.append('data_nadania', czas.dzisIso());
+  f.append('numer_nadania', 'RR000000099PL');
+  f.append('potwierdzenie', new Blob([Buffer.from('%PDF-1.4 skan')], { type: 'application/pdf' }), 'skan.pdf');
+  const odp = await fetch(`${ADRES}/api/psa/listy/${w.wysylka.list_id}/nadanie`, { method: 'POST', headers: { Cookie: prac }, body: f });
+  assert.equal(odp.status, 409);
+  assert.equal(liczPliki(), przed, 'skan odrzuconego nadania nie zostaje na dysku');
+});
+
 test('W4.3/W4.4: powiadomienie zbywcy bez zgody → list na adres z rejestru (nie z żądania); nadanie odblokowuje wpis', async () => {
   const sprawaId = await sprawaZbycia();
   const [st, wynik] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/powiadomienie`, {
@@ -246,6 +267,7 @@ test('W6.4: brak automatycznego usuwania — usuwanie plików tylko w znanych mi
     'trasy/sprawy.js', // sprzątanie po nieudanym uploadzie
     'trasy/osoby.js', // odrzucony upload skanu AML (treść ≠ rozszerzenie)
     'trasy/spolki.js', // odrzucony upload załącznika umowy (treść ≠ rozszerzenie)
+    'trasy/listy.js', // odrzucone nadanie (np. 409) — skan potwierdzenia nie zostaje bez listu
   ]);
   const katalog = path.join(__dirname, '..', 'server');
   const znalezione = [];

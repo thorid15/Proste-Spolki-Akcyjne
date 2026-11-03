@@ -113,3 +113,19 @@ test('publiczne/dist: każda paczka definiuje komponenty, których używają jej
     assert.deepEqual([...brakujace], [], `paczka ${paczka}`);
   }
 });
+
+/* Pliki paczki łączą się w jeden zakres — druga deklaracja `function x` po cichu nadpisuje
+   pierwszą (tak było z `zakresyNakladajaSie` w R4). Nazwa z najwyższego poziomu ma być jedna. */
+test('publiczne/dist: żadna nazwa najwyższego poziomu nie powtarza się w paczce', () => {
+  for (const [paczka, lista] of Object.entries(budowanie.PACZKI)) {
+    const gdzie = new Map();
+    for (const nazwa of lista) {
+      const kod = zrodla.get(nazwa) || '';
+      for (const d of kod.matchAll(/^(?:async\s+)?(?:function\*?|class|const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) {
+        gdzie.set(d[1], [...(gdzie.get(d[1]) || []), nazwa]);
+      }
+    }
+    const powtorzone = [...gdzie].filter(([, pliki]) => pliki.length > 1).map(([n, pliki]) => `${n}: ${pliki.join(', ')}`);
+    assert.deepEqual(powtorzone, [], `paczka ${paczka}`);
+  }
+});

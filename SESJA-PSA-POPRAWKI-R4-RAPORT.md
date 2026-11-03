@@ -36,8 +36,17 @@ osobnego przeglądu (plan przewidywał jeden).
 
 **Otwarte / odłożone:**
 - Zbycie akcji kilku serii albo na kilku nabywców = kilka spraw — **zaakceptowane przez Łukasza 3.11.2026**, bez zmian.
-- Zakładka „Opłaty” w portalu pokazuje kwotę netto, Start — brutto.
-- Drobne z przeglądu: okno powodu usunięcia listu zamyka się przy błędzie; źródło „pismo” w historii zgód
-  niedostępne z ekranu; kartoteka pokazuje kody typu i stanu sprawy; nieaktualne komentarze;
-  `POST /oswiadczenia` bez walidacji `spolka_id`; skan nadania zapisany przed 409.
-- Sugestia: test `front-js` wykrywający zdublowane deklaracje funkcji w paczce (w tej sesji złapany ręcznie).
+
+**Drobne poprawki po przeglądzie (3.11.2026, przed scaleniem):**
+- Kwoty opłat — wszędzie netto (mniejsze) i brutto (wytłuszczone), jeden komponent `KwotaNettoBrutto`:
+  Start i zakładka „Płatności” w portalu, cena informacji przed zamówieniem, wiersze i sumy w „Opłatach” kancelarii.
+  **Błąd naprawiony przy okazji:** Start portalu doliczał VAT drugi raz (API portalu podaje już brutto) — np. 151,29 zł
+  zamiast 123,00 zł; teraz API podaje wprost `kwota_netto_grosze` / `kwota_brutto_grosze`, przeglądarka niczego nie przelicza.
+- „Usuń z wysyłki”: przycisk aktywny od 5 znaków powodu, błąd serwera zostaje w oknie razem z tekstem.
+- Kartoteka osoby, sekcja „Sprawy”: nazwa typu i stanu sprawy zamiast kodów.
+- Zgoda na e-mail w kartotece: wybór „W kancelarii” / „Pismem (nadesłane)” — trafia do historii oświadczeń.
+- Usunięcie listu z wysyłki nie kasuje już znacznika powiadomienia wysłanego e-mailem do innej osoby; odrzucone
+  nadanie (409) nie zostawia pliku skanu (dopisane do listy W6.4); kartoteka: zmiana danych i historia zgody w jednej transakcji.
+- `POST /portal/oswiadczenia` z nieznaną spółką — 404 już z kontroli dostępu (test); komentarze o zgodzie zaktualizowane do D-092.
+- Test `front-js`: żadna nazwa najwyższego poziomu nie powtarza się w paczce (sprawdzony na dawnej kolizji `zakresyNakladajaSie`).
+- Zrzuty: dodane ekrany `portal-platnosci` i `kancelaria-oplaty` (układ bez problemów).

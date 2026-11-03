@@ -203,10 +203,7 @@ function WierszOplatyKancelarii({ oplata, przyZmianie }) {
           : (oplata.okres || '—')}
       </td>
       <td className="prawo">
-        <div style={{ fontWeight: 600 }}>{fmt.zlote(oplata.kwota_grosze)} netto</div>
-        <div className="male przyciemnione">
-          +{oplata.stawka_vat_procent}% VAT = {fmt.zlote(oplata.kwota_brutto_grosze)} brutto
-        </div>
+        <KwotaNettoBrutto netto={oplata.kwota_grosze} brutto={oplata.kwota_brutto_grosze} />
       </td>
       <td>
         <Pigulka odmiana={STATUS_ZNACZNIK[oplata.status]}>{STATUS_ETYKIETA[oplata.status]}</Pigulka>
@@ -303,8 +300,7 @@ function EkranOplat() {
   if (!dane) return <Komunikat odmiana="blad" tresc="Nie udało się wczytać rozliczeń." />;
 
   const spolki = spolkiOdp ? spolkiOdp.spolki : [];
-  const razemDoZaplaty = dane.spolki.reduce((s, g) => s + g.do_zaplaty_grosze, 0);
-  const razemBezFaktury = dane.spolki.reduce((s, g) => s + g.bez_faktury_grosze, 0);
+  const suma = (pole) => dane.spolki.reduce((s, g) => s + (g[pole] || 0), 0);
   const widoczne = dane.spolki.filter((g) => !tylkoNierozliczone || g.do_zaplaty_grosze > 0 || g.bez_faktury_grosze > 0);
 
   return (
@@ -313,11 +309,11 @@ function EkranOplat() {
         <div className="row-g" style={{ flexWrap: 'wrap' }}>
           <span className="stan-skrot">
             <span className="stan-skrot-etykieta">Do zapłaty</span>
-            <strong>{fmt.zlote(razemDoZaplaty)}</strong>
+            <KwotaNettoBrutto netto={suma('do_zaplaty_grosze')} brutto={suma('do_zaplaty_brutto_grosze')} />
           </span>
           <span className="stan-skrot">
             <span className="stan-skrot-etykieta">Bez faktury</span>
-            <strong>{fmt.zlote(razemBezFaktury)}</strong>
+            <KwotaNettoBrutto netto={suma('bez_faktury_grosze')} brutto={suma('bez_faktury_brutto_grosze')} />
           </span>
         </div>
         <div className="row-g">
@@ -403,11 +399,11 @@ function EkranOplat() {
           >
             <div className="sekcja-tresc">
               <div className="row-g" style={{ marginBottom: 'var(--od-12)', flexWrap: 'wrap' }}>
-                <span className="male przyciemnione">
-                  Do zapłaty: <strong>{fmt.zlote(grupa.do_zaplaty_grosze)}</strong>
+                <span className="male przyciemnione row-g" style={{ alignItems: 'center' }}>
+                  Do zapłaty: <KwotaNettoBrutto netto={grupa.do_zaplaty_grosze} brutto={grupa.do_zaplaty_brutto_grosze} />
                 </span>
-                <span className="male przyciemnione">
-                  Bez faktury: <strong>{fmt.zlote(grupa.bez_faktury_grosze)}</strong>
+                <span className="male przyciemnione row-g" style={{ alignItems: 'center' }}>
+                  Bez faktury: <KwotaNettoBrutto netto={grupa.bez_faktury_grosze} brutto={grupa.bez_faktury_brutto_grosze} />
                 </span>
                 {grupa.data_otwarcia_rejestru && (
                   <span className="male przyciemnione">

@@ -270,6 +270,21 @@ function FormularzOsoby({
           </select>
         </Pole>
       )}
+      {!portal && zgoda === 'potwierdzona' && (
+        <Pole
+          etykieta="Jak złożono oświadczenie"
+          podpowiedz="Trafia do historii oświadczeń przy zmianie zgody (D-092)."
+          id={`${idPrefiks}-zrodlo_oswiadczenia`}
+        >
+          <select
+            value={dane.zrodlo_oswiadczenia || 'kancelaria'} disabled={!edytowalne}
+            onChange={(z) => przyZmianie({ zrodlo_oswiadczenia: z.target.value })}
+          >
+            <option value="kancelaria">W kancelarii</option>
+            <option value="pismo">Pismem (nadesłane)</option>
+          </select>
+        </Pole>
+      )}
 
       <Przelacznik
         wlaczony={wspol}

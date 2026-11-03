@@ -19,6 +19,9 @@ const EKRANY = [
   { nazwa: 'kancelaria-sprawa', konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/sprawy/1', czekaj: 'text=Uprzednie powiadomienie' },
   { nazwa: 'kancelaria-osoba', konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/osoby/2', czekaj: '.karta' },
   { nazwa: 'kancelaria-listy', konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/listy', czekaj: '.karta' },
+  // Drobne R4: kwoty netto (mniejsze) i brutto (wytłuszczone).
+  { nazwa: 'portal-platnosci', konto: 'anna.zgoda@example.com', aplikacja: 'portal', adres: '/portal.html#/platnosci', czekaj: '.kwota-nb' },
+  { nazwa: 'kancelaria-oplaty', konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/oplaty', czekaj: '.kwota-nb' },
 ];
 
 module.exports = { zaloguj, EKRANY, HASLO };

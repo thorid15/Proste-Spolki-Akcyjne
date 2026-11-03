@@ -264,8 +264,26 @@ function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
 /* ─────────────────────────────────────────────────────
    AKCJE WORKFLOW (wstrzymaj / wznów / odmów / anuluj)
    ───────────────────────────────────────────────────── */
-function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie }) {
+/**
+ * Okno z powodem. `minDlugosc` — ta sama granica co na serwerze (przycisk aktywny dopiero po niej).
+ * Błąd z `przyZapisie` (rzucony wyjątek) zostaje w oknie razem z wpisanym tekstem.
+ */
+function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie, minDlugosc = 1 }) {
   const [powod, ustawPowod] = useState('');
+  const [blad, ustawBlad] = useState(null);
+  const [zapis, ustawZapis] = useState(false);
+  const zaKrotki = powod.trim().length < minDlugosc;
+  async function zatwierdz() {
+    ustawBlad(null);
+    ustawZapis(true);
+    try {
+      await przyZapisie(powod.trim());
+    } catch (e) {
+      ustawBlad(e.message || 'Nie udało się zapisać.');
+    } finally {
+      ustawZapis(false);
+    }
+  }
   return (
     <Modal
       tytul={tytul}
@@ -273,13 +291,14 @@ function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie }) {
       stopka={
         <>
           <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-          <button className="btn btn-glowny" disabled={!powod.trim()} onClick={() => przyZapisie(powod.trim())}>
+          <button className="btn btn-glowny" disabled={zaKrotki || zapis} onClick={zatwierdz}>
             Potwierdź
           </button>
         </>
       }
     >
-      <Pole etykieta={etykieta} wymagane>
+      <Komunikat odmiana="blad" tresc={blad} />
+      <Pole etykieta={etykieta} wymagane podpowiedz={minDlugosc > 1 ? `Co najmniej ${minDlugosc} znaków.` : undefined}>
         <textarea value={powod} onChange={(z) => ustawPowod(z.target.value)} autoFocus />
       </Pole>
     </Modal>

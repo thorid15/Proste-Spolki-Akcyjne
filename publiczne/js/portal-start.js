@@ -2,7 +2,7 @@
 
 /**
  * Start portalu (R4 zad. 2, P2) — czysta logika, bez JSX (testowana w `testy/portal-start.test.js`).
- *   pozycjeDoZaplatyPortal(stan) -> Array<{idOplaty, opis, kwotaBrutto}> — tylko nieopłacone,
+ *   pozycjeDoZaplatyPortal(stan) -> Array<{idOplaty, opis, kwotaNetto, kwotaBrutto}> — tylko nieopłacone,
  *   banerKrokuWniosku(stan) -> {tekst, akcja: {etykieta, adres}} | null — bieżący krok klienta.
  */
 
@@ -12,8 +12,9 @@ function pozycjeDoZaplatyPortal({ oplaty } = {}) {
     .map((o) => ({
       idOplaty: o.id,
       opis: o.opis,
-      // Ta sama formuła co `przepisy.obliczBrutto` po stronie serwera.
-      kwotaBrutto: Math.round((Number(o.kwota_grosze) * (100 + Number(o.stawka_vat_procent ?? 23))) / 100),
+      // API portalu podaje już obie kwoty (`kwota_grosze` = brutto) — nie liczymy VAT drugi raz.
+      kwotaNetto: o.kwota_netto_grosze,
+      kwotaBrutto: o.kwota_brutto_grosze ?? o.kwota_grosze,
     }));
 }
 

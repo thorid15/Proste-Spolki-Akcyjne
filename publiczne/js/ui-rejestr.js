@@ -153,6 +153,19 @@ function ListaDanych({ pary }) {
 }
 
 /**
+ * Kwota opłaty: netto mniejsze, brutto wytłuszczone (R4 drobne poprawki) — jeden wzór
+ * w kancelarii i w portalu. Bez netto (np. stara odpowiedź API) — samo brutto.
+ */
+function KwotaNettoBrutto({ netto, brutto }) {
+  return (
+    <span className="kwota-nb">
+      {netto != null && <span className="kwota-nb-netto">{fmt.zlote(netto)} netto</span>}
+      <strong className="kwota-nb-brutto">{fmt.zlote(brutto)} brutto</strong>
+    </span>
+  );
+}
+
+/**
  * R4 K5 (D-092): znacznik przy osobie bez zgody na e-mail albo bez adresu — korespondencja idzie listem.
  * Przy zgodzie nic się nie pokazuje (bez pozytywnego znacznika). `zawsze` — np. w kolejce listów.
  */

@@ -990,7 +990,7 @@ function EkranStart() {
             {doZaplaty.map((p) => (
               <div key={p.idOplaty} className="wiersz-zaplaty">
                 <span className="wiersz-zaplaty-opis">{p.opis}</span>
-                <span className="wiersz-zaplaty-kwota">{fmt.zlote(p.kwotaBrutto)}</span>
+                <span className="wiersz-zaplaty-kwota"><KwotaNettoBrutto netto={p.kwotaNetto} brutto={p.kwotaBrutto} /></span>
                 <button className="btn btn-glowny btn-sm" onClick={() => zaplac(p.idOplaty)} disabled={wysylanie === p.idOplaty}>
                   {wysylanie === p.idOplaty ? 'Otwieranie…' : 'Zapłać'}
                 </button>
@@ -1669,6 +1669,7 @@ function EkranInformacjaPortal({ spolkaId }) {
   }
 
   const stawka = cennik && cennik.stawki ? cennik.stawki.informacja : null;
+  const stawkaNetto = cennik && cennik.stawki_netto ? cennik.stawki_netto.informacja : null;
 
   return (
     <div className="pion" style={{ gap: 16 }}>
@@ -1684,6 +1685,12 @@ function EkranInformacjaPortal({ spolkaId }) {
           <PoleDaty wartosc={data} przyZmianie={(v) => v && ustawData(v)} />
         </Pole>
 
+        {stawka != null && (
+          <div className="row-g" style={{ alignItems: 'center', marginBottom: 12 }}>
+            <span className="przyciemnione">Opłata:</span>
+            <KwotaNettoBrutto netto={stawkaNetto} brutto={stawka} />
+          </div>
+        )}
         <button className="btn btn-glowny" onClick={zamow} disabled={pracuje}>
           {pracuje ? 'Przygotowywanie…' : stawka != null ? `Zapłać ${fmt.zlote(stawka)}` : 'Zamów informację'}
         </button>
@@ -1815,7 +1822,7 @@ function EkranPlatnosciPortal({ spolkaId } = {}) {
             {` · naliczono ${fmt.data(o.data_naliczenia)}`}
           </div>
         </div>
-        <div className="pozycja-platnosci-kwota">{fmt.zlote(o.kwota_grosze)}</div>
+        <div className="pozycja-platnosci-kwota"><KwotaNettoBrutto netto={o.kwota_netto_grosze} brutto={o.kwota_grosze} /></div>
         <Pigulka odmiana={status.odmiana}>{status.tekst}</Pigulka>
         <div className="pozycja-platnosci-akcja">
           {o.status !== 'oplacona' && dane.platnosci_wlaczone && (
@@ -1858,7 +1865,10 @@ function EkranPlatnosciPortal({ spolkaId } = {}) {
           <div className="lista-platnosci">
             <div className="suma-platnosci">
               <span>Razem</span>
-              <strong>{fmt.zlote(spolkaId ? doZaplaty.reduce((s, o) => s + o.kwota_grosze, 0) : dane.do_zaplaty_grosze)}</strong>
+              <KwotaNettoBrutto
+                netto={spolkaId ? doZaplaty.reduce((s, o) => s + (o.kwota_netto_grosze || 0), 0) : dane.do_zaplaty_netto_grosze}
+                brutto={spolkaId ? doZaplaty.reduce((s, o) => s + o.kwota_grosze, 0) : dane.do_zaplaty_grosze}
+              />
             </div>
             {doZaplaty.map(wiersz)}
           </div>

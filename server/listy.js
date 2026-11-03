@@ -4,7 +4,7 @@
  * Kolejka listów (W4.3, SESJA-PSA-WYTYCZNE.md Faza 3).
  *
  * Pismo do osoby, która NIE wyraziła zgody na komunikację e-mail
- * (art. 300(33) § 1 pkt 5 KSH — zgoda jest daną rejestru), idzie pocztą na
+ * (D-092: zgoda to dana kartoteki; adres e-mail w rejestrze tylko przy zgodzie), idzie pocztą na
  * adres Z REJESTRU. Adres kopiujemy w chwili wystawienia pisma — nigdy nie
  * bierzemy go od żądającego wpisu (W4.4). Kancelaria drukuje pismo, wpisuje
  * datę i numer nadania, dołącza skan potwierdzenia nadania; dopiero wtedy
@@ -104,8 +104,8 @@ class BladListu extends Error {
 
 /**
  * R4 K3: „Usuń z wysyłki” — tylko przed nadaniem. Pismo zostaje (bez fizycznego kasowania), powód, kto
- * i kiedy w rekordzie listu oraz w notatce sprawy. Usunięte powiadomienie przed wpisem → sprawa „bez
- * powiadomienia” (wpis zablokowany, art. 300(34) § 3 KSH), o ile nie nadano innego powiadomienia.
+ * i kiedy w rekordzie listu oraz w notatce sprawy. Usunięte powiadomienie nie liczy się jako wysłane —
+ * bez innego powiadomienia wpis pozostaje zablokowany (art. 300(34) § 3 KSH).
  */
 function usunZWysylki(db, id, { powod, autor }) {
   const list = wczytaj(db, id);
@@ -119,12 +119,9 @@ function usunZWysylki(db, id, { powod, autor }) {
     db.prepare(`UPDATE psa_listy SET status = 'usuniety', usuniecie_powod = ?, usunal = ?, usunieto = ? WHERE id = ?`)
       .run(tekst, autor || null, teraz, id);
     if (list.sprawa_id) {
-      if (list.rodzaj_pisma === 'powiadomienie') {
-        const inneNadane = db.prepare(
-          `SELECT 1 FROM psa_listy WHERE sprawa_id = ? AND rodzaj_pisma = 'powiadomienie' AND status = 'nadany' AND id <> ?`
-        ).get(list.sprawa_id, id);
-        if (!inneNadane) db.prepare('UPDATE psa_sprawy SET powiadomienie_wyslano = NULL WHERE id = ?').run(list.sprawa_id);
-      }
+      // Nienadany list nigdy nie ustawił `powiadomienie_wyslano` (ustawia je dopiero nadanie), więc usunięcie
+      // nie zmienia flagi: bez innego powiadomienia wpis i tak jest zablokowany, a e-mail wysłany innej osobie
+      // zostaje w mocy (przegląd R4 #4).
       db.prepare(
         `UPDATE psa_sprawy SET notatka = COALESCE(notatka || char(10), '') || ?, zaktualizowano = ? WHERE id = ?`
       ).run(`[${teraz.slice(0, 10)}] List (${list.rodzaj_pisma}) do ${list.odbiorca_nazwa} usunięty z wysyłki: ${tekst} (${autor || '—'})`, teraz, list.sprawa_id);

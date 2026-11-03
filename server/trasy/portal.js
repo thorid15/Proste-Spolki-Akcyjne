@@ -2101,11 +2101,11 @@ router.get('/przeniesienie/pisma/:kod', asy((zad, odp) => {
 // ─────────────────────────────────────────────────────────────
 // W4.1/W4.2 — oświadczenia akcjonariusza składane OSOBIŚCIE (konto albo link
 // z zaproszenia), nigdy przez zarząd w jego imieniu. Każde z datą, odwołalne
-// (tabela append-only `psa_oswiadczenia`).
-//   - zgoda na komunikację e-mail — dana rejestru (art. 300(33) § 1 pkt 5 KSH):
-//     złożenie i cofnięcie idą przez ŻĄDANIE WPISU, nie przez ustawienia konta;
-//   - żądanie automatycznego przesyłania powiadomień (art. 300(34) § 9 KSH,
-//     🔵) — oświadczenie w portalu, skuteczne od razu.
+// (tabela append-only `psa_oswiadczenia`). D-092: oba to dane KARTOTEKI osoby,
+// nie zdarzenia rejestru — historia poza łańcuchem, skuteczne od razu.
+//   - zgoda na komunikację e-mail — tylko dla adresu z kartoteki; zmiana samego
+//     adresu to zmiana danych w rejestrze (żądanie w zakładce „Zgłoszenia”);
+//   - żądanie automatycznego przesyłania powiadomień (art. 300(34) § 9 KSH, 🔵).
 // ─────────────────────────────────────────────────────────────
 
 const WZORZEC_EMAIL_OSW = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -2381,8 +2381,12 @@ const OPISY_TYPU_OPLATY = {
   informacja: 'Informacja z rejestru akcjonariuszy',
 };
 
-/** Klient widzi wylacznie BRUTTO (sekcja 2.1) - to jest kwota, ktora placi. */
+/**
+ * Klient widzi netto i brutto (R4 drobne poprawki); `kwota_grosze` zostaje BRUTTO —
+ * to jest kwota, ktora placi (sekcja 2.1), i tak licza ja przyciski „Zaplac”.
+ */
 function widokOplatyKlienta(w) {
+  const brutto = przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent);
   return {
     id: w.id,
     spolka_id: w.spolka_id,
@@ -2392,7 +2396,10 @@ function widokOplatyKlienta(w) {
     okres: w.okres,
     okres_od: w.okres_od,
     okres_do: w.okres_do,
-    kwota_grosze: przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent),
+    kwota_grosze: brutto,
+    kwota_brutto_grosze: brutto,
+    kwota_netto_grosze: w.kwota_grosze,
+    stawka_vat_procent: w.stawka_vat_procent,
     status: w.status,
     data_naliczenia: w.data_naliczenia,
     oplacona_kiedy: w.oplacona_kiedy,
@@ -2416,11 +2423,17 @@ router.get(
   '/cennik',
   asy((zad, odp) => {
     const brutto = (typ) => przepisy.obliczBrutto(ustawienia.stawkaGrosze(db(), typ), przepisy.STAWKA_VAT_PROCENT);
+    const netto = (typ) => ustawienia.stawkaGrosze(db(), typ);
     odp.json({
       stawki: {
         prowadzenie: brutto('prowadzenie'),
         wpis: brutto('wpis'),
         informacja: brutto('informacja'),
+      },
+      stawki_netto: {
+        prowadzenie: netto('prowadzenie'),
+        wpis: netto('wpis'),
+        informacja: netto('informacja'),
       },
       platnosci_wlaczone: tpay.skonfigurowany(),
     });
@@ -2448,13 +2461,13 @@ router.get(
       )
       .all(...warunek.parametry);
 
-    const doZaplaty = wiersze
-      .filter((w) => w.status !== 'oplacona')
-      .reduce((suma, w) => suma + przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent), 0);
+    const nieoplacone = wiersze.filter((w) => w.status !== 'oplacona');
+    const doZaplaty = nieoplacone.reduce((suma, w) => suma + przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent), 0);
 
     odp.json({
       oplaty: wiersze.map(widokOplatyKlienta),
       do_zaplaty_grosze: doZaplaty,
+      do_zaplaty_netto_grosze: nieoplacone.reduce((suma, w) => suma + w.kwota_grosze, 0),
       platnosci_wlaczone: tpay.skonfigurowany(),
     });
   })

@@ -15,14 +15,10 @@ function WierszListu({ list, odswiez }) {
   /** R4 K3: usunięcie z wysyłki przed nadaniem — z powodem (min. 5 znaków, sprawdza serwer). */
   async function usun(powod) {
     ustawBlad(null);
-    try {
-      await API.post(`/api/psa/listy/${list.id}/usun-z-wysylki`, { powod });
-      ustawUsuwanie(false);
-      odswiez();
-    } catch (e) {
-      ustawUsuwanie(false);
-      ustawBlad(e.message);
-    }
+    // Błąd zostaje w oknie (ModalPowod) razem z wpisanym powodem.
+    await API.post(`/api/psa/listy/${list.id}/usun-z-wysylki`, { powod });
+    ustawUsuwanie(false);
+    odswiez();
   }
 
   async function nadaj() {
@@ -85,7 +81,7 @@ function WierszListu({ list, odswiez }) {
           </>
         )}
         {usuwanie && (
-          <ModalPowod tytul="Usuń list z wysyłki" etykieta="Powód" przyZamknieciu={() => ustawUsuwanie(false)} przyZapisie={usun} />
+          <ModalPowod tytul="Usuń list z wysyłki" etykieta="Powód" minDlugosc={5} przyZamknieciu={() => ustawUsuwanie(false)} przyZapisie={usun} />
         )}
       </td>
     </tr>

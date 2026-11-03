@@ -688,7 +688,7 @@ function EkranProfiluOsoby({ osobaId }) {
               <ListaDanych pary={widoczneSprawy.map((s) => [
                 fmt.data(s.data_wplywu),
                 <a href={`#/sprawy/${s.id}`} onClick={(z) => { z.preventDefault(); idz(`/sprawy/${s.id}`); }}>
-                  {s.typ_zdarzenia} · {s.spolka_nazwa} · {s.stan}
+                  {s.typ_nazwa || s.typ_zdarzenia} · {s.spolka_nazwa} · {NAZWY_STANU_SPRAWY[s.stan] || s.stan}
                 </a>,
               ])} />
               {!wszystkieSprawy && listaSpraw.length > 5 && (

@@ -70,18 +70,28 @@ router.get(
           oplaty: [],
           do_zaplaty_grosze: 0,
           bez_faktury_grosze: 0,
+          do_zaplaty_brutto_grosze: 0,
+          bez_faktury_brutto_grosze: 0,
         });
       }
       const grupa = wgSpolki.get(w.spolka_id);
+      const widok = widokWiersza(w);
       grupa.oplaty.push({
-        ...widokWiersza(w),
+        ...widok,
         oplacona_online: w.online > 0,
         zamawiajacy: w.zamawiajacy_osoba_id
           ? (w.zamawiajacy_nazwa || [w.zamawiajacy_nazwisko, w.zamawiajacy_imie].filter(Boolean).join(' '))
           : null,
       });
-      if (w.status !== 'oplacona') grupa.do_zaplaty_grosze += w.kwota_grosze;
-      if (!w.faktura_wystawiono) grupa.bez_faktury_grosze += w.kwota_grosze;
+      // Sumy netto (`*_grosze`) i brutto (`*_brutto_grosze`) — kancelaria widzi obie (drobne R4).
+      if (w.status !== 'oplacona') {
+        grupa.do_zaplaty_grosze += w.kwota_grosze;
+        grupa.do_zaplaty_brutto_grosze += widok.kwota_brutto_grosze;
+      }
+      if (!w.faktura_wystawiono) {
+        grupa.bez_faktury_grosze += w.kwota_grosze;
+        grupa.bez_faktury_brutto_grosze += widok.kwota_brutto_grosze;
+      }
     }
 
     // Zadania zgloszone przez portal, ktore czekaja na oplate. NIE STOJA

@@ -321,21 +321,24 @@ router.put(
     // D-092: zmiana zgody na e-mail przez kancelarię — przez `oswiadczenia` (historia: źródło, kto).
     const zgodaPrzed = biezaca.zgoda_email_status === 'potwierdzona';
     const zgodaPo = 'zgoda_email_status' in dane ? dane.zgoda_email_status === 'potwierdzona' : zgodaPrzed;
-    db()
-      .prepare(
-        `UPDATE psa_osoby
-            SET ${Object.keys(dane).map((k) => `${k} = @${k}`).join(', ')},
-                zaktualizowano = @zaktualizowano
-          WHERE id = @id`
-      )
-      .run({ ...dane, id, zaktualizowano: czas.terazIso() });
-    if (zgodaPrzed !== zgodaPo) {
-      const zrodlo = (zad.body || {}).zrodlo_oswiadczenia === 'pismo' ? 'pismo' : 'kancelaria';
-      db().prepare(
-        `INSERT INTO psa_oswiadczenia (osoba_id, rodzaj, zlozone, email, zrodlo, autor, utworzono)
-         VALUES (?, 'zgoda_email', ?, ?, ?, ?, ?)`
-      ).run(id, zgodaPo ? 1 : 0, zgodaPo ? (dane.email ?? biezaca.email) : null, zrodlo, autor(zad), czas.terazIso());
-    }
+    // Przegląd R4 #3: zmiana danych i wpis historii oświadczeń — jedna transakcja.
+    db().transaction(() => {
+      db()
+        .prepare(
+          `UPDATE psa_osoby
+              SET ${Object.keys(dane).map((k) => `${k} = @${k}`).join(', ')},
+                  zaktualizowano = @zaktualizowano
+            WHERE id = @id`
+        )
+        .run({ ...dane, id, zaktualizowano: czas.terazIso() });
+      if (zgodaPrzed !== zgodaPo) {
+        const zrodlo = (zad.body || {}).zrodlo_oswiadczenia === 'pismo' ? 'pismo' : 'kancelaria';
+        db().prepare(
+          `INSERT INTO psa_oswiadczenia (osoba_id, rodzaj, zlozone, email, zrodlo, autor, utworzono)
+           VALUES (?, 'zgoda_email', ?, ?, ?, ?, ?)`
+        ).run(id, zgodaPo ? 1 : 0, zgodaPo ? (dane.email ?? biezaca.email) : null, zrodlo, autor(zad), czas.terazIso());
+      }
+    })();
 
     odp.json({
       osoba: zOznaczeniem(db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(id)),
@@ -393,7 +396,8 @@ router.get(
           ORDER BY sp.data_wplywu DESC`
       )
       .all(id);
-    odp.json({ sprawy: wiersze });
+    const typy = require('../logika/typy-zdarzen');
+    odp.json({ sprawy: wiersze.map((w) => ({ ...w, typ_nazwa: typy.istnieje(w.typ_zdarzenia) ? typy.typ(w.typ_zdarzenia).nazwa : w.typ_zdarzenia })) });
   })
 );
 

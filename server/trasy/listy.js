@@ -102,6 +102,7 @@ router.post('/:id/nadanie', upload.single('potwierdzenie'), asy((zad, odp) => {
       autor: autor(zad),
     });
   } catch (e) {
+    if (zad.file) fs.rmSync(zad.file.path, { force: true }); // przegląd R4 #6: bez osieroconego skanu
     if (e instanceof listy.BladListu) return odp.status(e.kod).json({ blad: e.message });
     throw e;
   }
