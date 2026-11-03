@@ -2599,6 +2599,29 @@ const MIGRACJE = [
       UPDATE psa_osoby SET zgoda_email = CASE WHEN zgoda_email_status = 'potwierdzona' THEN 1 ELSE 0 END;
     `,
   },
+  {
+    wersja: 69,
+    nazwa: 'D-092 pkt 6: dawne sprawy o zgodę na e-mail z portalu — oświadczenie w kartotece, sprawa anulowana (bez wpisu)',
+    sql: `
+      -- Najnowsze oświadczenie o zgodzie osoby, złożone dawnym trybem (z otwartą sprawą wpisu), trafia do kartoteki.
+      UPDATE psa_osoby
+         SET zgoda_email_status = CASE (SELECT o.zlozone FROM psa_oswiadczenia o WHERE o.osoba_id = psa_osoby.id
+                                          AND o.rodzaj = 'zgoda_email' ORDER BY o.utworzono DESC, o.id DESC LIMIT 1)
+                                  WHEN 1 THEN 'potwierdzona' ELSE 'brak' END,
+             email = COALESCE((SELECT o.email FROM psa_oswiadczenia o WHERE o.osoba_id = psa_osoby.id
+                                 AND o.rodzaj = 'zgoda_email' AND o.zlozone = 1 ORDER BY o.utworzono DESC, o.id DESC LIMIT 1), email)
+       WHERE id IN (SELECT o.osoba_id FROM psa_oswiadczenia o JOIN psa_sprawy s ON s.id = o.sprawa_id
+                     WHERE o.rodzaj = 'zgoda_email' AND s.stan IN ('nowa', 'weryfikacja', 'wstrzymana')
+                       AND o.id = (SELECT o2.id FROM psa_oswiadczenia o2 WHERE o2.osoba_id = o.osoba_id
+                                     AND o2.rodzaj = 'zgoda_email' ORDER BY o2.utworzono DESC, o2.id DESC LIMIT 1));
+      UPDATE psa_osoby SET zgoda_email = CASE WHEN zgoda_email_status = 'potwierdzona' THEN 1 ELSE 0 END;
+      UPDATE psa_sprawy
+         SET stan = 'anulowana', termin_do = NULL,
+             notatka = COALESCE(notatka || char(10), '') || 'Anulowano: D-092 — oświadczenie o zgodzie na e-mail zastosowane w kartotece, bez wpisu w rejestrze.'
+       WHERE stan IN ('nowa', 'weryfikacja', 'wstrzymana')
+         AND id IN (SELECT sprawa_id FROM psa_oswiadczenia WHERE rodzaj = 'zgoda_email' AND sprawa_id IS NOT NULL);
+    `,
+  },
 ];
 
 /**

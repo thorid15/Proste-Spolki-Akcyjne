@@ -167,3 +167,27 @@ test('przegląd #9: status zgody innych osób nie trafia do akcjonariusza; spó�
   assert.ok(!('zgoda_email' in dlaAkcjonariusza) || dlaAkcjonariusza.zgoda_email === undefined);
   assert.equal(zamaskujOsobe(osoba, przepisy.ROLE_ODBIORCY.SPOLKA).zgoda_email_status, 'potwierdzona');
 });
+
+test('D-092 pkt 6: dawne sprawy o zgodę — oświadczenie stosowane w kartotece, sprawa anulowana (migracja 69)', () => {
+  const { MIGRACJE } = require('../server/migracje');
+  const m69 = MIGRACJE.find((m) => m.wersja === 69);
+  assert.ok(m69, 'migracja 69 istnieje');
+  const teraz = czas.terazIso();
+  const osobaId = Number(db().prepare(
+    `INSERT INTO psa_osoby (typ, imie, nazwisko, data_urodzenia, kod_pocztowy, miejscowosc, ulica, nr_domu, email, zgoda_email_status, zgoda_email, aml_status, utworzono)
+     VALUES ('fizyczna', 'Dawna', 'Sprawa', '1980-01-01', '80-001', 'Gdańsk', 'Rejestrowa', '3', 'dawna@example.pl', 'potwierdzona', 1, 'wykonane', ?)`
+  ).run(teraz).lastInsertRowid);
+  const sprawaId = Number(db().prepare(
+    `INSERT INTO psa_sprawy (spolka_id, typ_zdarzenia, stan, zrodlo, zadajacy_osoba_id, data_wplywu, autor, utworzono, zaktualizowano)
+     VALUES (?, 'zmiana_danych_akcjonariusza', 'weryfikacja', 'portal', ?, ?, 'Portal', ?, ?)`
+  ).run(S.spolkaId, osobaId, teraz.slice(0, 10), teraz, teraz).lastInsertRowid);
+  db().prepare(`INSERT INTO psa_oswiadczenia (osoba_id, spolka_id, rodzaj, zlozone, sprawa_id, utworzono) VALUES (?, ?, 'zgoda_email', 0, ?, ?)`)
+    .run(osobaId, S.spolkaId, sprawaId, teraz);
+  db().exec(m69.sql);
+  const osoba = db().prepare('SELECT zgoda_email_status, zgoda_email FROM psa_osoby WHERE id = ?').get(osobaId);
+  assert.equal(osoba.zgoda_email_status, 'brak');
+  assert.equal(osoba.zgoda_email, 0);
+  const sprawa = db().prepare('SELECT stan, notatka FROM psa_sprawy WHERE id = ?').get(sprawaId);
+  assert.equal(sprawa.stan, 'anulowana');
+  assert.match(sprawa.notatka, /D-092/);
+});
