@@ -35,7 +35,7 @@ kolumna sprawy 48rem; powiadomienia automatyczne na osobę); dawne sprawy o zgod
 osobnego przeglądu (plan przewidywał jeden).
 
 **Otwarte / odłożone:**
-- Zbycie akcji kilku serii = kilka spraw (serwer: jedno zdarzenie = jedna emisja); w nowym przebiegu jeden nabywca.
+- Zbycie akcji kilku serii albo na kilku nabywców = kilka spraw — **zaakceptowane przez Łukasza 3.11.2026**, bez zmian.
 - Zakładka „Opłaty” w portalu pokazuje kwotę netto, Start — brutto.
 - Drobne z przeglądu: okno powodu usunięcia listu zamyka się przy błędzie; źródło „pismo” w historii zgód
   niedostępne z ekranu; kartoteka pokazuje kody typu i stanu sprawy; nieaktualne komentarze;
