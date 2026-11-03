@@ -458,6 +458,27 @@ function KrokPrzeniesienie({ dane, ustawDane, spolka }) {
             />
           )}
 
+          {zbywca && zbywca.pokryta !== 'tak' && (
+            <>
+              {/* D-089: akcje bez pełnego pokrycia (także „brak informacji”) — przypomnienie o zgodzie spółki. */}
+              <label className="chk">
+                <input
+                  type="checkbox"
+                  checked={Boolean(dane.zgoda_spolki_niepelne_pokrycie)}
+                  onChange={(z) => ustawDane({ ...dane, zgoda_spolki_niepelne_pokrycie: z.target.checked })}
+                />
+                <span className="chk-tresc">
+                  Uzyskano zgodę spółki na zbycie akcji nie w pełni pokrytych
+                  <div className="podstawa-prawna">art. 300⁴⁰ § 1 KSH — zgoda w formie dokumentowej, chyba że umowa spółki stanowi inaczej.</div>
+                </span>
+              </label>
+              <Komunikat
+                odmiana="uwaga"
+                tresc="Nabywca akcji nie w pełni pokrytej odpowiada wobec spółki solidarnie ze zbywcą za wniesienie pozostałej części wkładu (art. 300⁴⁰ § 3 KSH)."
+              />
+            </>
+          )}
+
           <Pole etykieta="Tytuł przejścia akcji">
             <select
               value={dane.tytul_prawny || 'sprzedaż'}

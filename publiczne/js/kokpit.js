@@ -86,7 +86,7 @@ const NAZWY_POKRYCIA_KOKPIT = {
   nie: 'niepokryte',
   czesciowo: 'częściowo',
 };
-const NAZWA_POKRYCIA_NIEUSTALONE = 'nieustalone';
+const NAZWA_POKRYCIA_NIEUSTALONE = 'brak informacji o pełnym pokryciu'; // D-089
 
 function opiszPokrycieKokpit(pokryta) {
   return NAZWY_POKRYCIA_KOKPIT[pokryta] || NAZWA_POKRYCIA_NIEUSTALONE;

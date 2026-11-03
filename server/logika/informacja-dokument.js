@@ -123,7 +123,8 @@ const NAZWY_POKRYCIA = {
   // nie wniesiono — dlatego nie „niepokryte". Nie jest to też „nieustalone":
   // tamto słowo czytało się jak usterka rejestru, choć opisuje wyłącznie brak
   // wzmianki, którą wpisuje się na podstawie oświadczenia zarządu.
-  nieustalone: 'brak wzmianki',
+  // D-089: domyślny stan — „brak informacji o pełnym pokryciu” (pokrycie może przyjść do 3 lat po wpisie spółki).
+  nieustalone: 'brak informacji o pełnym pokryciu',
 };
 
 const NAZWY_OBCIAZENIA = {

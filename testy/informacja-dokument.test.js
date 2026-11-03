@@ -259,7 +259,7 @@ test('brak wzmianki o pokryciu nie zamienia sie w „niepokryte”', () => {
   const html = dokument({ stan });
   // art. 300(33) § 1 pkt 9 KSH: rejestr niesie WZMIANKE o pokryciu. Jej brak
   // to brak wzmianki, a nie stwierdzenie, ze wkladu nie wniesiono.
-  assert.match(html, /brak wzmianki/);
+  assert.match(html, /brak informacji o pełnym pokryciu/); // D-089
   assert.doesNotMatch(html, /niepokryte/);
 });
 
