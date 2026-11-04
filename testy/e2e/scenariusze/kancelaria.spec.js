@@ -93,7 +93,7 @@ test('K3a: nowa spółka w kancelarii — pomiar pól w każdym z 4 kroków', as
   await start(page, testInfo, 'nowa-spolka-kancelaria', 'K3a otwarcie rejestru — nowa spółka');
   await krok(page, 'Spółki → Nowa spółka', async () => {
     await page.goto('/#/spolki');
-    await page.getByRole('button', { name: 'Nowa spółka' }).first().click();
+    await page.getByRole('button', { name: 'Dodaj spółkę' }).first().click();
     await ui.gotowe(page, 'Numer KRS');
   });
   await krok(page, 'Krok 1 — Spółka (Pobierz z KRS)', async () => {
@@ -124,8 +124,10 @@ test('K3c: przejęcie rejestru (Theta, „Uzgodnienie”) — checklista odbioru
     await ui.gotowe(page, 'Etap 6');
     const karta = page.locator('.karta', { hasText: 'Etap 6' });
     const pola = karta.locator('input[type="checkbox"]');
-    for (let i = 0; i < await pola.count(); i += 1) if (!(await pola.nth(i).isChecked())) await pola.nth(i).check();
-    await page.waitForTimeout(500);
+    // Checklista zapisuje się na serwerze po każdym kliknięciu — stan pola zmienia się po odpowiedzi.
+    for (let i = 0; i < await pola.count(); i += 1) {
+      if (!(await pola.nth(i).isChecked())) { await pola.nth(i).click(); await page.waitForTimeout(300); }
+    }
   });
   await krok(page, 'Etap 7 — pobierz protokół, wgraj podpisany', async () => {
     const karta = page.locator('.karta', { hasText: 'Etap 7' });
@@ -134,13 +136,23 @@ test('K3c: przejęcie rejestru (Theta, „Uzgodnienie”) — checklista odbioru
     await karta.getByRole('button', { name: 'Wgraj protokół podpisany przez notariusza' }).click();
     await page.waitForTimeout(800);
   });
-  await krok(page, 'Przejście → Aktywny', async () => {
-    await page.getByRole('button', { name: /→ Aktywny/ }).click();
-    await page.getByRole('button', { name: /Otwórz rejestr — PRZEJĘCIE/ }).waitFor({ timeout: 10000 });
-  });
-  await krok(page, 'Otwórz rejestr — PRZEJĘCIE (kreator stanu otwarcia)', async () => {
+  // „Aktywny” ustawia dopiero otwarcie rejestru zdarzeniem PRZEJĘCIE (server/trasy/spolki.js:939) — bez osobnego przejścia.
+  await krok(page, 'Otwórz rejestr — PRZEJĘCIE → kokpit spółki', async () => {
     await page.getByRole('button', { name: /Otwórz rejestr — PRZEJĘCIE/ }).click();
-    await ui.gotowe(page);
+    await ui.gotowe(page, 'Theta');
+  });
+  await zakoncz(page);
+});
+
+test('K3c: z kokpitu przejmowanej spółki do otwarcia PRZEJĘCIEM (B-004)', async ({ page }, testInfo) => {
+  test.fail(true, 'B-004 — kokpit nie prowadzi do /spolki/:id/otworz (docs/analiza/BLEDY.md)');
+  await start(page, testInfo, 'przejecie-otwarcie', 'K3c otwarcie PRZEJĘCIEM');
+  const { przeniesienia } = await api(page, 'GET', '/api/psa/przeniesienia');
+  const theta = przeniesienia.find((p) => p.status === 'uzgodnienie');
+  await krok(page, 'Kokpit przejmowanej spółki → „Otwórz rejestr”', async () => {
+    await page.goto(`/#/spolki/${theta.spolka_id}`);
+    await ui.gotowe(page, 'Theta');
+    await page.getByRole('button', { name: /^Otwórz rejestr/ }).first().click({ timeout: 5000 });
   });
   await zakoncz(page);
 });
@@ -157,7 +169,8 @@ test('K6: sprawa z portalu — „Rozpocznij weryfikację” → „Ustal podsta
   });
   await krok(page, 'Sprawa — Rozpocznij weryfikację', async () => {
     await page.goto(`/#/sprawy/${sprawa.id}`);
-    await page.getByRole('button', { name: 'Rozpocznij weryfikację' }).click();
+    // Ten sam przycisk jest na ekranie dwa razy (pasek akcji sprawy i karta kreatora) — ustalenie w raporcie.
+    await page.getByRole('button', { name: 'Rozpocznij weryfikację' }).first().click();
     await page.getByRole('button', { name: 'Ustal podstawę wpisu' }).waitFor({ timeout: 10000 });
   });
   await krok(page, 'Ustal podstawę wpisu', async () => {
@@ -175,11 +188,7 @@ test('K6: sprawa z portalu — „Rozpocznij weryfikację” → „Ustal podsta
     if (!(await opis.inputValue())) await opis.fill('Zwyczajne walne zgromadzenie (dane fikcyjne).');
     await page.getByRole('button', { name: 'Dalej', exact: true }).click();
     await page.locator('.card-h', { hasText: 'Weryfikacja i podgląd' }).waitFor({ timeout: 10000 });
-    const pola = page.locator('.karta input[type="checkbox"]:visible');
-    for (let i = 0; i < await pola.count(); i += 1) {
-      const t = await pola.nth(i).evaluate((el) => (el.closest('label') || el.parentElement).textContent);
-      if (!/wątpliwości/i.test(t) && !(await pola.nth(i).isChecked())) await pola.nth(i).check();
-    }
+    await ui.checklista(page);
     await page.getByRole('button', { name: 'Dokonaj wpisu' }).click();
     await page.getByRole('button', { name: 'Wróć do kokpitu spółki' }).waitFor({ timeout: 15000 });
   });
@@ -192,7 +201,8 @@ test('K7: przeszkoda (brak danych) — wstrzymanie i wznowienie sprawy zbycia', 
     await page.goto('/#/sprawy/1');
     await page.getByRole('button', { name: 'Wstrzymaj' }).first().click();
     await ui.wpisz(page, 'Przeszkoda uniemożliwiająca wpis', 'Brak adresu nabywcy w dokumencie (dane fikcyjne).');
-    await page.getByRole('dialog').getByRole('button', { name: /Wstrzymaj/ }).click();
+    // Przycisk w oknie nazywa czynność (A-017): „Wstrzymaj sprawę”, nie „Potwierdź”.
+    await page.getByRole('dialog').getByRole('button', { name: 'Wstrzymaj sprawę' }).click();
     await page.getByRole('button', { name: 'Wznów' }).waitFor({ timeout: 10000 });
   });
   await krok(page, 'Wznów', async () => {
@@ -211,7 +221,7 @@ test('K11: usunięcie listu z wysyłki (przed nadaniem)', async ({ page }, testI
   await krok(page, 'Usuń z wysyłki — powód', async () => {
     await page.getByRole('button', { name: 'Usuń z wysyłki' }).first().click();
     await page.getByRole('dialog').locator('textarea, input[type="text"]').first().fill('Zbywca wyraził zgodę w kancelarii (dane fikcyjne).');
-    await page.getByRole('dialog').getByRole('button', { name: /Usuń/ }).last().click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Usuń z wysyłki' }).click();
     await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 10000 });
   });
   await zakoncz(page);
@@ -249,10 +259,10 @@ test('Żądanie spółki, której nie ma w kartotece — dopisanie spółki w kr
     if (opcje.some((t) => /Alfa/.test(t))) throw new Error('spółka jest w kartotece — ustalenie nieaktualne');
   });
   await krok(page, '+ Nowa osoba w kartotece — dane spółki drugi raz', async () => {
+    // „+ Nowa osoba w kartotece” rozwija formularz osoby w samym polu (nie w oknie).
     await ui.pole(page, 'Żądający wpisu').getByRole('option', { name: /Nowa osoba/ }).click();
-    const okno = page.getByRole('dialog');
-    await okno.waitFor();
-    await okno.getByText(/prawna|Osoba prawna|Firma/).first().click().catch(() => {});
+    const okno = ui.pole(page, 'Żądający wpisu');
+    await okno.getByText('Osoba prawna lub spółka osobowa').click();
     await ui.wpisz(page, 'Firma (nazwa)', 'Alfa Testowa P.S.A.');
     await ui.wpisz(page, 'Numer w rejestrze (KRS lub zagranicznym)', '0000990001').catch(() => {});
     await ui.wpisz(page, 'Kod pocztowy', '80-001');
@@ -260,7 +270,7 @@ test('Żądanie spółki, której nie ma w kartotece — dopisanie spółki w kr
     await ui.wpisz(page, 'Ulica', 'Testowa').catch(() => {});
     await ui.wpisz(page, 'Nr domu', '1');
     await okno.getByRole('button', { name: 'Dodaj do kartoteki' }).click();
-    await okno.waitFor({ state: 'detached', timeout: 10000 });
+    await okno.getByRole('button', { name: 'Dodaj do kartoteki' }).waitFor({ state: 'detached', timeout: 10000 });
   });
   await zakoncz(page);
 });

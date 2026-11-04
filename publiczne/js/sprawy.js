@@ -268,7 +268,8 @@ function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
  * Okno z powodem. `minDlugosc` — ta sama granica co na serwerze (przycisk aktywny dopiero po niej).
  * Błąd z `przyZapisie` (rzucony wyjątek) zostaje w oknie razem z wpisanym tekstem.
  */
-function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie, minDlugosc = 1 }) {
+/** `akcja` — nazwa czynności na przycisku potwierdzenia (ta sama co przycisk, który otworzył okno). */
+function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie, minDlugosc = 1, akcja = 'Potwierdź', zamknij = 'Anuluj' }) {
   const [powod, ustawPowod] = useState('');
   const [blad, ustawBlad] = useState(null);
   const [zapis, ustawZapis] = useState(false);
@@ -290,9 +291,9 @@ function ModalPowod({ tytul, etykieta, przyZamknieciu, przyZapisie, minDlugosc =
       przyZamknieciu={przyZamknieciu}
       stopka={
         <>
-          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          <button className="btn" onClick={przyZamknieciu}>{zamknij}</button>
           <button className="btn btn-glowny" disabled={zaKrotki || zapis} onClick={zatwierdz}>
-            Potwierdź
+            {akcja}
           </button>
         </>
       }
@@ -327,7 +328,7 @@ function ModalWstrzymania({ przyZamknieciu, przyZapisie }) {
               termin_usuniecia: terminUsuniecia || null,
             })}
           >
-            Potwierdź
+            Wstrzymaj sprawę
           </button>
         </>
       }
@@ -370,7 +371,7 @@ function ModalOdmowy({ przyZamknieciu, przyZapisie }) {
             disabled={!kod || (wymagaOpisu && !opis.trim())}
             onClick={() => przyZapisie({ powod_odmowy_kod: kod, powod_odmowy: opis.trim() })}
           >
-            Potwierdź
+            Odmów wpisu
           </button>
         </>
       }
@@ -439,6 +440,8 @@ function PasekAkcjiSprawy({ sprawa, odswiez, zakonczona, przyPodstawie, przyZada
       {modal === 'anuluj' && (
         <ModalPowod
           tytul="Anulowanie sprawy"
+          akcja="Anuluj sprawę"
+          zamknij="Zostaw sprawę"
           etykieta="Powód anulowania"
           przyZamknieciu={() => ustawModal(null)}
           przyZapisie={(powod) => wykonaj('anuluj', { powod })}
@@ -455,7 +458,29 @@ function PasekAkcjiSprawy({ sprawa, odswiez, zakonczona, przyPodstawie, przyZada
  * D-090: ścieżką domyślną jest powiadomienie (e-mail przy zgodzie na e-mail, inaczej list — znacznik przy
  * adresacie); zgoda na wpis — jedno opcjonalne pole (D-088). `domyslnyOdbiorca` — np. zbywca z kreatora.
  */
+/**
+ * Powiadomienie wysłane listem czeka w kolejce do nadania — dopiero nadanie ustawia `powiadomienie_wyslano`
+ * (server/listy.js). Panel i przycisk wpisu pokazują ten stan wprost, zamiast znikającego okna `alert`
+ * (SESJA-PSA-ANALIZA-PRZEPLYWOW, A-008), a ponowne „Wyślij powiadomienie” nie dubluje listu.
+ */
+function useListPowiadomieniaWKolejce(sprawaId, zaleznosci = []) {
+  const { dane, ladowanie } = useDane(sprawaId ? '/api/psa/listy?status=do_wyslania' : null, [sprawaId, ...zaleznosci]);
+  // `undefined` — jeszcze nie wiadomo (przycisk wysyłki ukryty, żeby nie wysłać drugiego listu); `null` — brak listu.
+  if (sprawaId && (ladowanie || !dane)) return undefined;
+  return ((dane && dane.listy) || []).find((l) => l.sprawa_id === sprawaId && l.rodzaj_pisma === 'powiadomienie') || null;
+}
+
+/** Przyczyna blokady wpisu — gdy powiadomienie czeka na nadanie, mówi o tym zamiast „najpierw wyślij powiadomienie”. */
+function przyczynaBlokadyWpisu(sprawa, listWKolejce) {
+  if (!sprawa.blokada_wpisu) return null;
+  return listWKolejce
+    ? 'Powiadomienie czeka w kolejce listów — wpis będzie możliwy po nadaniu listu.'
+    : sprawa.blokada_wpisu.przyczyna;
+}
+
 function PanelPowiadomienia({ sprawa, spolka, odswiez, domyslnyOdbiorca = null }) {
+  const [wyslanoListow, ustawWyslanoListow] = useState(0);
+  const listWKolejce = useListPowiadomieniaWKolejce(sprawa.id, [wyslanoListow]);
   const [osobaId, ustawOsobeId] = useState(domyslnyOdbiorca);
   useEffect(() => { if (domyslnyOdbiorca) ustawOsobeId(domyslnyOdbiorca); }, [domyslnyOdbiorca]);
   const [wysylanie, ustawWysylanie] = useState(false);
@@ -470,7 +495,7 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez, domyslnyOdbiorca = null }
     try {
       const odp = await API.post(`/api/psa/sprawy/${sprawa.id}/powiadomienie`, { osoba_id: osobaId });
       // W4.3 — bez zgody na e-mail pismo idzie do kolejki listów (adres z rejestru).
-      if (odp.wysylka.status === 'list') window.alert(`${odp.wysylka.powod} Zakładka „Listy do wysyłki”.`);
+      if (odp.wysylka.status === 'list') ustawWyslanoListow((n) => n + 1);
       else if (!odp.wysylka.wyslano) ustawBlad(odp.wysylka.powod);
       odswiez();
     } catch (e) {
@@ -509,16 +534,26 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez, domyslnyOdbiorca = null }
         />
       )}
       <Komunikat odmiana="blad" tresc={blad} />
+      {!sprawa.powiadomienie_wyslano && listWKolejce && (
+        <Komunikat
+          odmiana="info"
+          tresc={<>Powiadomienie czeka w kolejce listów (adres z rejestru: {listWKolejce.odbiorca_nazwa}) — wpis będzie możliwy po nadaniu. <a href="#/listy">Listy do wysyłki</a></>}
+        />
+      )}
 
-      <Pole etykieta="Kogo powiadomić (osoba, której prawa zmienia wpis)">
-        <WyborZKartoteki wartosc={osobaId} przyZmianie={ustawOsobeId} />
-        <ZnacznikKontaktuOsoby osobaId={osobaId} />
-      </Pole>
-      <div className="przyciski-karty">
-        <button className="btn btn-glowny" disabled={!osobaId || wysylanie} onClick={wyslij}>
-          {wysylanie ? 'Wysyłanie…' : 'Wyślij powiadomienie'}
-        </button>
-      </div>
+      {listWKolejce === null && (
+        <>
+          <Pole etykieta="Kogo powiadomić (osoba, której prawa zmienia wpis)">
+            <WyborZKartoteki wartosc={osobaId} przyZmianie={ustawOsobeId} />
+            <ZnacznikKontaktuOsoby osobaId={osobaId} />
+          </Pole>
+          <div className="przyciski-karty">
+            <button className="btn btn-glowny" disabled={!osobaId || wysylanie} onClick={wyslij}>
+              {wysylanie ? 'Wysyłanie…' : 'Wyślij powiadomienie'}
+            </button>
+          </div>
+        </>
+      )}
 
       <label className="chk" style={{ marginTop: 'var(--od-16)' }}>
         <input type="checkbox" checked={zgodaOk} onChange={(z) => ustawZgodaOk(z.target.checked)} />
@@ -589,6 +624,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
   const [odhaczone, ustawOdhaczone] = useState({});
   const [notatkaWatpliwosci, ustawNotatkeWatpliwosci] = useState('');
   const [podglad, ustawPodglad] = useState(null);
+  const listWKolejce = useListPowiadomieniaWKolejce(sprawa.id, [sprawa.zaktualizowano]);
   const [ladowaniePodgladu, ustawLadowaniePodgladu] = useState(false);
   const [zapisywanie, ustawZapisywanie] = useState(false);
   const [wynik, ustawWynik] = useState(null);
@@ -675,7 +711,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
         <Karta>
           <Komunikat
             odmiana="ok"
-            tytul={`${definicjaTypu.nazwa} — zdarzenie zapisane w rejestrze`}
+            tytul={`${definicjaTypu.nazwa} — wpis dokonany`}
             tresc={`Skrót zdarzenia w łańcuchu: ${wynik.zdarzenie.hash_skrocony}…`}
           />
           {/* Po emisji „nieobjęte akcje" nie są uwagą do sprawdzenia, tylko
@@ -865,8 +901,8 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
               {/* W2.3 — przyczyna blokady obok przycisku (D-052: z odnośnikiem do miejsca naprawy). */}
               {sprawa.blokada_wpisu && (
                 <span className="podpowiedz" style={{ maxWidth: '28rem' }}>
-                  {sprawa.blokada_wpisu.przyczyna}{' '}
-                  <a href="#panel-powiadomienia">Uzupełnij</a>
+                  {przyczynaBlokadyWpisu(sprawa, listWKolejce)}{' '}
+                  {listWKolejce ? <a href="#/listy">Listy do wysyłki</a> : <a href="#panel-powiadomienia">Uzupełnij</a>}
                 </span>
               )}
               <button className="btn btn-glowny btn-lg" disabled={!mozeWpisac || zapisywanie || Boolean(sprawa.blokada_wpisu)} onClick={dokonajWpisu}>

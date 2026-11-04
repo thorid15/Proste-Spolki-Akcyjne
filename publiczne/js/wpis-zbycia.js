@@ -85,6 +85,7 @@ function NowyNabywca({ przyZapisie, przyAnulowaniu }) {
  */
 function KreatorZbycia({ spolkaId, sprawa = null, odswiezSprawe, definicjaTypu = null, poczatek = null }) {
   const stanSpolki = useDane(`/api/psa/spolki/${spolkaId}`);
+  const listWKolejce = useListPowiadomieniaWKolejce(sprawa ? sprawa.id : null, [sprawa && sprawa.zaktualizowano]);
   const [f, ustawF] = useState(() => formularzStartowy(sprawa, poczatek));
   const maSzkic = Boolean(sprawa && sprawa.dane_wejsciowe_json && String(sprawa.dane_wejsciowe_json).includes('_formularz'));
   const [krok, ustawKrok] = useState(maSzkic ? 3 : 1);
@@ -323,7 +324,7 @@ function KreatorZbycia({ spolkaId, sprawa = null, odswiezSprawe, definicjaTypu =
                 </div>
               </>
             )}
-            {sprawa.blokada_wpisu && <div className="podpowiedz">{sprawa.blokada_wpisu.przyczyna}</div>}
+            {sprawa.blokada_wpisu && <div className="podpowiedz">{przyczynaBlokadyWpisu(sprawa, listWKolejce)}{listWKolejce && <> <a href="#/listy">Listy do wysyłki</a></>}</div>}
             <p className="zdanie-nieodwracalne">Wpisu nie można cofnąć — możliwe jest tylko sprostowanie.</p>
             <PasekAkcji akcje={[
               { etykieta: 'Wstecz', przyKlik: () => ustawKrok(2) },

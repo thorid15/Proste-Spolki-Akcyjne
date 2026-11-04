@@ -123,6 +123,7 @@ async function krok(page, nazwa, fn, { bezAxe = false } = {}) {
     return {
       komunikaty: [...document.querySelectorAll('.komunikat-blad, .komunikat-uwaga, .pole-blad, [role="alert"]')].map(t).filter(Boolean).slice(0, 8),
       nieaktywne: [...document.querySelectorAll('button:disabled')].map(t).filter(Boolean).slice(0, 8),
+      przyciski: [...document.querySelectorAll('main button, #tresc button, .tresc button')].map(t).filter(Boolean).slice(0, 25),
       naglowki: [...document.querySelectorAll('.card-h, h1, h2, .krok-naglowek')].map(t).filter(Boolean).slice(0, 6),
       tresc: (document.querySelector('main, #tresc, .tresc') || document.body).innerText.replace(/\s+/g, ' ').slice(0, 600),
     };

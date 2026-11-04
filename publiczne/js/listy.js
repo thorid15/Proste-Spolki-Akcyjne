@@ -81,7 +81,7 @@ function WierszListu({ list, odswiez }) {
           </>
         )}
         {usuwanie && (
-          <ModalPowod tytul="Usuń list z wysyłki" etykieta="Powód" minDlugosc={5} przyZamknieciu={() => ustawUsuwanie(false)} przyZapisie={usun} />
+          <ModalPowod tytul="Usuń list z wysyłki" akcja="Usuń z wysyłki" zamknij="Zostaw w wysyłce" etykieta="Powód" minDlugosc={5} przyZamknieciu={() => ustawUsuwanie(false)} przyZapisie={usun} />
         )}
       </td>
     </tr>

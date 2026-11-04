@@ -46,3 +46,51 @@
   Zbycie (K5) ma własny stan kreatora i tego błędu nie ma (scenariusze `zbycie-*` przechodzą).
 - **Kierunek:** odświeżanie w tle bez `Spinner` (zachować poprzednie `dane` w `useDane` przy `odswiez`) albo stan kroku nad kreatorem;
   docelowo — jeden wzorzec wpisu (raport § 4).
+
+## B-004 — Przejęcie rejestru: z ekranu przeniesienia nie da się dojść do otwarcia PRZEJĘCIEM
+
+- **Waga:** B (blokuje — ścieżka w UI prowadzi do niewłaściwego otwarcia; przeniesienie nie dochodzi do „Aktywny”).
+- **Odtworzenie:** `#/przeniesienia/:id` (status „Uzgodnienie”, np. Theta z `test:seed`) → Etap 6 odhaczony, protokół wgrany →
+  „Otwórz rejestr — PRZEJĘCIE (kreator stanu otwarcia)” → kokpit spółki. Przyciski kokpitu (scenariusz `przejecie-rejestru`,
+  `stan_ekranu.przyciski`): „Migracja z innego rejestru — stan otwarcia”, „Informacja z rejestru”, „Przekazanie rejestru…”,
+  „Dodaj akcjonariusza”, „Przeniesienie akcji” … — **brak „Otwórz rejestr”**. Jedyne wejście w stan otwarcia to „Migracja”.
+- **Przyczyna:** `publiczne/js/przeniesienia.js:120` prowadzi do `/spolki/:id` (kokpit), nie do `/spolki/:id/otworz`.
+  W kokpicie (`kokpit.js:908–918`) dla spółki bez zdarzeń jest tylko odnośnik do `/spolki/:id/migracja` (`EkranMigracji`
+  — migracja z Rejestrów Notarialnych z datami historycznymi), który zapisuje emisję i objęcie wprost
+  (`POST /spolki/:id/zdarzenia`, `migracja.js:47`) — bez `POST /spolki/:id/otworz-rejestr`. Tylko ta trasa
+  (`server/trasy/spolki.js:893–939`) sprawdza przeszkody przejścia, zapisuje PRZEJĘCIE na początku łańcucha i ustawia
+  przeniesienie na „Aktywny”. Kreator `/spolki/:id/otworz` (`app.js`, `EkranOtwarciaRejestru`) jest osiągalny tylko
+  z wniosku (`wnioski.js:1706`) albo ręcznie wpisanym adresem.
+- **Kierunek:** przycisk na ekranie przeniesienia → `/spolki/:id/otworz` (jedna nazwa czynności w całym przepływie,
+  reguła 7); „Migracja z innego rejestru” niewidoczna dla spółki z przeniesieniem w toku.
+
+## B-005 — Zbycie (K5): pola „zgoda spółki” i „prawo pierwszeństwa wyczerpane” nigdy się nie pokazują; wpis zablokowany
+
+- **Waga:** B (blokuje — zbycia akcji objętych ograniczeniem z wymogiem zgody spółki albo prawem pierwszeństwa nie da się wpisać nowym przebiegiem).
+- **Odtworzenie:** ograniczenie na serii A (`zakres: 'emisja'`, `prawo_pierwszenstwa: true`; analogicznie `wymaga_zgody_spolki: true`)
+  → kokpit → „Przeniesienie akcji” → Anna Testowa → Celina, 20 akcji → „Podstawa” → „Sprawdzenie i wpis”.
+  Pól wyboru tylko 6 (checklista); pola „Prawo pierwszeństwa wyczerpane” brak; komunikat serwera „Wpis nie może zostać dokonany:
+  Zarejestrowane jest prawo pierwszeństwa nabycia akcji … Nie odnotowano jego wyczerpania.”; „Dokonaj wpisu” nieaktywne.
+  Scenariusze `zbycie-pierwszenstwo`, `zbycie-zgoda-spolki`.
+- **Przyczyna:** `publiczne/js/wpis-zbycia-logika.js:88–95` `ograniczeniaDlaDoboru` filtruje `stan.ograniczenia` po
+  `o.status === 'aktywne'` i `o.emisja_klucz === dobor.emisja_klucz` (kształt wewnętrzny `stan.js`). Kreator dostaje jednak
+  stan z `GET /api/psa/spolki/:id` (`wpis-zbycia.js:87`), a ten (`server/widoki.js:194–205`) zwraca ograniczenia w kształcie
+  do wyświetlania: `{klucz, zakres, seria, numery, wymaga_zgody_spolki, prawo_pierwszenstwa, opis}` — bez `status`,
+  bez `emisja_klucz`, bez `zakresy`. Filtr zawsze daje `[]` → `widoczneGdy` pól `zgoda_spolki` i `pierwszenstwo_wyczerpane`
+  zawsze `false` → `daneZdarzenia` wysyła flagi 0 → walidacja serwera (`walidacje.js:217–235`) blokuje.
+  Testy jednostkowe (`testy/wpis-zbycia-logika.test.js:49–51, 77`) przechodzą, bo ich dane mają kształt wewnętrzny, którego API nie zwraca.
+- **Kierunek:** jeden kształt ograniczeń dla kreatora (np. `emisja_klucz`, `zakresy` w widoku) + test na odpowiedzi `GET /api/psa/spolki/:id`.
+
+## B-006 — „Listy do wysyłki” przy 390 px: nakładające się treści, formularz nadania poza ekranem
+
+- **Waga:** B na telefonie (nie da się kliknąć „Zapisz nadanie” — wpis zbycia bez zgody zbywcy zostaje zablokowany); na 1440 px działa.
+- **Odtworzenie:** 390 px, `#/listy` (3 listy z `test:seed` + nowy) → „Nadano” przy liście → pola „Data nadania”, „Numer nadania” wychodzą
+  poza kartę i prawą krawędź ekranu; „Zapisz nadanie” poza zasięgiem. W wierszach „Pismo” i „Adresat” tekst nachodzi na etykiety,
+  znacznik „Brak zgody — konieczne powiadomienie listem” leży pod przyciskami. Zrzut `docs/analiza/arkusze/B-006-kolejka-listow-390.png`;
+  `sprawdzUklad`: 11 problemów w tym kroku („poza obszarem treści karty (133–386 vs 65–325)”). Scenariusze `zbycie-bez-zgody@390`, `zbycie-niepokryte@390`.
+- **Przyczyna:** `publiczne/style/rejestr.css:2557–2566` — poniżej 600 px każda komórka `table.tabela td` to jeden rząd flex
+  (`justify-content: space-between`, bez `flex-wrap`, bez `min-width: 0` dla dzieci), z etykietą `::before` (`max-width: 45%`).
+  Komórka z kilkoma blokami (tekst + `div`, albo cały formularz `div.pion` w „Nadanie”) nie mieści się w jednym rzędzie i nie może się zwinąć.
+  Kontrola układu R4 (`npm run zrzuty`) mierzyła ekran listów bez otwartego formularza nadania i z jednym listem.
+- **Kierunek:** komórki tabeli na wąskim ekranie — `flex-wrap: wrap`, treść komórki jako jeden blok `min-width: 0`; formularz w komórce na całą szerokość
+  pod etykietą. Zmiana wspólnej reguły → pełny przebieg `npm run zrzuty` i `npm run e2e` przy 390 px.

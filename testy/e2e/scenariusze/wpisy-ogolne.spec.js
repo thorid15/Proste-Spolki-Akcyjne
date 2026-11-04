@@ -90,15 +90,8 @@ const TYPY = [
   { typ: 'pokrycie_akcji', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['wybierz', 'Seria akcji?', 'A'], ['kartoteka', 'Akcjonariusz', 'Anna'], ['pierwsza', 'Wzmianka o pokryciu']] },
 ];
 
-async function checklista(page) {
-  const pola = page.locator('.karta input[type="checkbox"]:visible');
-  for (let i = 0; i < await pola.count(); i += 1) {
-    const p = pola.nth(i);
-    const tekst = await p.evaluate((el) => (el.closest('label') || el.parentElement).textContent);
-    if (/wątpliwości/i.test(tekst)) continue;
-    if (!(await p.isChecked())) await p.check();
-  }
-}
+/** Wspólny pomocnik (ui.checklista) — odhacza i czeka na aktywne „Dokonaj wpisu”. */
+const checklista = (page) => ui.checklista(page);
 
 async function przebieg(page, testInfo, def, { scenariusz } = {}) {
   rozpocznij(page, testInfo, { scenariusz: scenariusz || `wpis-${def.typ}`, proces: `K4 wpis ${def.typ}`, szerokosc: Number(testInfo.project.name), persona: def.zadajacy || 'z urzędu' });
