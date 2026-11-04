@@ -43,7 +43,7 @@ test('P1–P3: zgłoszenie nowej spółki → zaproszenie → aktywacja → RODO
     await page.goto('/portal.html#/zglos-sie');
     await ui.wpisz(page, 'E-mail', EMAIL);
     await ui.wpisz(page, 'Numer KRS spółki', '0000990099');
-    await ui.przycisk(page, 'Wyślij zgłoszenie');
+    await ui.przycisk(page, 'Zgłoś spółkę');
     await page.getByText(/wysłan|Dziękujemy|sprawdź skrzynkę|zaproszen/i).first().waitFor({ timeout: 10000 });
   });
   const link = linkZeSkrzynki(serwer, EMAIL);
@@ -91,7 +91,7 @@ test('P1–P3: zgłoszenie nowej spółki → zaproszenie → aktywacja → RODO
     await ui.wpisz(page, 'Ulica', 'Deltowa').catch(() => {});
     await ui.wpisz(page, 'Nr domu', '4');
     // D-099: bez zgody na komunikację e-mail — adresu nie podaje się (wcześniej wymagany zawsze, A-028).
-    await page.getByRole('button', { name: 'Gotowe', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Zapisz zmiany', exact: true }).last().click();
     await page.waitForTimeout(600);
     await dalejWniosku(page, 'Podsumowanie');
   });
@@ -177,7 +177,7 @@ for (const wariant of [
       await ui.wybierz(page, 'Kto dotąd prowadzi rejestr', wariant.etykieta);
       await ui.wpisz(page, 'Nazwa dotychczasowego podmiotu', wariant.nazwa).catch(() => {});
       await ui.wpisz(page, 'Okres wypowiedzenia', '3 miesiące').catch(() => {});
-      await ui.przycisk(page, 'Wyślij zgłoszenie');
+      await ui.przycisk(page, 'Zgłoś spółkę');
       await page.getByText(/wysłan|Dziękujemy|sprawdź skrzynkę|zaproszen/i).first().waitFor({ timeout: 10000 });
     });
     await zakoncz(page);
@@ -207,7 +207,7 @@ test('P7–P9: Zarząd — Start, Spółka, zamówienie informacji, „Zgłoś b
     await ui.gotowe(page, 'Czego dotyczy');
     await ui.pole(page, 'Czego dotyczy').locator('select').selectOption({ index: 1 });
     await ui.wpisz(page, 'Opisz, na czym polega błąd', 'Błędna miejscowość akcjonariusza (dane fikcyjne).');
-    await ui.przycisk(page, 'Zgłoś błąd');
+    await ui.przycisk(page, 'Zgłoś błąd we wpisie');
     await page.getByText(/Zgłoszono|przyjęte|zapisane/i).first().waitFor({ timeout: 10000 });
   });
   await zakoncz(page);
@@ -243,7 +243,7 @@ test('P11: żądanie wpisu z portalu (Zarząd) — zgłoszenie zmiany z dokument
     await ui.gotowe(page, 'Czego dotyczy zgłoszenie');
     await ui.pole(page, 'Czego dotyczy zgłoszenie').locator('select').selectOption({ index: 1 });
     await ui.pole(page, 'Dokument, na podstawie którego').locator('input[type="file"]').setInputFiles(PDF);
-    await ui.przycisk(page, 'Złóż zgłoszenie');
+    await ui.przycisk(page, 'Zgłoś zmianę');
     await page.getByText(/Zgłoszenie zapisane/).first().waitFor({ timeout: 10000 });
   });
   await krok(page, 'Przejdź do płatności', async () => {

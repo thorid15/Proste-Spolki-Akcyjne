@@ -104,10 +104,10 @@ function EkranPrzeniesienia({ id }) {
           <div className="karta" style={{ marginTop: 'var(--od-4)' }}>
             <div className="siatka-2">
               {p.dozwolone_przejscia.includes('umowa_warunkowa') && (
-                <Pole etykieta="Data zawarcia umowy (podpis notariusza)"><input type="date" value={pola.data_zawarcia_umowy} onChange={(z) => ustawPola({ ...pola, data_zawarcia_umowy: z.target.value })} /></Pole>
+                <Pole etykieta="Data zawarcia umowy (podpis notariusza)"><PoleDaty wartosc={pola.data_zawarcia_umowy || ''} max={fmt.dzisIso()} przyZmianie={(v) => ustawPola({ ...pola, data_zawarcia_umowy: v || '' })} /></Pole>
               )}
               {p.dozwolone_przejscia.includes('oczekuje_na_przekazanie') && (
-                <Pole etykieta="Data rozwiązania / wygaśnięcia dotychczasowej umowy (po weryfikacji)"><input type="date" value={pola.data_skutecznosci} onChange={(z) => ustawPola({ ...pola, data_skutecznosci: z.target.value })} /></Pole>
+                <Pole etykieta="Data rozwiązania / wygaśnięcia dotychczasowej umowy (po weryfikacji)"><PoleDaty wartosc={pola.data_skutecznosci || ''} przyZmianie={(v) => ustawPola({ ...pola, data_skutecznosci: v || '' })} /></Pole>
               )}
               {(p.dozwolone_przejscia.includes('wstrzymane_rozbieznosci') || p.status === 'wstrzymane_rozbieznosci') && (
                 <Pole etykieta="Opis rozbieżności / wyjaśnienia"><input value={pola.uwagi} onChange={(z) => ustawPola({ ...pola, uwagi: z.target.value })} /></Pole>

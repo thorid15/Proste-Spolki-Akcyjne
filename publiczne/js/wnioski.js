@@ -1153,7 +1153,7 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
             <div className="karta" style={{ marginTop: 'var(--od-4)' }}>
               {papier && (
                 <Pole etykieta="Data otrzymania oryginału (albo podpisu w kancelarii)" wymagane>
-                  <input type="date" value={otrzymano} onChange={(z) => ustawOtrzymano(z.target.value)} />
+                  <PoleDaty wartosc={otrzymano || ''} max={fmt.dzisIso()} przyZmianie={(v) => ustawOtrzymano(v || '')} />
                 </Pole>
               )}
               <div className="podpowiedz">

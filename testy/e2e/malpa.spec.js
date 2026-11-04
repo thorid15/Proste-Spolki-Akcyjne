@@ -226,7 +226,7 @@ test('małpa: błędne dane w polach', async ({ page }) => {
   });
   await sprawdz('portal — Zgłoś się', 'Numer KRS spółki', '00009ABC01 (po próbie wysłania)', async () => {
     await ui.wpisz(page, 'Numer KRS spółki', '00009ABC01');
-    await page.getByRole('button', { name: 'Wyślij zgłoszenie' }).click();
+    await page.getByRole('button', { name: 'Zgłoś spółkę' }).click();
   }, async () => !(await page.getByText(/dziesięć cyfr/).count()));
   fs.mkdirSync(CZESCI, { recursive: true });
   fs.writeFileSync(path.join(CZESCI, 'malpa-bledne-dane.json'), JSON.stringify({ malpa: true, ekran: 'błędne dane', adres: '—', elementy: wyniki.length, problemy: wyniki.filter((w) => w.odrzucone === false).map((w) => ({ element: `${w.gdzie}: ${w.pole}`, problem: w.ostrzezenie ? `przyjmuje z ostrzeżeniem (bez blokady): ${w.wartosc}` : `przyjmuje oczywiście błędną wartość bez komunikatu: ${w.wartosc}` })), sprawdzone: wyniki }, null, 2));

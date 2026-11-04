@@ -481,7 +481,7 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
       <NawigacjaKreatora
         wstecz={{ etykieta: 'Wróć do listy', przy: przyZamknieciu }}
         dalej={edytowalne
-          ? { etykieta: zamykanie ? 'Zapisywanie…' : 'Gotowe', przy: zamknij, wylaczony: zamykanie }
+          ? { etykieta: zamykanie ? 'Zapisywanie…' : 'Zapisz zmiany', przy: zamknij, wylaczony: zamykanie }
           : null}
       />
 
