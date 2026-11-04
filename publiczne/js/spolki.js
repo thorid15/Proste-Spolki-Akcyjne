@@ -33,6 +33,9 @@ const PUSTA_SPOLKA = {
   // Reprezentant — wszystkie dane w mianowniku, tak jak w dokumencie
   // tożsamości. Pisma nie odmieniają ich przez przypadki, tylko opisują
   // etykietą („imiona rodziców:", „działający jako:").
+  // D-101: reprezentant jako osoba w kartotece — dane osobowe i AML raz; w spółce zostaje funkcja,
+  // imiona rodziców i dokument okazany przy podpisie. Dawne pola osobowe — tylko gdy brak osoby.
+  reprezentant_osoba_id: null,
   reprezentant_imie_nazwisko: '', reprezentant_rodzice: '', reprezentant_pesel: '',
   reprezentant_funkcja: '', reprezentant_reprezentacja: '', reprezentant_email: '',
   // B2/B3 — dowód i adres ustrukturyzowane (migracja 53); stare
@@ -181,6 +184,16 @@ function PozycjaZalozycielska({ pozycja, ustawPozycje, usun, mozna_usunac, wyklu
  * (formularz klienta zbiera tożsamość, nie kapitał) — pracownik wpisuje je
  * tu samodzielnie, tak jak przy spółce zakładanej wewnętrznie.
  */
+/** D-101: dane osobowe reprezentanta z kartoteki nie są kopiowane do spółki (jedno źródło — `psa_osoby`). */
+const POLA_OSOBOWE_REPREZENTANTA = [
+  'reprezentant_imie_nazwisko', 'reprezentant_pesel', 'reprezentant_email', 'reprezentant_plec', 'reprezentant_kraj',
+  'reprezentant_kod_pocztowy', 'reprezentant_miejscowosc', 'reprezentant_ulica', 'reprezentant_nr_domu', 'reprezentant_nr_lokalu',
+];
+function daneSpolkiDoZapisu(dane) {
+  if (!dane.reprezentant_osoba_id) return dane;
+  return Object.fromEntries(Object.entries(dane).filter(([k]) => !POLA_OSOBOWE_REPREZENTANTA.includes(k)));
+}
+
 function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) {
   const [krok, ustawKrokWewn] = useState(spolkaIstniejaca ? 2 : 0);
   // Najdalszy osiągnięty krok — do niego pasek kroków jest klikalny (0.4 pkt 8).
@@ -398,7 +411,7 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
     try {
       let id = spolkaId;
       if (!id) {
-        const wynikSpolki = await API.post('/api/psa/spolki', dane);
+        const wynikSpolki = await API.post('/api/psa/spolki', daneSpolkiDoZapisu(dane));
         id = wynikSpolki.spolka.id;
         ustawSpolkaId(id);
       } else {
@@ -410,7 +423,7 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
         // całości w POST powyżej) — kokpit potem pokazywał „–" mimo
         // wypełnionego pola w kreatorze. `wyczysc()` po stronie serwera i tak
         // filtruje do znanych kolumn spółki.
-        await API.put(`/api/psa/spolki/${id}`, dane);
+        await API.put(`/api/psa/spolki/${id}`, daneSpolkiDoZapisu(dane));
       }
 
       if (umowaZalacznik) {
@@ -588,68 +601,15 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
               </>
             ) : (
               <>
-                <Pole etykieta="Firma (nazwa) spółki" id="otwarcie-nazwa">
-                  <input type="text" {...pole('nazwa')} />
-                </Pole>
-                <Pole
-                  etykieta="Organ zarządzający"
-                  podpowiedz="P.S.A. może mieć zarząd albo (struktura monistyczna) radę dyrektorów — decyduje umowa spółki. Widoczne na pismach jako adresat po stronie spółki."
-                >
-                  <select {...pole('organ_rodzaj')}>
-                    <option value="">— nie ustalono —</option>
-                    <option value="zarzad">Zarząd</option>
-                    <option value="rada_dyrektorow">Rada Dyrektorów</option>
-                  </select>
-                </Pole>
-                <div className="siatka-2">
-                  <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
-                  <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
-                </div>
-                <div className="siatka-2">
-                  <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} /></Pole>
-                  <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
-                </div>
-                <div className="siatka-3">
-                  <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
-                  <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
-                  <Pole etykieta="Nr lokalu"><input type="text" {...pole('nr_lokalu')} /></Pole>
-                </div>
-                <div className="siatka-2">
-                  <Pole
-                    etykieta="Sąd rejestrowy"
-                    podpowiedz={sadZaproponowany ? 'Zaproponowano na podstawie siedziby spółki — sprawdź przed zapisaniem.' : undefined}
-                  >
-                    <input type="text" {...pole('sad_rejestrowy')} />
-                  </Pole>
-                  <Pole etykieta="Wydział"><input type="text" {...pole('wydzial')} /></Pole>
-                </div>
-                <div className="siatka-3">
-                  <Pole etykieta="Telefon"><input type="text" {...pole('telefon')} /></Pole>
-                  <Pole etykieta="E-mail"><input type="text" {...pole('email')} /></Pole>
-                  <Pole
-                    etykieta="Adres do doręczeń elektronicznych"
-                    podpowiedz={pobranoZKrsBezAde ? 'Brak w KRS — uzupełnij ręcznie. ADE często nie jest ujawniony w KRS, tylko w bazie adresów elektronicznych.' : undefined}
-                  >
-                    <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
-                  </Pole>
-                </div>
-                <div className="siatka-2">
-                  <Pole etykieta="Data rejestracji w KRS">
-                    <PoleDaty wartosc={dane.data_utworzenia_spolki} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_utworzenia_spolki: v }))} />
-                  </Pole>
-                  <Pole etykieta="Kapitał akcyjny">
-                    <PoleKwoty grosze={dane.kapital_akcyjny_grosze} przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))} />
-                  </Pole>
-                </div>
-                <Pole
-                  etykieta="Data zawarcia umowy spółki"
-                  podpowiedz="Data aktu notarialnego zawiązania spółki — przy spółce zakładanej w S24 data podpisania w systemie. Różna od daty rejestracji w KRS powyżej. Uzupełnia „datę emisji” pierwszej emisji w kroku 3."
-                >
-                  <PoleDaty
-                    wartosc={dane.data_zawarcia_umowy_spolki}
-                    przyZmianie={(v) => ustawDane((p) => ({ ...p, data_zawarcia_umowy_spolki: v }))}
-                  />
-                </Pole>
+                {/* A-002: te same pola danych spółki co we wniosku portalu (P3). */}
+                <PolaDanychSpolki
+                  dane={dane} ustawDane={ustawDane} pole={pole} idNazwy="otwarcie-nazwa"
+                  podpowiedzi={{
+                    sad_rejestrowy: sadZaproponowany ? 'Zaproponowano na podstawie siedziby spółki — sprawdź przed zapisaniem.' : undefined,
+                    adres_edorecze: pobranoZKrsBezAde ? 'Brak w KRS — uzupełnij ręcznie. ADE często nie jest ujawniony w KRS, tylko w bazie adresów elektronicznych.' : undefined,
+                    data_zawarcia_umowy_spolki: 'Data aktu notarialnego zawiązania spółki — przy spółce zakładanej w S24 data podpisania w systemie. Różna od daty rejestracji w KRS. Uzupełnia „datę emisji” pierwszej emisji w kroku 3.',
+                  }}
+                />
 
                 {skladOrganu.length > 0 && (
                   <Pole etykieta="Skład organu reprezentującego" podpowiedz="Wyłącznie informacyjne — rejestr akcjonariuszy nie prowadzi własnej ewidencji osób w organach spółki.">
@@ -705,58 +665,35 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
 
             <div className="rozdzielacz" />
             <div className="card-h">Reprezentant spółki, który podpisał umowę</div>
-            <Komunikat
-              odmiana="info"
-              tresc="Osoba, która w imieniu SPÓŁKI podpisała już zawartą umowę o prowadzenie rejestru. Wpisz dane dokładnie tak, jak widnieją w dokumencie tożsamości — pisma używają ich w tej samej postaci."
-            />
+            <Pole
+              etykieta="Reprezentant (z kartoteki)"
+              podpowiedz="Osoba, która w imieniu SPÓŁKI podpisała umowę — dane osobowe i AML raz, w kartotece. Kogoś spoza kartoteki dodaj przez „+ Nowa osoba w kartotece”."
+            >
+              <WyborZKartoteki wartosc={dane.reprezentant_osoba_id || null} typFiltr="fizyczna" przyZmianie={(id) => ustawDane((p) => ({ ...p, reprezentant_osoba_id: id }))} />
+            </Pole>
+            {!dane.reprezentant_osoba_id && dane.reprezentant_imie_nazwisko && (
+              <Komunikat
+                odmiana="info"
+                tresc={`Reprezentant wpisany wcześniej poza kartoteką: ${dane.reprezentant_imie_nazwisko}. Wybierz tę osobę z kartoteki (albo dodaj ją) — pisma wezmą dane z kartoteki.`}
+              />
+            )}
             <div className="siatka-2">
-              <Pole etykieta="Imię i nazwisko">
-                <input type="text" {...pole('reprezentant_imie_nazwisko')} placeholder="np. Jan Kowalski" />
-              </Pole>
               <Pole etykieta="Funkcja">
                 <input type="text" {...pole('reprezentant_funkcja')} placeholder="np. Prezes Zarządu" />
               </Pole>
-            </div>
-            {/* Sposób reprezentacji NIE jest już polem do wypełnienia — kancelaria
-                sprawdza go na podstawie wydruku z KRS przy podpisaniu umowy;
-                gdy dane spółki pobrano przyciskiem „Pobierz z KRS” wyżej,
-                wartość dochodzi razem z resztą i trafia do umowy bez udziału
-                tego formularza. */}
-            <div className="siatka-2">
-              <Pole etykieta="Imiona rodziców">
+              <Pole etykieta="Imiona rodziców" podpowiedz="Do umowy o prowadzenie rejestru.">
                 <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
               </Pole>
-              <Pole
-                etykieta="PESEL"
-                ostrzezenie={walidujPesel(dane.reprezentant_pesel).ostrzezenie}
-              >
-                <input type="text" {...pole('reprezentant_pesel')} maxLength={11} />
-              </Pole>
             </div>
+            {/* Sposób reprezentacji NIE jest polem do wypełnienia — dochodzi z KRS („Pobierz z KRS” wyżej). */}
             <PoleDowod
-              etykieta="Dowód tożsamości"
+              etykieta="Dowód tożsamości okazany przy podpisie"
               rodzaj={dane.reprezentant_dowod_rodzaj}
               numer={dane.reprezentant_dowod_numer}
               przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
               idPrefiks="spolka-reprezentant"
               klucze={{ rodzaj: 'reprezentant_dowod_rodzaj', numer: 'reprezentant_dowod_numer' }}
             />
-            <PoleAdres
-              etykieta="Adres zamieszkania"
-              dane={dane}
-              przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
-              prefiks="reprezentant_"
-              idPrefiks="spolka-reprezentant"
-            />
-            {!dane.reprezentant_kod_pocztowy && !dane.reprezentant_ulica && dane.reprezentant_adres && (
-              <Komunikat
-                odmiana="info"
-                tresc={`Adres wpisany wcześniej, w jednym polu: „${dane.reprezentant_adres}”. Wpisz go ponownie powyżej, żeby pisma mogły go użyć w nowym formacie.`}
-              />
-            )}
-            <Pole etykieta="Adres e-mail" podpowiedz="Korespondencja w sprawie umowy o prowadzenie rejestru.">
-              <input type="email" {...pole('reprezentant_email')} />
-            </Pole>
 
             <div className="rozdzielacz" />
             <div className="card-h">Ograniczenia z umowy spółki</div>
@@ -1118,7 +1055,8 @@ function EkranSpolek() {
               {wycinek.map((s) => (
                 <tr key={s.id} className="klikalna" onClick={() => idz(`/spolki/${s.id}`)}>
                   <td>
-                    <div className="tekst-obciety" style={{ fontWeight: 500 }} title={s.nazwa}>{s.nazwa}</div>
+                    {/* A-034: nazwa jako łącze — wiersz osiągalny z klawiatury (i do otwarcia w nowej karcie). */}
+                    <div className="tekst-obciety" style={{ fontWeight: 500 }} title={s.nazwa}><a className="lacze-wiersza" href={`#/spolki/${s.id}`}>{s.nazwa}</a></div>
                     <div className="wiersz-podtytul">
                       {s.krs ? `KRS ${s.krs}` : 'bez numeru KRS'}
                       {s.miejscowosc ? ` · ${s.miejscowosc}` : ''}

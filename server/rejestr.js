@@ -38,7 +38,28 @@ class BladWalidacji extends Error {
 // ─────────────────────────────────────────────────────────────
 
 function wczytajSpolke(db, spolkaId) {
-  return db.prepare('SELECT * FROM psa_spolki WHERE id = ?').get(spolkaId) || null;
+  return zReprezentantem(db, db.prepare('SELECT * FROM psa_spolki WHERE id = ?').get(spolkaId) || null);
+}
+
+/**
+ * D-101: reprezentant spółki z kartoteki — dane osobowe z `psa_osoby` (jedno źródło, AML raz); funkcja,
+ * sposób reprezentacji, imiona rodziców i dokument przy podpisie — ze spółki. Bez osoby — dawne kolumny.
+ */
+function zReprezentantem(db, spolka) {
+  if (!spolka || !spolka.reprezentant_osoba_id) return spolka;
+  const o = db.prepare('SELECT * FROM psa_osoby WHERE id = ?').get(spolka.reprezentant_osoba_id);
+  if (!o) return spolka;
+  return {
+    ...spolka,
+    reprezentant_imie_nazwisko: [o.imie, o.nazwisko].filter(Boolean).join(' ') || spolka.reprezentant_imie_nazwisko,
+    reprezentant_pesel: o.pesel || null,
+    reprezentant_plec: o.plec || spolka.reprezentant_plec,
+    reprezentant_kraj: o.kraj, reprezentant_kraj_kod: o.kraj_kod,
+    reprezentant_kod_pocztowy: o.kod_pocztowy, reprezentant_miejscowosc: o.miejscowosc,
+    reprezentant_ulica: o.ulica, reprezentant_nr_domu: o.nr_domu, reprezentant_nr_lokalu: o.nr_lokalu,
+    reprezentant_email: o.email || spolka.reprezentant_email,
+    reprezentant_aml_status: o.aml_status,
+  };
 }
 
 function wczytajZdarzenia(db, spolkaId) {
@@ -742,6 +763,7 @@ function zweryfikujIntegralnosc(db) {
 }
 
 module.exports = {
+  zReprezentantem,
   odrzucRecznaDate,
   BladWalidacji,
   wczytajSpolke,

@@ -417,3 +417,24 @@ test('QW3 / D-083: akcjonariusz bez zgody na komunikację e-mail nie jest zapras
   assert.equal(status, 400);
   assert.match(wynik.blad, /nie wyraził zgody na komunikację e-mail/);
 });
+
+test('D-102: dane z rejestru osoby z akcjami zmienia wpis — kartoteka proponuje sprawę, resztę zapisuje', async () => {
+  const rejestr = require('../server/rejestr');
+  const teraz = new Date().toISOString();
+  const spolkaId = Number(db().prepare(`INSERT INTO psa_spolki (nazwa, forma_prawna, status, utworzono) VALUES ('D-102 P.S.A.', 'PROSTA SPÓŁKA AKCYJNA', 'aktywna', ?)`).run(teraz).lastInsertRowid);
+  const [, akcjonariusz] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', imie: 'Dorota', nazwisko: 'Rejestrowa', data_urodzenia: '1980-01-01', kraj: 'Polska', kod_pocztowy: '80-001', miejscowosc: 'Gdańsk', nr_domu: '1' });
+  const [, bezAkcji] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', imie: 'Damian', nazwisko: 'Kartotekowy', data_urodzenia: '1981-01-01', kraj: 'Polska', kod_pocztowy: '80-001', miejscowosc: 'Gdańsk', nr_domu: '1' });
+  const emisja = rejestr.dokonajWpisu(db(), { spolkaId, typ: 'emisja', wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-10' }, autor: 'Test' });
+  rejestr.dokonajWpisu(db(), { spolkaId, typ: 'objecie', wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: akcjonariusz.osoba.id, ilosc: 10 }] }, autor: 'Test' });
+
+  const [st, odp] = await zapytaj('PUT', `/api/psa/osoby/${akcjonariusz.osoba.id}`, { miejscowosc: 'Sopot', telefon: '500600700' });
+  assert.equal(st, 200);
+  assert.deepEqual(odp.zmiana_rejestrowa.po, { miejscowosc: 'Sopot' });
+  assert.deepEqual(odp.zmiana_rejestrowa.spolki.map((s) => s.id), [spolkaId]);
+  assert.equal(odp.osoba.miejscowosc, 'Gdańsk', 'adres z rejestru bez wpisu się nie zmienia');
+  assert.equal(odp.osoba.telefon, '500600700', 'dane spoza rejestru zapisane od razu');
+
+  const [, bez] = await zapytaj('PUT', `/api/psa/osoby/${bezAkcji.osoba.id}`, { miejscowosc: 'Sopot' });
+  assert.equal(bez.zmiana_rejestrowa, null);
+  assert.equal(bez.osoba.miejscowosc, 'Sopot', 'osoba bez akcji — zwykła edycja kartoteki');
+});

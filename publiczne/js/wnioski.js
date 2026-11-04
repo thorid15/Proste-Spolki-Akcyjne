@@ -66,7 +66,7 @@ function EkranWnioski() {
               {wnioski.map((w) => (
                 <tr key={w.id} className="klikalna" onClick={() => idz(`/wnioski/${w.id}`)}>
                   <td className="wyciszony">{fmt.dataCzas(w.zaktualizowano || w.utworzono)}</td>
-                  <td>{w.nazwa || '— nieuzupełniona —'}</td>
+                  <td><a className="lacze-wiersza" href={`#/wnioski/${w.id}`}>{w.nazwa || '— nieuzupełniona —'}</a></td>
                   <td>{w.konto_email}</td>
                   <td>{w.liczba_akcjonariuszy}</td>
                   <td><ZnacznikWniosku status={w.status} /></td>
@@ -1153,7 +1153,7 @@ function OknoDokumentu({ wniosekId, dokument, zablokowane, przyZamknieciu, przyZ
             <div className="karta" style={{ marginTop: 'var(--od-4)' }}>
               {papier && (
                 <Pole etykieta="Data otrzymania oryginału (albo podpisu w kancelarii)" wymagane>
-                  <input type="date" value={otrzymano} onChange={(z) => ustawOtrzymano(z.target.value)} />
+                  <PoleDaty wartosc={otrzymano || ''} max={fmt.dzisIso()} przyZmianie={(v) => ustawOtrzymano(v || '')} />
                 </Pole>
               )}
               <div className="podpowiedz">

@@ -481,7 +481,7 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
       <NawigacjaKreatora
         wstecz={{ etykieta: 'Wróć do listy', przy: przyZamknieciu }}
         dalej={edytowalne
-          ? { etykieta: zamykanie ? 'Zapisywanie…' : 'Gotowe', przy: zamknij, wylaczony: zamykanie }
+          ? { etykieta: zamykanie ? 'Zapisywanie…' : 'Zapisz zmiany', przy: zamknij, wylaczony: zamykanie }
           : null}
       />
 
@@ -865,79 +865,8 @@ function EkranWniosku() {
             </Pole>
             {komunikatKrs && <Komunikat odmiana={komunikatKrs.odmiana} tresc={komunikatKrs.tresc} />}
 
-            <Pole etykieta="Firma (nazwa) spółki" wymagane>
-              <input type="text" {...pole('nazwa')} />
-            </Pole>
-            <div className="siatka-2">
-              <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
-              <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
-            </div>
-
-            <div className="siatka-2">
-              <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} placeholder="00-000" /></Pole>
-              <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
-            </div>
-            <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
-            <div className="siatka-2">
-              <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
-              <Pole etykieta="Nr lokalu" opcjonalne><input type="text" {...pole('nr_lokalu')} /></Pole>
-            </div>
-
-            <div className="siatka-2">
-              <Pole etykieta="Sąd rejestrowy"><input type="text" {...pole('sad_rejestrowy')} /></Pole>
-              <Pole etykieta="Wydział"><input type="text" {...pole('wydzial')} /></Pole>
-            </div>
-
-            <Pole
-              etykieta="Organ zarządzający"
-              podpowiedz="P.S.A. może mieć zarząd albo — w strukturze monistycznej — radę dyrektorów; decyduje umowa spółki."
-            >
-              <select {...pole('organ_rodzaj')}>
-                <option value="">— nie ustalono —</option>
-                <option value="zarzad">Zarząd</option>
-                <option value="rada_dyrektorow">Rada Dyrektorów</option>
-              </select>
-            </Pole>
-
-            <div className="siatka-2">
-              <Pole etykieta="Data rejestracji w KRS">
-                <PoleDaty
-                  wartosc={dane.data_utworzenia_spolki || ''}
-                  przyZmianie={(v) => ustawDane((p) => ({ ...p, data_utworzenia_spolki: v }))}
-                  wylaczone={!wniosekEdytowalny}
-                />
-              </Pole>
-              <Pole etykieta="Kapitał akcyjny">
-                <PoleKwoty
-                  grosze={dane.kapital_akcyjny_grosze}
-                  przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))}
-                />
-              </Pole>
-            </div>
-            <Pole
-              etykieta="Data zawarcia umowy spółki"
-              podpowiedz="Data aktu notarialnego zawiązania spółki; przy spółce założonej w S24 — data podpisania w systemie."
-            >
-              <PoleDaty
-                wartosc={dane.data_zawarcia_umowy_spolki || ''}
-                przyZmianie={(v) => ustawDane((p) => ({ ...p, data_zawarcia_umowy_spolki: v }))}
-                wylaczone={!wniosekEdytowalny}
-              />
-            </Pole>
-
-            <div className="siatka-2">
-              <Pole etykieta="Adres e-mail spółki"><input type="text" {...pole('email')} /></Pole>
-              <Pole etykieta="Telefon" opcjonalne><input type="text" {...pole('telefon')} /></Pole>
-            </div>
-
-            <ZwijanaSekcja
-              tytul="Adres do doręczeń elektronicznych"
-              wypelniona={Boolean(dane.adres_edorecze)}
-            >
-              <Pole etykieta="Adres do doręczeń elektronicznych" podpowiedz="Skrzynka e-Doręczeń spółki, jeśli została uruchomiona.">
-                <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
-              </Pole>
-            </ZwijanaSekcja>
+            {/* A-002: te same pola danych spółki co przy otwarciu rejestru w kancelarii. */}
+            <PolaDanychSpolki dane={dane} ustawDane={ustawDane} pole={pole} wylaczone={!wniosekEdytowalny} wymaganaNazwa />
 
             {nawigacja()}
           </>

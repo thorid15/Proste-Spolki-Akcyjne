@@ -238,3 +238,64 @@ function WyborTypuOsoby({ wartosc, przyZmianie, edytowalne = true, id, pytanie =
     </fieldset>
   );
 }
+
+/**
+ * A-002: dane spółki — jeden zestaw pól we wniosku portalu (P3, krok 1) i przy otwarciu rejestru w kancelarii (K3a).
+ * `pole(klucz)` — powiązanie pola ze stanem rodzica (każdy ekran ma własną walidację); `podpowiedzi` — uwagi
+ * zależne od ekranu (np. sąd zaproponowany z siedziby, ADE nieujawnione w KRS).
+ */
+function PolaDanychSpolki({ dane, ustawDane, pole, podpowiedzi = {}, wylaczone = false, wymaganaNazwa = false, idNazwy }) {
+  const data = (klucz) => ({ wartosc: dane[klucz] || '', przyZmianie: (v) => ustawDane((p) => ({ ...p, [klucz]: v })), wylaczone });
+  return (
+    <>
+      <Pole etykieta="Firma (nazwa) spółki" wymagane={wymaganaNazwa} id={idNazwy}>
+        <input type="text" {...pole('nazwa')} />
+      </Pole>
+      <Pole etykieta="Organ zarządzający" podpowiedz="P.S.A. może mieć zarząd albo — w strukturze monistycznej — radę dyrektorów; decyduje umowa spółki.">
+        <select {...pole('organ_rodzaj')}>
+          <option value="">— nie ustalono —</option>
+          <option value="zarzad">Zarząd</option>
+          <option value="rada_dyrektorow">Rada Dyrektorów</option>
+        </select>
+      </Pole>
+      <div className="siatka-2">
+        <Pole etykieta="NIP"><input type="text" {...pole('nip')} /></Pole>
+        <Pole etykieta="REGON"><input type="text" {...pole('regon')} /></Pole>
+      </div>
+      <div className="siatka-2">
+        <Pole etykieta="Kod pocztowy"><input type="text" {...pole('kod_pocztowy')} placeholder="00-000" /></Pole>
+        <Pole etykieta="Miejscowość"><input type="text" {...pole('miejscowosc')} /></Pole>
+      </div>
+      <div className="siatka-3">
+        <Pole etykieta="Ulica"><input type="text" {...pole('ulica')} /></Pole>
+        <Pole etykieta="Nr domu"><input type="text" {...pole('nr_domu')} /></Pole>
+        <Pole etykieta="Nr lokalu" opcjonalne><input type="text" {...pole('nr_lokalu')} /></Pole>
+      </div>
+      <div className="siatka-2">
+        <Pole etykieta="Sąd rejestrowy" podpowiedz={podpowiedzi.sad_rejestrowy}><input type="text" {...pole('sad_rejestrowy')} /></Pole>
+        <Pole etykieta="Wydział"><input type="text" {...pole('wydzial')} /></Pole>
+      </div>
+      <div className="siatka-2">
+        <Pole etykieta="Data rejestracji w KRS"><PoleDaty {...data('data_utworzenia_spolki')} /></Pole>
+        <Pole etykieta="Kapitał akcyjny">
+          <PoleKwoty grosze={dane.kapital_akcyjny_grosze} przyZmianie={(v) => ustawDane((p) => ({ ...p, kapital_akcyjny_grosze: v }))} />
+        </Pole>
+      </div>
+      <Pole
+        etykieta="Data zawarcia umowy spółki"
+        podpowiedz={podpowiedzi.data_zawarcia_umowy_spolki || 'Data aktu notarialnego zawiązania spółki; przy spółce założonej w S24 — data podpisania w systemie.'}
+      >
+        <PoleDaty {...data('data_zawarcia_umowy_spolki')} />
+      </Pole>
+      <div className="siatka-2">
+        <Pole etykieta="Adres e-mail spółki"><input type="text" {...pole('email')} /></Pole>
+        <Pole etykieta="Telefon" opcjonalne><input type="text" {...pole('telefon')} /></Pole>
+      </div>
+      <ZwijanaSekcja tytul="Adres do doręczeń elektronicznych" wypelniona={Boolean(dane.adres_edorecze) || Boolean(podpowiedzi.adres_edorecze)}>
+        <Pole etykieta="Adres do doręczeń elektronicznych" podpowiedz={podpowiedzi.adres_edorecze || 'Skrzynka e-Doręczeń spółki, jeśli została uruchomiona.'}>
+          <input type="text" {...pole('adres_edorecze')} placeholder="AE:PL-…" />
+        </Pole>
+      </ZwijanaSekcja>
+    </>
+  );
+}

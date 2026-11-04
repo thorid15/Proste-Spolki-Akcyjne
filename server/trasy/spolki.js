@@ -61,6 +61,8 @@ const POLA_SPOLKI = [
   // da się ich nadpisać z formularza, zostają tylko do odczytu w piśmie
   // (`server/logika/kontekst-pisma.js`), dopóki nie zastąpią ich te pola.
   'reprezentant_dowod_rodzaj', 'reprezentant_dowod_numer',
+  // D-101: reprezentant jako osoba w kartotece — dane osobowe z `psa_osoby` (rejestr.wczytajSpolke).
+  'reprezentant_osoba_id',
   'reprezentant_kraj', 'reprezentant_kod_pocztowy', 'reprezentant_miejscowosc',
   'reprezentant_ulica', 'reprezentant_nr_domu', 'reprezentant_nr_lokalu',
   // Etap 2.2 poprawek: umowa jako fakt juz zaistnialy (data zawarcia to juz
@@ -126,6 +128,12 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   }
   if (dane.krs && !/^\d{10}$/.test(dane.krs)) {
     throw bledneZadanie('Numer KRS składa się z 10 cyfr.');
+  }
+  // D-101: reprezentant — osoba fizyczna z kartoteki.
+  if (dane.reprezentant_osoba_id != null && dane.reprezentant_osoba_id !== '') {
+    const o = db().prepare('SELECT typ FROM psa_osoby WHERE id = ?').get(Number(dane.reprezentant_osoba_id));
+    if (!o) throw bledneZadanie('Reprezentanta spółki nie ma w kartotece.');
+    if (o.typ !== 'fizyczna') throw bledneZadanie('Reprezentant spółki to osoba fizyczna.');
   }
   if (dane.nip && !/^\d{10}$/.test(String(dane.nip).replace(/[\s-]/g, ''))) {
     throw bledneZadanie('NIP składa się z 10 cyfr.');
@@ -894,9 +902,15 @@ router.post(
       throw bledneZadanie(`Rejestr tej spółki jest w trakcie przeniesienia („${przen.nazwa_statusu}”) — otwarcie dopiero w etapie uzgodnienia (Etap 7).`);
     }
     const trybPrzejecia = Boolean(przen && przen.status === 'uzgodnienie');
+    let protokolPrzejecia = null;
     if (trybPrzejecia) {
       const przeszkody = require('../logika/przeniesienie').przeszkodyPrzejscia(przen, 'aktywny', { dzis, dokumenty: przen.dokumenty });
       if (przeszkody.length) throw bledneZadanie(przeszkody[0], przeszkody);
+      // D-095: protokół (dokumenty źródłowe ze skrótami + checklista odbioru) generowany teraz, ze stanu końcowego;
+      // jego skrót trafia do zdarzenia PRZEJĘCIE. Zatwierdzenie = to otwarcie (autor i chwila w łańcuchu).
+      await modulPrzen.protokol(db(), przen.id);
+      const poProtokole = modulPrzen.wczytaj(db(), przen.id);
+      protokolPrzejecia = { id_dokumentu: poProtokole.protokol_id_dokumentu, sha256: poProtokole.protokol_sha256, zatwierdzono: czas.terazIso(), zatwierdzil: kto };
     }
 
     const wyniki = rejestr.otworzRejestr(db(), id, {
@@ -908,7 +922,7 @@ router.post(
         poprzednik: { typ: przen.poprzednik_typ, nazwa: przen.poprzednik_nazwa },
         przeniesienie_id: przen.id,
         dokumenty_zrodlowe: przen.dokumenty.map((d) => ({ nazwa: d.nazwa_pliku, typ: d.typ, zrodlo: d.zrodlo, sha256: d.sha256 })),
-        protokol: { id_dokumentu: przen.protokol_id_dokumentu, sha256: przen.protokol_sha256, zatwierdzono: przen.zatwierdzono },
+        protokol: protokolPrzejecia,
       } : null,
     });
 

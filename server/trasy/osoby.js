@@ -15,6 +15,7 @@ const multer = require('multer');
 const { db } = require('../baza');
 const przepisy = require('../logika/przepisy');
 const akcjonariuszLogika = require('../logika/akcjonariusz');
+const { POLA_DANYCH_REJESTRU } = require('../logika/kreator');
 const maskowanie = require('../logika/maskowanie');
 const aml = require('../logika/aml');
 const dziennikDostepu = require('../logika/dziennik-dostepu');
@@ -300,6 +301,25 @@ router.get(
   })
 );
 
+/** Spółki, w których osoba ma dziś akcje (kartoteka → rejestry). */
+function spolkiAkcjonariusza(id) {
+  return db()
+    .prepare(
+      `SELECT s.id, s.nazwa, s.krs, s.status, s.stosuje_procedure_aml,
+              SUM(sa.ilosc) AS ilosc_akcji,
+              COUNT(DISTINCT sa.emisja_id) AS liczba_serii,
+              GROUP_CONCAT(DISTINCT e.seria) AS serie,
+              MIN(sa.data_od) AS akcjonariusz_od
+         FROM psa_stan_akcji sa
+         JOIN psa_spolki s ON s.id = sa.spolka_id
+         LEFT JOIN psa_emisje e ON e.id = sa.emisja_id
+        WHERE sa.osoba_id = ? AND sa.data_do IS NULL AND sa.kategoria = 'akcjonariusz'
+        GROUP BY s.id
+        ORDER BY s.nazwa COLLATE NOCASE`
+    )
+    .all(id);
+}
+
 router.put(
   '/:id',
   asy((zad, odp) => {
@@ -310,6 +330,14 @@ router.put(
     const dane = wyczysc(zad.body || {});
     if (Object.keys(dane).length === 0) throw bledneZadanie('Brak danych do zapisania.');
     const scalone = { ...biezaca, ...dane };
+    // D-102: dane z rejestru (art. 300(33) § 1 pkt 5 KSH) osoby z akcjami zmienia wpis, nie edycja kartoteki —
+    // zmienione pola nie są zapisywane; odpowiedź niesie propozycję wpisu „Zmiana danych akcjonariusza”.
+    const zmienioneRejestrowe = POLA_DANYCH_REJESTRU.filter((k) => k in dane && String(dane[k] ?? '') !== String(biezaca[k] ?? ''));
+    const spolkiOsoby = zmienioneRejestrowe.length ? spolkiAkcjonariusza(id) : [];
+    const zmianaRejestrowa = spolkiOsoby.length
+      ? { po: Object.fromEntries(zmienioneRejestrowe.map((k) => [k, dane[k] ?? null])), spolki: spolkiOsoby.map((w) => ({ id: w.id, nazwa: w.nazwa })) }
+      : null;
+    if (zmianaRejestrowa) for (const k of POLA_DANYCH_REJESTRU) delete dane[k];
     sprawdzOsobe(scalone);
     if ('beneficjent_rzeczywisty_id' in dane) {
       sprawdzBeneficjenta(dane.beneficjent_rzeczywisty_id, id, scalone.typ);
@@ -323,7 +351,7 @@ router.put(
     const zgodaPo = 'zgoda_email_status' in dane ? dane.zgoda_email_status === 'potwierdzona' : zgodaPrzed;
     // Przegląd R4 #3: zmiana danych i wpis historii oświadczeń — jedna transakcja.
     db().transaction(() => {
-      db()
+      if (Object.keys(dane).length) db()
         .prepare(
           `UPDATE psa_osoby
               SET ${Object.keys(dane).map((k) => `${k} = @${k}`).join(', ')},
@@ -344,6 +372,7 @@ router.put(
       osoba: zOznaczeniem(db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(id)),
       ostrzezenia: [...ostrzezeniaOsoby(scalone), ...ostrzezeniaKolizji(scalone, id)],
       braki_ustawowe: akcjonariuszLogika.ostrzezenia(scalone),
+      zmiana_rejestrowa: zmianaRejestrowa,
     });
   })
 );
@@ -356,21 +385,7 @@ router.get(
     if (!db().prepare('SELECT id FROM psa_osoby WHERE id = ?').get(id)) {
       throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
     }
-    const wiersze = db()
-      .prepare(
-        `SELECT s.id, s.nazwa, s.krs, s.status, s.stosuje_procedure_aml,
-                SUM(sa.ilosc) AS ilosc_akcji,
-                COUNT(DISTINCT sa.emisja_id) AS liczba_serii,
-                GROUP_CONCAT(DISTINCT e.seria) AS serie,
-                MIN(sa.data_od) AS akcjonariusz_od
-           FROM psa_stan_akcji sa
-           JOIN psa_spolki s ON s.id = sa.spolka_id
-           LEFT JOIN psa_emisje e ON e.id = sa.emisja_id
-          WHERE sa.osoba_id = ? AND sa.data_do IS NULL AND sa.kategoria = 'akcjonariusz'
-          GROUP BY s.id
-          ORDER BY s.nazwa COLLATE NOCASE`
-      )
-      .all(id);
+    const wiersze = spolkiAkcjonariusza(id);
     odp.json({ spolki: wiersze });
   })
 );

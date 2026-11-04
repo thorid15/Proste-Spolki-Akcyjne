@@ -96,9 +96,9 @@ function walidujOsobe(a, { tryb = 'kancelaria' } = {}) {
 
   if (!pustaWartosc(a.email) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(a.email).trim())) {
     b.email = 'Wpisz adres e-mail w formacie nazwa@domena.pl.';
-  } else if (pustaWartosc(a.email)) {
-    if (tryb === 'portal') b.email = 'Wpisz adres e-mail akcjonariusza.';
-    else if (a.zgoda_email_status && a.zgoda_email_status !== 'brak') b.email = 'Wpisz adres e-mail — zaznaczono zgodę na komunikację elektroniczną.';
+  } else if (pustaWartosc(a.email) && a.zgoda_email_status && a.zgoda_email_status !== 'brak') {
+    // D-099: e-mail tylko przy zgodzie na komunikację elektroniczną (art. 300(33) § 1 pkt 5 KSH) — także w portalu.
+    b.email = 'Wpisz adres e-mail — zaznaczono zgodę na komunikację elektroniczną.';
   }
 
   if (a.wspolwlasnosc && a.wspolwlasnosc !== 'brak') {

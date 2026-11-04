@@ -77,3 +77,27 @@ test('dane zdarzenia z formularza: jedna seria, numery z doboru, pola warunkowe'
   const zOgr = { ...STAN, ograniczenia: [{ status: 'aktywne', zakres: 'wszystkie', wymaga_zgody_spolki: 1 }] };
   assert.equal(L.daneZdarzenia(zOgr, { zbywca_osoba_id: 1, ilosc: 15, nabywca_osoba_id: 9, zgoda_spolki: true }).zgoda_spolki, 1);
 });
+
+// B-005 (SESJA-PSA-ANALIZA-PRZEPLYWOW): kreator zbycia dostaje stan z `GET /api/psa/spolki/:id`
+// (`widoki.widokStanu`), nie surowy stan z `stan.js` — pola warunkowe muszą działać na TYM kształcie.
+test('B-005: ograniczenie z widoku API (prawo pierwszeństwa, zgoda spółki) pokazuje pola warunkowe zbycia', () => {
+  const { bazaTestowa, dodajSpolke, dodajOsobe, wpis } = require('./pomoc');
+  const widoki = require('../server/widoki');
+  const db = bazaTestowa();
+  const spolka = dodajSpolke(db);
+  const kowalski = dodajOsobe(db, { nazwisko: 'Kowalski', imie: 'Jan' });
+  const emisja = wpis(db, spolka, 'emisja', '2026-01-10', { seria: 'A', ilosc: 100 });
+  wpis(db, spolka, 'objecie', '2026-01-10', { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: kowalski, ilosc: 100 }] });
+  wpis(db, spolka, 'ograniczenie', '2026-01-15', { zakres: 'emisja', emisja_zdarzenie_id: emisja.zdarzenie.id, prawo_pierwszenstwa: true, opis: 'PP' });
+  wpis(db, spolka, 'ograniczenie', '2026-01-16', {
+    zakres: 'emisja', emisja_zdarzenie_id: emisja.zdarzenie.id, wymaga_zgody_spolki: true,
+    zgoda_termin_wskazania_dni: 30, zgoda_cena_opis: 'wartość godziwa', zgoda_termin_zaplaty_dni: 14, opis: 'Zgoda',
+  });
+  const stan = widoki.widokStanu(db, spolka);
+  const dobor = L.dobierzAkcje(stan, kowalski, 10);
+  assert.ok(dobor, 'dobór akcji na stanie z widoku');
+  const kontekst = { stan, dobor };
+  assert.equal(L.ograniczeniaDlaDoboru(stan, dobor).length, 2, 'oba ograniczenia serii A');
+  assert.equal(L.poleWidoczne('przeniesienie', 'pierwszenstwo_wyczerpane', kontekst), true);
+  assert.equal(L.poleWidoczne('przeniesienie', 'zgoda_spolki', kontekst), true);
+});

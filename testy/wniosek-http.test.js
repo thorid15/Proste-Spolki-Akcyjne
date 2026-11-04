@@ -290,26 +290,24 @@ test('POST /api/psa/portal/wniosek/zloz: odmawia przy niepelnych danych akcjonar
   assert.equal(stPo, 200);
 });
 
-test('Z-006/P-004: POST /api/psa/portal/wniosek/zloz odmawia bez e-maila akcjonariusza, niezaleznie od zgody na e-mail w rejestrze', async () => {
+test('D-099 (zastępuje Z-006/P-004): e-mail akcjonariusza we wniosku tylko przy zgodzie na komunikację e-mail', async () => {
+  // Bez zgody akcjonariusz nie dostaje konta w portalu (D-083) — adres „do zaproszenia” nie jest potrzebny;
+  // e-mail do rejestru — tylko za zgodą (art. 300(33) § 1 pkt 5 KSH).
   const { ciastko } = await kontoWnioskodawcy('zlozenie-bez-emaila@example.pl');
   await zapytaj('GET', '/api/psa/portal/wniosek', undefined, ciastko);
   await zapytaj('PUT', '/api/psa/portal/wniosek', { nazwa: 'Wniosek Bez Emaila P.S.A.' }, ciastko);
   const { email, ...bezEmaila } = AKCJONARIUSZ_PELNY;
-  const [, dodany] = await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', bezEmaila, ciastko);
+  const [, dodany] = await zapytaj('POST', '/api/psa/portal/wniosek/akcjonariusze', { ...bezEmaila, zgoda_email_status: 'zadeklarowana' }, ciastko);
 
   const [status, wynik] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
-  assert.equal(status, 400);
-  assert.ok(
-    wynik.szczegoly.some((b) => /brak adresu e-mail/.test(b)),
-    `oczekiwano braku e-maila w szczegolach, dostano: ${JSON.stringify(wynik.szczegoly)}`
-  );
+  assert.equal(status, 400, 'zgoda bez adresu e-mail — braki');
+  assert.ok(wynik.szczegoly.some((b) => /zgodę na komunikację elektroniczną, ale nie podano adresu e-mail/.test(b)), JSON.stringify(wynik.szczegoly));
+  assert.ok(!wynik.szczegoly.some((b) => /potrzebny do zaproszenia/.test(b)), 'bez osobnego wymogu „do zaproszenia”');
 
-  await zapytaj(
-    'PUT', `/api/psa/portal/wniosek/akcjonariusze/${dodany.akcjonariusz.id}`,
-    { email: 'anna.bezemaila@example-test.pl' }, ciastko
-  );
-  const [stPo] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
-  assert.equal(stPo, 200, 'sam adres e-mail operacyjny wystarcza - zgoda na e-mail W REJESTRZE to osobna sprawa (Z-157)');
+  await zapytaj('PUT', `/api/psa/portal/wniosek/akcjonariusze/${dodany.akcjonariusz.id}`, { zgoda_email_status: 'brak' }, ciastko);
+  const [stPo, poZmianie] = await zapytaj('POST', '/api/psa/portal/wniosek/zloz', undefined, ciastko);
+  assert.ok(!(poZmianie.szczegoly || []).some((b) => /e-mail/.test(b)), `bez zgody i bez e-maila — bez braków e-mail: ${JSON.stringify(poZmianie.szczegoly)}`);
+  assert.equal(stPo, 200);
 });
 
 /**

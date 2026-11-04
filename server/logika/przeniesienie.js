@@ -156,7 +156,8 @@ function przeszkodyPrzejscia(p, na, { dzis, dokumenty = [], dane = {} } = {}) {
   }
   if (na === STATUSY.AKTYWNY) {
     przeszkody.push(...brakiChecklisty(CHECKLISTA_ODBIORU, p.checklista_odbioru, dokumenty));
-    if (!p.zatwierdzono) przeszkody.push('Brak zatwierdzenia przez notariusza podpisem kwalifikowanym (protokół przejęcia).');
+    // D-095: protokół przejęcia powstaje automatycznie przy otwarciu rejestru (trasy/spolki.js); zatwierdzeniem
+    // notariusza jest samo otwarcie — bez osobnego „pobierz → podpisz → wgraj”.
   }
   return przeszkody;
 }

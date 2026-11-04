@@ -106,34 +106,22 @@ function EkranStawek() {
       </Karta>
 
       <Karta tytul="Terminy ustawowe">
-        <dl className="pary">
-          <Para etykieta="Wpis na żądanie">
-            {dane.terminy.WPIS_DNI} dni — {dane.podstawy.TRYB_WPISU}
-          </Para>
-          <Para etykieta="Wpis po usunięciu przeszkody">
-            {dane.terminy.WPIS_PO_USUNIECIU_PRZESZKODY_DNI} dni od dnia usunięcia
-          </Para>
-          <Para etykieta="Wypowiedzenie umowy przez notariusza">
-            min. {dane.terminy.WYPOWIEDZENIE_MIESIACE} miesiące, tylko z ważnych powodów
-          </Para>
-          <Para etykieta="Zawiadomienie sądu o rozwiązaniu umowy">
-            {dane.terminy.ZAWIADOMIENIE_SADU_DNI} dni od wygaśnięcia albo rozwiązania umowy
-          </Para>
-          <Para etykieta="Zgłoszenie zmiany danych przez zarząd">
-            {dane.terminy.ZGLOSZENIE_ZMIANY_PRZEZ_ZARZAD_DNI} dni od zdarzenia
-          </Para>
-        </dl>
+        <ListaDanych pary={[
+          ['Wpis na żądanie', `${dane.terminy.WPIS_DNI} dni — ${dane.podstawy.TRYB_WPISU}`],
+          ['Wpis po usunięciu przeszkody', `${dane.terminy.WPIS_PO_USUNIECIU_PRZESZKODY_DNI} dni od dnia usunięcia`],
+          ['Wypowiedzenie umowy przez notariusza', `min. ${dane.terminy.WYPOWIEDZENIE_MIESIACE} miesiące, tylko z ważnych powodów`],
+          ['Zawiadomienie sądu o rozwiązaniu umowy', `${dane.terminy.ZAWIADOMIENIE_SADU_DNI} dni od wygaśnięcia albo rozwiązania umowy`],
+          ['Zgłoszenie zmiany danych przez zarząd', `${dane.terminy.ZGLOSZENIE_ZMIANY_PRZEZ_ZARZAD_DNI} dni od zdarzenia`],
+        ]} />
         <div className="podstawa-prawna odstep-g">
           Termin 7 dni zamrożony w stanie „wstrzymana” — po wznowieniu biegnie od nowa w pełnym wymiarze.
         </div>
 
         <div className="rozdzielacz" />
 
-        <dl className="pary">
-          <Para etykieta="Cel wewnętrzny kancelarii">
-            {dane.cel_wewnetrzny.WPIS_DNI} dni kalendarzowe od wpływu żądania
-          </Para>
-        </dl>
+        <ListaDanych pary={[
+          ['Cel wewnętrzny kancelarii', `${dane.cel_wewnetrzny.WPIS_DNI} dni kalendarzowe od wpływu żądania`],
+        ]} />
         <div className="podstawa-prawna">
           Nie jest terminem ustawowym. Art. 300(34) § 1 KSH nakazuje działać „niezwłocznie”, a siedem
           dni tylko domyka ten obowiązek od góry — cel wyprzedza termin ustawowy i to on uruchamia
@@ -145,12 +133,10 @@ function EkranStawek() {
 
       {zakladka === 'dostep' && (
         <Karta tytul="Dostęp do danych rejestru">
-          <dl className="pary">
-            <Para etykieta="Maskowane pozostałym akcjonariuszom">
-              PESEL, data urodzenia, adres zamieszkania — {dane.podstawy.MASKOWANIE}
-            </Para>
-            <Para etykieta="Pełny dostęp">{dane.organy_uprawnione.join(', ')}</Para>
-          </dl>
+          <ListaDanych pary={[
+            ['Maskowane pozostałym akcjonariuszom', `PESEL, data urodzenia, adres zamieszkania — ${dane.podstawy.MASKOWANIE}`],
+            ['Pełny dostęp', dane.organy_uprawnione.join(', ')],
+          ]} />
           <div className="podstawa-prawna odstep-g">
             Maskowanie działa w każdym widoku i wydruku o roli innej niż spółka albo organ
             uprawniony — także w podglądzie rejestru w portalu klienta.

@@ -289,7 +289,7 @@ function EkranZgloszenieWstepne() {
 
   return (
     <form onSubmit={wyslij}>
-      <div className="brama-karta-tytul">Zgłoś zainteresowanie</div>
+      <div className="brama-karta-tytul">Zgłoś spółkę</div>
       <div className="brama-karta-podtytul">
         Prowadzenie rejestru akcjonariuszy prostej spółki akcyjnej
       </div>
@@ -347,7 +347,7 @@ function EkranZgloszenieWstepne() {
         disabled={wysylanie || !email.trim() || !krsPoprawny}
         style={{ width: '100%', marginTop: 'var(--od-8)' }}
       >
-        {wysylanie ? 'Wysyłanie…' : 'Wyślij zgłoszenie'}
+        {wysylanie ? 'Wysyłanie…' : 'Zgłoś spółkę'}
       </button>
       <div className="brama-stopka">
         <button type="button" className="btn btn-cichy" onClick={() => idz('/')}>← Wróć do logowania</button>
@@ -1400,7 +1400,7 @@ function EkranZgloszeniePortal({ spolkaId }) {
           onClick={zglos}
           style={{ marginTop: 8 }}
         >
-          {wysylanie ? 'Wysyłanie…' : 'Złóż zgłoszenie'}
+          {wysylanie ? 'Wysyłanie…' : 'Zgłoś zmianę'}
         </button>
       </Karta>
     </div>
@@ -1490,7 +1490,7 @@ function EkranZgloszenieBleduPortal({ spolkaId, odwolanie }) {
         <Komunikat odmiana="info" tresc="Zgłoszenie jest bezpłatne. Ewentualne sprostowanie ustali i wykona kancelaria." />
 
         <button className="btn btn-glowny" disabled={wysylanie || !mozeZlozyc} onClick={zglos} style={{ marginTop: 8 }}>
-          {wysylanie ? 'Wysyłanie…' : 'Zgłoś błąd'}
+          {wysylanie ? 'Wysyłanie…' : 'Zgłoś błąd we wpisie'}
         </button>
       </Karta>
     </div>
@@ -1896,8 +1896,16 @@ function FormularzZmianyHaslaPortal() {
   const [blad, ustawBlad] = useState(null);
   const [gotowe, ustawGotowe] = useState(false);
 
+  // A-020: walidacja jak w reszcie aplikacji — komunikat pod polem (`Pole blad`), nie dymek przeglądarki.
+  const [pokazBledy, ustawPokazBledy] = useState(false);
+  const bledy = {
+    obecne: !obecne ? 'Wpisz obecne hasło.' : null,
+    nowe: !nowe ? 'Wpisz nowe hasło.' : nowe.length < 12 ? 'Nowe hasło musi mieć co najmniej 12 znaków.' : null,
+  };
   async function zapisz(z) {
     z.preventDefault();
+    if (bledy.obecne || bledy.nowe) { ustawPokazBledy(true); return; }
+    ustawPokazBledy(false);
     ustawWysylanie(true);
     ustawBlad(null);
     ustawGotowe(false);
@@ -1914,18 +1922,18 @@ function FormularzZmianyHaslaPortal() {
   }
 
   return (
-    <form onSubmit={zapisz} className="pion" style={{ gap: 12 }}>
+    <form onSubmit={zapisz} className="pion" style={{ gap: 12 }} noValidate>
       <Komunikat odmiana="blad" tresc={blad} />
       <Komunikat odmiana="ok" tresc={gotowe ? 'Hasło zmienione. Przy kolejnym logowaniu użyj nowego hasła.' : null} />
-      <Pole etykieta="Obecne hasło" wymagane>
+      <Pole etykieta="Obecne hasło" blad={pokazBledy ? bledy.obecne : null}>
         <input
-          type="password" className="fl" autoComplete="current-password" required
+          type="password" className="fl" autoComplete="current-password"
           value={obecne} onChange={(z) => ustawObecne(z.target.value)}
         />
       </Pole>
-      <Pole etykieta="Nowe hasło" wymagane podpowiedz="Minimum 12 znaków.">
+      <Pole etykieta="Nowe hasło" podpowiedz="Minimum 12 znaków." blad={pokazBledy ? bledy.nowe : null}>
         <input
-          type="password" className="fl" autoComplete="new-password" required minLength={12}
+          type="password" className="fl" autoComplete="new-password"
           value={nowe} onChange={(z) => ustawNowe(z.target.value)}
         />
       </Pole>

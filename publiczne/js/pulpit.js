@@ -32,7 +32,7 @@ function pozycjeDoZrobienia({ sprawy, zgloszenia, wnioski, zawiadomienia, podpis
       priorytet,
       data: s.data_wplywu,
       ikona: IKONY_ZDARZEN[s.typ_zdarzenia] || 'sprawy',
-      tytul: s.typ_nazwa,
+      tytul: nazwaCzynnosci(s.typ_zdarzenia, s.typ_nazwa),
       podtytul: s.spolka_nazwa,
       przyKlik: () => idz(`/sprawy/${s.id}`),
       prawo: (

@@ -13,6 +13,8 @@ const PORT = Number(process.env.PSA_ZRZUTY_PORT || 3105);
 module.exports = defineConfig({
   testDir: __dirname,
   testMatch: /.*\.spec\.js$/,
+  // Scenariusze i małpa mają własne konfiguracje (`npm run e2e`, `npm run e2e:malpa`).
+  testIgnore: ['scenariusze/**', 'malpa.spec.js'],
   timeout: 60000,
   workers: 1,
   reporter: [['list']],

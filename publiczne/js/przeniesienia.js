@@ -20,8 +20,8 @@ function EkranPrzeniesien() {
           <thead><tr><th>Spółka</th><th>Dotychczasowy podmiot</th><th>Status</th><th>Umowa / skuteczność</th></tr></thead>
           <tbody>
             {lista.map((p) => (
-              <tr key={p.id} className="klikalny" onClick={() => idz(`/przeniesienia/${p.id}`)}>
-                <td><strong>{p.nazwa || '—'}</strong><div className="przyciemnione">KRS {p.krs || '—'}</div></td>
+              <tr key={p.id} className="klikalna" onClick={() => idz(`/przeniesienia/${p.id}`)}>
+                <td><strong><a className="lacze-wiersza" href={`#/przeniesienia/${p.id}`}>{p.nazwa || '—'}</a></strong><div className="przyciemnione">KRS {p.krs || '—'}</div></td>
                 <td>{p.poprzednik_nazwa || '—'}<div className="przyciemnione">{p.poprzednik_opis}</div></td>
                 <td><Pigulka odmiana={ODMIANA_STATUSU_PRZEN[p.status]}>{p.nazwa_statusu}</Pigulka>
                   {p.przypomnienia.length > 0 && <div className="przyciemnione">przypomnienia: {p.przypomnienia.length}</div>}</td>
@@ -59,14 +59,28 @@ function ChecklistaPrzeniesienia({ id, rodzaj, definicja, zaznaczone, blokady, e
   );
 }
 
+/**
+ * A-030: bieżący etap rozwinięty (jedna akcja główna), zakończone i późniejsze — zwinięte z tytułem.
+ * Etap bieżący wynika ze statusu przeniesienia (wytyczne § 7.2).
+ */
+const ETAP_STATUSU = {
+  zgloszone: 3, weryfikacja: 3, umowa_warunkowa: 4, oczekuje_na_przekazanie: 4,
+  uzgodnienie: 6, wstrzymane_rozbieznosci: 6, aktywny: 7, wygasla: 8,
+};
+function EtapPrzeniesienia({ nr, tytul, status, children }) {
+  const biezacy = ETAP_STATUSU[status] || 3;
+  if (nr === biezacy) return <Karta tytul={`Etap ${nr} — ${tytul} · bieżący`}>{children}</Karta>;
+  return <Sekcja tytul={`Etap ${nr} — ${tytul}${nr < biezacy ? ' ✓' : ' — później'}`}>{children}</Sekcja>;
+}
+
 function EkranPrzeniesienia({ id }) {
   const { dane, odswiez } = useDane(`/api/psa/przeniesienia/${id}`);
   const [blad, ustawBlad] = useState(null);
   const [pola, ustawPola] = useState({ data_zawarcia_umowy: dzisIso(), data_skutecznosci: dzisIso(), uwagi: '' });
   const [typDok, ustawTypDok] = useState('uchwala');
+  const [maPlik, ustawMaPlik] = useState(false); // A-033: „Dodaj dokument” aktywne dopiero z wybranym plikiem
   const [zrodlo, ustawZrodlo] = useState('klient');
   const plik = useRef(null);
-  const podpisany = useRef(null);
   if (!dane) return <Spinner />;
   const p = dane.przeniesienie;
 
@@ -104,10 +118,10 @@ function EkranPrzeniesienia({ id }) {
           <div className="karta" style={{ marginTop: 'var(--od-4)' }}>
             <div className="siatka-2">
               {p.dozwolone_przejscia.includes('umowa_warunkowa') && (
-                <Pole etykieta="Data zawarcia umowy (podpis notariusza)"><input type="date" value={pola.data_zawarcia_umowy} onChange={(z) => ustawPola({ ...pola, data_zawarcia_umowy: z.target.value })} /></Pole>
+                <Pole etykieta="Data zawarcia umowy (podpis notariusza)"><PoleDaty wartosc={pola.data_zawarcia_umowy || ''} max={fmt.dzisIso()} przyZmianie={(v) => ustawPola({ ...pola, data_zawarcia_umowy: v || '' })} /></Pole>
               )}
               {p.dozwolone_przejscia.includes('oczekuje_na_przekazanie') && (
-                <Pole etykieta="Data rozwiązania / wygaśnięcia dotychczasowej umowy (po weryfikacji)"><input type="date" value={pola.data_skutecznosci} onChange={(z) => ustawPola({ ...pola, data_skutecznosci: z.target.value })} /></Pole>
+                <Pole etykieta="Data rozwiązania / wygaśnięcia dotychczasowej umowy (po weryfikacji)"><PoleDaty wartosc={pola.data_skutecznosci || ''} przyZmianie={(v) => ustawPola({ ...pola, data_skutecznosci: v || '' })} /></Pole>
               )}
               {(p.dozwolone_przejscia.includes('wstrzymane_rozbieznosci') || p.status === 'wstrzymane_rozbieznosci') && (
                 <Pole etykieta="Opis rozbieżności / wyjaśnienia"><input value={pola.uwagi} onChange={(z) => ustawPola({ ...pola, uwagi: z.target.value })} /></Pole>
@@ -115,20 +129,26 @@ function EkranPrzeniesienia({ id }) {
             </div>
             <span className="row-g" style={{ flexWrap: 'wrap' }}>
               {p.dozwolone_przejscia.filter((na) => na !== 'aktywny').map((na) => (
-                <button key={na} className="btn btn-maly" onClick={() => przejdz(na)}>→ {dane.statusy[na]}</button>
+                // A-033: przejście, które na pewno zostanie odrzucone (rozbieżności bez opisu), jest nieaktywne (D-052).
+                <button key={na} className="btn btn-maly" onClick={() => przejdz(na)}
+                  disabled={(na === 'wstrzymane_rozbieznosci' || p.status === 'wstrzymane_rozbieznosci') && !String(pola.uwagi || '').trim()}>
+                  → {dane.statusy[na]}
+                </button>
               ))}
               {p.dozwolone_przejscia.includes('aktywny') && p.spolka_id && (
-                <button className="btn btn-glowny btn-maly" onClick={() => idz(`/spolki/${p.spolka_id}`)}>Otwórz rejestr — PRZEJĘCIE (kreator stanu otwarcia)</button>
+                // B-004: wprost do kreatora otwarcia (`POST /spolki/:id/otworz-rejestr` zapisuje PRZEJĘCIE i kończy
+                // przeniesienie) — nie do kokpitu, gdzie jest tylko „Migracja z innego rejestru” (KRN). A-024: jedna nazwa.
+                <button className="btn btn-glowny btn-maly" onClick={() => idz(`/spolki/${p.spolka_id}/otworz`)}>Otwórz rejestr</button>
               )}
             </span>
           </div>
         )}
       </Karta>
 
-      <Karta tytul="Etap 3 — weryfikacja kancelarii">
+      <EtapPrzeniesienia nr={3} tytul="weryfikacja kancelarii" status={p.status}>
         <ChecklistaPrzeniesienia id={id} rodzaj="weryfikacji" definicja={dane.checklista_weryfikacji} zaznaczone={p.checklista_weryfikacji}
           blokady={p.blokady_weryfikacji} edytowalna={p.status === 'weryfikacja'} przyZmianie={odswiez} />
-      </Karta>
+      </EtapPrzeniesienia>
 
       <Karta tytul="Dokumenty (SHA-256)">
         <table className="tabela">
@@ -143,32 +163,31 @@ function EkranPrzeniesienia({ id }) {
           <select value={zrodlo} onChange={(z) => ustawZrodlo(z.target.value)}>
             {['klient', 'kancelaria', 'poprzednik'].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <input type="file" ref={plik} />
-          <button className="btn btn-maly" onClick={() => wykonaj(() => wyslij(`/api/psa/przeniesienia/${id}/dokumenty`, plik, { typ: typDok, zrodlo }))}>Dodaj dokument</button>
+          <input type="file" ref={plik} onChange={(z) => ustawMaPlik(Boolean(z.target.files && z.target.files.length))} />
+          <button className="btn btn-maly" disabled={!maPlik} onClick={() => wykonaj(() => wyslij(`/api/psa/przeniesienia/${id}/dokumenty`, plik, { typ: typDok, zrodlo }))}>Dodaj dokument</button>
         </div>
       </Karta>
 
-      <Karta tytul="Etap 4 — pisma (szablony)">
+      <EtapPrzeniesienia nr={4} tytul="pisma (szablony)" status={p.status}>
         <ul>{dane.pisma.map((x) => (
           <li key={x.kod}><a href={`/api/psa/przeniesienia/${id}/pisma/${x.kod}`} target="_blank" rel="noopener">{x.tytul}</a>{x.projekt && <span className="przyciemnione"> — PROJEKT</span>}</li>
         ))}</ul>
-      </Karta>
+      </EtapPrzeniesienia>
 
-      <Karta tytul="Etap 6 — odbiór i uzgodnienie">
+      <EtapPrzeniesienia nr={6} tytul="odbiór i uzgodnienie" status={p.status}>
         <ChecklistaPrzeniesienia id={id} rodzaj="odbioru" definicja={dane.checklista_odbioru} zaznaczone={p.checklista_odbioru}
           blokady={p.blokady_odbioru} edytowalna={p.status === 'uzgodnienie'} przyZmianie={odswiez} />
         <div className="podpowiedz">Rozbieżności nie poprawiamy samodzielnie — rejestr odwzorowujemy, korekty tylko w trybie żądania wpisu.</div>
-      </Karta>
+      </EtapPrzeniesienia>
 
-      <Karta tytul="Etap 7 — protokół przejęcia i zatwierdzenie (podpis kwalifikowany notariusza)">
-        <a className="btn btn-maly" href={`/api/psa/przeniesienia/${id}/protokol.pdf`}>Pobierz protokół przejęcia (PDF)</a>
+      {/* D-095: protokół powstaje automatycznie przy „Otwórz rejestr” (dokumenty ze skrótami + checklista odbioru)
+          i trafia do zdarzenia PRZEJĘCIE; zatwierdzeniem notariusza jest samo otwarcie — bez wgrywania podpisanego pliku. */}
+      <EtapPrzeniesienia nr={7} tytul="protokół przejęcia" status={p.status}>
+        <p className="male">Protokół (dokumenty źródłowe ze skrótami SHA-256 i checklista odbioru) powstaje przy otwarciu rejestru
+          i jest dołączany do zdarzenia PRZEJĘCIE. Otwarcie rejestru przez notariusza jest jego zatwierdzeniem.</p>
+        <a className="btn btn-maly" href={`/api/psa/przeniesienia/${id}/protokol.pdf`}>Podgląd protokołu (PDF)</a>
         {p.protokol_id_dokumentu && <span className="przyciemnione"> ID {p.protokol_id_dokumentu}</span>}
-        <div className="row-g" style={{ marginTop: 'var(--od-2)' }}>
-          <input type="file" ref={podpisany} accept=".pdf,.xml,.xades" />
-          <button className="btn btn-maly btn-glowny" onClick={() => wykonaj(() => wyslij(`/api/psa/przeniesienia/${id}/zatwierdzenie`, podpisany))}>Wgraj protokół podpisany przez notariusza</button>
-        </div>
-        {p.zatwierdzenie_walidacja && <WynikWalidacji walidacja={p.zatwierdzenie_walidacja} />}
-      </Karta>
+      </EtapPrzeniesienia>
 
       <Karta tytul="Historia (append-only)">
         <ul>{p.historia.map((h) => (

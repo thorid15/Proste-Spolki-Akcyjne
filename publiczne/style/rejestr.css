@@ -555,6 +555,12 @@ body {
 }
 .naglowek-strony-kontekst { color: var(--atrament-2); font-size: var(--st-13); margin-top: var(--od-4); }
 .naglowek-strony-akcje { display: flex; gap: var(--od-8); flex-shrink: 0; }
+/* A-031: na telefonie nazwa (np. spółki w kokpicie) na pełną szerokość, „Stan na dzień” i akcje pod nią —
+   obok siebie nazwa łamała się co słowo. */
+@media (max-width: 720px) {
+  .naglowek-strony { flex-direction: column; gap: var(--od-12); }
+  .naglowek-strony-akcje { flex-wrap: wrap; flex-shrink: 1; max-width: 100%; }
+}
 
 .okruszki { display: flex; align-items: center; gap: var(--od-8); font-size: var(--st-13); color: var(--atrament-3); margin-bottom: var(--od-12); }
 .okruszki button {
@@ -747,6 +753,13 @@ body {
 }
 .wiersz-prawo { display: flex; align-items: center; gap: var(--od-16); flex-shrink: 0; }
 .wiersz-data { font-size: var(--st-11); color: var(--atrament-3); font-family: var(--font-dane); }
+/* A-032: na telefonie stan, termin i data przechodzą pod tytuł — wcześniej wychodziły poza kartę,
+   a tytuł kurczył się do kilkunastu pikseli. */
+@media (max-width: 600px) {
+  .wiersz { flex-wrap: wrap; padding: var(--od-12) var(--od-16); }
+  .wiersz-tresc { flex: 1 1 calc(100% - 48px); }
+  .wiersz-prawo { flex: 1 1 100%; flex-wrap: wrap; gap: var(--od-8); padding-left: 48px; flex-shrink: 1; }
+}
 
 /* Naprawa Z-354: utility do skracania dowolnego dlugiego tekstu z bazy
    (np. nazwy spolki) w komorkach tabel, gdzie `table-layout: auto` samo
@@ -1640,6 +1653,10 @@ a.stopka-poz:hover span { text-decoration: underline; }
 @media (max-width: 720px) {
   .pozycja-platnosci { grid-template-columns: minmax(0, 1fr) auto; }
   .pozycja-platnosci-akcja { grid-column: 1 / -1; justify-content: flex-start; }
+}
+/* A-032: na telefonie jedna kolumna — tytuł pozycji (np. „Wpis w rejestrze akcjonariuszy”) bez ucięcia. */
+@media (max-width: 480px) {
+  .pozycja-platnosci { grid-template-columns: minmax(0, 1fr); gap: var(--od-8); padding: var(--od-12) var(--od-16); }
 }
 
 /* ─────────────────────────────────────────────────────
@@ -2560,6 +2577,14 @@ h1[tabindex="-1"]:focus-visible { outline: none; }
     padding: 4px 0 !important; border: none !important; text-align: right; white-space: normal !important;
     max-width: none !important; overflow: visible !important;
   }
+  /* B-006: komórka z kilkoma blokami (tekst + opis, znacznik, formularz nadania) zawija się zamiast
+     wychodzić poza kartę; formularz w komórce — na całą szerokość pod etykietą. */
+  /* `.tabela td { height: 44px }` (wiersz na komputerze) w flex na telefonie jest sztywną wysokością — treść
+     wychodziła na następny wiersz; tu wysokość wynika z treści. */
+  table.tabela td, table.tbl td { flex-wrap: wrap; height: auto; }
+  table.tabela td > *, table.tbl td > * { min-width: 0; max-width: 100%; }
+  table.tabela td > .pion, table.tbl td > .pion { flex: 1 1 100%; text-align: left; }
+  table.tabela td > .pion input, table.tbl td > .pion input { max-width: 100%; }
   table.tabela td[data-etykieta]::before, table.tbl td[data-etykieta]::before {
     content: attr(data-etykieta); flex: 0 0 auto; max-width: 45%;
     text-align: left; color: var(--atrament-3); font-size: var(--st-11); font-weight: 500;
@@ -2592,3 +2617,10 @@ h1.topbar-tytul, h1.brama-tytul { margin: 0; font-weight: inherit; }
   .okruszki button { min-height: 44px; }
   .zakladka { min-width: 44px; min-height: 44px; }
 }
+
+/* A-034: wiersz listy otwierany łączem w nazwie (klawiatura, nowa karta); cały wiersz nadal klikalny myszą.
+   `.klikalna` — jedna klasa dla wszystkich list (dawniej także `.klikalny`). */
+.klikalna { cursor: pointer; }
+.klikalna:hover { background: var(--paper); }
+.lacze-wiersza { color: inherit; text-decoration: none; }
+.lacze-wiersza:hover, .lacze-wiersza:focus-visible { text-decoration: underline; }

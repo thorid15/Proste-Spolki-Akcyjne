@@ -2622,6 +2622,16 @@ const MIGRACJE = [
          AND id IN (SELECT sprawa_id FROM psa_oswiadczenia WHERE rodzaj = 'zgoda_email' AND sprawa_id IS NOT NULL);
     `,
   },
+  {
+    wersja: 70,
+    nazwa: 'D-101: reprezentant spółki jako osoba w kartotece — dane osobowe i AML raz',
+    sql: `
+      -- Dane osobowe reprezentanta (imię i nazwisko, PESEL, płeć, adres, e-mail) czyta się z psa_osoby
+      -- (rejestr.wczytajSpolke); w spółce zostaje to, co dotyczy umowy: funkcja, sposób reprezentacji,
+      -- imiona rodziców i dokument okazany przy podpisie. Dawne kolumny reprezentant_* — gdy brak osoby.
+      ALTER TABLE psa_spolki ADD COLUMN reprezentant_osoba_id INTEGER REFERENCES psa_osoby(id);
+    `,
+  },
 ];
 
 /**

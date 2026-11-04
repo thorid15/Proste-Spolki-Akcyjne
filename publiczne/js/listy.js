@@ -62,11 +62,11 @@ function WierszListu({ list, odswiez }) {
         ) : otwarty ? (
           <div className="pion" style={{ gap: 'var(--od-2)' }}>
             <Komunikat odmiana="blad" tresc={blad} />
-            <Pole etykieta="Data nadania" wymagane><input type="date" value={data} onChange={(z) => ustawDate(z.target.value)} /></Pole>
+            <Pole etykieta="Data nadania" wymagane><PoleDaty wartosc={data} max={dzisIso()} przyZmianie={(v) => ustawDate(v || '')} /></Pole>
             <Pole etykieta="Numer nadania" wymagane><input value={numer} onChange={(z) => ustawNumer(z.target.value)} /></Pole>
             <Pole etykieta="Skan potwierdzenia nadania"><input type="file" ref={plik} accept=".pdf,.jpg,.jpeg,.png" /></Pole>
             <span className="row-g">
-              <button className="btn btn-glowny btn-maly" disabled={zapis || !numer.trim()} onClick={nadaj}>Zapisz nadanie</button>
+              <button className="btn btn-glowny btn-maly" disabled={zapis || !numer.trim() || !data} onClick={nadaj}>Zapisz nadanie</button>
               <button className="btn btn-maly" onClick={() => ustawOtwarty(false)}>Anuluj</button>
             </span>
           </div>
@@ -81,7 +81,7 @@ function WierszListu({ list, odswiez }) {
           </>
         )}
         {usuwanie && (
-          <ModalPowod tytul="Usuń list z wysyłki" etykieta="Powód" minDlugosc={5} przyZamknieciu={() => ustawUsuwanie(false)} przyZapisie={usun} />
+          <ModalPowod tytul="Usuń list z wysyłki" akcja="Usuń z wysyłki" zamknij="Zostaw w wysyłce" etykieta="Powód" minDlugosc={5} przyZamknieciu={() => ustawUsuwanie(false)} przyZapisie={usun} />
         )}
       </td>
     </tr>

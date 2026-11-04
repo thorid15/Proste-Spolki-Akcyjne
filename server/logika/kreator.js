@@ -25,6 +25,17 @@ const przepisy = require('./przepisy');
 
 const K = przepisy.KATEGORIE_AKCJI;
 
+/**
+ * D-102: dane akcjonariusza wpisywane do rejestru (art. 300(33) § 1 pkt 5 KSH — firma albo imię i nazwisko,
+ * adres albo adres zamieszkania, adres do doręczeń). Zmienia je wyłącznie wpis `zmiana_danych_akcjonariusza`;
+ * edycja w kartotece osoby z akcjami ich nie nadpisuje, tylko proponuje ten wpis (`server/trasy/osoby.js`).
+ */
+const POLA_DANYCH_REJESTRU = [
+  'nazwisko', 'imie', 'nazwa',
+  'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu', 'nr_lokalu',
+  'adres_doreczen', 'adres_edoreczen',
+];
+
 class BladKreatora extends Error {
   constructor(komunikat) {
     super(komunikat);
@@ -673,12 +684,8 @@ const PRZYGOTOWANIA = {
     if (!osoba) {
       throw new BladKreatora('Wskazana osoba nie figuruje w kartotece.');
     }
-    const dozwolone = [
-      'nazwisko', 'imie', 'nazwa',
-      'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu', 'nr_lokalu',
-      // D-092: zgoda na e-mail to dane kartoteki (`server/oswiadczenia.js`), nie wpis w rejestrze.
-      'adres_doreczen', 'adres_edoreczen', 'email', 'telefon',
-    ];
+    // D-092: zgoda na e-mail to dane kartoteki (`server/oswiadczenia.js`), nie wpis w rejestrze.
+    const dozwolone = [...POLA_DANYCH_REJESTRU, 'email', 'telefon'];
     const po = we.po && typeof we.po === 'object' ? we.po : {};
     const zmienione = Object.keys(po).filter(
       (k) => dozwolone.includes(k) && String(osoba[k] ?? '') !== String(po[k] ?? '')
@@ -841,6 +848,7 @@ function przygotujSprostowanie({ zdarzenia, zdarzeniePierwotneId, uzasadnienie, 
 
 module.exports = {
   BladKreatora,
+  POLA_DANYCH_REJESTRU,
   przygotuj,
   przygotujSprostowanie,
   osobyWWejsciu,
