@@ -99,3 +99,19 @@ test('D-102: krok „Co” zmiany danych gotowy dopiero z nowymi danymi z kartot
   assert.equal(L.coGotowe('zmiana_danych_akcjonariusza', { osoba_id: 1 }), false);
   assert.equal(L.coGotowe('zmiana_danych_akcjonariusza', { osoba_id: 1, po: { miejscowosc: 'Sopot' } }), true);
 });
+
+test('D-101: reprezentant spółki z kartoteki — umowa bierze dane osobowe z osoby, funkcję i dowód ze spółki', () => {
+  const { zReprezentantem } = require('../server/rejestr');
+  const kontekstPisma = require('../server/logika/kontekst-pisma');
+  const osoba = { imie: 'Jan', nazwisko: 'Kowalski', pesel: '80010112345', kraj: 'Polska', kod_pocztowy: '80-001', miejscowosc: 'Gdańsk', ulica: 'Długa', nr_domu: '1', email: 'jan@example.com', aml_status: 'wykonane' };
+  const db = { prepare: () => ({ get: () => osoba }) };
+  const spolka = { id: 1, nazwa: 'Alfa P.S.A.', reprezentant_osoba_id: 5, reprezentant_imie_nazwisko: 'Stare Dane', reprezentant_funkcja: 'Prezes Zarządu', reprezentant_dowod_rodzaj: 'dowod_osobisty', reprezentant_dowod_numer: 'ABC123456' };
+  const scalona = zReprezentantem(db, spolka);
+  const k = kontekstPisma.reprezentantKlucze(scalona); // te same klucze co w umowie (wzór 01)
+  assert.equal(k.reprezentant_imie_nazwisko, 'Jan Kowalski');
+  assert.equal(k.reprezentant_pesel, '80010112345');
+  assert.equal(k.reprezentant_funkcja, 'Prezes Zarządu');
+  assert.match(k.reprezentant_adres, /Gdańsk/);
+  assert.match(k.reprezentant_dowod, /ABC123456/);
+  assert.equal(zReprezentantem(db, { id: 2, reprezentant_imie_nazwisko: 'Bez Osoby' }).reprezentant_imie_nazwisko, 'Bez Osoby', 'bez osoby — dawne kolumny');
+});

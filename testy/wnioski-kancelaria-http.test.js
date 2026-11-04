@@ -374,7 +374,10 @@ test('POST /api/psa/wnioski/:id/przyjmij: dopasowuje istniejaca osobe przy zwery
   assert.equal(wynik.wniosek.status, 'przyjety');
 
   const liczbaOsobPo = db().prepare('SELECT COUNT(*) AS ile FROM psa_osoby').get().ile;
-  assert.equal(liczbaOsobPo, liczbaOsobPrzed, 'zaden nowy wpis w kartotece - pozycja byla dowiazana do istniejacej osoby');
+  // D-101: jedyna nowa osoba to reprezentant spółki z wniosku — akcjonariusza nie zdublowano.
+  assert.equal(liczbaOsobPo, liczbaOsobPrzed + 1, 'akcjonariusz dowiazany do istniejacej osoby; nowa osoba = reprezentant');
+  const reprezentant = db().prepare('SELECT o.imie, o.nazwisko FROM psa_spolki s JOIN psa_osoby o ON o.id = s.reprezentant_osoba_id WHERE s.id = ?').get(wynik.wniosek.spolka_id);
+  assert.deepEqual({ ...reprezentant }, { imie: 'Jan', nazwisko: 'Kowalski' }, 'D-101: reprezentant w kartotece, spółka go wskazuje');
 
   const akcjonariuszPo = db().prepare('SELECT * FROM psa_wnioski_akcjonariusze WHERE id = ?').get(akcId);
   assert.equal(akcjonariuszPo.osoba_id, istniejaca.osoba.id);

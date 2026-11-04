@@ -751,6 +751,33 @@ router.post(
  * Akcjonariusze: dowiazuje do wskazanej osoby (zweryfikuj z osoba_id) albo
  * zaklada nowa osobe z danych pozycji.
  */
+/**
+ * D-101: reprezentant z wniosku trafia do kartoteki — ta sama osoba (PESEL) albo nowa; spółka wskazuje ją
+ * w `reprezentant_osoba_id` (dane osobowe i AML raz). Spółka z już wskazanym reprezentantem — bez zmian.
+ */
+function przypnijReprezentanta(wniosek, spolkaId, teraz) {
+  const spolka = db().prepare('SELECT reprezentant_osoba_id FROM psa_spolki WHERE id = ?').get(spolkaId);
+  const imieNazwisko = String(wniosek.reprezentant_imie_nazwisko || '').trim();
+  if (!spolka || spolka.reprezentant_osoba_id || !imieNazwisko) return;
+  const pesel = String(wniosek.reprezentant_pesel || '').trim();
+  let osobaId = pesel ? (db().prepare("SELECT id FROM psa_osoby WHERE pesel = ? AND typ = 'fizyczna'").get(pesel) || {}).id : null;
+  if (!osobaId) {
+    const czesci = imieNazwisko.split(/\s+/);
+    const dane = {
+      typ: 'fizyczna', imie: czesci.slice(0, -1).join(' ') || null, nazwisko: czesci[czesci.length - 1],
+      pesel: pesel || null, plec: wniosek.reprezentant_plec || null, email: wniosek.reprezentant_email || null,
+      kraj: wniosek.reprezentant_kraj || 'Polska', kod_pocztowy: wniosek.reprezentant_kod_pocztowy || null,
+      miejscowosc: wniosek.reprezentant_miejscowosc || null, ulica: wniosek.reprezentant_ulica || null,
+      nr_domu: wniosek.reprezentant_nr_domu || null, nr_lokalu: wniosek.reprezentant_nr_lokalu || null,
+    };
+    const kolumny = Object.keys(dane).filter((k) => dane[k] !== null);
+    osobaId = Number(db()
+      .prepare(`INSERT INTO psa_osoby (${kolumny.join(', ')}, utworzono) VALUES (${kolumny.map((k) => `@${k}`).join(', ')}, @utworzono)`)
+      .run({ ...Object.fromEntries(kolumny.map((k) => [k, dane[k]])), utworzono: teraz }).lastInsertRowid);
+  }
+  db().prepare('UPDATE psa_spolki SET reprezentant_osoba_id = ? WHERE id = ?').run(osobaId, spolkaId);
+}
+
 router.post(
   '/:id/przyjmij',
   asy((zad, odp) => {
@@ -836,6 +863,8 @@ router.post(
         .prepare('UPDATE psa_wnioski_akcjonariusze SET osoba_id = ? WHERE id = ?')
         .run(Number(wynikOsoby.lastInsertRowid), a.id);
     }
+
+    przypnijReprezentanta(wniosek, spolkaId, teraz);
 
     db()
       .prepare(
