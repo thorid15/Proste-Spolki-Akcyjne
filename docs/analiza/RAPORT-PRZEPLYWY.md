@@ -377,9 +377,61 @@ przycisk „Wyślij powiadomienie” jest ukryty, dopóki stan listów się nie 
 | 1 | B-001–B-006 (+ D-103); decyzje zapisane w `DECYZJE.md` | **wdrożone** — scenariusze e2e bez `test.fail` |
 | 2 | D-098 (sprawa z portalu bez „Rozpocznij weryfikację”), D-104 (adresat powiadomienia domyślny), A-013 (charakter żądającego domyślny), D-099 (e-mail akcjonariusza tylko przy zgodzie; zastępuje Z-006/P-004 — spójne z D-083), D-100 („Zbycie akcji” w interfejsie), A-033 (przyciski przeniesienia nieaktywne, gdy błąd pewny), A-034 (wiersze list jako łącza — klawiatura), A-035 (`min`/`max` daty także przy wpisaniu z klawiatury; „Data nadania” — `PoleDaty`), D-106 (ostrzeżenie PESEL przy zapisie) | **wdrożone** |
 | 3 | D-096 (spółka jako żądający bez kartoteki), D-095 (protokół przejęcia automatycznie przy otwarciu, skrót w PRZEJĘCIU), D-105 (numery akcji za przyciskiem „Wybierz numery ręcznie”) | **wdrożone** |
-| 4 | D-097 (jeden kreator wpisu dla wszystkich typów), D-101 (reprezentant w kartotece), D-102 (zmiana adresu jedną drogą) oraz A-002, A-005, A-006, A-016 (reszta), A-019–A-022, A-025–A-027, A-030–A-032, A-037 | **do wykonania** — przebudowa kreatora i modelu danych; osobna sesja z planem, regresja `npm run e2e` |
+| 4 | D-097 (jeden kreator wpisu dla wszystkich typów), D-101 (reprezentant w kartotece), D-102 (zmiana adresu jedną drogą) oraz A-002, A-005, A-006, A-016 (reszta), A-019–A-022, A-025–A-027, A-030–A-032, A-037 | **wdrożone** (4.11.2026) — szczegóły niżej |
 
 Testy nowych zachowań: `testy/wdrozenie-analizy.test.js` (D-103, D-104, A-013, D-100), `testy/wpis-zbycia-logika.test.js` (B-005),
 `testy/przeniesienie-stany.test.js` (D-095), `testy/wniosek-http.test.js` (D-099) oraz scenariusze e2e (B-001, B-003, B-004, B-006,
 D-096, D-098, D-104, D-100, D-103, D-095). Korekta raportu: przy A-028 istniała wcześniejsza poprawka w kodzie (Z-006/P-004 —
 e-mail „do zaproszenia”), bez wpisu w `DECYZJE.md`; D-099 ją zastępuje.
+
+### Etap 4 — co wdrożono (4.11.2026)
+
+| Ustalenie | Zmiana | Miejsce |
+|---|---|---|
+| **D-097**, A-009, A-021, A-037 | `KreatorWpisu`: „Co” → „Podstawa” → „Sprawdzenie i wpis” dla każdego typu; zbycie to wkład typu (`WPIS_ZBYCIA`), nie osobny kreator. Sprawa zakłada się w tle po „Podstawie”; ten sam kreator w sprawie z portalu i wznowionej z kolejki. Znikają `EkranNowejSprawy`, `KreatorSprawy`, okno `PodstawaWpisu`, stopka wystająca poza kartę — `PasekAkcji` w każdym kroku. Osoba działająca ustala się sama (wybór tylko, gdy niejednoznaczna) | `publiczne/js/kreator-wpisu.js`, `wpis-zbycia.js`, `wpis-zbycia-logika.js` (`krokiWpisu`, `osobaWCharakterze`, `coGotowe`, `poczatekWpisu`) |
+| A-005 | Rodzaj dokumentu podstawy domyślny z typu (`domyslnyRodzajDokumentu`), plik dziedziczy rodzaj; zmiana za przyciskiem „Rodzaj dokumentu, data wpływu, notatka” | jw. |
+| A-006 | Sprawa z portalu: podstawa (data dokumentu, rodzaj z typu) w kroku 2 kreatora; okno tylko do zmiany rodzaju wpisu („Zmień rodzaj wpisu”, sprawy z portalu) | `sprawy.js` (`ModalTypuWpisu`) |
+| — | Żądający podstawiony z kroku „Co”, gdy wynika z danych wpisu (nabywca, zastawnik, akcjonariusz…) — bez drugiego wyboru z kartoteki | `osobaWCharakterze` |
+| **D-102**, A-007 | Kartoteka nie nadpisuje danych z rejestru (art. 300(33) § 1 pkt 5 — nazwisko/firma, adres, adres do doręczeń) osoby z akcjami: zapisuje resztę i proponuje wpis „Zmiana danych akcjonariusza” — sprawa z wypełnionymi danymi, otwarta w „Sprawdzeniu i wpisie”. W kreatorze nowe dane wpisuje się tym samym formularzem kartoteki; podgląd „dziś w rejestrze → po wpisie” | `server/trasy/osoby.js` (`zmiana_rejestrowa`), `server/logika/kreator.js` (`POLA_DANYCH_REJESTRU`), `osoby.js` (`PropozycjaZmianyDanych`), `kreator.js` |
+| **D-101**, A-003 | Migracja 70: `psa_spolki.reprezentant_osoba_id`. Dane osobowe reprezentanta (imię i nazwisko, PESEL, płeć, adres, e-mail) czyta `rejestr.wczytajSpolke` z kartoteki — pisma (umowa, wzór 01) z jednego źródła, AML raz. Otwarcie rejestru: wybór z kartoteki. Przyjęcie wniosku: reprezentant trafia do kartoteki (ta sama osoba po PESEL albo nowa) | `server/migracje.js`, `server/rejestr.js` (`zReprezentantem`), `server/trasy/wnioski.js`, `spolki.js` |
+| A-002 | `PolaDanychSpolki` — jeden zestaw pól danych spółki we wniosku portalu i przy otwarciu rejestru | `pola.js` |
+| A-016 | `PoleDaty` zamiast natywnych pól daty (przeniesienie — 2, otrzymanie oryginału) | `przeniesienia.js`, `wnioski.js` |
+| A-019, A-025 | Nowy nabywca w zbyciu formularzem kartoteki („Dodaj do kartoteki”); przy akcjonariuszu we wniosku „Zapisz zmiany” zamiast „Gotowe” | `wpis-zbycia.js`, `wniosek.js` |
+| A-020 | Zmiana hasła w portalu — komunikaty pod polami, bez dymków przeglądarki | `portal.js` |
+| A-022 | `ListaDanych` zamiast `Para` (stawki i terminy, dostęp do danych); `Para` usunięty | `konfiguracja.js` |
+| A-026, A-027 | Portal: „Zgłoś spółkę”; „Zgłoś zmianę”, „Zgłoś błąd we wpisie” (przycisk = nazwa wejścia) | `portal.js` |
+| A-030 | Przeniesienie rejestru: bieżący etap rozwinięty, zakończone (✓) i późniejsze zwinięte | `przeniesienia.js` |
+| A-031, A-032 | Telefon: nagłówek strony (nazwa na pełną szerokość), wiersze kolejki spraw i płatności portalu bez wychodzenia poza kartę | `rejestr.css` |
+
+**Pomiar testerem po etapie 4** (1440 px; „przed” — tabela § 1):
+
+| Scenariusz | Przed: ekrany / pola / kliknięcia / przejścia | Po |
+|---|---|---|
+| `wpis-emisja` | 3 / 5 / 8 / 3 | 3 / 4 / 7 / 3 |
+| `wpis-obciazenie` | 3 / 6 / 11 / 3 | 3 / 4 / 8 / 3 |
+| `wpis-umorzenie` | 3 / 4 / 12 / 3 | 3 / 2 / 9 / 3 |
+| `zbycie-ze-zgoda` (wzorzec) | 3 / 3 / 11 / 3 | 3 / 3 / 11 / 3 |
+| `sprawa-z-portalu` | 2 / 2 / 6 / 2 | 2 / 2 / 6 / 2 — w tym 2 kliknięcia kontroli okna „Zmień rodzaj wpisu”; sam przebieg −2 |
+| `sprawdzUklad` 390 px | 26 scenariuszy z problemami | 0 |
+
+Ekrany i przejścia kreatora zostają 3 / 3 — jak w zbyciu: po „Podstawie” adres zmienia się z `#/spolki/:id/zdarzenie` na `#/sprawy/:id`
+(ten sam kreator, krok 3). Cel „1 ekran” z § 1 wymagałby pozostania na jednym adresie — możliwe bez zmian serwera, do decyzji.
+
+**Do decyzji (wynikło przy wdrożeniu):**
+1. **D-102 — kartoteka wspólna dla wszystkich spółek.** Wpis „Zmiana danych akcjonariusza” zmienia rekord osoby (`psa_osoby`), więc dane
+   zmieniają się we wszystkich rejestrach, w których osoba ma akcje — także bez wpisu w rejestrze drugiej spółki (model sprzed etapu 4).
+   Okno propozycji to mówi; czy przy kilku spółkach zakładać wpis w każdej (wymaga zmiany porównania „przed/po” w serwerze)?
+2. **D-101 — dowód osobisty i imiona rodziców reprezentanta zostały w spółce** (kartoteka nie ma tych pól; dokument okazany przy podpisie
+   umowy). Przenieść do kartoteki — rozszerzenie `psa_osoby` i formularza osoby.
+3. **A-005 — katalog rodzajów dokumentu** nie ma „umowy zastawu / użytkowania”, „oświadczenia akcjonariusza” ani „zawiadomienia organu
+   egzekucyjnego” (§ 4) — dla tych typów domyślnie „inny dokument”. Rozszerzenie katalogu wymaga migracji (ograniczenia `CHECK`).
+4. **A-022** — `Metryka` (pasek wskaźników w kokpicie) zostaje: to inna rola niż lista „etykieta — wartość”.
+
+Mapy procesów i danych (`MAPA-PROCESOW.md`, `MAPA-DANYCH.md`) i `BLEDY.md` opisują stan sprzed etapu 4 — zostawione jako zapis analizy.
+
+Testy etapu 4: `testy/wdrozenie-analizy.test.js` (D-097, A-005, D-102, D-101), `testy/osoby-http.test.js` (D-102 — kartoteka nie nadpisuje
+danych z rejestru), `testy/wnioski-kancelaria-http.test.js` (D-101 — reprezentant z wniosku w kartotece); e2e: `wpisy-ogolne.spec.js`
+(16 typów, kafelek, emisja → objęcie — nowy przebieg), `kancelaria.spec.js` (D-102 z kartoteki, K6, D-096), `zbycie.spec.js` (A-019),
+`uklad-ekrany.spec.js` (A-019), `malpa.spec.js` (kreator — daty z przyszłości w „Podstawie”).
+Weryfikacja: `npm test` 620 ✓ / 0 ✗ / 1 pominięty (jak dotąd), `npm run e2e` 94/94, `npm run e2e:malpa` 28/28, `npm run zrzuty` 39/39.
+

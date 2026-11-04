@@ -127,6 +127,11 @@ umowy, plik, kto żąda, tytuł) → **Sprawdzenie i wpis** (podgląd, pola waru
 pokrycie, powiadomienie zbywcy albo zgoda, checklista, „Dokonaj wpisu”). Sprawa powstaje po kroku „Podstawa”;
 do kroku 3 można wrócić po nadaniu listu. Raport sesji: `SESJA-PSA-POPRAWKI-R4-RAPORT.md`.
 
+**Jeden kreator wpisu (D-097, etap 4 analizy przepływów):** ten sam przebieg „Co” → „Podstawa” → „Sprawdzenie i wpis”
+obsługuje każdy typ wpisu (`publiczne/js/kreator-wpisu.js`); rodzaj dokumentu, charakter i osoba żądającego są domyślne
+z typu i z kroku 1. Zmiana adresu akcjonariusza — tylko w kartotece, która proponuje wpis (D-102); reprezentant spółki
+— osoba w kartotece (D-101). Szczegóły: `docs/analiza/RAPORT-PRZEPLYWY.md` § 9.
+
 ## Zrzuty ekranów i kontrola układu — R4
 
 ```bash
@@ -477,8 +482,9 @@ publiczne/                 React 18 + Babel z CDN, bez bundlera
   style/psa.css            wyłącznie układ modułu, kolory tylko przez var(--…)
   index.html               SPA kancelaryjna
   portal.html              SPA portalu klienta — OSOBNA aplikacja, osobna sesja
-  js/sprawy.js             kolejka + kokpit sprawy + kroki 3–4 kreatora (osadzone)
-  js/kreator.js            kroki 1–2 (zakłada sprawę) + formularze kroku 3 per typ
+  js/sprawy.js             kolejka + ekran sprawy (kreator wpisu osadzony)
+  js/kreator-wpisu.js      kreator wpisu dla każdego typu (D-097): Co → Podstawa → Sprawdzenie i wpis
+  js/kreator.js            formularze kroku „Co” per typ
   js/auth.js                sesja pracownika + ekran logowania (kancelaria)
   js/uzytkownicy.js         zarządzanie kontami pracowników (tylko admin)
   js/oplaty.js               ekran Opłaty: filtry, ręczny wpis, status, naliczenie roczne, eksport CSV
