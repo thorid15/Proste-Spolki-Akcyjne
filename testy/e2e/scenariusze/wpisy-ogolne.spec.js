@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Wpis kreatorem ogólnym (K4) — każdy typ z `dostepneWKreatorze()` poza zbyciem (osobny przebieg, `zbycie.spec.js`).
- * Przebieg: kokpit → `#/spolki/1/zdarzenie?typ=…` (przycisk w kokpicie) → „Podstawa” → „Załóż sprawę i przejdź dalej”
- * → „Co się zmienia” → „Weryfikacja i podgląd” → „Dokonaj wpisu”.
+ * Wpis kreatorem wpisu (K4, D-097) — każdy typ z `dostepneWKreatorze()` poza zbyciem (`zbycie.spec.js`, ten sam kreator).
+ * Przebieg: kokpit → `#/spolki/1/zdarzenie?typ=…` (przycisk w kokpicie) → „Co się zmienia” → „Podstawa”
+ * (sprawa w tle) → „Sprawdzenie i wpis” → „Dokonaj wpisu”.
  * Stan wstępny (obciążenie do wykreślenia, zajęcie do uchylenia) — zwykłym API, dane fikcyjne.
  * Persony: Anna Testowa (600 akcji serii A, zgoda e-mail), Bartosz Próbny (400, bez zgody), Celina Nabywczyni (bez akcji).
  */
@@ -86,6 +86,26 @@ const TYPY = [
 /** Wspólny pomocnik (ui.checklista) — odhacza i czeka na aktywne „Dokonaj wpisu”. */
 const checklista = (page) => ui.checklista(page);
 
+/**
+ * Krok „Podstawa”: charakter żądającego domyślny z typu (A-013), spółka bez kartoteki (D-096), osoba podstawiona
+ * z kroku „Co”, gdy z niego wynika (D-097) — inaczej wybór z kartoteki; rodzaj dokumentu domyślny (A-005) — tylko data.
+ */
+async function podstawa(page, def) {
+  const oczekiwany = L.domyslnyCharakterZadajacego(def.typ) || 'spolka';
+  const charakter = await ui.pole(page, 'W jakim charakterze').locator('select').inputValue();
+  if (charakter !== oczekiwany) throw new Error(`A-013: „W jakim charakterze” = „${charakter}”, oczekiwano „${oczekiwany}”`);
+  const zadajacy = ui.pole(page, 'Żądający wpisu');
+  if (charakter === 'spolka') {
+    await zadajacy.getByText('Alfa Testowa').waitFor({ timeout: 5000 });
+  } else if (await zadajacy.locator('.kartoteka-wybrana').count()) {
+    const kto = await zadajacy.locator('.kartoteka-wybrana').textContent();
+    if (!kto.includes(def.zadajacy)) throw new Error(`D-097: podstawiony żądający „${kto}”, oczekiwano „${def.zadajacy}”`);
+  } else {
+    await ui.wybierzZKartoteki(page, 'Żądający wpisu', def.zadajacy);
+  }
+  await ui.wpiszDate(page, 'Data dokumentu', DZIS);
+}
+
 async function przebieg(page, testInfo, def, { scenariusz } = {}) {
   rozpocznij(page, testInfo, { scenariusz: scenariusz || `wpis-${def.typ}`, proces: `K4 wpis ${def.typ}`, szerokosc: Number(testInfo.project.name), persona: def.zadajacy || 'z urzędu' });
   await zaloguj(page, 'notariusz@example.com', 'kancelaria');
@@ -99,39 +119,25 @@ async function przebieg(page, testInfo, def, { scenariusz } = {}) {
       await page.goto('/#/spolki/1/zdarzenie');
       await page.getByText('Co się wydarzyło?', { exact: true }).waitFor();
       await page.locator('.kafelek-wyboru', { hasText: def.przezKafelek }).first().click();
-      await page.getByText('Podstawa wpisu', { exact: true }).waitFor();
+      await ui.gotowe(page, 'Co się zmienia');
     });
   } else {
     await krok(page, 'Wybór czynności (przycisk w kokpicie)', async () => {
       await page.goto(`/#/spolki/1/zdarzenie?typ=${def.typ}`);
-      await page.getByText('Podstawa wpisu', { exact: true }).waitFor();
+      await ui.gotowe(page, 'Co się zmienia');
     });
   }
-  await krok(page, 'Podstawa', async () => {
-    if (!def.zUrzedu) {
-      // D-096: żądanie spółki — spółka z rejestru, bez wyboru osoby z kartoteki.
-      if (L.domyslnyCharakterZadajacego(def.typ) === 'spolka') {
-        await ui.pole(page, 'Żądający wpisu').getByText('Alfa Testowa').waitFor({ timeout: 5000 });
-      } else {
-        await ui.wybierzZKartoteki(page, 'Żądający wpisu', def.zadajacy);
-      }
-      // A-013: charakter żądającego podstawiony z typu wpisu — bez wyboru.
-      const charakter = await ui.pole(page, 'W jakim charakterze').locator('select').inputValue();
-      if (charakter !== L.domyslnyCharakterZadajacego(def.typ)) throw new Error(`A-013: „W jakim charakterze” = „${charakter}”, oczekiwano domyślnego`);
-      const rodzaj = ui.pole(page, 'Rodzaj dokumentu stanowiącego podstawę').locator('select');
-      const v = await rodzaj.evaluate((el) => [...el.options].find((o) => o.value !== '')?.value ?? null);
-      if (v) await rodzaj.selectOption(v);
-      await ui.wpiszDate(page, 'Data dokumentu', DZIS);
-    }
-    await page.getByRole('button', { name: /Załóż sprawę/ }).click();
-    await ui.gotowe(page, 'Co się zmienia');
-  });
   await krok(page, 'Co się zmienia', async () => {
     await wykonaj(page, def.plan);
-    await page.getByRole('button', { name: 'Dalej', exact: true }).click();
-    await page.locator('.card-h', { hasText: 'Weryfikacja i podgląd' }).first().waitFor({ timeout: 10000 });
+    await ui.przycisk(page, 'Dalej');
+    await ui.pole(page, 'Data dokumentu').waitFor({ timeout: 10000 });
   });
-  await krok(page, 'Weryfikacja i podgląd — wpis', async () => {
+  await krok(page, 'Podstawa', async () => {
+    if (!def.zUrzedu) await podstawa(page, def);
+    await ui.przycisk(page, 'Dalej');
+    await page.getByRole('button', { name: 'Dokonaj wpisu' }).waitFor({ timeout: 15000 });
+  });
+  await krok(page, 'Sprawdzenie i wpis', async () => {
     if (def.powiadom) {
       // D-104: adresat uprzedniego powiadomienia (art. 300(34) § 3) podpowiedziany z danych wpisu — bez wyboru.
       const wyslij = page.getByRole('button', { name: 'Wyślij powiadomienie' });
@@ -139,9 +145,9 @@ async function przebieg(page, testInfo, def, { scenariusz } = {}) {
       if (!(await wyslij.isEnabled())) throw new Error('D-104: adresat powiadomienia nie został podpowiedziany');
       await wyslij.click();
       await page.getByText('Powiadomienie wysłano').waitFor({ timeout: 10000 });
-      // B-003 (naprawione): po wysłaniu kreator zostaje w „Weryfikacji i podglądzie”.
+      // B-003: po wysłaniu kreator zostaje w „Sprawdzeniu i wpisie”.
       await page.waitForTimeout(800);
-      if (!(await page.locator('.card-h', { hasText: 'Weryfikacja i podgląd' }).isVisible())) throw new Error('B-003: kreator wrócił z „Weryfikacji i podglądu”');
+      if (!(await page.getByRole('button', { name: 'Dokonaj wpisu' }).isVisible())) throw new Error('B-003: kreator wyszedł ze „Sprawdzenia i wpisu”');
     }
     await checklista(page);
     await page.getByRole('button', { name: 'Dokonaj wpisu' }).click();
@@ -170,14 +176,16 @@ test('emisja → objęcie z tej samej podstawy (przycisk „Wpisz, kto objął a
   page.__rejestrator._zapisano = false;
   await krok(page, 'Wpisz, kto objął akcje', async () => {
     await page.getByRole('button', { name: 'Wpisz, kto objął akcje' }).click();
-    await ui.gotowe(page, 'Podstawa przeniesiona');
-    await page.getByRole('button', { name: /Załóż sprawę/ }).click();
     await ui.gotowe(page, 'Co się zmienia');
   });
   await krok(page, 'Objęcie — co się zmienia', async () => {
     await wykonaj(page, [['kartoteka', 'Obejmujący?', 'Nabywczyni'], ['kartoteka', 'Akcjonariusz?', 'Nabywczyni'], ['wpisz', 'Liczba akcji', '100']]);
-    await page.getByRole('button', { name: 'Dalej', exact: true }).click();
-    await page.locator('.card-h', { hasText: 'Weryfikacja i podgląd' }).first().waitFor({ timeout: 10000 });
+    await ui.przycisk(page, 'Dalej');
+    await ui.gotowe(page, 'Podstawa przeniesiona');
+  });
+  await krok(page, 'Objęcie — podstawa z emisji', async () => {
+    await ui.przycisk(page, 'Dalej');
+    await page.getByRole('button', { name: 'Dokonaj wpisu' }).waitFor({ timeout: 15000 });
   });
   await krok(page, 'Objęcie — wpis', async () => {
     await checklista(page);

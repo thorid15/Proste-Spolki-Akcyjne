@@ -159,15 +159,20 @@ test('zbycie: nowy nabywca spoza kartoteki („Nowy nabywca” w kroku 1)', asyn
   await krok(page, 'Co się zbywa — nowy nabywca', async () => {
     await ui.wybierz(page, 'Zbywca', 'Testowa');
     await ui.wpisz(page, 'Liczba zbywanych akcji', 30);
+    // A-019: nowy nabywca tym samym formularzem co w kartotece (`PanelOsoby` → „Dodaj do kartoteki”).
     await page.getByRole('button', { name: 'Nowy nabywca (spoza kartoteki)' }).click();
     await ui.wpisz(page, 'Imię', 'Feliks');
     await ui.wpisz(page, 'Nazwisko', 'Nowy');
-    await ui.wpisz(page, 'PESEL', '92010124683').catch(() => {});
+    await ui.wpisz(page, 'Numer PESEL', '92010124683').catch(() => {});
     await ui.wpisz(page, 'Kod pocztowy', '80-006');
     await ui.wpisz(page, 'Miejscowość', 'Gdańsk');
-    await ui.wpisz(page, 'Nr domu / lokalu', '6');
-    await page.getByRole('button', { name: 'Zapisz w kartotece' }).click();
-    await page.getByRole('button', { name: 'Zapisz w kartotece' }).waitFor({ state: 'detached', timeout: 10000 });
+    await ui.wpisz(page, 'Ulica', 'Długa');
+    await ui.wpisz(page, 'Nr domu', '6');
+    await page.getByRole('button', { name: 'Dodaj do kartoteki' }).click();
+    const mimo = page.getByRole('button', { name: 'Zapisz mimo braków' });
+    if (await mimo.isVisible({ timeout: 1500 }).catch(() => false)) await mimo.click();
+    await page.getByRole('button', { name: 'Dodaj do kartoteki' }).waitFor({ state: 'detached', timeout: 10000 });
+    await ui.pole(page, 'Nabywca').getByText('Nowy Feliks').waitFor({ timeout: 5000 });
     await ui.przycisk(page, 'Dalej');
     await ui.gotowe(page, 'Data umowy zbycia');
   });

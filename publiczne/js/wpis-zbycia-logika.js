@@ -193,6 +193,91 @@ function domyslnyCharakterZadajacego(typ) {
   return Object.prototype.hasOwnProperty.call(CHARAKTER_ZADAJACEGO, typ) ? CHARAKTER_ZADAJACEGO[typ] : 'spolka';
 }
 
+/* ─────────────────────────────────────────────────────
+   D-097 — jeden kreator wpisu dla wszystkich typów: „Co” → „Podstawa” → „Sprawdzenie i wpis”.
+   Krok 2 i 3 są wspólne; różni się krok 1 i domyślne wartości kroku 2 (RAPORT-PRZEPLYWY § 4).
+   ───────────────────────────────────────────────────── */
+
+/** Nazwy kroków kreatora wpisu (zbycie zachowuje „Co się zbywa”, D-091). */
+function krokiWpisu(typ) {
+  if (definicjaWpisu[typ]) return definicjaWpisu[typ].kroki;
+  return ['Co się zmienia', 'Podstawa', 'Sprawdzenie i wpis'];
+}
+
+/**
+ * A-005: rodzaj dokumentu stanowiącego podstawę — domyślny z typu (art. 300(34) § 4 KSH); zmiana za przyciskiem.
+ * Plik dołączony w „Podstawie” dziedziczy ten rodzaj. Pierwsza emisja (i jej objęcie) — umowa spółki
+ * (art. 300(3), art. 300(9) KSH), następne — uchwała. Katalog bez „umowy zastawu” i „oświadczenia” — wtedy „inny dokument”.
+ */
+const RODZAJ_DOKUMENTU_TYPU = {
+  przeniesienie: 'umowa_zbycia', przeniesienie_ulamka: 'umowa_zbycia',
+  umorzenie: 'uchwala', pokrycie_akcji: 'uchwala',
+  uniewaznienie: 'postanowienie',
+  ograniczenie: 'umowa_spolki', uprawnienie: 'umowa_spolki',
+  wykreslenie_obciazenia: 'zgoda',
+};
+function domyslnyRodzajDokumentu(typ, stan = null) {
+  if (typ === 'emisja' || typ === 'objecie') {
+    const emisji = ((stan && stan.emisje) || []).length;
+    return emisji > (typ === 'objecie' ? 1 : 0) ? 'uchwala' : 'umowa_spolki';
+  }
+  return RODZAJ_DOKUMENTU_TYPU[typ] || 'inny';
+}
+
+/**
+ * D-097 / A-013: osoba w charakterze żądającego wynikająca z kroku „Co” — żądający podstawiony bez drugiego
+ * wyboru z kartoteki (zbycie: nabywca / zbywca, obciążenie: zastawnik / akcjonariusz…). `null` — wybór ręczny.
+ */
+function osobaWCharakterze(typ, rola, dane, stan = null) {
+  const d = dane || {};
+  const pierwsza = (Array.isArray(d.pozycje) && d.pozycje[0] && d.pozycje[0].osoba_id) || null;
+  const obc = ['prawo_glosu_zastawnika', 'wykreslenie_obciazenia'].includes(typ)
+    ? ((stan && stan.obciazenia) || []).find((x) => Number(x.klucz) === Number(d.obciazenie_zdarzenie_id)) : null;
+  const id = (o) => (o && o.id) || null;
+  switch (rola) {
+    case 'zbywca': return d.zbywca_osoba_id || null;
+    case 'nabywca': return d.nabywca_osoba_id || (typ === 'objecie' ? pierwsza : null);
+    case 'akcjonariusz':
+      if (typ === 'zmiana_danych_akcjonariusza') return d.osoba_id || null;
+      return d.akcjonariusz_osoba_id || (obc && (id(obc.akcjonariusz) || obc.akcjonariusz_osoba_id)) || (typ === 'umorzenie' ? pierwsza : null) || null;
+    case 'zastawnik':
+    case 'uzytkownik':
+      if (typ === 'obciazenie') return d.osoba_id || null;
+      return (obc && (id(obc.uprawniony) || obc.osoba_id)) || null;
+    default:
+      return null;
+  }
+}
+
+/** Krok „Co” gotowy — minimum, bez którego sprawy nie ma po co zakładać (resztę ocenia podgląd serwera). */
+const WYMAGANE_CO = {
+  objecie: ['emisja_zdarzenie_id'], umorzenie: ['emisja_zdarzenie_id'], uniewaznienie: ['emisja_zdarzenie_id'],
+  obciazenie: ['emisja_zdarzenie_id', 'akcjonariusz_osoba_id', 'osoba_id'],
+  wykreslenie_obciazenia: ['obciazenie_zdarzenie_id'], prawo_glosu_zastawnika: ['obciazenie_zdarzenie_id'],
+  zajecie: ['emisja_zdarzenie_id', 'osoba_id'], wykreslenie_zajecia: ['obciazenie_zdarzenie_id'],
+  zmiana_danych_akcjonariusza: ['osoba_id'], zobowiazanie: ['akcjonariusz_osoba_id'],
+  przedstawiciel: ['nr'], przeniesienie_ulamka: ['zbywca_osoba_id', 'nabywca_osoba_id'],
+  emisja: ['seria', 'ilosc'], zdarzenie_inne: ['opis'],
+};
+function coGotowe(typ, dane) {
+  const d = dane || {};
+  return (WYMAGANE_CO[typ] || []).every((k) => d[k] !== undefined && d[k] !== null && String(d[k]).trim() !== '');
+}
+
+/** D-P1: dane startowe kroku „Co” z wiersza kokpitu (seria, osoba, zakres numerów) albo z przejścia EMISJA → OBJĘCIE. */
+function poczatekWpisu(typ, { emisja, osoba, zakres } = {}) {
+  const osobaId = osoba ? Number(osoba) : null;
+  if (typ === 'przeniesienie') {
+    return { ...(osobaId ? { zbywca_osoba_id: osobaId } : {}), ...(emisja ? { emisja_klucz: Number(emisja) } : {}) };
+  }
+  if (!emisja) return {};
+  const baza = { emisja_zdarzenie_id: Number(emisja) };
+  const zakresy = zakres ? { zakresy_tekst: String(zakres).replace(/–/g, '-') } : {};
+  if (typ === 'umorzenie' && osobaId) return { ...baza, pozycje: [{ osoba_id: osobaId, ...zakresy }] };
+  if (typ === 'obciazenie' && osobaId) return { ...baza, akcjonariusz_osoba_id: osobaId, ...zakresy };
+  return baza;
+}
+
 /** D-100: nazwa czynności w interfejsie; w pismach i danych zostaje nazwa typu (`typy-zdarzen.js`). */
 const NAZWY_CZYNNOSCI_UI = { przeniesienie: 'Zbycie akcji', przeniesienie_ulamka: 'Zbycie ułamkowej części akcji' };
 function nazwaCzynnosci(kod, nazwa) {
@@ -203,5 +288,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     zbywcyZRejestru, dobierzAkcje, ograniczeniaDlaDoboru, definicjaWpisu, poleWidoczne, daneZdarzenia, zakresyNaTekst,
     odbiorcaPowiadomienia, domyslnyCharakterZadajacego, nazwaCzynnosci,
+    krokiWpisu, domyslnyRodzajDokumentu, osobaWCharakterze, coGotowe, poczatekWpisu,
   };
 }

@@ -302,19 +302,15 @@ function Aplikacja() {
       // co nowa spolka, wystartowany od razu na kroku akcjonariatu.
       if (segmenty[2] === 'otworz') return <EkranOtwarciaRejestru spolkaId={id} />;
       if (segmenty[2] === 'zdarzenie') {
-        // R4 zad. 15 (D-091): zbycie akcji — nowy przebieg w trzech krokach.
-        if (zapytanie.get('typ') === 'przeniesienie' && !zapytanie.get('zpodstawy')) {
-          return <EkranNowegoZbycia spolkaId={id} osobaPoczatkowa={zapytanie.get('osoba') || undefined} emisjaPoczatkowa={zapytanie.get('emisja') || undefined} />;
-        }
-        // Przejście EMISJA → OBJĘCIE: typ i seria przychodzą z ekranu wyniku
-        // wpisu emisji, żeby nie zakładać sprawy „od zera" (sprawy.js).
+        // D-097: jeden kreator wpisu dla każdego typu (także zbycie, D-091); bez typu — wybór kafelkiem.
+        // EMISJA → OBJĘCIE: typ, seria i sprawa-źródło podstawy przychodzą z ekranu wyniku emisji.
         return (
-          <EkranNowejSprawy
+          <EkranNowegoWpisu
             spolkaId={id}
-            typPoczatkowy={zapytanie.get('typ') || undefined}
-            emisjaPoczatkowa={zapytanie.get('emisja') || undefined}
-            osobaPoczatkowa={zapytanie.get('osoba') || undefined}
-            zakresPoczatkowy={zapytanie.get('zakres') || undefined}
+            typ={zapytanie.get('typ') || undefined}
+            emisja={zapytanie.get('emisja') || undefined}
+            osoba={zapytanie.get('osoba') || undefined}
+            zakres={zapytanie.get('zakres') || undefined}
             zPodstawySprawy={zapytanie.get('zpodstawy') || undefined}
           />
         );

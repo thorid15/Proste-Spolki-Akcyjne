@@ -399,7 +399,7 @@ function ModalOdmowy({ przyZamknieciu, przyZapisie }) {
  * R4 K1: wszystkie akcje sprawy w jednym pasku (PasekAkcji) — podstawa wpisu i żądanie wpisu jako
  * drugorzędne, przycisk główny zależny od stanu (rozpocznij weryfikację / wznów).
  */
-function PasekAkcjiSprawy({ sprawa, odswiez, zakonczona, przyPodstawie, przyZadaniu, nowyPrzebieg = false }) {
+function PasekAkcjiSprawy({ sprawa, odswiez, zakonczona, przyZmianieTypu, przyZadaniu }) {
   const [modal, ustawModal] = useState(null);
   const [bladAkcji, ustawBladAkcji] = useState(null);
 
@@ -416,8 +416,9 @@ function PasekAkcjiSprawy({ sprawa, odswiez, zakonczona, przyPodstawie, przyZada
 
   const stan = sprawa.stan;
   const akcje = [
-    // D-091: w nowym przebiegu zbycia podstawa to krok 2 kreatora, a weryfikacja zaczyna się sama.
-    !zakonczona && !nowyPrzebieg && { etykieta: sprawa.dokument_rodzaj ? 'Popraw podstawę wpisu' : 'Ustal podstawę wpisu', przyKlik: przyPodstawie },
+    // D-097: podstawa wpisu to krok 2 kreatora, a weryfikacja zaczyna się sama (D-098). Rodzaj wpisu zmienia się
+    // tylko w sprawie z portalu — klient wybiera grupę, czynność kwalifikuje pracownik (A-006).
+    !zakonczona && sprawa.zrodlo === 'portal' && { etykieta: 'Zmień rodzaj wpisu', przyKlik: przyZmianieTypu },
     { etykieta: 'Wystaw żądanie wpisu', przyKlik: przyZadaniu },
     stan === 'weryfikacja' && { etykieta: 'Wstrzymaj', przyKlik: () => ustawModal('wstrzymaj') },
     ['weryfikacja', 'wstrzymana'].includes(stan) && { etykieta: 'Odmów wpisu', przyKlik: () => ustawModal('odmow'), niebezpieczna: true },
@@ -581,343 +582,6 @@ function PanelPowiadomienia({ sprawa, spolka, odswiez, domyslnyOdbiorca = null }
 /* ─────────────────────────────────────────────────────
    KROKI 3–4 OSADZONE — wspólne dla nowej i wznawianej sprawy
    ───────────────────────────────────────────────────── */
-/**
- * D-P1 — dane startowe kreatora uruchomionego z wiersza akcjonariusza albo
- * zakresu akcji w kokpicie: seria, osoba (zbywca / akcjonariusz) i zakres
- * numerów, który w kreatorze można zawęzić.
- */
-function daneStartowe(typ, emisja, osoba, zakres) {
-  if (!emisja) return {};
-  const baza = { emisja_zdarzenie_id: Number(emisja) };
-  const osobaId = osoba ? Number(osoba) : null;
-  const zakresy = zakres ? { zakresy_tekst: zakres.replace(/–/g, '-') } : {};
-  if (typ === 'przeniesienie' && osobaId) return { ...baza, zbywca_osoba_id: osobaId, pozycje: [{ ...zakresy }] };
-  if (typ === 'umorzenie' && osobaId) return { ...baza, pozycje: [{ osoba_id: osobaId, ...zakresy }] };
-  if (typ === 'obciazenie' && osobaId) return { ...baza, akcjonariusz_osoba_id: osobaId, ...zakresy };
-  return baza;
-}
-
-function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy, przyZmianieDanych }) {
-  const draft = sprawa.dane_wejsciowe_json ? JSON.parse(sprawa.dane_wejsciowe_json) : null;
-
-  const [krok, ustawKrok] = useState(2);
-  // `emisjaPoczatkowa` przychodzi z przejścia EMISJA → OBJĘCIE (kreator.js) —
-  // seria jest już wskazana, notariusz uzupełnia tylko, kto ją obejmuje.
-  // Zapisany draft ma pierwszeństwo: to stan, do którego ktoś wrócił.
-  // K3 (FAZA 3 sesji frontendowej v2): żądający wpisu jest już wybrany przy
-  // zakładaniu sprawy (kreator.js, krok „Podstawa wpisu") — przy zbyciu
-  // akcji to w praktyce zwykle ten sam człowiek, który w kroku „Co się
-  // zmienia” wybierałby zbywcę z osobnej listy. Podstawiamy go od razu
-  // (0.4 pkt 1 — „raz wpisane, nigdy więcej”), zbywcę wciąż można zmienić —
-  // sprawę mógł założyć pełnomocnik albo osoba trzecia w czyimś imieniu.
-  const [dane, ustawDane] = useState(
-    (draft && draft.dane) || daneStartowe(sprawa.typ_zdarzenia, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy)
-  );
-  useEffect(() => {
-    if (draft || emisjaPoczatkowa) return;
-    if (sprawa.typ_zdarzenia === 'przeniesienie' && sprawa.zadajacy_rola === 'zbywca' && sprawa.zadajacy_osoba_id) {
-      ustawDane((p) => (p.zbywca_osoba_id ? p : { ...p, zbywca_osoba_id: sprawa.zadajacy_osoba_id }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  // D-104: dane kreatora idą do ekranu sprawy — panel powiadomienia podpowiada z nich adresata.
-  useEffect(() => { if (przyZmianieDanych) przyZmianieDanych(dane); }, [dane]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [odhaczone, ustawOdhaczone] = useState({});
-  const [notatkaWatpliwosci, ustawNotatkeWatpliwosci] = useState('');
-  const [podglad, ustawPodglad] = useState(null);
-  const listWKolejce = useListPowiadomieniaWKolejce(sprawa.id, [sprawa.zaktualizowano]);
-  const [ladowaniePodgladu, ustawLadowaniePodgladu] = useState(false);
-  const [zapisywanie, ustawZapisywanie] = useState(false);
-  const [wynik, ustawWynik] = useState(null);
-  // D-Z: osoba działająca przy wpisie (audyt) — domyślnie ta przypisana pracownikowi.
-  const dzialajace = useDane('/api/psa/auth/osoby-dzialajace');
-  const [dzialajacyId, ustawDzialajacyId] = useState(null);
-  const listaDzialajacych = dzialajace.dane ? dzialajace.dane.osoby.filter((o) => o.aktywny) : [];
-  const wybranyDzialajacy = dzialajacyId ?? (dzialajace.dane ? dzialajace.dane.moja_domyslna_id : null);
-  const [bladLokalny, ustawBladLokalny] = useState(null);
-
-  function budujDane() {
-    return zbudujDaneZdarzenia(sprawa.typ_zdarzenia, dane);
-  }
-
-  async function wczytajPodglad() {
-    ustawLadowaniePodgladu(true);
-    ustawBladLokalny(null);
-    try {
-      const odpowiedz = await API.post(`/api/psa/sprawy/${sprawa.id}/podglad`, {
-        dane: budujDane(),
-      });
-      ustawPodglad(odpowiedz);
-    } catch (e) {
-      ustawBladLokalny(e.message);
-      ustawPodglad(null);
-    } finally {
-      ustawLadowaniePodgladu(false);
-    }
-  }
-
-  async function dokonajWpisu() {
-    ustawZapisywanie(true);
-    ustawBladLokalny(null);
-    try {
-      const odpowiedz = await API.post(`/api/psa/sprawy/${sprawa.id}/wpisz`, {
-        dane: budujDane(),
-        ...(wybranyDzialajacy ? { dzialajacy_id: wybranyDzialajacy } : {}),
-      });
-      ustawWynik(odpowiedz);
-      // Sprawa jest juz „wpisana” w bazie - ukrywamy w rodzicu akcje i panel
-      // powiadomienia (dotycza stanu „weryfikacja”), zeby nie sugerowac
-      // czynnosci, ktorych serwer i tak juz nie wykona. Danych sprawy
-      // NIE odswiezamy tutaj - zrobiloby to zniknac ten ekran podsumowania
-      // (renderowany tylko, gdy sprawa.stan==='weryfikacja').
-      if (naWpisano) naWpisano();
-    } catch (e) {
-      ustawPodglad((p) => ({ ...(p || {}), dopuszczalne: false, bledy: e.bledy, ostrzezenia: e.ostrzezenia }));
-    } finally {
-      ustawZapisywanie(false);
-    }
-  }
-
-  async function wstrzymajZWatpliwosci() {
-    ustawZapisywanie(true);
-    try {
-      await API.patch(`/api/psa/sprawy/${sprawa.id}`, { akcja: 'wstrzymaj', powod: `Uzasadnione wątpliwości: ${notatkaWatpliwosci}` });
-      odswiezSprawe();
-    } catch (e) {
-      ustawBladLokalny(e.message);
-    } finally {
-      ustawZapisywanie(false);
-    }
-  }
-
-  function idzDoKroku(nowy) {
-    ustawBladLokalny(null);
-    if (nowy === 3) {
-      try {
-        budujDane();
-      } catch (e) {
-        ustawBladLokalny(e.message);
-        return;
-      }
-      ustawKrok(3);
-      wczytajPodglad();
-      return;
-    }
-    ustawKrok(nowy);
-  }
-
-  if (wynik) {
-    return (
-      <div>{/* R4 K1: szerokość wyznacza KolumnaSprawy */}
-        <Karta>
-          <Komunikat
-            odmiana="ok"
-            tytul={`${nazwaCzynnosci(sprawa.typ_zdarzenia, definicjaTypu.nazwa)} — wpis dokonany`}
-            tresc={`Skrót zdarzenia w łańcuchu: ${wynik.zdarzenie.hash_skrocony}…`}
-          />
-          {/* Po emisji „nieobjęte akcje" nie są uwagą do sprawdzenia, tylko
-              normalnym stanem rzeczy — mówi o tym komunikat pod spodem,
-              razem z przyciskiem. Powtarzanie tego w rubryce „Do sprawdzenia"
-              wyglądało jak błąd wpisu, którym nie jest. */}
-          {sprawa.typ_zdarzenia !== 'emisja' && (
-            <Komunikat odmiana="uwaga" tytul="Do sprawdzenia:" lista={wynik.ostrzezenia} />
-          )}
-          {/* Emisja tworzy tylko PULĘ akcji — dopóki nikt ich nie obejmie,
-              rejestr nie ma akcjonariusza. To osobne zdarzenie (i osobna
-              opłata), ale nie osobna wizyta w kreatorze: prowadzimy wprost
-              do objęcia, z wskazaną serią. */}
-          {sprawa.typ_zdarzenia === 'emisja' && (
-            <Komunikat
-              odmiana="uwaga"
-              tytul="Akcje czekają na objęcie"
-              tresc="Wyemitowane akcje nie mają jeszcze akcjonariusza. Wpisz teraz, kto je obejmuje."
-            />
-          )}
-          <div className="kreator-stopka">
-            {sprawa.typ_zdarzenia === 'emisja' && (
-              <button
-                className="btn btn-glowny"
-                onClick={() => idz(
-                  `/spolki/${sprawa.spolka_id}/zdarzenie?typ=objecie`
-                  + `&emisja=${wynik.zdarzenie.id}&zpodstawy=${sprawa.id}`
-                )}
-              >
-                Wpisz, kto objął akcje
-              </button>
-            )}
-            <button
-              className={sprawa.typ_zdarzenia === 'emisja' ? 'btn' : 'btn btn-glowny'}
-              onClick={() => idz(`/spolki/${sprawa.spolka_id}`)}
-            >
-              Wróć do kokpitu spółki
-            </button>
-          </div>
-        </Karta>
-      </div>
-    );
-  }
-
-  const checklista = definicjaTypu ? definicjaTypu.checklista : [];
-  const wymagane = checklista.filter((p) => p.wymagana && !p.watpliwosci);
-  const wszystkoOdhaczone = wymagane.every((p) => odhaczone[p.kod]);
-  const pozycjaWatpliwosci = checklista.find((p) => p.watpliwosci);
-  const sawatpliwosci = checklista.some((p) => p.watpliwosci && odhaczone[p.kod]);
-  const mozeWpisac =
-    podglad && podglad.dopuszczalne && wszystkoOdhaczone && (!sawatpliwosci || notatkaWatpliwosci.trim());
-  const KrokTresci = KROKI_TRESCI[sprawa.typ_zdarzenia];
-
-  return (
-    <div>{/* R4 K1: szerokość wyznacza KolumnaSprawy */}
-      <Kroki kroki={['Podstawa', 'Co się zmienia', 'Weryfikacja i podgląd']} biezacy={krok - 1} />
-      <Karta>
-      {krok === 2 && (
-        <>
-          <div className="card-h">Co się zmienia</div>
-          <p className="podstawa-prawna">
-            Datę i godzinę wpisu nadaje system w chwili zatwierdzenia — od niej liczy się stan
-            rejestru (art. 300³⁷ § 1 i art. 300³⁸ § 1 KSH).
-          </p>
-          {KrokTresci ? (
-            <KrokTresci dane={dane} ustawDane={ustawDane} spolka={spolka} />
-          ) : (
-            <Komunikat odmiana="blad" tresc={`Brak formularza dla typu „${sprawa.typ_zdarzenia}”.`} />
-          )}
-          {sprawa.typ_zdarzenia !== 'emisja' && (
-            <div className="podstawa-prawna odstep-g">
-              Numery akcji przydziela aplikacja — podajesz wyłącznie ilość. Wyliczony zakres
-              zobaczysz do potwierdzenia w następnym kroku.
-            </div>
-          )}
-        </>
-      )}
-
-      {krok === 3 && (
-        <>
-          <div className="card-h">Weryfikacja i podgląd</div>
-          {ladowaniePodgladu ? (
-            <Spinner />
-          ) : !podglad ? (
-            <Komunikat odmiana="blad" tresc="Nie udało się przygotować podglądu." />
-          ) : (
-            <>
-              <Wyniki bledy={podglad.bledy} ostrzezenia={podglad.ostrzezenia} />
-
-              <PrzydzialDoPotwierdzenia dane={podglad.dane} />
-
-              {podglad.dane && podglad.dane.zamiast === undefined && podglad.dopuszczalne && (
-                <Komunikat odmiana="ok" tresc="Treść gotowa do wpisu." />
-              )}
-
-              <div className="rozdzielacz" />
-              <div className="fl">Checklista weryfikacji</div>
-              <div className="checklista">
-                {/* K3 (FAZA 3 sesji frontendowej v2): „Zachodzą uzasadnione
-                    wątpliwości…” NIE jest potwierdzeniem jak reszta tej listy —
-                    to zgłoszenie przeszkody. Renderuje się osobno, poniżej,
-                    żeby nie wyglądała jak kolejna pozycja do odhaczenia. */}
-                {checklista.filter((p) => !p.watpliwosci).map((p) => (
-                  <label key={p.kod} className="chk">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(odhaczone[p.kod])}
-                      onChange={(z) => ustawOdhaczone((o) => ({ ...o, [p.kod]: z.target.checked }))}
-                    />
-                    <span className="chk-tresc">
-                      {p.tresc}
-                      {!p.wymagana && <span className="przyciemnione"> (jeśli dotyczy)</span>}
-                      {p.podstawa && <div className="podstawa-prawna">{p.podstawa}</div>}
-                    </span>
-                  </label>
-                ))}
-              </div>
-
-              {pozycjaWatpliwosci && (
-                <div className="komunikat komunikat-uwaga">
-                  <label className="chk chk-watpliwosci">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(odhaczone[pozycjaWatpliwosci.kod])}
-                      onChange={(z) => ustawOdhaczone((o) => ({ ...o, [pozycjaWatpliwosci.kod]: z.target.checked }))}
-                    />
-                    <span className="chk-tresc">
-                      Mam wątpliwości — wstrzymaj wpis
-                      <div className="podstawa-prawna">{pozycjaWatpliwosci.tresc}{pozycjaWatpliwosci.podstawa ? ` (${pozycjaWatpliwosci.podstawa})` : ''}</div>
-                    </span>
-                  </label>
-                  {odhaczone[pozycjaWatpliwosci.kod] && (
-                    <div className="chk-watpliwosci-uwaga">
-                      Zaznaczenie wstrzyma sprawę do wyjaśnienia — zamiast „Dokonaj wpisu” zobaczysz niżej przycisk „Wstrzymaj sprawę”.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {sawatpliwosci && (
-                <Pole etykieta="Notatka o uzasadnionych wątpliwościach" wymagane podpowiedz="Wymagana. Sprawa zostanie wstrzymana do wyjaśnienia.">
-                  <textarea value={notatkaWatpliwosci} onChange={(z) => ustawNotatkeWatpliwosci(z.target.value)} />
-                </Pole>
-              )}
-
-              {!wszystkoOdhaczone && !sawatpliwosci && (
-                <div className="podstawa-prawna">
-                  Przycisk „Dokonaj wpisu” pozostaje nieaktywny do czasu odhaczenia całej checklisty.
-                </div>
-              )}
-              {!sawatpliwosci && listaDzialajacych.length > 0 && (
-                <Pole etykieta="Osoba działająca przy wpisie" podpowiedz="Tylko do audytu — nie trafia na dokumenty.">
-                  <select value={wybranyDzialajacy ?? ''} onChange={(z) => ustawDzialajacyId(z.target.value === '' ? null : Number(z.target.value))}>
-                    <option value="">— ustal automatycznie —</option>
-                    {listaDzialajacych.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.imie} {o.nazwisko} ({o.funkcja === 'notariusz' ? 'notariusz' : 'zastępca notarialny'})
-                      </option>
-                    ))}
-                  </select>
-                </Pole>
-              )}
-              {!sawatpliwosci && (
-                <p className="zdanie-nieodwracalne">Wpisu nie można cofnąć — możliwe jest tylko sprostowanie.</p>
-              )}
-            </>
-          )}
-        </>
-      )}
-
-      <Komunikat odmiana="blad" tresc={bladLokalny} />
-
-      <div className="kreator-stopka">
-        <button className="btn" onClick={() => idzDoKroku(krok - 1)} disabled={krok === 2}>
-          Wstecz
-        </button>
-        <div className="kreator-stopka-prawa">
-          {krok === 2 ? (
-            <button className="btn btn-glowny" onClick={() => idzDoKroku(3)}>Dalej</button>
-          ) : sawatpliwosci ? (
-            <button className="btn btn-danger btn-lg" disabled={!notatkaWatpliwosci.trim() || zapisywanie} onClick={wstrzymajZWatpliwosci}>
-              {zapisywanie ? 'Wstrzymywanie…' : 'Wstrzymaj sprawę (wątpliwości)'}
-            </button>
-          ) : (
-            <>
-              <button className="btn" onClick={wczytajPodglad} disabled={ladowaniePodgladu}>Przelicz podgląd</button>
-              {/* W2.3 — przyczyna blokady obok przycisku (D-052: z odnośnikiem do miejsca naprawy). */}
-              {sprawa.blokada_wpisu && (
-                <span className="podpowiedz" style={{ maxWidth: '28rem' }}>
-                  {przyczynaBlokadyWpisu(sprawa, listWKolejce)}{' '}
-                  {listWKolejce ? <a href="#/listy">Listy do wysyłki</a> : <a href="#panel-powiadomienia">Uzupełnij</a>}
-                </span>
-              )}
-              <button className="btn btn-glowny btn-lg" disabled={!mozeWpisac || zapisywanie || Boolean(sprawa.blokada_wpisu)} onClick={dokonajWpisu}>
-                {zapisywanie ? 'Zapisywanie…' : 'Dokonaj wpisu'}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-      </Karta>
-    </div>
-  );
-}
-
 /** „1–100, 150” z listy zakresów numerów akcji. */
 function opiszZakresy(zakresy) {
   return (zakresy || [])
@@ -982,90 +646,46 @@ function PrzydzialDoPotwierdzenia({ dane }) {
 }
 
 /**
- * Podstawa wpisu przy sprawie już założonej.
- *
- * Sprawa zgłoszona przez portal nie przechodzi przez kreator kancelarii,
- * więc dwie rzeczy zostają w niej nieustalone: TYP zdarzenia (klient wybiera
- * jedną z trzech grup, nie kwalifikuje czynności prawnej) i RODZAJ dokumentu
- * (klient załącza plik, nie opisuje go). Jedno i drugie ustala pracownik po
- * przeczytaniu załącznika — art. 300(34) § 4 KSH wiąże wpis z dokumentem,
- * nie z opisem żądającego.
- *
- * Zwinięte do jednego odnośnika: przy sprawie założonej w kancelarii oba
- * pola są już wypełnione w kreatorze i nie ma czego poprawiać.
+ * Zmiana rodzaju wpisu przy sprawie już założonej — zwykle sprawa z portalu: klient wybiera jedną z trzech
+ * grup, a czynność prawną kwalifikuje pracownik po przeczytaniu załącznika. Podstawa (rodzaj i data
+ * dokumentu) to krok 2 kreatora wpisu (A-006) — tu tylko typ.
  */
-function PodstawaWpisu({ sprawa, typy, odswiez, przyZamknieciu }) {
+function ModalTypuWpisu({ sprawa, typy, odswiez, przyZamknieciu }) {
   const [typ, ustawTyp] = useState(sprawa.typ_zdarzenia);
-  const [rodzaj, ustawRodzaj] = useState(sprawa.dokument_rodzaj || '');
-  const [dataDokumentu, ustawDateDokumentu] = useState(sprawa.dokument_data || '');
   const [zapisywanie, ustawZapisywanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
-
-  const niepelna = Boolean(rodzaj) !== Boolean(dataDokumentu);
-
   async function zapisz() {
-    if (niepelna) return;
     ustawZapisywanie(true);
     ustawBlad(null);
     try {
-      if (typ !== sprawa.typ_zdarzenia) {
-        await API.patch(`/api/psa/sprawy/${sprawa.id}`, { akcja: 'zmien-typ', typ_zdarzenia: typ });
-      }
-      await API.patch(`/api/psa/sprawy/${sprawa.id}`, {
-        akcja: 'podstawa',
-        dokument_rodzaj: rodzaj || null,
-        dokument_data: dataDokumentu || null,
-      });
+      await API.patch(`/api/psa/sprawy/${sprawa.id}`, { akcja: 'zmien-typ', typ_zdarzenia: typ });
       przyZamknieciu();
       odswiez();
     } catch (e) {
       ustawBlad(e.message);
-    } finally {
       ustawZapisywanie(false);
     }
   }
-
-
   return (
-    <Karta tytul="Podstawa wpisu">
-      <div className="pion" style={{ gap: 12 }}>
-        <Komunikat odmiana="blad" tresc={blad} />
-        <Pole etykieta="Typ zdarzenia" wymagane>
-          <select value={typ} onChange={(z) => ustawTyp(z.target.value)}>
-            {typy.filter((t) => !t.z_urzedu).map((t) => (
-              <option key={t.kod} value={t.kod}>{t.nazwa}</option>
-            ))}
-          </select>
-        </Pole>
-        <div className="siatka-2">
-          <Pole etykieta="Rodzaj dokumentu">
-            <select value={rodzaj} onChange={(z) => ustawRodzaj(z.target.value)}>
-              <option value="">— brak —</option>
-              {RODZAJE_DOKUMENTU_PODSTAWY.map(([kod, opis]) => (
-                <option key={kod} value={kod}>{opis}</option>
-              ))}
-            </select>
-          </Pole>
-          <Pole etykieta="Data dokumentu">
-            <PoleDaty wartosc={dataDokumentu} przyZmianie={(v) => ustawDateDokumentu(v || '')} />
-          </Pole>
-        </div>
-        {niepelna && (
-          <Komunikat odmiana="uwaga" tresc="Rodzaj i datę dokumentu podaje się razem." />
-        )}
-        <div className="row-g">
-          <button className="btn btn-glowny btn-maly" disabled={zapisywanie || niepelna} onClick={zapisz}>
-            {zapisywanie ? 'Zapisywanie…' : 'Zapisz podstawę'}
+    <Modal
+      tytul="Rodzaj wpisu"
+      przyZamknieciu={przyZamknieciu}
+      stopka={(
+        <>
+          <button type="button" className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          <button type="button" className="btn btn-glowny" disabled={zapisywanie || typ === sprawa.typ_zdarzenia} onClick={zapisz}>
+            {zapisywanie ? 'Zapisywanie…' : 'Zmień rodzaj wpisu'}
           </button>
-          <button
-            className="btn btn-maly"
-            onClick={przyZamknieciu}
-          >
-            Anuluj
-          </button>
-        </div>
-      </div>
-    </Karta>
+        </>
+      )}
+    >
+      <Komunikat odmiana="blad" tresc={blad} />
+      <Pole etykieta="Rodzaj wpisu" wymagane>
+        <select value={typ} onChange={(z) => ustawTyp(z.target.value)}>
+          {typy.filter((t) => !t.z_urzedu).map((t) => <option key={t.kod} value={t.kod}>{nazwaCzynnosci(t.kod, t.nazwa)}</option>)}
+        </select>
+      </Pole>
+    </Modal>
   );
 }
 
@@ -1075,38 +695,24 @@ function PodstawaWpisu({ sprawa, typy, odswiez, przyZamknieciu }) {
 function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy }) {
   const { dane, ladowanie, blad, odswiez } = useDane(`/api/psa/sprawy/${sprawaId}`);
   const meta = useDane('/api/psa/meta');
-  // Ustawiane od razu po udanym wpisie (patrz KreatorSprawy) - ukrywa akcje
+  // Ustawiane od razu po udanym wpisie (patrz KreatorWpisu) - ukrywa akcje
   // i panel powiadomienia dotyczace stanu „weryfikacja”, zanim jeszcze
   // odswiezymy dane sprawy. Odswiezenia CELOWO NIE wywolujemy od razu:
   // zrobiloby to zniknac ekran podsumowania wpisu (widoczny tylko, gdy
   // sprawa.stan==='weryfikacja').
   const [wlasnieWpisano, ustawWlasnieWpisano] = useState(false);
-  const [daneKreatora, ustawDaneKreatora] = useState(null); // D-104
-  // D-098: sprawa z portalu (stan „nowa”) przechodzi w weryfikację przy otwarciu w kancelarii — bez osobnego
-  // „Rozpocznij weryfikację” (klik bez decyzji, reguła 5). Zbycie robi to w swoim kreatorze (wpis-zbycia.js).
-  const stanSprawy = dane && dane.sprawa && dane.sprawa.stan;
-  useEffect(() => {
-    if (stanSprawy !== 'nowa' || (dane.sprawa.typ_zdarzenia === 'przeniesienie')) return;
-    API.patch(`/api/psa/sprawy/${dane.sprawa.id}`, { akcja: 'weryfikuj' }).then(odswiez).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stanSprawy]);
+  // D-098: sprawa z portalu (stan „nowa”) przechodzi w weryfikację przy otwarciu — robi to `KreatorWpisu`.
   const [wystawianieZadania, ustawWystawianieZadania] = useState(false);
-  const [edycjaPodstawy, ustawEdycjePodstawy] = useState(false);
-  // Krok 3/4 kreatora potrzebuje "bogatego" widoku spółki (emisje, bilans,
-  // akcjonariusze, obciążenia, uprawnienia, ograniczenia) — ten sam kształt,
-  // co kokpit spółki. Endpoint sprawy zwraca tylko surowy rekord spółki.
-  const spolkaBogata = useDane(dane ? `/api/psa/spolki/${dane.sprawa.spolka_id}` : null, [dane && dane.sprawa.id]);
+  const [zmianaTypu, ustawZmianeTypu] = useState(false);
 
   // B-003: `Spinner` tylko przy pierwszym wczytaniu. Odświeżenie (np. po „Wyślij powiadomienie”) zostawia
-  // poprzednie dane na ekranie — `KreatorSprawy` się nie odmontowuje i nie traci kroku ani checklisty.
-  if (!dane || !meta.dane || (!spolkaBogata.dane && spolkaBogata.ladowanie)) return <Spinner />;
+  // poprzednie dane na ekranie — `KreatorWpisu` się nie odmontowuje i nie traci kroku ani checklisty.
+  if (!dane || !meta.dane) return <Spinner />;
   if (blad) return <Komunikat odmiana="blad" tresc={blad.message} />;
-  if (spolkaBogata.blad) return <Komunikat odmiana="blad" tresc={spolkaBogata.blad.message} />;
 
   const { sprawa, spolka, zadajacy, dokumenty, wydane_dokumenty } = dane;
   const definicjaTypu = meta.dane.typy_zdarzen.find((t) => t.kod === sprawa.typ_zdarzenia);
   const zakonczona = ['wpisana', 'odmowa', 'anulowana'].includes(sprawa.stan);
-  const nowyPrzebieg = sprawa.typ_zdarzenia === 'przeniesienie' && !zakonczona; // R4 zad. 15 (D-091)
 
   return (
     <KolumnaSprawy>
@@ -1149,24 +755,26 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
           sprawa={sprawa}
           odswiez={odswiez}
           zakonczona={zakonczona}
-          przyPodstawie={() => ustawEdycjePodstawy(true)}
+          przyZmianieTypu={() => ustawZmianeTypu(true)}
           przyZadaniu={() => ustawWystawianieZadania(true)}
-          nowyPrzebieg={nowyPrzebieg}
         />
       )}
 
-      {nowyPrzebieg && !wlasnieWpisano && (
-        <KreatorZbycia spolkaId={sprawa.spolka_id} sprawa={sprawa} odswiezSprawe={odswiez} definicjaTypu={definicjaTypu} />
+      {!zakonczona && zmianaTypu && (
+        <ModalTypuWpisu sprawa={sprawa} typy={meta.dane.typy_zdarzen} odswiez={odswiez} przyZamknieciu={() => ustawZmianeTypu(false)} />
       )}
 
-      {!zakonczona && edycjaPodstawy && (
-        <PodstawaWpisu sprawa={sprawa} typy={meta.dane.typy_zdarzen} odswiez={odswiez} przyZamknieciu={() => ustawEdycjePodstawy(false)} />
-      )}
-
-      {!wlasnieWpisano && !nowyPrzebieg && definicjaTypu && definicjaTypu.wymaga_powiadomienia === true && !zakonczona && (
-        <PanelPowiadomienia
-          sprawa={sprawa} spolka={spolka} odswiez={odswiez}
-          domyslnyOdbiorca={odbiorcaPowiadomienia(sprawa.typ_zdarzenia, daneKreatora, spolkaBogata.dane)}
+      {/* D-097: jeden kreator wpisu dla każdego typu — także sprawa z portalu i wznowiona z kolejki. */}
+      {!zakonczona && ['nowa', 'weryfikacja'].includes(sprawa.stan) && (
+        <KreatorWpisu
+          key={sprawa.typ_zdarzenia}
+          spolkaId={sprawa.spolka_id}
+          typ={sprawa.typ_zdarzenia}
+          sprawa={sprawa}
+          definicjaTypu={definicjaTypu}
+          odswiezSprawe={odswiez}
+          naWpisano={() => ustawWlasnieWpisano(true)}
+          poczatek={poczatekWpisu(sprawa.typ_zdarzenia, { emisja: emisjaPoczatkowa, osoba: osobaPoczatkowa, zakres: zakresPoczatkowy })}
         />
       )}
 
@@ -1207,26 +815,10 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
         </Sekcja>
       )}
 
-      {!zakonczona && !nowyPrzebieg && sprawa.stan === 'weryfikacja' && (
-        <KreatorSprawy
-            sprawa={sprawa}
-            spolka={spolkaBogata.dane}
-            definicjaTypu={definicjaTypu}
-            odswiezSprawe={odswiez}
-            naWpisano={() => ustawWlasnieWpisano(true)}
-            przyZmianieDanych={ustawDaneKreatora}
-            emisjaPoczatkowa={emisjaPoczatkowa}
-            osobaPoczatkowa={osobaPoczatkowa}
-            zakresPoczatkowy={zakresPoczatkowy}
-          />
-      )}
       {sprawa.stan === 'wstrzymana' && (
         <Karta>
           <Pusto tytul="Sprawa wstrzymana" opis="Wznów sprawę po usunięciu przeszkody, żeby wrócić do kreatora." />
         </Karta>
-      )}
-      {sprawa.stan === 'nowa' && (
-        <Karta><Spinner wierszy={2} /></Karta>
       )}
     </KolumnaSprawy>
   );

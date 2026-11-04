@@ -176,7 +176,7 @@ test('D-103: sprostowanie zdarzenia — przycisk „Sprostuj” w historii zdarz
   await zakoncz(page);
 });
 
-test('K6: sprawa z portalu — „Rozpocznij weryfikację” → „Ustal podstawę wpisu” → wpis', async ({ page }, testInfo) => {
+test('K6: sprawa z portalu — weryfikacja przy otwarciu, kreator wpisu od kroku „Co” (D-097, D-098, A-006)', async ({ page }, testInfo) => {
   rozpocznij(page, testInfo, { scenariusz: 'sprawa-z-portalu', proces: 'K6 sprawa z portalu', szerokosc: szer(testInfo), persona: 'Zarząd Alfa → notariusz' });
   await zaloguj(page, 'zarzad@example.com', 'portal');
   const { sprawa } = await api(page, 'POST', '/api/psa/portal/zadania', { spolka_id: 1, typ_zdarzenia: 'zdarzenie_inne', opis: 'Zwyczajne walne zgromadzenie (dane fikcyjne).' });
@@ -186,26 +186,27 @@ test('K6: sprawa z portalu — „Rozpocznij weryfikację” → „Ustal podsta
     await page.goto('/#/sprawy');
     await ui.gotowe(page);
   });
-  await krok(page, 'Sprawa — weryfikacja sama przy otwarciu (D-098)', async () => {
+  await krok(page, 'Sprawa — weryfikacja sama przy otwarciu (D-098), kreator od „Co się zmienia”', async () => {
     await page.goto(`/#/sprawy/${sprawa.id}`);
-    await page.getByRole('button', { name: 'Ustal podstawę wpisu' }).waitFor({ timeout: 10000 });
-    if (await page.getByRole('button', { name: 'Rozpocznij weryfikację' }).count()) throw new Error('D-098: „Rozpocznij weryfikację” nadal na ekranie');
-  });
-  await krok(page, 'Ustal podstawę wpisu', async () => {
-    await page.getByRole('button', { name: 'Ustal podstawę wpisu' }).click();
-    const rodzaj = ui.pole(page, 'Rodzaj dokumentu').locator('select');
-    if (await rodzaj.isVisible().catch(() => false)) {
-      await rodzaj.selectOption({ index: 1 });
-      await ui.wpiszDate(page, 'Data dokumentu', DZIS);
+    await ui.gotowe(page, 'Co się zmienia');
+    for (const n of ['Rozpocznij weryfikację', 'Ustal podstawę wpisu']) {
+      if (await page.getByRole('button', { name: n }).count()) throw new Error(`D-097/D-098: „${n}” nadal na ekranie`);
     }
-    await page.getByRole('button', { name: 'Zapisz podstawę' }).click();
-    await page.locator('.card-h', { hasText: 'Co się zmienia' }).waitFor({ timeout: 10000 });
-  });
-  await krok(page, 'Co się zmienia → Weryfikacja → Dokonaj wpisu', async () => {
+    // A-006: sprawa z portalu — rodzaj wpisu kwalifikuje pracownik (okno tylko z typem; podstawa to krok 2 kreatora).
+    await ui.przycisk(page, 'Zmień rodzaj wpisu');
+    await ui.pole(page, 'Rodzaj wpisu').locator('select').waitFor();
+    await ui.przycisk(page, 'Anuluj');
     const opis = ui.pole(page, 'Opis zdarzenia').locator('textarea');
     if (!(await opis.inputValue())) await opis.fill('Zwyczajne walne zgromadzenie (dane fikcyjne).');
-    await page.getByRole('button', { name: 'Dalej', exact: true }).click();
-    await page.locator('.card-h', { hasText: 'Weryfikacja i podgląd' }).waitFor({ timeout: 10000 });
+    await ui.przycisk(page, 'Dalej');
+    await ui.pole(page, 'Data dokumentu').waitFor({ timeout: 10000 });
+  });
+  await krok(page, 'Podstawa — rodzaj dokumentu z typu (A-006), tylko data', async () => {
+    await ui.wpiszDate(page, 'Data dokumentu', DZIS);
+    await ui.przycisk(page, 'Dalej');
+    await page.getByRole('button', { name: 'Dokonaj wpisu' }).waitFor({ timeout: 15000 });
+  });
+  await krok(page, 'Sprawdzenie i wpis', async () => {
     await ui.checklista(page);
     await page.getByRole('button', { name: 'Dokonaj wpisu' }).click();
     await page.getByRole('button', { name: 'Wróć do kokpitu spółki' }).waitFor({ timeout: 15000 });
@@ -264,15 +265,20 @@ test('K12: informacja z rejestru — kokpit (druk) i dla organu (dziennik)', asy
 
 test('D-096: żądanie spółki — spółka z rejestru jako żądający, bez dopisywania do kartoteki', async ({ page }, testInfo) => {
   await start(page, testInfo, 'spolka-zadajacy', 'K4 podstawa — spółka jako żądający (D-096)');
-  await krok(page, 'Nowa emisja → Podstawa', async () => {
+  await krok(page, 'Nowa emisja → Co się zmienia', async () => {
     await page.goto('/#/spolki/1/zdarzenie?typ=emisja');
-    await page.getByText('Podstawa wpisu', { exact: true }).waitFor();
+    await ui.gotowe(page, 'Co się zmienia');
+    await ui.wpisz(page, 'Oznaczenie serii', 'B');
+    await ui.wpisz(page, 'Liczba akcji', '100');
+    await ui.wpiszDate(page, 'Data wpisu emisji do KRS', DZIS);
+    await ui.przycisk(page, 'Dalej');
   });
-  await krok(page, 'Żądający = spółka (domyślnie) → Załóż sprawę', async () => {
+  await krok(page, 'Podstawa: żądający = spółka (domyślnie) → Dalej', async () => {
     await ui.pole(page, 'Żądający wpisu').getByText('Alfa Testowa').waitFor({ timeout: 5000 });
     if (await ui.pole(page, 'Żądający wpisu').getByRole('combobox').count()) throw new Error('D-096: wybór z kartoteki zamiast spółki');
-    await page.getByRole('button', { name: /Załóż sprawę/ }).click();
-    await page.locator('.card-h', { hasText: 'Co się zmienia' }).waitFor({ timeout: 10000 });
+    await ui.wpiszDate(page, 'Data dokumentu', DZIS);
+    await ui.przycisk(page, 'Dalej');
+    await page.getByRole('button', { name: 'Dokonaj wpisu' }).waitFor({ timeout: 15000 });
   });
   await zakoncz(page);
 });

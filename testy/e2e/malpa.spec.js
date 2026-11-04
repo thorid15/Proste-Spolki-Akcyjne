@@ -24,7 +24,7 @@ const EKRANY = [
   { nazwa: 'k-kokpit', konto: K, app: 'kancelaria', adres: '/#/spolki/1' },
   { nazwa: 'k-sprawy', konto: K, app: 'kancelaria', adres: '/#/sprawy' },
   { nazwa: 'k-sprawa-zbycia', konto: K, app: 'kancelaria', adres: '/#/sprawy/1' },
-  { nazwa: 'k-kreator-podstawa', konto: K, app: 'kancelaria', adres: '/#/spolki/1/zdarzenie?typ=emisja' },
+  { nazwa: 'k-kreator-wpisu', konto: K, app: 'kancelaria', adres: '/#/spolki/1/zdarzenie?typ=emisja' },
   { nazwa: 'k-kreator-zbycia', konto: K, app: 'kancelaria', adres: '/#/spolki/1/zdarzenie?typ=przeniesienie' },
   { nazwa: 'k-osoby', konto: K, app: 'kancelaria', adres: '/#/osoby' },
   { nazwa: 'k-osoba', konto: K, app: 'kancelaria', adres: '/#/osoby/1' },
@@ -189,17 +189,18 @@ test('małpa: błędne dane w polach', async ({ page }) => {
     await ui.wpisz(page, 'Numer PESEL', '85031502484');
     await ui.pole(page, 'Numer PESEL').locator('input').first().blur();
   }, async () => true);
-  // Kreator ogólny — data wpływu i data dokumentu z przyszłości.
+  // Kreator wpisu (D-097) — data dokumentu i data wpływu z przyszłości w kroku „Podstawa”.
   await etap(async () => {
     await page.goto('/#/spolki/1/zdarzenie?typ=emisja');
-    await page.getByText('Podstawa wpisu', { exact: true }).waitFor();
+    await ui.gotowe(page, 'Co się zmienia');
+    await ui.wpisz(page, 'Oznaczenie serii', 'B'); await ui.wpisz(page, 'Liczba akcji', '100');
+    await ui.przycisk(page, 'Dalej');
+    await ui.pole(page, 'Data dokumentu').waitFor();
   });
   const jutro = new Date(Date.now() + 86400000 * 30).toISOString().slice(0, 10);
-  await sprawdz('kreator — Podstawa', 'Data wpływu', `${jutro} (przyszłość)`, async () => ui.wpiszDate(page, 'Data wpływu', jutro), async () => true);
-  await etap(async () => {
-    await ui.pole(page, 'Rodzaj dokumentu stanowiącego podstawę').locator('select').selectOption({ index: 1 });
-  });
   await sprawdz('kreator — Podstawa', 'Data dokumentu', `${jutro} (przyszłość)`, async () => ui.wpiszDate(page, 'Data dokumentu', jutro), async () => true);
+  await etap(async () => { await ui.przycisk(page, 'Rodzaj dokumentu, data wpływu, notatka'); });
+  await sprawdz('kreator — Podstawa', 'Data wpływu', `${jutro} (przyszłość)`, async () => ui.wpiszDate(page, 'Data wpływu', jutro), async () => true);
   // Zbycie — data umowy zbycia z przyszłości.
   await etap(async () => {
     await page.goto('/#/spolki/1/zdarzenie?typ=przeniesienie');

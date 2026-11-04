@@ -50,3 +50,47 @@ test('D-100: w interfejsie „Zbycie akcji” zamiast „Przeniesienie akcji” 
   assert.equal(L.nazwaCzynnosci('emisja', 'Emisja akcji'), 'Emisja akcji');
   assert.equal(typyZdarzen.typ('przeniesienie').nazwa, 'Przeniesienie akcji', 'nazwa typu (pisma) bez zmian');
 });
+
+// ── Etap 4 ──
+
+test('D-097: jeden kreator — kroki „Co” → „Podstawa” → „Sprawdzenie i wpis” dla każdego typu (zbycie: „Co się zbywa”)', () => {
+  assert.deepEqual(L.krokiWpisu('przeniesienie'), ['Co się zbywa', 'Podstawa', 'Sprawdzenie i wpis']);
+  for (const kod of typyZdarzen.dostepneWKreatorze()) {
+    const kroki = L.krokiWpisu(kod);
+    assert.equal(kroki.length, 3, kod);
+    assert.deepEqual(kroki.slice(1), ['Podstawa', 'Sprawdzenie i wpis'], kod);
+  }
+});
+
+test('A-005: rodzaj dokumentu podstawy domyślny z typu — zawsze z katalogu (art. 300(34) § 4)', () => {
+  const katalog = Object.values(require('../server/logika/przepisy').RODZAJE_DOKUMENTU);
+  for (const kod of typyZdarzen.dostepneWKreatorze()) assert.ok(katalog.includes(L.domyslnyRodzajDokumentu(kod, { emisje: [{}] })), kod);
+  assert.equal(L.domyslnyRodzajDokumentu('przeniesienie'), 'umowa_zbycia');
+  assert.equal(L.domyslnyRodzajDokumentu('emisja', { emisje: [] }), 'umowa_spolki', 'pierwsza emisja — umowa spółki');
+  assert.equal(L.domyslnyRodzajDokumentu('emisja', { emisje: [{}] }), 'uchwala');
+  assert.equal(L.domyslnyRodzajDokumentu('objecie', { emisje: [{}] }), 'umowa_spolki', 'objęcie pierwszej emisji');
+  assert.equal(L.domyslnyRodzajDokumentu('uniewaznienie'), 'postanowienie');
+});
+
+test('D-097: żądający podstawiony z kroku „Co” zgodnie z charakterem', () => {
+  assert.equal(L.osobaWCharakterze('przeniesienie', 'nabywca', { nabywca_osoba_id: 3, zbywca_osoba_id: 1 }), 3);
+  assert.equal(L.osobaWCharakterze('przeniesienie', 'zbywca', { nabywca_osoba_id: 3, zbywca_osoba_id: 1 }), 1);
+  assert.equal(L.osobaWCharakterze('obciazenie', 'zastawnik', { akcjonariusz_osoba_id: 1, osoba_id: 3 }), 3);
+  assert.equal(L.osobaWCharakterze('obciazenie', 'akcjonariusz', { akcjonariusz_osoba_id: 1, osoba_id: 3 }), 1);
+  const stan = { obciazenia: [{ klucz: 9, akcjonariusz: { id: 1 }, uprawniony: { id: 3 } }] };
+  assert.equal(L.osobaWCharakterze('wykreslenie_obciazenia', 'akcjonariusz', { obciazenie_zdarzenie_id: 9 }, stan), 1);
+  assert.equal(L.osobaWCharakterze('prawo_glosu_zastawnika', 'zastawnik', { obciazenie_zdarzenie_id: 9 }, stan), 3);
+  assert.equal(L.osobaWCharakterze('zmiana_danych_akcjonariusza', 'akcjonariusz', { osoba_id: 2 }), 2);
+  assert.equal(L.osobaWCharakterze('zobowiazanie', 'nabywca', { akcjonariusz_osoba_id: 1 }), null, 'uprawniony spoza kroku 1 — wybór ręczny');
+  assert.equal(L.osobaWCharakterze('emisja', 'spolka', {}), null);
+});
+
+test('D-097: krok „Co” gotowy dopiero z minimum danych; dane startowe z wiersza kokpitu', () => {
+  assert.equal(L.coGotowe('obciazenie', { emisja_zdarzenie_id: 1, akcjonariusz_osoba_id: 1 }), false);
+  assert.equal(L.coGotowe('obciazenie', { emisja_zdarzenie_id: 1, akcjonariusz_osoba_id: 1, osoba_id: 3 }), true);
+  assert.equal(L.coGotowe('zdarzenie_inne', { opis: '  ' }), false);
+  assert.equal(L.coGotowe('uprawnienie', {}), true, 'typ bez minimum — ocenia podgląd serwera');
+  assert.deepEqual(L.poczatekWpisu('przeniesienie', { osoba: '2', emisja: '1' }), { zbywca_osoba_id: 2, emisja_klucz: 1 });
+  assert.deepEqual(L.poczatekWpisu('obciazenie', { osoba: '2', emisja: '1', zakres: '1–10' }), { emisja_zdarzenie_id: 1, akcjonariusz_osoba_id: 2, zakresy_tekst: '1-10' });
+  assert.deepEqual(L.poczatekWpisu('umorzenie', {}), {});
+});
