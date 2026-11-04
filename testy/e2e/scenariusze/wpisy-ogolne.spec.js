@@ -11,6 +11,7 @@
 const { test, zaloguj, api } = require('../pomocnicze/srodowisko');
 const { rozpocznij, krok, zakoncz } = require('../pomocnicze/krok');
 const ui = require('../pomocnicze/ui');
+const L = require('../../../publiczne/js/wpis-zbycia-logika.js');
 
 const DZIS = new Date().toISOString().slice(0, 10);
 const EMISJA_A = 1;
@@ -40,13 +41,6 @@ async function wykonaj(page, plan) {
   }
 }
 
-/** Spółka jako żądający musi być w kartotece (osoba prawna) — tu dopisana wcześniej; koszt ścieżki w UI: `inne.spec.js`. */
-async function spolkaWKartotece(page) {
-  await api(page, 'POST', '/api/psa/osoby', {
-    typ: 'prawna', nazwa: 'Alfa Testowa P.S.A.', numer_w_rejestrze: '0000990001', nazwa_rejestru: 'KRS', kraj: 'Polska',
-    kod_pocztowy: '80-001', miejscowosc: 'Gdańsk', ulica: 'Testowa', nr_domu: '1', aml_status: 'wykonane',
-  });
-}
 
 async function przygotujObciazenie(page) {
   await api(page, 'POST', '/api/psa/spolki/1/zdarzenia', {
@@ -71,9 +65,9 @@ const TYPY = [
   { typ: 'obciazenie', zadajacy: 'Nabywczyni', rola: 'zastawnik', powiadom: 'Anna', plan: [['wybierz', 'Seria akcji?', 'A'], ['pierwsza', 'Rodzaj obciążenia?'], ['kartoteka', 'Akcjonariusz, którego akcje są obciążane', 'Anna'], ['kartoteka', 'Zastawnik / użytkownik', 'Nabywczyni'], ['wpisz', 'Liczba akcji', '10']] },
   { typ: 'wykreslenie_obciazenia', zadajacy: 'Anna', rola: 'akcjonariusz', przygotuj: przygotujObciazenie, plan: [['pierwsza', 'Obciążenie']] },
   { typ: 'prawo_glosu_zastawnika', zadajacy: 'Nabywczyni', rola: 'zastawnik', powiadom: 'Anna', przygotuj: przygotujObciazenie, plan: [['pierwsza', 'Obciążenie'], ['pierwsza', 'Prawo głosu?']] },
-  { typ: 'zajecie', zUrzedu: true, znanyBlad: 'B-001', przygotuj: przygotujOrgan, plan: [['wybierz', 'Seria akcji', 'A'], ['kartoteka', 'Organ egzekucyjny', 'Komornik'], ['kartoteka', 'Akcjonariusz (dłużnik)', 'Próbny'], ['wpisz', 'Liczba akcji objętych zajęciem', '10']] },
+  { typ: 'zajecie', zUrzedu: true, przygotuj: przygotujOrgan, plan: [['wybierz', 'Seria akcji', 'A'], ['kartoteka', 'Organ egzekucyjny', 'Komornik'], ['kartoteka', 'Akcjonariusz (dłużnik)', 'Próbny'], ['wpisz', 'Liczba akcji objętych zajęciem', '10']] },
   {
-    typ: 'wykreslenie_zajecia', zUrzedu: true, znanyBlad: 'B-001',
+    typ: 'wykreslenie_zajecia', zUrzedu: true,
     przygotuj: async (page) => {
       const organ = await przygotujOrgan(page);
       await api(page, 'POST', '/api/psa/spolki/1/zdarzenia', { typ: 'zajecie', dane: { emisja_zdarzenie_id: EMISJA_A, osoba_id: organ.id, akcjonariusz_osoba_id: 2, ilosc: 10 } });
@@ -84,7 +78,6 @@ const TYPY = [
   { typ: 'uprawnienie', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['pierwsza', 'Rodzaj'], ['pierwsza', 'Zakres'], ['wybierz', 'Seria akcji?', 'A'], ['kartoteka', 'Akcjonariusz?', 'Anna'], ['wpisz', 'Tytuł', 'Akcje uprzywilejowane co do głosu (dane fikcyjne)']] },
   { typ: 'ograniczenie', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['pierwsza', 'Zakres'], ['wybierz', 'Seria akcji?', 'A'], ['wpisz', 'Opis', 'Zbycie wymaga zgody spółki (dane fikcyjne)']] },
   { typ: 'zdarzenie_inne', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['wpisz', 'Opis zdarzenia', 'Zwyczajne walne zgromadzenie (dane fikcyjne)']] },
-  { typ: 'sprostowanie', zadajacy: 'Alfa Testowa', rola: 'spółka', znanyBlad: 'B-002', plan: [['pierwsza', 'Prostowane zdarzenie?'], ['wpisz', 'Uzasadnienie?', 'Oczywista omyłka pisarska (dane fikcyjne)']] },
   { typ: 'przeniesienie_ulamka', zadajacy: 'Nabywczyni', rola: 'nabywca', powiadom: 'Anna', plan: [['wybierz', 'Seria akcji?', 'A'], ['wybierz', 'Zbywca', 'Testowa'], ['wpisz', 'Numer akcji', '1'], ['ulamek', 'Ułamek zbywanej części', ['1', '2']], ['kartoteka', 'Nabywca', 'Nabywczyni']] },
   { typ: 'przedstawiciel', zadajacy: 'Anna', rola: 'akcjonariusz', plan: [['wybierz', 'Seria akcji?', 'A'], ['wpisz', 'Numer akcji', '1'], ['kartoteka', 'Wspólny przedstawiciel?', 'Anna']] },
   { typ: 'pokrycie_akcji', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['wybierz', 'Seria akcji?', 'A'], ['kartoteka', 'Akcjonariusz', 'Anna'], ['pierwsza', 'Wzmianka o pokryciu']] },
@@ -96,7 +89,6 @@ const checklista = (page) => ui.checklista(page);
 async function przebieg(page, testInfo, def, { scenariusz } = {}) {
   rozpocznij(page, testInfo, { scenariusz: scenariusz || `wpis-${def.typ}`, proces: `K4 wpis ${def.typ}`, szerokosc: Number(testInfo.project.name), persona: def.zadajacy || 'z urzędu' });
   await zaloguj(page, 'notariusz@example.com', 'kancelaria');
-  if (def.zadajacy === 'Alfa Testowa') await spolkaWKartotece(page);
   if (def.przygotuj) await def.przygotuj(page);
   await krok(page, 'Kokpit spółki', async () => {
     await page.goto('/#/spolki/1');
@@ -117,8 +109,15 @@ async function przebieg(page, testInfo, def, { scenariusz } = {}) {
   }
   await krok(page, 'Podstawa', async () => {
     if (!def.zUrzedu) {
-      await ui.wybierzZKartoteki(page, 'Żądający wpisu', def.zadajacy);
-      await ui.wybierz(page, 'W jakim charakterze', def.rola);
+      // D-096: żądanie spółki — spółka z rejestru, bez wyboru osoby z kartoteki.
+      if (L.domyslnyCharakterZadajacego(def.typ) === 'spolka') {
+        await ui.pole(page, 'Żądający wpisu').getByText('Alfa Testowa').waitFor({ timeout: 5000 });
+      } else {
+        await ui.wybierzZKartoteki(page, 'Żądający wpisu', def.zadajacy);
+      }
+      // A-013: charakter żądającego podstawiony z typu wpisu — bez wyboru.
+      const charakter = await ui.pole(page, 'W jakim charakterze').locator('select').inputValue();
+      if (charakter !== L.domyslnyCharakterZadajacego(def.typ)) throw new Error(`A-013: „W jakim charakterze” = „${charakter}”, oczekiwano domyślnego`);
       const rodzaj = ui.pole(page, 'Rodzaj dokumentu stanowiącego podstawę').locator('select');
       const v = await rodzaj.evaluate((el) => [...el.options].find((o) => o.value !== '')?.value ?? null);
       if (v) await rodzaj.selectOption(v);
@@ -134,15 +133,15 @@ async function przebieg(page, testInfo, def, { scenariusz } = {}) {
   });
   await krok(page, 'Weryfikacja i podgląd — wpis', async () => {
     if (def.powiadom) {
-      // Uprzednie powiadomienie (art. 300(34) § 3) — w K4 adresata trzeba wskazać (w K5 jest domyślny, D-090).
-      await ui.wybierzZKartoteki(page, 'Kogo powiadomić', def.powiadom);
-      await page.getByRole('button', { name: 'Wyślij powiadomienie' }).click();
+      // D-104: adresat uprzedniego powiadomienia (art. 300(34) § 3) podpowiedziany z danych wpisu — bez wyboru.
+      const wyslij = page.getByRole('button', { name: 'Wyślij powiadomienie' });
+      await page.waitForTimeout(500);
+      if (!(await wyslij.isEnabled())) throw new Error('D-104: adresat powiadomienia nie został podpowiedziany');
+      await wyslij.click();
       await page.getByText('Powiadomienie wysłano').waitFor({ timeout: 10000 });
-      // B-003: po wysłaniu kreator wraca do „Co się zmienia” — użytkownik musi kliknąć „Dalej” jeszcze raz.
-      if (await page.locator('.card-h', { hasText: 'Co się zmienia' }).isVisible()) {
-        await page.getByRole('button', { name: 'Dalej', exact: true }).click();
-        await page.locator('.card-h', { hasText: 'Weryfikacja i podgląd' }).first().waitFor({ timeout: 10000 });
-      }
+      // B-003 (naprawione): po wysłaniu kreator zostaje w „Weryfikacji i podglądzie”.
+      await page.waitForTimeout(800);
+      if (!(await page.locator('.card-h', { hasText: 'Weryfikacja i podgląd' }).isVisible())) throw new Error('B-003: kreator wrócił z „Weryfikacji i podglądu”');
     }
     await checklista(page);
     await page.getByRole('button', { name: 'Dokonaj wpisu' }).click();

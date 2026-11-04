@@ -195,6 +195,11 @@ function widokStanu(db, spolkaId, data, opcje = {}) {
       .filter((o) => o.status === 'aktywne')
       .map((o) => ({
         klucz: o.klucz,
+        // B-005: kreator zbycia (wpis-zbycia-logika.js) dobiera ograniczenia po statusie, serii i zakresach
+        // numerów — te same pola co w stanie; `seria` i `numery` niżej są do wyświetlania.
+        status: o.status,
+        emisja_klucz: o.emisja_klucz ?? null,
+        zakresy: o.zakresy || [],
         zakres: o.zakres,
         seria: o.emisja_klucz == null ? null : emisjeWgKlucza.get(o.emisja_klucz)?.seria ?? null,
         numery: o.zakresy && o.zakresy.length ? n.opisz(o.zakresy) : null,

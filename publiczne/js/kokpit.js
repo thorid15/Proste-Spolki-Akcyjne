@@ -479,7 +479,7 @@ function ModalKwalifikacjaZgloszenia({ zgloszenie, przyZamknieciu, przyZapisie }
       <Pole etykieta="Kwalifikacja" wymagane>
         <select value={kwalifikacja} onChange={(z) => ustawKwalifikacje(z.target.value)}>
           <option value="">— wybierz —</option>
-          <option value="sprostowanie">Sprostowanie — dokonam go w kreatorze zdarzenia</option>
+          <option value="sprostowanie">Sprostowanie — przyciskiem „Sprostuj” w historii zdarzeń</option>
           <option value="zadanie_wpisu">To żądanie nowego wpisu, nie błąd</option>
           <option value="brak_nieprawidlowosci">Rejestr jest poprawny — brak nieprawidłowości</option>
         </select>
@@ -490,7 +490,7 @@ function ModalKwalifikacjaZgloszenia({ zgloszenie, przyZamknieciu, przyZapisie }
       {kwalifikacja === 'sprostowanie' && (
         <Komunikat
           odmiana="info"
-          tresc="Kwalifikacja NIE dokonuje sprostowania automatycznie — po zapisaniu wykonaj je zwykłym kreatorem zdarzenia (przycisk „Sprostuj” przy zdarzeniu w historii)."
+          tresc="Kwalifikacja NIE dokonuje sprostowania automatycznie — po zapisaniu użyj przycisku „Sprostuj” przy zdarzeniu w historii."
         />
       )}
     </Modal>
@@ -1006,7 +1006,7 @@ function EkranKokpitu({ spolkaId }) {
               />
               {!tylkoOdczyt && (
                 <DalszeWpisy tytul="Dalsze wpisy:">
-                  <PrzyciskWpisu spolkaId={spolkaId} typ="przeniesienie">Przeniesienie akcji</PrzyciskWpisu>
+                  <PrzyciskWpisu spolkaId={spolkaId} typ="przeniesienie">Zbycie akcji</PrzyciskWpisu>
                   <PrzyciskWpisu spolkaId={spolkaId} typ="zmiana_danych_akcjonariusza">
                     Zmiana danych akcjonariusza
                   </PrzyciskWpisu>

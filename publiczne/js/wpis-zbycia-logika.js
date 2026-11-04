@@ -157,6 +157,51 @@ function daneZdarzenia(stan, formularz) {
   };
 }
 
+/**
+ * D-104: domyślny adresat uprzedniego powiadomienia (art. 300(34) § 3 KSH) — osoba, której prawa wpis zmienia.
+ * `dane` — dane kreatora wpisu; `stan` — widok spółki z `GET /api/psa/spolki/:id` (obciążenia). `null` = brak domyślnego.
+ */
+function odbiorcaPowiadomienia(typ, dane, stan = null) {
+  const d = dane || {};
+  switch (typ) {
+    case 'przeniesienie':
+    case 'przeniesienie_ulamka':
+      return d.zbywca_osoba_id || null;
+    case 'umorzenie':
+      return (Array.isArray(d.pozycje) && d.pozycje[0] && d.pozycje[0].osoba_id) || null;
+    case 'obciazenie':
+    case 'zobowiazanie':
+      return d.akcjonariusz_osoba_id || null;
+    case 'prawo_glosu_zastawnika': {
+      const o = ((stan && stan.obciazenia) || []).find((x) => Number(x.klucz) === Number(d.obciazenie_zdarzenie_id));
+      return (o && ((o.akcjonariusz && o.akcjonariusz.id) || o.akcjonariusz_osoba_id)) || null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** A-013: domyślny charakter żądającego (art. 300(34) § 1 KSH) wynika z typu wpisu; `''` — wpis z urzędu. */
+const CHARAKTER_ZADAJACEGO = {
+  przeniesienie: 'nabywca', przeniesienie_ulamka: 'nabywca',
+  obciazenie: 'zastawnik', prawo_glosu_zastawnika: 'zastawnik',
+  wykreslenie_obciazenia: 'akcjonariusz', zmiana_danych_akcjonariusza: 'akcjonariusz',
+  przedstawiciel: 'akcjonariusz', zobowiazanie: 'nabywca',
+  zajecie: '', wykreslenie_zajecia: '',
+};
+function domyslnyCharakterZadajacego(typ) {
+  return Object.prototype.hasOwnProperty.call(CHARAKTER_ZADAJACEGO, typ) ? CHARAKTER_ZADAJACEGO[typ] : 'spolka';
+}
+
+/** D-100: nazwa czynności w interfejsie; w pismach i danych zostaje nazwa typu (`typy-zdarzen.js`). */
+const NAZWY_CZYNNOSCI_UI = { przeniesienie: 'Zbycie akcji', przeniesienie_ulamka: 'Zbycie ułamkowej części akcji' };
+function nazwaCzynnosci(kod, nazwa) {
+  return NAZWY_CZYNNOSCI_UI[kod] || nazwa;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { zbywcyZRejestru, dobierzAkcje, ograniczeniaDlaDoboru, definicjaWpisu, poleWidoczne, daneZdarzenia, zakresyNaTekst };
+  module.exports = {
+    zbywcyZRejestru, dobierzAkcje, ograniczeniaDlaDoboru, definicjaWpisu, poleWidoczne, daneZdarzenia, zakresyNaTekst,
+    odbiorcaPowiadomienia, domyslnyCharakterZadajacego, nazwaCzynnosci,
+  };
 }

@@ -6,6 +6,8 @@
 
 ## B-001 — Wpis z urzędu z przycisku w kokpitu wymaga żądającego; „Załóż sprawę” nieaktywne
 
+> **Naprawione 4.11.2026:** `kreator.js` — efekt z zależnością `[typ, definicjaTypu]`. Scenariusz e2e bez `test.fail`.
+
 - **Waga:** B (blokuje — zajęcie / uchylenie zajęcia nie da się założyć wejściem z kokpitu).
 - **Odtworzenie:** kokpit spółki → „Zajęcie egzekucyjne (z urzędu)” (`#/spolki/1/zdarzenie?typ=zajecie`) → krok „Podstawa”.
   Widać naraz komunikat „To zdarzenie zakłada się wyłącznie z urzędu — bez żądającego” **i** pola „Żądający wpisu”,
@@ -21,6 +23,8 @@
 
 ## B-002 — „Sprostowanie” w kreatorze prowadzi do ślepego zaułka po założeniu sprawy
 
+> **Naprawione 4.11.2026:** D-103 — `kreator: false` dla `sprostowanie` (jedna droga: „Sprostuj” w historii). Scenariusz e2e bez `test.fail`.
+
 - **Waga:** B (blokuje — sprawa założona, wpisu nie da się dokonać; zostaje sprawa do anulowania).
 - **Odtworzenie:** kreator → „Sprostowanie wcześniejszego zdarzenia” → „Podstawa” → „Załóż sprawę i przejdź dalej” (sprawa
   powstaje) → „Co się zmienia” → „Dalej” → „Weryfikacja i podgląd”: „Wpis nie może zostać dokonany: Typ zdarzenia
@@ -33,6 +37,8 @@
 - **Kierunek:** `kreator: false` dla `sprostowanie` (jedna droga — okno w historii, W9) albo budowniczy wołający `przygotujSprostowanie`.
 
 ## B-003 — Po „Wyślij powiadomienie” (K4) kreator wraca do „Co się zmienia”, checklista znika
+
+> **Naprawione 4.11.2026:** `EkranSprawy` — `Spinner` tylko przy pierwszym wczytaniu; odświeżenie zostawia kreator na miejscu. Scenariusz e2e bez `test.fail`.
 
 - **Waga:** U (utrudnia — użytkownik traci miejsce i odhaczoną checklistę; jedno „Dalej” i ponowne odhaczenie więcej).
 - **Odtworzenie:** typ z uprzednim powiadomieniem (obciążenie, umorzenie, zobowiązanie, prawo głosu zastawnika, zbycie ułamka)
@@ -48,6 +54,8 @@
   docelowo — jeden wzorzec wpisu (raport § 4).
 
 ## B-004 — Przejęcie rejestru: z ekranu przeniesienia nie da się dojść do otwarcia PRZEJĘCIEM
+
+> **Naprawione 4.11.2026:** `przeniesienia.js` — „Otwórz rejestr” → `/spolki/:id/otworz`. Scenariusz e2e bez `test.fail`.
 
 - **Waga:** B (blokuje — ścieżka w UI prowadzi do niewłaściwego otwarcia; przeniesienie nie dochodzi do „Aktywny”).
 - **Odtworzenie:** `#/przeniesienia/:id` (status „Uzgodnienie”, np. Theta z `test:seed`) → Etap 6 odhaczony, protokół wgrany →
@@ -66,6 +74,8 @@
 
 ## B-005 — Zbycie (K5): pola „zgoda spółki” i „prawo pierwszeństwa wyczerpane” nigdy się nie pokazują; wpis zablokowany
 
+> **Naprawione 4.11.2026:** `widoki.js` — ograniczenia z `status`, `emisja_klucz`, `zakresy`; test na kształcie API (`testy/wpis-zbycia-logika.test.js`). Scenariusz e2e bez `test.fail`.
+
 - **Waga:** B (blokuje — zbycia akcji objętych ograniczeniem z wymogiem zgody spółki albo prawem pierwszeństwa nie da się wpisać nowym przebiegiem).
 - **Odtworzenie:** ograniczenie na serii A (`zakres: 'emisja'`, `prawo_pierwszenstwa: true`; analogicznie `wymaga_zgody_spolki: true`)
   → kokpit → „Przeniesienie akcji” → Anna Testowa → Celina, 20 akcji → „Podstawa” → „Sprawdzenie i wpis”.
@@ -82,6 +92,8 @@
 - **Kierunek:** jeden kształt ograniczeń dla kreatora (np. `emisja_klucz`, `zakresy` w widoku) + test na odpowiedzi `GET /api/psa/spolki/:id`.
 
 ## B-006 — „Listy do wysyłki” przy 390 px: nakładające się treści, formularz nadania poza ekranem
+
+> **Naprawione 4.11.2026:** `rejestr.css` — komórki tabeli na wąskim ekranie: zawijanie, `height: auto`, formularz na całą szerokość. Scenariusz e2e bez `test.fail`.
 
 - **Waga:** B na telefonie (nie da się kliknąć „Zapisz nadanie” — wpis zbycia bez zgody zbywcy zostaje zablokowany); na 1440 px działa.
 - **Odtworzenie:** 390 px, `#/listy` (3 listy z `test:seed` + nowy) → „Nadano” przy liście → pola „Data nadania”, „Numer nadania” wychodzą

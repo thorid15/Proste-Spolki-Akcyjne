@@ -18,8 +18,8 @@ async function doKreatora(page, testInfo, scenariusz, persona) {
     await page.goto('/#/spolki/1');
     await ui.gotowe(page, 'Alfa Testowa');
   });
-  await krok(page, 'Przeniesienie akcji (kokpit)', async () => {
-    await page.getByRole('button', { name: 'Przeniesienie akcji' }).first().click();
+  await krok(page, 'Zbycie akcji (kokpit)', async () => {
+    await page.getByRole('button', { name: 'Zbycie akcji' }).first().click();
     await ui.gotowe(page, 'Co się zbywa');
   });
 }
@@ -46,7 +46,6 @@ async function podstawa(page) {
 const checklista = (page) => ui.checklista(page);
 
 test('zbycie: zbywca bez zgody na e-mail — powiadomienie listem, nadanie, wpis', async ({ page }, testInfo) => {
-  test.fail(testInfo.project.name === '390', 'B-006 — „Listy do wysyłki” przy 390 px: formularz nadania poza ekranem (docs/analiza/BLEDY.md)');
   await doKreatora(page, testInfo, 'zbycie-bez-zgody', 'Bartosz Próbny → Celina Nabywczyni');
   await coSieZbywa(page, { zbywca: 'Próbny', ilosc: 100, nabywca: 'Nabywczyni' });
   await podstawa(page);
@@ -131,7 +130,6 @@ async function dokonczZbycie(page, { warunkowe, list = null } = {}) {
 }
 
 test('zbycie: akcje niepokryte — zgoda spółki (art. 300(40) § 1) i komunikat o solidarnej odpowiedzialności', async ({ page }, testInfo) => {
-  test.fail(testInfo.project.name === '390', 'B-006 — „Listy do wysyłki” przy 390 px (docs/analiza/BLEDY.md)');
   await zaloguj(page, 'notariusz@example.com', 'kancelaria');
   const emisja = await api(page, 'POST', '/api/psa/spolki/1/zdarzenia', { typ: 'emisja', dane: { seria: 'B', nr_pierwszy: 1001, ilosc: 100, data_wpisu_krs: DZIS, rodzaj_akcji: 'zwykla', tytul: 'Emisja serii B (dane fikcyjne)' } });
   await api(page, 'POST', '/api/psa/spolki/1/zdarzenia', { typ: 'objecie', dane: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: 3, ilosc: 100, pokryta: 'nie' }] } });
@@ -141,7 +139,6 @@ test('zbycie: akcje niepokryte — zgoda spółki (art. 300(40) § 1) i komunika
 });
 
 test('zbycie: ograniczenie — wymagana zgoda spółki (art. 300(34) § 6)', async ({ page }, testInfo) => {
-  test.fail(true, 'B-005 — pole „zgoda spółki” się nie pokazuje (docs/analiza/BLEDY.md)');
   await zaloguj(page, 'notariusz@example.com', 'kancelaria');
   await api(page, 'POST', '/api/psa/spolki/1/zdarzenia', { typ: 'ograniczenie', dane: { zakres: 'emisja', emisja_zdarzenie_id: 1, wymaga_zgody_spolki: true, zgoda_termin_wskazania_dni: 30, zgoda_cena_opis: 'wartość godziwa (dane fikcyjne)', zgoda_termin_zaplaty_dni: 14, opis: 'Zbycie wymaga zgody spółki (dane fikcyjne)' } });
   await doKreatora(page, testInfo, 'zbycie-zgoda-spolki', 'Anna Testowa → Celina Nabywczyni');
@@ -150,7 +147,6 @@ test('zbycie: ograniczenie — wymagana zgoda spółki (art. 300(34) § 6)', asy
 });
 
 test('zbycie: prawo pierwszeństwa (art. 300(42)) — „wyczerpane”', async ({ page }, testInfo) => {
-  test.fail(true, 'B-005 — pole „prawo pierwszeństwa wyczerpane” się nie pokazuje (docs/analiza/BLEDY.md)');
   await zaloguj(page, 'notariusz@example.com', 'kancelaria');
   await api(page, 'POST', '/api/psa/spolki/1/zdarzenia', { typ: 'ograniczenie', dane: { zakres: 'emisja', emisja_zdarzenie_id: 1, prawo_pierwszenstwa: true, opis: 'Prawo pierwszeństwa akcjonariuszy (dane fikcyjne)' } });
   await doKreatora(page, testInfo, 'zbycie-pierwszenstwo', 'Anna Testowa → Celina Nabywczyni');
@@ -197,7 +193,7 @@ test('zbycie: jedna umowa, dwóch nabywców = dwie sprawy (zaakceptowane 3.11.20
       await krok(page, 'Druga sprawa — znów z kokpitu', async () => {
         await page.goto('/#/spolki/1');
         await ui.gotowe(page, 'Alfa Testowa');
-        await page.getByRole('button', { name: 'Przeniesienie akcji' }).first().click();
+        await page.getByRole('button', { name: 'Zbycie akcji' }).first().click();
         await ui.gotowe(page, 'Co się zbywa');
       });
     }

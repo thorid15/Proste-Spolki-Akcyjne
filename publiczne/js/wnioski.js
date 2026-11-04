@@ -66,7 +66,7 @@ function EkranWnioski() {
               {wnioski.map((w) => (
                 <tr key={w.id} className="klikalna" onClick={() => idz(`/wnioski/${w.id}`)}>
                   <td className="wyciszony">{fmt.dataCzas(w.zaktualizowano || w.utworzono)}</td>
-                  <td>{w.nazwa || '— nieuzupełniona —'}</td>
+                  <td><a className="lacze-wiersza" href={`#/wnioski/${w.id}`}>{w.nazwa || '— nieuzupełniona —'}</a></td>
                   <td>{w.konto_email}</td>
                   <td>{w.liczba_akcjonariuszy}</td>
                   <td><ZnacznikWniosku status={w.status} /></td>

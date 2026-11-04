@@ -20,8 +20,8 @@ function EkranPrzeniesien() {
           <thead><tr><th>Spółka</th><th>Dotychczasowy podmiot</th><th>Status</th><th>Umowa / skuteczność</th></tr></thead>
           <tbody>
             {lista.map((p) => (
-              <tr key={p.id} className="klikalny" onClick={() => idz(`/przeniesienia/${p.id}`)}>
-                <td><strong>{p.nazwa || '—'}</strong><div className="przyciemnione">KRS {p.krs || '—'}</div></td>
+              <tr key={p.id} className="klikalna" onClick={() => idz(`/przeniesienia/${p.id}`)}>
+                <td><strong><a className="lacze-wiersza" href={`#/przeniesienia/${p.id}`}>{p.nazwa || '—'}</a></strong><div className="przyciemnione">KRS {p.krs || '—'}</div></td>
                 <td>{p.poprzednik_nazwa || '—'}<div className="przyciemnione">{p.poprzednik_opis}</div></td>
                 <td><Pigulka odmiana={ODMIANA_STATUSU_PRZEN[p.status]}>{p.nazwa_statusu}</Pigulka>
                   {p.przypomnienia.length > 0 && <div className="przyciemnione">przypomnienia: {p.przypomnienia.length}</div>}</td>
@@ -64,9 +64,9 @@ function EkranPrzeniesienia({ id }) {
   const [blad, ustawBlad] = useState(null);
   const [pola, ustawPola] = useState({ data_zawarcia_umowy: dzisIso(), data_skutecznosci: dzisIso(), uwagi: '' });
   const [typDok, ustawTypDok] = useState('uchwala');
+  const [maPlik, ustawMaPlik] = useState(false); // A-033: „Dodaj dokument” aktywne dopiero z wybranym plikiem
   const [zrodlo, ustawZrodlo] = useState('klient');
   const plik = useRef(null);
-  const podpisany = useRef(null);
   if (!dane) return <Spinner />;
   const p = dane.przeniesienie;
 
@@ -115,10 +115,16 @@ function EkranPrzeniesienia({ id }) {
             </div>
             <span className="row-g" style={{ flexWrap: 'wrap' }}>
               {p.dozwolone_przejscia.filter((na) => na !== 'aktywny').map((na) => (
-                <button key={na} className="btn btn-maly" onClick={() => przejdz(na)}>→ {dane.statusy[na]}</button>
+                // A-033: przejście, które na pewno zostanie odrzucone (rozbieżności bez opisu), jest nieaktywne (D-052).
+                <button key={na} className="btn btn-maly" onClick={() => przejdz(na)}
+                  disabled={(na === 'wstrzymane_rozbieznosci' || p.status === 'wstrzymane_rozbieznosci') && !String(pola.uwagi || '').trim()}>
+                  → {dane.statusy[na]}
+                </button>
               ))}
               {p.dozwolone_przejscia.includes('aktywny') && p.spolka_id && (
-                <button className="btn btn-glowny btn-maly" onClick={() => idz(`/spolki/${p.spolka_id}`)}>Otwórz rejestr — PRZEJĘCIE (kreator stanu otwarcia)</button>
+                // B-004: wprost do kreatora otwarcia (`POST /spolki/:id/otworz-rejestr` zapisuje PRZEJĘCIE i kończy
+                // przeniesienie) — nie do kokpitu, gdzie jest tylko „Migracja z innego rejestru” (KRN). A-024: jedna nazwa.
+                <button className="btn btn-glowny btn-maly" onClick={() => idz(`/spolki/${p.spolka_id}/otworz`)}>Otwórz rejestr</button>
               )}
             </span>
           </div>
@@ -143,8 +149,8 @@ function EkranPrzeniesienia({ id }) {
           <select value={zrodlo} onChange={(z) => ustawZrodlo(z.target.value)}>
             {['klient', 'kancelaria', 'poprzednik'].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <input type="file" ref={plik} />
-          <button className="btn btn-maly" onClick={() => wykonaj(() => wyslij(`/api/psa/przeniesienia/${id}/dokumenty`, plik, { typ: typDok, zrodlo }))}>Dodaj dokument</button>
+          <input type="file" ref={plik} onChange={(z) => ustawMaPlik(Boolean(z.target.files && z.target.files.length))} />
+          <button className="btn btn-maly" disabled={!maPlik} onClick={() => wykonaj(() => wyslij(`/api/psa/przeniesienia/${id}/dokumenty`, plik, { typ: typDok, zrodlo }))}>Dodaj dokument</button>
         </div>
       </Karta>
 
@@ -160,14 +166,13 @@ function EkranPrzeniesienia({ id }) {
         <div className="podpowiedz">Rozbieżności nie poprawiamy samodzielnie — rejestr odwzorowujemy, korekty tylko w trybie żądania wpisu.</div>
       </Karta>
 
-      <Karta tytul="Etap 7 — protokół przejęcia i zatwierdzenie (podpis kwalifikowany notariusza)">
-        <a className="btn btn-maly" href={`/api/psa/przeniesienia/${id}/protokol.pdf`}>Pobierz protokół przejęcia (PDF)</a>
+      {/* D-095: protokół powstaje automatycznie przy „Otwórz rejestr” (dokumenty ze skrótami + checklista odbioru)
+          i trafia do zdarzenia PRZEJĘCIE; zatwierdzeniem notariusza jest samo otwarcie — bez wgrywania podpisanego pliku. */}
+      <Karta tytul="Etap 7 — protokół przejęcia">
+        <p className="male">Protokół (dokumenty źródłowe ze skrótami SHA-256 i checklista odbioru) powstaje przy otwarciu rejestru
+          i jest dołączany do zdarzenia PRZEJĘCIE. Otwarcie rejestru przez notariusza jest jego zatwierdzeniem.</p>
+        <a className="btn btn-maly" href={`/api/psa/przeniesienia/${id}/protokol.pdf`}>Podgląd protokołu (PDF)</a>
         {p.protokol_id_dokumentu && <span className="przyciemnione"> ID {p.protokol_id_dokumentu}</span>}
-        <div className="row-g" style={{ marginTop: 'var(--od-2)' }}>
-          <input type="file" ref={podpisany} accept=".pdf,.xml,.xades" />
-          <button className="btn btn-maly btn-glowny" onClick={() => wykonaj(() => wyslij(`/api/psa/przeniesienia/${id}/zatwierdzenie`, podpisany))}>Wgraj protokół podpisany przez notariusza</button>
-        </div>
-        {p.zatwierdzenie_walidacja && <WynikWalidacji walidacja={p.zatwierdzenie_walidacja} />}
       </Karta>
 
       <Karta tytul="Historia (append-only)">

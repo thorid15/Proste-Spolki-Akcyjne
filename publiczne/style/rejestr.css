@@ -2560,6 +2560,14 @@ h1[tabindex="-1"]:focus-visible { outline: none; }
     padding: 4px 0 !important; border: none !important; text-align: right; white-space: normal !important;
     max-width: none !important; overflow: visible !important;
   }
+  /* B-006: komórka z kilkoma blokami (tekst + opis, znacznik, formularz nadania) zawija się zamiast
+     wychodzić poza kartę; formularz w komórce — na całą szerokość pod etykietą. */
+  /* `.tabela td { height: 44px }` (wiersz na komputerze) w flex na telefonie jest sztywną wysokością — treść
+     wychodziła na następny wiersz; tu wysokość wynika z treści. */
+  table.tabela td, table.tbl td { flex-wrap: wrap; height: auto; }
+  table.tabela td > *, table.tbl td > * { min-width: 0; max-width: 100%; }
+  table.tabela td > .pion, table.tbl td > .pion { flex: 1 1 100%; text-align: left; }
+  table.tabela td > .pion input, table.tbl td > .pion input { max-width: 100%; }
   table.tabela td[data-etykieta]::before, table.tbl td[data-etykieta]::before {
     content: attr(data-etykieta); flex: 0 0 auto; max-width: 45%;
     text-align: left; color: var(--atrament-3); font-size: var(--st-11); font-weight: 500;
@@ -2592,3 +2600,10 @@ h1.topbar-tytul, h1.brama-tytul { margin: 0; font-weight: inherit; }
   .okruszki button { min-height: 44px; }
   .zakladka { min-width: 44px; min-height: 44px; }
 }
+
+/* A-034: wiersz listy otwierany łączem w nazwie (klawiatura, nowa karta); cały wiersz nadal klikalny myszą.
+   `.klikalna` — jedna klasa dla wszystkich list (dawniej także `.klikalny`). */
+.klikalna { cursor: pointer; }
+.klikalna:hover { background: var(--paper); }
+.lacze-wiersza { color: inherit; text-decoration: none; }
+.lacze-wiersza:hover, .lacze-wiersza:focus-visible { text-decoration: underline; }

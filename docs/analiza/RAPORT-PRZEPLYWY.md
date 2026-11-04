@@ -367,3 +367,19 @@ Weryfikacja całości: `npm test` — 609 testów, 608 ✓, 0 ✗, 1 pominięty 
 `npm run scenariusz:testowy` — 35 ✓, 0 ✗. Paczka `publiczne/dist/kancelaria.js` przebudowana (`npm run buduj`).
 Wnioski z weryfikacji wprowadzone do zmiany A-008: po wysłaniu sprawa się odświeża i panel montuje się od nowa (B-003) —
 przycisk „Wyślij powiadomienie” jest ukryty, dopóki stan listów się nie wczyta (bez chwilowego mignięcia i ryzyka drugiego listu).
+
+---
+
+## 9. Wdrożenie (4.11.2026, po akceptacji raportu i decyzji D-095–D-106)
+
+| Etap | Zakres | Stan |
+|---|---|---|
+| 1 | B-001–B-006 (+ D-103); decyzje zapisane w `DECYZJE.md` | **wdrożone** — scenariusze e2e bez `test.fail` |
+| 2 | D-098 (sprawa z portalu bez „Rozpocznij weryfikację”), D-104 (adresat powiadomienia domyślny), A-013 (charakter żądającego domyślny), D-099 (e-mail akcjonariusza tylko przy zgodzie; zastępuje Z-006/P-004 — spójne z D-083), D-100 („Zbycie akcji” w interfejsie), A-033 (przyciski przeniesienia nieaktywne, gdy błąd pewny), A-034 (wiersze list jako łącza — klawiatura), A-035 (`min`/`max` daty także przy wpisaniu z klawiatury; „Data nadania” — `PoleDaty`), D-106 (ostrzeżenie PESEL przy zapisie) | **wdrożone** |
+| 3 | D-096 (spółka jako żądający bez kartoteki), D-095 (protokół przejęcia automatycznie przy otwarciu, skrót w PRZEJĘCIU), D-105 (numery akcji za przyciskiem „Wybierz numery ręcznie”) | **wdrożone** |
+| 4 | D-097 (jeden kreator wpisu dla wszystkich typów), D-101 (reprezentant w kartotece), D-102 (zmiana adresu jedną drogą) oraz A-002, A-005, A-006, A-016 (reszta), A-019–A-022, A-025–A-027, A-030–A-032, A-037 | **do wykonania** — przebudowa kreatora i modelu danych; osobna sesja z planem, regresja `npm run e2e` |
+
+Testy nowych zachowań: `testy/wdrozenie-analizy.test.js` (D-103, D-104, A-013, D-100), `testy/wpis-zbycia-logika.test.js` (B-005),
+`testy/przeniesienie-stany.test.js` (D-095), `testy/wniosek-http.test.js` (D-099) oraz scenariusze e2e (B-001, B-003, B-004, B-006,
+D-096, D-098, D-104, D-100, D-103, D-095). Korekta raportu: przy A-028 istniała wcześniejsza poprawka w kodzie (Z-006/P-004 —
+e-mail „do zaproszenia”), bez wpisu w `DECYZJE.md`; D-099 ją zastępuje.

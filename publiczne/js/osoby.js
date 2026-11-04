@@ -174,6 +174,7 @@ function SekcjaZaproszeniaPortal({ osobaId, emailPodpowiedz }) {
  */
 function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej }) {
   const [dane, ustawDane] = useState(() => osobaDoFormularza(osoba, PUSTA_OSOBA));
+  const ostrzezeniePesel = !Number(dane.bez_pesel) && dane.pesel ? walidujPesel(String(dane.pesel)).ostrzezenie || null : null;
   const [blad, ustawBlad] = useState(null);
   const [zapisywanie, ustawZapisywanie] = useState(false);
   const [brakiPokazane, ustawBrakiPokazane] = useState(false);
@@ -272,6 +273,8 @@ function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej
       przyZamknieciu={anuluj}
       stopka={
         <>
+          {/* D-106: zła suma kontrolna PESEL — ostrzeżenie także przy zapisie, bez blokady (cudzoziemcy, stare nadania). */}
+          {ostrzezeniePesel && <span className="male wyciszony" role="status" style={{ marginRight: 'auto' }}>{ostrzezeniePesel}</span>}
           <button type="button" className="btn" onClick={anuluj}>Anuluj</button>
           <button type="button" className="btn btn-glowny" onClick={() => zapisz(false)} disabled={zapisywanie}>
             {zapisywanie ? 'Zapisywanie…' : edycja ? 'Zapisz zmiany' : 'Dodaj do kartoteki'}

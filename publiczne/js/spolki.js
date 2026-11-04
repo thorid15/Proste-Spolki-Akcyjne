@@ -1118,7 +1118,8 @@ function EkranSpolek() {
               {wycinek.map((s) => (
                 <tr key={s.id} className="klikalna" onClick={() => idz(`/spolki/${s.id}`)}>
                   <td>
-                    <div className="tekst-obciety" style={{ fontWeight: 500 }} title={s.nazwa}>{s.nazwa}</div>
+                    {/* A-034: nazwa jako łącze — wiersz osiągalny z klawiatury (i do otwarcia w nowej karcie). */}
+                    <div className="tekst-obciety" style={{ fontWeight: 500 }} title={s.nazwa}><a className="lacze-wiersza" href={`#/spolki/${s.id}`}>{s.nazwa}</a></div>
                     <div className="wiersz-podtytul">
                       {s.krs ? `KRS ${s.krs}` : 'bez numeru KRS'}
                       {s.miejscowosc ? ` · ${s.miejscowosc}` : ''}

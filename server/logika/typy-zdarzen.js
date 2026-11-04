@@ -378,6 +378,9 @@ const TYPY = [
     symbol: '↺',
     grupa: 'inne',
     sprint: 2,
+    // D-103 (B-002): sprostowanie jedna droga — przycisk „Sprostuj” przy zdarzeniu w historii
+    // (`POST /zdarzenia/:id/sprostuj`, `kreator.przygotujSprostowanie`); nie ma go w kafelkach kreatora.
+    kreator: false,
     odplatne: false,
     // "zaleznie od tresci" - decyzja zapada w kreatorze sprostowania.
     wymaga_powiadomienia: 'zaleznie',

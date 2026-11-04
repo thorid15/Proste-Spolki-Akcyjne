@@ -54,10 +54,12 @@ test('oczekuje → uzgodnienie wymaga danych od poprzednika; uzgodnienie ⇄ wst
   assert.deepEqual(r.przeszkodyPrzejscia({ status: 'wstrzymane_rozbieznosci' }, 'uzgodnienie', { dane: { uwagi: 'Poprzednik przesłał korektę' } }), []);
 });
 
-test('uzgodnienie → aktywny: checklista Etapu 6 + zatwierdzenie QES', () => {
+test('uzgodnienie → aktywny: checklista Etapu 6 wystarcza — protokół powstaje przy otwarciu (D-095)', () => {
   const p = { status: 'uzgodnienie', checklista_odbioru: wszystkie(r.CHECKLISTA_ODBIORU) };
-  assert.ok(r.przeszkodyPrzejscia(p, 'aktywny', { dokumenty: dokumenty('dane_poprzednika') }).some((x) => /zatwierdzenia przez notariusza/.test(x)));
-  assert.deepEqual(r.przeszkodyPrzejscia({ ...p, zatwierdzono: '2027-02-01T10:00:00Z' }, 'aktywny', { dokumenty: dokumenty('dane_poprzednika') }), []);
+  // D-095: bez osobnego kroku „pobierz protokół → podpisz → wgraj”; zatwierdzeniem jest otwarcie rejestru przez notariusza.
+  assert.deepEqual(r.przeszkodyPrzejscia(p, 'aktywny', { dokumenty: dokumenty('dane_poprzednika') }), []);
+  assert.ok(r.przeszkodyPrzejscia({ status: 'uzgodnienie', checklista_odbioru: {} }, 'aktywny', { dokumenty: dokumenty('dane_poprzednika') }).length > 0,
+    'bez checklisty odbioru — przeszkody');
 });
 
 test('W7.5: przypomnienia — 14 dni bez zawiadomienia, 30 dni przed terminem 12 miesięcy', () => {

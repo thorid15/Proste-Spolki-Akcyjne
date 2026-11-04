@@ -1592,6 +1592,26 @@
   osobny krok „weryfikuj”, „osoba działająca przy wpisie” (domyślnie notariusz z ustawień); „Wystaw żądanie
   wpisu” — akcja drugorzędna. Logika wpisu i walidacje art. 300(34) / 300(40) bez zmian.
 
+### D-095–D-106 — Analiza przepływów: uproszczenia procesów (Łukasz, 4.11.2026)
+
+- Obszar: przepływy kancelarii i portalu (SESJA-PSA-ANALIZA-PRZEPLYWOW, `docs/analiza/RAPORT-PRZEPLYWY.md` § 6 — uzasadnienie i skutki)
+- Przyjęte wszystkie propozycje raportu:
+  1. **D-095** Protokół przejęcia rejestru bez osobnego kroku: generowany automatycznie przy zamknięciu checklisty odbioru
+     (Etap 6) i dołączany do zdarzenia PRZEJĘCIE; zatwierdzenie notariusza = „Otwórz rejestr”. Dokument wymagany — uchwała
+     akcjonariuszy o wyborze podmiotu (art. 300(31) § 5), jedno pole.
+  2. **D-096** Spółka zawsze dostępna jako żądający wpisu (dane z rejestru spółek), bez dopisywania do kartoteki.
+  3. **D-097** Jeden kreator wpisu dla wszystkich typów — przebieg zbycia (3 kroki, `definicjaWpisu`), sprawa zakładana w tle.
+  4. **D-098** Sprawa z portalu bez „Rozpocznij weryfikację” — weryfikacja zaczyna się przy otwarciu sprawy w kancelarii.
+  5. **D-099** E-mail akcjonariusza we wniosku portalu opcjonalny; wymagany tylko przy zgodzie na komunikację e-mail.
+  6. **D-100** W interfejsie „Zbycie akcji” (przycisk, nagłówek sprawy, lista spraw); w pismach bez zmian.
+  7. **D-101** Reprezentant spółki jako osoba w kartotece (dane osobowe i AML raz).
+  8. **D-102** Zmiana adresu akcjonariusza jedną drogą: w kartotece; gdy dotyczy danych z art. 300(33) § 1 pkt 5 — aplikacja
+     proponuje wpis (sprawa z wypełnionymi danymi).
+  9. **D-103** Sprostowanie jedną drogą: przycisk „Sprostuj” przy zdarzeniu w historii; typ poza kafelkami kreatora.
+  10. **D-104** Adresat uprzedniego powiadomienia domyślny z typu wpisu (jak D-090 dla zbycia).
+  11. **D-105** Numery akcji dobierane automatycznie we wszystkich typach (jak D-091), ręcznie za przyciskiem.
+  12. **D-106** PESEL ze złą sumą kontrolną — ostrzeżenie bez blokady (cudzoziemcy, stare nadania), pokazane także przy zapisie.
+
 ---
 
 ## Decyzje otwarte

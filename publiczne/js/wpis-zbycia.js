@@ -245,7 +245,7 @@ function KreatorZbycia({ spolkaId, sprawa = null, odswiezSprawe, definicjaTypu =
         {krok === 2 && (
           <div className="pion" style={{ gap: 'var(--od-12)' }}>
             <Pole etykieta="Data umowy zbycia" wymagane>
-              <PoleDaty wartosc={f.dokument_data} przyZmianie={(v) => zmien({ dokument_data: v || '' })} />
+              <PoleDaty wartosc={f.dokument_data} max={dzisIso()} przyZmianie={(v) => zmien({ dokument_data: v || '' })} />
             </Pole>
             {!sprawa && (
               <Pole etykieta="Umowa (plik)" podpowiedz="Możesz dołączyć później w „Dokumentach” sprawy.">

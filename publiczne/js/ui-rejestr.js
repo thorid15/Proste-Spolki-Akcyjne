@@ -889,10 +889,18 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
     }
   }, [wartosc]);
 
+  // A-035: `min`/`max` dotyczą też daty wpisanej z klawiatury (dawniej tylko kalendarza) — data spoza zakresu
+  // nie trafia do formularza, a pod polem jest powód.
+  const [bladZakresu, ustawBladZakresu] = useState(null);
   function zglos(d, m, r) {
     if (d.length === 2 && m.length === 2 && r.length === 4) {
-      przyZmianie(`${r}-${m}-${d}`);
+      const iso = `${r}-${m}-${d}`;
+      const poza = (max && iso > max) ? `Data nie może być późniejsza niż ${max.split('-').reverse().join('.')}.`
+        : (min && iso < min) ? `Data nie może być wcześniejsza niż ${min.split('-').reverse().join('.')}.` : null;
+      ustawBladZakresu(poza);
+      przyZmianie(poza ? '' : iso);
     } else {
+      ustawBladZakresu(null);
       przyZmianie('');
     }
   }
@@ -958,7 +966,7 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
     <>
       <div className="pole-daty">
         <div
-          className={`data-segmenty ${blad || niepoprawne ? 'bledne' : ''} ${wylaczone ? 'wylaczone' : ''}`}
+          className={`data-segmenty ${blad || niepoprawne || bladZakresu ? 'bledne' : ''} ${wylaczone ? 'wylaczone' : ''}`}
           onPaste={wklej}
           role="group"
           // R4 STOP 1 (WCAG 2.5.5): cała ramka pola jest celem dotyku — klik obok cyfr ustawia kursor w dniu.
@@ -1019,6 +1027,7 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFo
           </div>
         )}
       </div>
+      {bladZakresu && <p className="pole-blad" role="alert"><span className="sr-only">Błąd: </span>{bladZakresu}</p>}
     </>
   );
 }

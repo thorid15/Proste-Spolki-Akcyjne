@@ -182,8 +182,11 @@ async function zbycieDoKroku3(page, szerokosc = 1440) {
 test('D-090/D-091: krok 3 — powiadomienie domyślne (zbywca podpowiedziany), zgoda jednym polem; „Dokonaj wpisu” dopiero po zgodzie i checkliście', async ({ page }) => {
   await zbycieDoKroku3(page);
   const panel = page.locator('#panel-powiadomienia');
-  await expect(panel.getByRole('button', { name: 'Wyślij powiadomienie' })).toHaveClass(/btn-glowny/);
-  await expect(panel.getByText(/Próbny/).first()).toBeVisible(); // zbywca podpowiedziany jako adresat
+  // `test:seed` wysłał już powiadomienie listem do zbywcy — A-008 (SESJA-PSA-ANALIZA-PRZEPLYWOW): panel pokazuje list
+  // w kolejce (adresat = zbywca) zamiast ponownego „Wyślij powiadomienie” (bez drugiego listu).
+  await expect(panel.getByText(/Powiadomienie czeka w kolejce listów/)).toBeVisible();
+  await expect(panel.getByText(/Próbny/).first()).toBeVisible(); // zbywca jako adresat
+  await expect(panel.getByRole('button', { name: 'Wyślij powiadomienie' })).toHaveCount(0);
   const wpis = page.getByRole('button', { name: 'Dokonaj wpisu' });
   await expect(wpis).toBeDisabled();
   await expect(panel.getByText('Data zgody')).toHaveCount(0);

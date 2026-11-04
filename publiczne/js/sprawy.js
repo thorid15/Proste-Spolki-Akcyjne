@@ -143,7 +143,7 @@ function EkranKolejkiSpraw({ spolkaId }) {
               <WierszListy
                 key={s.id}
                 ikona={IKONY_ZDARZEN[s.typ_zdarzenia] || 'sprawy'}
-                tytul={s.typ_nazwa}
+                tytul={nazwaCzynnosci(s.typ_zdarzenia, s.typ_nazwa)}
                 podtytul={`${s.spolka_nazwa} · ${s.zrodlo === 'z_urzedu' ? 'z urzędu' : s.zrodlo}`}
                 przyKlik={() => idz(`/sprawy/${s.id}`)}
                 prawo={
@@ -423,7 +423,6 @@ function PasekAkcjiSprawy({ sprawa, odswiez, zakonczona, przyPodstawie, przyZada
     ['weryfikacja', 'wstrzymana'].includes(stan) && { etykieta: 'Odmów wpisu', przyKlik: () => ustawModal('odmow'), niebezpieczna: true },
     !zakonczona && { etykieta: 'Anuluj sprawę', przyKlik: () => ustawModal('anuluj') },
     // Sprawa z portalu wpada w stan „nowa”; kreator wpisu otwiera się dopiero w „weryfikacji”.
-    stan === 'nowa' && !nowyPrzebieg && { etykieta: 'Rozpocznij weryfikację', przyKlik: () => wykonaj('weryfikuj'), glowna: true },
     stan === 'wstrzymana' && { etykieta: 'Wznów', przyKlik: () => wykonaj('wznow'), glowna: true },
   ];
 
@@ -598,7 +597,7 @@ function daneStartowe(typ, emisja, osoba, zakres) {
   return baza;
 }
 
-function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy }) {
+function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczatkowy, przyZmianieDanych }) {
   const draft = sprawa.dane_wejsciowe_json ? JSON.parse(sprawa.dane_wejsciowe_json) : null;
 
   const [krok, ustawKrok] = useState(2);
@@ -621,6 +620,8 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // D-104: dane kreatora idą do ekranu sprawy — panel powiadomienia podpowiada z nich adresata.
+  useEffect(() => { if (przyZmianieDanych) przyZmianieDanych(dane); }, [dane]); // eslint-disable-line react-hooks/exhaustive-deps
   const [odhaczone, ustawOdhaczone] = useState({});
   const [notatkaWatpliwosci, ustawNotatkeWatpliwosci] = useState('');
   const [podglad, ustawPodglad] = useState(null);
@@ -711,7 +712,7 @@ function KreatorSprawy({ sprawa, spolka, definicjaTypu, odswiezSprawe, naWpisano
         <Karta>
           <Komunikat
             odmiana="ok"
-            tytul={`${definicjaTypu.nazwa} — wpis dokonany`}
+            tytul={`${nazwaCzynnosci(sprawa.typ_zdarzenia, definicjaTypu.nazwa)} — wpis dokonany`}
             tresc={`Skrót zdarzenia w łańcuchu: ${wynik.zdarzenie.hash_skrocony}…`}
           />
           {/* Po emisji „nieobjęte akcje" nie są uwagą do sprawdzenia, tylko
@@ -1080,6 +1081,15 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
   // zrobiloby to zniknac ekran podsumowania wpisu (widoczny tylko, gdy
   // sprawa.stan==='weryfikacja').
   const [wlasnieWpisano, ustawWlasnieWpisano] = useState(false);
+  const [daneKreatora, ustawDaneKreatora] = useState(null); // D-104
+  // D-098: sprawa z portalu (stan „nowa”) przechodzi w weryfikację przy otwarciu w kancelarii — bez osobnego
+  // „Rozpocznij weryfikację” (klik bez decyzji, reguła 5). Zbycie robi to w swoim kreatorze (wpis-zbycia.js).
+  const stanSprawy = dane && dane.sprawa && dane.sprawa.stan;
+  useEffect(() => {
+    if (stanSprawy !== 'nowa' || (dane.sprawa.typ_zdarzenia === 'przeniesienie')) return;
+    API.patch(`/api/psa/sprawy/${dane.sprawa.id}`, { akcja: 'weryfikuj' }).then(odswiez).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stanSprawy]);
   const [wystawianieZadania, ustawWystawianieZadania] = useState(false);
   const [edycjaPodstawy, ustawEdycjePodstawy] = useState(false);
   // Krok 3/4 kreatora potrzebuje "bogatego" widoku spółki (emisje, bilans,
@@ -1087,7 +1097,9 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
   // co kokpit spółki. Endpoint sprawy zwraca tylko surowy rekord spółki.
   const spolkaBogata = useDane(dane ? `/api/psa/spolki/${dane.sprawa.spolka_id}` : null, [dane && dane.sprawa.id]);
 
-  if (ladowanie || meta.ladowanie || !dane || spolkaBogata.ladowanie) return <Spinner />;
+  // B-003: `Spinner` tylko przy pierwszym wczytaniu. Odświeżenie (np. po „Wyślij powiadomienie”) zostawia
+  // poprzednie dane na ekranie — `KreatorSprawy` się nie odmontowuje i nie traci kroku ani checklisty.
+  if (!dane || !meta.dane || (!spolkaBogata.dane && spolkaBogata.ladowanie)) return <Spinner />;
   if (blad) return <Komunikat odmiana="blad" tresc={blad.message} />;
   if (spolkaBogata.blad) return <Komunikat odmiana="blad" tresc={spolkaBogata.blad.message} />;
 
@@ -1105,7 +1117,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
 
       <div className="pasek-gorny">
         <div>
-          <div className="tytul-strony">{sprawa.typ_nazwa}</div>
+          <div className="tytul-strony">{nazwaCzynnosci(sprawa.typ_zdarzenia, sprawa.typ_nazwa)}</div>
           <div className="podtytul-strony">
             {spolka.nazwa} · wpłynęła {fmt.data(sprawa.data_wplywu)} · {sprawa.zrodlo === 'z_urzedu' ? 'z urzędu' : sprawa.zrodlo}
             {zadajacy ? ` · żądający: ${zadajacy.oznaczenie}` : ''}
@@ -1152,7 +1164,10 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
       )}
 
       {!wlasnieWpisano && !nowyPrzebieg && definicjaTypu && definicjaTypu.wymaga_powiadomienia === true && !zakonczona && (
-        <PanelPowiadomienia sprawa={sprawa} spolka={spolka} odswiez={odswiez} />
+        <PanelPowiadomienia
+          sprawa={sprawa} spolka={spolka} odswiez={odswiez}
+          domyslnyOdbiorca={odbiorcaPowiadomienia(sprawa.typ_zdarzenia, daneKreatora, spolkaBogata.dane)}
+        />
       )}
 
       <PanelDokumentow sprawaId={sprawa.id} dokumenty={dokumenty} odswiez={odswiez} />
@@ -1199,6 +1214,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
             definicjaTypu={definicjaTypu}
             odswiezSprawe={odswiez}
             naWpisano={() => ustawWlasnieWpisano(true)}
+            przyZmianieDanych={ustawDaneKreatora}
             emisjaPoczatkowa={emisjaPoczatkowa}
             osobaPoczatkowa={osobaPoczatkowa}
             zakresPoczatkowy={zakresPoczatkowy}
@@ -1210,23 +1226,7 @@ function EkranSprawy({ sprawaId, emisjaPoczatkowa, osobaPoczatkowa, zakresPoczat
         </Karta>
       )}
       {sprawa.stan === 'nowa' && (
-        <Karta>
-          <Pusto
-            tytul="Sprawa czeka na weryfikację"
-            opis="Otwórz dokumenty, sprawdź, czego dotyczą, i rozpocznij weryfikację — kreator wpisu otworzy się poniżej."
-            akcja={
-              <button
-                className="btn btn-glowny"
-                onClick={async () => {
-                  await API.patch(`/api/psa/sprawy/${sprawa.id}`, { akcja: 'weryfikuj' });
-                  odswiez();
-                }}
-              >
-                Rozpocznij weryfikację
-              </button>
-            }
-          />
-        </Karta>
+        <Karta><Spinner wierszy={2} /></Karta>
       )}
     </KolumnaSprawy>
   );

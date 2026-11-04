@@ -49,6 +49,21 @@ const RODZAJE_DOKUMENTU_PODSTAWY = [
   ['inny', 'inny dokument'],
 ];
 
+/**
+ * D-105: numery akcji dobiera aplikacja (jak w zbyciu, D-091); pole ręcznych numerów dopiero za przyciskiem —
+ * albo od razu, gdy numery już są (np. zakres z wiersza kokpitu).
+ */
+function NumeryRecznie({ wartosc, children }) {
+  const [pokaz, ustawPokaz] = useState(Boolean(wartosc));
+  if (pokaz) return children;
+  return (
+    <div className="pole">
+      <button type="button" className="btn btn-sm" onClick={() => ustawPokaz(true)}>Wybierz numery ręcznie</button>
+      <div className="pole-podpowiedz">Numery akcji dobierze aplikacja.</div>
+    </div>
+  );
+}
+
 /** Jedna pozycja: osoba + ilość (+ opcjonalnie ręczny zakres numerów). */
 function PozycjaKreatora({
   pozycja, ustawPozycje, usun, mozna_usunac, etykietaOsoby, kluczOsoby, dostepne, wyklucz,
@@ -603,6 +618,7 @@ function KrokUmorzenie({ dane, ustawDane, spolka }) {
                 />
               </Pole>
               {/* D-P1: zakres z wiersza kokpitu — do zawężenia; pusty = numery przydziela aplikacja. */}
+              <NumeryRecznie wartosc={p.zakresy_tekst}>
               <Pole etykieta="Numery akcji" podpowiedz="Opcjonalnie, np. „1-100, 150”.">
                 <input
                   type="text"
@@ -612,6 +628,7 @@ function KrokUmorzenie({ dane, ustawDane, spolka }) {
                   }
                 />
               </Pole>
+              </NumeryRecznie>
               {pozycje.length > 1 ? (
                 <button
                   className="btn btn-sm btn-danger"
@@ -773,9 +790,11 @@ function KrokObciazenie({ dane, ustawDane, spolka }) {
             <input type="number" min="1" {...pole('ilosc')} />
           </Pole>
           {/* D-P1: zakres z wiersza kokpitu — do zawężenia; pusty = numery przydziela aplikacja. */}
-          <Pole etykieta="Numery akcji" podpowiedz="Opcjonalnie, np. „1-100, 150”.">
-            <input type="text" {...pole('zakresy_tekst')} />
-          </Pole>
+          <NumeryRecznie wartosc={dane.zakresy_tekst}>
+            <Pole etykieta="Numery akcji" podpowiedz="Opcjonalnie, np. „1-100, 150”.">
+              <input type="text" {...pole('zakresy_tekst')} />
+            </Pole>
+          </NumeryRecznie>
           <label className="chk">
             <input type="checkbox" checked={dane.blokuje_rozporzadzanie !== false} onChange={(z) => ustawDane({ ...dane, blokuje_rozporzadzanie: z.target.checked })} />
             <span className="chk-tresc">Obciążenie blokuje rozporządzanie akcjami (typowe dla zastawu)</span>
@@ -1393,6 +1412,12 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, osobaPocz
     ustawPodstawePrzeniesiona(true);
   }, [zrodloweSprawa.dane, podstawaPrzeniesiona]);
 
+  // A-013: charakter żądającego domyślny z typu wpisu (zmiana jednym wyborem; z urzędu — bez żądającego).
+  useEffect(() => {
+    if (typ && !zadajacyRola) ustawZadajacegoRole(domyslnyCharakterZadajacego(typ));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typ]);
+
   const cokolwiekWpisano = Boolean(typ);
   useEscape(() => {
     if (!cokolwiekWpisano || window.confirm('Przerwać zakładanie sprawy? Wprowadzone dane przepadną.')) {
@@ -1405,11 +1430,13 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, osobaPocz
     return meta.dane.typy_zdarzen.find((t) => t.kod === typ) || null;
   }, [meta.dane, typ]);
 
+  // B-001: zależność także od `definicjaTypu` — przy typie z adresu (przycisk w kokpicie) definicja
+  // przychodzi z `/api/psa/meta` dopiero po pierwszym renderze; samo `[typ]` nie uruchomiłoby efektu ponownie.
   useEffect(() => {
     if (definicjaTypu && definicjaTypu.z_urzedu) ustawZrodlo('z_urzedu');
     else if (definicjaTypu && zrodlo === 'z_urzedu') ustawZrodlo('papier');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typ]);
+  }, [typ, definicjaTypu]);
 
   async function zalozSprawe() {
     ustawZapisywanie(true);
@@ -1419,9 +1446,10 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, osobaPocz
         spolka_id: spolkaId,
         typ_zdarzenia: typ,
         zrodlo,
-        zadajacy_osoba_id: zadajacyOsobaId,
+        // D-096: spółka jako żądający — bez osoby z kartoteki, opis = firma spółki (jak żądanie z portalu).
+        zadajacy_osoba_id: zadajacyRola === 'spolka' ? null : zadajacyOsobaId,
         zadajacy_rola: zadajacyRola || null,
-        zadajacy_opis: zadajacyOpis || null,
+        zadajacy_opis: zadajacyRola === 'spolka' ? spolkaDane.dane.spolka.nazwa : (zadajacyOpis || null),
         data_wplywu: dataWplywu,
         dokument_rodzaj: dokumentRodzaj || null,
         dokument_data: dokumentData || null,
@@ -1466,6 +1494,7 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, osobaPocz
   // wyslaniem formularza, a nie z bledu serwera.
   const zadajacyKompletny =
     zrodlo === 'z_urzedu' ||
+    zadajacyRola === 'spolka' ||
     (Boolean(zadajacyOsobaId) && Boolean(zadajacyRola)
       && (zadajacyRola !== 'inna' || Boolean(zadajacyOpis.trim())));
   const mozeDalej =
@@ -1566,14 +1595,21 @@ function EkranNowejSprawy({ spolkaId, typPoczatkowy, emisjaPoczatkowa, osobaPocz
                     Kolejność jest odwrotna: najpierw osoba w kartotece,
                     potem sprawa. Akcjonariusze z przyjętego wniosku są tam
                     od razu (`POST /api/psa/wnioski/:id/przyjmij`). */}
-                <Pole
-                  etykieta="Żądający wpisu"
-                  wymagane
-                  podpowiedz="Spółka albo inna osoba mająca interes prawny — art. 300(34) § 1 KSH. Kogoś spoza kartoteki najpierw się do niej dopisuje."
-                >
-                  <WyborZKartoteki wartosc={zadajacyOsobaId} przyZmianie={ustawZadajacegoOsobaId} />
-                  <ZnacznikKontaktuOsoby osobaId={zadajacyOsobaId} />
-                </Pole>
+                {/* D-096: żądanie spółki — spółka z rejestru spółek, bez dopisywania jej do kartoteki osób. */}
+                {zadajacyRola === 'spolka' ? (
+                  <Pole etykieta="Żądający wpisu" podpowiedz="Spółka (art. 300(34) § 1 KSH) — dane z rejestru. Inny żądający: zmień „W jakim charakterze”.">
+                    <div className="pole-echo"><strong>{spolkaDane.dane.spolka.nazwa}</strong> — spółka</div>
+                  </Pole>
+                ) : (
+                  <Pole
+                    etykieta="Żądający wpisu"
+                    wymagane
+                    podpowiedz="Osoba mająca interes prawny — art. 300(34) § 1 KSH. Kogoś spoza kartoteki najpierw się do niej dopisuje."
+                  >
+                    <WyborZKartoteki wartosc={zadajacyOsobaId} przyZmianie={ustawZadajacegoOsobaId} />
+                    <ZnacznikKontaktuOsoby osobaId={zadajacyOsobaId} />
+                  </Pole>
+                )}
                 <Pole
                   etykieta="W jakim charakterze"
                   wymagane

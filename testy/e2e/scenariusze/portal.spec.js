@@ -90,8 +90,7 @@ test('P1–P3: zgłoszenie nowej spółki → zaproszenie → aktywacja → RODO
     await ui.wpisz(page, 'Miejscowość', 'Gdańsk');
     await ui.wpisz(page, 'Ulica', 'Deltowa').catch(() => {});
     await ui.wpisz(page, 'Nr domu', '4');
-    // Portal wymaga e-maila każdego akcjonariusza (formularz-osoby.js:100) — niezależnie od zgody.
-    await ui.wpisz(page, 'Adres e-mail', EMAIL);
+    // D-099: bez zgody na komunikację e-mail — adresu nie podaje się (wcześniej wymagany zawsze, A-028).
     await page.getByRole('button', { name: 'Gotowe', exact: true }).last().click();
     await page.waitForTimeout(600);
     await dalejWniosku(page, 'Podsumowanie');

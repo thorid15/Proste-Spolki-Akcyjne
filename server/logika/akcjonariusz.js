@@ -162,14 +162,8 @@ function ostrzezenia(a) {
     lista.push(`${oznaczenie}: zaznaczono zgodę na komunikację elektroniczną, ale nie podano adresu e-mail.`);
   }
 
-  // Naprawa Z-006/P-004: e-mail jest tu OPERACYJNY (zaproszenie do portalu
-  // po przyjęciu wniosku), NIE ten sam co e-mail W REJESTRZE (pkt 4 wyżej,
-  // wymaga osobnej zgody — Z-157). Bez adresu na koncie pracownik nie ma
-  // jak zaprosić akcjonariusza, gdy rejestr już działa — więc pole jest
-  // obowiązkowe niezależnie od zgody na komunikację elektroniczną.
-  if (pusty(a.email)) {
-    lista.push(`${oznaczenie}: brak adresu e-mail — potrzebny do zaproszenia akcjonariusza do portalu po otwarciu rejestru.`);
-  }
+  // D-099 (Łukasz, 4.11.2026; zastępuje Z-006/P-004): e-mail tylko przy zgodzie (pkt 4 wyżej). Akcjonariusz bez
+  // zgody nie dostaje konta w portalu (D-083), więc adres „do zaproszenia” nie jest potrzebny.
 
   // Ustawa AML: przy PEP kancelaria stosuje WZMOŻONE środki bezpieczeństwa
   // finansowego, a te wymagają wiedzy, na czym status polega — samo „tak"
