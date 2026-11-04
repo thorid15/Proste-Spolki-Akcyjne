@@ -59,6 +59,20 @@ function ChecklistaPrzeniesienia({ id, rodzaj, definicja, zaznaczone, blokady, e
   );
 }
 
+/**
+ * A-030: bieżący etap rozwinięty (jedna akcja główna), zakończone i późniejsze — zwinięte z tytułem.
+ * Etap bieżący wynika ze statusu przeniesienia (wytyczne § 7.2).
+ */
+const ETAP_STATUSU = {
+  zgloszone: 3, weryfikacja: 3, umowa_warunkowa: 4, oczekuje_na_przekazanie: 4,
+  uzgodnienie: 6, wstrzymane_rozbieznosci: 6, aktywny: 7, wygasla: 8,
+};
+function EtapPrzeniesienia({ nr, tytul, status, children }) {
+  const biezacy = ETAP_STATUSU[status] || 3;
+  if (nr === biezacy) return <Karta tytul={`Etap ${nr} — ${tytul} · bieżący`}>{children}</Karta>;
+  return <Sekcja tytul={`Etap ${nr} — ${tytul}${nr < biezacy ? ' ✓' : ' — później'}`}>{children}</Sekcja>;
+}
+
 function EkranPrzeniesienia({ id }) {
   const { dane, odswiez } = useDane(`/api/psa/przeniesienia/${id}`);
   const [blad, ustawBlad] = useState(null);
@@ -131,10 +145,10 @@ function EkranPrzeniesienia({ id }) {
         )}
       </Karta>
 
-      <Karta tytul="Etap 3 — weryfikacja kancelarii">
+      <EtapPrzeniesienia nr={3} tytul="weryfikacja kancelarii" status={p.status}>
         <ChecklistaPrzeniesienia id={id} rodzaj="weryfikacji" definicja={dane.checklista_weryfikacji} zaznaczone={p.checklista_weryfikacji}
           blokady={p.blokady_weryfikacji} edytowalna={p.status === 'weryfikacja'} przyZmianie={odswiez} />
-      </Karta>
+      </EtapPrzeniesienia>
 
       <Karta tytul="Dokumenty (SHA-256)">
         <table className="tabela">
@@ -154,26 +168,26 @@ function EkranPrzeniesienia({ id }) {
         </div>
       </Karta>
 
-      <Karta tytul="Etap 4 — pisma (szablony)">
+      <EtapPrzeniesienia nr={4} tytul="pisma (szablony)" status={p.status}>
         <ul>{dane.pisma.map((x) => (
           <li key={x.kod}><a href={`/api/psa/przeniesienia/${id}/pisma/${x.kod}`} target="_blank" rel="noopener">{x.tytul}</a>{x.projekt && <span className="przyciemnione"> — PROJEKT</span>}</li>
         ))}</ul>
-      </Karta>
+      </EtapPrzeniesienia>
 
-      <Karta tytul="Etap 6 — odbiór i uzgodnienie">
+      <EtapPrzeniesienia nr={6} tytul="odbiór i uzgodnienie" status={p.status}>
         <ChecklistaPrzeniesienia id={id} rodzaj="odbioru" definicja={dane.checklista_odbioru} zaznaczone={p.checklista_odbioru}
           blokady={p.blokady_odbioru} edytowalna={p.status === 'uzgodnienie'} przyZmianie={odswiez} />
         <div className="podpowiedz">Rozbieżności nie poprawiamy samodzielnie — rejestr odwzorowujemy, korekty tylko w trybie żądania wpisu.</div>
-      </Karta>
+      </EtapPrzeniesienia>
 
       {/* D-095: protokół powstaje automatycznie przy „Otwórz rejestr” (dokumenty ze skrótami + checklista odbioru)
           i trafia do zdarzenia PRZEJĘCIE; zatwierdzeniem notariusza jest samo otwarcie — bez wgrywania podpisanego pliku. */}
-      <Karta tytul="Etap 7 — protokół przejęcia">
+      <EtapPrzeniesienia nr={7} tytul="protokół przejęcia" status={p.status}>
         <p className="male">Protokół (dokumenty źródłowe ze skrótami SHA-256 i checklista odbioru) powstaje przy otwarciu rejestru
           i jest dołączany do zdarzenia PRZEJĘCIE. Otwarcie rejestru przez notariusza jest jego zatwierdzeniem.</p>
         <a className="btn btn-maly" href={`/api/psa/przeniesienia/${id}/protokol.pdf`}>Podgląd protokołu (PDF)</a>
         {p.protokol_id_dokumentu && <span className="przyciemnione"> ID {p.protokol_id_dokumentu}</span>}
-      </Karta>
+      </EtapPrzeniesienia>
 
       <Karta tytul="Historia (append-only)">
         <ul>{p.historia.map((h) => (

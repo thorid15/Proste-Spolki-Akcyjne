@@ -198,21 +198,25 @@ test('D-090/D-091: krok 3 — powiadomienie domyślne (zbywca podpowiedziany), z
   await expect(wpis).toBeEnabled();
 });
 
-test('D-091: nowy nabywca z minimum danych zapisuje się w kartotece', async ({ page }) => {
+test('A-019: nowy nabywca formularzem kartoteki („Dodaj do kartoteki”) — zapisuje się i trafia do zbycia', async ({ page }) => {
+  const ui = require('./pomocnicze/ui');
   await otworz(page, { konto: 'notariusz@example.com', aplikacja: 'kancelaria', adres: '/#/spolki/1/zdarzenie?typ=przeniesienie', czekaj: 'text=Co się zbywa', szerokosc: 1440 });
   await page.getByRole('button', { name: 'Nowy nabywca (spoza kartoteki)' }).click();
-  const forma = page.locator('.nowy-nabywca');
-  await forma.getByLabel('Imię').fill('Nadia');
-  await forma.getByLabel('Nazwisko').fill('Nowonabywająca');
-  await wypelnijDate(forma.locator('.pole-daty'), '1990', '05', '05');
-  await forma.getByLabel('Kod pocztowy').fill('80-100');
-  await forma.getByLabel('Miejscowość').fill('Gdańsk');
-  await forma.locator('input').nth(-2).fill('12');
-  await forma.getByRole('button', { name: 'Zapisz w kartotece' }).click();
-  await expect(forma).toHaveCount(0);
-  const odp = await page.request.get('/api/psa/osoby?q=Nowonabywająca');
-  const dane = await odp.json();
-  expect(dane.osoby.some((o) => o.nazwisko === 'Nowonabywająca' && o.data_urodzenia === '1990-05-05')).toBe(true);
+  await page.getByRole('dialog').waitFor();
+  await ui.wpisz(page, 'Imię', 'Nadia');
+  await ui.wpisz(page, 'Nazwisko', 'Nowonabywająca');
+  await ui.wpisz(page, 'Numer PESEL', '92010124683');
+  await ui.wpisz(page, 'Kod pocztowy', '80-100');
+  await ui.wpisz(page, 'Miejscowość', 'Gdańsk');
+  await ui.wpisz(page, 'Ulica', 'Długa');
+  await ui.wpisz(page, 'Nr domu', '12');
+  await page.getByRole('button', { name: 'Dodaj do kartoteki' }).click();
+  const mimo = page.getByRole('button', { name: 'Zapisz mimo braków' });
+  if (await mimo.isVisible({ timeout: 1500 }).catch(() => false)) await mimo.click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const dane = await (await page.request.get('/api/psa/osoby?q=Nowonabywająca')).json();
+  expect(dane.osoby.some((o) => o.nazwisko === 'Nowonabywająca')).toBe(true);
+  await expect(page.locator('.kartoteka-wybrana', { hasText: 'Nowonabywająca' })).toBeVisible();
 });
 
 test('D-091: nowe zbycie z kokpitu — trzy kroki, powiadomienie e-mailem, wpis dokonany', async ({ page }) => {

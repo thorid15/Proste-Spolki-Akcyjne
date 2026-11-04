@@ -555,6 +555,12 @@ body {
 }
 .naglowek-strony-kontekst { color: var(--atrament-2); font-size: var(--st-13); margin-top: var(--od-4); }
 .naglowek-strony-akcje { display: flex; gap: var(--od-8); flex-shrink: 0; }
+/* A-031: na telefonie nazwa (np. spółki w kokpicie) na pełną szerokość, „Stan na dzień” i akcje pod nią —
+   obok siebie nazwa łamała się co słowo. */
+@media (max-width: 720px) {
+  .naglowek-strony { flex-direction: column; gap: var(--od-12); }
+  .naglowek-strony-akcje { flex-wrap: wrap; flex-shrink: 1; max-width: 100%; }
+}
 
 .okruszki { display: flex; align-items: center; gap: var(--od-8); font-size: var(--st-13); color: var(--atrament-3); margin-bottom: var(--od-12); }
 .okruszki button {
@@ -747,6 +753,13 @@ body {
 }
 .wiersz-prawo { display: flex; align-items: center; gap: var(--od-16); flex-shrink: 0; }
 .wiersz-data { font-size: var(--st-11); color: var(--atrament-3); font-family: var(--font-dane); }
+/* A-032: na telefonie stan, termin i data przechodzą pod tytuł — wcześniej wychodziły poza kartę,
+   a tytuł kurczył się do kilkunastu pikseli. */
+@media (max-width: 600px) {
+  .wiersz { flex-wrap: wrap; padding: var(--od-12) var(--od-16); }
+  .wiersz-tresc { flex: 1 1 calc(100% - 48px); }
+  .wiersz-prawo { flex: 1 1 100%; flex-wrap: wrap; gap: var(--od-8); padding-left: 48px; flex-shrink: 1; }
+}
 
 /* Naprawa Z-354: utility do skracania dowolnego dlugiego tekstu z bazy
    (np. nazwy spolki) w komorkach tabel, gdzie `table-layout: auto` samo
@@ -1640,6 +1653,10 @@ a.stopka-poz:hover span { text-decoration: underline; }
 @media (max-width: 720px) {
   .pozycja-platnosci { grid-template-columns: minmax(0, 1fr) auto; }
   .pozycja-platnosci-akcja { grid-column: 1 / -1; justify-content: flex-start; }
+}
+/* A-032: na telefonie jedna kolumna — tytuł pozycji (np. „Wpis w rejestrze akcjonariuszy”) bez ucięcia. */
+@media (max-width: 480px) {
+  .pozycja-platnosci { grid-template-columns: minmax(0, 1fr); gap: var(--od-8); padding: var(--od-12) var(--od-16); }
 }
 
 /* ─────────────────────────────────────────────────────
