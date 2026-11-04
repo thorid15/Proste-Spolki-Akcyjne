@@ -176,6 +176,35 @@ test('D-103: sprostowanie zdarzenia — przycisk „Sprostuj” w historii zdarz
   await zakoncz(page);
 });
 
+test('D-102: zmiana adresu akcjonariusza w kartotece — propozycja wpisu, sprawa z wypełnionymi danymi', async ({ page }, testInfo) => {
+  await start(page, testInfo, 'zmiana-adresu-kartoteka', 'K13 kartoteka → K4 zmiana danych (D-102)');
+  await krok(page, 'Kartoteka — nowy adres akcjonariusza', async () => {
+    await page.goto('/#/osoby/1');
+    await ui.gotowe(page, 'Edytuj dane');
+    await page.getByRole('button', { name: 'Edytuj dane' }).click();
+    await ui.wpisz(page, 'Miejscowość', 'Sopot');
+    await page.getByRole('button', { name: 'Zapisz zmiany' }).click();
+    const mimo = page.getByRole('button', { name: 'Zapisz mimo braków' });
+    if (await mimo.isVisible({ timeout: 1500 }).catch(() => false)) await mimo.click();
+    await ui.gotowe(page, 'Zmiana danych wpisanych do rejestru');
+  });
+  await krok(page, 'Propozycja wpisu → sprawa w „Sprawdzeniu i wpisie”', async () => {
+    await page.getByRole('button', { name: /Załóż wpis zmiany danych/ }).first().click();
+    await page.getByRole('button', { name: 'Dokonaj wpisu' }).waitFor({ timeout: 15000 });
+    await page.getByText('Sopot').first().waitFor({ timeout: 10000 });
+  });
+  await krok(page, 'Wpis — adres w kartotece dopiero po wpisie', async () => {
+    const przed = await api(page, 'GET', '/api/psa/osoby/1');
+    if (przed.osoba.miejscowosc === 'Sopot') throw new Error('D-102: adres zmieniony w kartotece bez wpisu');
+    await ui.checklista(page);
+    await page.getByRole('button', { name: 'Dokonaj wpisu' }).click();
+    await page.getByRole('button', { name: 'Wróć do kokpitu spółki' }).waitFor({ timeout: 15000 });
+    const po = await api(page, 'GET', '/api/psa/osoby/1');
+    if (po.osoba.miejscowosc !== 'Sopot') throw new Error(`D-102: po wpisie miejscowość = ${po.osoba.miejscowosc}`);
+  });
+  await zakoncz(page);
+});
+
 test('K6: sprawa z portalu — weryfikacja przy otwarciu, kreator wpisu od kroku „Co” (D-097, D-098, A-006)', async ({ page }, testInfo) => {
   rozpocznij(page, testInfo, { scenariusz: 'sprawa-z-portalu', proces: 'K6 sprawa z portalu', szerokosc: szer(testInfo), persona: 'Zarząd Alfa → notariusz' });
   await zaloguj(page, 'zarzad@example.com', 'portal');

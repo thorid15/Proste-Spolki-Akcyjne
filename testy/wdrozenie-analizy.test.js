@@ -94,3 +94,8 @@ test('D-097: krok „Co” gotowy dopiero z minimum danych; dane startowe z wier
   assert.deepEqual(L.poczatekWpisu('obciazenie', { osoba: '2', emisja: '1', zakres: '1–10' }), { emisja_zdarzenie_id: 1, akcjonariusz_osoba_id: 2, zakresy_tekst: '1-10' });
   assert.deepEqual(L.poczatekWpisu('umorzenie', {}), {});
 });
+
+test('D-102: krok „Co” zmiany danych gotowy dopiero z nowymi danymi z kartoteki', () => {
+  assert.equal(L.coGotowe('zmiana_danych_akcjonariusza', { osoba_id: 1 }), false);
+  assert.equal(L.coGotowe('zmiana_danych_akcjonariusza', { osoba_id: 1, po: { miejscowosc: 'Sopot' } }), true);
+});

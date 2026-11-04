@@ -81,4 +81,12 @@ async function checklista(page) {
   }
 }
 
-module.exports = { pole, wpiszDate, wybierzZKartoteki, wybierz, wpisz, przycisk, gotowe, checklista };
+/** `PanelOsoby` w trybie edycji: „Zapisz zmiany” (i „Zapisz mimo braków”, gdy dane osoby testowej są niepełne). */
+async function zapiszOsobe(page) {
+  await page.getByRole('button', { name: 'Zapisz zmiany' }).click();
+  const mimo = page.getByRole('button', { name: 'Zapisz mimo braków' });
+  if (await mimo.isVisible({ timeout: 1500 }).catch(() => false)) await mimo.click();
+  await page.getByRole('button', { name: 'Zapisz zmiany' }).waitFor({ state: 'detached', timeout: 10000 });
+}
+
+module.exports = { pole, wpiszDate, wybierzZKartoteki, wybierz, wpisz, przycisk, gotowe, checklista, zapiszOsobe };

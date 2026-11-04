@@ -172,7 +172,60 @@ function SekcjaZaproszeniaPortal({ osobaId, emailPodpowiedz }) {
  * PESEL / NIP / KRS należy już do kogoś, można wybrać tę osobę zamiast
  * zakładać drugą (reguła domenowa nr 10, D-042).
  */
-function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej }) {
+/**
+ * D-102: zmiana danych z rejestru (art. 300(33) § 1 pkt 5 KSH) osoby z akcjami — kartoteka ich nie nadpisuje,
+ * tylko proponuje wpis „Zmiana danych akcjonariusza”: sprawa z wypełnionymi danymi (przed → po), otwarta od razu
+ * w „Sprawdzeniu i wpisie”. Kartoteka jest wspólna — wpis zmienia dane osoby we wszystkich rejestrach.
+ */
+function PropozycjaZmianyDanych({ osoba, zmiana, przyZamknieciu }) {
+  const [pracuje, ustawPracuje] = useState(false);
+  const [blad, ustawBlad] = useState(null);
+  const klucz = useRef(crypto.randomUUID());
+  async function zaloz(spolkaId) {
+    ustawPracuje(true);
+    ustawBlad(null);
+    try {
+      const odp = await API.post('/api/psa/sprawy', {
+        spolka_id: spolkaId, typ_zdarzenia: 'zmiana_danych_akcjonariusza', zrodlo: 'papier',
+        zadajacy_osoba_id: osoba.id, zadajacy_rola: 'akcjonariusz', data_wplywu: fmt.dzisIso(), klucz_idempotencji: klucz.current,
+      });
+      const id = odp.sprawa.id;
+      if (odp.sprawa.stan === 'nowa') await API.patch(`/api/psa/sprawy/${id}`, { akcja: 'weryfikuj' });
+      const formularz = { osoba_id: osoba.id, po: zmiana.po };
+      await API.post(`/api/psa/sprawy/${id}/podglad`, { dane: { ...formularz, _formularz: formularz, _typ: 'zmiana_danych_akcjonariusza' } });
+      idz(`/sprawy/${id}`);
+    } catch (e) {
+      ustawBlad(e.message);
+      ustawPracuje(false);
+    }
+  }
+  return (
+    <Modal tytul="Zmiana danych wpisanych do rejestru" przyZamknieciu={przyZamknieciu} stopka={<button type="button" className="btn" onClick={przyZamknieciu}>Nie teraz</button>}>
+      <Komunikat odmiana="blad" tresc={blad} />
+      <p>
+        Zmienione dane ({Object.keys(zmiana.po).map((k) => ETYKIETY_POL_REJESTRU[k] || k).join(', ')}) są wpisane do rejestru akcjonariuszy —
+        zmienia je wpis (art. 300(33) § 1 pkt 5 KSH). Pozostałe zmiany zapisano w kartotece.
+      </p>
+      {zmiana.spolki.length > 1 && <p className="male wyciszony">Kartoteka jest wspólna — wpis w jednej spółce zmieni dane osoby we wszystkich rejestrach.</p>}
+      <div className="pion" style={{ gap: 'var(--od-8)' }}>
+        {zmiana.spolki.map((s) => (
+          <button key={s.id} type="button" className="btn btn-glowny" disabled={pracuje} onClick={() => zaloz(s.id)}>
+            {pracuje ? 'Zakładanie sprawy…' : `Załóż wpis zmiany danych — ${s.nazwa}`}
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+const ETYKIETY_POL_REJESTRU = {
+  nazwisko: 'nazwisko', imie: 'imię', nazwa: 'firma', kod_pocztowy: 'kod pocztowy', miejscowosc: 'miejscowość', ulica: 'ulica',
+  nr_domu: 'nr domu', nr_lokalu: 'nr lokalu', adres_doreczen: 'adres do doręczeń', adres_edoreczen: 'adres do doręczeń elektronicznych',
+};
+
+/** `przyZmianieRejestrowej(zmiana)` — kreator wpisu przejmuje zmianę danych z rejestru (D-102) zamiast propozycji sprawy. */
+function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej, przyZmianieRejestrowej }) {
+  const [zmianaRejestrowa, ustawZmianeRejestrowa] = useState(null);
   const [dane, ustawDane] = useState(() => osobaDoFormularza(osoba, PUSTA_OSOBA));
   const ostrzezeniePesel = !Number(dane.bez_pesel) && dane.pesel ? walidujPesel(String(dane.pesel)).ostrzezenie || null : null;
   const [blad, ustawBlad] = useState(null);
@@ -183,7 +236,7 @@ function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej
   const idPrefiks = 'kartoteka';
   const poczatkowe = useRef(JSON.stringify(dane));
   const zmienione = () => JSON.stringify(dane) !== poczatkowe.current;
-  useBlokadaWyjscia(() => zmienione() && !zapisywanie);
+  useBlokadaWyjscia(() => zmienione() && !zapisywanie && !zmianaRejestrowa);
   function anuluj() {
     if (zmienione() && !window.confirm('Zamknąć bez zapisania wprowadzonych danych?')) return;
     przyZamknieciu();
@@ -257,6 +310,14 @@ function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej
       const wynik = edycja
         ? await API.put(`/api/psa/osoby/${osoba.id}`, dane)
         : await API.post('/api/psa/osoby', dane);
+      if (wynik.zmiana_rejestrowa && przyZmianieRejestrowej) {
+        przyZmianieRejestrowej(wynik.zmiana_rejestrowa, wynik.osoba);
+        return;
+      }
+      if (wynik.zmiana_rejestrowa) {
+        ustawZmianeRejestrowa({ ...wynik.zmiana_rejestrowa, osoba: wynik.osoba });
+        return;
+      }
       przyZapisie(wynik.osoba);
     } catch (e) {
       ustawBlad(e.message);
@@ -266,6 +327,9 @@ function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej
   }
 
   const listaBledow = listaBledowOsoby(walidacja.widoczne, idPrefiks);
+  if (zmianaRejestrowa) {
+    return <PropozycjaZmianyDanych osoba={zmianaRejestrowa.osoba} zmiana={zmianaRejestrowa} przyZamknieciu={() => przyZapisie(zmianaRejestrowa.osoba)} />;
+  }
   return (
     <Modal
       panel

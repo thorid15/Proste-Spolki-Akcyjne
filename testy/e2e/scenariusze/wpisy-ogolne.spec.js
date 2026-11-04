@@ -19,6 +19,8 @@ const EMISJA_A = 1;
 /** Plan kroku „Co się zmienia”: [czynność, etykieta, wartość]. `?` na końcu etykiety = pole może się nie pokazać. */
 async function wykonaj(page, plan) {
   for (const [co, etykieta0, wartosc] of plan) {
+    if (co === 'klik') { await ui.przycisk(page, etykieta0); continue; }
+    if (co === 'zapiszOsobe') { await ui.zapiszOsobe(page); continue; }
     const opcjonalne = etykieta0.endsWith('?');
     const etykieta = opcjonalne ? etykieta0.slice(0, -1) : etykieta0;
     const p = ui.pole(page, etykieta);
@@ -74,7 +76,8 @@ const TYPY = [
     },
     plan: [['pierwsza', 'Zajęcie']],
   },
-  { typ: 'zmiana_danych_akcjonariusza', zadajacy: 'Anna', rola: 'akcjonariusz', plan: [['kartoteka', 'Akcjonariusz', 'Anna'], ['wpisz', 'Miejscowość', 'Sopot']] },
+  // D-102: nowe dane — formularzem kartoteki (raz), kreator przejmuje je jako „po”.
+  { typ: 'zmiana_danych_akcjonariusza', zadajacy: 'Anna', rola: 'akcjonariusz', plan: [['wybierz', 'Akcjonariusz', 'Testowa'], ['klik', 'Wpisz nowe dane'], ['wpisz', 'Miejscowość', 'Sopot'], ['zapiszOsobe']] },
   { typ: 'uprawnienie', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['pierwsza', 'Rodzaj'], ['pierwsza', 'Zakres'], ['wybierz', 'Seria akcji?', 'A'], ['kartoteka', 'Akcjonariusz?', 'Anna'], ['wpisz', 'Tytuł', 'Akcje uprzywilejowane co do głosu (dane fikcyjne)']] },
   { typ: 'ograniczenie', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['pierwsza', 'Zakres'], ['wybierz', 'Seria akcji?', 'A'], ['wpisz', 'Opis', 'Zbycie wymaga zgody spółki (dane fikcyjne)']] },
   { typ: 'zdarzenie_inne', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['wpisz', 'Opis zdarzenia', 'Zwyczajne walne zgromadzenie (dane fikcyjne)']] },

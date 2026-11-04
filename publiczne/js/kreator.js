@@ -873,41 +873,49 @@ function KrokOgraniczenie({ dane, ustawDane, spolka }) {
   );
 }
 
-function KrokZmianaDanychAkcjonariusza({ dane, ustawDane }) {
+/**
+ * D-102: zmiana danych akcjonariusza — akcjonariusz z rejestru; nowe dane wpisuje się raz, formularzem kartoteki
+ * (`PanelOsoby`). Kartoteka nie nadpisuje danych z rejestru (art. 300(33) § 1 pkt 5 KSH) — oddaje je tu jako „po”.
+ */
+function KrokZmianaDanychAkcjonariusza({ dane, ustawDane, spolka }) {
   const [osoba, ustawOsobe] = useState(null);
+  const [edycja, ustawEdycje] = useState(false);
   useEffect(() => {
-    if (dane.osoba_id) API.get(`/api/psa/osoby/${dane.osoba_id}`).then((o) => ustawOsobe(o.osoba)).catch(() => {});
+    if (!dane.osoba_id) { ustawOsobe(null); return; }
+    API.get(`/api/psa/osoby/${dane.osoba_id}`).then((o) => ustawOsobe(o.osoba)).catch(() => {});
   }, [dane.osoba_id]);
-
   const po = dane.po || {};
-  const ustawPo = (klucz, wartosc) => ustawDane({ ...dane, po: { ...po, [klucz]: wartosc } });
-  const POLA = [
-    ['email', 'E-mail'], ['telefon', 'Telefon'],
-    ['kod_pocztowy', 'Kod pocztowy'], ['miejscowosc', 'Miejscowość'],
-    ['ulica', 'Ulica'], ['nr_domu', 'Nr domu'], ['nr_lokalu', 'Nr lokalu'],
-    ['adres_doreczen', 'Adres do doręczeń'], ['adres_edoreczen', 'Adres do e-doręczeń'],
-  ];
-
+  const zmienione = Object.keys(po);
   return (
     <>
-      <Pole etykieta="Akcjonariusz" wymagane>
-        <WyborZKartoteki wartosc={dane.osoba_id} przyZmianie={(id) => ustawDane({ ...dane, osoba_id: id, po: {} })} />
+      <Pole etykieta="Akcjonariusz" wymagane podpowiedz="Akcjonariusz tej spółki.">
+        <select value={dane.osoba_id || ''} onChange={(z) => ustawDane({ ...dane, osoba_id: Number(z.target.value) || null, po: {} })}>
+          <option value="">— wybierz akcjonariusza —</option>
+          {zbywcyZRejestru(spolka).map((a) => <option key={a.osoba_id} value={a.osoba_id}>{a.oznaczenie}</option>)}
+        </select>
       </Pole>
-      {osoba && (
-        <>
-          <div className="fl" style={{ marginTop: 24 }}>Nowe dane</div>
-          <div className="siatka-2">
-            {POLA.map(([klucz, etykieta]) => (
-              <Pole key={klucz} etykieta={etykieta}>
-                <input
-                  type="text"
-                  value={po[klucz] ?? osoba[klucz] ?? ''}
-                  onChange={(z) => ustawPo(klucz, z.target.value)}
-                />
-              </Pole>
+      {osoba && (zmienione.length > 0 ? (
+        <table className="tbl">
+          <thead><tr><th>Dane</th><th>Dziś w rejestrze</th><th>Po wpisie</th></tr></thead>
+          <tbody>
+            {zmienione.map((k) => (
+              <tr key={k}><td>{ETYKIETY_POL_REJESTRU[k] || k}</td><td>{osoba[k] || '—'}</td><td><strong>{po[k] || '—'}</strong></td></tr>
             ))}
-          </div>
-        </>
+          </tbody>
+        </table>
+      ) : (
+        <div className="podpowiedz">Nowe dane wpisuje się raz — w formularzu kartoteki; wpis przeniesie je do rejestru.</div>
+      ))}
+      {osoba && (
+        <div><button type="button" className="btn btn-sm" onClick={() => ustawEdycje(true)}>{zmienione.length ? 'Popraw nowe dane' : 'Wpisz nowe dane'}</button></div>
+      )}
+      {edycja && osoba && (
+        <PanelOsoby
+          osoba={{ ...osoba, ...po }}
+          przyZamknieciu={() => ustawEdycje(false)}
+          przyZapisie={() => ustawEdycje(false)}
+          przyZmianieRejestrowej={(z) => { ustawEdycje(false); ustawDane({ ...dane, po: z.po }); }}
+        />
       )}
     </>
   );

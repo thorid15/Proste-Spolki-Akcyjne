@@ -601,6 +601,22 @@ function opiszZakresy(zakresy) {
  */
 function PrzydzialDoPotwierdzenia({ dane }) {
   if (!dane) return null;
+  // D-102: zmiana danych akcjonariusza — do potwierdzenia „dziś w rejestrze → po wpisie”.
+  if (dane.po && dane.przed) {
+    return (
+      <>
+        <div className="fl odstep-g">Do wpisu — zmiana danych: {dane.osoba_nazwa}</div>
+        <table className="tbl">
+          <thead><tr><th>Dane</th><th>Dziś w rejestrze</th><th>Po wpisie</th></tr></thead>
+          <tbody>
+            {Object.keys(dane.po).map((k) => (
+              <tr key={k}><td>{ETYKIETY_POL_REJESTRU[k] || k}</td><td>{dane.przed[k] || '—'}</td><td><strong>{dane.po[k] || '—'}</strong></td></tr>
+            ))}
+          </tbody>
+        </table>
+      </>
+    );
+  }
   const pozycje = dane.pozycje || [];
   if (pozycje.length === 0) return null;
 

@@ -261,6 +261,8 @@ const WYMAGANE_CO = {
 };
 function coGotowe(typ, dane) {
   const d = dane || {};
+  // D-102: zmiana danych — dopiero z nowymi danymi z formularza kartoteki.
+  if (typ === 'zmiana_danych_akcjonariusza' && !(d.po && Object.keys(d.po).length)) return false;
   return (WYMAGANE_CO[typ] || []).every((k) => d[k] !== undefined && d[k] !== null && String(d[k]).trim() !== '');
 }
 
