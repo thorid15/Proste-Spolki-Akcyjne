@@ -1,0 +1,33 @@
+# Mapa danych — gdzie wpisywane, przechowywane, pokazywane, kopiowane (Faza 1)
+
+> Źródło: schemat po migracjach (`server/migracje.js`, 69 migracji, odczyt `PRAGMA table_info` na bazie w pamięci),
+> formularze (`publiczne/js/*.js`). **Każda kopia i każde drugie miejsce wpisywania = ustalenie** (oznaczone ⚠ i numerem
+> ustalenia z `RAPORT-PRZEPLYWY.md`). Reguła 2: kartoteka (`psa_osoby`) i rejestr (`psa_zdarzenia` → stan) są jedynym źródłem.
+
+| Dana | Wpisywana (formularz) | Przechowywana | Pokazywana | Kopiowana / drugie miejsce |
+|---|---|---|---|---|
+| **Nazwisko i imię / firma osoby** | `FormularzOsoby` (kartoteka K13); `FormularzOsoby` w kroku „Akcjonariusze” wniosku (P3); edycja pozycji wniosku w kancelarii (`SzczegolAkcjonariusza`, K2); `NowyNabywca` w zbyciu (K5) | `psa_osoby.imie/nazwisko/nazwa`; `psa_wnioski_akcjonariusze.*` | kartoteka, kreatory (wybór), sprawa, kokpit, informacja z rejestru, pisma | ⚠ `psa_wnioski_akcjonariusze` → `psa_osoby` przy przyjęciu wniosku (kopia jednorazowa — dopuszczalna, ale dwa formularze: P3 i K2 edytują to samo); ⚠ `NowyNabywca` — trzeci formularz tej samej osoby (A-006); `psa_listy.odbiorca_nazwa` — migawka adresata listu (uzasadniona: dowód nadania) |
+| **Reprezentant spółki** (imię, nazwisko, PESEL, adres, e-mail) | wniosek 2/4 (P3); `#/spolki/nowa` 1/4 (K3a) | ⚠ `psa_spolki.reprezentant_*` i `psa_wnioski.reprezentant_*` — **poza kartoteką** | umowa o prowadzenie rejestru, PEP/RODO, kokpit | ⚠ dane osobowe i PESEL reprezentanta w dwóch tabelach i dwóch formularzach, nie w `psa_osoby`; AML reprezentanta nie korzysta z kartoteki (A-010) |
+| **Adres** (zamieszkania / siedziby / do doręczeń / e-doręczeń) | `PoleAdres` w `FormularzOsoby`, wniosek (reprezentant, akcjonariusze), `NowyNabywca`, `#/spolki/nowa` | `psa_osoby.ulica/miejscowosc/adres_doreczen/adres_edoreczen/rodzaj_adresu_rejestrowego`; spółka: `psa_spolki.*` | informacja z rejestru (wersja akcjonariusza — bez adresów innych, art. 300(35) § 1(1)), pisma, listy | `psa_listy.adres` — migawka (uzasadniona); ⚠ adres spółki wpisywany w P3 i K3a (A-009) |
+| **PESEL / data urodzenia** | `PoleTozsamosc` (kartoteka, wniosek), reprezentant (wniosek, nowa spółka), `NowyNabywca` | `psa_osoby.pesel/data_urodzenia/bez_pesel`; `psa_wnioski_akcjonariusze`; ⚠ `psa_spolki.reprezentant_pesel`, `psa_wnioski.reprezentant_pesel` | kartoteka (maskowany w listach), informacja dla spółki; nigdy w wersji akcjonariusza | jw. reprezentant; art. 30 ustawy zmieniającej — PESEL albo data urodzenia w nowych wpisach (D-076) |
+| **E-mail** | `FormularzOsoby`; konto portalu (P1/P2); „Moje oświadczenia” (adres **z kartoteki**, R4); wniosek; zgłoszenie wstępne | `psa_osoby.email` (źródło); `psa_konta.email` (login); `psa_oswiadczenia.email` (migawka przy oświadczeniu); `psa_zgloszenia.email`; `psa_spolki.email`, `reprezentant_email` | kartoteka, oświadczenia, pisma | ⚠ dwa adresy osoby: kartoteka i login (`psa_konta.email`) mogą się rozejść — dziś zgoda dotyczy adresu z kartoteki (R4 poprawka 1); migawka w `psa_oswiadczenia` uzasadniona (dowód, na jaki adres wyrażono zgodę) |
+| **Stan oświadczeń** (zgoda e-mail, powiadomienia automatyczne) | portal „Moje oświadczenia” (P10); kartoteka „Kontakt i oświadczenia” (K13: „W kancelarii” / „Pismem”); wniosek (pole zgody w `FormularzOsoby`) | `psa_oswiadczenia` (historia, D-092); ⚠ `psa_osoby.zgoda_email` (0/1) **i** `psa_osoby.zgoda_email_status` — dwie kolumny (migracja: „status źródłem prawdy, zgoda_email skrótem dla wzorów pism”) | `ZnacznikKontaktu` (7 plików), kartoteka, sprawa | ⚠ pochodna `zgoda_email` utrzymywana równolegle do statusu (A-011, kosmetyka danych — bez zmian w UI) |
+| **Liczba i numery akcji** | kreatory: `PozycjaKreatora` (liczba + „Numery akcji — ścieżka wyjątkowa”), zbycie (liczba; numery auto), `umorzenie`/`obciazenie`/`ograniczenie`/`zajecie` (liczba **i** pole „Numery akcji” obok) | `psa_stan_akcji` (wyliczany z `psa_zdarzenia`) | kokpit, informacja, sprawa (podgląd) | ⚠ w 4 typach numery wpisywane ręcznie obok liczby, choć dobór automatyczny istnieje w zbyciu (`dobierzAkcje`) (A-004) |
+| **Seria** | `KrokEmisja` (oznaczenie); wybór serii `WyborEmisji` (rejestr); zbycie — auto z doboru | `psa_emisje.seria` | wszędzie | — (sprawdzone: wniosek P3 nie zbiera liczby akcji ani serii — reguła 8 spełniona) |
+| **Pokrycie** | `PozycjaZalozycielska` („Wzmianka o pokryciu”); typ `pokrycie_akcji` | `psa_stan_akcji.pokryta` | informacja (art. 300(33) § 1 pkt 9), zbycie (pole zgody art. 300(40)) | — (D-089: domyślnie „brak informacji o pełnym pokryciu”) |
+| **Obciążenia** | `obciazenie`, `zajecie`, `prawo_glosu_zastawnika` | `psa_obciazenia` | kokpit, informacja | — |
+| **Ograniczenia rozporządzania** | `ograniczenie`, umowa spółki przy otwarciu (`Treść postanowienia umowy spółki`, terminy) | `psa_ograniczenia` | zbycie (warunkowe pola), informacja | — |
+| **Data wpływu** | K4 krok 2 (`PoleDaty`, domyślnie dziś); K5 auto; portal — auto (chwila zapłaty) | `psa_sprawy.data_wplywu` | sprawa, terminy (`ZnacznikTerminu`) | — |
+| **Podstawa wpisu** (rodzaj i data dokumentu, plik) | K4 krok 2; okno „Ustal / Popraw podstawę wpisu” (K6); K5 krok 2; portal P11 (tylko plik) | `psa_sprawy.dokument_rodzaj/dokument_data/notatka`; `psa_dokumenty` | sprawa, zawiadomienie | ⚠ trzy formularze podstawy (W8, A-003); z portalu przychodzi plik, ale rodzaj/data dokumentu wpisuje pracownik od nowa |
+| **Żądający** | K4 krok 2 (kartoteka + rola + interes prawny); K5 (domyślnie nabywca); portal — auto (konto) | `psa_sprawy.zadajacy_osoba_id/zadajacy_rola/zadajacy_opis` | sprawa, zawiadomienie § 7 | — |
+| **Dane spółki** (firma, adres, KRS, sąd, NIP, REGON, kapitał, daty) | P3 1/4 (z KRS + ręcznie); K3a 1/4 (z KRS + ręcznie); kokpit „Dane rejestrowe” (K10) | `psa_spolki`; `psa_wnioski` (przed przyjęciem); `psa_zgloszenia.nazwa_spolki`, `psa_przeniesienia.nazwa` | wszędzie | ⚠ dwa formularze wpisu (A-009); `psa_przeniesienia.nazwa` — kopia nazwy spółki obok `spolka_id` |
+| **Zdarzenie w łańcuchu** | — (wynik wpisu) | `psa_zdarzenia.dane_json`, `hash_poprzedni`, `hash` | historia, informacja | migawka danych w zdarzeniu — wymagana (integralność, art. 300(31) § 4; tylko odczyt) |
+
+## Wnioski do raportu
+
+1. **Osoby poza kartoteką:** reprezentant spółki żyje w `psa_spolki` i `psa_wnioski`, nie w `psa_osoby` — dane osobowe
+   wpisywane dwukrotnie (portal + kancelaria), AML reprezentanta osobno.
+2. **Trzy formularze osoby:** `FormularzOsoby`, `NowyNabywca`, pola reprezentanta.
+3. **Dwa formularze spółki:** wniosek P3 i `#/spolki/nowa` K3a — ten sam zestaw ~20 pól.
+4. **Trzy formularze podstawy wpisu** (K4, K6, K5).
+5. **Numery akcji obok liczby** w czterech typach, mimo że dobór automatyczny już jest (zbycie).
