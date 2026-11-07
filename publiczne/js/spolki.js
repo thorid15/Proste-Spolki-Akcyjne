@@ -33,15 +33,14 @@ const PUSTA_SPOLKA = {
   // Reprezentant — wszystkie dane w mianowniku, tak jak w dokumencie
   // tożsamości. Pisma nie odmieniają ich przez przypadki, tylko opisują
   // etykietą („imiona rodziców:", „działający jako:").
-  // D-101: reprezentant jako osoba w kartotece — dane osobowe i AML raz; w spółce zostaje funkcja,
-  // imiona rodziców i dokument okazany przy podpisie. Dawne pola osobowe — tylko gdy brak osoby.
+  // D-101: reprezentant jako osoba w kartotece — dane osobowe i AML raz; w spółce zostaje funkcja.
+  // D-108: imiona rodziców i dokument tożsamości — tylko do umowy, bez zapisu. Dawne pola osobowe — gdy brak osoby.
   reprezentant_osoba_id: null,
-  reprezentant_imie_nazwisko: '', reprezentant_rodzice: '', reprezentant_pesel: '',
+  reprezentant_imie_nazwisko: '', reprezentant_pesel: '',
   reprezentant_funkcja: '', reprezentant_reprezentacja: '', reprezentant_email: '',
   // B2/B3 — dowód i adres ustrukturyzowane (migracja 53); stare
   // `reprezentant_dowod`/`reprezentant_adres` zostają tylko do odczytu w
   // piśmie, gdy te pola są jeszcze puste (`kontekst-pisma.js`).
-  reprezentant_dowod_rodzaj: '', reprezentant_dowod_numer: '',
   reprezentant_kraj: 'Polska', reprezentant_kod_pocztowy: '', reprezentant_miejscowosc: '',
   reprezentant_ulica: '', reprezentant_nr_domu: '', reprezentant_nr_lokalu: '',
 };
@@ -635,7 +634,11 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
               <Pole etykieta="Data uchwały o wyborze" podpowiedz="art. 300(32) § 1 KSH">
                 <PoleDaty wartosc={dane.data_uchwaly_wyboru} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_uchwaly_wyboru: v }))} />
               </Pole>
-              <Pole etykieta="Data umowy o prowadzenie rejestru">
+              <Pole
+                etykieta="Data umowy o prowadzenie rejestru"
+                ostrzezenie={dane.data_uchwaly_wyboru && dane.data_umowy && dane.data_uchwaly_wyboru > dane.data_umowy
+                  ? 'Uchwała o wyborze jest późniejsza niż umowa — sprawdź daty (D-113).' : undefined}
+              >
                 <PoleDaty wartosc={dane.data_umowy} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_umowy: v }))} />
               </Pole>
               <Pole
@@ -677,23 +680,10 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
                 tresc={`Reprezentant wpisany wcześniej poza kartoteką: ${dane.reprezentant_imie_nazwisko}. Wybierz tę osobę z kartoteki (albo dodaj ją) — pisma wezmą dane z kartoteki.`}
               />
             )}
-            <div className="siatka-2">
-              <Pole etykieta="Funkcja">
-                <input type="text" {...pole('reprezentant_funkcja')} placeholder="np. Prezes Zarządu" />
-              </Pole>
-              <Pole etykieta="Imiona rodziców" podpowiedz="Do umowy o prowadzenie rejestru.">
-                <input type="text" {...pole('reprezentant_rodzice')} placeholder="np. Piotr i Anna" />
-              </Pole>
-            </div>
-            {/* Sposób reprezentacji NIE jest polem do wypełnienia — dochodzi z KRS („Pobierz z KRS” wyżej). */}
-            <PoleDowod
-              etykieta="Dowód tożsamości okazany przy podpisie"
-              rodzaj={dane.reprezentant_dowod_rodzaj}
-              numer={dane.reprezentant_dowod_numer}
-              przyZmianie={(latka) => ustawDane((p) => ({ ...p, ...latka }))}
-              idPrefiks="spolka-reprezentant"
-              klucze={{ rodzaj: 'reprezentant_dowod_rodzaj', numer: 'reprezentant_dowod_numer' }}
-            />
+            {/* D-108: imiona rodziców i dokument tożsamości — tylko przy wystawieniu umowy, bez zapisu. */}
+            <Pole etykieta="Funkcja">
+              <input type="text" {...pole('reprezentant_funkcja')} placeholder="np. Prezes Zarządu" />
+            </Pole>
 
             <div className="rozdzielacz" />
             <div className="card-h">Ograniczenia z umowy spółki</div>
@@ -825,7 +815,6 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
                   <option value="zwykla">zwykła</option>
                   <option value="uprzywilejowana">uprzywilejowana</option>
                   <option value="zalozycielska">założycielska</option>
-                  <option value="niema">niema</option>
                 </select>
               </Pole>
             </div>

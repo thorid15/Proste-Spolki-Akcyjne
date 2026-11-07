@@ -27,6 +27,8 @@ const zaproszenia = require('../logika/zaproszenia');
 
 const router = express.Router();
 
+const POLA_REPREZENTANTA_OSOBY = ['reprezentant_imie', 'reprezentant_nazwisko', 'reprezentant_pesel', 'reprezentant_funkcja'];
+
 const POLA_OSOBY = [
   'typ', 'nazwisko', 'imie', 'nazwa', 'plec', 'pesel', 'data_urodzenia', 'nip', 'regon',
   'numer_w_rejestrze', 'nazwa_rejestru', 'kraj', 'kod_pocztowy', 'miejscowosc', 'ulica',
@@ -36,9 +38,36 @@ const POLA_OSOBY = [
   ...akcjonariuszLogika.POLA_USTAWOWE,
   // Sesja 8, blok C (przeglad okresowy, beneficjent rzeczywisty, oswiadczenie PEP):
   'aml_data_przegladu', 'beneficjent_rzeczywisty_id', 'pep_oswiadczenie', 'pep_oswiadczenie_data',
+  // D-115 (P-016): reprezentant akcjonariusza-osoby prawnej; D-116 (P-017): lista beneficjentów rzeczywistych.
+  ...POLA_REPREZENTANTA_OSOBY, 'beneficjenci_json',
 ];
 
-function wyczysc(cialo) {
+/**
+ * D-116 (P-017): `beneficjenci` (lista id z kartoteki) → `beneficjenci_json`; pierwszy zostaje też
+ * w `beneficjent_rzeczywisty_id` (zgodność wsteczna). Samo `beneficjent_rzeczywisty_id` — lista z jednego.
+ */
+function zBeneficjentami(cialo) {
+  if (Array.isArray(cialo.beneficjenci)) {
+    const ids = [...new Set(cialo.beneficjenci.map(Number).filter((x) => Number.isInteger(x) && x > 0))];
+    return { ...cialo, beneficjenci_json: ids.length ? JSON.stringify(ids) : null, beneficjent_rzeczywisty_id: ids[0] ?? null };
+  }
+  if (cialo.beneficjent_rzeczywisty_id !== undefined) {
+    const id = cialo.beneficjent_rzeczywisty_id === '' || cialo.beneficjent_rzeczywisty_id === null ? null : Number(cialo.beneficjent_rzeczywisty_id);
+    return { ...cialo, beneficjenci_json: id ? JSON.stringify([id]) : null };
+  }
+  return cialo;
+}
+
+function listaBeneficjentow(osoba) {
+  try {
+    const lista = JSON.parse((osoba && osoba.beneficjenci_json) || 'null');
+    if (Array.isArray(lista)) return lista;
+  } catch (e) { /* stary zapis */ }
+  return osoba && osoba.beneficjent_rzeczywisty_id ? [osoba.beneficjent_rzeczywisty_id] : [];
+}
+
+function wyczysc(cialoWejscie) {
+  const cialo = zBeneficjentami(cialoWejscie || {});
   const wynik = {};
   for (const pole of POLA_OSOBY) {
     if (cialo[pole] === undefined) continue;
@@ -204,6 +233,7 @@ function zOznaczeniem(osoba) {
     jawny_identyfikator: maskowanie.jawnyIdentyfikator(osoba),
     // Sygnal, NIE blokada (blok C1) - patrz logika/aml.js.
     wymaga_przegladu_aml: aml.wymagaPrzegladu(osoba, czas.dzisIso()),
+    beneficjenci: listaBeneficjentow(osoba), // D-116
   };
 }
 
@@ -258,7 +288,7 @@ router.post(
   asy((zad, odp) => {
     const dane = wyczysc(zad.body || {});
     sprawdzOsobe(dane);
-    sprawdzBeneficjenta(dane.beneficjent_rzeczywisty_id, null, dane.typ);
+    for (const b of listaBeneficjentow(dane)) sprawdzBeneficjenta(b, null, dane.typ);
     // PRZED insertem - rekord jeszcze nie istnieje, wiec nie trzeba go
     // wykluczac z wyniku samego siebie (patrz PUT nizej, gdzie trzeba).
     const kolizje = ostrzezeniaKolizji(dane);
@@ -339,8 +369,8 @@ router.put(
       : null;
     if (zmianaRejestrowa) for (const k of POLA_DANYCH_REJESTRU) delete dane[k];
     sprawdzOsobe(scalone);
-    if ('beneficjent_rzeczywisty_id' in dane) {
-      sprawdzBeneficjenta(dane.beneficjent_rzeczywisty_id, id, scalone.typ);
+    if ('beneficjenci_json' in dane || 'beneficjent_rzeczywisty_id' in dane) {
+      for (const b of listaBeneficjentow(scalone)) sprawdzBeneficjenta(b, id, scalone.typ);
     }
 
     // D-092 (przegląd R4 #2): dawna flaga `zgoda_email` to ten sam stan co status — jedna reguła.
@@ -435,7 +465,7 @@ router.post(
 
     let wynik;
     try {
-      wynik = await zaproszenia.wyslijAkcjonariuszowi(db(), { osobaId: id, email, autor: autor(zad) });
+      wynik = await zaproszenia.wyslijAkcjonariuszowi(db(), { osobaId: id, email, autor: autor(zad), tylkoLink: Boolean((zad.body || {}).tylko_link) });
     } catch (e) {
       throw bledneZadanie(e.message);
     }

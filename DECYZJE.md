@@ -1612,6 +1612,60 @@
   11. **D-105** Numery akcji dobierane automatycznie we wszystkich typach (jak D-091), ręcznie za przyciskiem.
   12. **D-106** PESEL ze złą sumą kontrolną — ostrzeżenie bez blokady (cudzoziemcy, stare nadania), pokazane także przy zapisie.
 
+### D-107–D-111 — Rozstrzygnięcia po etapie 4 analizy przepływów (Łukasz, 7.11.2026)
+
+- Obszar: kartoteka, reprezentant spółki, podstawa wpisu, przeniesienie rejestru (`docs/analiza/RAPORT-PRZEPLYWY.md` § 9 „Do decyzji”)
+- Decyzje:
+  1. **D-107** Zmiana danych akcjonariusza (D-102) obejmuje łącznie wpisy we wszystkich spółkach, w których osoba ma akcje:
+     jeden wpis „Zmiana danych akcjonariusza” zapisuje to samo zdarzenie (przed → po) w rejestrze każdej z tych spółek,
+     w jednej transakcji, a dopiero potem zmienia kartotekę. Skutek w kodzie: `server/rejestr.js` (`_wykonajWpis`,
+     `inneSpolkiAkcjonariusza`), podgląd zapowiada wpis łączny, okno propozycji w kartotece — jeden przycisk.
+  2. **D-108** Imiona rodziców i dokument tożsamości reprezentanta spółki nie są zapisywane ani w danych spółki, ani w kartotece —
+     potrzebne są tylko do umowy o prowadzenie rejestru: podaje się je we wniosku (umowa z wniosku) albo przy wystawieniu wzoru 01
+     na żądanie. Skutek w kodzie: pola usunięte z formularza spółki i z `POLA_SPOLKI` (nie przechodzą z wniosku do spółki);
+     wzór 01 bierze je z formularza wystawienia. Wartości zapisane w spółkach przed tą decyzją zostają w bazie nieużywane.
+  3. **D-109** Katalog rodzajów dokumentu podstawy wpisu bez zmian (bez „umowy zastawu”, „oświadczenia”, „zawiadomienia organu”) —
+     dla tych typów domyślnie „inny dokument”.
+  4. **D-110** Pole „Okres wypowiedzenia (jeśli znany)” w zgłoszeniu przeniesienia rejestru zostaje (A-029).
+  5. **D-111** Każda spółka trafia do rejestru przez nowo przyjęty wniosek — reprezentantów spółek już zapisanych nie przenosi się
+     do kartoteki (bez migracji danych); D-101 działa od przyjęcia wniosku.
+  6. Uzupełnienie D-108 (7.11.2026): kopie imion rodziców i dowodów reprezentantów zapisane w spółkach i w przyjętych wnioskach
+     usunięte migracją 71; po przyjęciu wniosku usuwane od razu (dane są w podpisanej umowie o prowadzenie rejestru).
+
+### D-112–D-124 — Odpowiedzi na pytania P-001–P-017 i ustalenia po etapie 4 (Łukasz, 7.11.2026)
+
+- Obszar: AML, portal, rejestr, opłaty, dziennik dostępu (`testy-audyt/PYTANIA-DO-LUKASZA.md`)
+- Decyzje:
+  1. **D-112 (P-002)** Akcje nieme — skutek zależy od umowy spółki; system ich nie rozróżnia (opcja „niema” usunięta z wyboru
+     rodzaju akcji), pracownik opisuje to w „Opis” emisji. Liczba głosów bez zmian.
+  2. **D-113 (P-005)** Uchwała o wyborze późniejsza niż umowa oraz zmiana daty zawartej umowy — ostrzeżenie, nie blokada
+     (`POST/PUT /api/psa/spolki` zwraca `ostrzezenia`; w otwarciu rejestru — ostrzeżenie przy polu).
+  3. **D-114 (P-006)** Emisja założycielska następuje z chwilą rejestracji spółki — jej data wpisu do KRS to data rejestracji;
+     kolejne emisje — z datą zmiany, nie wcześniejszą niż rejestracja. Odstępstwo — ostrzeżenie (`walidacje.js`).
+  4. **D-115 (P-016)** Za akcjonariusza-osobę prawną działa „Reprezentant” zgodnie z jej umową — pola osoby fizycznej (imię,
+     nazwisko, PESEL, funkcja) we wniosku i w kartotece; wpisuje klient, kancelaria potwierdza przy weryfikacji (migracja 71).
+  5. **D-116 (P-017)** Beneficjentów rzeczywistych może być kilku — domyślnie jedno pole, „Dodaj beneficjenta” dokłada kolejne
+     (`beneficjenci_json`; pierwszy zostaje w `beneficjent_rzeczywisty_id`).
+  6. **D-117 (P-013, P-014)** Status AML „nie wykonano”, przeterminowany przegląd AML i brak beneficjenta nie blokują wpisu
+     (ostrzeżenia). Blokuje tylko „niemożliwe do zastosowania” (D-010).
+  7. **D-118 (P-001)** Przy wpisie na rzecz osoby prawnej beneficjent rzeczywisty jest wymagany — wskazuje go sama spółka
+     (oświadczenie); jego brak to ostrzeżenie przy wpisie.
+  8. **D-119 (P-003, P-004)** Zaproszenie po zgłoszeniu idzie automatycznie (bez zmian). Dostęp do portalu domyślnie ma tylko
+     wnioskodawca; innego akcjonariusza zaprasza się na jego zgłoszenie — „Zaproś nowego akcjonariusza” w kokpicie spółki
+     generuje link do przekazania e-mailem (bez automatycznej wysyłki). Zaproszenie z kartoteki osoby usunięte — jedna ścieżka.
+  9. **D-120 (P-007)** Otwarcie rejestru nie jest odrębną opłatą: wszystkie wpisy założycielskie (emisja, akcjonariusze) to jeden
+     wpis — przy założeniu 1200 zł netto za pierwszy rok prowadzenia i 100 zł netto za pierwszy wpis. Zgodne z kodem
+     (`oplaty.naliczOtwarcieRejestru`); przejęcie rejestru — bez opłaty za przejęcie (D-085).
+  10. **D-121 (P-008)** Kalendarzowe „naliczenie roczne” usunięte (stan kodu potwierdzony testem Z-100/P-008).
+  11. **D-122 (P-009)** Dziennik dostępu (zakres jak D-041): retencja 5 lat od wpisu (jak dokumentacja środków AML, art. 49
+      ustawy AML; rozliczalność RODO). Harmonogram dobowy usuwa starsze wpisy; młodszych nadal nie da się usunąć (wyzwalacz).
+  12. **D-123 (P-010, P-012)** Dokumenty RODO i PEP dla akcjonariuszy dochodzących po założeniu spółki przygotowuje pracownik
+      (bez automatu). Zdalna identyfikacja (dane i skan przekazane przez klienta) spełnia wymogi AML.
+  13. **D-124** „Dodaj spółkę” w kancelarii zostaje jako ścieżka zapasowa (D-111 — zasadą jest przyjęty wniosek).
+- Propozycja do decyzji (Łukasz, „może warto”): AML stosować dopiero, gdy suma wartości akcji w spółce przekracza
+  równowartość 15 000 EUR — dziś procedurę AML włącza się ręcznie przełącznikiem przy spółce (etap 3.1). Wymaga ustalenia,
+  z czego liczyć wartość (kapitał akcyjny, cena emisyjna, cena z umowy zbycia).
+
 ---
 
 ## Decyzje otwarte
@@ -1620,27 +1674,27 @@
 > `testy-audyt/PYTANIA-DO-LUKASZA.md` albo bezpośrednio), kolejna sesja dokumentacyjna przenosi
 > odpowiedź tutaj jako nowy wpis `D-0xx` w sekcji „Decyzje”.
 
-### Z `testy-audyt/PYTANIA-DO-LUKASZA.md` — wszystkie 15, bez odpowiedzi na dziś (2026-09-18)
+### Z `testy-audyt/PYTANIA-DO-LUKASZA.md` — P-001–P-017 (odpowiedzi 7.11.2026: D-112–D-123)
 
 | ID | Skrót pytania | Obszar | Stan po sesji napraw (2026-09-19) |
 |---|---|---|---|
-| P-001 | Czy przy wpisie transakcyjnym na rzecz osoby prawnej wymagamy identyfikacji beneficjenta rzeczywistego? | AML | otwarte |
-| P-002 | Czy akcja `niema` ma być automatycznie pozbawiona głosu, czy zależy to od umowy spółki? | rejestr | otwarte |
-| P-003 | Czy automatyczne zaproszenie „od razu” po zgłoszeniu ma zostać, czy przywrócić ocenę kancelarii? | portal (patrz D-038) | otwarte |
-| P-004 | Jaki ma być docelowy sposób nadawania dostępu portalowego akcjonariuszom innym niż wnioskodawca? | portal | otwarte |
-| P-005 | Czy niezgodność dat uchwała/umowa i nadpisanie umowy bez śladu mają być blokadą czy ostrzeżeniem? | rejestr | otwarte |
-| P-006 | Jaka ma być reguła walidacji krzyżowej `data_wpisu_krs` emisji względem daty rejestracji spółki? | rejestr | otwarte |
-| P-007 | Czy stan otwarcia to wpisy na żądanie (każdy odpłatny), czy tylko opłata za prowadzenie? | opłaty | otwarte |
-| P-008 | Czy martwy w UI endpoint `/naliczenie-roczne` ma zostać usunięty, zabezpieczony, czy zostać bez zmian? | opłaty | otwarte |
-| P-009 | Czy dziennik dostępu ma objąć też zwykłe odczyty portalowe? | dziennik dostępu | **rozstrzygnięte → D-041** (tak, objęto); okres retencji nadal otwarty |
-| P-010 | Jak naprawić rozjazd pól PEP przy przejęciu wniosku; czy dokumenty RODO/PEP mają powstawać też dla akcjonariuszy dochodzących po założeniu spółki? | AML / dane osobowe | **częściowo → D-041** (mapowanie PEP naprawione); rozszerzenie RODO/PEP (Z-153) nadal otwarte |
+| P-001 | Czy przy wpisie transakcyjnym na rzecz osoby prawnej wymagamy identyfikacji beneficjenta rzeczywistego? | AML | **rozstrzygnięte → D-118** |
+| P-002 | Czy akcja `niema` ma być automatycznie pozbawiona głosu, czy zależy to od umowy spółki? | rejestr | **rozstrzygnięte → D-112** |
+| P-003 | Czy automatyczne zaproszenie „od razu” po zgłoszeniu ma zostać, czy przywrócić ocenę kancelarii? | portal (patrz D-038) | **rozstrzygnięte → D-119** |
+| P-004 | Jaki ma być docelowy sposób nadawania dostępu portalowego akcjonariuszom innym niż wnioskodawca? | portal | **rozstrzygnięte → D-119** |
+| P-005 | Czy niezgodność dat uchwała/umowa i nadpisanie umowy bez śladu mają być blokadą czy ostrzeżeniem? | rejestr | **rozstrzygnięte → D-113** |
+| P-006 | Jaka ma być reguła walidacji krzyżowej `data_wpisu_krs` emisji względem daty rejestracji spółki? | rejestr | **rozstrzygnięte → D-114** |
+| P-007 | Czy stan otwarcia to wpisy na żądanie (każdy odpłatny), czy tylko opłata za prowadzenie? | opłaty | **rozstrzygnięte → D-120** |
+| P-008 | Czy martwy w UI endpoint `/naliczenie-roczne` ma zostać usunięty, zabezpieczony, czy zostać bez zmian? | opłaty | **rozstrzygnięte → D-121** |
+| P-009 | Czy dziennik dostępu ma objąć też zwykłe odczyty portalowe? | dziennik dostępu | **rozstrzygnięte → D-041** (tak, objęto); retencja → D-122 (5 lat) |
+| P-010 | Jak naprawić rozjazd pól PEP przy przejęciu wniosku; czy dokumenty RODO/PEP mają powstawać też dla akcjonariuszy dochodzących po założeniu spółki? | AML / dane osobowe | **częściowo → D-041** (mapowanie PEP naprawione); RODO/PEP po założeniu — ręcznie (D-123) |
 | P-011 | Czy „stan na” z dokładnością do minuty ma wrócić do UI (patrz D-032); czy `TZ` serwera ma być programowo wymuszony? | rejestr / interfejs | **rozstrzygnięte → D-042, D-050** (UI: tylko dzień — D-050 zastępuje D-043; `TZ` — D-042) |
-| P-012 | Czy zdalna identyfikacja akcjonariusza (dane + opcjonalny skan wgrywany przez pracownika) spełnia wymogi AML? | AML | częściowo — mechanizm samodzielnego wgrywania skanu przez akcjonariusza dodany (D-041); ocena PRAWNA wymogów AML nadal otwarta |
-| P-013 | Czy status AML `brak` powinien blokować wpis tak jak `niemozliwe` (patrz D-010)? | AML | otwarte (świadomie nietknięte — patrz uzupełnienie D-010) |
-| P-014 | Czy dezaktualizacja AML i brak beneficjenta rzeczywistego mają blokować wpis? | AML | otwarte (świadomie nietknięte) |
+| P-012 | Czy zdalna identyfikacja akcjonariusza (dane + opcjonalny skan wgrywany przez pracownika) spełnia wymogi AML? | AML | częściowo — mechanizm samodzielnego wgrywania skanu przez akcjonariusza dodany (D-041); spełnia AML → D-123 |
+| P-013 | Czy status AML `brak` powinien blokować wpis tak jak `niemozliwe` (patrz D-010)? | AML | **rozstrzygnięte → D-117** |
+| P-014 | Czy dezaktualizacja AML i brak beneficjenta rzeczywistego mają blokować wpis? | AML | **rozstrzygnięte → D-117** |
 | P-015 | Czy potrzebny jest mechanizm oznaczania danych jako testowe/demo na produkcji? | operacyjne | **rozstrzygnięte → D-044** (nie, niepotrzebny) |
-| P-016 | Kto fizycznie działa (podpisuje) za akcjonariusza-osobę prawną — brak pola reprezentanta akcjonariusza | AML / dokumenty (sesja frontendowa v2, B11) | otwarte |
-| P-017 | Czy `beneficjent_rzeczywisty_id` (pojedyncze pole) wystarcza przy więcej niż jednym beneficjencie rzeczywistym | AML (sesja frontendowa v2, B11) | otwarte |
+| P-016 | Kto fizycznie działa (podpisuje) za akcjonariusza-osobę prawną — brak pola reprezentanta akcjonariusza | AML / dokumenty (sesja frontendowa v2, B11) | **rozstrzygnięte → D-115** |
+| P-017 | Czy `beneficjent_rzeczywisty_id` (pojedyncze pole) wystarcza przy więcej niż jednym beneficjencie rzeczywistym | AML (sesja frontendowa v2, B11) | **rozstrzygnięte → D-116** |
 
 Pełny kontekst i warianty odpowiedzi dla każdego: `testy-audyt/PYTANIA-DO-LUKASZA.md`.
 

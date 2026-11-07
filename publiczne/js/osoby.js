@@ -92,72 +92,15 @@ function SekcjaSkanowAml({ osobaId, spolkaId }) {
         </ul>
       )}
       <div className="siatka-3">
-        <select value={typDokumentu} onChange={(z) => ustawTypDokumentu(z.target.value)}>
+        <select aria-label="Rodzaj dokumentu tożsamości" value={typDokumentu} onChange={(z) => ustawTypDokumentu(z.target.value)}>
           {TYPY_DOKUMENTU_AML.map((t) => <option key={t.wartosc} value={t.wartosc}>{t.etykieta}</option>)}
         </select>
         <PoleDaty wartosc={retencjaDo} przyZmianie={ustawRetencjaDo} />
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(z) => ustawPlik(z.target.files[0] || null)} />
+        <input type="file" aria-label="Skan dokumentu tożsamości" accept=".pdf,.jpg,.jpeg,.png" onChange={(z) => ustawPlik(z.target.files[0] || null)} />
       </div>
       <button className="btn btn-maly" onClick={wgraj} disabled={!plik || wgrywanie} style={{ marginTop: 8 }}>
         {wgrywanie ? 'Przesyłanie…' : 'Dodaj skan'}
       </button>
-    </Pole>
-  );
-}
-
-/**
- * Naprawa Z-006/P-004 — zaproszenie akcjonariusza do portalu, akcja przy
- * osobie w kartotece (widoczna tylko, gdy osoba JEST akcjonariuszem
- * przynajmniej jednej spółki — `spolkiOsoby` z `GET /:id/spolki`).
- * E-mail operacyjny konta jest ODRĘBNY od e-maila w treści rejestru
- * (`dane.email` na formularzu wyżej, wymaga osobnej zgody — Z-157), więc
- * podpowiadamy go tylko jako punkt startowy, nie podstawiamy automatycznie.
- */
-function SekcjaZaproszeniaPortal({ osobaId, emailPodpowiedz }) {
-  const [email, ustawEmail] = useState(emailPodpowiedz || '');
-  const [wysylanie, ustawWysylanie] = useState(false);
-  const [wynik, ustawWynik] = useState(null);
-  const [blad, ustawBlad] = useState(null);
-
-  async function zapros() {
-    ustawWysylanie(true);
-    ustawBlad(null);
-    ustawWynik(null);
-    try {
-      const odpowiedz = await API.post(`/api/psa/osoby/${osobaId}/zapros-do-portalu`, { email });
-      ustawWynik(odpowiedz);
-    } catch (e) {
-      ustawBlad(e.message);
-    } finally {
-      ustawWysylanie(false);
-    }
-  }
-
-  return (
-    <Pole
-      etykieta="Zaproszenie do portalu"
-      podpowiedz="Adres OPERACYJNY konta portalowego — niezależny od e-maila w rejestrze i jego zgody (pole „Adres e-mail” wyżej)."
-    >
-      <div className="rzad" style={{ gap: 8 }}>
-        <input type="text" value={email} onChange={(z) => ustawEmail(z.target.value)} placeholder="adres@przyklad.pl" style={{ flex: 1 }} />
-        <button className="btn btn-maly btn-glowny" onClick={zapros} disabled={!email.trim() || wysylanie}>
-          {wysylanie ? 'Wysyłanie…' : 'Zaproś do portalu'}
-        </button>
-      </div>
-      <Komunikat odmiana="blad" tresc={blad} />
-      {wynik && wynik.juz_aktywne && (
-        <Komunikat odmiana="info" tresc="Konto na ten adres jest już aktywne — akcjonariusz ma się jak zalogować, nie trzeba nowego zaproszenia." />
-      )}
-      {wynik && !wynik.juz_aktywne && wynik.email_wyslany && (
-        <Komunikat odmiana="ok" tresc="Zaproszenie wysłane e-mailem." />
-      )}
-      {wynik && <PrzyciskLinkuTestowego link={wynik.link_testowy} />}
-      {wynik && !wynik.juz_aktywne && !wynik.email_wyslany && wynik.link_aktywacyjny && (
-        <Komunikat
-          odmiana="uwaga"
-          tresc={<>Wysyłka e-mail nie jest skonfigurowana — przekaż link ręcznie: <code>{wynik.link_aktywacyjny}</code></>}
-        />
-      )}
     </Pole>
   );
 }
@@ -173,9 +116,40 @@ function SekcjaZaproszeniaPortal({ osobaId, emailPodpowiedz }) {
  * zakładać drugą (reguła domenowa nr 10, D-042).
  */
 /**
+ * D-116 (P-017): beneficjenci rzeczywiści osoby prawnej — domyślnie jedno pole, „Dodaj beneficjenta” dokłada kolejne.
+ * Wskazuje ich sama spółka (D-118); brak to ostrzeżenie przy wpisie, nie blokada.
+ */
+function ListaBeneficjentow({ lista, przyZmianie, wyklucz }) {
+  const wybrani = lista.filter(Boolean);
+  return (
+    <Pole etykieta="Beneficjenci rzeczywiści" podpowiedz="Osoby fizyczne sprawujące kontrolę nad podmiotem (art. 2 ust. 2 pkt 1 ustawy AML) — wskazuje je spółka.">
+      <div className="pion" style={{ gap: 'var(--od-8)' }}>
+        {lista.map((id, i) => (
+          <div key={i} className="rzad" style={{ gap: 8, alignItems: 'center' }}>
+            <div style={{ flex: 1 }}>
+              <WyborZKartoteki
+                wartosc={id}
+                typFiltr="fizyczna"
+                wyklucz={[...wyklucz, ...wybrani.filter((x) => x !== id)]}
+                placeholder="Szukaj osoby fizycznej w kartotece…"
+                przyZmianie={(nowy) => przyZmianie(lista.map((x, j) => (j === i ? nowy : x)))}
+              />
+            </div>
+            {lista.length > 1 && (
+              <button type="button" className="btn btn-maly btn-cichy" onClick={() => przyZmianie(lista.filter((_, j) => j !== i))}>Usuń</button>
+            )}
+          </div>
+        ))}
+        <div><button type="button" className="btn btn-sm" onClick={() => przyZmianie([...lista, null])}>Dodaj beneficjenta</button></div>
+      </div>
+    </Pole>
+  );
+}
+
+/**
  * D-102: zmiana danych z rejestru (art. 300(33) § 1 pkt 5 KSH) osoby z akcjami — kartoteka ich nie nadpisuje,
  * tylko proponuje wpis „Zmiana danych akcjonariusza”: sprawa z wypełnionymi danymi (przed → po), otwarta od razu
- * w „Sprawdzeniu i wpisie”. Kartoteka jest wspólna — wpis zmienia dane osoby we wszystkich rejestrach.
+ * w „Sprawdzeniu i wpisie”. D-107: jeden wpis obejmuje łącznie rejestry wszystkich spółek, w których osoba ma akcje.
  */
 function PropozycjaZmianyDanych({ osoba, zmiana, przyZamknieciu }) {
   const [pracuje, ustawPracuje] = useState(false);
@@ -206,13 +180,13 @@ function PropozycjaZmianyDanych({ osoba, zmiana, przyZamknieciu }) {
         Zmienione dane ({Object.keys(zmiana.po).map((k) => ETYKIETY_POL_REJESTRU[k] || k).join(', ')}) są wpisane do rejestru akcjonariuszy —
         zmienia je wpis (art. 300(33) § 1 pkt 5 KSH). Pozostałe zmiany zapisano w kartotece.
       </p>
-      {zmiana.spolki.length > 1 && <p className="male wyciszony">Kartoteka jest wspólna — wpis w jednej spółce zmieni dane osoby we wszystkich rejestrach.</p>}
-      <div className="pion" style={{ gap: 'var(--od-8)' }}>
-        {zmiana.spolki.map((s) => (
-          <button key={s.id} type="button" className="btn btn-glowny" disabled={pracuje} onClick={() => zaloz(s.id)}>
-            {pracuje ? 'Zakładanie sprawy…' : `Załóż wpis zmiany danych — ${s.nazwa}`}
-          </button>
-        ))}
+      {zmiana.spolki.length > 1 && (
+        <p className="male wyciszony">Wpis obejmie łącznie rejestry spółek: {zmiana.spolki.map((s) => s.nazwa).join(', ')}.</p>
+      )}
+      <div>
+        <button type="button" className="btn btn-glowny" disabled={pracuje} onClick={() => zaloz(zmiana.spolki[0].id)}>
+          {pracuje ? 'Zakładanie sprawy…' : 'Załóż wpis zmiany danych'}
+        </button>
       </div>
     </Modal>
   );
@@ -237,8 +211,8 @@ function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej
   const poczatkowe = useRef(JSON.stringify(dane));
   const zmienione = () => JSON.stringify(dane) !== poczatkowe.current;
   useBlokadaWyjscia(() => zmienione() && !zapisywanie && !zmianaRejestrowa);
-  function anuluj() {
-    if (zmienione() && !window.confirm('Zamknąć bez zapisania wprowadzonych danych?')) return;
+  async function anuluj() {
+    if (zmienione() && !(await potwierdz({ tytul: 'Niezapisane dane', tresc: 'Zamknąć bez zapisania wprowadzonych danych?', akcja: 'Zamknij bez zapisania', zamknij: 'Wróć do formularza', niebezpieczna: true }))) return;
     przyZamknieciu();
   }
 
@@ -436,9 +410,6 @@ function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej
         <textarea {...pole('aml_notatka')} style={{ minHeight: 70 }} />
       </Pole>
 
-      {edycja && spolkiOsoby.length > 0 && (
-        <SekcjaZaproszeniaPortal osobaId={osoba.id} emailPodpowiedz={dane.email} />
-      )}
 
       {edycja && spolkiOsoby.length > 0 && (
         <Pole
@@ -468,18 +439,11 @@ function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej
       ) : (
         <>
           {dane.typ === 'prawna' && (
-            <Pole
-              etykieta="Beneficjent rzeczywisty"
-              podpowiedz="Osoba fizyczna sprawująca kontrolę nad podmiotem (art. 2 ust. 2 pkt 1 ustawy AML)."
-            >
-              <WyborZKartoteki
-                wartosc={dane.beneficjent_rzeczywisty_id}
-                przyZmianie={(id) => zmien({ beneficjent_rzeczywisty_id: id })}
-                typFiltr="fizyczna"
-                wyklucz={edycja ? [osoba.id] : []}
-                placeholder="Szukaj osoby fizycznej w kartotece…"
-              />
-            </Pole>
+            <ListaBeneficjentow
+              lista={dane.beneficjenci && dane.beneficjenci.length ? dane.beneficjenci : [dane.beneficjent_rzeczywisty_id || null]}
+              przyZmianie={(lista) => zmien({ beneficjenci: lista })}
+              wyklucz={edycja ? [osoba.id] : []}
+            />
           )}
 
           <div className="siatka-2">

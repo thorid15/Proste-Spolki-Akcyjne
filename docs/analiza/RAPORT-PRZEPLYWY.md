@@ -378,6 +378,7 @@ przycisk „Wyślij powiadomienie” jest ukryty, dopóki stan listów się nie 
 | 2 | D-098 (sprawa z portalu bez „Rozpocznij weryfikację”), D-104 (adresat powiadomienia domyślny), A-013 (charakter żądającego domyślny), D-099 (e-mail akcjonariusza tylko przy zgodzie; zastępuje Z-006/P-004 — spójne z D-083), D-100 („Zbycie akcji” w interfejsie), A-033 (przyciski przeniesienia nieaktywne, gdy błąd pewny), A-034 (wiersze list jako łącza — klawiatura), A-035 (`min`/`max` daty także przy wpisaniu z klawiatury; „Data nadania” — `PoleDaty`), D-106 (ostrzeżenie PESEL przy zapisie) | **wdrożone** |
 | 3 | D-096 (spółka jako żądający bez kartoteki), D-095 (protokół przejęcia automatycznie przy otwarciu, skrót w PRZEJĘCIU), D-105 (numery akcji za przyciskiem „Wybierz numery ręcznie”) | **wdrożone** |
 | 4 | D-097 (jeden kreator wpisu dla wszystkich typów), D-101 (reprezentant w kartotece), D-102 (zmiana adresu jedną drogą) oraz A-002, A-005, A-006, A-016 (reszta), A-019–A-022, A-025–A-027, A-030–A-032, A-037 | **wdrożone** (4.11.2026) — szczegóły niżej |
+| 5 | Dostępność (axe: `label`, `select-name`), A-015 (akcjonariusz z rejestru), A-017 (okna aplikacji zamiast `confirm`/`alert`), A-021 (jeden pasek akcji), znacznik kontaktu we wniosku, A-012; decyzje D-107–D-124 | **wdrożone** (7.11.2026) — axe w scenariuszach e2e: ok. 400 → 0; otwarte: cel „1 ekran” kreatora, próg AML 15 000 EUR (propozycja) |
 
 Testy nowych zachowań: `testy/wdrozenie-analizy.test.js` (D-103, D-104, A-013, D-100), `testy/wpis-zbycia-logika.test.js` (B-005),
 `testy/przeniesienie-stany.test.js` (D-095), `testy/wniosek-http.test.js` (D-099) oraz scenariusze e2e (B-001, B-003, B-004, B-006,
@@ -417,17 +418,13 @@ e-mail „do zaproszenia”), bez wpisu w `DECYZJE.md`; D-099 ją zastępuje.
 Ekrany i przejścia kreatora zostają 3 / 3 — jak w zbyciu: po „Podstawie” adres zmienia się z `#/spolki/:id/zdarzenie` na `#/sprawy/:id`
 (ten sam kreator, krok 3). Cel „1 ekran” z § 1 wymagałby pozostania na jednym adresie — możliwe bez zmian serwera, do decyzji.
 
-**Do decyzji (wynikło przy wdrożeniu):**
-1. **D-102 — kartoteka wspólna dla wszystkich spółek.** Wpis „Zmiana danych akcjonariusza” zmienia rekord osoby (`psa_osoby`), więc dane
-   zmieniają się we wszystkich rejestrach, w których osoba ma akcje — także bez wpisu w rejestrze drugiej spółki (model sprzed etapu 4).
-   Okno propozycji to mówi; czy przy kilku spółkach zakładać wpis w każdej (wymaga zmiany porównania „przed/po” w serwerze)?
-2. **D-101 — dowód osobisty i imiona rodziców reprezentanta zostały w spółce** (kartoteka nie ma tych pól; dokument okazany przy podpisie
-   umowy). Przenieść do kartoteki — rozszerzenie `psa_osoby` i formularza osoby.
-3. **A-005 — katalog rodzajów dokumentu** nie ma „umowy zastawu / użytkowania”, „oświadczenia akcjonariusza” ani „zawiadomienia organu
-   egzekucyjnego” (§ 4) — dla tych typów domyślnie „inny dokument”. Rozszerzenie katalogu wymaga migracji (ograniczenia `CHECK`).
-4. **A-022** — `Metryka` (pasek wskaźników w kokpicie) zostaje: to inna rola niż lista „etykieta — wartość”.
+**Rozstrzygnięte 7.11.2026 (D-107–D-111, `DECYZJE.md`):** zmiana danych akcjonariusza wpisuje się łącznie w rejestrach
+wszystkich jego spółek (D-107 — wdrożone); imiona rodziców i dokument tożsamości reprezentanta tylko do umowy, bez zapisu
+(D-108 — wdrożone; wzór 01 na żądanie ma pola w formularzu wystawienia); katalog rodzajów dokumentu bez zmian (D-109);
+„Okres wypowiedzenia” zostaje (D-110); każda spółka przez nowo przyjęty wniosek — bez przenoszenia dawnych reprezentantów
+do kartoteki (D-111). Otwarte: cel „1 ekran” kreatora (adres strony po „Podstawie”). `Metryka` (pasek wskaźników) zostaje.
 
-Mapy procesów i danych (`MAPA-PROCESOW.md`, `MAPA-DANYCH.md`) i `BLEDY.md` opisują stan sprzed etapu 4 — zostawione jako zapis analizy.
+`MAPA-PROCESOW.md` odświeżona po etapie 4 (7.11.2026). `MAPA-DANYCH.md` i `BLEDY.md` — zapis analizy sprzed wdrożenia.
 
 Testy etapu 4: `testy/wdrozenie-analizy.test.js` (D-097, A-005, D-102, D-101), `testy/osoby-http.test.js` (D-102 — kartoteka nie nadpisuje
 danych z rejestru), `testy/wnioski-kancelaria-http.test.js` (D-101 — reprezentant z wniosku w kartotece); e2e: `wpisy-ogolne.spec.js`

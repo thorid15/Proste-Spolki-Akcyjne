@@ -127,20 +127,21 @@ function EkranPrzeniesienia({ id }) {
                 <Pole etykieta="Opis rozbieżności / wyjaśnienia"><input value={pola.uwagi} onChange={(z) => ustawPola({ ...pola, uwagi: z.target.value })} /></Pole>
               )}
             </div>
-            <span className="row-g" style={{ flexWrap: 'wrap' }}>
-              {p.dozwolone_przejscia.filter((na) => na !== 'aktywny').map((na) => (
-                // A-033: przejście, które na pewno zostanie odrzucone (rozbieżności bez opisu), jest nieaktywne (D-052).
-                <button key={na} className="btn btn-maly" onClick={() => przejdz(na)}
-                  disabled={(na === 'wstrzymane_rozbieznosci' || p.status === 'wstrzymane_rozbieznosci') && !String(pola.uwagi || '').trim()}>
-                  → {dane.statusy[na]}
-                </button>
-              ))}
-              {p.dozwolone_przejscia.includes('aktywny') && p.spolka_id && (
-                // B-004: wprost do kreatora otwarcia (`POST /spolki/:id/otworz-rejestr` zapisuje PRZEJĘCIE i kończy
-                // przeniesienie) — nie do kokpitu, gdzie jest tylko „Migracja z innego rejestru” (KRN). A-024: jedna nazwa.
-                <button className="btn btn-glowny btn-maly" onClick={() => idz(`/spolki/${p.spolka_id}/otworz`)}>Otwórz rejestr</button>
-              )}
-            </span>
+            {(p.przeszkody_otwarcia || []).length > 0 && (
+              <Komunikat odmiana="uwaga" tytul="Przed otwarciem rejestru" lista={p.przeszkody_otwarcia} />
+            )}
+            {/* A-021: jeden pasek akcji. A-033: przejście na pewno odrzucone (rozbieżności bez opisu) — nieaktywne (D-052).
+                B-004: „Otwórz rejestr” wprost do kreatora otwarcia (PRZEJĘCIE); A-012: aktywne dopiero bez przeszkód. */}
+            <PasekAkcji akcje={[
+              ...p.dozwolone_przejscia.filter((na) => na !== 'aktywny').map((na) => ({
+                etykieta: `→ ${dane.statusy[na]}`, przyKlik: () => przejdz(na),
+                wylaczona: (na === 'wstrzymane_rozbieznosci' || p.status === 'wstrzymane_rozbieznosci') && !String(pola.uwagi || '').trim(),
+              })),
+              p.dozwolone_przejscia.includes('aktywny') && p.spolka_id && {
+                etykieta: 'Otwórz rejestr', glowna: true, przyKlik: () => idz(`/spolki/${p.spolka_id}/otworz`),
+                wylaczona: (p.przeszkody_otwarcia || []).length > 0, powod: 'Najpierw usuń braki wymienione wyżej.',
+              },
+            ]} />
           </div>
         )}
       </Karta>
@@ -157,13 +158,13 @@ function EkranPrzeniesienia({ id }) {
           ))}</tbody>
         </table>
         <div className="row-g" style={{ flexWrap: 'wrap', marginTop: 'var(--od-2)' }}>
-          <select value={typDok} onChange={(z) => ustawTypDok(z.target.value)}>
+          <select aria-label="Rodzaj dokumentu" value={typDok} onChange={(z) => ustawTypDok(z.target.value)}>
             {['uchwala', 'umowa_spolki', 'informacja_poprzednika', 'umowa_warunkowa', 'wypowiedzenie', 'potwierdzenie_rozwiazania', 'dane_poprzednika', 'inne'].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={zrodlo} onChange={(z) => ustawZrodlo(z.target.value)}>
+          <select aria-label="Źródło dokumentu" value={zrodlo} onChange={(z) => ustawZrodlo(z.target.value)}>
             {['klient', 'kancelaria', 'poprzednik'].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <input type="file" ref={plik} onChange={(z) => ustawMaPlik(Boolean(z.target.files && z.target.files.length))} />
+          <input type="file" ref={plik} aria-label="Plik dokumentu" onChange={(z) => ustawMaPlik(Boolean(z.target.files && z.target.files.length))} />
           <button className="btn btn-maly" disabled={!maPlik} onClick={() => wykonaj(() => wyslij(`/api/psa/przeniesienia/${id}/dokumenty`, plik, { typ: typDok, zrodlo }))}>Dodaj dokument</button>
         </div>
       </Karta>

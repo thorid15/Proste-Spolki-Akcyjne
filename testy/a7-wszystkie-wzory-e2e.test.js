@@ -128,13 +128,8 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
     sklad_organu_json: JSON.stringify([{ imiona: 'Łukasz Adrian', nazwisko: 'Szymborski', funkcja: 'Prezes Zarządu' }]),
     // Mianownik (etap 2.3 poprawek) - biernik/dopelniacz liczy deklinacja.js.
     reprezentant_imie_nazwisko: 'Łukasz Adrian Szymborski',
-    reprezentant_rodzice: 'Paweł i Izabella',
-    // Dowód i adres ustrukturyzowane od migracji 53 (B2/B3, FAZA 2 sesji
-    // frontendowej) — stare `reprezentant_dowod`/`reprezentant_adres`
-    // zostały tylko do odczytu (`kontekst-pisma.js`), formularz już ich nie
-    // wysyła.
-    reprezentant_dowod_rodzaj: 'dowod_osobisty',
-    reprezentant_dowod_numer: 'DGK 138559',
+    // D-108: imiona rodziców i dokument tożsamości reprezentanta nie są danymi spółki — podaje się je
+    // przy wystawieniu umowy (wzór 01, niżej).
     reprezentant_pesel: '88081105939',
     reprezentant_kod_pocztowy: '76-015',
     reprezentant_miejscowosc: 'Manowo',
@@ -175,7 +170,7 @@ test('wszystkie dziesięć wzorów renderuje się na jednym, realistycznie wype�
 
   // ── 4. Pięć wzorów wystawianych NA ŻĄDANIE ze spółki (blok A5) ────────
   for (const [kod, cialo] of [
-    ['01', {}],
+    ['01', { reprezentant: { rodzice: 'Paweł i Izabella', dowod_rodzaj: 'dowod_osobisty', dowod_numer: 'DGK 138559' } }],
     ['02', {}],
     [
       '03',

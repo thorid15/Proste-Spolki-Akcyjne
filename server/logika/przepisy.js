@@ -292,6 +292,7 @@ const POLA_KANCELARYJNE = [
   'aml_notatka',
   'aml_data_przegladu',
   'beneficjent_rzeczywisty_id',
+  'beneficjenci_json',
   'pep',
   'pep_opis',
   'pep_oswiadczenie',

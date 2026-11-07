@@ -27,4 +27,16 @@ function uruchomHarmonogramPrzypomnien(db, { wyslij, interwalMs = 24 * 60 * 60 *
   return uchwyt;
 }
 
-module.exports = { uruchomHarmonogramPrzypomnien };
+/** D-122: retencja dziennika dostępu — raz na dobę (i od razu po starcie). */
+function uruchomRetencjeDziennika(db, { interwalMs = 24 * 60 * 60 * 1000 } = {}) {
+  const dziennik = require('./dziennik-dostepu');
+  const uruchom = () => {
+    try { dziennik.usunPrzeterminowane(db); } catch (e) { console.error(`[psa] retencja dziennika dostępu: ${e.message}`); }
+  };
+  uruchom();
+  const uchwyt = setInterval(uruchom, interwalMs);
+  uchwyt.unref?.();
+  return uchwyt;
+}
+
+module.exports = { uruchomHarmonogramPrzypomnien, uruchomRetencjeDziennika };

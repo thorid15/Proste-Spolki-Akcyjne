@@ -216,18 +216,25 @@ function useTrasa() {
   useEffect(() => {
     let wstecz = false;
     let cofanie = false;
+    let pominBlokade = false; // A-017: po potwierdzeniu w oknie aplikacji — jedno przejście bez pytania
     const przyPopstate = () => { wstecz = true; };
     const przy = (z) => {
       if (cofanie) { cofanie = false; wstecz = false; return; }
       const nowa = biezacaTrasa();
       const zmianaEkranu = nowa.sciezka !== poprzednia.current;
-      if (zmianaEkranu && [...BLOKADY_WYJSCIA].some((f) => f())
-          && !window.confirm('Masz niezapisane zmiany. Opuścić ten ekran bez zapisania?')) {
+      if (zmianaEkranu && !pominBlokade && [...BLOKADY_WYJSCIA].some((f) => f())) {
+        // A-017: okno aplikacji zamiast `window.confirm` — najpierw wracamy na ekran, potem pytamy.
+        const cel = window.location.href;
         cofanie = true;
         wstecz = false;
         window.location.replace(z.oldURL);
+        potwierdz({
+          tytul: 'Niezapisane zmiany', tresc: 'Masz niezapisane zmiany. Opuścić ten ekran bez zapisania?',
+          akcja: 'Opuść bez zapisania', zamknij: 'Zostań na ekranie', niebezpieczna: true,
+        }).then((tak) => { if (tak) { pominBlokade = true; window.location.assign(cel); } });
         return;
       }
+      pominBlokade = false;
       if (z && z.oldURL) zapamietajPrzewiniecie(new URL(z.oldURL).hash || '#/', window.scrollY);
       poprzednia.current = nowa.sciezka;
       const cel = wstecz ? zapamietanePrzewiniecia()[window.location.hash || '#/'] : 0;

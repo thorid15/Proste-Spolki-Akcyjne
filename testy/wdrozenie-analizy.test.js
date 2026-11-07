@@ -115,3 +115,23 @@ test('D-101: reprezentant spółki z kartoteki — umowa bierze dane osobowe z o
   assert.match(k.reprezentant_dowod, /ABC123456/);
   assert.equal(zReprezentantem(db, { id: 2, reprezentant_imie_nazwisko: 'Bez Osoby' }).reprezentant_imie_nazwisko, 'Bez Osoby', 'bez osoby — dawne kolumny');
 });
+
+test('D-114: data wpisu emisji — założycielska z datą rejestracji spółki, kolejne nie wcześniej (ostrzeżenia)', () => {
+  const walidacje = require('../server/logika/walidacje');
+  const spolka = { id: 1, data_utworzenia_spolki: '2026-01-10' };
+  const emisja = (data) => ({ typ: 'emisja', chwila: '2026-11-07T10:00:00.000Z', dane: { seria: 'Z', ilosc: 10, nr_pierwszy: 1, data_wpisu_krs: data, zakresy: [{ nr_od: 1, nr_do: 10 }] } });
+  const pierwsza = walidacje.sprawdz({ zdarzenia: [], propozycja: emisja('2026-02-01'), spolka });
+  assert.ok(pierwsza.ostrzezenia.some((o) => o.includes('Emisja założycielska następuje z chwilą rejestracji spółki')));
+  const zgodna = walidacje.sprawdz({ zdarzenia: [], propozycja: emisja('2026-01-10'), spolka });
+  assert.ok(!zgodna.ostrzezenia.some((o) => o.includes('Emisja założycielska')));
+});
+
+test('D-118: wpis na rzecz osoby prawnej bez beneficjenta — ostrzeżenie, nie blokada', () => {
+  const walidacje = require('../server/logika/walidacje');
+  const ostrzezenia = [];
+  const bledy = [];
+  const osoby = new Map([[7, { id: 7, typ: 'prawna', nazwa: 'Holding', aml_status: 'wykonane' }]]);
+  walidacje._sprawdzAml({ typ: 'objecie', dane: { pozycje: [{ osoba_id: 7 }] } }, osoby, bledy, ostrzezenia);
+  assert.equal(bledy.length, 0);
+  assert.ok(ostrzezenia.some((o) => o.includes('bez wskazanego beneficjenta')), JSON.stringify(ostrzezenia));
+});

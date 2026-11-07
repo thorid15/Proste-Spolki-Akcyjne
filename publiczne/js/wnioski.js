@@ -481,7 +481,7 @@ function SzczegolAkcjonariusza({ pozycja, wniosekId, zablokowane, braki, odswiez
   }
 
   async function usun() {
-    if (!window.confirm('Usunąć tę pozycję z wniosku?')) return;
+    if (!(await potwierdz({ tytul: 'Usunięcie pozycji', tresc: 'Usunąć tę pozycję z wniosku?', akcja: 'Usuń pozycję', zamknij: 'Zostaw', niebezpieczna: true }))) return;
     try {
       await API.delete(`/api/psa/wnioski/${wniosekId}/akcjonariusze/${pozycja.id}`);
       odswiez();
@@ -767,6 +767,7 @@ function KrokAkcjonariusze({ wniosek, akcjonariusze, brakiUstawowe, zablokowane,
                       OPIS_ZGODY_EMAIL_WNIOSKU[a.zgoda_email_status || 'brak'],
                       OPIS_PEP_WNIOSKU[a.pep],
                     ].filter(Boolean).join(' · ')}
+                    kontakt={a}
                     przyKliknieciu={() => ustawOtwarty(a.id)}
                   />
                 );
@@ -1276,7 +1277,7 @@ function PodpisNotariusza({ wniosekId, dokument, zablokowane, przyZapisie }) {
         </div>
       ) : !zablokowane && (
         <>
-          <input ref={wejscie} type="file" accept=".pdf,.xml,.xades" className="pole-pliku-ukryte"
+          <input ref={wejscie} type="file" accept=".pdf,.xml,.xades" className="pole-pliku-ukryte" aria-label="Plik do wgrania"
             onChange={(z) => wyslij(z.target.files[0])} />
           <button className="btn btn-maly" disabled={wysylanie} onClick={() => wejscie.current && wejscie.current.click()}>
             {wysylanie ? 'Sprawdzanie podpisu…' : 'Wgraj umowę podpisaną przez notariusza'}
@@ -1380,9 +1381,11 @@ function KrokDokumenty({ wniosek, akcjonariusze, dokumenty, ustawDokumenty, zabl
   const pustychMiejsc = dokumenty.reduce((suma, d) => suma + d.brakujace.length, 0);
 
   async function wystaw() {
-    if (wystawione && !window.confirm(
-      'Wystawić komplet od nowa? Dotychczasowe dokumenty i odesłane przez klienta skany zostaną zastąpione.'
-    )) return;
+    if (wystawione && !(await potwierdz({
+      tytul: 'Wystawienie kompletu od nowa',
+      tresc: 'Wystawić komplet od nowa? Dotychczasowe dokumenty i odesłane przez klienta skany zostaną zastąpione.',
+      akcja: 'Wystaw od nowa', zamknij: 'Zostaw obecne', niebezpieczna: true,
+    }))) return;
     ustawPrace('wystaw');
     ustawBlad(null);
     ustawKomunikat(null);
@@ -1513,6 +1516,7 @@ function KrokDecyzja({ wniosek, akcjonariusze, dokumenty, zablokowane, odswiez }
   const [pokazNotatke, ustawPokazNotatke] = useState(null); // 'do_uzupelnienia' | 'odrzuc' | null
   const [przetwarzanie, ustawPrzetwarzanie] = useState(false);
   const [blad, ustawBlad] = useState(null);
+  const [przyjeto, ustawPrzyjeto] = useState(false);
 
   const wszystkoZweryfikowane = akcjonariusze.length > 0 && akcjonariusze.every((a) => a.zweryfikowano);
   const niezweryfikowani = akcjonariusze.filter((a) => !a.zweryfikowano).length;
@@ -1539,14 +1543,18 @@ function KrokDecyzja({ wniosek, akcjonariusze, dokumenty, zablokowane, odswiez }
   }
 
   async function przyjmij() {
-    if (!window.confirm('Przyjąć wniosek? Założy to spółkę i akcjonariuszy w kartotece — operacji nie da się cofnąć z tego ekranu.')) return;
+    if (!(await potwierdz({
+      tytul: 'Przyjęcie wniosku',
+      tresc: 'Przyjąć wniosek? Założy to spółkę i akcjonariuszy w kartotece — operacji nie da się cofnąć z tego ekranu.',
+      akcja: 'Przyjmij wniosek', zamknij: 'Jeszcze nie',
+    }))) return;
     ustawPrzetwarzanie(true);
     ustawBlad(null);
     try {
       const wynik = await API.post(`/api/psa/wnioski/${wniosek.id}/przyjmij`, {});
       odswiez();
       if (wynik.spolka_id) {
-        window.alert('Wniosek przyjęty. Spółka i akcjonariusze założeni w kartotece — dokończ otwarcie rejestru (emisja założycielska i checklista) na ekranie poniżej.');
+        ustawPrzyjeto(true); // A-017: komunikat na ekranie zamiast `alert`
       }
     } catch (e) {
       ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się przyjąć wniosku.');
@@ -1572,6 +1580,7 @@ function KrokDecyzja({ wniosek, akcjonariusze, dokumenty, zablokowane, odswiez }
 
   return (
     <Karta tytul="Decyzja kancelarii">
+      <Komunikat odmiana="ok" tresc={przyjeto ? 'Wniosek przyjęty. Spółka i akcjonariusze założeni w kartotece — dokończ otwarcie rejestru (emisja założycielska i checklista) na ekranie poniżej.' : null} />
       <Komunikat odmiana="blad" tresc={blad} />
 
       <dl className="podsumowanie">

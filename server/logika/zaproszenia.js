@@ -169,7 +169,7 @@ function trescZaproszeniaAkcjonariusza({ link, kancelariaNazwa, osobaOznaczenie 
  * @returns {{konto_id:number, nowe_konto:boolean, juz_aktywne?:boolean,
  *            email_wyslany:boolean, powod?:string, link_aktywacyjny?:string}}
  */
-async function wyslijAkcjonariuszowi(db, { osobaId, email, autor }) {
+async function wyslijAkcjonariuszowi(db, { osobaId, email, autor, tylkoLink = false }) {
   const osoba = db.prepare('SELECT * FROM psa_osoby WHERE id = ?').get(osobaId);
   if (!osoba) throw new Error('Nie odnaleziono osoby w kartotece.');
 
@@ -220,6 +220,10 @@ async function wyslijAkcjonariuszowi(db, { osobaId, email, autor }) {
   }
 
   const link = `${konfiguracja.URL_PORTALU}#/aktywuj/${token}`;
+  // D-119 (P-004): „Zaproś nowego akcjonariusza” przy spółce — link do przekazania akcjonariuszowi, bez wysyłki.
+  if (tylkoLink) {
+    return { konto_id: kontoId, nowe_konto: !istniejace, email_wyslany: false, link_aktywacyjny: link, link_testowy: linkTestowy(link) };
+  }
   const oznaczenie = osoba.typ === 'prawna' ? osoba.nazwa : [osoba.imie, osoba.nazwisko].filter(Boolean).join(' ');
   const proba = await poczta.wyslij({
     do: adres,

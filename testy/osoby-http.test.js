@@ -438,3 +438,59 @@ test('D-102: dane z rejestru osoby z akcjami zmienia wpis — kartoteka proponuj
   assert.equal(bez.zmiana_rejestrowa, null);
   assert.equal(bez.osoba.miejscowosc, 'Sopot', 'osoba bez akcji — zwykła edycja kartoteki');
 });
+
+test('D-107: zmiana danych akcjonariusza wpisuje się łącznie w rejestrach wszystkich jego spółek', async () => {
+  const rejestr = require('../server/rejestr');
+  const teraz = new Date().toISOString();
+  const nowaSpolka = (nazwa) => Number(db().prepare(`INSERT INTO psa_spolki (nazwa, forma_prawna, status, utworzono) VALUES (?, 'PROSTA SPÓŁKA AKCYJNA', 'aktywna', ?)`).run(nazwa, teraz).lastInsertRowid);
+  const [a, b] = [nowaSpolka('D-107 A P.S.A.'), nowaSpolka('D-107 B P.S.A.')];
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', imie: 'Ewa', nazwisko: 'Wielospółkowa', data_urodzenia: '1979-01-01', kraj: 'Polska', kod_pocztowy: '80-001', miejscowosc: 'Gdańsk', nr_domu: '1' });
+  for (const s of [a, b]) {
+    const em = rejestr.dokonajWpisu(db(), { spolkaId: s, typ: 'emisja', wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-10' }, autor: 'Test' });
+    rejestr.dokonajWpisu(db(), { spolkaId: s, typ: 'objecie', wejscie: { emisja_zdarzenie_id: em.zdarzenie.id, pozycje: [{ osoba_id: osoba.osoba.id, ilosc: 10 }] }, autor: 'Test' });
+  }
+  const podglad = rejestr.przygotujPodglad(db(), { spolkaId: a, typ: 'zmiana_danych_akcjonariusza', wejscie: { osoba_id: osoba.osoba.id, po: { miejscowosc: 'Sopot' } } });
+  assert.ok(podglad.ostrzezenia.some((o) => o.includes('D-107 B P.S.A.')), 'podgląd zapowiada wpis łączny');
+
+  const wynik = rejestr.dokonajWpisu(db(), { spolkaId: a, typ: 'zmiana_danych_akcjonariusza', wejscie: { osoba_id: osoba.osoba.id, po: { miejscowosc: 'Sopot' } }, autor: 'Test' });
+  const zmiany = (s) => db().prepare("SELECT dane_json FROM psa_zdarzenia WHERE spolka_id = ? AND typ = 'zmiana_danych_akcjonariusza'").all(s).map((z) => JSON.parse(z.dane_json));
+  assert.equal(zmiany(a).length, 1);
+  assert.equal(zmiany(b).length, 1, 'ten sam wpis w rejestrze drugiej spółki');
+  assert.deepEqual([zmiany(b)[0].przed, zmiany(b)[0].po], [{ miejscowosc: 'Gdańsk' }, { miejscowosc: 'Sopot' }]);
+  assert.equal(db().prepare('SELECT miejscowosc FROM psa_osoby WHERE id = ?').get(osoba.osoba.id).miejscowosc, 'Sopot');
+  assert.ok(wynik.ostrzezenia.some((o) => o.startsWith('Wpis dokonano łącznie')));
+});
+
+test('D-119: zaproszenie akcjonariusza przy spółce — tylko link do przekazania, bez wysyłki', async () => {
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', zgoda_email_status: 'potwierdzona', nazwisko: `Linkowy${Date.now()}`, imie: 'Lech' });
+  const [status, wynik] = await zapytaj('POST', `/api/psa/osoby/${osoba.osoba.id}/zapros-do-portalu`, { email: `lech${Date.now()}@example-test.pl`, tylko_link: true });
+  assert.equal(status, 200);
+  assert.equal(wynik.email_wyslany, false);
+  assert.match(wynik.link_aktywacyjny, /#\/aktywuj\//);
+});
+
+test('D-116 / D-115: kilku beneficjentów rzeczywistych i reprezentant akcjonariusza-osoby prawnej', async () => {
+  const fiz = async (n) => (await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwisko: `${n}${Date.now()}`, imie: 'B', data_urodzenia: '1970-01-01', kraj: 'Polska', kod_pocztowy: '80-001', miejscowosc: 'Gdańsk', nr_domu: '1' }))[1].osoba;
+  const [b1, b2] = [await fiz('Benef1'), await fiz('Benef2')];
+  const [st, prawna] = await zapytaj('POST', '/api/psa/osoby', {
+    typ: 'prawna', nazwa: `Holding ${Date.now()} sp. z o.o.`, kraj: 'Polska', kod_pocztowy: '80-001', miejscowosc: 'Gdańsk', nr_domu: '2',
+    beneficjenci: [b1.id, b2.id], reprezentant_imie: 'Rafał', reprezentant_nazwisko: 'Reprezentujący', reprezentant_funkcja: 'Prezes Zarządu',
+  });
+  assert.equal(st, 201);
+  assert.deepEqual(prawna.osoba.beneficjenci, [b1.id, b2.id]);
+  assert.equal(prawna.osoba.beneficjent_rzeczywisty_id, b1.id, 'pierwszy — zgodność wsteczna');
+  assert.equal(prawna.osoba.reprezentant_nazwisko, 'Reprezentujący');
+  const [, po] = await zapytaj('PUT', `/api/psa/osoby/${prawna.osoba.id}`, { beneficjenci: [b2.id] });
+  assert.deepEqual(po.osoba.beneficjenci, [b2.id]);
+  const [stZly] = await zapytaj('PUT', `/api/psa/osoby/${prawna.osoba.id}`, { beneficjenci: [prawna.osoba.id] });
+  assert.equal(stZly, 400, 'podmiot nie jest własnym beneficjentem');
+});
+
+test('D-122: dziennik dostępu — wpisy starsze niż 5 lat usuwane', () => {
+  const dziennik = require('../server/logika/dziennik-dostepu');
+  db().prepare("INSERT INTO psa_dziennik_dostepu (chwila, kto, typ_kto, akcja) VALUES ('2019-01-01T00:00:00.000Z', 'test', 'pracownik', 'test_stary')").run();
+  db().prepare("INSERT INTO psa_dziennik_dostepu (chwila, kto, typ_kto, akcja) VALUES (?, 'test', 'pracownik', 'test_nowy')").run(new Date().toISOString());
+  dziennik.usunPrzeterminowane(db());
+  const akcje = db().prepare("SELECT akcja FROM psa_dziennik_dostepu WHERE kto = 'test'").all().map((w) => w.akcja);
+  assert.deepEqual(akcje, ['test_nowy']);
+});

@@ -63,11 +63,11 @@ const TYPY = [
   { typ: 'emisja', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['wpisz', 'Oznaczenie serii', 'B'], ['wpisz', 'Liczba akcji', '100'], ['data', 'Data wpisu emisji do KRS', DZIS]] },
   { typ: 'umorzenie', zadajacy: 'Alfa Testowa', rola: 'spółka', powiadom: 'Anna', plan: [['wybierz', 'Seria akcji?', 'A'], ['pierwsza', 'Tryb umorzenia?'], ['wybierz', 'Akcjonariusz', 'Testowa'], ['wpisz', 'Liczba akcji', '10']] },
   { typ: 'uniewaznienie', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['wybierz', 'Seria akcji', 'A'], ['wpisz', 'Sąd, który wydał orzeczenie', 'Sąd Rejonowy Testowy'], ['wpisz', 'Sygnatura akt', 'I C 1/26'], ['data', 'Data orzeczenia', DZIS], ['wybierz', 'Akcjonariusz', 'Testowa'], ['wpisz', 'Liczba akcji', '10']] },
-  { typ: 'zobowiazanie', zadajacy: 'Nabywczyni', rola: 'nabywca', powiadom: 'Anna', plan: [['kartoteka', 'Akcjonariusz składający oświadczenie', 'Anna'], ['pierwsza', 'Rodzaj zobowiązania'], ['wpisz', 'Treść oświadczenia', 'Zobowiązuję się przenieść 10 akcji serii A (dane fikcyjne).']] },
-  { typ: 'obciazenie', zadajacy: 'Nabywczyni', rola: 'zastawnik', powiadom: 'Anna', plan: [['wybierz', 'Seria akcji?', 'A'], ['pierwsza', 'Rodzaj obciążenia?'], ['kartoteka', 'Akcjonariusz, którego akcje są obciążane', 'Anna'], ['kartoteka', 'Zastawnik / użytkownik', 'Nabywczyni'], ['wpisz', 'Liczba akcji', '10']] },
+  { typ: 'zobowiazanie', zadajacy: 'Nabywczyni', rola: 'nabywca', powiadom: 'Anna', plan: [['wybierz', 'Akcjonariusz składający oświadczenie', 'Testowa'], ['pierwsza', 'Rodzaj zobowiązania'], ['wpisz', 'Treść oświadczenia', 'Zobowiązuję się przenieść 10 akcji serii A (dane fikcyjne).']] },
+  { typ: 'obciazenie', zadajacy: 'Nabywczyni', rola: 'zastawnik', powiadom: 'Anna', plan: [['wybierz', 'Seria akcji?', 'A'], ['pierwsza', 'Rodzaj obciążenia?'], ['wybierz', 'Akcjonariusz, którego akcje są obciążane', 'Testowa'], ['kartoteka', 'Zastawnik / użytkownik', 'Nabywczyni'], ['wpisz', 'Liczba akcji', '10']] },
   { typ: 'wykreslenie_obciazenia', zadajacy: 'Anna', rola: 'akcjonariusz', przygotuj: przygotujObciazenie, plan: [['pierwsza', 'Obciążenie']] },
   { typ: 'prawo_glosu_zastawnika', zadajacy: 'Nabywczyni', rola: 'zastawnik', powiadom: 'Anna', przygotuj: przygotujObciazenie, plan: [['pierwsza', 'Obciążenie'], ['pierwsza', 'Prawo głosu?']] },
-  { typ: 'zajecie', zUrzedu: true, przygotuj: przygotujOrgan, plan: [['wybierz', 'Seria akcji', 'A'], ['kartoteka', 'Organ egzekucyjny', 'Komornik'], ['kartoteka', 'Akcjonariusz (dłużnik)', 'Próbny'], ['wpisz', 'Liczba akcji objętych zajęciem', '10']] },
+  { typ: 'zajecie', zUrzedu: true, przygotuj: przygotujOrgan, plan: [['wybierz', 'Seria akcji', 'A'], ['kartoteka', 'Organ egzekucyjny', 'Komornik'], ['wybierz', 'Akcjonariusz (dłużnik)', 'Próbny'], ['wpisz', 'Liczba akcji objętych zajęciem', '10']] },
   {
     typ: 'wykreslenie_zajecia', zUrzedu: true,
     przygotuj: async (page) => {
@@ -78,12 +78,12 @@ const TYPY = [
   },
   // D-102: nowe dane — formularzem kartoteki (raz), kreator przejmuje je jako „po”.
   { typ: 'zmiana_danych_akcjonariusza', zadajacy: 'Anna', rola: 'akcjonariusz', plan: [['wybierz', 'Akcjonariusz', 'Testowa'], ['klik', 'Wpisz nowe dane'], ['wpisz', 'Miejscowość', 'Sopot'], ['zapiszOsobe']] },
-  { typ: 'uprawnienie', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['pierwsza', 'Rodzaj'], ['pierwsza', 'Zakres'], ['wybierz', 'Seria akcji?', 'A'], ['kartoteka', 'Akcjonariusz?', 'Anna'], ['wpisz', 'Tytuł', 'Akcje uprzywilejowane co do głosu (dane fikcyjne)']] },
+  { typ: 'uprawnienie', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['pierwsza', 'Rodzaj'], ['pierwsza', 'Zakres'], ['wybierz', 'Seria akcji?', 'A'], ['wybierz', 'Akcjonariusz?', 'Testowa'], ['wpisz', 'Tytuł', 'Akcje uprzywilejowane co do głosu (dane fikcyjne)']] },
   { typ: 'ograniczenie', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['pierwsza', 'Zakres'], ['wybierz', 'Seria akcji?', 'A'], ['wpisz', 'Opis', 'Zbycie wymaga zgody spółki (dane fikcyjne)']] },
   { typ: 'zdarzenie_inne', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['wpisz', 'Opis zdarzenia', 'Zwyczajne walne zgromadzenie (dane fikcyjne)']] },
   { typ: 'przeniesienie_ulamka', zadajacy: 'Nabywczyni', rola: 'nabywca', powiadom: 'Anna', plan: [['wybierz', 'Seria akcji?', 'A'], ['wybierz', 'Zbywca', 'Testowa'], ['wpisz', 'Numer akcji', '1'], ['ulamek', 'Ułamek zbywanej części', ['1', '2']], ['kartoteka', 'Nabywca', 'Nabywczyni']] },
   { typ: 'przedstawiciel', zadajacy: 'Anna', rola: 'akcjonariusz', plan: [['wybierz', 'Seria akcji?', 'A'], ['wpisz', 'Numer akcji', '1'], ['kartoteka', 'Wspólny przedstawiciel?', 'Anna']] },
-  { typ: 'pokrycie_akcji', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['wybierz', 'Seria akcji?', 'A'], ['kartoteka', 'Akcjonariusz', 'Anna'], ['pierwsza', 'Wzmianka o pokryciu']] },
+  { typ: 'pokrycie_akcji', zadajacy: 'Alfa Testowa', rola: 'spółka', plan: [['wybierz', 'Seria akcji?', 'A'], ['wybierz', 'Akcjonariusz', 'Testowa'], ['pierwsza', 'Wzmianka o pokryciu']] },
 ];
 
 /** Wspólny pomocnik (ui.checklista) — odhacza i czeka na aktywne „Dokonaj wpisu”. */

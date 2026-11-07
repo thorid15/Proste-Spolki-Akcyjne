@@ -457,7 +457,22 @@ function przygotujPodglad(db, { spolkaId, typ, wejscie, teraz, migracja_krn: mig
     osoby,
   });
 
+  // D-107: zmiana danych akcjonariusza wpisuje się łącznie w rejestrach wszystkich spółek, w których osoba ma akcje.
+  if (typ === 'zmiana_danych_akcjonariusza' && dane && dane.osoba_id && wynik.dopuszczalne) {
+    const inne = inneSpolkiAkcjonariusza(db, dane.osoba_id, spolkaId);
+    if (inne.length) wynik.ostrzezenia = [...wynik.ostrzezenia, `Zmiana danych wpisze się łącznie także w rejestrach: ${inne.map((x) => x.nazwa).join(', ')}.`];
+  }
+
   return { spolka, dane, osoby, zdarzenia, chwila, ...wynik };
+}
+
+/** D-107: spółki (poza wskazaną), w których osoba ma dziś akcje. */
+function inneSpolkiAkcjonariusza(db, osobaId, spolkaId) {
+  return db.prepare(
+    `SELECT DISTINCT s.id, s.nazwa FROM psa_stan_akcji sa JOIN psa_spolki s ON s.id = sa.spolka_id
+      WHERE sa.osoba_id = ? AND sa.data_do IS NULL AND sa.kategoria = 'akcjonariusz' AND s.id <> ?
+      ORDER BY s.nazwa COLLATE NOCASE`
+  ).all(osobaId, spolkaId);
 }
 
 /**
@@ -487,6 +502,25 @@ function _wykonajWpis(db, zlecenie) {
     uzasadnienie: zlecenie.uzasadnienie ?? null,
   });
 
+  // D-107: zmiana danych akcjonariusza — ten sam wpis (przed → po) łącznie w rejestrach pozostałych spółek,
+  // w których osoba ma akcje; w tej samej transakcji i PRZED zmianą kartoteki (porównanie „przed” jest wspólne).
+  const laczne = [];
+  if (zlecenie.typ === 'zmiana_danych_akcjonariusza' && podglad.dane.po) {
+    for (const inna of inneSpolkiAkcjonariusza(db, podglad.dane.osoba_id, zlecenie.spolkaId)) {
+      const opis = `Wpis łączny ze zmianą danych w rejestrze spółki ${podglad.spolka.nazwa}${zlecenie.sprawa_id ? ` (sprawa #${zlecenie.sprawa_id})` : ''}.`;
+      const p2 = przygotujPodglad(db, { spolkaId: inna.id, typ: zlecenie.typ, wejscie: { ...zlecenie.wejscie, podstawa_opis: opis }, teraz: zlecenie.teraz });
+      if (!p2.dopuszczalne) throw new BladWalidacji(p2.bledy.map((b) => `${inna.nazwa}: ${b}`), p2.ostrzezenia);
+      zapiszZdarzenie(db, {
+        spolka_id: inna.id, typ: zlecenie.typ, chwila: p2.chwila, autor: zlecenie.autor,
+        dzialajacy: zlecenie.dzialajacy ?? null, sprawa_id: null, dane: p2.dane,
+      });
+      const { niezgodnosci: n2 } = zmaterializuj(db, inna.id);
+      if (n2.length > 0) throw new BladWalidacji(n2.map((k) => `${inna.nazwa} — bilans akcji: ${k}`));
+      db.prepare('UPDATE psa_spolki SET zaktualizowano = ? WHERE id = ?').run(czas.terazIso(), inna.id);
+      laczne.push(inna.nazwa);
+    }
+  }
+
   // Zmiana danych akcjonariusza aktualizuje ZRODLO PRAWDY tych danych -
   // kartoteke `psa_osoby` - jako efekt uboczny zapisu zdarzenia. Sama
   // materializacja stanu akcji tego typu nie dotyczy (TYPY_BEZ_SKUTKU).
@@ -512,7 +546,9 @@ function _wykonajWpis(db, zlecenie) {
 
   return {
     zdarzenie,
-    ostrzezenia: podglad.ostrzezenia,
+    ostrzezenia: laczne.length
+      ? [...podglad.ostrzezenia.filter((o) => !o.startsWith('Zmiana danych wpisze się łącznie')), `Wpis dokonano łącznie także w rejestrach: ${laczne.join(', ')}.`]
+      : podglad.ostrzezenia,
     typ: typyZdarzen.typ(zlecenie.typ),
   };
 }

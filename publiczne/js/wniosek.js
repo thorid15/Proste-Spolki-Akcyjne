@@ -81,7 +81,7 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie, mobywatelUrl, pzU
   }
 
   async function usun() {
-    if (!window.confirm('Usunąć przesłany plik tego dokumentu?')) return;
+    if (!(await potwierdz({ tytul: 'Usunięcie pliku', tresc: 'Usunąć przesłany plik tego dokumentu?', akcja: 'Usuń plik', zamknij: 'Zostaw plik', niebezpieczna: true }))) return;
     ustawWysylanie(true);
     ustawBlad(null);
     try {
@@ -170,7 +170,7 @@ function PozycjaDokumentu({ dokument, edytowalne, przyZmianie, mobywatelUrl, pzU
               accept=".pdf,.xml,.xades"
               disabled={wysylanie}
               onChange={(z) => wyslij(z.target.files[0])}
-              className="pole-pliku-ukryte"
+              className="pole-pliku-ukryte" aria-label="Plik do wgrania"
             />
             <button
               type="button"
@@ -408,7 +408,7 @@ function FormularzAkcjonariusza({ pozycja, edytowalne, przyZapisie, przyUsunieci
   );
 
   async function usun() {
-    if (!window.confirm('Usunąć tego akcjonariusza z wniosku?')) return;
+    if (!(await potwierdz({ tytul: 'Usunięcie akcjonariusza', tresc: 'Usunąć tego akcjonariusza z wniosku?', akcja: 'Usuń akcjonariusza', zamknij: 'Zostaw', niebezpieczna: true }))) return;
     ustawUsuwanie(true);
     ustawBlad(null);
     try {
@@ -570,7 +570,7 @@ function PoleDowoduReprezentanta({ wniosek, edytowalne, przyZmianie }) {
             ref={wejscie}
             type="file"
             accept=".pdf,.jpg,.jpeg,.png"
-            className="pole-pliku-ukryte"
+            className="pole-pliku-ukryte" aria-label="Plik do wgrania"
             disabled={wysylanie}
             onChange={(z) => wyslij(z.target.files[0])}
           />
@@ -1022,6 +1022,7 @@ function EkranWniosku() {
                           ? 'do poprawy'
                           : braki > 0 ? 'do uzupełnienia' : null}
                         opis={[identyfikatorAkcjonariusza(a), opisAdresowAkcjonariusza(a)].join(' · ')}
+                        kontakt={a}
                         przyKliknieciu={() => ustawOtwartyAkcjonariusz(a.id)}
                       />
                     );
