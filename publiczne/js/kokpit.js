@@ -516,14 +516,16 @@ const NAZWY_UMOWE_ZAWARL = {
  */
 function KartaProceduryAml({ spolka, spolkaId, odswiez }) {
   const [zapisywanie, ustawZapisywanie] = useState(false);
+  const [blad, ustawBlad] = useState(null);
 
   async function przelacz() {
     ustawZapisywanie(true);
+    ustawBlad(null);
     try {
       await API.put(`/api/psa/spolki/${spolkaId}`, { stosuje_procedure_aml: !spolka.stosuje_procedure_aml });
       odswiez();
     } catch (e) {
-      window.alert(e instanceof BladApi ? e.message : 'Nie udało się zmienić ustawienia procedury AML.');
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się zmienić ustawienia procedury AML.');
     } finally {
       ustawZapisywanie(false);
     }
@@ -533,6 +535,7 @@ function KartaProceduryAml({ spolka, spolkaId, odswiez }) {
 
   return (
     <Karta tytul="Procedura AML">
+      <Komunikat odmiana="blad" tresc={blad} />
       <div className="metryka-pion">
         <label className="chk" style={{ padding: '4px 0' }}>
           <input type="checkbox" checked={wlaczona} onChange={przelacz} disabled={zapisywanie} />

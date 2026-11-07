@@ -237,7 +237,7 @@ function PanelDokumentow({ sprawaId, dokumenty, odswiez }) {
             type="file"
             multiple
             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-            className="pole-pliku-ukryte"
+            className="pole-pliku-ukryte" aria-label="Plik do wgrania"
             disabled={wysylanie}
             onChange={wgraj}
           />

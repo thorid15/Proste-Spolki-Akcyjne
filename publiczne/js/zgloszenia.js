@@ -12,6 +12,7 @@ function EkranZgloszenWstepnych() {
   );
   const [notatki, ustawNotatki] = useState({});
   const [przetwarzanie, ustawPrzetwarzanie] = useState(null);
+  const [blad, ustawBlad] = useState(null); // A-017: błąd w miejscu akcji zamiast `alert`
   // Zaproszenie, którego nie udało się wysłać mailem — link trzeba przekazać
   // klientowi ręcznie, więc pokazujemy go do skopiowania zamiast gubić.
   const [linkDoPrzekazania, ustawLinkDoPrzekazania] = useState(null);
@@ -22,7 +23,7 @@ function EkranZgloszenWstepnych() {
       await API.post(`/api/psa/zgloszenia/${id}/odrzuc`, { notatka: notatki[id] || '' });
       odswiez();
     } catch (e) {
-      window.alert(e instanceof BladApi ? e.message : 'Nie udało się odrzucić zgłoszenia.');
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się odrzucić zgłoszenia.');
     } finally {
       ustawPrzetwarzanie(null);
     }
@@ -48,7 +49,7 @@ function EkranZgloszenWstepnych() {
       }
       odswiez();
     } catch (e) {
-      window.alert(e instanceof BladApi ? e.message : 'Nie udało się wysłać zaproszenia.');
+      ustawBlad(e instanceof BladApi ? e.message : 'Nie udało się wysłać zaproszenia.');
     } finally {
       ustawPrzetwarzanie(null);
     }
@@ -64,6 +65,7 @@ function EkranZgloszenWstepnych() {
           przyZamknieciu={() => ustawLinkDoPrzekazania(null)}
         />
       )}
+      <Komunikat odmiana="blad" tresc={blad} />
       <div className="pasek-narzedzi">
         <select aria-label="Filtruj zgłoszenia wg statusu" value={filtrStatus} onChange={(z) => ustawFiltrStatus(z.target.value)}>
           <option value="">Wszystkie statusy</option>

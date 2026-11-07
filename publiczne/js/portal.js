@@ -932,14 +932,14 @@ function PrzeniesieniePortal() {
       )}
       <Komunikat odmiana="blad" tresc={blad} />
       <div className="row-g" style={{ flexWrap: 'wrap' }}>
-        <select value={typ} onChange={(z) => ustawTyp(z.target.value)}>
+        <select aria-label="Rodzaj dokumentu" value={typ} onChange={(z) => ustawTyp(z.target.value)}>
           <option value="umowa_spolki">aktualny tekst umowy spółki</option>
           <option value="informacja_poprzednika">informacja z dotychczasowego rejestru</option>
           <option value="uchwala">podpisana uchwała akcjonariuszy</option>
           <option value="wypowiedzenie">wypowiedzenie z potwierdzeniem doręczenia</option>
           <option value="potwierdzenie_rozwiazania">potwierdzenie daty rozwiązania od poprzednika</option>
         </select>
-        <input type="file" ref={plik} />
+        <input type="file" ref={plik} aria-label="Plik dokumentu" />
         <button className="btn btn-maly" onClick={wyslij}>Wgraj dokument</button>
       </div>
       {p.dokumenty.length > 0 && <ul>{p.dokumenty.map((d) => <li key={d.id}>{nazwaPlikuDoWyswietlenia({ nazwaOryginalna: d.nazwa_pliku, rodzaj: d.typ, data: d.utworzono })} <span className="przyciemnione">({d.typ})</span></li>)}</ul>}
@@ -1359,7 +1359,7 @@ function EkranZgloszeniePortal({ spolkaId }) {
               type="file"
               multiple
               accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-              className="pole-pliku-ukryte"
+              className="pole-pliku-ukryte" aria-label="Plik do wgrania"
               onChange={(z) => dodajPliki([...z.target.files])}
             />
             <button type="button" className="btn" onClick={() => wejscie.current && wejscie.current.click()}>

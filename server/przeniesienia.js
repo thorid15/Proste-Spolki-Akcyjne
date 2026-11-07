@@ -52,6 +52,9 @@ function wczytaj(db, id, { dzis = czas.dzisIso() } = {}) {
     dozwolone_przejscia: reguly.PRZEJSCIA[p.status],
     blokady_weryfikacji: reguly.blokadyChecklisty(reguly.CHECKLISTA_WERYFIKACJI, dok),
     blokady_odbioru: reguly.blokadyChecklisty(reguly.CHECKLISTA_ODBIORU, dok),
+    // A-012: „Otwórz rejestr” aktywne dopiero bez przeszkód — ta sama reguła, którą sprawdza otwarcie (D-052).
+    przeszkody_otwarcia: (reguly.PRZEJSCIA[p.status] || []).includes('aktywny')
+      ? reguly.przeszkodyPrzejscia({ ...wynik }, 'aktywny', { dzis, dokumenty: dok }) : [],
     dokumenty: dok,
     historia: db.prepare('SELECT * FROM psa_przeniesienia_historia WHERE przeniesienie_id = ? ORDER BY id').all(id),
     // W7.9 / D-085 — opłaty za przejęcie rejestru nie pobieramy.

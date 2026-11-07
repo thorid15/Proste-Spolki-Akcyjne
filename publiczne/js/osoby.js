@@ -92,11 +92,11 @@ function SekcjaSkanowAml({ osobaId, spolkaId }) {
         </ul>
       )}
       <div className="siatka-3">
-        <select value={typDokumentu} onChange={(z) => ustawTypDokumentu(z.target.value)}>
+        <select aria-label="Rodzaj dokumentu tożsamości" value={typDokumentu} onChange={(z) => ustawTypDokumentu(z.target.value)}>
           {TYPY_DOKUMENTU_AML.map((t) => <option key={t.wartosc} value={t.wartosc}>{t.etykieta}</option>)}
         </select>
         <PoleDaty wartosc={retencjaDo} przyZmianie={ustawRetencjaDo} />
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(z) => ustawPlik(z.target.files[0] || null)} />
+        <input type="file" aria-label="Skan dokumentu tożsamości" accept=".pdf,.jpg,.jpeg,.png" onChange={(z) => ustawPlik(z.target.files[0] || null)} />
       </div>
       <button className="btn btn-maly" onClick={wgraj} disabled={!plik || wgrywanie} style={{ marginTop: 8 }}>
         {wgrywanie ? 'Przesyłanie…' : 'Dodaj skan'}
@@ -211,8 +211,8 @@ function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej
   const poczatkowe = useRef(JSON.stringify(dane));
   const zmienione = () => JSON.stringify(dane) !== poczatkowe.current;
   useBlokadaWyjscia(() => zmienione() && !zapisywanie && !zmianaRejestrowa);
-  function anuluj() {
-    if (zmienione() && !window.confirm('Zamknąć bez zapisania wprowadzonych danych?')) return;
+  async function anuluj() {
+    if (zmienione() && !(await potwierdz({ tytul: 'Niezapisane dane', tresc: 'Zamknąć bez zapisania wprowadzonych danych?', akcja: 'Zamknij bez zapisania', zamknij: 'Wróć do formularza', niebezpieczna: true }))) return;
     przyZamknieciu();
   }
 

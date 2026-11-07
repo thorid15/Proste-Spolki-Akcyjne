@@ -85,14 +85,14 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
 
           <span className="pasek-pole">
             <span className="fl" style={{ marginBottom: 0 }}>Odbiorca</span>
-            <select value={rola} onChange={(z) => ustawRole(z.target.value)} style={{ width: 'auto' }}>
+            <select aria-label="Odbiorca informacji" value={rola} onChange={(z) => ustawRole(z.target.value)} style={{ width: 'auto' }}>
               {ROLE_INFORMACJI.map((r) => (
                 <option key={r.wartosc} value={r.wartosc}>{r.nazwa}</option>
               ))}
             </select>
 
             {rola === 'akcjonariusz' && (
-              <select value={odbiorca} onChange={(z) => ustawOdbiorce(z.target.value)} style={{ width: 'auto' }}>
+              <select aria-label="Akcjonariusz — odbiorca" value={odbiorca} onChange={(z) => ustawOdbiorce(z.target.value)} style={{ width: 'auto' }}>
                 <option value="">— który akcjonariusz —</option>
                 {((stan.dane && stan.dane.akcjonariusze) || []).map((a) => (
                   <option key={a.osoba_id} value={a.osoba_id}>
@@ -103,7 +103,7 @@ function EkranInformacji({ spolkaId, dataPoczatkowa }) {
             )}
 
             {rola === 'organ' && (
-              <select value={organ} onChange={(z) => ustawOrgan(z.target.value)} style={{ width: 'auto' }}>
+              <select aria-label="Organ — odbiorca" value={organ} onChange={(z) => ustawOrgan(z.target.value)} style={{ width: 'auto' }}>
                 {ORGANY_INFORMACJI.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             )}

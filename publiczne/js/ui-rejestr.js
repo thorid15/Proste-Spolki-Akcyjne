@@ -194,23 +194,36 @@ function KolumnaSprawy({ children }) {
  * R4 K1: jeden pasek akcji — wyrównany do prawej, drugorzędne po lewej, jeden główny skrajny prawy;
  * na telefonie w pionie, główny na górze. `akcje`: [{ etykieta, przyKlik, glowna?, niebezpieczna?, wylaczona? }].
  */
-function PasekAkcji({ akcje }) {
+/**
+ * Jeden pasek akcji dla wszystkich ekranów (A-021): akcje drugorzędne, potem jedna główna. `duze` — nawigacja kroku
+ * kreatora (duże przyciski, „Wstecz” z lewej, „Dalej” z prawej; dawny `NawigacjaKreatora`). Akcja wyłączona z `powod`
+ * mówi, dlaczego jest wyłączona.
+ */
+function PasekAkcji({ akcje, duze = false }) {
+  const idPowodu = useId();
   const widoczne = (akcje || []).filter(Boolean);
   if (!widoczne.length) return null;
   const kolejnosc = [...widoczne.filter((a) => !a.glowna), ...widoczne.filter((a) => a.glowna).slice(0, 1)];
+  const powod = kolejnosc.find((a) => a.wylaczona && a.powod);
   return (
-    <div className="pasek-akcji bez-druku">
-      {kolejnosc.map((a) => (
-        <button
-          key={a.etykieta}
-          className={`btn btn-sm${a.glowna ? ' btn-glowny' : ''}${a.niebezpieczna ? ' btn-danger' : ''}`}
-          onClick={a.przyKlik}
-          disabled={a.wylaczona}
-        >
-          {a.etykieta}
-        </button>
-      ))}
-    </div>
+    <>
+      {powod && <p className="nawigacja-powod" id={idPowodu}>{powod.powod}</p>}
+      <div className={duze ? 'nawigacja-kreatora bez-druku' : 'pasek-akcji bez-druku'}>
+        {duze && !kolejnosc.some((a) => !a.glowna) && <span />}
+        {kolejnosc.map((a) => (
+          <button
+            key={a.etykieta}
+            type={duze ? 'button' : undefined}
+            className={`btn ${duze ? 'btn-nawigacja' : 'btn-sm'}${a.glowna ? ' btn-glowny' : ''}${a.niebezpieczna ? ' btn-danger' : ''}`}
+            onClick={a.przyKlik}
+            disabled={a.wylaczona}
+            aria-describedby={a.wylaczona && a.powod ? idPowodu : undefined}
+          >
+            {a.etykieta}
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -361,6 +374,39 @@ function Pusto({ tytul, opis, akcja, ikona = 'pusto' }) {
  * — tło zostaje widoczne, panel ma pełną wysokość i własne przewijanie, a
  * przyciski stopki są zawsze na dole ekranu.
  */
+/**
+ * A-017: okno potwierdzenia aplikacji zamiast `window.confirm` — przycisk nazywa czynność („Usuń plik” / „Zostaw plik”).
+ * Zwraca Promise<boolean>; okno renderuje się we własnym korzeniu, więc działa z każdego miejsca (także z rdzenia trasy).
+ */
+function potwierdz({ tytul, tresc, akcja, zamknij = 'Anuluj', niebezpieczna = false }) {
+  return new Promise((rozwiaz) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const korzen = ReactDOM.createRoot(host);
+    let zakonczono = false;
+    const koniec = (wynik) => {
+      if (zakonczono) return;
+      zakonczono = true;
+      setTimeout(() => { korzen.unmount(); host.remove(); }, 0);
+      rozwiaz(wynik);
+    };
+    korzen.render(
+      <Modal
+        tytul={tytul}
+        przyZamknieciu={() => koniec(false)}
+        stopka={(
+          <>
+            <button type="button" className="btn" onClick={() => koniec(false)}>{zamknij}</button>
+            <button type="button" className={`btn ${niebezpieczna ? 'btn-danger' : 'btn-glowny'}`} onClick={() => koniec(true)}>{akcja}</button>
+          </>
+        )}
+      >
+        <p>{tresc}</p>
+      </Modal>
+    );
+  });
+}
+
 function Modal({ tytul, children, stopka, przyZamknieciu, szerokosc, panel = false }) {
   useEscape(() => przyZamknieciu && przyZamknieciu());
   const idTytulu = useId();
@@ -707,15 +753,19 @@ function Pole({ etykieta, podpowiedz, blad, ostrzezenie, echo, opcjonalne, id: i
   const opis = [blad && idBledu, !blad && ostrzezenie && idOstrzezenia, podpowiedz && idPodpowiedzi]
     .filter(Boolean).join(' ') || undefined;
 
-  const pojedyncze = React.isValidElement(children)
-    && (['input', 'select', 'textarea'].includes(children.type) || (children.type && children.type.przyjmujeId));
-  const dziecko = pojedyncze
-    ? React.cloneElement(children, {
-      id: children.props.id || id,
-      'aria-describedby': opis,
-      'aria-invalid': blad ? true : undefined,
-    })
-    : children;
+  const kontrolka = (c) => React.isValidElement(c)
+    && (['input', 'select', 'textarea'].includes(c.type) || (c.type && c.type.przyjmujeId));
+  const sklonuj = (c) => React.cloneElement(c, {
+    id: c.props.id || id,
+    'aria-describedby': opis,
+    'aria-invalid': blad ? true : undefined,
+  });
+  // Dostępność (raport § 2.3): przy kilku dzieciach (pole + znacznik, przycisk) etykieta wiąże się z PIERWSZĄ kontrolką.
+  const pojedyncze = kontrolka(children);
+  const lista = pojedyncze ? null : React.Children.toArray(children);
+  const indeks = lista ? lista.findIndex(kontrolka) : -1;
+  const powiazana = pojedyncze ? children : indeks >= 0 ? lista[indeks] : null;
+  const dziecko = pojedyncze ? sklonuj(children) : indeks >= 0 ? lista.map((c, i) => (i === indeks ? sklonuj(c) : c)) : children;
 
   function opuszczenie(z) {
     if (!przyOpuszczeniu) return;
@@ -726,7 +776,7 @@ function Pole({ etykieta, podpowiedz, blad, ostrzezenie, echo, opcjonalne, id: i
   return (
     <div className={`pole ${blad ? 'pole-z-bledem' : ''}`} onBlur={przyOpuszczeniu ? opuszczenie : undefined}>
       {etykieta && (
-        <label className="pole-etykieta" htmlFor={pojedyncze ? (children.props.id || id) : undefined} id={`${id}-etykieta`}>
+        <label className="pole-etykieta" htmlFor={powiazana ? (powiazana.props.id || id) : undefined} id={`${id}-etykieta`}>
           {etykieta}
           {/* „(opcjonalnie)" przy etykiecie, a nie w podpowiedzi pod polem:
               o tym, czy pole trzeba wypełnić, decyduje się PATRZĄC na nie,
@@ -1587,7 +1637,7 @@ function KrokNaglowek({ tytul, opis }) {
  * Klika się CAŁY wiersz, nie strzałkę na jego końcu: cel wielkości palca,
  * nie cel wielkości ikony.
  */
-function WierszPodmiotu({ ikona = 'osoby', tytul, opis, znacznik, przyKliknieciu, wylaczony = false }) {
+function WierszPodmiotu({ ikona = 'osoby', tytul, opis, znacznik, kontakt = null, przyKliknieciu, wylaczony = false }) {
   return (
     <button type="button" className="wiersz-podmiotu" onClick={przyKliknieciu} disabled={wylaczony}>
       <span className="wiersz-podmiotu-ikona"><Ikona nazwa={ikona} rozmiar={20} /></span>
@@ -1595,6 +1645,8 @@ function WierszPodmiotu({ ikona = 'osoby', tytul, opis, znacznik, przyKliknieciu
         <span className="wiersz-podmiotu-tytul">
           {tytul}
           {znacznik && <span className="wiersz-podmiotu-znacznik">{znacznik}</span>}
+          {/* Znacznik kontaktu („list”, gdy brak zgody na e-mail) — jak w reszcie aplikacji. */}
+          {kontakt && <ZnacznikKontaktu osoba={kontakt} />}
         </span>
         {opis && <span className="wiersz-podmiotu-opis">{opis}</span>}
       </span>
@@ -1621,38 +1673,15 @@ function WierszDodania({ etykieta, przyKliknieciu, wylaczony = false }) {
  * zaproszeniem, a nie drobnym odnośnikiem do wypatrzenia.
  */
 function NawigacjaKreatora({ wstecz, dalej }) {
-  // Wyłączony przycisk zawsze mówi, DLACZEGO jest wyłączony (FAZA 1 pkt 4).
-  // Braki w formularzu nie wyłączają „Dalej" — kliknięcie pokazuje
-  // podsumowanie błędów; wyłączenie zostaje tylko dla blokady prawnej.
-  const idPowodu = useId();
+  // A-021: ten sam pasek akcji co w reszcie aplikacji, w trybie dużych przycisków kroku.
   return (
-    <>
-    {dalej && dalej.wylaczony && dalej.powod && (
-      <p className="nawigacja-powod" id={idPowodu}>{dalej.powod}</p>
-    )}
-    <div className="nawigacja-kreatora">
-      {wstecz
-        ? (
-          <button type="button" className="btn btn-nawigacja" onClick={wstecz.przy} disabled={wstecz.wylaczony}>
-            {wstecz.etykieta}
-          </button>
-        )
-        : <span />}
-      {dalej
-        ? (
-          <button
-            type="button"
-            className="btn btn-glowny btn-nawigacja"
-            onClick={dalej.przy}
-            disabled={dalej.wylaczony}
-            aria-describedby={dalej.wylaczony && dalej.powod ? idPowodu : undefined}
-          >
-            {dalej.etykieta}
-          </button>
-        )
-        : <span />}
-    </div>
-    </>
+    <PasekAkcji
+      duze
+      akcje={[
+        wstecz && { etykieta: wstecz.etykieta, przyKlik: wstecz.przy, wylaczona: wstecz.wylaczony },
+        dalej && { etykieta: dalej.etykieta, przyKlik: dalej.przy, wylaczona: dalej.wylaczony, powod: dalej.powod, glowna: true },
+      ]}
+    />
   );
 }
 
