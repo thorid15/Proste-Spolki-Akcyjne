@@ -1,6 +1,6 @@
 # Mapa procesów — stan z kodu (SESJA-PSA-ANALIZA-PRZEPLYWOW)
 
-> **Odświeżona 7.11.2026** — stan po wdrożeniu etapów 1–4 analizy (`RAPORT-PRZEPLYWY.md` § 9) i decyzjach D-095–D-111.
+> **Odświeżona 7.11.2026** — stan po wdrożeniu etapów 1–5 analizy (`RAPORT-PRZEPLYWY.md` § 9) i decyzjach D-095–D-111.
 > Pierwotna wersja (3.11.2026, po scaleniu R4 `8a75c01`) — w historii git; § 4 i § 5 pokazują, co się od niej zmieniło. Źródło: trasy `server/trasy/*.js`, widoki
 > `publiczne/js/*.js`, katalog typów `server/logika/typy-zdarzen.js`. Pola wyliczone ekstraktorem
 > (`<Pole etykieta=…>` w każdym komponencie) i sprawdzone ręcznie tam, gdzie heurystyka myli kontrolkę.
@@ -180,18 +180,18 @@ Portal oferuje typy ze sprintów 1–2 bez `z_urzedu` (`portal.js:1929`).
 
 | # | Czynność | Stan 3.11.2026 | Po etapie 4 |
 |---|---|---|---|
-| W1 | **Wybór akcjonariusza** | `WyborZKartoteki` (cała kartoteka) w `obciazenie`, `uprawnienie`, `zobowiazanie`, `pokrycie_akcji`, `zajecie` vs `<select>` z rejestru w `umorzenie`, `uniewaznienie`, zbycie, `przeniesienie_ulamka` | **otwarte (A-015)** — z rejestru także `zmiana_danych_akcjonariusza`; pozostałe 5 typów nadal z kartoteki |
+| W1 | **Wybór akcjonariusza** | `WyborZKartoteki` (cała kartoteka) w `obciazenie`, `uprawnienie`, `zobowiazanie`, `pokrycie_akcji`, `zajecie` vs `<select>` z rejestru w `umorzenie`, `uniewaznienie`, zbycie, `przeniesienie_ulamka` | akcjonariusz zawsze z rejestru (`WyborAkcjonariusza`, A-015, etap 5); z kartoteki — zastawnik, organ, nabywca, obejmujący, przedstawiciel |
 | W2 | **Nowa osoba w trakcie wpisu** | „+ Nowa osoba w kartotece” vs `NowyNabywca` w zbyciu | jeden `PanelOsoby` („Dodaj do kartoteki”, A-019) |
 | W3 | **Pole daty** | `PoleDaty` vs natywne `type="date"` (4) | `PoleDaty` wszędzie (A-016, A-035: `min`/`max` także z klawiatury) |
-| W4 | **Okno potwierdzenia** | `Modal` vs `window.confirm` (9) vs `alert` (5) | **częściowo** — przyciski okien sprawy i listów nazywają czynność (A-017); `window.confirm` (7: `osoby.js`, `rdzen.js`, `wniosek.js` ×2, `wnioski.js` ×3) i `window.alert` (4: `kokpit.js`, `wnioski.js`, `zgloszenia.js` ×2) — otwarte |
-| W5 | **Pasek akcji** | `PasekAkcji` tylko w sprawie i zbyciu | **częściowo** — cały kreator wpisu (A-021, A-037); wniosek (`NawigacjaKreatora`), przeniesienie, kokpit — otwarte |
+| W4 | **Okno potwierdzenia** | `Modal` vs `window.confirm` (9) vs `alert` (5) | okno aplikacji `potwierdz()` z nazwą czynności wszędzie (także blokada wyjścia); błędy na ekranie zamiast `alert` (A-017, etap 5) |
+| W5 | **Pasek akcji** | `PasekAkcji` tylko w sprawie i zbyciu | `PasekAkcji` w kreatorze wpisu, wniosku (tryb dużych przycisków zamiast `NawigacjaKreatora`) i przeniesieniu (A-021); kokpit — przyciski nagłówka |
 | W6 | **Kreator wpisu** | 4 kroki na dwóch adresach (K4) vs 3 kroki (K5) | jeden kreator 3 kroków (D-097); po „Podstawie” zmiana adresu na `#/sprawy/:id` (jak dawniej w zbyciu) |
 | W7 | **Nazwa kroku weryfikacji** | „Weryfikacja i podgląd” / „Sprawdzenie i wpis” / „Weryfikacja” | „Sprawdzenie i wpis” w każdym wpisie; „Weryfikacja” zostaje w otwarciu rejestru (K3a) |
 | W8 | **Podstawa wpisu** | krok 2 K4 vs okno `PodstawaWpisu` vs krok 2 zbycia | krok 2 kreatora wszędzie; okno tylko do zmiany rodzaju wpisu (A-006) |
 | W9 | **Sprostowanie** | typ w kreatorze + 2 okna | 2 okna (historia, sprostowanie emisji); typ poza kreatorem (D-103) |
 | W10 | **Dane spółki** | dwa formularze (P3 1/4, K3a 1/4) | `PolaDanychSpolki` (A-002) |
 | W11 | **Lista danych** | `ListaDanych` vs `Metryka` vs `Para` vs tabele ad hoc | `Para` usunięty (A-022); `Metryka` zostaje (pasek wskaźników — inna rola) |
-| W12 | **Znacznik kontaktu** | brak przy akcjonariuszach w kokpicie i we wniosku | **otwarte** |
+| W12 | **Znacznik kontaktu** | brak przy akcjonariuszach w kokpicie i we wniosku | kokpit (tabela akcjonariatu) i wniosek — portal i kancelaria (etap 5) |
 
 ---
 
