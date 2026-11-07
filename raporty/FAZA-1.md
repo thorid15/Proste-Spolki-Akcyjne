@@ -30,8 +30,8 @@
 4. `zip.js` jest na liście usunięć Fazy 2 (U-04), a wymaga go eksport ZIP (bez zmian, § 3.6) — eksport odłączony do Fazy 2.
 5. `auth.js` ma nadal SQL w trasach (poza „sprawami, spółkami i osobami”) — do Fazy 5/6. Gałąź jak w Fazie 0.
 
-## Pytania i odpowiedzi Łukasza (DECYZJE D-155–D-167)
+## Pytania i odpowiedzi Łukasza (DECYZJE D-155–D-168)
 1. D-156 — osoby działającej przy wpisie nie zapisuje się wcale: pole „działa przez” w sprawie usunięte.
 2. D-157 — potwierdzona (akcjonariusz powiadamiany, gdy zastawnik dostaje prawo głosu).
-3. D-163 — otwarte: czy zgoda na wpis ma tracić ważność po „Zmień treść”, tak jak wysłane powiadomienia?
+3. D-168 — zgoda na wpis jest ogólna (zgodnie z umową spółki albo umową sprzedaży), więc zostaje ważna po „Zmień treść”.
 4. `zip.js` — na razie zostaje (eksport ZIP).

@@ -1726,6 +1726,13 @@
   3. `zip.js` na razie zostaje (eksport ZIP rejestru, § 3.6) — odstępstwo od listy usunięć U-04.
   4. D-163 (zgoda na wpis po „Zmień treść”) — pytanie otwarte.
 
+### D-168 — Zgoda na wpis jest ogólna (Łukasz, 7.11.2026)
+
+- Obszar: sprawy / zgoda na wpis (art. 300³⁴ § 3 KSH; rozstrzyga pytanie z D-167 pkt 4)
+- Decyzja: zgoda na wpis wyraża zgodę na wpis zgodnie z dokumentem podstawy (np. umową spółki albo umową sprzedaży), bez szczegółów
+  wpisu — zostaje ważna po „Zmień treść” (w przeciwieństwie do wysłanych powiadomień, które tracą ważność — R2). Odnotowanie zgody: osoba,
+  „dopuszczalna forma”, data, opcjonalnie plik (D-088). Potwierdza zachowanie z D-163; bez zmian w kodzie.
+
 ---
 
 ## Decyzje otwarte
