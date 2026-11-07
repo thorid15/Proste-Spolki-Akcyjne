@@ -140,8 +140,8 @@ function zmien(db, id, we, kto) {
       throw new BladWalidacji([{ pole: tresc[0], komunikat: 'Treść sprawy jest zatwierdzona — wybierz „Zmień treść”, aby ją poprawić.' }]);
     }
     const pola = {};
-    for (const k of [...POLA_TRESCI, 'dziala_przez', 'data_wplywu', 'checklista', 'oplata']) {
-      if (we[k] !== undefined) pola[k] = ['podstawa', 'zadajacy_opis', 'dziala_przez'].includes(k) ? tekst(we[k]) : we[k];
+    for (const k of [...POLA_TRESCI, 'data_wplywu', 'checklista', 'oplata']) {
+      if (we[k] !== undefined) pola[k] = ['podstawa', 'zadajacy_opis'].includes(k) ? tekst(we[k]) : we[k];
     }
     const s = sprawdzDane(db, { ...sprawa, ...pola });
     for (const k of ['zadajacy_osoba_id', 'zadajacy_opis']) if (pola.zadajacy !== undefined || pola[k] !== undefined) pola[k] = s[k];
@@ -237,7 +237,6 @@ function zaloz(db, we, kto) {
         zadajacy: we.zadajacy,
         zadajacy_osoba_id: we.zadajacy_osoba_id,
         zadajacy_opis: tekst(we.zadajacy_opis),
-        dziala_przez: tekst(we.dziala_przez),
         data_wplywu: we.data_wplywu || czas.dzisIso(),
         operacje: we.operacje || [],
         podstawa: tekst(we.podstawa),

@@ -85,7 +85,6 @@ const SQL_SCHEMAT = `
     zadajacy            TEXT NOT NULL CHECK (zadajacy IN ('spolka','osoba','organ','brak')),
     zadajacy_osoba_id   INTEGER REFERENCES psa_osoby(id),
     zadajacy_opis       TEXT,                      -- organ: nazwa i sygnatura (U-15)
-    dziala_przez        TEXT,
     data_wplywu         TEXT NOT NULL,
     wstrzymana_od       TEXT,
     wznowiona_od        TEXT,

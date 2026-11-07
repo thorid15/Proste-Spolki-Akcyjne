@@ -51,9 +51,9 @@ function dodaj(db, s) {
   const teraz = czas.terazIso();
   const w = db
     .prepare(
-      `INSERT INTO psa_sprawy (spolka_id, zadajacy, zadajacy_osoba_id, zadajacy_opis, dziala_przez, data_wplywu,
+      `INSERT INTO psa_sprawy (spolka_id, zadajacy, zadajacy_osoba_id, zadajacy_opis, data_wplywu,
          operacje_json, podstawa, podstawa_data, klucz_idempotencji, autor, utworzono, zmieniono)
-       VALUES (@spolka_id, @zadajacy, @zadajacy_osoba_id, @zadajacy_opis, @dziala_przez, @data_wplywu,
+       VALUES (@spolka_id, @zadajacy, @zadajacy_osoba_id, @zadajacy_opis, @data_wplywu,
          @operacje_json, @podstawa, @podstawa_data, @klucz_idempotencji, @autor, @teraz, @teraz)`
     )
     .run({
@@ -61,7 +61,6 @@ function dodaj(db, s) {
       zadajacy: s.zadajacy,
       zadajacy_osoba_id: s.zadajacy_osoba_id ?? null,
       zadajacy_opis: s.zadajacy_opis ?? null,
-      dziala_przez: s.dziala_przez ?? null,
       data_wplywu: s.data_wplywu,
       operacje_json: JSON.stringify(s.operacje || []),
       podstawa: s.podstawa ?? null,
@@ -77,7 +76,6 @@ const KOLUMNY = {
   zadajacy: 'zadajacy',
   zadajacy_osoba_id: 'zadajacy_osoba_id',
   zadajacy_opis: 'zadajacy_opis',
-  dziala_przez: 'dziala_przez',
   data_wplywu: 'data_wplywu',
   podstawa: 'podstawa',
   podstawa_data: 'podstawa_data',

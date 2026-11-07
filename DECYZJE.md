@@ -1718,6 +1718,14 @@
   11. **D-165** D-R01: wpis z chwilą wcześniejszą niż ostatni wpis spółki jest wstrzymany (kontrola zegara w symulacji sprawy).
   12. **D-166** Do czasu przebudowy odłączone (trasy niemontowane, testy pominięte z numerem fazy): eksport ZIP i przypomnienia (Faza 2), import KRS i wnioski (Faza 4), portal i tpay (Faza 5).
 
+### D-167 — Odpowiedzi do raportu Fazy 1 (Łukasz, 7.11.2026)
+
+- Decyzje:
+  1. Uzupełnienie D-156: nie zapisuje się, czy wpisu dokonał notariusz, czy zastępca — pole `dziala_przez` w sprawie usunięte (bez zastępstwa).
+  2. D-157 potwierdzona.
+  3. `zip.js` na razie zostaje (eksport ZIP rejestru, § 3.6) — odstępstwo od listy usunięć U-04.
+  4. D-163 (zgoda na wpis po „Zmień treść”) — pytanie otwarte.
+
 ---
 
 ## Decyzje otwarte

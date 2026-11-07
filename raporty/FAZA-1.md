@@ -30,8 +30,8 @@
 4. `zip.js` jest na liście usunięć Fazy 2 (U-04), a wymaga go eksport ZIP (bez zmian, § 3.6) — eksport odłączony do Fazy 2.
 5. `auth.js` ma nadal SQL w trasach (poza „sprawami, spółkami i osobami”) — do Fazy 5/6. Gałąź jak w Fazie 0.
 
-## Pytania (szczegóły: DECYZJE D-155–D-166)
-1. D-156: `psa_osoby_dzialajace` zapisywała w każdym wpisie notariusza albo zastępcę. Wystarczy tekst „działa przez” w sprawie?
-2. D-157: przyznanie zastawnikowi prawa głosu — powiadamiać akcjonariusza (moja wykładnia art. 300³⁴ § 3)?
-3. D-163: czy zgoda na wpis ma tracić ważność po „Zmień treść”, tak jak wysłane powiadomienia?
-4. `zip.js` zostaje dla eksportu ZIP mimo U-04?
+## Pytania i odpowiedzi Łukasza (DECYZJE D-155–D-167)
+1. D-156 — osoby działającej przy wpisie nie zapisuje się wcale: pole „działa przez” w sprawie usunięte.
+2. D-157 — potwierdzona (akcjonariusz powiadamiany, gdy zastawnik dostaje prawo głosu).
+3. D-163 — otwarte: czy zgoda na wpis ma tracić ważność po „Zmień treść”, tak jak wysłane powiadomienia?
+4. `zip.js` — na razie zostaje (eksport ZIP).
