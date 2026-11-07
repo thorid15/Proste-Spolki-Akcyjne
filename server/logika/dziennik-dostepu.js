@@ -70,4 +70,15 @@ function zapiszOdczytRejestruPortalu(db, { kto, spolkaId, liczbaOsob, zamaskowan
   });
 }
 
-module.exports = { zapisz, zapiszOdczytRejestruPortalu, AKCJE };
+/**
+ * D-122 (P-009): retencja dziennika dostępu — 5 lat od wpisu (jak dokumentacja środków AML, art. 49 ustawy AML;
+ * rozliczalność RODO). Starsze wpisy usuwa harmonogram raz na dobę.
+ */
+const RETENCJA_LAT = 5;
+function usunPrzeterminowane(db, { teraz = new Date() } = {}) {
+  const granica = new Date(teraz);
+  granica.setFullYear(granica.getFullYear() - RETENCJA_LAT);
+  return db.prepare('DELETE FROM psa_dziennik_dostepu WHERE chwila < ?').run(granica.toISOString()).changes;
+}
+
+module.exports = { zapisz, zapiszOdczytRejestruPortalu, usunPrzeterminowane, RETENCJA_LAT, AKCJE };

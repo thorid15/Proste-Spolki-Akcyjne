@@ -634,7 +634,11 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
               <Pole etykieta="Data uchwały o wyborze" podpowiedz="art. 300(32) § 1 KSH">
                 <PoleDaty wartosc={dane.data_uchwaly_wyboru} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_uchwaly_wyboru: v }))} />
               </Pole>
-              <Pole etykieta="Data umowy o prowadzenie rejestru">
+              <Pole
+                etykieta="Data umowy o prowadzenie rejestru"
+                ostrzezenie={dane.data_uchwaly_wyboru && dane.data_umowy && dane.data_uchwaly_wyboru > dane.data_umowy
+                  ? 'Uchwała o wyborze jest późniejsza niż umowa — sprawdź daty (D-113).' : undefined}
+              >
                 <PoleDaty wartosc={dane.data_umowy} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_umowy: v }))} />
               </Pole>
               <Pole
@@ -811,7 +815,6 @@ function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) 
                   <option value="zwykla">zwykła</option>
                   <option value="uprzywilejowana">uprzywilejowana</option>
                   <option value="zalozycielska">założycielska</option>
-                  <option value="niema">niema</option>
                 </select>
               </Pole>
             </div>

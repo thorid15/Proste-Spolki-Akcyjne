@@ -76,14 +76,14 @@ async function zapytaj(metoda, sciezka, cialo, naglowki = {}) {
   return [odp.status, dane];
 }
 
-test('Z-008: data uchwaly o wyborze notariusza pozniejsza niz data umowy o prowadzenie rejestru jest odrzucona', async () => {
+test('Z-008 / D-113: data uchwaly pozniejsza niz data umowy — zapis z ostrzezeniem, nie blokada', async () => {
   const [status, dane] = await zapytaj(
     'POST', '/api/psa/spolki',
     { nazwa: 'Uchwala Po Umowie P.S.A.', krs: '0000776655', data_uchwaly_wyboru: '2026-03-10', data_umowy: '2026-03-01' },
     { Cookie: ciastkoSesji }
   );
-  assert.equal(status, 400);
-  assert.match(dane.blad, /uchwały o wyborze notariusza.*nie może być późniejsza/);
+  assert.equal(status, 201);
+  assert.ok(dane.ostrzezenia.some((o) => /uchwały o wyborze notariusza.*późniejsza/.test(o)));
 });
 
 test('Z-008: data uchwaly rowna albo wczesniejsza niz data umowy przechodzi', async () => {
@@ -129,8 +129,11 @@ test('Z-008: sprawdzenie dziala tez przy PUT, gdy tylko jedno z pol sie zmienia 
     { data_uchwaly_wyboru: '2026-03-15' },
     { Cookie: ciastkoSesji }
   );
-  assert.equal(status, 400);
-  assert.match(dane.blad, /uchwały o wyborze notariusza.*nie może być późniejsza/);
+  assert.equal(status, 200, 'D-113: ostrzezenie, nie blokada');
+  assert.ok(dane.ostrzezenia.some((o) => /uchwały o wyborze notariusza.*późniejsza/.test(o)));
+
+  const [, zmianaUmowy] = await zapytaj('PUT', `/api/psa/spolki/${spolkaId}`, { data_umowy: '2026-03-20' }, { Cookie: ciastkoSesji });
+  assert.ok(zmianaUmowy.ostrzezenia.some((o) => o.includes('Zmieniono datę umowy') && o.includes('2026-03-01')));
 });
 
 test('Z-019: data_otwarcia_rejestru nie da sie ustawic recznie przez POST/PUT - wylacznie automatem przy otworz-rejestr', async () => {

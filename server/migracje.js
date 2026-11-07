@@ -2632,6 +2632,42 @@ const MIGRACJE = [
       ALTER TABLE psa_spolki ADD COLUMN reprezentant_osoba_id INTEGER REFERENCES psa_osoby(id);
     `,
   },
+  {
+    wersja: 71,
+    nazwa: 'D-108, D-115, D-116: bez imion rodziców i dowodu reprezentanta; reprezentant akcjonariusza-osoby prawnej; kilku beneficjentów',
+    sql: `
+      -- D-108: imiona rodziców i dokument tożsamości reprezentanta spółki są tylko w umowie o prowadzenie rejestru —
+      -- kopie zapisane w spółkach i w przyjętych wnioskach usuwamy (Łukasz, 7.11.2026).
+      UPDATE psa_spolki SET reprezentant_rodzice = NULL, reprezentant_rodzice_recznie = NULL, reprezentant_dowod = NULL,
+             reprezentant_dowod_rodzaj = NULL, reprezentant_dowod_numer = NULL;
+      UPDATE psa_wnioski SET reprezentant_rodzice = NULL, reprezentant_rodzice_recznie = NULL, reprezentant_dowod = NULL,
+             reprezentant_dowod_rodzaj = NULL, reprezentant_dowod_numer = NULL
+       WHERE status = 'przyjety';
+      -- D-115 (P-016): osoba fizyczna działająca za akcjonariusza-osobę prawną („Reprezentant” wg umowy tej osoby prawnej);
+      -- wpisuje klient we wniosku, kancelaria potwierdza.
+      ALTER TABLE psa_osoby ADD COLUMN reprezentant_imie TEXT;
+      ALTER TABLE psa_osoby ADD COLUMN reprezentant_nazwisko TEXT;
+      ALTER TABLE psa_osoby ADD COLUMN reprezentant_pesel TEXT;
+      ALTER TABLE psa_osoby ADD COLUMN reprezentant_funkcja TEXT;
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN reprezentant_imie TEXT;
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN reprezentant_nazwisko TEXT;
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN reprezentant_pesel TEXT;
+      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN reprezentant_funkcja TEXT;
+      -- D-116 (P-017): kilku beneficjentów rzeczywistych — lista id osób z kartoteki; beneficjent_rzeczywisty_id
+      -- zostaje jako pierwszy z listy (zgodność wsteczna).
+      ALTER TABLE psa_osoby ADD COLUMN beneficjenci_json TEXT;
+      UPDATE psa_osoby SET beneficjenci_json = json_array(beneficjent_rzeczywisty_id) WHERE beneficjent_rzeczywisty_id IS NOT NULL;
+      -- D-122 (P-009): retencja dziennika dostępu 5 lat — wpis młodszy niż 5 lat nadal nieusuwalny (append-only),
+      -- starszy usuwa harmonogram (server/logika/dziennik-dostepu.js: usunPrzeterminowane).
+      DROP TRIGGER IF EXISTS psa_dziennik_dostepu_bez_delete;
+      CREATE TRIGGER psa_dziennik_dostepu_bez_delete
+      BEFORE DELETE ON psa_dziennik_dostepu
+      WHEN OLD.chwila >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-5 years')
+      BEGIN
+        SELECT RAISE(ABORT, 'psa_dziennik_dostepu jest append-only — usuwa się wyłącznie wpisy starsze niż 5 lat (retencja D-122).');
+      END;
+    `,
+  },
 ];
 
 /**

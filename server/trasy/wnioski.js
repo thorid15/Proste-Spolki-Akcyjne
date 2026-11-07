@@ -778,6 +778,14 @@ function przypnijReprezentanta(wniosek, spolkaId, teraz) {
   db().prepare('UPDATE psa_spolki SET reprezentant_osoba_id = ? WHERE id = ?').run(osobaId, spolkaId);
 }
 
+/** D-108: po przyjęciu wniosku imiona rodziców i dokument tożsamości reprezentanta zostają tylko w podpisanej umowie. */
+function usunDaneTylkoDoUmowy(wniosekId) {
+  db().prepare(
+    `UPDATE psa_wnioski SET reprezentant_rodzice = NULL, reprezentant_rodzice_recznie = NULL, reprezentant_dowod = NULL,
+            reprezentant_dowod_rodzaj = NULL, reprezentant_dowod_numer = NULL WHERE id = ?`
+  ).run(wniosekId);
+}
+
 router.post(
   '/:id/przyjmij',
   asy((zad, odp) => {
@@ -865,6 +873,7 @@ router.post(
     }
 
     przypnijReprezentanta(wniosek, spolkaId, teraz);
+    usunDaneTylkoDoUmowy(wniosek.id);
 
     db()
       .prepare(

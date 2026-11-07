@@ -347,12 +347,11 @@ function KrokEmisja({ dane, ustawDane, spolka }) {
         </Pole>
       </div>
       <div className="siatka-2">
-        <Pole etykieta="Rodzaj akcji" podpowiedz="art. 300(33) § 1 pkt 4 KSH">
+        <Pole etykieta="Rodzaj akcji" podpowiedz="art. 300(33) § 1 pkt 4 KSH. Akcje nieme — zależnie od umowy spółki, opisz w „Opis” (D-112).">
           <select value={dane.rodzaj_akcji || 'zwykla'} onChange={(z) => ustawDane({ ...dane, rodzaj_akcji: z.target.value })}>
             <option value="zwykla">zwykła</option>
             <option value="uprzywilejowana">uprzywilejowana</option>
             <option value="zalozycielska">założycielska</option>
-            <option value="niema">niema</option>
           </select>
         </Pole>
         <Pole etykieta="Data wpisu emisji do KRS" wymagane>

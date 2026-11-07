@@ -548,6 +548,76 @@ function KartaProceduryAml({ spolka, spolkaId, odswiez }) {
   );
 }
 
+/**
+ * D-119 (P-004): dostęp do portalu domyślnie ma tylko wnioskodawca. Innego akcjonariusza zaprasza się na jego zgłoszenie:
+ * link aktywacyjny do przekazania mu e-mailem (bez automatycznej wysyłki). Portal — tylko przy zgodzie na e-mail (D-083).
+ */
+function ModalZaproszeniaAkcjonariusza({ stan, przyZamknieciu }) {
+  const akcjonariusze = zbywcyZRejestru(stan);
+  const [osobaId, ustawOsobaId] = useState('');
+  const [email, ustawEmail] = useState('');
+  const [wynik, ustawWynik] = useState(null);
+  const [blad, ustawBlad] = useState(null);
+  const [pracuje, ustawPracuje] = useState(false);
+  const [skopiowano, ustawSkopiowano] = useState(false);
+  async function generuj() {
+    ustawPracuje(true);
+    ustawBlad(null);
+    try {
+      ustawWynik(await API.post(`/api/psa/osoby/${osobaId}/zapros-do-portalu`, { email, tylko_link: true }));
+    } catch (e) {
+      ustawBlad(e.message);
+    } finally {
+      ustawPracuje(false);
+    }
+  }
+  async function kopiuj() {
+    try { await navigator.clipboard.writeText(wynik.link_aktywacyjny); ustawSkopiowano(true); } catch (e) { ustawSkopiowano(false); }
+  }
+  return (
+    <Modal
+      tytul="Zaproś nowego akcjonariusza"
+      przyZamknieciu={przyZamknieciu}
+      stopka={(
+        <>
+          <button type="button" className="btn" onClick={przyZamknieciu}>Zamknij</button>
+          {!wynik && (
+            <button type="button" className="btn btn-glowny" disabled={pracuje || !osobaId || !email.trim()} onClick={generuj}>
+              {pracuje ? 'Generowanie…' : 'Wygeneruj link'}
+            </button>
+          )}
+        </>
+      )}
+    >
+      <Komunikat odmiana="blad" tresc={blad} />
+      {!wynik ? (
+        <>
+          <Pole etykieta="Akcjonariusz" podpowiedz="Akcjonariusz tej spółki, który zgłosił chęć korzystania z portalu.">
+            <select value={osobaId} onChange={(z) => ustawOsobaId(z.target.value)}>
+              <option value="">— wybierz akcjonariusza —</option>
+              {akcjonariusze.map((a) => <option key={a.osoba_id} value={a.osoba_id}>{a.oznaczenie}</option>)}
+            </select>
+          </Pole>
+          <Pole etykieta="Adres e-mail konta" podpowiedz="Login do portalu — link wyślij na ten adres.">
+            <input type="email" value={email} onChange={(z) => ustawEmail(z.target.value)} placeholder="adres@przyklad.pl" />
+          </Pole>
+        </>
+      ) : wynik.juz_aktywne ? (
+        <Komunikat odmiana="info" tresc="Konto na ten adres jest już aktywne — akcjonariusz może się zalogować." />
+      ) : (
+        <>
+          <Komunikat odmiana="ok" tresc="Link aktywacyjny gotowy — przekaż go akcjonariuszowi e-mailem." />
+          <div className="rzad" style={{ gap: 8 }}>
+            <input type="text" readOnly value={wynik.link_aktywacyjny} aria-label="Link aktywacyjny" style={{ flex: 1 }} onFocus={(z) => z.target.select()} />
+            <button type="button" className="btn btn-glowny" onClick={kopiuj}>{skopiowano ? 'Skopiowano' : 'Kopiuj link'}</button>
+          </div>
+          <PrzyciskLinkuTestowego link={wynik.link_testowy} />
+        </>
+      )}
+    </Modal>
+  );
+}
+
 function MetrykaBoczna({ spolka, dane, spolkaId, odswiez }) {
   const integralnosc = useDane('/api/psa/integralnosc');
   const terminy = useDane(`/api/psa/sprawy?spolka_id=${spolkaId}`);
@@ -822,6 +892,7 @@ function EkranKokpitu({ spolkaId }) {
 
   const wstecz = data !== fmt.dzisIso();
   const [przekazywanie, ustawPrzekazywanie] = useState(false);
+  const [zapraszanie, ustawZapraszanie] = useState(false);
   const [prostowanaEmisja, ustawProstowanaEmisje] = useState(null);
 
   const { dane, ladowanie, blad, odswiez } = useDane(
@@ -932,6 +1003,9 @@ function EkranKokpitu({ spolkaId }) {
           <button className="btn" onClick={() => idz(`/spolki/${spolkaId}/wydruk/informacja?data=${data}`)}>
             <Ikona nazwa="dokument" rozmiar={16} /> Informacja z rejestru
           </button>
+          {!tylkoOdczyt && (
+            <button className="btn" onClick={() => ustawZapraszanie(true)}>Zaproś nowego akcjonariusza</button>
+          )}
           {!tylkoOdczyt && (
             <button className="btn-tekstowy" onClick={() => ustawPrzekazywanie(true)}>
               Przekazanie rejestru…
@@ -1410,6 +1484,8 @@ function EkranKokpitu({ spolkaId }) {
           }}
         />
       )}
+
+      {zapraszanie && <ModalZaproszeniaAkcjonariusza stan={dane} przyZamknieciu={() => ustawZapraszanie(false)} />}
 
       {przekazywanie && (
         <ModalPrzekazania

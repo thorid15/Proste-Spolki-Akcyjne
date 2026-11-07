@@ -17,7 +17,7 @@ const { posrednikBledow } = require('./server/pomocnicze/odpowiedzi');
 const autoryzacja = require('./server/pomocnicze/autoryzacja');
 const auth = require('./server/trasy/auth');
 const przypomnienia = require('./server/logika/przypomnienia');
-const { uruchomHarmonogramPrzypomnien } = require('./server/logika/harmonogram');
+const { uruchomHarmonogramPrzypomnien, uruchomRetencjeDziennika } = require('./server/logika/harmonogram');
 const trybTestowy = require('./server/tryb-testowy');
 
 const aplikacja = express();
@@ -209,6 +209,7 @@ if (require.main === module) {
     // dzialaly wylacznie po recznym kliknieciu w zakladce „Oplaty" - realny
     // wyzwalacz, nie tylko przycisk (patrz komentarz w harmonogram.js).
     uruchomHarmonogramPrzypomnien(db(), { wyslij: przypomnienia.wyslijPrzypomnienia });
+    uruchomRetencjeDziennika(db());
   });
 }
 

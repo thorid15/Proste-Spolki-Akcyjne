@@ -147,14 +147,13 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
       throw bledneZadanie(`Pole „${pole}” musi być datą w formacie RRRR-MM-DD.`);
     }
   }
-  // Naprawa Z-008: spolka wybiera notariusza UCHWALA, dopiero potem z nim
-  // zawiera umowe o prowadzenie rejestru - uchwala nie moze byc pozniejsza
-  // niz sama umowa. Sprawdzamy tylko, gdy obie daty sa znane (formularz
-  // uzupelnia je stopniowo, w kreatorze i pozniej).
+  // Z-008 / D-113 (P-005): spolka wybiera notariusza UCHWALA, dopiero potem z nim zawiera umowe — odwrotna
+  // kolejnosc dat to OSTRZEZENIE (decyzja Lukasza), nie blokada. Tylko gdy obie daty sa znane.
+  const ostrzezenia = [];
   if (dane.data_uchwaly_wyboru && dane.data_umowy && dane.data_uchwaly_wyboru > dane.data_umowy) {
-    throw bledneZadanie(
-      `Data uchwały o wyborze notariusza (${dane.data_uchwaly_wyboru}) nie może być późniejsza ` +
-        `niż data umowy o prowadzenie rejestru (${dane.data_umowy}).`
+    ostrzezenia.push(
+      `Data uchwały o wyborze notariusza (${dane.data_uchwaly_wyboru}) jest późniejsza ` +
+        `niż data umowy o prowadzenie rejestru (${dane.data_umowy}) — sprawdź daty.`
     );
   }
   if (dane.status && !Object.values(przepisy.STATUSY_SPOLKI).includes(dane.status)) {
@@ -183,6 +182,7 @@ function sprawdzDaneSpolki(dane, { wymaganaNazwa = true } = {}) {
   if (dane.organ_rodzaj && !['zarzad', 'rada_dyrektorow'].includes(dane.organ_rodzaj)) {
     throw bledneZadanie('Rodzaj organu musi być „zarzad” albo „rada_dyrektorow”.');
   }
+  return ostrzezenia;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -250,7 +250,7 @@ router.post(
   asy((zad, odp) => {
     const dane = wyczysc(zad.body || {});
     if (dane.forma_prawna === undefined) dane.forma_prawna = przepisy.FORMA_PRAWNA_WYMAGANA;
-    sprawdzDaneSpolki(dane);
+    const ostrzezenia = sprawdzDaneSpolki(dane);
 
     const teraz = czas.terazIso();
     const kolumny = Object.keys(dane);
@@ -263,6 +263,7 @@ router.post(
 
     odp.status(201).json({
       spolka: db().prepare('SELECT * FROM psa_spolki WHERE id = ?').get(wynik.lastInsertRowid),
+      ostrzezenia,
     });
   })
 );
@@ -430,7 +431,11 @@ router.put(
     if (biezaca.przekazanie_data) throw bledneZadanie(przepisy.blokadaWpisu(biezaca));
 
     const dane = wyczysc(zad.body || {});
-    sprawdzDaneSpolki({ ...biezaca, ...dane }, { wymaganaNazwa: true });
+    const ostrzezenia = sprawdzDaneSpolki({ ...biezaca, ...dane }, { wymaganaNazwa: true });
+    // D-113 (P-005): zmiana daty zawartej już umowy o prowadzenie rejestru — ostrzeżenie (poprzednia wartość w treści).
+    if (biezaca.data_umowy && dane.data_umowy && dane.data_umowy !== biezaca.data_umowy) {
+      ostrzezenia.push(`Zmieniono datę umowy o prowadzenie rejestru (było: ${biezaca.data_umowy}).`);
+    }
 
     const zmienione = Object.keys(dane).filter(
       (pole) => String(biezaca[pole] ?? '') !== String(dane[pole] ?? '')
@@ -480,6 +485,7 @@ router.put(
       spolka: db().prepare('SELECT * FROM psa_spolki WHERE id = ?').get(id),
       zdarzenie,
       zmienione_pola: zmienione,
+      ostrzezenia,
     });
   })
 );

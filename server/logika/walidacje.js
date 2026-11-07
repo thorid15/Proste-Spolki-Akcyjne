@@ -340,6 +340,27 @@ function sprawdzIdentyfikacjeNabywcow(propozycja, osoby, bledy) {
   }
 }
 
+/**
+ * D-114 (P-006): emisja założycielska następuje z chwilą rejestracji spółki — jej data wpisu do KRS to data rejestracji
+ * spółki; kolejne emisje — z datą zmiany, nie wcześniejszą niż rejestracja. Odstępstwo = ostrzeżenie, nie blokada.
+ */
+function sprawdzDateEmisji(stanPrzed, propozycja, spolka, ostrzezenia) {
+  if (propozycja.typ !== 'emisja' || !spolka || !spolka.data_utworzenia_spolki) return;
+  const data = (propozycja.dane || {}).data_wpisu_krs;
+  if (!data) return;
+  const rejestracja = spolka.data_utworzenia_spolki;
+  if ((stanPrzed.emisje || []).length === 0 && data !== rejestracja) {
+    ostrzezenia.push(`Emisja założycielska następuje z chwilą rejestracji spółki (${rejestracja}), a data wpisu emisji do KRS to ${data} — sprawdź datę.`);
+  } else if ((stanPrzed.emisje || []).length > 0 && data < rejestracja) {
+    ostrzezenia.push(`Data wpisu emisji do KRS (${data}) jest wcześniejsza niż data rejestracji spółki (${rejestracja}) — sprawdź datę.`);
+  }
+}
+
+function maBeneficjenta(osoba) {
+  if (osoba.beneficjent_rzeczywisty_id) return true;
+  try { return JSON.parse(osoba.beneficjenci_json || '[]').length > 0; } catch (e) { return false; }
+}
+
 function sprawdzAml(propozycja, osoby, bledy, ostrzezenia) {
   const nabywcy = nabywcyWpisu(propozycja);
 
@@ -362,6 +383,11 @@ function sprawdzAml(propozycja, osoby, bledy, ostrzezenia) {
       ostrzezenia.push(
         `Wobec ${okreslenie} „${nazwa}” nie odnotowano wykonania środków bezpieczeństwa finansowego (AML).`
       );
+    }
+    // D-118 (P-001): przy wpisie na rzecz osoby prawnej beneficjent rzeczywisty jest wymagany — wskazuje go sama
+    // spółka (oświadczenie); jego brak to ostrzeżenie, nie blokada (D-117, P-014).
+    if (osoba.typ === 'prawna' && !maBeneficjenta(osoba)) {
+      ostrzezenia.push(`Nabywca „${nazwa}” jest osobą prawną bez wskazanego beneficjenta rzeczywistego — poproś spółkę o wskazanie (oświadczenie).`);
     }
   }
 }
@@ -848,6 +874,7 @@ function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map() } = {})
   sprawdzOgraniczenia(stanPrzed, propozycja, bledy, ostrzezenia);
   sprawdzPokrycie(stanPrzed, propozycja, bledy);
   sprawdzAml(propozycja, osoby, bledy, ostrzezenia);
+  sprawdzDateEmisji(stanPrzed, propozycja, spolka, ostrzezenia);
   sprawdzIdentyfikacjeNabywcow(propozycja, osoby, bledy);
 
   // Warstwa druga: bilans calego rejestru po zdarzeniu. Nawet jesli kontrole
@@ -896,4 +923,4 @@ function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map() } = {})
   };
 }
 
-module.exports = { sprawdz, dotknieteZakresy };
+module.exports = { sprawdz, dotknieteZakresy, _sprawdzAml: sprawdzAml };

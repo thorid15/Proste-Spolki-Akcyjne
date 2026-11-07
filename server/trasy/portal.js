@@ -777,6 +777,8 @@ const POLA_AKCJONARIUSZA_WNIOSKU = [
   // `pep`/`pep_opis` wyzej - te dwa pola sa USTALENIEM KANCELARII i celowo
   // NIE przechodza z wniosku do kartoteki (patrz trasy/wnioski.js: przyjmij).
   'pep_oswiadczenie', 'pep_oswiadczenie_data',
+  // D-115 (P-016): reprezentant akcjonariusza-osoby prawnej — wpisuje klient, kancelaria potwierdza.
+  'reprezentant_imie', 'reprezentant_nazwisko', 'reprezentant_pesel', 'reprezentant_funkcja',
 ];
 
 function wyczyscAkcjonariuszaWniosku(cialo) {

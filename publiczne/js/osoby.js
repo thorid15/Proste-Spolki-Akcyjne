@@ -106,63 +106,6 @@ function SekcjaSkanowAml({ osobaId, spolkaId }) {
 }
 
 /**
- * Naprawa Z-006/P-004 — zaproszenie akcjonariusza do portalu, akcja przy
- * osobie w kartotece (widoczna tylko, gdy osoba JEST akcjonariuszem
- * przynajmniej jednej spółki — `spolkiOsoby` z `GET /:id/spolki`).
- * E-mail operacyjny konta jest ODRĘBNY od e-maila w treści rejestru
- * (`dane.email` na formularzu wyżej, wymaga osobnej zgody — Z-157), więc
- * podpowiadamy go tylko jako punkt startowy, nie podstawiamy automatycznie.
- */
-function SekcjaZaproszeniaPortal({ osobaId, emailPodpowiedz }) {
-  const [email, ustawEmail] = useState(emailPodpowiedz || '');
-  const [wysylanie, ustawWysylanie] = useState(false);
-  const [wynik, ustawWynik] = useState(null);
-  const [blad, ustawBlad] = useState(null);
-
-  async function zapros() {
-    ustawWysylanie(true);
-    ustawBlad(null);
-    ustawWynik(null);
-    try {
-      const odpowiedz = await API.post(`/api/psa/osoby/${osobaId}/zapros-do-portalu`, { email });
-      ustawWynik(odpowiedz);
-    } catch (e) {
-      ustawBlad(e.message);
-    } finally {
-      ustawWysylanie(false);
-    }
-  }
-
-  return (
-    <Pole
-      etykieta="Zaproszenie do portalu"
-      podpowiedz="Adres OPERACYJNY konta portalowego — niezależny od e-maila w rejestrze i jego zgody (pole „Adres e-mail” wyżej)."
-    >
-      <div className="rzad" style={{ gap: 8 }}>
-        <input type="text" value={email} onChange={(z) => ustawEmail(z.target.value)} placeholder="adres@przyklad.pl" style={{ flex: 1 }} />
-        <button className="btn btn-maly btn-glowny" onClick={zapros} disabled={!email.trim() || wysylanie}>
-          {wysylanie ? 'Wysyłanie…' : 'Zaproś do portalu'}
-        </button>
-      </div>
-      <Komunikat odmiana="blad" tresc={blad} />
-      {wynik && wynik.juz_aktywne && (
-        <Komunikat odmiana="info" tresc="Konto na ten adres jest już aktywne — akcjonariusz ma się jak zalogować, nie trzeba nowego zaproszenia." />
-      )}
-      {wynik && !wynik.juz_aktywne && wynik.email_wyslany && (
-        <Komunikat odmiana="ok" tresc="Zaproszenie wysłane e-mailem." />
-      )}
-      {wynik && <PrzyciskLinkuTestowego link={wynik.link_testowy} />}
-      {wynik && !wynik.juz_aktywne && !wynik.email_wyslany && wynik.link_aktywacyjny && (
-        <Komunikat
-          odmiana="uwaga"
-          tresc={<>Wysyłka e-mail nie jest skonfigurowana — przekaż link ręcznie: <code>{wynik.link_aktywacyjny}</code></>}
-        />
-      )}
-    </Pole>
-  );
-}
-
-/**
  * Kartoteka: dane osoby w PANELU BOCZNYM (formularz dłuższy niż 4 pola nie
  * jest modalem — FAZA 1 pkt 5). Pola wspólne z wnioskiem klienta renderuje
  * `FormularzOsoby` (formularz-osoby.js); tu dochodzą wyłącznie dane
@@ -172,6 +115,37 @@ function SekcjaZaproszeniaPortal({ osobaId, emailPodpowiedz }) {
  * PESEL / NIP / KRS należy już do kogoś, można wybrać tę osobę zamiast
  * zakładać drugą (reguła domenowa nr 10, D-042).
  */
+/**
+ * D-116 (P-017): beneficjenci rzeczywiści osoby prawnej — domyślnie jedno pole, „Dodaj beneficjenta” dokłada kolejne.
+ * Wskazuje ich sama spółka (D-118); brak to ostrzeżenie przy wpisie, nie blokada.
+ */
+function ListaBeneficjentow({ lista, przyZmianie, wyklucz }) {
+  const wybrani = lista.filter(Boolean);
+  return (
+    <Pole etykieta="Beneficjenci rzeczywiści" podpowiedz="Osoby fizyczne sprawujące kontrolę nad podmiotem (art. 2 ust. 2 pkt 1 ustawy AML) — wskazuje je spółka.">
+      <div className="pion" style={{ gap: 'var(--od-8)' }}>
+        {lista.map((id, i) => (
+          <div key={i} className="rzad" style={{ gap: 8, alignItems: 'center' }}>
+            <div style={{ flex: 1 }}>
+              <WyborZKartoteki
+                wartosc={id}
+                typFiltr="fizyczna"
+                wyklucz={[...wyklucz, ...wybrani.filter((x) => x !== id)]}
+                placeholder="Szukaj osoby fizycznej w kartotece…"
+                przyZmianie={(nowy) => przyZmianie(lista.map((x, j) => (j === i ? nowy : x)))}
+              />
+            </div>
+            {lista.length > 1 && (
+              <button type="button" className="btn btn-maly btn-cichy" onClick={() => przyZmianie(lista.filter((_, j) => j !== i))}>Usuń</button>
+            )}
+          </div>
+        ))}
+        <div><button type="button" className="btn btn-sm" onClick={() => przyZmianie([...lista, null])}>Dodaj beneficjenta</button></div>
+      </div>
+    </Pole>
+  );
+}
+
 /**
  * D-102: zmiana danych z rejestru (art. 300(33) § 1 pkt 5 KSH) osoby z akcjami — kartoteka ich nie nadpisuje,
  * tylko proponuje wpis „Zmiana danych akcjonariusza”: sprawa z wypełnionymi danymi (przed → po), otwarta od razu
@@ -436,9 +410,6 @@ function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej
         <textarea {...pole('aml_notatka')} style={{ minHeight: 70 }} />
       </Pole>
 
-      {edycja && spolkiOsoby.length > 0 && (
-        <SekcjaZaproszeniaPortal osobaId={osoba.id} emailPodpowiedz={dane.email} />
-      )}
 
       {edycja && spolkiOsoby.length > 0 && (
         <Pole
@@ -468,18 +439,11 @@ function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej
       ) : (
         <>
           {dane.typ === 'prawna' && (
-            <Pole
-              etykieta="Beneficjent rzeczywisty"
-              podpowiedz="Osoba fizyczna sprawująca kontrolę nad podmiotem (art. 2 ust. 2 pkt 1 ustawy AML)."
-            >
-              <WyborZKartoteki
-                wartosc={dane.beneficjent_rzeczywisty_id}
-                przyZmianie={(id) => zmien({ beneficjent_rzeczywisty_id: id })}
-                typFiltr="fizyczna"
-                wyklucz={edycja ? [osoba.id] : []}
-                placeholder="Szukaj osoby fizycznej w kartotece…"
-              />
-            </Pole>
+            <ListaBeneficjentow
+              lista={dane.beneficjenci && dane.beneficjenci.length ? dane.beneficjenci : [dane.beneficjent_rzeczywisty_id || null]}
+              przyZmianie={(lista) => zmien({ beneficjenci: lista })}
+              wyklucz={edycja ? [osoba.id] : []}
+            />
           )}
 
           <div className="siatka-2">

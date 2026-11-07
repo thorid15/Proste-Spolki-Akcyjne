@@ -24,6 +24,7 @@ const PUSTA_OSOBA_FORMULARZA = {
   nazwisko: '', imie: '', nazwa: '', plec: '',
   pesel: '', bez_pesel: 0, data_urodzenia: '',
   nip: '', regon: '', numer_w_rejestrze: '', nazwa_rejestru: '',
+  reprezentant_imie: '', reprezentant_nazwisko: '', reprezentant_pesel: '', reprezentant_funkcja: '',
   kraj: 'Polska', kod_pocztowy: '', miejscowosc: '', ulica: '', nr_domu: '', nr_lokalu: '',
   adres_doreczen: '', adres_edoreczen: '', email: '', telefon: '',
   // Art. 300(33) § 1 pkt 3 KSH — do rejestru wchodzi JEDEN adres.
@@ -186,6 +187,10 @@ function FormularzOsoby({
   const adresDoreczen = p('adres_doreczen');
   const adresEdoreczen = p('adres_edoreczen', { placeholder: 'AE:PL-…' });
   const wspolwlasciciele = p('wspolwlasciciele');
+  const reprImie = p('reprezentant_imie', { autoCapitalize: 'words' });
+  const reprNazwisko = p('reprezentant_nazwisko', { autoCapitalize: 'words' });
+  const reprPesel = p('reprezentant_pesel', { inputMode: 'numeric' });
+  const reprFunkcja = p('reprezentant_funkcja');
 
   const zgoda = dane.zgoda_email_status || 'brak';
   const wspol = dane.wspolwlasnosc && dane.wspolwlasnosc !== 'brak';
@@ -226,6 +231,17 @@ function FormularzOsoby({
             )}
           </div>
           {ostrzezeniaIdentyfikatora.numer_w_rejestrze}
+          {/* D-115 (P-016): za akcjonariusza-osobę prawną działa „Reprezentant” zgodnie z jej umową — wpisuje klient,
+              kancelaria potwierdza przy weryfikacji. */}
+          <fieldset className="grupa-pol">
+            <legend className="grupa-pol-legenda">Reprezentant — osoba fizyczna działająca za akcjonariusza</legend>
+            <div className="siatka-2">
+              <Pole etykieta="Imię reprezentanta" opcjonalne {...reprImie.pole}><input type="text" {...reprImie.wejscie} /></Pole>
+              <Pole etykieta="Nazwisko reprezentanta" opcjonalne {...reprNazwisko.pole}><input type="text" {...reprNazwisko.wejscie} /></Pole>
+              <Pole etykieta="PESEL reprezentanta" opcjonalne {...reprPesel.pole}><input type="text" className="dane" maxLength={11} {...reprPesel.wejscie} /></Pole>
+              <Pole etykieta="Funkcja reprezentanta" opcjonalne podpowiedz="np. Prezes Zarządu, pełnomocnik" {...reprFunkcja.pole}><input type="text" {...reprFunkcja.wejscie} /></Pole>
+            </div>
+          </fieldset>
         </>
       )}
 
