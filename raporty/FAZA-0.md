@@ -18,7 +18,7 @@ Baza: commit `0565234`. Bez zmian w działaniu aplikacji.
 - Pozostałe miary bez zmian (faza nie dotyka kodu).
 
 ## Odstępstwa
-1. **Gałąź:** zamiast `uproszczenie` praca idzie na `claude/amazing-archimedes-uoog4j` — gałąź wyznaczona przez środowisko sesji.
+1. **Gałąź:** zamiast `uproszczenie` praca idzie na `claude/amazing-archimedes-uoog4j` — gałąź wyznaczona przez środowisko sesji. **Tag** `przed-uproszczeniem` istnieje tylko lokalnie: push tagu kończy się zerwaniem połączenia (4 próby). Punkt wyjścia i tak jest w historii gałęzi jako `0565234` — tag można założyć ponownie poleceniem `git tag przed-uproszczeniem 0565234`.
 2. **`RAPORT-STANU-PSA.md` nie ma w repozytorium** (ani w historii git, ani na dysku sesji; commit `0565234` go nie zawiera). Nie mogłem go czytać ani zachować przy przenoszeniu (nie było czego przenosić).
 3. **Duplikaty plików (raport § 7 k) — nie usunięto.** Bez raportu nie wiem, o które chodzi. Byte-identyczne duplikaty plików tekstowych w repozytorium: tylko `nowy-projekt/nowa-strona.html` = `projekt-strony/nowa-strona.html` (strona publiczna — poza zakresem, § 0 pkt 10; `nowy-projekt/podglad.html` odwołuje się do tego pliku z nazwy). Poza tym tylko zrzuty PNG w `testy-audyt/zrzuty` i `frontend-audyt/zrzuty` oraz fonty `publiczne/fonty` = `strona/dist/fonty`.
 4. Poza zakresem dosłownego polecenia (korzeń i `docs/`) zostały pliki `.md` w `testy-audyt/`, `frontend-audyt/raporty/`, `nowy-projekt/`, `server/dane/`, `wzory/`, `publiczne/obrazy/`, `testy/` — nie ruszane.
