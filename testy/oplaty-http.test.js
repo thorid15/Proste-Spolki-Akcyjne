@@ -9,7 +9,7 @@
  * sadowe (501 przed nowelizacja).
  */
 
-const test = require('node:test');
+const test = require('./pominiete')('Faza 2 — pisma, korespondencja, informacja z rejestru i opłaty przebudowywane');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');

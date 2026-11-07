@@ -73,16 +73,12 @@ function posrednikBledow(blad, zad, odp, dalej) {
   if (blad instanceof BladZadania) {
     return odp.status(blad.status).json({ blad: blad.message, szczegoly: blad.szczegoly });
   }
-  // Bledy domenowe niosa gotowy komunikat po polsku.
-  if (['BladWalidacji'].includes(blad.name)) {
-    return odp.status(422).json({
-      blad: 'Wpis nie może zostać dokonany.',
-      bledy: blad.bledy,
-      ostrzezenia: blad.ostrzezenia || [],
-    });
+  // Bledy domenowe niosa gotowy komunikat po polsku; `bledy` — lista { pole?, komunikat }.
+  if (blad.name === 'BladWalidacji') {
+    return odp.status(422).json({ blad: blad.bledy.length === 1 ? blad.bledy[0].komunikat : 'Popraw wskazane błędy.', bledy: blad.bledy });
   }
-  if (['BladZakresu', 'BladKreatora', 'BladStanu', 'BladTerminu', 'BladOsobyDzialajacej'].includes(blad.name)) {
-    return odp.status(422).json({ blad: blad.message, bledy: [blad.message] });
+  if (['BladZakresu', 'BladStanu', 'BladTerminu', 'BladUlamka'].includes(blad.name)) {
+    return odp.status(422).json({ blad: blad.message, bledy: [{ komunikat: blad.message }] });
   }
   if (blad.code === 'SQLITE_CONSTRAINT_UNIQUE') {
     return odp.status(409).json({ blad: 'Rekord o tych danych już istnieje.' });
@@ -94,8 +90,8 @@ function posrednikBledow(blad, zad, odp, dalej) {
   // (np. zly typ pliku) trafia tu jako zwykly Error z pomocnicze/odpowiedzi.
   if (blad.name === 'MulterError') {
     const komunikaty = {
-      LIMIT_FILE_SIZE: 'Plik jest za duży (limit 20 MB).',
-      LIMIT_FILE_COUNT: 'Za dużo plików w jednym żądaniu (limit 10).',
+      LIMIT_FILE_SIZE: 'Plik jest za duży (limit 10 MB).',
+      LIMIT_FILE_COUNT: 'Wgraj jeden plik naraz.',
     };
     return odp.status(400).json({ blad: komunikaty[blad.code] || `Błąd przesyłania pliku: ${blad.message}` });
   }

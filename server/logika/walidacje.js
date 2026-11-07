@@ -1,926 +1,393 @@
 'use strict';
 
 /**
- * Walidacje BLOKUJACE (sekcja 6 specyfikacji).
+ * Walidacja treści sprawy — moduł czysty.
  *
- * Sekcja 16: "Nie ostrzegac tam, gdzie ma byc blokada". Wszystko, co trafia
- * do `bledy`, konczy zapis odmowa. `ostrzezenia` sa wylacznie informacja
- * dla weryfikujacego i nie wstrzymuja wpisu.
- *
- * Metoda: nie ufamy pojedynczym regulom - obok kontroli szczegolowych
- * (dajacych czytelny komunikat) odtwarzamy stan PO zdarzeniu i sprawdzamy
- * bilans calego rejestru. Zdarzenie przechodzi tylko wtedy, gdy obie
- * warstwy sa zgodne.
+ * 1. `przygotuj` — robocza operacja (seria, numery i liczba wpisane ręcznie — U-26) → treść wpisu;
+ *    niezgodności formatu to błędy przy polach (R8), nie blokady prawne.
+ * 2. `sprawdzSklad` — co wolno połączyć w jednej sprawie (R3: zajęcie tylko z urzędu).
+ * 3. `sprawdzBlokady` — blokady systemowe R6 niezależne od odtworzenia stanu: rejestr zamknięty,
+ *    data wpisu emisji do KRS (art. 300(30) § 2 KSH, reguła Z-012), nieprawidłowy PESEL (U-18).
+ *    Bilans i rozporządzenie ponad stan posiadania sprawdza odtworzenie stanu (`rejestr.js`),
+ *    powiadomienia i checklistę — `rejestr.wpisz`.
  */
 
 const n = require('./numery');
 const u = require('./ulamki');
-const stanLogika = require('./stan');
-const przepisy = require('./przepisy');
-const typyZdarzen = require('./typy-zdarzen');
-
-const K = przepisy.KATEGORIE_AKCJI;
-
+const typy = require('./typy-zdarzen');
+const osobyLogika = require('./osoby');
 const czas = require('../pomocnicze/czas');
 
-const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Wszystkie zakresy dotkniete zdarzeniem, per emisja.
- * Zakresy niosa albo `dane.pozycje[].zakresy` (objecie/przeniesienie/umorzenie),
- * albo `dane.zakresy` wprost (obciazenie/zajecie - zdarzenie dotyczy jednej
- * pozycji, bez tablicy `pozycje`), albo `dane.nr` przy zdarzeniu ROZPORZADZAJACYM
- * pojedynczym numerem (`przeniesienie_ulamka`, rozpoznawane po `zbywca_osoba_id`
- * - regula domenowa 4a). `przedstawiciel`/`pokrycie_akcji` tez niosa `dane.nr`/
- * numery, ale nie sa rozporzadzeniem akcja - obciazenia blokujace ich nie
- * dotycza, wiec CELOWO nie trafiaja tutaj.
- */
-function dotknieteZakresy(dane) {
-  const wynik = new Map();
-  const klucz = dane.emisja_zdarzenie_id == null ? null : Number(dane.emisja_zdarzenie_id);
-  if (klucz == null) return wynik;
-  const zPozycji = (dane.pozycje || []).flatMap((p) => p.zakresy || []);
-  const zBezposrednio = Array.isArray(dane.zakresy) ? dane.zakresy : [];
-  const zNumeru =
-    dane.zbywca_osoba_id != null && Number.isInteger(Number(dane.nr))
-      ? [{ nr_od: Number(dane.nr), nr_do: Number(dane.nr) }]
-      : [];
-  const zakresy = n.normalizuj([...zPozycji, ...zBezposrednio, ...zNumeru]);
-  if (zakresy.length > 0) wynik.set(klucz, zakresy);
-  return wynik;
+class BladWalidacji extends Error {
+  constructor(bledy) {
+    const lista = (bledy || []).map((b) => (typeof b === 'string' ? { komunikat: b } : b));
+    super(lista.map((b) => b.komunikat).join(' '));
+    this.name = 'BladWalidacji';
+    this.bledy = lista;
+  }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Kontrole wspolne
-// ─────────────────────────────────────────────────────────────
+const TYLKO_SAMODZIELNE = ['otwarcie', 'sprostowanie', 'zamkniecie'];
+const RODZAJE_ATRYBUTOW = [...typy.RODZAJE_OBCIAZENIA, ...typy.RODZAJE_ADNOTACJI];
 
-function sprawdzSpolke(spolka, bledy) {
-  if (!spolka) {
-    bledy.push('Nie odnaleziono spółki, której dotyczy zdarzenie.');
-    return;
-  }
-  const blokada = przepisy.blokadaWpisu(spolka);
-  if (blokada) bledy.push(blokada);
+function tekst(v) {
+  return v == null ? '' : String(v).trim();
 }
 
 /**
- * D-R01: chwila wpisu nadaje system. Wpis nie moze wyprzedzac ostatniego
- * wpisu spolki (rejestr prowadzi sie chronologicznie; znaczenie ma tylko
- * dla migracji z KRN, gdzie chwila jest historyczna) ani lezec w przyszlosci.
+ * Walidator jednej roboczej operacji. `k` = { osoba(id) → wiersz|null, zdarzenie(id) → wiersz|null,
+ * stan (odtworzony stan spółki) }.
  */
-function sprawdzChwile(zdarzenia, propozycja, bledy) {
-  const chwila = String(propozycja.chwila || '');
-  if (!chwila) {
-    bledy.push('Brak chwili wpisu — nadaje ją system w momencie zatwierdzenia wpisu.');
-    return;
-  }
-  // Zwykly wpis dostaje chwile „teraz”; data z zewnatrz trafia tu wylacznie
-  // przy migracji z KRN - i tylko ona moze byc bledna w przyszlosc.
-  const migracja = propozycja.dane && propozycja.dane.migracja_krn;
-  if (migracja && chwila > czas.terazUtc()) {
-    bledy.push('Data rejestracji w KRN nie może leżeć w przyszłości.');
-  }
-  const ostatnia = zdarzenia.reduce(
-    (max, z) => (z.data_wpisu && String(z.data_wpisu) > max ? String(z.data_wpisu) : max),
-    ''
-  );
-  if (ostatnia && chwila < ostatnia) {
-    bledy.push(
-      `Wpis nie może poprzedzać ostatniego wpisu w rejestrze tej spółki (${czas.dzienLokalny(ostatnia)}, ` +
-        `godz. ${czas.godzinaLokalna(ostatnia)}) — rejestr prowadzi się chronologicznie.`
-    );
-  }
-}
+function walidator(k, bledy) {
+  const blad = (pole, komunikat) => bledy.push({ pole, komunikat });
 
-/**
- * Naprawa Z-012/P-006 — walidacja krzyzowa daty wpisu emisji do KRS wobec
- * daty rejestracji spolki (art. 592 § 3 KSH - sankcja karna za dzialanie
- * bez wpisu): emisja ZALOZYCIELSKA (pierwsza w rejestrze tej spolki) ma
- * date wpisu RÓWNA dacie utworzenia spolki - to ten sam wpis do KRS, ktory
- * rejestruje jednoczesnie spolke i jej pierwsze akcje. Kazda KOLEJNA emisja
- * (podwyzszenie kapitalu) dostaje wlasny, PÓŹNIEJSZY wpis - nie moze
- * poprzedzac istnienia spolki, do ktorej akcje ma nalezec. Zadna z dwoch
- * dat nie moze byc z przyszlosci - rejestr odzwierciedla fakty juz
- * stwierdzone przez sad, nie zapowiedzi.
- */
-function sprawdzDataWpisuKrsEmisji(stanPrzed, propozycja, spolka, dzisiaj, bledy) {
-  if (propozycja.typ !== 'emisja') return;
-  const dataWpisu = String((propozycja.dane || {}).data_wpisu_krs || '');
-  if (!dataWpisu) return; // brak daty jest juz zablokowane w PER_TYP.emisja
-
-  if (!DATA_ISO.test(dataWpisu) || Number.isNaN(Date.parse(`${dataWpisu}T00:00:00Z`))) {
-    bledy.push(`Data wpisu emisji do KRS „${dataWpisu}” nie jest poprawną datą.`);
-    return;
-  }
-  if (dataWpisu > dzisiaj) {
-    bledy.push(`Data wpisu emisji do KRS (${dataWpisu}) jest z przyszłości.`);
-  }
-
-  const dataUtworzenia = spolka && spolka.data_utworzenia_spolki ? String(spolka.data_utworzenia_spolki) : null;
-  if (!dataUtworzenia) return; // brak daty rejestracji spolki - nie ma z czym porownac
-
-  const zalozycielska = stanPrzed.emisje.length === 0;
-  if (zalozycielska && dataWpisu !== dataUtworzenia) {
-    bledy.push(
-      `Emisja założycielska musi mieć datę wpisu do KRS równą dacie rejestracji spółki ` +
-        `(${dataUtworzenia}), a nie ${dataWpisu}.`
-    );
-  } else if (!zalozycielska && dataWpisu <= dataUtworzenia) {
-    bledy.push(
-      `Data wpisu tej emisji do KRS (${dataWpisu}) musi być późniejsza niż data rejestracji ` +
-        `spółki (${dataUtworzenia}) — akcje nie mogą powstać przed samą spółką.`
-    );
-  }
-}
-
-/**
- * D-P3: po objeciu choc jednej akcji emisji jej serii, numeracji ani liczby
- * akcji nie prostuje sie - zmniejszenie liczby akcji to umorzenie, a
- * zwiekszenie - nowa emisja. Pola opisowe (tytul, opis, uwagi i pozostale)
- * mozna prostowac nadal. Wycofanie calej emisji tez jest wtedy zablokowane.
- */
-const KOMUNIKAT_EMISJA_OBJETA =
-  'Akcje tej emisji zostały już objęte — seria, numeracja i liczba akcji nie mogą być prostowane. ' +
-  'Jeżeli liczba akcji ma się zmniejszyć, dokonaj umorzenia; jeżeli zwiększyć — wpisz nową emisję. ' +
-  'Pola opisowe (tytuł, opis, uwagi) można prostować.';
-
-function sprawdzSprostowanieEmisji(zdarzenia, stanPrzed, propozycja, bledy) {
-  if (propozycja.typ !== 'sprostowanie' || propozycja.zdarzenie_prostowane_id == null) return;
-  const id = Number(propozycja.zdarzenie_prostowane_id);
-  const pierwotne = zdarzenia.find((z) => Number(z.id) === id);
-  if (!pierwotne || pierwotne.typ !== 'emisja') return;
-  const objeta = stanPrzed.przedzialy.some(
-    (p) => Number(p.emisja_klucz) === id && p.kategoria !== K.NIEOBJETA
-  );
-  if (!objeta) return;
-
-  const zamiast = (propozycja.dane || {}).zamiast;
-  if (!zamiast) {
-    bledy.push(KOMUNIKAT_EMISJA_OBJETA);
-    return;
-  }
-  const przed = pierwotne.dane || JSON.parse(pierwotne.dane_json || '{}');
-  const zmienione = ['seria', 'nr_pierwszy', 'ilosc'].filter(
-    (pole) => String(zamiast[pole] ?? '') !== String(przed[pole] ?? (pole === 'nr_pierwszy' ? 1 : ''))
-  );
-  if (zamiast.typ !== 'emisja' || zmienione.length > 0) bledy.push(KOMUNIKAT_EMISJA_OBJETA);
-}
-
-function sprawdzObciazenia(stanPrzed, propozycja, bledy) {
-  // Zajecie jest z urzedu (art. 300(34) § 2 KSH) - nie jest "rozporzadzeniem"
-  // akcja, wiec nie blokuje go istniejace obciazenie. Kilku wierzycieli moze
-  // legalnie zajac te same akcje po kolei.
-  if (propozycja.typ === 'zajecie') return;
-  for (const [emisjaKlucz, zakresy] of dotknieteZakresy(propozycja.dane)) {
-    const blokujace = stanLogika
-      .obciazeniaNaDzien(stanPrzed, null)
-      .filter((o) => o.emisja_klucz === emisjaKlucz && o.blokuje_rozporzadzanie === 1);
-    for (const o of blokujace) {
-      const kolizja = n.przeciecie(o.zakresy, zakresy);
-      if (kolizja.length === 0) continue;
-      const nazwa = o.typ === 'zajecie' ? 'zajęciem' : `obciążeniem (${o.typ})`;
-      bledy.push(
-        `Akcje ${n.opisz(kolizja)} są objęte ${nazwa} blokującym rozporządzanie. ` +
-          `Wpis wymaga uprzedniego wykreślenia obciążenia albo wskazania innych akcji.`
-      );
+  const lista = (v, pole, komunikat) => {
+    if (!Array.isArray(v) || v.length === 0) {
+      blad(pole, komunikat);
+      return [];
     }
-  }
-}
-
-function sprawdzOgraniczenia(stanPrzed, propozycja, bledy, ostrzezenia) {
-  if (propozycja.typ !== 'przeniesienie') return;
-  const dane = propozycja.dane || {};
-  const emisjaKlucz = Number(dane.emisja_zdarzenie_id);
-  const zakresy = n.normalizuj((dane.pozycje || []).flatMap((p) => p.zakresy || []));
-
-  const aktywne = stanPrzed.ograniczenia.filter((o) => o.status === 'aktywne');
-  for (const o of aktywne) {
-    const dotyczy =
-      o.zakres === 'wszystkie' ||
-      (o.zakres === 'emisja' && o.emisja_klucz === emisjaKlucz) ||
-      (o.zakres === 'zakres_numerow' &&
-        o.emisja_klucz === emisjaKlucz &&
-        n.nakladaja(o.zakresy, zakresy));
-    if (!dotyczy) continue;
-
-    // Postanowienie o zgodzie spolki jest SKUTECZNE (art. 300(39) § 1, 3 KSH)
-    // wylacznie z kompletem trzech szczegolow - kreator dopuszcza zapisanie
-    // niekompletnego postanowienia juz przy zakladaniu spolki (etap 2.7
-    // poprawek, server/logika/kreator.js), wiec twarda blokada zapada TU,
-    // przy faktycznym zbyciu, i tylko dla postanowien kompletnych. Niekompletne
-    // dostaje miekkie ostrzezenie - jest bezskuteczne, ale notariusz powinien
-    // sprawdzic tresc postanowienia recznie, zanim wpisze zbycie bez zgody.
-    const zgodaKompletna =
-      o.zgoda_termin_wskazania_dni != null &&
-      o.zgoda_cena_opis != null &&
-      o.zgoda_termin_zaplaty_dni != null;
-    if (o.wymaga_zgody_spolki && zgodaKompletna && !dane.zgoda_spolki) {
-      bledy.push(
-        `Rozporządzenie akcjami wymaga zgody spółki (${przepisy.PODSTAWY.OGRANICZENIA_ROZPORZADZANIA})` +
-          `${o.opis ? `: ${o.opis}` : ''}. Zgoda nie została odnotowana.`
-      );
+    return v;
+  };
+  const wybor = (v, dozwolone, pole, komunikat) => {
+    if (!dozwolone.includes(v)) blad(pole, komunikat);
+    return v;
+  };
+  const takNie = (v, pole, komunikat) => {
+    if (v !== true && v !== false) blad(pole, komunikat);
+    return v;
+  };
+  const osoba = (v, pole) => {
+    const id = Number(v);
+    if (!Number.isInteger(id) || id < 1) {
+      blad(pole, 'Wskaż osobę z kartoteki.');
+      return null;
     }
-    if (o.wymaga_zgody_spolki && !zgodaKompletna) {
-      ostrzezenia.push(
-        `Postanowienie umowy spółki o zgodzie na zbycie akcji jest niekompletne (brak terminu wskazania ` +
-          `nabywcy, sposobu ustalenia ceny albo terminu zapłaty) — bez kompletu jest bezskuteczne ` +
-          `(${przepisy.PODSTAWY.ZGODA_SPOLKI_NA_ZBYCIE}).` +
-          `${o.tresc_postanowienia ? ` Treść z umowy spółki: „${o.tresc_postanowienia}”.` : ''} ` +
-          'Sprawdź ręcznie, czy zgoda spółki nie jest mimo to wymagana, zanim wpiszesz zbycie.'
-      );
+    const o = k.osoba(id);
+    if (!o) blad(pole, `Nie ma w kartotece osoby #${id}.`);
+    else if (o.typ === 'fizyczna' && o.pesel && !osobyLogika.poprawnyPesel(o.pesel)) {
+      blad(pole, `Osoba „${o.nazwa}” ma nieprawidłowy PESEL — popraw dane w kartotece.`);
     }
-    if (o.prawo_pierwszenstwa && !dane.pierwszenstwo_wyczerpane) {
-      bledy.push(
-        `Zarejestrowane jest prawo pierwszeństwa nabycia akcji` +
-          `${o.opis ? `: ${o.opis}` : ''}. Nie odnotowano jego wyczerpania.`
-      );
+    return id;
+  };
+  const data = (v, pole, komunikat) => {
+    if (!czas.poprawnaData(v)) blad(pole, komunikat);
+    return v || null;
+  };
+
+  /** Seria, numery i liczba (U-26); `ulamek` dopuszcza część jednego numeru. */
+  const akcje = (a, pole, { ulamek = false, seria = null } = {}) => {
+    const w = { seria: seria ?? tekst(a && a.seria), zakresy: [], liczba: null };
+    if (!w.seria) blad(`${pole}.seria`, 'Podaj serię akcji.');
+    try {
+      w.zakresy = n.parsuj(a && a.numery);
+      if (w.zakresy.length === 0) blad(`${pole}.numery`, 'Podaj numery akcji.');
+    } catch (e) {
+      blad(`${pole}.numery`, e.message);
     }
-    if (!o.wymaga_zgody_spolki && !o.prawo_pierwszenstwa) {
-      ostrzezenia.push(
-        `Na akcjach ciąży zarejestrowane ograniczenie w rozporządzaniu${o.opis ? `: ${o.opis}` : ''}. ` +
-          `Sprawdź, czy nie stoi na przeszkodzie wpisowi.`
-      );
+    const liczba = Number(a && a.liczba);
+    if (!Number.isInteger(liczba) || liczba < 1) {
+      blad(`${pole}.liczba`, 'Podaj liczbę akcji.');
+    } else if (w.zakresy.length > 0 && n.ilosc(w.zakresy) !== liczba) {
+      blad(`${pole}.liczba`, `Liczba akcji (${liczba}) nie zgadza się z numerami ${n.opisz(w.zakresy)} (${n.ilosc(w.zakresy)} akcji).`);
     }
-  }
-}
-
-/**
- * Zbycie akcji nie w pelni pokrytej wymaga zgody spolki (art. 300(40) § 1
- * KSH) - dotyczy zarowno calych akcji (`przeniesienie`), jak i ich ulamkowych
- * czesci (`przeniesienie_ulamka` - art. 300(43) KSH nakazuje stosowac
- * przepisy o rozporzadzaniu akcja odpowiednio do ulamkow). `pokryta` rowna
- * `null` (nieustalone) NIE blokuje - blokuje wylacznie WYKAZANY brak pelnego
- * pokrycia ('nie'/'czesciowo'); regula nie moze wstecznie zablokowac calego
- * historycznego rejestru sprzed wprowadzenia wzmianki o pokryciu.
- */
-function sprawdzPokrycie(stanPrzed, propozycja, bledy) {
-  const d = propozycja.dane || {};
-  let emisjaKlucz;
-  let zbywcaId;
-  let zakresy;
-  if (propozycja.typ === 'przeniesienie') {
-    emisjaKlucz = Number(d.emisja_zdarzenie_id);
-    zbywcaId = Number(d.zbywca_osoba_id);
-    zakresy = n.normalizuj((d.pozycje || []).flatMap((p) => p.zakresy || []));
-  } else if (propozycja.typ === 'przeniesienie_ulamka') {
-    emisjaKlucz = Number(d.emisja_zdarzenie_id);
-    zbywcaId = Number(d.zbywca_osoba_id);
-    const nr = Number(d.nr);
-    zakresy = Number.isInteger(nr) ? [{ nr_od: nr, nr_do: nr }] : [];
-  } else {
-    return;
-  }
-  if (zakresy.length === 0) return;
-
-  const niepokryte = stanLogika
-    .otwarte(stanPrzed)
-    .filter(
-      (p) =>
-        p.emisja_klucz === emisjaKlucz &&
-        p.kategoria === K.AKCJONARIUSZ &&
-        Number(p.osoba_id) === zbywcaId &&
-        (p.pokryta === 'nie' || p.pokryta === 'czesciowo') &&
-        n.nakladaja([{ nr_od: p.nr_od, nr_do: p.nr_do }], zakresy)
-    );
-  if (niepokryte.length > 0 && !d.zgoda_spolki_niepelne_pokrycie) {
-    const dotkniete = n.normalizuj(
-      niepokryte.flatMap((p) => n.przeciecie([{ nr_od: p.nr_od, nr_do: p.nr_do }], zakresy))
-    );
-    bledy.push(
-      `Akcje ${n.opisz(dotkniete)} nie są w pełni pokryte — zbycie wymaga zgody spółki ` +
-        `(${przepisy.PODSTAWY.NIEPELNE_POKRYCIE}). Zgoda nie została odnotowana.`
-    );
-  }
-}
-
-/**
- * AML (notariusz jako instytucja obowiazana).
- * `niemozliwe` = przeszkoda wpisu -> blokada.
- * `brak`       = weryfikacja niewykonana -> ostrzezenie; checklista i tak
- *                nie pozwoli dokonac wpisu bez jej odhaczenia.
- */
-/** Osoby, które wpis czyni akcjonariuszem albo uprawnionym z obciążenia (AML, W6.1). */
-function nabywcyWpisu(propozycja) {
-  const dane = propozycja.dane || {};
-  const nabywcy = new Set();
-  if (propozycja.typ === 'objecie') {
-    for (const p of dane.pozycje || []) if (p.osoba_id != null) nabywcy.add(Number(p.osoba_id));
-  }
-  if (propozycja.typ === 'przeniesienie') {
-    for (const p of dane.pozycje || []) nabywcy.add(Number(p.nabywca_osoba_id));
-  }
-  if (propozycja.typ === 'przeniesienie_ulamka' && dane.nabywca_osoba_id != null) {
-    nabywcy.add(Number(dane.nabywca_osoba_id));
-  }
-  // Obciazenie (zastaw/uzytkowanie) tworzy nowy tytul prawny do akcji na
-  // rzecz zastawnika/uzytkownika - traktujemy go jak nabywce dla celow AML.
-  // Zajecie jest z urzedu (organ egzekucyjny) - poza rezimem AML.
-  if (propozycja.typ === 'obciazenie' && dane.osoba_id != null) {
-    nabywcy.add(Number(dane.osoba_id));
-  }
-  return nabywcy;
-}
-
-/**
- * W6.1 / D-076 — PESEL albo data urodzenia osoby fizycznej w nowym wpisie
- * (art. 30 ustawy z 23.01.2026, Dz.U. 2026 poz. 176; kancelaria stosuje od
- * dziś). Brak obu = na pewno niespełnione → błąd. Nie dotyczy wpisów
- * dokonanych wcześniej ani osób prawnych.
- */
-function sprawdzIdentyfikacjeNabywcow(propozycja, osoby, bledy) {
-  for (const id of nabywcyWpisu(propozycja)) {
-    const osoba = osoby.get(id);
-    if (!osoba || osoba.typ === 'prawna') continue;
-    if (String(osoba.pesel || '').trim() || String(osoba.data_urodzenia || '').trim()) continue;
-    const nazwa = [osoba.imie, osoba.nazwisko].filter(Boolean).join(' ') || `#${id}`;
-    bledy.push(
-      `Osoba „${nazwa}”: rejestr wymaga numeru PESEL albo daty urodzenia (D-076; art. 30 ustawy z 23.01.2026). `
-        + 'Uzupełnij dane w kartotece osób.'
-    );
-  }
-}
-
-/**
- * D-114 (P-006): emisja założycielska następuje z chwilą rejestracji spółki — jej data wpisu do KRS to data rejestracji
- * spółki; kolejne emisje — z datą zmiany, nie wcześniejszą niż rejestracja. Odstępstwo = ostrzeżenie, nie blokada.
- */
-function sprawdzDateEmisji(stanPrzed, propozycja, spolka, ostrzezenia) {
-  if (propozycja.typ !== 'emisja' || !spolka || !spolka.data_utworzenia_spolki) return;
-  const data = (propozycja.dane || {}).data_wpisu_krs;
-  if (!data) return;
-  const rejestracja = spolka.data_utworzenia_spolki;
-  if ((stanPrzed.emisje || []).length === 0 && data !== rejestracja) {
-    ostrzezenia.push(`Emisja założycielska następuje z chwilą rejestracji spółki (${rejestracja}), a data wpisu emisji do KRS to ${data} — sprawdź datę.`);
-  } else if ((stanPrzed.emisje || []).length > 0 && data < rejestracja) {
-    ostrzezenia.push(`Data wpisu emisji do KRS (${data}) jest wcześniejsza niż data rejestracji spółki (${rejestracja}) — sprawdź datę.`);
-  }
-}
-
-function maBeneficjenta(osoba) {
-  if (osoba.beneficjent_rzeczywisty_id) return true;
-  try { return JSON.parse(osoba.beneficjenci_json || '[]').length > 0; } catch (e) { return false; }
-}
-
-function sprawdzAml(propozycja, osoby, bledy, ostrzezenia) {
-  const nabywcy = nabywcyWpisu(propozycja);
-
-  for (const id of nabywcy) {
-    const osoba = osoby.get(id);
-    if (!osoba) continue;
-    const nazwa = osoba.nazwa || [osoba.nazwisko, osoba.imie].filter(Boolean).join(' ') || `#${id}`;
-    // Naprawa Z-203: komunikat rozroznia osobe fizyczna i prawna - dla
-    // podmiotu srodki bezpieczenstwa obejmuja tozsamosc reprezentanta i (gdy
-    // wskazany) beneficjenta rzeczywistego, nie sam wpis do KRS. Bez
-    // blokowania (P-013) i bez osobnego sygnalu o braku wskazania
-    // beneficjenta (P-001 - to swiadomie zero ostrzezenia, decyzja pracownika).
-    const okreslenie = osoba.typ === 'prawna' ? 'nabywcy (podmiotu)' : 'nabywcy';
-    if (osoba.aml_status === przepisy.AML_STATUSY.NIEMOZLIWE) {
-      bledy.push(
-        `Wobec ${okreslenie} „${nazwa}” odnotowano brak możliwości zastosowania środków bezpieczeństwa ` +
-          `finansowego. To przeszkoda wpisu — przy jej nieusunięciu wpisu odmawia się.`
-      );
-    } else if (osoba.aml_status !== przepisy.AML_STATUS_WYMAGANY) {
-      ostrzezenia.push(
-        `Wobec ${okreslenie} „${nazwa}” nie odnotowano wykonania środków bezpieczeństwa finansowego (AML).`
-      );
-    }
-    // D-118 (P-001): przy wpisie na rzecz osoby prawnej beneficjent rzeczywisty jest wymagany — wskazuje go sama
-    // spółka (oświadczenie); jego brak to ostrzeżenie, nie blokada (D-117, P-014).
-    if (osoba.typ === 'prawna' && !maBeneficjenta(osoba)) {
-      ostrzezenia.push(`Nabywca „${nazwa}” jest osobą prawną bez wskazanego beneficjenta rzeczywistego — poproś spółkę o wskazanie (oświadczenie).`);
-    }
-  }
-}
-
-function sprawdzOsoby(propozycja, osoby, bledy) {
-  const dane = propozycja.dane || {};
-  const wymagane = new Set();
-  if (dane.zbywca_osoba_id != null) wymagane.add(Number(dane.zbywca_osoba_id));
-  if (dane.nabywca_osoba_id != null) wymagane.add(Number(dane.nabywca_osoba_id));
-  if (dane.osoba_id != null && dane.osoba_id !== '') wymagane.add(Number(dane.osoba_id));
-  if (dane.akcjonariusz_osoba_id != null && dane.akcjonariusz_osoba_id !== '') {
-    wymagane.add(Number(dane.akcjonariusz_osoba_id));
-  }
-  if (dane.przedstawiciel_osoba_id != null && dane.przedstawiciel_osoba_id !== '') {
-    wymagane.add(Number(dane.przedstawiciel_osoba_id));
-  }
-  for (const p of dane.pozycje || []) {
-    if (p.osoba_id != null) wymagane.add(Number(p.osoba_id));
-    if (p.nabywca_osoba_id != null) wymagane.add(Number(p.nabywca_osoba_id));
-  }
-  for (const id of wymagane) {
-    if (!osoby.has(id)) {
-      bledy.push(`Osoba #${id} nie figuruje w kartotece — nie można jej wpisać do rejestru.`);
-    }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Kontrole per typ
-// ─────────────────────────────────────────────────────────────
-
-const PER_TYP = {
-  emisja(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    if (stanPrzed.emisje.some((e) => e.seria === d.seria)) {
-      bledy.push(
-        `Seria „${d.seria}” jest już zarejestrowana w tej spółce. Oznaczenie serii musi być niepowtarzalne.`
-      );
-    }
-    if (!Number.isInteger(Number(d.ilosc)) || Number(d.ilosc) < 1) {
-      bledy.push('Emisja musi obejmować co najmniej jedną akcję.');
-    }
-    // Regula domenowa 12, od strony SAMEJ EMISJI: akcje nie istnieja przed
-    // wpisem spolki albo emisji do KRS (art. 300(30) § 2 KSH). Dotad date
-    // wpisu wolno bylo zostawic pusta - emisja zapisywala sie, a objecie
-    // akcji odbijalo sie o te sama regule sprawdzana nizej. Efekt byl taki,
-    // ze w rejestrze siedziala emisja, ktorej nie dalo sie ani uzyc, ani
-    // poprawic inaczej niz sprostowaniem, o ktorym trzeba bylo wiedziec.
-    // Blokujemy wczesniej: emisji bez wpisu do KRS po prostu sie nie zapisuje.
-    if (!d.data_wpisu_krs) {
-      bledy.push(
-        `Emisja nie ma daty wpisu do KRS — akcje z niej jeszcze nie istnieją ` +
-          `(${przepisy.PODSTAWY.WPIS_WARUNEK_KRS}). Uzupełnij datę wpisu albo wróć do tego ` +
-          `zdarzenia, gdy sąd zarejestruje emisję.`
-      );
-    }
-  },
-
-  objecie(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
-    if (!emisja) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-      return;
-    }
-    // Regula domenowa 12: akcje nie istnieja przed wpisem SPOLKI ALBO EMISJI
-    // do KRS (art. 300(30) § 2 KSH) - sankcja karna z art. 592 § 3 KSH wobec
-    // zarzadu. Twarda blokada, nie ostrzezenie.
-    if (!emisja.data_wpisu_krs) {
-      bledy.push(
-        `Emisja serii ${emisja.seria} nie ma wpisu do KRS — akcje z tej emisji jeszcze nie istnieją ` +
-          `(${przepisy.PODSTAWY.WPIS_WARUNEK_KRS}) i nie mogą zostać objęte.`
-      );
-    }
-    const dostepne = stanLogika.pula(stanPrzed, emisja.klucz, K.NIEOBJETA, null);
-    const zadane = n.normalizuj((d.pozycje || []).flatMap((p) => p.zakresy || []));
-    const pozaPula = n.roznica(zadane, dostepne);
-    if (pozaPula.length > 0) {
-      bledy.push(
-        `Akcje ${n.opisz(pozaPula)} serii ${emisja.seria} nie są dostępne do objęcia — ` +
-          `zostały już objęte albo umorzone.`
-      );
-    }
-    sprawdzRozlacznoscPozycji(d.pozycje, bledy);
-  },
-
-  przeniesienie(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
-    if (!emisja) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-      return;
-    }
-    const zbywcaId = Number(d.zbywca_osoba_id);
-    const pakiet = stanLogika.pula(stanPrzed, emisja.klucz, K.AKCJONARIUSZ, zbywcaId);
-    const zadane = n.normalizuj((d.pozycje || []).flatMap((p) => p.zakresy || []));
-    const brakujace = n.roznica(zadane, pakiet);
-
-    if (brakujace.length > 0) {
-      const nieobjete = n.przeciecie(
-        brakujace,
-        stanLogika.pula(stanPrzed, emisja.klucz, K.NIEOBJETA, null)
-      );
-      const umorzone = n.przeciecie(
-        brakujace,
-        stanLogika.pula(stanPrzed, emisja.klucz, K.UMORZONA, null)
-      );
-      if (nieobjete.length > 0) {
-        bledy.push(
-          `Akcje ${n.opisz(nieobjete)} serii ${emisja.seria} nie zostały objęte — ` +
-            `nie można ich przenieść przed wpisem objęcia.`
-        );
+    w.liczba = liczba;
+    if (ulamek && tekst(a.ulamek)) {
+      const m = tekst(a.ulamek).match(/^(\d+)\s*\/\s*(\d+)$/);
+      let cz = null;
+      try {
+        cz = m ? u.waliduj({ licznik: Number(m[1]), mianownik: Number(m[2]) }) : null;
+      } catch {
+        cz = null;
       }
-      if (umorzone.length > 0) {
-        bledy.push(`Akcje ${n.opisz(umorzone)} serii ${emisja.seria} są umorzone.`);
-      }
-      const cudze = n.roznica(n.roznica(brakujace, nieobjete), umorzone);
-      if (cudze.length > 0) {
-        bledy.push(
-          `Zbywca nie posiada akcji ${n.opisz(cudze)} serii ${emisja.seria}. ` +
-            `Posiada: ${n.opisz(pakiet) || 'brak akcji w tej serii'}.`
-        );
+      if (!cz) blad(`${pole}.ulamek`, 'Podaj ułamek w postaci „1/2”.');
+      else if (!u.jestJeden(cz)) {
+        if (liczba !== 1) blad(`${pole}.ulamek`, 'Ułamek dotyczy dokładnie jednej akcji (jednego numeru).');
+        w.czesc = { licznik: cz.licznik, mianownik: cz.mianownik };
       }
     }
+    return w;
+  };
 
-    for (const p of d.pozycje || []) {
-      if (Number(p.nabywca_osoba_id) === zbywcaId) {
-        bledy.push('Zbywca i nabywca to ta sama osoba — takie przeniesienie nie zmienia rejestru.');
-      }
-    }
-    sprawdzRozlacznoscPozycji(d.pozycje, bledy);
-  },
+  const listaAkcji = (v, pole, opcje) =>
+    lista(v, pole, 'Wskaż akcje: serię, numery i liczbę.').map((a, i) => akcje(a, `${pole}.${i}`, opcje));
 
-  umorzenie(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
-    if (!emisja) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-      return;
-    }
-    for (const p of d.pozycje || []) {
-      const zakresy = n.normalizuj(p.zakresy || []);
-      const pula =
-        p.osoba_id == null
-          ? stanLogika.pula(stanPrzed, emisja.klucz, K.NIEOBJETA, null)
-          : stanLogika.pula(stanPrzed, emisja.klucz, K.AKCJONARIUSZ, Number(p.osoba_id));
-      const brakujace = n.roznica(zakresy, pula);
-      if (brakujace.length > 0) {
-        bledy.push(
-          p.osoba_id == null
-            ? `Akcje ${n.opisz(brakujace)} serii ${emisja.seria} nie są nieobjęte — nie można ich umorzyć w tym trybie.`
-            : `Akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria}.`
-        );
-      }
-    }
-    sprawdzRozlacznoscPozycji(d.pozycje, bledy);
-  },
+  const seriaCiagla = (s, pole) => {
+    const a = akcje(s, pole);
+    if (a.zakresy.length > 1) blad(`${pole}.numery`, 'Numery serii muszą tworzyć jeden ciągły zakres.');
+    const z = a.zakresy[0] || { nr_od: null, nr_do: null };
+    return { seria: a.seria, nr_od: z.nr_od, nr_do: z.nr_do, liczba: a.liczba };
+  };
 
   /**
-   * Uniewaznienie akcji orzeczeniem sadu (art. 300(51) KSH) - kontrola tych
-   * samych pul co przy umorzeniu: unieważnić można wyłącznie akcje, które na
-   * dzień zdarzenia rzeczywiście są w rejestrze pod wskazanym tytułem.
+   * Atrybut wskazany do zmiany albo wykreślenia — rodzaj wynika ze stanu (także atrybutu już
+   * wykreślonego: sprostowanie zastępuje wpis w jego miejscu w chronologii). Czy atrybut jest
+   * otwarty na wskazanych akcjach, sprawdza odtworzenie stanu.
    */
-  uniewaznienie(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
-    if (!emisja) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-      return;
+  const atrybut = (ref, pole, rodzajeDozwolone) => {
+    const zid = Number(ref && ref.zdarzenie_id);
+    const poz = Number((ref && ref.pozycja) || 0);
+    const wiersz = k.stan && k.stan.atrybuty.find((a) => a.zdarzenie_id === zid && a.pozycja === poz);
+    if (!wiersz) {
+      blad(pole, 'Wskaż obciążenie albo adnotację, której dotyczy zmiana.');
+      return { ref: { zdarzenie_id: zid, pozycja: poz }, rodzaj: null };
     }
-    for (const p of d.pozycje || []) {
-      const zakresy = n.normalizuj(p.zakresy || []);
-      const pula =
-        p.osoba_id == null
-          ? stanLogika.pula(stanPrzed, emisja.klucz, K.NIEOBJETA, null)
-          : stanLogika.pula(stanPrzed, emisja.klucz, K.AKCJONARIUSZ, Number(p.osoba_id));
-      const brakujace = n.roznica(zakresy, pula);
-      if (brakujace.length > 0) {
-        bledy.push(
-          p.osoba_id == null
-            ? `Akcje ${n.opisz(brakujace)} serii ${emisja.seria} nie są nieobjęte — nie można ich unieważnić w tym trybie.`
-            : `Akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria}.`
-        );
-      }
-    }
-    sprawdzRozlacznoscPozycji(d.pozycje, bledy);
-  },
+    if (!rodzajeDozwolone.includes(wiersz.rodzaj)) blad(pole, 'Wskazany wpis jest innego rodzaju.');
+    return { ref: { zdarzenie_id: zid, pozycja: poz }, rodzaj: wiersz.rodzaj };
+  };
 
-  zmiana_danych_spolki() {},
-
-  obciazenie(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
-    if (!emisja) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-      return;
-    }
-    if (Number(d.osoba_id) === Number(d.akcjonariusz_osoba_id)) {
-      bledy.push('Zastawnik (użytkownik) i akcjonariusz nie mogą być tą samą osobą.');
-    }
-    const pakiet = stanLogika.pula(stanPrzed, emisja.klucz, K.AKCJONARIUSZ, Number(d.akcjonariusz_osoba_id));
-    const zadane = n.normalizuj(d.zakresy || []);
-    const brakujace = n.roznica(zadane, pakiet);
-    if (brakujace.length > 0) {
-      bledy.push(
-        `Akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria}.`
-      );
-    }
-  },
-
-  wykreslenie_obciazenia(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const cel = stanPrzed.obciazenia.find(
-      (o) => o.klucz === Number(d.obciazenie_zdarzenie_id) && o.data_do === null
-    );
-    if (!cel) {
-      bledy.push('Wskazane obciążenie nie istnieje w rejestrze albo zostało już wykreślone.');
-      return;
-    }
-    if (cel.typ === 'zajecie') {
-      bledy.push(
-        'Zajęcie egzekucyjne wykreśla się zdarzeniem „uchylenie zajęcia”, nie „wykreślenie obciążenia”.'
-      );
-    }
-  },
-
-  prawo_glosu_zastawnika(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const cel = stanPrzed.obciazenia.find(
-      (o) => o.klucz === Number(d.obciazenie_zdarzenie_id) && o.data_do === null
-    );
-    if (!cel) {
-      bledy.push('Wskazane obciążenie nie istnieje w rejestrze albo zostało już wykreślone.');
-      return;
-    }
-    if (cel.typ === 'zajecie') {
-      bledy.push('Prawo głosu zastawnika dotyczy zastawu lub użytkowania, nie zajęcia egzekucyjnego.');
-    }
-  },
-
-  zajecie(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
-    if (!emisja) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-      return;
-    }
-    const zadane = n.normalizuj(d.zakresy || []);
-    if (zadane.length === 0) {
-      bledy.push('Nie zidentyfikowano akcji objętych zajęciem.');
-      return;
-    }
-    if (d.akcjonariusz_osoba_id != null) {
-      const pakiet = stanLogika.pula(stanPrzed, emisja.klucz, K.AKCJONARIUSZ, Number(d.akcjonariusz_osoba_id));
-      const brakujace = n.roznica(zadane, pakiet);
-      if (brakujace.length > 0) {
-        bledy.push(
-          `Wskazany akcjonariusz nie posiada akcji ${n.opisz(brakujace)} serii ${emisja.seria}.`
-        );
-      }
-    } else {
-      const brakujace = n.roznica(zadane, n.zakresEmisji(emisja));
-      if (brakujace.length > 0) {
-        bledy.push(`Numery ${n.opisz(brakujace)} wykraczają poza zakres emisji ${emisja.seria}.`);
-      }
-    }
-  },
-
-  wykreslenie_zajecia(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const cel = stanPrzed.obciazenia.find(
-      (o) => o.klucz === Number(d.obciazenie_zdarzenie_id) && o.data_do === null && o.typ === 'zajecie'
-    );
-    if (!cel) {
-      bledy.push('Wskazane zajęcie nie istnieje w rejestrze albo zostało już uchylone.');
-    }
-  },
-
-  uprawnienie(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    if (d.wykresla_zdarzenie_id != null) {
-      const cel = stanPrzed.uprawnienia.find(
-        (u) => u.klucz === Number(d.wykresla_zdarzenie_id) && u.status === 'aktywne'
-      );
-      if (!cel) bledy.push('Wskazane uprawnienie nie istnieje w rejestrze albo zostało już wykreślone.');
-      return;
-    }
-    if (d.zakres === 'emisja' && !stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id))) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-    }
-    if (!d.tytul && !d.tresc) {
-      bledy.push('Uprawnienie wymaga podania tytułu albo treści.');
-    }
-  },
-
-  ograniczenie(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    if (d.wykresla_zdarzenie_id != null) {
-      const cel = stanPrzed.ograniczenia.find(
-        (o) => o.klucz === Number(d.wykresla_zdarzenie_id) && o.status === 'aktywne'
-      );
-      if (!cel) bledy.push('Wskazane ograniczenie nie istnieje w rejestrze albo zostało już wykreślone.');
-      return;
-    }
-    if (
-      (d.zakres === 'emisja' || d.zakres === 'zakres_numerow') &&
-      !stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id))
-    ) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-    }
-    if (d.zakres === 'zakres_numerow' && (!Array.isArray(d.zakresy) || d.zakresy.length === 0)) {
-      bledy.push('Wskaż numery akcji objęte ograniczeniem.');
-    }
-  },
-
-  zmiana_danych_akcjonariusza(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    if (!Array.isArray(d.zmienione_pola) || d.zmienione_pola.length === 0) {
-      bledy.push('Nie wskazano żadnej zmiany danych.');
-    }
-  },
-
-  zobowiazanie(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    if (d.emisja_zdarzenie_id != null && !stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id))) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-    }
-  },
-
-  zdarzenie_inne() {},
-
-  przeniesienie_ulamka(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
-    if (!emisja) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-      return;
-    }
-    if (!emisja.data_wpisu_krs) {
-      bledy.push(
-        `Emisja serii ${emisja.seria} nie ma wpisu do KRS — akcje z tej emisji jeszcze nie istnieją ` +
-          `(${przepisy.PODSTAWY.WPIS_WARUNEK_KRS}).`
-      );
-    }
-    const zbywcaId = Number(d.zbywca_osoba_id);
-    const nabywcaId = Number(d.nabywca_osoba_id);
-    if (zbywcaId === nabywcaId) {
-      bledy.push('Zbywca i nabywca to ta sama osoba — takie przeniesienie nie zmienia rejestru.');
-    }
-    const nr = Number(d.nr);
-    if (!Number.isInteger(nr) || nr < 1) {
-      bledy.push('Wskaż numer akcji, której dotyczy przeniesienie ułamkowej części.');
-      return;
-    }
-    let czesc;
-    try {
-      czesc = u.waliduj({ licznik: d.czesc_licznik, mianownik: d.czesc_mianownik });
-    } catch (e) {
-      bledy.push(e.message);
-      return;
-    }
-    const zbywcaMa = stanLogika.ulamekOsobyNaNumerze(stanPrzed, emisja.klucz, zbywcaId, nr);
-    if (!u.mniejszyRowny(czesc, zbywcaMa)) {
-      bledy.push(
-        `Zbywca posiada ${u.opisz(zbywcaMa)} akcji nr ${nr} serii ${emisja.seria} ` +
-          `— nie może zbyć ${u.opisz(czesc)}.`
-      );
-    }
-  },
-
-  przedstawiciel(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
-    if (!emisja) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-      return;
-    }
-    const nr = Number(d.nr);
-    const wlasciciele = stanLogika
-      .otwarte(stanPrzed)
-      .filter((p) => p.emisja_klucz === emisja.klucz && p.kategoria === K.AKCJONARIUSZ && p.nr_od <= nr && nr <= p.nr_do);
-    if (wlasciciele.length === 0) {
-      bledy.push(`Akcja nr ${nr} serii ${emisja.seria} nie ma obecnie żadnego uprawnionego.`);
-      return;
-    }
-    if (d.przedstawiciel_osoba_id != null && !wlasciciele.some((w) => Number(w.osoba_id) === Number(d.przedstawiciel_osoba_id))) {
-      bledy.push('Wskazany przedstawiciel musi być jednym ze współuprawnionych z tej akcji.');
-    }
-  },
-
-  pokrycie_akcji(stanPrzed, propozycja, kontekst, bledy) {
-    const d = propozycja.dane || {};
-    const emisja = stanLogika.znajdzEmisje(stanPrzed, Number(d.emisja_zdarzenie_id));
-    if (!emisja) {
-      bledy.push('Wskazana emisja nie istnieje w rejestrze tej spółki.');
-      return;
-    }
-    if (!przepisy.STANY_POKRYCIA.includes(d.pokryta)) {
-      bledy.push(`Wzmianka o pokryciu musi być jedną z wartości: ${przepisy.STANY_POKRYCIA.join(', ')}.`);
-    }
-    const maAkcje = stanLogika
-      .otwarte(stanPrzed)
-      .some((p) => p.emisja_klucz === emisja.klucz && p.kategoria === K.AKCJONARIUSZ && Number(p.osoba_id) === Number(d.osoba_id));
-    if (!maAkcje) {
-      bledy.push('Wskazany akcjonariusz nie posiada akcji tej emisji.');
-    }
-  },
-};
-
-/** Dwie pozycje jednego zdarzenia nie moga siegac po te same akcje. */
-function sprawdzRozlacznoscPozycji(pozycje, bledy) {
-  const lista = (pozycje || []).map((p) => n.normalizuj(p.zakresy || []));
-  for (let i = 0; i < lista.length; i += 1) {
-    for (let j = i + 1; j < lista.length; j += 1) {
-      const wspolne = n.przeciecie(lista[i], lista[j]);
-      if (wspolne.length > 0) {
-        bledy.push(
-          `Akcje ${n.opisz(wspolne)} zostały przypisane w tym zdarzeniu dwukrotnie ` +
-            `(pozycja ${i + 1} i ${j + 1}).`
-        );
-      }
-    }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Wejscie glowne
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Sprawdza propozycje zdarzenia wobec stanu rejestru.
- *
- * @param {object[]} zdarzenia  dotychczasowe zdarzenia spolki
- * @param {object}   propozycja { typ, chwila, dane } - `chwila` = UTC wpisu (D-R01)
- * @param {object}   spolka     rekord `psa_spolki`
- * @param {Map}      osoby      id -> rekord `psa_osoby`
- * @returns {{ dopuszczalne, bledy, ostrzezenia, stanPrzed, stanPo }}
- */
-function sprawdz({ zdarzenia = [], propozycja, spolka, osoby = new Map() } = {}) {
-  const bledy = [];
-  const ostrzezenia = [];
-  // Dzien wpisu w strefie kancelarii - odniesienie dla dat dziennych
-  // (np. data wpisu emisji do KRS nie moze byc z przyszlosci).
-  const dzis = czas.dzienLokalny(propozycja && propozycja.chwila) || czas.dzisIso();
-
-  if (!propozycja || !propozycja.typ) {
-    return { dopuszczalne: false, bledy: ['Nie wskazano typu zdarzenia.'], ostrzezenia, stanPrzed: null, stanPo: null };
-  }
-  if (!typyZdarzen.istnieje(propozycja.typ)) {
-    return {
-      dopuszczalne: false,
-      bledy: [`Typ zdarzenia „${propozycja.typ}” nie występuje w katalogu.`],
-      ostrzezenia,
-      stanPrzed: null,
-      stanPo: null,
-    };
-  }
-
-  let stanPrzed;
-  try {
-    stanPrzed = stanLogika.odtworzStan(zdarzenia);
-  } catch (e) {
-    return {
-      dopuszczalne: false,
-      bledy: [`Nie udało się odtworzyć stanu rejestru: ${e.message}`],
-      ostrzezenia,
-      stanPrzed: null,
-      stanPo: null,
-    };
-  }
-
-  sprawdzSpolke(spolka, bledy);
-  sprawdzChwile(zdarzenia, propozycja, bledy);
-  sprawdzDataWpisuKrsEmisji(stanPrzed, propozycja, spolka, dzis, bledy);
-  sprawdzOsoby(propozycja, osoby, bledy);
-
-  const perTyp = PER_TYP[propozycja.typ];
-  if (perTyp) {
-    perTyp(stanPrzed, propozycja, { osoby }, bledy, ostrzezenia);
-  }
-
-  sprawdzSprostowanieEmisji(zdarzenia, stanPrzed, propozycja, bledy);
-  sprawdzObciazenia(stanPrzed, propozycja, bledy);
-  sprawdzOgraniczenia(stanPrzed, propozycja, bledy, ostrzezenia);
-  sprawdzPokrycie(stanPrzed, propozycja, bledy);
-  sprawdzAml(propozycja, osoby, bledy, ostrzezenia);
-  sprawdzDateEmisji(stanPrzed, propozycja, spolka, ostrzezenia);
-  sprawdzIdentyfikacjeNabywcow(propozycja, osoby, bledy);
-
-  // Warstwa druga: bilans calego rejestru po zdarzeniu. Nawet jesli kontrole
-  // szczegolowe czegos nie zlapaly, niezgodny bilans zatrzymuje zapis.
-  let stanPo = null;
-  const nastepneId =
-    zdarzenia.reduce((max, z) => Math.max(max, Number(z.id) || 0), 0) + 1;
-  const proba = [
-    ...zdarzenia,
-    {
-      id: nastepneId,
-      typ: propozycja.typ,
-      data_wpisu: propozycja.chwila,
-      dane: propozycja.dane || {},
-      zdarzenie_prostowane_id: propozycja.zdarzenie_prostowane_id ?? null,
+  const PRZYGOTUJ = {
+    otwarcie(r, p) {
+      const serie = lista(r.serie, `${p}.serie`, 'Podaj co najmniej jedną serię akcji.').map((s, i) => ({
+        ...seriaCiagla(s, `${p}.serie.${i}`),
+        data_wpisu_krs: data(s.data_wpisu_krs, `${p}.serie.${i}.data_wpisu_krs`, 'Podaj datę wpisu emisji do KRS.'),
+      }));
+      return {
+        typ: 'otwarcie',
+        zrodlo: wybor(r.zrodlo, typy.ZRODLA_OTWARCIA, `${p}.zrodlo`, 'Wskaż: założenie spółki albo przejęcie rejestru.'),
+        serie,
+        akcjonariusze: lista(r.akcjonariusze, `${p}.akcjonariusze`, 'Podaj akcjonariuszy.').map((a, i) => ({
+          osoba_id: osoba(a.osoba_id, `${p}.akcjonariusze.${i}.osoba_id`),
+          akcje: listaAkcji(a.akcje, `${p}.akcjonariusze.${i}.akcje`, { ulamek: true }),
+        })),
+        umorzone: (r.umorzone || []).map((m, i) => ({
+          ...akcje(m, `${p}.umorzone.${i}`),
+          podstawa: wybor(m.podstawa, typy.PODSTAWY_UMORZENIA, `${p}.umorzone.${i}.podstawa`, 'Wskaż podstawę umorzenia.'),
+        })),
+        atrybuty: (r.atrybuty || []).map((t, i) => {
+          const q = `${p}.atrybuty.${i}`;
+          const rodzaj = wybor(t.rodzaj, RODZAJE_ATRYBUTOW, `${q}.rodzaj`, 'Wybierz rodzaj obciążenia albo adnotacji.');
+          return {
+            rodzaj,
+            akcje: listaAkcji(t.akcje, `${q}.akcje`),
+            osoba_id: ['zastaw', 'uzytkowanie'].includes(rodzaj) ? osoba(t.osoba_id, `${q}.osoba_id`) : null,
+            tresc: tekst(t.tresc) || null,
+            prawo_glosu: ['zastaw', 'uzytkowanie'].includes(rodzaj) && t.prawo_glosu === true,
+          };
+        }),
+      };
     },
-  ];
-  try {
-    stanPo = stanLogika.odtworzStan(proba);
-    for (const blad of stanLogika.sprawdzBilans(stanPo)) {
-      bledy.push(`Bilans akcji: ${blad}`);
-    }
-  } catch (e) {
-    bledy.push(e.message);
-  }
 
-  // Informacyjnie: akcje wyemitowane, a wciaz nieobjete (art. 300(31) § 3 KSH).
-  if (stanPo) {
-    for (const seria of stanLogika.bilansNaDzien(stanPo, null)) {
-      if (seria.nieobjete > 0) {
-        ostrzezenia.push(
-          `Seria ${seria.seria}: ${seria.nieobjete} akcji pozostaje nieobjętych ` +
-            `(${n.opisz(seria.nieobjete_zakresy)}). Liczba akcji zarejestrowanych ma odpowiadać ` +
-            `liczbie wyemitowanych — uzupełnij wpisem objęcia.`
-        );
+    emisja(r, p) {
+      const s = seriaCiagla(r, p);
+      return {
+        typ: 'emisja',
+        ...s,
+        data_wpisu_krs: data(r.data_wpisu_krs, `${p}.data_wpisu_krs`, 'Podaj datę wpisu emisji do KRS.'),
+        pokryte: takNie(r.pokryte, `${p}.pokryte`, 'Odpowiedz: czy akcje są pokryte w całości (tak albo nie).'),
+        obejmujacy: lista(r.obejmujacy, `${p}.obejmujacy`, 'Podaj obejmujących akcje.').map((o, i) => {
+          const a = akcje(o, `${p}.obejmujacy.${i}`, { seria: s.seria });
+          return { osoba_id: osoba(o.osoba_id, `${p}.obejmujacy.${i}.osoba_id`), zakresy: a.zakresy, liczba: a.liczba };
+        }),
+      };
+    },
+
+    przeniesienie(r, p) {
+      return {
+        typ: 'przeniesienie',
+        zbywca_osoba_id: osoba(r.zbywca_osoba_id, `${p}.zbywca_osoba_id`),
+        nabywcy: lista(r.nabywcy, `${p}.nabywcy`, 'Podaj nabywcę.').map((x, i) => ({
+          osoba_id: osoba(x.osoba_id, `${p}.nabywcy.${i}.osoba_id`),
+          akcje: listaAkcji(x.akcje, `${p}.nabywcy.${i}.akcje`, { ulamek: true }),
+        })),
+      };
+    },
+
+    umorzenie(r, p) {
+      return {
+        typ: 'umorzenie',
+        podstawa: wybor(r.podstawa, typy.PODSTAWY_UMORZENIA, `${p}.podstawa`, 'Wskaż podstawę: uchwała albo orzeczenie sądu.'),
+        akcje: listaAkcji(r.akcje, `${p}.akcje`),
+      };
+    },
+
+    obciazenie(r, p) {
+      const operacja = wybor(r.operacja, typy.OPERACJE_OBCIAZENIA, `${p}.operacja`, 'Wybierz: ustanowienie, zmiana prawa głosu albo wykreślenie.');
+      const op = { typ: 'obciazenie', operacja, akcje: listaAkcji(r.akcje, `${p}.akcje`) };
+      if (operacja === 'ustanowienie') {
+        op.rodzaj = wybor(r.rodzaj, typy.RODZAJE_OBCIAZENIA, `${p}.rodzaj`, 'Wybierz: zastaw, użytkowanie albo zajęcie.');
+        op.osoba_id = op.rodzaj === 'zajecie' ? null : osoba(r.osoba_id, `${p}.osoba_id`);
+        op.tresc = tekst(r.tresc) || null;
+        op.prawo_glosu = op.rodzaj !== 'zajecie' && r.prawo_glosu === true;
+      } else if (operacja) {
+        const a = atrybut(r.atrybut, `${p}.atrybut`, typy.RODZAJE_OBCIAZENIA);
+        op.atrybut = a.ref;
+        op.rodzaj = a.rodzaj;
+        if (operacja === 'zmiana_prawa_glosu') {
+          if (a.rodzaj === 'zajecie') blad(`${p}.atrybut`, 'Zajęcie nie daje prawa głosu.');
+          op.prawo_glosu = takNie(r.prawo_glosu, `${p}.prawo_glosu`, 'Wskaż: prawo głosu tak albo nie.');
+        }
       }
-    }
-  }
+      return op;
+    },
 
-  return {
-    dopuszczalne: bledy.length === 0,
-    bledy: [...new Set(bledy)],
-    ostrzezenia: [...new Set(ostrzezenia)],
-    stanPrzed,
-    stanPo,
+    adnotacja(r, p) {
+      const operacja = wybor(r.operacja, typy.OPERACJE_ADNOTACJI, `${p}.operacja`, 'Wybierz: dodanie albo wykreślenie.');
+      const op = { typ: 'adnotacja', operacja, akcje: listaAkcji(r.akcje, `${p}.akcje`) };
+      if (operacja === 'dodanie') {
+        op.rodzaj = wybor(r.rodzaj, typy.RODZAJE_ADNOTACJI, `${p}.rodzaj`, 'Wybierz rodzaj informacji o akcjach.');
+        op.tresc = tekst(r.tresc) || null;
+        if (!op.tresc && op.rodzaj !== 'niepokryte') blad(`${p}.tresc`, 'Podaj treść.');
+      } else if (operacja) {
+        const a = atrybut(r.atrybut, `${p}.atrybut`, typy.RODZAJE_ADNOTACJI);
+        op.atrybut = a.ref;
+        op.rodzaj = a.rodzaj;
+      }
+      return op;
+    },
+
+    sprostowanie(r, p) {
+      const zid = Number(r.zdarzenie_id);
+      const cel = Number.isInteger(zid) ? k.zdarzenie(zid) : null;
+      const tryb = wybor(r.tryb, ['zastap', 'wycofaj'], `${p}.tryb`, 'Wybierz: zastąpienie treści albo wycofanie wpisu.');
+      if (!cel) {
+        blad(`${p}.zdarzenie_id`, 'Wskaż wpis do sprostowania.');
+        return { typ: 'sprostowanie', zdarzenie_id: zid, tryb };
+      }
+      if (cel.typ === 'sprostowanie') blad(`${p}.zdarzenie_id`, 'Sprostowania nie prostuje się — wskaż wpis, którego dotyczy.');
+      if (cel.typ === 'otwarcie' && tryb === 'wycofaj') blad(`${p}.tryb`, 'Otwarcia rejestru nie wycofuje się — sprostuj jego treść.');
+      const op = { typ: 'sprostowanie', zdarzenie_id: zid, tryb };
+      if (tryb === 'zastap') {
+        const zamiast = r.zamiast && typeof r.zamiast === 'object' ? r.zamiast : {};
+        if (zamiast.typ !== cel.typ) blad(`${p}.zamiast`, 'Sprostowanie zastępuje treść wpisu tego samego rodzaju.');
+        else op.zamiast = PRZYGOTUJ[cel.typ](zamiast, `${p}.zamiast`);
+      }
+      return op;
+    },
+
+    zamkniecie(r, p) {
+      return {
+        typ: 'zamkniecie',
+        powod: wybor(r.powod, typy.POWODY_ZAMKNIECIA, `${p}.powod`, 'Wskaż powód zamknięcia rejestru.'),
+      };
+    },
+  };
+
+  return (r, pole) => {
+    if (!r || !typy.istnieje(r.typ)) {
+      blad(`${pole}.typ`, 'Nieznany rodzaj zmiany.');
+      return null;
+    }
+    return PRZYGOTUJ[r.typ](r, pole);
   };
 }
 
-module.exports = { sprawdz, dotknieteZakresy, _sprawdzAml: sprawdzAml };
+/** Robocze operacje sprawy → treść wpisów. Rzuca BladWalidacji z błędami przy polach. */
+function przygotuj(robocze, k) {
+  const bledy = [];
+  const jedna = walidator(k, bledy);
+  const operacje = (Array.isArray(robocze) ? robocze : []).map((r, i) => jedna(r, `operacje.${i}`));
+  if (bledy.length > 0) throw new BladWalidacji(bledy);
+  return operacje;
+}
+
+/**
+ * Skład sprawy: co najmniej jedna zmiana; otwarcie, sprostowanie i zamknięcie osobno (z treści
+ * roboczej); R3 i żądający „brak” — z treści po przygotowaniu (rodzaj wykreślanego obciążenia
+ * wynika ze stanu). `operacje` = null, gdy przygotowanie się nie powiodło.
+ */
+function sprawdzSklad(robocze, operacje, zadajacy) {
+  const bledy = [];
+  const ops = Array.isArray(robocze) ? robocze : [];
+  if (ops.length === 0) bledy.push({ pole: 'operacje', komunikat: 'Dodaj co najmniej jedną zmianę.' });
+  if (ops.length > 1 && ops.some((o) => TYLKO_SAMODZIELNE.includes(o && o.typ))) {
+    bledy.push({ pole: 'operacje', komunikat: 'Otwarcie, sprostowanie i zamknięcie rejestru to osobne sprawy.' });
+  }
+  if (!operacje || operacje.length === 0) return bledy;
+  const zUrzedu = operacje.filter((o) => typy.zUrzedu(o));
+  if (zUrzedu.length > 0 && zUrzedu.length !== operacje.length) {
+    bledy.push({ pole: 'operacje', komunikat: 'Zajęcie wpisuje się z urzędu — w osobnej sprawie.' });
+  }
+  if (zUrzedu.length === operacje.length && zadajacy !== 'organ') {
+    bledy.push({ pole: 'zadajacy', komunikat: 'Zajęcie wpisuje się na zawiadomienie organu — wskaż organ.' });
+  }
+  if (zadajacy === 'organ' && zUrzedu.length !== operacje.length) {
+    bledy.push({ pole: 'zadajacy', komunikat: 'Organ jest żądającym tylko przy zajęciu.' });
+  }
+  if (zadajacy === 'brak' && operacje.some((o) => o.typ !== 'sprostowanie')) {
+    bledy.push({ pole: 'zadajacy', komunikat: 'Wskaż żądającego — bez żądającego kancelaria dokonuje wyłącznie sprostowania.' });
+  }
+  return bledy;
+}
+
+/** Dane spółki w „Edytuj” (U-25) — błędy przy polach. */
+function sprawdzSpolke(s) {
+  const bledy = [];
+  for (const pole of ['nazwa', 'siedziba', 'adres', 'sad_rejestrowy']) {
+    if (s[pole] !== undefined && !tekst(s[pole])) bledy.push({ pole, komunikat: 'Pole nie może być puste.' });
+  }
+  if (s.data_rejestracji !== undefined && (!czas.poprawnaData(s.data_rejestracji) || s.data_rejestracji > czas.dzisIso())) {
+    bledy.push({ pole: 'data_rejestracji', komunikat: 'Podaj prawidłową datę rejestracji spółki.' });
+  }
+  if (s.email && !osobyLogika.EMAIL.test(s.email)) bledy.push({ pole: 'email', komunikat: 'Nieprawidłowy adres e-mail.' });
+  if (s.nip && !/^\d{10}$/.test(String(s.nip))) bledy.push({ pole: 'nip', komunikat: 'NIP to 10 cyfr.' });
+  if (s.platnosc !== undefined && !['roczna', 'miesieczna'].includes(s.platnosc)) {
+    bledy.push({ pole: 'platnosc', komunikat: 'Wybierz: raz w roku albo co miesiąc.' });
+  }
+  if (s.krs !== undefined && !/^\d{10}$/.test(String(s.krs))) bledy.push({ pole: 'krs', komunikat: 'Numer KRS to 10 cyfr.' });
+  return bledy;
+}
+
+/**
+ * Blokady R6 sprawdzalne bez odtwarzania: rejestr zamknięty albo nieotwarty, data wpisu emisji
+ * do KRS (brak, z przyszłości, sprzeczna z datą rejestracji spółki — Z-012).
+ */
+function sprawdzBlokady(operacje, { stan, spolka, dzisiaj, zdarzenie }) {
+  const bledy = [];
+  const otwarcie = operacje.find((o) => o.typ === 'otwarcie');
+  if (!stan.otwarty) {
+    if (stan.data_zamkniecia) {
+      const naZamkniecie = operacje.every(
+        (o) => o.typ === 'sprostowanie' && (zdarzenie(o.zdarzenie_id) || {}).typ === 'zamkniecie'
+      );
+      if (!naZamkniecie) bledy.push('Rejestr spółki jest zamknięty — wpisy są niemożliwe.');
+    } else if (!otwarcie) {
+      bledy.push('Rejestr spółki nie został otwarty.');
+    }
+  } else if (otwarcie) {
+    bledy.push('Rejestr tej spółki został już otwarty.');
+  }
+
+  const rejestracja = spolka.data_rejestracji;
+  const daty = [];
+  for (const o of operacje) {
+    const op = o.typ === 'sprostowanie' ? o.zamiast : o;
+    if (!op) continue;
+    if (op.typ === 'emisja') {
+      daty.push({ seria: op.seria, data: op.data_wpisu_krs });
+      if (op.data_wpisu_krs <= rejestracja) {
+        bledy.push(`Data wpisu emisji serii ${op.seria} do KRS (${op.data_wpisu_krs}) musi być późniejsza niż data rejestracji spółki (${rejestracja}).`);
+      }
+    }
+    if (op.typ === 'otwarcie') {
+      for (const s of op.serie) {
+        daty.push({ seria: s.seria, data: s.data_wpisu_krs });
+        if (s.data_wpisu_krs < rejestracja) {
+          bledy.push(`Data wpisu serii ${s.seria} do KRS (${s.data_wpisu_krs}) nie może poprzedzać rejestracji spółki (${rejestracja}).`);
+        }
+      }
+      if (op.serie.length > 0 && !op.serie.some((s) => s.data_wpisu_krs === rejestracja)) {
+        bledy.push(`Emisja założycielska ma datę wpisu do KRS równą dacie rejestracji spółki (${rejestracja}).`);
+      }
+    }
+  }
+  for (const d of daty) {
+    if (d.data > dzisiaj) bledy.push(`Data wpisu serii ${d.seria} do KRS (${d.data}) jest z przyszłości.`);
+  }
+  return bledy;
+}
+
+/** Treść wpisu → robocza (formularz „Sprostuj” wypełniony treścią wpisu). */
+function naRobocza(wartosc) {
+  if (Array.isArray(wartosc)) return wartosc.map(naRobocza);
+  if (!wartosc || typeof wartosc !== 'object') return wartosc;
+  const wynik = {};
+  for (const [klucz, v] of Object.entries(wartosc)) {
+    if (klucz === 'zakresy') wynik.numery = n.opisz(v);
+    else if (klucz === 'czesc') wynik.ulamek = `${v.licznik}/${v.mianownik}`;
+    else if (klucz === 'nr_od' && wartosc.nr_do != null) wynik.numery = n.opisz([{ nr_od: v, nr_do: wartosc.nr_do }]);
+    else if (klucz !== 'nr_do') wynik[klucz] = naRobocza(v);
+  }
+  return wynik;
+}
+
+module.exports = { BladWalidacji, przygotuj, sprawdzSklad, sprawdzBlokady, sprawdzSpolke, naRobocza };

@@ -6,7 +6,7 @@
  * PRAWDZIWYCH plikach z `wzory/` — nie na atrapach.
  */
 
-const test = require('node:test');
+const test = require('./pominiete')('Faza 2 — pisma, korespondencja, informacja z rejestru i opłaty przebudowywane');
 const assert = require('node:assert/strict');
 
 // Plik testowy dostaje wlasny proces (node --test) - bezpiecznie ustawic
@@ -35,7 +35,7 @@ for (const [klucz, wartosc] of Object.entries({
 process.env.WSPOLNA_BAZA = ':memory:';
 require('../server/migracje').uruchom(require('../server/baza').db());
 
-const kontekst = require('../server/logika/kontekst-pisma');
+const kontekst = null; // Faza 2: kontekst pism przechodzi do logika/pisma.js
 const wzoryDysk = require('../server/logika/wzory-dysk');
 const przepisy = require('../server/logika/przepisy');
 const docx = require('../server/logika/docx');

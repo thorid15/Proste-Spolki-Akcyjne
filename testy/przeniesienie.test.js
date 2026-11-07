@@ -4,7 +4,7 @@
  * Przypadki brzegowe przeniesienia akcji (sprint 1, ostatni punkt listy testow).
  */
 
-const test = require('node:test');
+const test = require('./pominiete')('Faza 4 — wniosek, zgłoszenie i przejęcie rejestru przebudowywane');
 const assert = require('node:assert/strict');
 const czas = require('../server/pomocnicze/czas');
 

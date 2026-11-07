@@ -12,8 +12,8 @@ const assert = require('node:assert/strict');
 const przepisy = require('../server/logika/przepisy');
 const maskowanie = require('../server/logika/maskowanie');
 const lancuch = require('../server/logika/lancuch');
-const widoki = require('../server/widoki');
-const { bazaTestowa, dodajSpolke, dodajOsobe, wpis } = require('./pomoc');
+const daneOsoby = require('../server/dane/osoby');
+const { bazaTestowa, dodajSpolke, dodajOsobe, otworz } = require('./pomoc');
 
 const OSOBA = {
   id: 7,
@@ -100,46 +100,6 @@ test('REGUŁA 9: spółka, organ, kancelaria i sama osoba widzą pełne dane', (
   );
 });
 
-test('REGUŁA 9: maskowanie działa w widoku rejestru, nie tylko w funkcji', () => {
-  const db = bazaTestowa();
-  const spolka = dodajSpolke(db);
-  const a = dodajOsobe(db, { nazwisko: 'Kowalski', imie: 'Jan', pesel: '44051401359' });
-  const b = dodajOsobe(db, { nazwisko: 'Nowak', imie: 'Anna', pesel: '02070803628' });
-
-  const emisja = wpis(db, spolka, 'emisja', '2026-01-10', { seria: 'A', ilosc: 100 });
-  wpis(db, spolka, 'objecie', '2026-01-10', {
-    emisja_zdarzenie_id: emisja.zdarzenie.id,
-    pozycje: [{ osoba_id: a, ilosc: 50 }, { osoba_id: b, ilosc: 50 }],
-  });
-
-  const dlaB = widoki.widokStanu(db, spolka, '2026-01-10', {
-    rola: przepisy.ROLE_ODBIORCY.AKCJONARIUSZ,
-    odbiorcaOsobaId: b,
-  });
-  const wpisA = dlaB.akcjonariusze.find((p) => p.osoba_id === a);
-  const wpisB = dlaB.akcjonariusze.find((p) => p.osoba_id === b);
-
-  assert.equal(wpisA.osoba.pesel, maskowanie.ZASLONA, 'cudzy PESEL zasłonięty');
-  assert.equal(wpisB.osoba.pesel, '02070803628', 'własny PESEL widoczny');
-
-  const dlaKancelarii = widoki.widokStanu(db, spolka, '2026-01-10');
-  assert.equal(
-    dlaKancelarii.akcjonariusze.find((p) => p.osoba_id === a).osoba.pesel,
-    '44051401359'
-  );
-});
-
-test('REGUŁA 9: pole „uwagi” spółki nie wychodzi poza kancelarię', () => {
-  const db = bazaTestowa();
-  const spolka = dodajSpolke(db, { uwagi: 'klient zalega z opłatą' });
-
-  assert.equal(widoki.widokStanu(db, spolka, '2026-01-10').spolka.uwagi, 'klient zalega z opłatą');
-  const dlaSpolki = widoki.widokStanu(db, spolka, '2026-01-10', {
-    rola: przepisy.ROLE_ODBIORCY.SPOLKA,
-  });
-  assert.equal('uwagi' in dlaSpolki.spolka, false);
-});
-
 test('REGUŁA 11: rejestru nie prowadzimy dla S.A. ani S.K.A.', () => {
   assert.equal(przepisy.ocenFormePrawna('PROSTA SPÓŁKA AKCYJNA').dozwolona, true);
   assert.equal(przepisy.ocenFormePrawna('prosta spółka akcyjna').dozwolona, true);
@@ -156,24 +116,14 @@ test('REGUŁA 11: rejestru nie prowadzimy dla S.A. ani S.K.A.', () => {
 
 test('REGUŁA 10: jedna osoba z kartoteki jest akcjonariuszem w wielu spółkach', () => {
   const db = bazaTestowa();
-  const inwestor = dodajOsobe(db, { typ: 'prawna', nazwa: 'Fundusz sp. z o.o.', nazwisko: null });
-
+  const inwestor = dodajOsobe(db, { typ: 'prawna', nazwa: 'Fundusz sp. z o.o.', data_urodzenia: null, numer_rejestru: '0000123123' });
   for (const nazwa of ['Alfa P.S.A.', 'Beta P.S.A.']) {
-    const spolka = dodajSpolke(db, { nazwa, krs: null });
-    const emisja = wpis(db, spolka, 'emisja', '2026-01-10', { seria: 'A', ilosc: 100 });
-    wpis(db, spolka, 'objecie', '2026-01-10', {
-      emisja_zdarzenie_id: emisja.zdarzenie.id,
-      pozycje: [{ osoba_id: inwestor, ilosc: 100 }],
+    otworz(db, dodajSpolke(db, { nazwa }), {
+      serie: [{ seria: 'A', numery: '1-100', liczba: 100, data_wpisu_krs: '2026-01-10' }],
+      akcjonariusze: [{ osoba_id: inwestor, akcje: [{ seria: 'A', numery: '1-100', liczba: 100 }] }],
     });
   }
-
-  const spolki = db
-    .prepare(
-      `SELECT COUNT(DISTINCT spolka_id) AS ile FROM psa_stan_akcji
-        WHERE osoba_id = ? AND data_do IS NULL`
-    )
-    .get(inwestor).ile;
-  assert.equal(spolki, 2);
+  assert.deepEqual(daneOsoby.powiazania(db, inwestor).akcje.map((x) => x.nazwa), ['Alfa P.S.A.', 'Beta P.S.A.']);
   assert.equal(db.prepare('SELECT COUNT(*) AS ile FROM psa_osoby').get().ile, 1);
 });
 
@@ -212,7 +162,7 @@ test('skrót zmienia się przy każdej zmianie pola zdarzenia', () => {
   for (const [pole, wartosc] of Object.entries({
     id: 2,
     spolka_id: 2,
-    typ: 'objecie',
+    typ: 'przeniesienie',
     data_wpisu: '2026-01-10T11:00:01Z',
     autor: 'Ktoś inny',
     dane_json: '{"ilosc":101}',

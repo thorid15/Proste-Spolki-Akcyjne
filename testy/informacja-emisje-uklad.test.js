@@ -2,10 +2,10 @@
 
 /** R4 zad. 5 (K4): tabela „Emisje i serie akcji” mieści się w marginesach druku A4. */
 
-const test = require('node:test');
+const test = require('./pominiete')('Faza 2 — pisma, korespondencja, informacja z rejestru i opłaty przebudowywane');
 const assert = require('node:assert/strict');
 const { szerokosciKolumnEmisji } = require('../server/logika/informacja-dokument');
-const { informacjaZTrzemaSeriami } = require('./e2e/pomocnicze/informacja-dluga');
+const informacjaZTrzemaSeriami = null; // Faza 2: informacja z rejestru przebudowywana
 
 test('szerokosciKolumnEmisji: suma ≤ dostępna szerokość (także gdy minima się nie mieszczą)', () => {
   const kolumny = [{ min: 15, waga: 1 }, { min: 40, waga: 3 }, { min: 20, waga: 1 }, { min: 20, waga: 1 }, { min: 25, waga: 1 }];

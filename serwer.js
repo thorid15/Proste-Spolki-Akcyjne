@@ -16,8 +16,7 @@ const migracje = require('./server/migracje');
 const { posrednikBledow } = require('./server/pomocnicze/odpowiedzi');
 const autoryzacja = require('./server/pomocnicze/autoryzacja');
 const auth = require('./server/trasy/auth');
-const przypomnienia = require('./server/logika/przypomnienia');
-const { uruchomHarmonogramPrzypomnien, uruchomRetencjeDziennika } = require('./server/logika/harmonogram');
+const { uruchomRetencjeDziennika } = require('./server/logika/harmonogram');
 const trybTestowy = require('./server/tryb-testowy');
 
 const aplikacja = express();
@@ -104,12 +103,6 @@ if (konfiguracja.TRYB_TESTOWY) trybTestowy.wczytajStan(db());
 // Reszta wymaga zalogowanego pracownika kancelarii (odstepstwo nr 2, sekcja 2).
 aplikacja.use('/api/wspolne', require('./server/trasy/wspolne'));
 aplikacja.use('/api/psa/auth', auth);
-// Powiadomienie od operatora platnosci puka tu SERWEREM, nie przegladarka —
-// nie ma i nie moze miec sesji. Sprawdza sie je suma kontrolna liczona
-// sekretem wspolnym z operatorem (`server/platnosci.js`), wiec musi stac
-// PRZED bramkami sesji.
-aplikacja.use('/api/psa/platnosci', require('./server/trasy/platnosci'));
-
 // Trasy trybu testowego istnieja WYLACZNIE w trybie testowym — inaczej 404
 // (jawnie: bez tego `/test/...` trafialoby w strone aplikacji z kodem 200).
 if (konfiguracja.TRYB_TESTOWY) {
@@ -117,30 +110,13 @@ if (konfiguracja.TRYB_TESTOWY) {
 } else {
   aplikacja.use('/test', (zad, odp) => odp.status(404).type('text/plain').send('Nie odnaleziono.'));
 }
-if (konfiguracja.PORTAL_WLACZONY) {
-  aplikacja.use('/api/psa/portal', require('./server/trasy/portal'));
-} else {
-  aplikacja.use('/api/psa/portal', (zad, odp) => {
-    odp.status(503).json({ blad: 'Portal klienta jest obecnie wyłączony.' });
-  });
-}
+// Uproszczenie modułu: portal (Faza 5), płatności tpay (Faza 5), korespondencja, opłaty
+// i informacja z rejestru (Faza 2) oraz wnioski (Faza 4) są przebudowywane — do tego czasu
+// ich trasy nie są montowane.
 aplikacja.use('/api/psa/spolki', autoryzacja.wymagajPracownika, require('./server/trasy/spolki'));
 aplikacja.use('/api/psa/osoby', autoryzacja.wymagajPracownika, require('./server/trasy/osoby'));
 aplikacja.use('/api/psa/sprawy', autoryzacja.wymagajPracownika, require('./server/trasy/sprawy'));
-aplikacja.use('/api/psa/zdarzenia', autoryzacja.wymagajPracownika, require('./server/trasy/zdarzenia'));
-aplikacja.use('/api/psa/oplaty', autoryzacja.wymagajPracownika, require('./server/trasy/oplaty'));
-aplikacja.use('/api/psa/szablony', autoryzacja.wymagajPracownika, require('./server/trasy/szablony'));
-aplikacja.use('/api/psa/zgloszenia', autoryzacja.wymagajPracownika, require('./server/trasy/zgloszenia'));
-aplikacja.use(
-  '/api/psa/zgloszenia-nieprawidlowosci',
-  autoryzacja.wymagajPracownika,
-  require('./server/trasy/zgloszenia-nieprawidlowosci')
-);
-aplikacja.use('/api/psa/wnioski', autoryzacja.wymagajPracownika, require('./server/trasy/wnioski'));
-aplikacja.use('/api/psa/zawiadomienia', autoryzacja.wymagajPracownika, require('./server/trasy/zawiadomienia'));
-aplikacja.use('/api/psa/listy', autoryzacja.wymagajPracownika, require('./server/trasy/listy'));
-aplikacja.use('/api/psa/informacje', autoryzacja.wymagajPracownika, require('./server/trasy/informacje'));
-aplikacja.use('/api/psa/przeniesienia', autoryzacja.wymagajPracownika, require('./server/trasy/przeniesienia'));
+aplikacja.use('/api/psa/pliki', autoryzacja.wymagajPracownika, require('./server/trasy/pliki'));
 aplikacja.use('/api/psa', require('./server/trasy/pozostale'));
 
 // ── Statyki ──────────────────────────────────────────────────────────────
@@ -205,10 +181,6 @@ if (require.main === module) {
       console.log(`[psa] baza: ${konfiguracja.WSPOLNA_BAZA}`);
       console.log(`[psa] portal klienta: ${konfiguracja.PORTAL_WLACZONY ? 'włączony' : 'wyłączony (PORTAL_WLACZONY=false)'}`);
     });
-    // Naprawa Z-357: przypomnienia o konczacym sie roku prowadzenia rejestru
-    // dzialaly wylacznie po recznym kliknieciu w zakladce „Oplaty" - realny
-    // wyzwalacz, nie tylko przycisk (patrz komentarz w harmonogram.js).
-    uruchomHarmonogramPrzypomnien(db(), { wyslij: przypomnienia.wyslijPrzypomnienia });
     uruchomRetencjeDziennika(db());
   });
 }

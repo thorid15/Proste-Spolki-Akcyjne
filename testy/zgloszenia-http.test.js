@@ -9,7 +9,7 @@
  *   - `POST /api/psa/portal/rodo` — potwierdzenie klauzuli informacyjnej.
  */
 
-const test = require('node:test');
+const test = require('./pominiete')('Faza 4 — wniosek, zgłoszenie i przejęcie rejestru przebudowywane');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');

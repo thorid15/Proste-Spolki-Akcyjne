@@ -2,7 +2,7 @@
 
 /** R4 zad. 10 (P6): kolejnej spółki nie zakłada się w tym samym logowaniu — każda przez zgłoszenie. */
 
-const test = require('node:test');
+const test = require('./pominiete')('Faza 4 — wniosek, zgłoszenie i przejęcie rejestru przebudowywane');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');

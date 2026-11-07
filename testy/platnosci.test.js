@@ -10,7 +10,7 @@
  * nie wywolasz na zadanie.
  */
 
-const test = require('node:test');
+const test = require('./pominiete')('Faza 5 — portal klienta i płatności przebudowywane');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const http = require('node:http');

@@ -146,10 +146,9 @@ test('T2: logowanie z listy kont używa zwykłego endpointu i tokenu sesji; wpis
   assert.ok(ciastko, 'ta sama sesja ciasteczkowa co przy zwykłym logowaniu');
   const kto = await (await fetch(`${ADRES}/api/psa/auth/whoami`, { headers: { Cookie: ciastko.split(';')[0] } })).json();
   assert.equal(kto.zalogowany, true);
-  const wpis = db().prepare('SELECT * FROM psa_dziennik_logowan ORDER BY id DESC LIMIT 1').get();
-  assert.equal(wpis.email, 'notariusz@example.com');
-  assert.equal(wpis.droga, 'lista_kont');
-  assert.equal(wpis.tryb_testowy, 1);
+  const wpis = db().prepare("SELECT * FROM psa_dziennik WHERE akcja = 'logowanie' ORDER BY id DESC LIMIT 1").get();
+  assert.equal(wpis.kto, 'notariusz@example.com');
+  assert.match(wpis.opis, /droga: lista_kont; .*tryb testowy/);
   // Bez hasła — odmowa jak zawsze: lista kont nie omija uwierzytelnienia.
   const zle = await fetch(`${ADRES}/api/psa/auth/login`, {
     method: 'POST',
@@ -157,10 +156,10 @@ test('T2: logowanie z listy kont używa zwykłego endpointu i tokenu sesji; wpis
     body: JSON.stringify({ email: 'notariusz@example.com', haslo: 'zle-haslo', droga_testowa: 'lista_kont' }),
   });
   assert.equal(zle.status, 401);
-  assert.throws(() => db().prepare('DELETE FROM psa_dziennik_logowan').run(), /append-only/);
+  assert.throws(() => db().prepare('DELETE FROM psa_dziennik').run(), /append-only/);
 });
 
-test('T2: „Zaloguj (tryb testowy)” po zgłoszeniu to ten sam link i token, który poszedł e-mailem', async () => {
+test('T2: „Zaloguj (tryb testowy)” po zgłoszeniu to ten sam link i token, który poszedł e-mailem', { skip: 'Faza 4 — formularz publiczny (zgłoszenie = wniosek) przebudowywany' }, async () => {
   const odp = await fetch(`${ADRES}/api/psa/portal/zgloszenia`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -195,16 +194,16 @@ test('T4: symulowana data działa na bramkę 2027 i nie cofa się przed ostatnie
   assert.equal(db().prepare('SELECT przesuniecie_ms FROM psa_baza_testowa').get().przesuniecie_ms, czas.przesuniecie());
 
   // Zdarzenie zapisane „w przyszłości” blokuje powrót przed jego chwilę.
-  db().prepare(`INSERT INTO psa_spolki (nazwa, utworzono) VALUES ('Spółka do testu daty', ?)`).run(czas.terazIso());
-  const spolkaId = db().prepare('SELECT MAX(id) AS id FROM psa_spolki').get().id;
-  const rejestr = require('../server/rejestr');
-  const wynik = rejestr.dokonajWpisu(db(), {
-    spolkaId,
-    typ: 'emisja',
-    wejscie: { seria: 'A', nr_pierwszy: 1, ilosc: 10, data_wpisu_krs: '2027-03-01', rodzaj_akcji: 'zwykla' },
-    autor: 'test',
+  const spolkaId = require('../server/dane/spolki').dodaj(db(), {
+    krs: '0000990777', nazwa: 'Spółka do testu daty', siedziba: 'Gdańsk', adres: 'ul. Testowa 1', sad_rejestrowy: 'SR Gdańsk', data_rejestracji: '2027-03-01',
   });
-  const zapisane = db().prepare('SELECT data_wpisu FROM psa_zdarzenia WHERE id = ?').get(wynik.zdarzenie.id);
+  const { dodajOsobe, otworz } = require('./pomoc');
+  const osoba = dodajOsobe(db());
+  otworz(db(), spolkaId, {
+    serie: [{ seria: 'A', numery: '1-10', liczba: 10, data_wpisu_krs: '2027-03-01' }],
+    akcjonariusze: [{ osoba_id: osoba, akcje: [{ seria: 'A', numery: '1-10', liczba: 10 }] }],
+  });
+  const zapisane = db().prepare('SELECT data_wpisu FROM psa_zdarzenia ORDER BY id DESC LIMIT 1').get();
   assert.equal(czas.dzienLokalny(zapisane.data_wpisu), '2027-03-01', 'znacznik nowego zdarzenia z symulowanej daty');
   assert.throws(() => tryb.ustawDate(db(), null), /wcześniejszej niż ostatnie zdarzenie/);
   assert.throws(() => tryb.ustawDate(db(), '2027-02-01'), /wcześniejszej/);

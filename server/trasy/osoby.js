@@ -1,644 +1,110 @@
 'use strict';
 
 /**
- * Trasy `/api/psa/osoby/...` - kartoteka wspolna.
- *
- * Regula domenowa nr 10: jeden inwestor w wielu spolkach wpisywany RAZ.
+ * Kartoteka osób i karta osoby (§ 5). „Edytuj” zmienia dane w miejscu z historią (U-25) — bez
+ * sprawy i wpisu. Zgoda na korespondencję e-mail (U-11): włączenie wymaga pliku podpisanej
+ * zgody (wgranego do karty osoby), wyłączenie — daty.
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const crypto = require('node:crypto');
 const express = require('express');
-const multer = require('multer');
 
 const { db } = require('../baza');
-const przepisy = require('../logika/przepisy');
-const akcjonariuszLogika = require('../logika/akcjonariusz');
-const { POLA_DANYCH_REJESTRU } = require('../logika/kreator');
-const maskowanie = require('../logika/maskowanie');
-const aml = require('../logika/aml');
-const dziennikDostepu = require('../logika/dziennik-dostepu');
-const konfiguracja = require('../konfiguracja');
-const pliki = require('../pomocnicze/pliki');
 const czas = require('../pomocnicze/czas');
-const { asy, autor, bledneZadanie, nieZnaleziono, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
-const zaproszenia = require('../logika/zaproszenia');
+const osobyLogika = require('../logika/osoby');
+const { BladWalidacji } = require('../logika/walidacje');
+const daneOsoby = require('../dane/osoby');
+const danePliki = require('../dane/pliki');
+const historia = require('../dane/historia');
+const pliki = require('../pomocnicze/pliki');
+const { asy, autor, nieZnaleziono, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
 
 const router = express.Router();
 
-const POLA_REPREZENTANTA_OSOBY = ['reprezentant_imie', 'reprezentant_nazwisko', 'reprezentant_pesel', 'reprezentant_funkcja'];
-
-const POLA_OSOBY = [
-  'typ', 'nazwisko', 'imie', 'nazwa', 'plec', 'pesel', 'data_urodzenia', 'nip', 'regon',
-  'numer_w_rejestrze', 'nazwa_rejestru', 'kraj', 'kod_pocztowy', 'miejscowosc', 'ulica',
-  'nr_domu', 'nr_lokalu', 'adres_doreczen', 'adres_edoreczen', 'email', 'telefon',
-  'zgoda_email', 'aml_status', 'aml_data', 'aml_notatka', 'uwagi',
-  // Art. 300(33) § 1 pkt 2-5 KSH - patrz logika/akcjonariusz.js.
-  ...akcjonariuszLogika.POLA_USTAWOWE,
-  // Sesja 8, blok C (przeglad okresowy, beneficjent rzeczywisty, oswiadczenie PEP):
-  'aml_data_przegladu', 'beneficjent_rzeczywisty_id', 'pep_oswiadczenie', 'pep_oswiadczenie_data',
-  // D-115 (P-016): reprezentant akcjonariusza-osoby prawnej; D-116 (P-017): lista beneficjentów rzeczywistych.
-  ...POLA_REPREZENTANTA_OSOBY, 'beneficjenci_json',
-];
-
-/**
- * D-116 (P-017): `beneficjenci` (lista id z kartoteki) → `beneficjenci_json`; pierwszy zostaje też
- * w `beneficjent_rzeczywisty_id` (zgodność wsteczna). Samo `beneficjent_rzeczywisty_id` — lista z jednego.
- */
-function zBeneficjentami(cialo) {
-  if (Array.isArray(cialo.beneficjenci)) {
-    const ids = [...new Set(cialo.beneficjenci.map(Number).filter((x) => Number.isInteger(x) && x > 0))];
-    return { ...cialo, beneficjenci_json: ids.length ? JSON.stringify(ids) : null, beneficjent_rzeczywisty_id: ids[0] ?? null };
-  }
-  if (cialo.beneficjent_rzeczywisty_id !== undefined) {
-    const id = cialo.beneficjent_rzeczywisty_id === '' || cialo.beneficjent_rzeczywisty_id === null ? null : Number(cialo.beneficjent_rzeczywisty_id);
-    return { ...cialo, beneficjenci_json: id ? JSON.stringify([id]) : null };
-  }
-  return cialo;
+function wymagajOsoby(zad) {
+  const osoba = daneOsoby.wczytaj(db(), zad.params.id);
+  if (!osoba) throw nieZnaleziono('Nie odnaleziono osoby.');
+  return osoba;
 }
 
-function listaBeneficjentow(osoba) {
-  try {
-    const lista = JSON.parse((osoba && osoba.beneficjenci_json) || 'null');
-    if (Array.isArray(lista)) return lista;
-  } catch (e) { /* stary zapis */ }
-  return osoba && osoba.beneficjent_rzeczywisty_id ? [osoba.beneficjent_rzeczywisty_id] : [];
+function ostrzezenia(osoba, pomijajId = null) {
+  return daneOsoby.takieSame(db(), osoba, pomijajId).map((o) => `W kartotece jest już osoba z tym numerem: ${o.nazwa} (#${o.id}).`);
 }
 
-function wyczysc(cialoWejscie) {
-  const cialo = zBeneficjentami(cialoWejscie || {});
-  const wynik = {};
-  for (const pole of POLA_OSOBY) {
-    if (cialo[pole] === undefined) continue;
-    if (pole === 'zgoda_email' || pole === 'bez_pesel') {
-      wynik[pole] = cialo[pole] ? 1 : 0;
-      continue;
-    }
-    if (pole === 'beneficjent_rzeczywisty_id') {
-      wynik[pole] = cialo[pole] === '' || cialo[pole] === null ? null : Number(cialo[pole]);
-      continue;
-    }
-    const v = cialo[pole];
-    wynik[pole] = v === '' || v === null ? null : String(v).trim();
-  }
-  return akcjonariuszLogika.znormalizuj(wynik);
-}
-
-/** Suma kontrolna numeru PESEL - blad w PESEL-u akcjonariusza jest kosztowny. */
-function poprawnyPesel(pesel) {
-  if (!/^\d{11}$/.test(pesel)) return false;
-  const wagi = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
-  const suma = wagi.reduce((s, w, i) => s + w * Number(pesel[i]), 0);
-  return (10 - (suma % 10)) % 10 === Number(pesel[10]);
-}
-
-function sprawdzOsobe(dane, { czesciowe = false } = {}) {
-  const typ = dane.typ;
-  if (!czesciowe || dane.typ !== undefined) {
-    if (!['fizyczna', 'prawna'].includes(typ)) {
-      throw bledneZadanie('Typ osoby musi być „fizyczna” albo „prawna”.');
-    }
-  }
-
-  if (typ === 'fizyczna') {
-    if (!czesciowe && !dane.nazwisko) throw bledneZadanie('Nazwisko jest wymagane.');
-    // PESEL i data urodzenia sa DOBROWOLNE. Art. 300(33) § 1 pkt 5 KSH wymaga
-    // dla osoby fizycznej wylacznie nazwiska i imienia oraz adresu - nie
-    // zawiera PESEL-u ani daty urodzenia. Wczesniejsza wersja blokowala tu
-    // zapis, przenoszac mechanicznie art. 328(3) KSH dotyczacy SPOLKI AKCYJNEJ
-    // (PRZEPISY-PSA.md sekcja 12 pkt 2 wymienia ten blad wprost).
-    // Oba pola zbieramy nadal - sluza identyfikacji na potrzeby AML i sa
-    // maskowane wobec pozostalych akcjonariuszy (art. 300(35) § 1(1) KSH).
-  }
-  if (typ === 'prawna' && !czesciowe && !dane.nazwa) {
-    throw bledneZadanie('Nazwa podmiotu jest wymagana.');
-  }
-
-  // Sprzecznosci ustawowe (np. "brak PESEL-u" razem z podanym PESEL-em)
-  // blokuja zapis - to nie niekompletnosc, tylko dane wykluczajace sie
-  // nawzajem. Patrz logika/akcjonariusz.js.
-  const bledyUstawowe = akcjonariuszLogika.bledy(dane);
-  if (bledyUstawowe.length > 0) throw bledneZadanie(bledyUstawowe.join(' '));
-
-  // Suma kontrolna PESEL jest MIEKKIM sygnalem (etap 2.8 poprawek), nie
-  // blokada - PESEL jest juz i tak polem dobrowolnym (patrz komentarz wyzej),
-  // a pomylka w jednej cyfrze nie powinna uniemozliwic zalozenia kartoteki
-  // osoby. Ostrzezenie wraca w odpowiedzi (patrz `ostrzezeniaOsoby` nizej).
-  if (dane.plec && !['kobieta', 'mezczyzna'].includes(dane.plec)) {
-    throw bledneZadanie('Płeć musi być „kobieta” albo „mężczyzna”.');
-  }
-  if (dane.data_urodzenia && !czas.poprawnaData(dane.data_urodzenia)) {
-    throw bledneZadanie('Data urodzenia musi mieć format RRRR-MM-DD.');
-  }
-  if (dane.aml_data && !czas.poprawnaData(dane.aml_data)) {
-    throw bledneZadanie('Data weryfikacji AML musi mieć format RRRR-MM-DD.');
-  }
-  if (dane.aml_status && !Object.values(przepisy.AML_STATUSY).includes(dane.aml_status)) {
-    throw bledneZadanie(`Nieznany status AML: „${dane.aml_status}”.`);
-  }
-  if (dane.aml_data_przegladu && !czas.poprawnaData(dane.aml_data_przegladu)) {
-    throw bledneZadanie('Data przeglądu AML musi mieć format RRRR-MM-DD.');
-  }
-  // Oswiadczenie PEP (blok C3) - skladane przez OSOBE, nie ocena kancelarii,
-  // stad katalog zamkniety tak/nie (nigdy zgadywane trzecia wartoscia).
-  if (dane.pep_oswiadczenie && !['tak', 'nie'].includes(dane.pep_oswiadczenie)) {
-    throw bledneZadanie('Oświadczenie PEP musi być „tak” albo „nie”.');
-  }
-  if (dane.pep_oswiadczenie_data && !czas.poprawnaData(dane.pep_oswiadczenie_data)) {
-    throw bledneZadanie('Data oświadczenia PEP musi mieć format RRRR-MM-DD.');
-  }
-  if (dane.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dane.email)) {
-    throw bledneZadanie('Adres e-mail jest niepoprawny.');
-  }
-}
-
-/** Ostrzezenia NIE blokujace zapisu (etap 2.8 poprawek) - patrz sprawdzOsobe. */
-function ostrzezeniaOsoby(dane) {
-  const ostrzezenia = [];
-  if (dane.pesel && !poprawnyPesel(dane.pesel)) {
-    ostrzezenia.push('Suma kontrolna numeru PESEL się nie zgadza — sprawdź numer.');
-  }
-  // `pep` to ustalenie kancelarii, `pep_oswiadczenie` - to, co oswiadczyla
-  // osoba. Wolno im sie roznic (po to sa dwa pola), ale roznica musi byc
-  // widoczna, bo to ona uruchamia wzmozone srodki mimo zaprzeczenia klienta.
-  // `nieustalono` to brak ustalenia, nie sprzeczna ocena - nie ma tu z czym
-  // porownywac oswiadczenia osoby.
-  if (dane.pep !== przepisy.STATUSY_PEP.NIEUSTALONO && przepisy.pepWymagaWzmozonych(dane.pep) && dane.pep_oswiadczenie === 'nie') {
-    ostrzezenia.push(
-      'Kartoteka wskazuje na eksponowane stanowisko polityczne, a osoba oświadczyła, że go nie zajmuje — '
-        + 'rozbieżność wymaga wyjaśnienia, wzmożone środki bezpieczeństwa stosuje się mimo oświadczenia.'
-    );
-  }
-  return ostrzezenia;
-}
-
-/**
- * Naprawa Z-350: kartoteka deklaruje wprost "jeden inwestor wpisywany RAZ"
- * (regula domenowa nr 10, cytat w naglowku pliku), ale nic tego nie
- * egzekwowalo - dwie ROZNE osoby moglysie zapisac z tym samym PESEL/NIP
- * bez zadnego sygnalu. OSTRZEZENIE, nie blokada: ta sama osoba wystepuje
- * legalnie w wielu spolkach, wiec kolizja bywa prawdziwa - ale zawsze
- * oznacza TEN SAM rekord kartoteki, nie dwa osobne, wiec pracownik musi to
- * zobaczyc i sam zdecydowac (polaczyc rekordy recznie, sprostowac pomylke).
- */
-function ostrzezeniaKolizji(dane, id = null) {
-  const ostrzezenia = [];
-  for (const pole of ['pesel', 'nip', 'numer_w_rejestrze']) {
-    const wartosc = dane[pole];
-    if (!wartosc) continue;
-    const kolizja = db()
-      .prepare(
-        `SELECT id, nazwisko, imie, nazwa FROM psa_osoby
-          WHERE ${pole} = ? AND id IS NOT ?
-          LIMIT 5`
-      )
-      .all(wartosc, id);
-    if (kolizja.length === 0) continue;
-    const nazwy = kolizja.map((o) => `„${maskowanie.oznaczenieOsoby(o)}” (#${o.id})`).join(', ');
-    const nazwaPola = pole === 'numer_w_rejestrze' ? 'Numer w rejestrze' : pole.toUpperCase();
-    ostrzezenia.push(
-      `${nazwaPola} „${wartosc}” jest już w kartotece pod inną pozycją: ${nazwy}. ` +
-        'Jeśli to ta sama osoba, kartoteka ma mieć jeden rekord, nie dwa — sprawdź przed zapisaniem.'
-    );
-  }
-  return ostrzezenia;
-}
-
-/**
- * Beneficjent rzeczywisty (blok C2) - z definicji OSOBA FIZYCZNA (art. 2
- * ust. 2 pkt 1 ustawy AML), sensowny wylacznie dla podmiotu typu "prawna".
- * Odwolanie miedzy wierszami - CHECK w schemacie tego nie sprawdzi, stad
- * walidacja tutaj, z dostepem do bazy.
- */
-function sprawdzBeneficjenta(id, wlascicielId, wlascicielTyp) {
-  if (id == null) return;
-  if (wlascicielTyp !== 'prawna') {
-    throw bledneZadanie('Beneficjenta rzeczywistego wskazuje się wyłącznie dla osoby prawnej.');
-  }
-  if (id === wlascicielId) {
-    throw bledneZadanie('Podmiot nie może być własnym beneficjentem rzeczywistym.');
-  }
-  const beneficjent = db().prepare('SELECT typ FROM psa_osoby WHERE id = ?').get(id);
-  if (!beneficjent) throw bledneZadanie('Wskazany beneficjent rzeczywisty nie figuruje w kartotece.');
-  if (beneficjent.typ !== 'fizyczna') {
-    throw bledneZadanie('Beneficjent rzeczywisty musi być osobą fizyczną.');
-  }
-}
-
-function zOznaczeniem(osoba) {
-  return {
-    ...osoba,
-    oznaczenie: maskowanie.oznaczenieOsoby(osoba),
-    jawny_identyfikator: maskowanie.jawnyIdentyfikator(osoba),
-    // Sygnal, NIE blokada (blok C1) - patrz logika/aml.js.
-    wymaga_przegladu_aml: aml.wymagaPrzegladu(osoba, czas.dzisIso()),
-    beneficjenci: listaBeneficjentow(osoba), // D-116
-  };
-}
-
-// ─────────────────────────────────────────────────────────────
-
-/** Wyszukiwarka kartoteki. */
 router.get(
   '/',
   asy((zad, odp) => {
-    const szukaj = String(zad.query.q || '').trim();
-    const warunki = [];
-    const parametry = [];
-
-    if (szukaj) {
-      warunki.push(
-        '(nazwisko LIKE ? OR imie LIKE ? OR nazwa LIKE ? OR pesel LIKE ? OR nip LIKE ? OR email LIKE ?'
-          + ' OR numer_w_rejestrze LIKE ?)'
-      );
-      // Numer KRS (`numer_w_rejestrze`) od FAZY 1 sesji frontendowej — wybór z
-      // kartoteki szuka osoby prawnej tak samo jak fizycznej po PESEL.
-      const wzorzec = `%${szukaj}%`;
-      parametry.push(wzorzec, wzorzec, wzorzec, wzorzec, wzorzec, wzorzec, wzorzec);
-    }
-    if (zad.query.typ) {
-      warunki.push('typ = ?');
-      parametry.push(String(zad.query.typ));
-    }
-    if (zad.query.aml_status) {
-      warunki.push('aml_status = ?');
-      parametry.push(String(zad.query.aml_status));
-    }
-
-    const gdzie = warunki.length ? `WHERE ${warunki.join(' AND ')}` : '';
-    const osoby = db()
-      .prepare(
-        `SELECT o.*,
-                (SELECT COUNT(DISTINCT sa.spolka_id) FROM psa_stan_akcji sa
-                  WHERE sa.osoba_id = o.id AND sa.data_do IS NULL) AS liczba_spolek
-           FROM psa_osoby o
-           ${gdzie}
-          ORDER BY COALESCE(o.nazwisko, o.nazwa) COLLATE NOCASE, o.imie COLLATE NOCASE
-          LIMIT 200`
-      )
-      .all(...parametry);
-
-    odp.json({ osoby: osoby.map(zOznaczeniem) });
+    odp.json(daneOsoby.lista(db(), { q: zad.query.q || '', limit: zad.query.limit }));
   })
 );
 
 router.post(
   '/',
   asy((zad, odp) => {
-    const dane = wyczysc(zad.body || {});
-    sprawdzOsobe(dane);
-    for (const b of listaBeneficjentow(dane)) sprawdzBeneficjenta(b, null, dane.typ);
-    // PRZED insertem - rekord jeszcze nie istnieje, wiec nie trzeba go
-    // wykluczac z wyniku samego siebie (patrz PUT nizej, gdzie trzeba).
-    const kolizje = ostrzezeniaKolizji(dane);
-
-    const teraz = czas.terazIso();
-    const kolumny = Object.keys(dane);
-    const wynik = db()
-      .prepare(
-        `INSERT INTO psa_osoby (${kolumny.join(', ')}, utworzono)
-         VALUES (${kolumny.map((k) => `@${k}`).join(', ')}, @utworzono)`
-      )
-      .run({ ...dane, utworzono: teraz });
-
-    odp.status(201).json({
-      osoba: zOznaczeniem(
-        db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(wynik.lastInsertRowid)
-      ),
-      ostrzezenia: [...ostrzezeniaOsoby(dane), ...kolizje],
-      // Braki wobec art. 300(33) § 1 KSH sa czyms innym niz ostrzezenia
-      // o jakosci danych: kartoteke zaklada sie czesto zanim komplet danych
-      // wroci od akcjonariusza, a wiaza dopiero przy wpisie do rejestru.
-      // Osobny klucz, zeby ekran mogl je pokazac inaczej - i zeby nie
-      // zaszumialy sygnalu o blednym PESEL-u.
-      braki_ustawowe: akcjonariuszLogika.ostrzezenia(dane),
-    });
+    const { osoba, bledy } = osobyLogika.sprawdz(zad.body || {});
+    if (bledy.length > 0) throw new BladWalidacji(bledy);
+    const id = daneOsoby.dodaj(db(), osoba);
+    odp.status(201).json({ osoba: daneOsoby.wczytaj(db(), id), ostrzezenia: ostrzezenia(osoba, id) });
   })
 );
 
 router.get(
   '/:id',
   asy((zad, odp) => {
-    const osoba = db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(Number(zad.params.id));
-    if (!osoba) throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
-    const oswiadczenia = require('../oswiadczenia');
+    const osoba = wymagajOsoby(zad);
     odp.json({
-      osoba: zOznaczeniem(osoba),
-      // D-092: zgoda e-mail i powiadomienia — dane kartoteki, historia poza łańcuchem rejestru.
-      oswiadczenia: { stan: oswiadczenia.stanOswiadczen(db(), osoba.id), historia: oswiadczenia.historiaOswiadczen(db(), osoba.id) },
+      osoba,
+      ...daneOsoby.powiazania(db(), osoba.id),
+      pliki: danePliki.lista(db(), { osobaId: osoba.id }),
+      historia: historia.lista(db(), { osobaId: osoba.id }),
     });
   })
 );
 
-/** Spółki, w których osoba ma dziś akcje (kartoteka → rejestry). */
-function spolkiAkcjonariusza(id) {
-  return db()
-    .prepare(
-      `SELECT s.id, s.nazwa, s.krs, s.status, s.stosuje_procedure_aml,
-              SUM(sa.ilosc) AS ilosc_akcji,
-              COUNT(DISTINCT sa.emisja_id) AS liczba_serii,
-              GROUP_CONCAT(DISTINCT e.seria) AS serie,
-              MIN(sa.data_od) AS akcjonariusz_od
-         FROM psa_stan_akcji sa
-         JOIN psa_spolki s ON s.id = sa.spolka_id
-         LEFT JOIN psa_emisje e ON e.id = sa.emisja_id
-        WHERE sa.osoba_id = ? AND sa.data_do IS NULL AND sa.kategoria = 'akcjonariusz'
-        GROUP BY s.id
-        ORDER BY s.nazwa COLLATE NOCASE`
-    )
-    .all(id);
+function zmienZgode(osoba, zgoda, kto) {
+  if (zgoda.zgoda === true) {
+    const plik = danePliki.wczytaj(db(), zgoda.plik_id);
+    if (!osoba.email) throw new BladWalidacji([{ pole: 'email', komunikat: 'Podaj adres e-mail przed włączeniem zgody.' }]);
+    if (!plik || plik.osoba_id !== osoba.id) {
+      throw new BladWalidacji([{ pole: 'zgoda_email', komunikat: 'Dodaj plik podpisanej zgody do karty osoby i wskaż go.' }]);
+    }
+    return daneOsoby.ustawZgodeEmail(db(), osoba.id, { zgoda: true, plikId: plik.id }, kto);
+  }
+  if (zgoda.zgoda === false) {
+    if (!czas.poprawnaData(zgoda.data) || zgoda.data > czas.dzisIso()) {
+      throw new BladWalidacji([{ pole: 'zgoda_email', komunikat: 'Podaj datę wycofania zgody.' }]);
+    }
+    return daneOsoby.ustawZgodeEmail(db(), osoba.id, { zgoda: false, data: zgoda.data }, kto);
+  }
+  throw new BladWalidacji([{ pole: 'zgoda_email', komunikat: 'Wskaż: zgoda włączona albo wyłączona.' }]);
 }
 
 router.put(
   '/:id',
   asy((zad, odp) => {
-    const id = Number(zad.params.id);
-    const biezaca = db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(id);
-    if (!biezaca) throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
-
-    const dane = wyczysc(zad.body || {});
-    if (Object.keys(dane).length === 0) throw bledneZadanie('Brak danych do zapisania.');
-    const scalone = { ...biezaca, ...dane };
-    // D-102: dane z rejestru (art. 300(33) § 1 pkt 5 KSH) osoby z akcjami zmienia wpis, nie edycja kartoteki —
-    // zmienione pola nie są zapisywane; odpowiedź niesie propozycję wpisu „Zmiana danych akcjonariusza”.
-    const zmienioneRejestrowe = POLA_DANYCH_REJESTRU.filter((k) => k in dane && String(dane[k] ?? '') !== String(biezaca[k] ?? ''));
-    const spolkiOsoby = zmienioneRejestrowe.length ? spolkiAkcjonariusza(id) : [];
-    const zmianaRejestrowa = spolkiOsoby.length
-      ? { po: Object.fromEntries(zmienioneRejestrowe.map((k) => [k, dane[k] ?? null])), spolki: spolkiOsoby.map((w) => ({ id: w.id, nazwa: w.nazwa })) }
-      : null;
-    if (zmianaRejestrowa) for (const k of POLA_DANYCH_REJESTRU) delete dane[k];
-    sprawdzOsobe(scalone);
-    if ('beneficjenci_json' in dane || 'beneficjent_rzeczywisty_id' in dane) {
-      for (const b of listaBeneficjentow(scalone)) sprawdzBeneficjenta(b, id, scalone.typ);
-    }
-
-    // D-092 (przegląd R4 #2): dawna flaga `zgoda_email` to ten sam stan co status — jedna reguła.
-    if ('zgoda_email' in dane && !('zgoda_email_status' in dane)) dane.zgoda_email_status = Number(dane.zgoda_email) ? 'potwierdzona' : 'brak';
-    if ('zgoda_email_status' in dane) dane.zgoda_email = dane.zgoda_email_status === 'potwierdzona' ? 1 : 0;
-    // D-092: zmiana zgody na e-mail przez kancelarię — przez `oswiadczenia` (historia: źródło, kto).
-    const zgodaPrzed = biezaca.zgoda_email_status === 'potwierdzona';
-    const zgodaPo = 'zgoda_email_status' in dane ? dane.zgoda_email_status === 'potwierdzona' : zgodaPrzed;
-    // Przegląd R4 #3: zmiana danych i wpis historii oświadczeń — jedna transakcja.
+    const osoba = wymagajOsoby(zad);
+    const cialo = zad.body || {};
+    const zmiany = Object.fromEntries(osobyLogika.POLA_EDYCJI.filter((p) => cialo[p] !== undefined).map((p) => [p, cialo[p]]));
+    let wynikOstrzezen = [];
     db().transaction(() => {
-      if (Object.keys(dane).length) db()
-        .prepare(
-          `UPDATE psa_osoby
-              SET ${Object.keys(dane).map((k) => `${k} = @${k}`).join(', ')},
-                  zaktualizowano = @zaktualizowano
-            WHERE id = @id`
-        )
-        .run({ ...dane, id, zaktualizowano: czas.terazIso() });
-      if (zgodaPrzed !== zgodaPo) {
-        const zrodlo = (zad.body || {}).zrodlo_oswiadczenia === 'pismo' ? 'pismo' : 'kancelaria';
-        db().prepare(
-          `INSERT INTO psa_oswiadczenia (osoba_id, rodzaj, zlozone, email, zrodlo, autor, utworzono)
-           VALUES (?, 'zgoda_email', ?, ?, ?, ?, ?)`
-        ).run(id, zgodaPo ? 1 : 0, zgodaPo ? (dane.email ?? biezaca.email) : null, zrodlo, autor(zad), czas.terazIso());
+      if (Object.keys(zmiany).length > 0) {
+        const { osoba: po, bledy } = osobyLogika.sprawdz(zmiany, osoba);
+        if (bledy.length > 0) throw new BladWalidacji(bledy);
+        daneOsoby.zmien(db(), osoba.id, Object.fromEntries(osobyLogika.POLA_EDYCJI.map((p) => [p, po[p] ?? null])), autor(zad));
+        wynikOstrzezen = ostrzezenia(po, osoba.id);
       }
-    })();
-
-    odp.json({
-      osoba: zOznaczeniem(db().prepare('SELECT * FROM psa_osoby WHERE id = ?').get(id)),
-      ostrzezenia: [...ostrzezeniaOsoby(scalone), ...ostrzezeniaKolizji(scalone, id)],
-      braki_ustawowe: akcjonariuszLogika.ostrzezenia(scalone),
-      zmiana_rejestrowa: zmianaRejestrowa,
-    });
-  })
-);
-
-/** W ktorych spolkach osoba ma akcje - podglad z kartoteki. */
-router.get(
-  '/:id/spolki',
-  asy((zad, odp) => {
-    const id = Number(zad.params.id);
-    if (!db().prepare('SELECT id FROM psa_osoby WHERE id = ?').get(id)) {
-      throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
-    }
-    const wiersze = spolkiAkcjonariusza(id);
-    odp.json({ spolki: wiersze });
-  })
-);
-
-/**
- * K4 (FAZA 3 sesji frontendowej v2): sprawy tej osoby jako żądającej wpisu —
- * do profilu osoby w kartotece (widok „Otwórz" nie jest już panelem
- * edycyjnym, tylko pełnym profilem, sekcja 1).
- */
-router.get(
-  '/:id/sprawy',
-  asy((zad, odp) => {
-    const id = Number(zad.params.id);
-    if (!db().prepare('SELECT id FROM psa_osoby WHERE id = ?').get(id)) {
-      throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
-    }
-    const wiersze = db()
-      .prepare(
-        `SELECT sp.id, sp.spolka_id, s.nazwa AS spolka_nazwa, sp.typ_zdarzenia, sp.stan, sp.data_wplywu
-           FROM psa_sprawy sp
-           JOIN psa_spolki s ON s.id = sp.spolka_id
-          WHERE sp.zadajacy_osoba_id = ?
-          ORDER BY sp.data_wplywu DESC`
-      )
-      .all(id);
-    const typy = require('../logika/typy-zdarzen');
-    odp.json({ sprawy: wiersze.map((w) => ({ ...w, typ_nazwa: typy.istnieje(w.typ_zdarzenia) ? typy.typ(w.typ_zdarzenia).nazwa : w.typ_zdarzenia })) });
-  })
-);
-
-/**
- * Naprawa Z-006/P-004 — zaproszenie akcjonariusza do portalu, akcja przy
- * osobie w kartotece, wykonywana przez pracownika. Adres e-mail podaje
- * pracownik przy wysylce (kanal OPERACYJNY konta - odrebny od e-maila w
- * tresci rejestru, ktory wymaga zgody akcjonariusza, art. 300(33) § 1 pkt 5
- * KSH / Z-157) - nie jest wiec brany z `psa_osoby.email` automatycznie.
- */
-router.post(
-  '/:id/zapros-do-portalu',
-  asy(async (zad, odp) => {
-    const id = Number(zad.params.id);
-    if (!db().prepare('SELECT id FROM psa_osoby WHERE id = ?').get(id)) {
-      throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
-    }
-    const email = String((zad.body || {}).email || '').trim();
-    if (!email) throw bledneZadanie('Adres e-mail jest wymagany.');
-
-    let wynik;
-    try {
-      wynik = await zaproszenia.wyslijAkcjonariuszowi(db(), { osobaId: id, email, autor: autor(zad), tylkoLink: Boolean((zad.body || {}).tylko_link) });
-    } catch (e) {
-      throw bledneZadanie(e.message);
-    }
-
-    odp.json(wynik);
-  })
-);
-
-// ─────────────────────────────────────────────────────────────
-// Skany dokumentow AML (etap 3.1) - domyslnie WYLACZONE (patrz migracja 28
-// i psa_spolki.stosuje_procedure_aml). Skan jest przypisany do osoby
-// (kartoteka wspolna), ale niesie spolka_id - procedura AML jest wlaczana
-// PER SPOLKA, wiec upload jest dopuszczalny wylacznie, gdy WSKAZANA spolka
-// ma przelacznik wlaczony.
-// ─────────────────────────────────────────────────────────────
-
-const ROZSZERZENIA_SKANU_AML_DOZWOLONE = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
-const LIMIT_ROZMIARU_SKANU_AML_BAJTY = 20 * 1024 * 1024;
-const TYPY_DOKUMENTU_AML = ['dowod_osobisty', 'paszport', 'inny'];
-
-function katalogSkanowAml(osobaId) {
-  return path.join(konfiguracja.KATALOG_DOKUMENTOW, 'aml', `osoba_${osobaId}`);
-}
-
-const uploadSkanuAml = multer({
-  storage: multer.diskStorage({
-    destination(zad, plik, wywolaj) {
-      const katalog = katalogSkanowAml(Number(zad.params.id));
-      fs.mkdirSync(katalog, { recursive: true });
-      wywolaj(null, katalog);
-    },
-    filename(zad, plik, wywolaj) {
-      const bezpiecznaNazwa = path.basename(plik.originalname).replace(/[^\w.\- ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/gu, '_');
-      wywolaj(null, `${crypto.randomUUID()}-${bezpiecznaNazwa}`);
-    },
-  }),
-  limits: { fileSize: LIMIT_ROZMIARU_SKANU_AML_BAJTY, files: 1 },
-  fileFilter(zad, plik, wywolaj) {
-    const rozszerzenie = path.extname(plik.originalname).toLowerCase();
-    if (!ROZSZERZENIA_SKANU_AML_DOZWOLONE.has(rozszerzenie)) {
-      return wywolaj(new Error(`Niedozwolone rozszerzenie pliku: „${rozszerzenie}”. Dozwolone: PDF, JPG, PNG.`));
-    }
-    wywolaj(null, true);
-  },
-});
-
-/** Wymaga, zeby WSKAZANA spolka miala wlaczona procedure AML - inaczej upload skanu jest odmawiany. */
-function wymagajProceduryAml(zad, odp, dalej) {
-  const spolkaId = Number((zad.body && zad.body.spolka_id) || zad.query.spolka_id);
-  if (!Number.isInteger(spolkaId)) return dalej(bledneZadanie('Wskaż spółkę (spolka_id), w kontekście której zbierany jest skan.'));
-  const spolka = db().prepare('SELECT id, stosuje_procedure_aml FROM psa_spolki WHERE id = ?').get(spolkaId);
-  if (!spolka) return dalej(nieZnaleziono('Nie odnaleziono spółki.'));
-  if (!spolka.stosuje_procedure_aml) {
-    return dalej(bledneZadanie('Ta spółka nie ma włączonej procedury AML — skany dokumentów nie są zbierane.'));
-  }
-  zad.psaSpolkaAml = spolka;
-  dalej();
-}
-
-router.get(
-  '/:id/aml-skany',
-  asy((zad, odp) => {
-    const id = Number(zad.params.id);
-    const warunki = ['osoba_id = ?'];
-    const parametry = [id];
-    if (zad.query.spolka_id) {
-      warunki.push('spolka_id = ?');
-      parametry.push(Number(zad.query.spolka_id));
-    }
-    const skany = db()
-      .prepare(
-        `SELECT id, spolka_id, typ_dokumentu, nazwa_pliku, rozmiar, retencja_do, wgral, utworzono
-           FROM psa_osoby_skany_aml WHERE ${warunki.join(' AND ')} ORDER BY utworzono DESC`
-      )
-      .all(...parametry);
-    odp.json({ skany });
+      if (cialo.zgoda_email !== undefined) zmienZgode(daneOsoby.wczytaj(db(), osoba.id), cialo.zgoda_email || {}, autor(zad));
+    }).immediate();
+    odp.json({ osoba: daneOsoby.wczytaj(db(), osoba.id), ostrzezenia: wynikOstrzezen });
   })
 );
 
 router.post(
-  '/:id/aml-skany',
-  // Kolejnosc: multer NAJPIERW (spolka_id jest polem formularza multipart -
-  // zad.body jest puste, dopoki multer nie sparsuje strumienia; destynacja
-  // pliku zalezy tylko od :id z URL, wiec walidacja procedury AML moze
-  // bezpiecznie isc PO uploadzie - a gdy sie nie powiedzie, plik jest kasowany).
-  // Naprawa Z-254: blad multera (limit rozmiaru/liczby) idzie do
-  // posrednikaBledow nieopakowany, zeby zadzialala tam przetlumaczona
-  // galaz "MulterError"; blad z fileFilter (juz po polsku) staje sie 400.
-  (zad, odp, dalej) => uploadSkanuAml.single('plik')(zad, odp, dalejPoUploadzie(dalej)),
-  (zad, odp, dalej) => wymagajProceduryAml(zad, odp, (blad) => {
-    if (blad && zad.file) fs.rm(zad.file.path, { force: true }, () => {});
-    dalej(blad);
-  }),
+  '/:id/pliki',
+  (zad, odp, dalej) => pliki.odbierz(zad, odp, dalejPoUploadzie(dalej)),
   asy((zad, odp) => {
-    const id = Number(zad.params.id);
-    if (!db().prepare('SELECT id FROM psa_osoby WHERE id = ?').get(id)) throw nieZnaleziono('Nie odnaleziono osoby w kartotece.');
-    if (!zad.file) throw bledneZadanie('Nie przesłano pliku.');
-    // Naprawa Z-253: rozszerzenie to obietnica klienta — sprawdzamy tresc
-    // pliku po sygnaturze (te sama kontrola co przy dokumentach sprawy
-    // i wniosku; wczesniej ta trasa jej nie miala, mimo ze zbiera skany
-    // dokumentow tozsamosci — najbardziej wrazliwa kategoria uploadu).
-    if (!pliki.trescPasuje(zad.file.path, pliki.typZNazwy(zad.file.originalname))) {
-      fs.rmSync(zad.file.path, { force: true });
-      throw bledneZadanie(`Treść pliku „${zad.file.originalname}" nie odpowiada jego rozszerzeniu. Prześlij PDF albo zdjęcie.`);
-    }
-    const typDokumentu = String((zad.body || {}).typ_dokumentu || 'inny');
-    if (!TYPY_DOKUMENTU_AML.includes(typDokumentu)) throw bledneZadanie(`Nieznany typ dokumentu: „${typDokumentu}”.`);
-    const retencjaDo = (zad.body || {}).retencja_do || null;
-    if (retencjaDo && !czas.poprawnaData(retencjaDo)) throw bledneZadanie('Data retencji musi mieć format RRRR-MM-DD.');
-
-    const hash = crypto.createHash('sha256').update(fs.readFileSync(zad.file.path)).digest('hex');
-    const wynik = db()
-      .prepare(
-        `INSERT INTO psa_osoby_skany_aml
-           (osoba_id, spolka_id, typ_dokumentu, nazwa_pliku, sciezka, mime, rozmiar, hash, retencja_do, wgral, utworzono)
-         VALUES (@osoba_id, @spolka_id, @typ_dokumentu, @nazwa_pliku, @sciezka, @mime, @rozmiar, @hash, @retencja_do, @wgral, @utworzono)`
-      )
-      .run({
-        osoba_id: id,
-        spolka_id: zad.psaSpolkaAml.id,
-        typ_dokumentu: typDokumentu,
-        nazwa_pliku: zad.file.originalname,
-        sciezka: path.relative(konfiguracja.KATALOG_DOKUMENTOW, zad.file.path),
-        mime: zad.file.mimetype,
-        rozmiar: zad.file.size,
-        hash,
-        retencja_do: retencjaDo,
-        wgral: autor(zad),
-        utworzono: czas.terazIso(),
-      });
-
-    odp.status(201).json({
-      skan: db().prepare('SELECT id, spolka_id, typ_dokumentu, nazwa_pliku, rozmiar, retencja_do, wgral, utworzono FROM psa_osoby_skany_aml WHERE id = ?').get(wynik.lastInsertRowid),
-    });
-  })
-);
-
-router.get(
-  '/:id/aml-skany/:skanId/plik',
-  asy((zad, odp) => {
-    const id = Number(zad.params.id);
-    const skan = db().prepare('SELECT * FROM psa_osoby_skany_aml WHERE id = ? AND osoba_id = ?').get(Number(zad.params.skanId), id);
-    if (!skan) throw nieZnaleziono('Nie odnaleziono skanu.');
-
-    const pelnaSciezka = path.join(konfiguracja.KATALOG_DOKUMENTOW, skan.sciezka);
-    if (!pelnaSciezka.startsWith(konfiguracja.KATALOG_DOKUMENTOW) || !fs.existsSync(pelnaSciezka)) {
-      throw nieZnaleziono('Plik nie jest już dostępny.');
-    }
-
-    // Log dostepu do skanu - opis etapu 3.1 promptu ("log dostepu dla skanow").
-    dziennikDostepu.zapisz(db(), {
-      kto: autor(zad), typKto: 'pracownik', spolkaId: skan.spolka_id, osobaId: id,
-      akcja: dziennikDostepu.AKCJE.POBRANIE_PLIKU, opis: `skan dokumentu AML: ${skan.nazwa_pliku}`,
-    });
-
-    pliki.naglowkiPliku(odp, { nazwaPliku: skan.nazwa_pliku, wRamce: false });
-    fs.createReadStream(pelnaSciezka).pipe(odp);
+    const osoba = wymagajOsoby(zad);
+    odp.status(201).json({ id: pliki.przyjmij(db(), zad.file, { osoba_id: osoba.id }, autor(zad)) });
   })
 );
 
 module.exports = router;
-// Naprawa P-012: reuzywane przez trasy/portal.js (upload wlasnego skanu
-// akcjonariusza) - ten sam rezim hasha, retencji i miejsca na dysku, zeby
-// oba kanaly (pracownik i klient) skladaly sie w JEDNA kartoteke skanow.
-module.exports.TYPY_DOKUMENTU_AML = TYPY_DOKUMENTU_AML;
-module.exports.katalogSkanowAml = katalogSkanowAml;
-module.exports.ROZSZERZENIA_SKANU_AML_DOZWOLONE = ROZSZERZENIA_SKANU_AML_DOZWOLONE;
-module.exports.LIMIT_ROZMIARU_SKANU_AML_BAJTY = LIMIT_ROZMIARU_SKANU_AML_BAJTY;
-// Etap 3F: kancelaria materializuje akcjonariuszy proponowanych we wniosku
-// klienta do kartoteki wspólnej - wnioski.js reużywa TĘ SAMĄ walidację
-// (regula domenowa nr 10 - jeden inwestor wpisany raz - nie duplikujemy
-// logiki, żeby wpis z wniosku nigdy nie ominął reguł, którym podlega
-// wpis ręczny).
-module.exports.POLA_OSOBY = POLA_OSOBY;
-module.exports.sprawdzOsobe = sprawdzOsobe;
-module.exports.ostrzezeniaOsoby = ostrzezeniaOsoby;

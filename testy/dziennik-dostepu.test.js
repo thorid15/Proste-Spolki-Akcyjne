@@ -23,7 +23,7 @@ test('zapisz: tworzy wiersz z kompletem pol', () => {
     opis: 'eksport CSV',
   });
 
-  const wiersz = db.prepare('SELECT * FROM psa_dziennik_dostepu ORDER BY id DESC LIMIT 1').get();
+  const wiersz = db.prepare('SELECT * FROM psa_dziennik ORDER BY id DESC LIMIT 1').get();
   assert.equal(wiersz.kto, 'Łukasz Kozon');
   assert.equal(wiersz.typ_kto, 'pracownik');
   assert.equal(wiersz.spolka_id, spolkaId);
@@ -43,7 +43,7 @@ test('zapisz: osoba_id i opis sa opcjonalne (np. raport dotyczy calej spolki, ni
     akcja: dziennik.AKCJE.INFORMACJA_Z_REJESTRU,
   });
 
-  const wiersz = db.prepare('SELECT * FROM psa_dziennik_dostepu ORDER BY id DESC LIMIT 1').get();
+  const wiersz = db.prepare('SELECT * FROM psa_dziennik ORDER BY id DESC LIMIT 1').get();
   assert.equal(wiersz.osoba_id, null);
   assert.equal(wiersz.opis, null);
 });
@@ -52,6 +52,6 @@ test('kazde wywolanie dopisuje nowy wiersz - append-only', () => {
   const db = bazaTestowa();
   dziennik.zapisz(db, { kto: 'X', typKto: 'pracownik', akcja: dziennik.AKCJE.POBRANIE_PLIKU });
   dziennik.zapisz(db, { kto: 'X', typKto: 'pracownik', akcja: dziennik.AKCJE.POBRANIE_PLIKU });
-  const n = db.prepare('SELECT COUNT(*) AS n FROM psa_dziennik_dostepu').get().n;
+  const n = db.prepare('SELECT COUNT(*) AS n FROM psa_dziennik').get().n;
   assert.equal(n, 2);
 });

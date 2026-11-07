@@ -1701,6 +1701,23 @@
   29. **D-153 (U-29)** Nazwy pism jak w art. 300³⁴ § 9 KSH: powiadomienie o zamierzonym wpisie / o wpisie / o odmowie; „zawiadomienie” tylko wobec sądu (art. 300³² § 3); przychodzące to „pliki”, wychodzące — „pisma”.
   30. **D-154 (U-30)** Opłata za prowadzenie rejestru do wyboru we wniosku: raz w roku (1 200 zł netto, domyślnie) albo co miesiąc (100 zł netto); wybór wchodzi do umowy, zmienia go tylko kancelaria; po zamknięciu rejestru nowe opłaty nie powstają. Zastępuje tylko opłatę roczną.
 
+### D-155–D-166 — Faza 1 uproszczenia: rozstrzygnięcia wykonawcze (7.11.2026; raport `raporty/FAZA-1.md`)
+
+- Obszar: rdzeń rejestru (schemat, wpisy, sprawy). Decyzje podjęte przy wykonaniu specyfikacji — do akceptacji Łukasza razem z raportem.
+- Decyzje:
+  1. **D-155** Nazwa migracji bazowej niesie skrót treści SQL: każda zmiana schematu do końca Fazy 6 zakłada bazę od nowa (pod zabezpieczeniem U-01). Po Fazie 6 schemat zamrożony, zmiany jako kolejne migracje.
+  2. **D-156** `psa_osoby_dzialajace` służyła do zapisu osoby działającej przy wpisie (notariusz albo zastępca notarialny — imię, nazwisko, funkcja w treści każdego wpisu, domyślna dla pracownika, słownik w trasach `auth`). Zastąpiona polem tekstowym `dziala_przez` w sprawie (poza treścią wpisu — R10); słownik, kolumna `psa_uzytkownicy.osoba_dzialajaca_id` i trasy usunięte.
+  3. **D-157** R2 a art. 300³⁴ § 3 KSH (🟢, § 0 pkt 6): przyznanie uprawnionemu z obciążenia prawa głosu zmienia uprawnienia akcjonariusza — akcjonariusz jest na liście osób do powiadomienia.
+  4. **D-158** R5: pozycje checklisty z atrybutów tylko przy operacjach, których dotyczą — ograniczenie: zbycie i ustanowienie obciążenia; niepokryte i zajęcie: zbycie (art. 300⁴⁰ § 1 dotyczy zbycia); prawo głosu: wpis, który je przyznaje.
+  5. **D-159** Sprostowanie: przy kilku sprostowaniach jednego wpisu obowiązuje ostatnie; zastępuje treść wyłącznie tym samym typem; otwarcia się nie wycofuje (tylko zastępuje treść); w zamkniętym rejestrze wolno sprostować tylko zamknięcie.
+  6. **D-160** Obciążenie i adnotacja to atrybut identyfikowany wpisem, który go ustanowił, i pozycją w tym wpisie; zmiana i wykreślenie wskazują atrybut i numery akcji (U-26); umorzenie akcji kończy atrybuty na tych numerach.
+  7. **D-161** Data otwarcia rejestru = dzień wpisu `otwarcie`; nazwa dotychczasowego podmiotu nie trafia do treści wpisu (R10) — zostaje we wniosku.
+  8. **D-162** Opłata za wpis (U-02) obciąża żądającego: osobę z kartoteki albo spółkę; sprawa bez operacji odpłatnej nie przyjmuje wyboru „opłata”.
+  9. **D-163** Odmowa wpisu usuwa niewysłane powiadomienia o zamierzonym wpisie i wezwania (przestały być potrzebne); odnotowane zgody na wpis po „Zmień treść” zostają.
+  10. **D-164** `terminy.js` — liczenie terminu bez zmian; funkcje `wstrzymaj`/`wznow` usunięte (stan zmienia wyłącznie `sprawy.zmienStan`), `dni_wstrzymania` usunięte (U-16).
+  11. **D-165** D-R01: wpis z chwilą wcześniejszą niż ostatni wpis spółki jest wstrzymany (kontrola zegara w symulacji sprawy).
+  12. **D-166** Do czasu przebudowy odłączone (trasy niemontowane, testy pominięte z numerem fazy): eksport ZIP i przypomnienia (Faza 2), import KRS i wnioski (Faza 4), portal i tpay (Faza 5).
+
 ---
 
 ## Decyzje otwarte

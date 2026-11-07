@@ -1,2731 +1,406 @@
 'use strict';
 
 /**
- * Migracje modulu PSA - IDEMPOTENTNE.
+ * Schemat bazy modułu PSA — jedna migracja bazowa (U-01) zamiast 71 dawnych.
  *
- * Uruchamiane przy kazdym starcie serwera i w testach. Dotykaja wylacznie
- * obiektow `psa_*` - plik bazy jest wspolny dla modulow kancelarii.
+ * Dotyka wyłącznie obiektów `psa_*` — plik bazy jest wspólny dla modułów kancelarii.
  *
- * Zasada: kazda migracja da sie wykonac wielokrotnie bez skutkow ubocznych.
- * Zmiany schematu dopisujemy jako NOWA pozycje w `MIGRACJE`, nigdy nie
- * edytujemy juz wydanej.
+ * Do końca Fazy 6 uproszczenia schemat wolno edytować w miejscu: nazwa migracji niesie skrót
+ * treści SQL, więc baza założona według innej wersji schematu (także według dawnych 71 migracji)
+ * zakłada się od nowa — ale tylko wtedy, gdy `psa_zdarzenia` jest pusta albo baza jest oznaczona
+ * jako testowa (`psa_baza_testowa`). Inaczej migracja odmawia działania: wpisów rejestru nie
+ * wolno utracić (art. 300(31) § 4 KSH). Po Fazie 6 zmiany schematu idą jako kolejne migracje.
  */
 
-const MIGRACJE = [
-  {
-    wersja: 1,
-    nazwa: 'rdzen rejestru - spolki, osoby, emisje, zdarzenia, materializacje',
-    sql: `
-      -- ── Spolki, dla ktorych prowadzimy rejestr ─────────────────────────
-      CREATE TABLE IF NOT EXISTS psa_spolki (
-        id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-        krs                     TEXT UNIQUE,
-        nip                     TEXT,
-        regon                   TEXT,
-        nazwa                   TEXT NOT NULL,
-        -- Kontrola z reguly domenowej nr 11: rejestr wylacznie dla P.S.A.
-        forma_prawna            TEXT NOT NULL DEFAULT 'PROSTA SPÓŁKA AKCYJNA',
-        kraj                    TEXT DEFAULT 'Polska',
-        kod_pocztowy            TEXT,
-        miejscowosc             TEXT,
-        ulica                   TEXT,
-        nr_domu                 TEXT,
-        nr_lokalu               TEXT,
-        sad_rejestrowy          TEXT,
-        wydzial                 TEXT,
-        telefon                 TEXT,
-        email                   TEXT,
-        www                     TEXT,
-        status                  TEXT NOT NULL DEFAULT 'aktywna'
-                                  CHECK (status IN ('aktywna','w_likwidacji','zawieszona','wykreslona')),
-        komentarz_statusu       TEXT,
-        data_utworzenia_spolki  TEXT,
-        data_uchwaly_wyboru     TEXT,
-        data_umowy              TEXT,
-        data_otwarcia_rejestru  TEXT,
-        data_zakonczenia_umowy  TEXT,
-        opis                    TEXT,   -- drukowany na raporcie
-        uwagi                   TEXT,   -- wewnetrzne, NIGDY na wydruku
-        utworzono               TEXT NOT NULL,
-        zaktualizowano          TEXT
-      );
+const crypto = require('node:crypto');
+
+const SQL_SCHEMAT = `
+  -- ── Spółki, dla których prowadzimy rejestr ───────────────────────────────
+  CREATE TABLE psa_spolki (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    krs               TEXT NOT NULL UNIQUE,
+    nazwa             TEXT NOT NULL,               -- firma (art. 300(33) § 1 pkt 1)
+    siedziba          TEXT NOT NULL,
+    adres             TEXT NOT NULL,
+    sad_rejestrowy    TEXT NOT NULL,               -- pkt 2
+    data_rejestracji  TEXT NOT NULL,               -- pkt 3
+    nip               TEXT,                        -- do faktur
+    email             TEXT,                        -- zgoda na e-mail wynika z umowy (U-10)
+    umowe_zawarl      TEXT,                        -- art. 300(32) § 1(2)
+    platnosc          TEXT NOT NULL DEFAULT 'roczna' CHECK (platnosc IN ('roczna','miesieczna')),
+    -- Materializacja wpisów „otwarcie” i „zamkniecie” (stan rejestru — U-14).
+    data_otwarcia     TEXT,
+    data_zamkniecia   TEXT,
+    powod_zamkniecia  TEXT CHECK (powod_zamkniecia IN ('przekazanie','wykreslenie_spolki','rozwiazanie_umowy')),
+    utworzono         TEXT NOT NULL
+  );
+
+  -- ── Kartoteka osób (akcjonariusze, uprawnieni, osoby działające za spółkę) ─
+  CREATE TABLE psa_osoby (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    typ             TEXT NOT NULL CHECK (typ IN ('fizyczna','prawna')),
+    nazwa           TEXT NOT NULL,                 -- imię i nazwisko albo firma
+    pesel           TEXT CHECK (pesel IS NULL OR (typ = 'fizyczna' AND length(pesel) = 11)),
+    data_urodzenia  TEXT CHECK (data_urodzenia IS NULL OR typ = 'fizyczna'),
+    numer_rejestru  TEXT CHECK (numer_rejestru IS NULL OR typ = 'prawna'),
+    adres           TEXT NOT NULL,
+    -- glowny = zamieszkania (osoba fizyczna) albo siedziby (osoba prawna)
+    rodzaj_adresu   TEXT NOT NULL DEFAULT 'glowny' CHECK (rodzaj_adresu IN ('glowny','doreczen')),
+    email           TEXT,
+    zgoda_email     INTEGER NOT NULL DEFAULT 0 CHECK (zgoda_email IN (0,1)),
+    pep             INTEGER NOT NULL DEFAULT 0 CHECK (pep IN (0,1)),
+    pep_opis        TEXT,
+    aml_data        TEXT,                          -- data weryfikacji (U-06)
+    uwagi           TEXT,
+    utworzono       TEXT NOT NULL,
+    -- D-076: osoba fizyczna — PESEL albo data urodzenia.
+    CHECK (typ = 'prawna' OR pesel IS NOT NULL OR data_urodzenia IS NOT NULL),
+    CHECK (zgoda_email = 0 OR email IS NOT NULL)
+  );
+  CREATE INDEX psa_ix_osoby_pesel ON psa_osoby (pesel);
+
+  -- ── Wniosek o prowadzenie rejestru (zgłoszenie = wniosek — U-08) ─────────
+  CREATE TABLE psa_wnioski (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    stan                   TEXT NOT NULL DEFAULT 'roboczy'
+                             CHECK (stan IN ('roboczy','zlozony','przyjety','odrzucony')),
+    krs                    TEXT NOT NULL,
+    przejecie              INTEGER NOT NULL DEFAULT 0 CHECK (przejecie IN (0,1)),
+    dotychczasowy_podmiot  TEXT,
+    data_przejecia         TEXT,
+    dane_json              TEXT NOT NULL DEFAULT '{}',   -- dane klienta przed weryfikacją (U-19)
+    checklista_json        TEXT NOT NULL DEFAULT '{}',
+    notatka                TEXT,
+    spolka_id              INTEGER REFERENCES psa_spolki(id),
+    utworzono              TEXT NOT NULL,
+    zmieniono              TEXT NOT NULL
+  );
+
+  -- ── Sprawy: każdy wpis idzie przez sprawę (R1) ───────────────────────────
+  CREATE TABLE psa_sprawy (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    spolka_id           INTEGER NOT NULL REFERENCES psa_spolki(id),
+    stan                TEXT NOT NULL DEFAULT 'w_toku'
+                          CHECK (stan IN ('w_toku','wstrzymana','wpisana','odmowa','wycofana')),
+    zadajacy            TEXT NOT NULL CHECK (zadajacy IN ('spolka','osoba','organ','brak')),
+    zadajacy_osoba_id   INTEGER REFERENCES psa_osoby(id),
+    zadajacy_opis       TEXT,                      -- organ: nazwa i sygnatura (U-15)
+    dziala_przez        TEXT,
+    data_wplywu         TEXT NOT NULL,
+    wstrzymana_od       TEXT,
+    wznowiona_od        TEXT,
+    operacje_json       TEXT NOT NULL DEFAULT '[]',
+    podstawa            TEXT,
+    podstawa_data       TEXT,
+    tresc_zatwierdzona  TEXT,                      -- chwila „Dalej” (krok 1 → 2); NULL = krok 1
+    checklista_json     TEXT NOT NULL DEFAULT '{}',
+    dopisane_json       TEXT NOT NULL DEFAULT '[]',-- osoby dopisane do powiadomienia (R2)
+    zgody_json          TEXT NOT NULL DEFAULT '[]',-- zgody na wpis (art. 300(34) § 3, D-088)
+    oplata              TEXT CHECK (oplata IN ('tak','nie')),
+    przyczyna_odmowy    TEXT,
+    klucz_idempotencji  TEXT UNIQUE,
+    autor               TEXT NOT NULL,
+    utworzono           TEXT NOT NULL,
+    zmieniono           TEXT NOT NULL,
+    CHECK ((zadajacy = 'osoba') = (zadajacy_osoba_id IS NOT NULL)),
+    CHECK (zadajacy <> 'organ' OR zadajacy_opis IS NOT NULL),
+    CHECK (stan <> 'odmowa' OR przyczyna_odmowy IS NOT NULL)
+  );
+  CREATE INDEX psa_ix_sprawy_spolka ON psa_sprawy (spolka_id, stan);
+
+  -- ── ŹRÓDŁO PRAWDY: zdarzenia tylko dopisywane, łańcuch skrótów ───────────
+  CREATE TABLE psa_zdarzenia (
+    id                       INTEGER PRIMARY KEY,
+    spolka_id                INTEGER NOT NULL REFERENCES psa_spolki(id),
+    typ                      TEXT NOT NULL,
+    data_wpisu               TEXT NOT NULL,   -- chwila wpisu (UTC, co do sekundy) — D-R01
+    autor                    TEXT NOT NULL,
+    sprawa_id                INTEGER NOT NULL REFERENCES psa_sprawy(id),
+    dane_json                TEXT NOT NULL,   -- kanoniczny JSON, bez danych osobowych (R10)
+    zdarzenie_prostowane_id  INTEGER REFERENCES psa_zdarzenia(id),
+    uzasadnienie             TEXT,
+    hash_poprzedni           TEXT NOT NULL,
+    hash                     TEXT NOT NULL
+  );
+  CREATE INDEX psa_ix_zdarzenia_spolka ON psa_zdarzenia (spolka_id, data_wpisu, id);
+  CREATE TRIGGER psa_zdarzenia_bez_update BEFORE UPDATE ON psa_zdarzenia
+  BEGIN
+    SELECT RAISE(ABORT, 'psa_zdarzenia jest append-only — pomyłkę prostuje się wpisem „sprostowanie”.');
+  END;
+  CREATE TRIGGER psa_zdarzenia_bez_delete BEFORE DELETE ON psa_zdarzenia
+  BEGIN
+    SELECT RAISE(ABORT, 'psa_zdarzenia jest append-only — wpisów rejestru nie usuwa się.');
+  END;
+
+  -- ── Materializacje (odtwarzalne w całości ze zdarzeń) ────────────────────
+  CREATE TABLE psa_emisje (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    spolka_id       INTEGER NOT NULL REFERENCES psa_spolki(id),
+    seria           TEXT NOT NULL,
+    nr_od           INTEGER NOT NULL,
+    nr_do           INTEGER NOT NULL,
+    data_wpisu_krs  TEXT NOT NULL,                 -- art. 300(30) § 2
+    UNIQUE (spolka_id, seria),
+    CHECK (nr_od >= 1 AND nr_do >= nr_od)
+  );
+
+  CREATE TABLE psa_stan_akcji (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    spolka_id        INTEGER NOT NULL,
+    seria            TEXT NOT NULL,
+    kategoria        TEXT NOT NULL CHECK (kategoria IN ('akcjonariusz','umorzona')),
+    osoba_id         INTEGER REFERENCES psa_osoby(id),
+    nr_od            INTEGER NOT NULL,
+    nr_do            INTEGER NOT NULL,
+    czesc_licznik    INTEGER NOT NULL DEFAULT 1,
+    czesc_mianownik  INTEGER NOT NULL DEFAULT 1,
+    zdarzenie_od_id  INTEGER NOT NULL REFERENCES psa_zdarzenia(id),
+    data_od          TEXT NOT NULL,
+    zdarzenie_do_id  INTEGER REFERENCES psa_zdarzenia(id),
+    data_do          TEXT,
+    FOREIGN KEY (spolka_id, seria) REFERENCES psa_emisje (spolka_id, seria),
+    CHECK ((kategoria = 'akcjonariusz') = (osoba_id IS NOT NULL)),
+    CHECK (nr_do >= nr_od),
+    -- art. 300(43): ułamek zawsze przypisany do jednego numeru akcji.
+    CHECK (czesc_licznik = czesc_mianownik OR nr_od = nr_do)
+  );
+  CREATE INDEX psa_ix_stan_spolka ON psa_stan_akcji (spolka_id, seria, nr_od);
+  CREATE INDEX psa_ix_stan_osoba ON psa_stan_akcji (osoba_id);
+
+  -- Obciążenia i adnotacje na akcjach (art. 300(33) § 1 pkt 4, 6–7, 9–11).
+  CREATE TABLE psa_atrybuty (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    spolka_id        INTEGER NOT NULL,
+    -- Tożsamość atrybutu: wpis, który go ustanowił, i pozycja w tym wpisie (otwarcie ma ich wiele).
+    zdarzenie_id     INTEGER NOT NULL REFERENCES psa_zdarzenia(id),
+    pozycja          INTEGER NOT NULL DEFAULT 0,
+    rodzaj          TEXT NOT NULL CHECK (rodzaj IN ('zastaw','uzytkowanie','zajecie',
+                       'uprawnienie','ograniczenie','obowiazek','niepokryte','inna')),
+    seria            TEXT NOT NULL,
+    nr_od            INTEGER NOT NULL,
+    nr_do            INTEGER NOT NULL,
+    osoba_id         INTEGER REFERENCES psa_osoby(id),                -- zastawnik, użytkownik
+    tresc            TEXT,
+    prawo_glosu      INTEGER NOT NULL DEFAULT 0 CHECK (prawo_glosu IN (0,1)),
+    zdarzenie_od_id  INTEGER NOT NULL REFERENCES psa_zdarzenia(id),
+    data_od          TEXT NOT NULL,
+    zdarzenie_do_id  INTEGER REFERENCES psa_zdarzenia(id),
+    data_do          TEXT,
+    FOREIGN KEY (spolka_id, seria) REFERENCES psa_emisje (spolka_id, seria),
+    CHECK (nr_do >= nr_od)
+  );
+  CREATE INDEX psa_ix_atrybuty_spolka ON psa_atrybuty (spolka_id, seria, nr_od);
+
+  -- ── Pliki przychodzące — jedna tabela (U-29: „pliki”) ────────────────────
+  CREATE TABLE psa_pliki (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    spolka_id         INTEGER REFERENCES psa_spolki(id),
+    osoba_id          INTEGER REFERENCES psa_osoby(id),
+    sprawa_id         INTEGER REFERENCES psa_sprawy(id),
+    wniosek_id        INTEGER REFERENCES psa_wnioski(id),
+    nazwa             TEXT NOT NULL,
+    sciezka           TEXT NOT NULL UNIQUE,        -- losowa nazwa na dysku
+    typ               TEXT NOT NULL,
+    sha256            TEXT NOT NULL,
+    wgral             TEXT NOT NULL,
+    wgrano            TEXT NOT NULL,
+    dokument          TEXT,                        -- wniosek: który dokument (U-03)
+    stan_podpisu      TEXT CHECK (stan_podpisu IN ('do_podpisu','do_sprawdzenia','potwierdzony','odrzucony')),
+    powod_odrzucenia  TEXT,
+    CHECK (spolka_id IS NOT NULL OR osoba_id IS NOT NULL OR wniosek_id IS NOT NULL),
+    CHECK (sprawa_id IS NULL OR spolka_id IS NOT NULL)
+  );
+  CREATE INDEX psa_ix_pliki_sprawa ON psa_pliki (sprawa_id);
+  CREATE INDEX psa_ix_pliki_osoba ON psa_pliki (osoba_id);
+
+  -- ── Pisma wychodzące — jedna tabela (U-29: „pisma”) ──────────────────────
+  CREATE TABLE psa_pisma (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    typ                TEXT NOT NULL CHECK (typ IN ('umowa','uchwala','zgoda_email',
+                         'powiadomienie_zamierzony','powiadomienie_wpis','powiadomienie_odmowa',
+                         'wezwanie','informacja')),
+    numer              TEXT UNIQUE,
+    spolka_id          INTEGER REFERENCES psa_spolki(id),
+    sprawa_id          INTEGER REFERENCES psa_sprawy(id),
+    wniosek_id         INTEGER REFERENCES psa_wnioski(id),
+    adresat            TEXT NOT NULL CHECK (adresat IN ('spolka','osoba','organ','wnioskodawca')),
+    adresat_osoba_id   INTEGER REFERENCES psa_osoby(id),
+    adresat_opis       TEXT,                       -- organ — tylko tu, nie w treści pisma
+    sygnatura          TEXT,                       -- organ: sygnatura (art. 300(35) § 4)
+    kanal              TEXT NOT NULL CHECK (kanal IN ('email','list','portal')),
+    stan               TEXT NOT NULL DEFAULT 'do_wyslania' CHECK (stan IN ('do_wyslania','wyslane','blad')),
+    kontekst_json      TEXT NOT NULL DEFAULT '{}',
+    plik               TEXT,
+    sha256             TEXT,
+    uniewaznione       TEXT,                       -- R2: wysłane powiadomienie po zmianie treści
+    id_wiadomosci      TEXT,
+    odpowiedz_serwera  TEXT,
+    wyslano            TEXT,
+    autor              TEXT NOT NULL,
+    utworzono          TEXT NOT NULL,
+    CHECK ((adresat = 'osoba') = (adresat_osoba_id IS NOT NULL))
+  );
+  CREATE INDEX psa_ix_pisma_sprawa ON psa_pisma (sprawa_id);
+  CREATE INDEX psa_ix_pisma_stan ON psa_pisma (stan);
+
+  -- ── Historia zmian danych osób i spółek (U-25, U-11) — tylko dopisywanie ─
+  CREATE TABLE psa_historia_danych (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    osoba_id  INTEGER REFERENCES psa_osoby(id),
+    spolka_id INTEGER REFERENCES psa_spolki(id),
+    pole      TEXT NOT NULL,
+    stara     TEXT,
+    nowa      TEXT,
+    plik_id   INTEGER REFERENCES psa_pliki(id),
+    kto       TEXT NOT NULL,
+    kiedy     TEXT NOT NULL,
+    CHECK ((osoba_id IS NULL) <> (spolka_id IS NULL))
+  );
+  CREATE INDEX psa_ix_historia_osoba ON psa_historia_danych (osoba_id);
+  CREATE INDEX psa_ix_historia_spolka ON psa_historia_danych (spolka_id);
+  CREATE TRIGGER psa_historia_danych_bez_update BEFORE UPDATE ON psa_historia_danych
+  BEGIN
+    SELECT RAISE(ABORT, 'psa_historia_danych jest append-only.');
+  END;
+  CREATE TRIGGER psa_historia_danych_bez_delete BEFORE DELETE ON psa_historia_danych
+  BEGIN
+    SELECT RAISE(ABORT, 'psa_historia_danych jest append-only.');
+  END;
+
+  -- ── Opłaty (U-02, U-30) i płatności tpay ─────────────────────────────────
+  CREATE TABLE psa_oplaty (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    spolka_id           INTEGER NOT NULL REFERENCES psa_spolki(id),
+    typ                 TEXT NOT NULL CHECK (typ IN ('prowadzenie','wpis','informacja')),
+    platnik             TEXT NOT NULL CHECK (platnik IN ('spolka','osoba')),
+    platnik_osoba_id    INTEGER REFERENCES psa_osoby(id),
+    sprawa_id           INTEGER UNIQUE REFERENCES psa_sprawy(id),  -- najwyżej jedna na sprawę
+    pismo_id            INTEGER REFERENCES psa_pisma(id),
+    okres               TEXT,
+    kwota_netto_grosze  INTEGER NOT NULL CHECK (kwota_netto_grosze > 0),
+    stawka_vat_procent  INTEGER NOT NULL,
+    stan                TEXT NOT NULL DEFAULT 'do_zaplaty' CHECK (stan IN ('do_zaplaty','oplacona','anulowana')),
+    powod_anulowania    TEXT,
+    numer_faktury       TEXT,
+    oplacono            TEXT,
+    autor               TEXT NOT NULL,
+    utworzono           TEXT NOT NULL,
+    CHECK ((platnik = 'osoba') = (platnik_osoba_id IS NOT NULL)),
+    CHECK (stan <> 'anulowana' OR powod_anulowania IS NOT NULL)
+  );
+  CREATE INDEX psa_ix_oplaty_spolka ON psa_oplaty (spolka_id, stan);
+  CREATE UNIQUE INDEX psa_ux_oplaty_prowadzenie ON psa_oplaty (spolka_id, okres) WHERE typ = 'prowadzenie';
+
+  CREATE TABLE psa_platnosci (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    oplata_id      INTEGER NOT NULL REFERENCES psa_oplaty(id),
+    dostawca       TEXT NOT NULL DEFAULT 'tpay',
+    tpay_id        TEXT,
+    crc            TEXT NOT NULL UNIQUE,
+    kwota_grosze   INTEGER NOT NULL,
+    link           TEXT,
+    status         TEXT NOT NULL DEFAULT 'oczekuje'
+                     CHECK (status IN ('oczekuje','oplacona','nieudana','anulowana','wygasla')),
+    tryb_testowy   INTEGER NOT NULL DEFAULT 0,
+    utworzono      TEXT NOT NULL,
+    zakonczono     TEXT,
+    odpowiedz_json TEXT
+  );
+  CREATE INDEX psa_ix_platnosci_oplata ON psa_platnosci (oplata_id);
+  CREATE INDEX psa_ix_platnosci_tpay ON psa_platnosci (tpay_id);
+
+  -- ── Portal: jedno konto na osobę (U-23) ─────────────────────────────────
+  CREATE TABLE psa_konta (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    email                    TEXT NOT NULL UNIQUE,
+    hash_hasla               TEXT,
+    osoba_id                 INTEGER UNIQUE REFERENCES psa_osoby(id),
+    wniosek_id               INTEGER REFERENCES psa_wnioski(id),  -- przed przyjęciem wniosku
+    aktywne                  INTEGER NOT NULL DEFAULT 0 CHECK (aktywne IN (0,1)),
+    token_aktywacji          TEXT,
+    token_wygasa             TEXT,
+    regulamin_zaakceptowano  TEXT,
+    ostatnie_logowanie       TEXT,
+    tokeny_wersja            INTEGER NOT NULL DEFAULT 0,
+    utworzono                TEXT NOT NULL,
+    CHECK (osoba_id IS NOT NULL OR wniosek_id IS NOT NULL)
+  );
+  CREATE INDEX psa_ix_konta_token ON psa_konta (token_aktywacji);
+
+  -- Osoby działające za spółkę (U-23).
+  CREATE TABLE psa_reprezentanci (
+    spolka_id  INTEGER NOT NULL REFERENCES psa_spolki(id),
+    osoba_id   INTEGER NOT NULL REFERENCES psa_osoby(id),
+    dodano     TEXT NOT NULL,
+    PRIMARY KEY (spolka_id, osoba_id)
+  );
+
+  -- ── Pracownicy kancelarii i sesje ────────────────────────────────────────
+  CREATE TABLE psa_uzytkownicy (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    imie                TEXT NOT NULL,
+    email               TEXT NOT NULL UNIQUE,
+    hash_hasla          TEXT NOT NULL,
+    rola                TEXT NOT NULL DEFAULT 'pracownik' CHECK (rola IN ('admin','pracownik')),
+    aktywny             INTEGER NOT NULL DEFAULT 1 CHECK (aktywny IN (0,1)),
+    ostatnie_logowanie  TEXT,
+    utworzono           TEXT NOT NULL,
+    tokeny_wersja       INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE psa_sesje_uniewaznione (
+    jti     TEXT PRIMARY KEY,
+    wygasa  TEXT NOT NULL
+  );
+  CREATE INDEX psa_ix_sesje_uniewaznione_wygasa ON psa_sesje_uniewaznione (wygasa);
+
+  -- ── Dziennik dostępu i logowań — tylko dopisywanie, retencja 5 lat (D-122) ─
+  CREATE TABLE psa_dziennik (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    chwila     TEXT NOT NULL,
+    kto        TEXT NOT NULL,
+    typ_kto    TEXT NOT NULL CHECK (typ_kto IN ('pracownik','portal')),
+    spolka_id  INTEGER REFERENCES psa_spolki(id),
+    osoba_id   INTEGER REFERENCES psa_osoby(id),
+    akcja      TEXT NOT NULL,
+    opis       TEXT
+  );
+  CREATE INDEX psa_ix_dziennik_chwila ON psa_dziennik (chwila);
+  CREATE TRIGGER psa_dziennik_bez_update BEFORE UPDATE ON psa_dziennik
+  BEGIN
+    SELECT RAISE(ABORT, 'psa_dziennik jest append-only — wpisów dziennika nie edytuje się.');
+  END;
+  CREATE TRIGGER psa_dziennik_bez_delete BEFORE DELETE ON psa_dziennik
+    WHEN OLD.chwila >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-5 years')
+  BEGIN
+    SELECT RAISE(ABORT, 'psa_dziennik jest append-only — usuwa się wyłącznie wpisy starsze niż 5 lat (D-122).');
+  END;
+
+  -- ── Dane kancelarii i osób zawierających umowy — jedyne źródło ──────────
+  CREATE TABLE psa_ustawienia (
+    klucz           TEXT PRIMARY KEY,
+    wartosc         TEXT,
+    zaktualizowano  TEXT NOT NULL,
+    autor           TEXT NOT NULL
+  );
+
+  -- ── Oznaczenie bazy testowej (D-074) — zachowywane przy zakładaniu od nowa ─
+  CREATE TABLE IF NOT EXISTS psa_baza_testowa (
+    id               INTEGER PRIMARY KEY CHECK (id = 1),
+    oznaczono        TEXT NOT NULL,
+    opis             TEXT NOT NULL,
+    przesuniecie_ms  INTEGER NOT NULL DEFAULT 0,
+    walidator_wynik  TEXT NOT NULL DEFAULT 'qes_poprawny'
+  );
+`;
+
+const SKROT_SCHEMATU = crypto.createHash('sha256').update(SQL_SCHEMAT).digest('hex').slice(0, 12);
+
+const MIGRACJE = [{ wersja: 1, nazwa: `schemat bazowy (U-01) ${SKROT_SCHEMATU}`, sql: SQL_SCHEMAT }];
+
+/** Tabele, które przetrwają założenie schematu od nowa. */
+const ZACHOWANE = new Set(['psa_migracje', 'psa_baza_testowa']);
 
-      -- ── Kartoteka wspolna: jeden inwestor w wielu spolkach wpisany raz ──
-      CREATE TABLE IF NOT EXISTS psa_osoby (
-        id                INTEGER PRIMARY KEY AUTOINCREMENT,
-        typ               TEXT NOT NULL CHECK (typ IN ('fizyczna','prawna')),
-        nazwisko          TEXT,
-        imie              TEXT,
-        nazwa             TEXT,
-        pesel             TEXT,
-        data_urodzenia    TEXT,
-        nip               TEXT,
-        regon             TEXT,
-        numer_w_rejestrze TEXT,
-        nazwa_rejestru    TEXT,
-        kraj              TEXT DEFAULT 'Polska',
-        kod_pocztowy      TEXT,
-        miejscowosc       TEXT,
-        ulica             TEXT,
-        nr_domu           TEXT,
-        nr_lokalu         TEXT,
-        adres_doreczen    TEXT,
-        adres_edoreczen   TEXT,
-        email             TEXT,
-        telefon           TEXT,
-        zgoda_email       INTEGER NOT NULL DEFAULT 0 CHECK (zgoda_email IN (0,1)),
-        aml_status        TEXT NOT NULL DEFAULT 'brak'
-                            CHECK (aml_status IN ('brak','wykonane','niemozliwe')),
-        aml_data          TEXT,
-        aml_notatka       TEXT,
-        uwagi             TEXT,
-        utworzono         TEXT NOT NULL,
-        zaktualizowano    TEXT
-      );
-
-      -- ── ZRODLO PRAWDY: append-only lancuch zdarzen ─────────────────────
-      CREATE TABLE IF NOT EXISTS psa_zdarzenia (
-        id                       INTEGER PRIMARY KEY,
-        spolka_id                INTEGER NOT NULL REFERENCES psa_spolki(id),
-        typ                      TEXT NOT NULL,
-        data_zdarzenia           TEXT NOT NULL,   -- DATE, z dokumentu
-        data_wpisu               TEXT NOT NULL,   -- DATETIME co do sekundy, systemowa
-        autor                    TEXT NOT NULL,
-        sprawa_id                INTEGER,         -- FK od sprintu 2
-        dane_json                TEXT NOT NULL,   -- kanoniczny JSON, dokladnie ten, ktory hashujemy
-        zdarzenie_prostowane_id  INTEGER REFERENCES psa_zdarzenia(id),
-        uzasadnienie             TEXT,
-        hash_poprzedni           TEXT NOT NULL,
-        hash                     TEXT NOT NULL
-      );
-
-      -- ── Emisje (materializacja zdarzen typu „emisja”) ──────────────────
-      CREATE TABLE IF NOT EXISTS psa_emisje (
-        id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-        spolka_id            INTEGER NOT NULL REFERENCES psa_spolki(id),
-        zdarzenie_id         INTEGER NOT NULL UNIQUE REFERENCES psa_zdarzenia(id),
-        tytul                TEXT,
-        podstawa_prawna      TEXT,
-        seria                TEXT NOT NULL,
-        nr_pierwszy          INTEGER NOT NULL,
-        ilosc                INTEGER NOT NULL,
-        cena_emisyjna_grosze INTEGER,
-        waluta               TEXT NOT NULL DEFAULT 'PLN',
-        data_emisji          TEXT,
-        status               TEXT NOT NULL DEFAULT 'aktywna'
-                               CHECK (status IN ('aktywna','w_umarzaniu','umorzona','wykreslona')),
-        opis                 TEXT,
-        uwagi                TEXT
-      );
-
-      -- ── Stan akcji: przedzialy czasowe (materializacja) ────────────────
-      -- Kolumna „kategoria” jest rozszerzeniem wobec sekcji 5 specyfikacji. Dzieki
-      -- niej KAZDY numer akcji nalezy zawsze do dokladnie jednego otwartego
-      -- przedzialu, wiec bilans z reguly nr 3 sprawdza sie jednym warunkiem
-      -- (szczelne pokrycie zakresu emisji).
-      CREATE TABLE IF NOT EXISTS psa_stan_akcji (
-        id               INTEGER PRIMARY KEY AUTOINCREMENT,
-        spolka_id        INTEGER NOT NULL REFERENCES psa_spolki(id),
-        emisja_id        INTEGER NOT NULL REFERENCES psa_emisje(id),
-        kategoria        TEXT NOT NULL CHECK (kategoria IN ('nieobjeta','akcjonariusz','umorzona')),
-        osoba_id         INTEGER REFERENCES psa_osoby(id),
-        nr_od            INTEGER NOT NULL,
-        nr_do            INTEGER NOT NULL,
-        ilosc            INTEGER NOT NULL,
-        tytul_nabycia    TEXT,
-        zdarzenie_od_id  INTEGER NOT NULL REFERENCES psa_zdarzenia(id),
-        data_od          TEXT NOT NULL,
-        zdarzenie_do_id  INTEGER REFERENCES psa_zdarzenia(id),
-        data_do          TEXT,
-        CHECK (nr_do >= nr_od),
-        CHECK ((kategoria = 'akcjonariusz') = (osoba_id IS NOT NULL))
-      );
-
-      -- ── Obciazenia i zajecia (materializacja) ──────────────────────────
-      CREATE TABLE IF NOT EXISTS psa_obciazenia (
-        id                        INTEGER PRIMARY KEY AUTOINCREMENT,
-        spolka_id                 INTEGER NOT NULL REFERENCES psa_spolki(id),
-        typ                       TEXT NOT NULL CHECK (typ IN ('zastaw','uzytkowanie','zajecie')),
-        emisja_id                 INTEGER NOT NULL REFERENCES psa_emisje(id),
-        nr_od                     INTEGER NOT NULL,
-        nr_do                     INTEGER NOT NULL,
-        osoba_id                  INTEGER REFERENCES psa_osoby(id),
-        akcjonariusz_osoba_id     INTEGER REFERENCES psa_osoby(id),
-        prawo_glosu               INTEGER NOT NULL DEFAULT 0 CHECK (prawo_glosu IN (0,1)),
-        blokuje_rozporzadzanie    INTEGER NOT NULL DEFAULT 1 CHECK (blokuje_rozporzadzanie IN (0,1)),
-        opis                      TEXT,
-        zdarzenie_ustanowienia_id INTEGER NOT NULL REFERENCES psa_zdarzenia(id),
-        data_od                   TEXT NOT NULL,
-        zdarzenie_wykreslenia_id  INTEGER REFERENCES psa_zdarzenia(id),
-        data_do                   TEXT,
-        CHECK (nr_do >= nr_od)
-      );
-
-      -- ── Uprawnienia, przywileje, obowiazki (materializacja) ────────────
-      CREATE TABLE IF NOT EXISTS psa_uprawnienia (
-        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-        spolka_id          INTEGER NOT NULL REFERENCES psa_spolki(id),
-        rodzaj             TEXT NOT NULL CHECK (rodzaj IN ('uprawnienie','przywilej','obowiazek')),
-        zakres             TEXT NOT NULL CHECK (zakres IN ('spolka','emisja','akcjonariusz')),
-        emisja_id          INTEGER REFERENCES psa_emisje(id),
-        osoba_id           INTEGER REFERENCES psa_osoby(id),
-        tytul              TEXT,
-        tresc              TEXT,
-        data_ustanowienia  TEXT NOT NULL,
-        zdarzenie_id       INTEGER NOT NULL REFERENCES psa_zdarzenia(id),
-        status             TEXT NOT NULL DEFAULT 'aktywne' CHECK (status IN ('aktywne','wykreslone')),
-        data_wykreslenia   TEXT
-      );
-
-      -- ── Ograniczenia w rozporzadzaniu akcja (materializacja) ───────────
-      CREATE TABLE IF NOT EXISTS psa_ograniczenia (
-        id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-        spolka_id            INTEGER NOT NULL REFERENCES psa_spolki(id),
-        zakres               TEXT NOT NULL CHECK (zakres IN ('wszystkie','emisja','zakres_numerow')),
-        emisja_id            INTEGER REFERENCES psa_emisje(id),
-        nr_od                INTEGER,
-        nr_do                INTEGER,
-        wymaga_zgody_spolki  INTEGER NOT NULL DEFAULT 0 CHECK (wymaga_zgody_spolki IN (0,1)),
-        prawo_pierwszenstwa  INTEGER NOT NULL DEFAULT 0 CHECK (prawo_pierwszenstwa IN (0,1)),
-        opis                 TEXT,
-        zdarzenie_id         INTEGER NOT NULL REFERENCES psa_zdarzenia(id),
-        status               TEXT NOT NULL DEFAULT 'aktywne' CHECK (status IN ('aktywne','wykreslone')),
-        data_wykreslenia     TEXT
-      );
-
-      -- ── Indeksy ────────────────────────────────────────────────────────
-      CREATE INDEX IF NOT EXISTS psa_ix_zdarzenia_spolka
-        ON psa_zdarzenia (spolka_id, data_zdarzenia, id);
-      CREATE INDEX IF NOT EXISTS psa_ix_stan_spolka
-        ON psa_stan_akcji (spolka_id, data_od, data_do);
-      CREATE INDEX IF NOT EXISTS psa_ix_stan_osoba
-        ON psa_stan_akcji (osoba_id, data_do);
-      CREATE INDEX IF NOT EXISTS psa_ix_emisje_spolka
-        ON psa_emisje (spolka_id, seria);
-      CREATE INDEX IF NOT EXISTS psa_ix_obciazenia_spolka
-        ON psa_obciazenia (spolka_id, data_do);
-      CREATE INDEX IF NOT EXISTS psa_ix_osoby_nazwisko
-        ON psa_osoby (nazwisko, imie);
-      CREATE INDEX IF NOT EXISTS psa_ix_osoby_nazwa
-        ON psa_osoby (nazwa);
-
-      -- ── APPEND-ONLY: regula domenowa nr 1, egzekwowana przez baze ──────
-      -- Sekcja 16: "Nie edytowac i nie kasowac rekordow w psa_zdarzenia -
-      -- nigdy, w zadnym trybie". Wyzwalacze pilnuja tego takze wtedy, gdy
-      -- ktos siegnie do bazy z pominieciem aplikacji.
-      CREATE TRIGGER IF NOT EXISTS psa_zdarzenia_bez_update
-      BEFORE UPDATE ON psa_zdarzenia
-      BEGIN
-        SELECT RAISE(ABORT,
-          'psa_zdarzenia jest append-only — pomyłkę prostuje się zdarzeniem „sprostowanie”.');
-      END;
-
-      CREATE TRIGGER IF NOT EXISTS psa_zdarzenia_bez_delete
-      BEFORE DELETE ON psa_zdarzenia
-      BEGIN
-        SELECT RAISE(ABORT,
-          'psa_zdarzenia jest append-only — rekordów zdarzeń nie usuwa się.');
-      END;
-    `,
-  },
-  {
-    wersja: 2,
-    nazwa: 'workflow spraw - psa_sprawy, psa_dokumenty, psa_wydane_dokumenty',
-    sql: `
-      -- ── Sprawy: workflow od zadania do wpisu (sekcja 7 specyfikacji) ────
-      -- Kolumny "wznowiona_od" i "dane_wejsciowe_json" sa rozszerzeniem
-      -- wobec katalogu z sekcji 5:
-      --   wznowiona_od        - dzien, od ktorego liczy sie NOWY, pelny
-      --                          siedmiodniowy termin po usunieciu przeszkody
-      --                          (server/logika/terminy.js, patrz komentarz
-      --                          tamze co do przyjetej interpretacji ustawy);
-      --   dane_wejsciowe_json - roboczy zapis kroku "co sie zmienia" kreatora,
-      --                          zeby pracownik mogl wrocic do sprawy bez
-      --                          utraty wprowadzonych danych (sekcja 9:
-      --                          "kazdy krok da sie cofnac bez utraty danych").
-      CREATE TABLE IF NOT EXISTS psa_sprawy (
-        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-        spolka_id             INTEGER NOT NULL REFERENCES psa_spolki(id),
-        typ_zdarzenia         TEXT NOT NULL,
-        zrodlo                TEXT NOT NULL CHECK (zrodlo IN ('portal','email','papier','z_urzedu')),
-        zadajacy_osoba_id     INTEGER REFERENCES psa_osoby(id),
-        zadajacy_opis         TEXT,
-        data_wplywu           TEXT NOT NULL,
-        stan                  TEXT NOT NULL DEFAULT 'nowa'
-                                CHECK (stan IN ('nowa','weryfikacja','wstrzymana','wpisana','odmowa','anulowana')),
-        termin_do             TEXT,
-        wstrzymana_od         TEXT,
-        wznowiona_od          TEXT,
-        dni_wstrzymania       INTEGER NOT NULL DEFAULT 0,
-        wymaga_powiadomienia  INTEGER NOT NULL DEFAULT 0 CHECK (wymaga_powiadomienia IN (0,1)),
-        zgoda_forma           TEXT,
-        zgoda_data            TEXT,
-        powiadomienie_wyslano TEXT,
-        zdarzenie_id          INTEGER REFERENCES psa_zdarzenia(id),
-        powod_odmowy          TEXT,
-        autor                 TEXT NOT NULL,
-        notatka                TEXT,
-        dane_wejsciowe_json   TEXT,
-        utworzono             TEXT NOT NULL,
-        zaktualizowano        TEXT
-      );
-
-      -- ── Dokumenty zalaczone do sprawy - pliki NA DYSKU, nie w bazie ─────
-      CREATE TABLE IF NOT EXISTS psa_dokumenty (
-        id             INTEGER PRIMARY KEY AUTOINCREMENT,
-        sprawa_id      INTEGER NOT NULL REFERENCES psa_sprawy(id),
-        nazwa_pliku    TEXT NOT NULL,
-        sciezka        TEXT NOT NULL,
-        mime           TEXT,
-        rozmiar        INTEGER,
-        typ_dokumentu  TEXT NOT NULL
-                         CHECK (typ_dokumentu IN
-                           ('umowa_zbycia','uchwala','zgoda','postanowienie','pelnomocnictwo','inny')),
-        hash           TEXT,
-        wgral          TEXT NOT NULL,
-        utworzono      TEXT NOT NULL
-      );
-
-      -- ── Slad wysylki dokumentow wychodzacych ────────────────────────────
-      -- Kolumna „tresc_html” jest rozszerzeniem wobec katalogu z sekcji 5:
-      -- dokumenty generujemy jako deterministyczny HTML (bez bibliotek PDF,
-      -- sekcja 13), ktory sluzy JEDNOCZESNIE jako tresc e-maila i zapis
-      -- audytowy - stad trzymamy go wprost w bazie, a nie jako plik
-      -- wskazywany przez „sciezka_pdf”. Kolumna „sciezka_pdf” zostaje
-      -- w schemacie zgodnie ze specyfikacja, ale w tym sprincie pozostaje NULL.
-      CREATE TABLE IF NOT EXISTS psa_wydane_dokumenty (
-        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-        sprawa_id          INTEGER REFERENCES psa_sprawy(id),
-        spolka_id          INTEGER NOT NULL REFERENCES psa_spolki(id),
-        typ                TEXT NOT NULL
-                             CHECK (typ IN
-                               ('zawiadomienie_wpis','zawiadomienie_odmowa','informacja_z_rejestru',
-                                'wezwanie','raport','powiadomienie')),
-        odbiorca_osoba_id  INTEGER REFERENCES psa_osoby(id),
-        kanal              TEXT NOT NULL CHECK (kanal IN ('email','portal','papier')),
-        sciezka_pdf        TEXT,
-        tresc_html         TEXT,
-        wyslano            TEXT,
-        autor              TEXT NOT NULL,
-        utworzono          TEXT NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS psa_ix_sprawy_stan
-        ON psa_sprawy (stan, termin_do);
-      CREATE INDEX IF NOT EXISTS psa_ix_sprawy_spolka
-        ON psa_sprawy (spolka_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_dokumenty_sprawa
-        ON psa_dokumenty (sprawa_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_wydane_sprawa
-        ON psa_wydane_dokumenty (sprawa_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_wydane_spolka
-        ON psa_wydane_dokumenty (spolka_id);
-    `,
-  },
-  {
-    wersja: 3,
-    nazwa: 'uwierzytelnianie - psa_uzytkownicy, psa_konta',
-    sql: `
-      -- ── Pracownicy kancelarii (sekcja 5) ────────────────────────────────
-      -- Admin = Lukasz, env ADMIN_EMAIL - konto zakladane automatycznie przy
-      -- pierwszym starcie serwera (server/trasy/auth.js: zapewnijAdmina).
-      CREATE TABLE IF NOT EXISTS psa_uzytkownicy (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        imie            TEXT NOT NULL,
-        email           TEXT NOT NULL UNIQUE,
-        hash_hasla      TEXT NOT NULL,
-        rola            TEXT NOT NULL DEFAULT 'pracownik' CHECK (rola IN ('admin','pracownik')),
-        aktywny         INTEGER NOT NULL DEFAULT 1 CHECK (aktywny IN (0,1)),
-        ostatnie_logowanie TEXT,
-        utworzono       TEXT NOT NULL
-      );
-
-      -- ── Konta portalowe: spolka albo akcjonariusz (sekcja 5, 8) ─────────
-      CREATE TABLE IF NOT EXISTS psa_konta (
-        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-        email              TEXT NOT NULL UNIQUE,
-        hash_hasla         TEXT NOT NULL,
-        rola               TEXT NOT NULL CHECK (rola IN ('spolka','akcjonariusz')),
-        spolka_id          INTEGER REFERENCES psa_spolki(id),
-        osoba_id           INTEGER REFERENCES psa_osoby(id),
-        aktywne            INTEGER NOT NULL DEFAULT 0 CHECK (aktywne IN (0,1)),
-        token_aktywacji    TEXT,
-        ostatnie_logowanie TEXT,
-        utworzono          TEXT NOT NULL,
-        CHECK ((rola = 'spolka') = (spolka_id IS NOT NULL)),
-        CHECK (osoba_id IS NOT NULL OR rola = 'spolka')
-      );
-
-      CREATE INDEX IF NOT EXISTS psa_ix_konta_spolka
-        ON psa_konta (spolka_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_konta_osoba
-        ON psa_konta (osoba_id);
-    `,
-  },
-  {
-    wersja: 4,
-    nazwa: 'rozliczenia - psa_oplaty; wykaz akcjonariuszy i zawiadomienie sadu w wydanych dokumentach',
-    sql: `
-      -- ── Oplaty: prowadzenie rejestru (rocznie), wpis, informacja (sekcja 5, 8) ──
-      -- „okres” ma sens wylacznie dla typu 'prowadzenie' (rok jako TEXT, np.
-      -- "2026") - dla 'wpis' i 'informacja' zostaje NULL. Idempotencja
-      -- naliczenia rocznego (jedna oplata 'prowadzenie' na spolke+rok) jest
-      -- pilnowana w server/oplaty.js (sprawdz-przed-wstaw w transakcji), nie
-      -- unikalnym indeksem - status 'anulowana' musi pozwalac na ponowne
-      -- naliczenie, a warunkowy UNIQUE INDEX komplikowalby to bez potrzeby.
-      CREATE TABLE IF NOT EXISTS psa_oplaty (
-        id               INTEGER PRIMARY KEY AUTOINCREMENT,
-        spolka_id        INTEGER NOT NULL REFERENCES psa_spolki(id),
-        sprawa_id        INTEGER REFERENCES psa_sprawy(id),
-        typ              TEXT NOT NULL CHECK (typ IN ('prowadzenie','wpis','informacja')),
-        okres            TEXT,
-        kwota_grosze     INTEGER NOT NULL,
-        status           TEXT NOT NULL DEFAULT 'naliczona'
-                           CHECK (status IN ('naliczona','zafakturowana','oplacona','anulowana')),
-        data_naliczenia  TEXT NOT NULL,
-        notatka          TEXT,
-        autor            TEXT NOT NULL,
-        utworzono        TEXT NOT NULL,
-        zaktualizowano   TEXT
-      );
-
-      CREATE INDEX IF NOT EXISTS psa_ix_oplaty_spolka
-        ON psa_oplaty (spolka_id, typ, okres);
-      CREATE INDEX IF NOT EXISTS psa_ix_oplaty_status
-        ON psa_oplaty (status);
-      CREATE INDEX IF NOT EXISTS psa_ix_oplaty_sprawa
-        ON psa_oplaty (sprawa_id);
-
-      -- ── Rozszerzenie katalogu wydanych dokumentow (nowelizacja) ──────────
-      -- SQLite nie pozwala zmienic CHECK-a przez ALTER TABLE - tabela nie
-      -- jest append-only (to nie psa_zdarzenia), wiec przepisujemy ja z
-      -- szerszym katalogiem "typ": dochodza 'wykaz_akcjonariuszy' (art. 476
-      -- § 1(1) KSH - przy wykresleniu spolki i jako odpowiedz na zapytanie
-      -- sadu, art. 25da ustawy o KRS) i 'zawiadomienie_sad_rozwiazanie'
-      -- (art. 300(32) § 3 KSH - zawiadomienie sadu o wygasnieciu/rozwiazaniu
-      -- umowy o prowadzenie rejestru).
-      CREATE TABLE psa_wydane_dokumenty_v4 (
-        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-        sprawa_id          INTEGER REFERENCES psa_sprawy(id),
-        spolka_id          INTEGER NOT NULL REFERENCES psa_spolki(id),
-        typ                TEXT NOT NULL
-                             CHECK (typ IN
-                               ('zawiadomienie_wpis','zawiadomienie_odmowa','informacja_z_rejestru',
-                                'wezwanie','raport','powiadomienie',
-                                'wykaz_akcjonariuszy','zawiadomienie_sad_rozwiazanie')),
-        odbiorca_osoba_id  INTEGER REFERENCES psa_osoby(id),
-        kanal              TEXT NOT NULL CHECK (kanal IN ('email','portal','papier')),
-        sciezka_pdf        TEXT,
-        tresc_html         TEXT,
-        wyslano            TEXT,
-        autor              TEXT NOT NULL,
-        utworzono          TEXT NOT NULL
-      );
-      INSERT INTO psa_wydane_dokumenty_v4
-        SELECT id, sprawa_id, spolka_id, typ, odbiorca_osoba_id, kanal, sciezka_pdf, tresc_html, wyslano, autor, utworzono
-          FROM psa_wydane_dokumenty;
-      DROP TABLE psa_wydane_dokumenty;
-      ALTER TABLE psa_wydane_dokumenty_v4 RENAME TO psa_wydane_dokumenty;
-
-      CREATE INDEX IF NOT EXISTS psa_ix_wydane_sprawa
-        ON psa_wydane_dokumenty (sprawa_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_wydane_spolka
-        ON psa_wydane_dokumenty (spolka_id);
-    `,
-  },
-  {
-    wersja: 5,
-    nazwa:
-      'zgodnosc z ustawa - ulamkowe czesci akcji, pokrycie, data_wpisu_krs, rodzaj akcji, ' +
-      'przedstawiciel wspoluprawnionych, charakter wpisu',
-    sql: `
-      -- ── Ulamkowe czesci akcji (regula domenowa 4a, art. 300(2) § 3 + art. 300(43) KSH) ──
-      -- SQLite pozwala dopisac kolumne z CHECK-iem odwolujacym sie do innych
-      -- kolumn tego samego wiersza (w tym juz istniejacych) - nie trzeba wiec
-      -- przepisywac calej tabeli jak w migracji 4. Kazdy ISTNIEJACY wiersz
-      -- dostaje przez DEFAULT wartosc 1/1 (akcja niepodzielona) - dokladnie
-      -- to, co CLAUDE-PSA.md sekcja 14 nazywa "migracja bezbolesna": na
-      -- 08.2026 zaden akcjonariat nie ma wspolwlasnosci ani ulamkow.
-      ALTER TABLE psa_stan_akcji ADD COLUMN czesc_mianownik INTEGER NOT NULL DEFAULT 1
-        CHECK (czesc_mianownik > 0);
-      ALTER TABLE psa_stan_akcji ADD COLUMN czesc_licznik INTEGER NOT NULL DEFAULT 1
-        CHECK (czesc_licznik BETWEEN 1 AND czesc_mianownik
-               AND (czesc_licznik = czesc_mianownik OR nr_od = nr_do));
-      -- Wspolny przedstawiciel wspolwlascicieli (art. 300(38) § 3 KSH) - brak
-      -- nie blokuje wpisu, tylko jest oznaczany (regula domenowa 4b).
-      ALTER TABLE psa_stan_akcji ADD COLUMN przedstawiciel_osoba_id INTEGER
-        REFERENCES psa_osoby(id);
-      -- Wzmianka o pokryciu (art. 300(33) § 1 pkt 9 KSH) - NULL = nieustalone
-      -- (rejestr przejety bez tej informacji albo jeszcze nie odnotowana
-      -- uchwala zarzadu z art. 300(9) § 2 KSH), nie "nie".
-      ALTER TABLE psa_stan_akcji ADD COLUMN pokryta TEXT
-        CHECK (pokryta IS NULL OR pokryta IN ('tak','nie','czesciowo'));
-
-      -- ── Emisje: KRS, rodzaj akcji, obowiazki wobec spolki (sekcja 5) ────
-      ALTER TABLE psa_emisje ADD COLUMN data_wpisu_krs TEXT;
-      ALTER TABLE psa_emisje ADD COLUMN rodzaj_akcji TEXT NOT NULL DEFAULT 'zwykla'
-        CHECK (rodzaj_akcji IN ('zwykla','uprzywilejowana','zalozycielska','niema'));
-      ALTER TABLE psa_emisje ADD COLUMN obowiazki_wobec_spolki TEXT;
-
-      -- Backfill: emisje zapisane PRZED wprowadzeniem blokady z art. 300(30) § 2
-      -- KSH juz istnieja w rejestrze jako fakt dokonany - ich akcje zostaly
-      -- objete, wiec spolka/emisja musiala juz byc wpisana do KRS. Blokada ma
-      -- dzialac na NOWE objecia, nie uniewazniac wsteczne historie. Nowe
-      -- emisje (po tej migracji) startuja z data_wpisu_krs = NULL, jak nakazuje
-      -- regula domenowa 12.
-      UPDATE psa_emisje SET data_wpisu_krs = data_emisji WHERE data_wpisu_krs IS NULL;
-
-      -- ── Spolka: kto zawarl umowe (art. 300(32) § 1(2) KSH), dodatkowe ──
-      -- informacje z umowy spolki (art. 300(33) § 2 KSH)
-      ALTER TABLE psa_spolki ADD COLUMN dodatkowe_informacje_umowa_spolki TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN umowe_zawarl TEXT
-        CHECK (umowe_zawarl IS NULL OR umowe_zawarl IN ('notariusz','zastepca','osoba_upowazniona'));
-      ALTER TABLE psa_spolki ADD COLUMN umowe_zawarl_imie_nazwisko TEXT;
-
-      -- ── Sprawa: charakter wpisu - konstytutywny/deklaratoryjny (art. 300(37) ──
-      -- § 2 KSH, regula domenowa 13). Sprawy zalatwione PRZED ta migracja
-      -- zostaja NULL ("nieustalone") - rozroznienie dotyczy wylacznie tresci
-      -- checklisty i zawiadomienia w chwili wpisu, nie da sie go sensownie
-      -- zrekonstruowac wstecz bez wgladu w kazda historyczna sprawe z osobna.
-      ALTER TABLE psa_sprawy ADD COLUMN charakter_wpisu TEXT
-        CHECK (charakter_wpisu IS NULL OR charakter_wpisu IN ('konstytutywny','deklaratoryjny'));
-    `,
-  },
-  {
-    wersja: 6,
-    nazwa:
-      'kreator rejestracji spolki - rozszerzony import KRS, ograniczenia z umowy spolki ' +
-      '(zgoda spolki, pierwszenstwo, zakaz glosu zastawnika, ograniczenia dziedziczenia)',
-    sql: `
-      -- ── Spolka: pola z rozszerzonego importu KRS (sesja 6, faza 3) ──────
-      -- Mapowanie API KRS jest OBRONNE (server/trasy/krs.js) - kazde z tych
-      -- pol moze zostac puste, jesli odpowiedz API nie zawiera odpowiadajacej
-      -- rubryki; wpis recznie uzupelnia brakujace pola w kreatorze.
-      ALTER TABLE psa_spolki ADD COLUMN data_ostatniego_wpisu_krs TEXT;
-      -- Wysokosc kapitalu akcyjnego (Dzial 1, Rubryka 8.1) w groszach - jak
-      -- pozostale kwoty w rejestrze (np. psa_emisje.cena_emisyjna_grosze).
-      ALTER TABLE psa_spolki ADD COLUMN kapital_akcyjny_grosze INTEGER;
-      -- Adres do doreczen elektronicznych wpisany do Bazy Adresow
-      -- Elektronicznych (Dzial 1, Rubryka 2.5) - format "AE:PL-#####-#####-...".
-      ALTER TABLE psa_spolki ADD COLUMN adres_edorecze TEXT;
-      -- Sklad organu reprezentujacego (Dzial 2, Rubryka 1, Podrubryka 1) -
-      -- tablica JSON [{nazwisko, imiona, funkcja}] wylacznie informacyjna,
-      -- do podgladu w kreatorze; rejestr akcjonariuszy nie prowadzi wlasnej
-      -- ewidencji osob w organach spolki.
-      ALTER TABLE psa_spolki ADD COLUMN sklad_organu_json TEXT;
-
-      -- ── Ograniczenia z umowy spolki wczytywane przy przyjeciu spolki ───
-      -- (WYTYCZNE-MERYTORYCZNE-PSA.md sekcja 3 i 11 - bez tego art. 300(34)
-      -- § 6 KSH jest niewykonalny). Dwie z czterech kategorii NIE maja
-      -- wlasnego cyklu zycia w rejestrze (nie dotycza konkretnej emisji ani
-      -- akcji, tylko sa faktem o tresci umowy spolki), wiec zyja jako pola
-      -- informacyjne na spolce, nie jako zdarzenie:
-      --   * zakaz prawa glosu zastawnika/uzytkownika (art. 300(23) § 2 KSH) -
-      --     umowa spolki moze go zakazac wprost albo uzaleznic od zgody
-      --     organu spolki; bramka dla przyszlego zdarzenia
-      --     prawo_glosu_zastawnika (server/logika/kreator.js).
-      ALTER TABLE psa_spolki ADD COLUMN zakaz_glosu_zastawnika_umowa TEXT
-        CHECK (zakaz_glosu_zastawnika_umowa IS NULL
-               OR zakaz_glosu_zastawnika_umowa IN ('zakazane','wymaga_zgody_organu'));
-      --   * ograniczenie podzialu akcji miedzy spadkobiercow (art. 300(41)
-      --     § 3 KSH) - tresc klauzuli, NULL = umowa spolki nie ogranicza.
-      ALTER TABLE psa_spolki ADD COLUMN ograniczenie_dziedziczenia_umowa TEXT;
-
-      -- Pozostale dwie kategorie (zgoda spolki na zbycie, prawo
-      -- pierwszenstwa) MAJA juz reprezentacje jako zdarzenie ograniczenie
-      -- / tabela psa_ograniczenia (sprint 2) - dopisujemy tylko brakujace
-      -- pola kompletnosci postanowienia o zgodzie spolki (art. 300(39) § 1,
-      -- 3 KSH): bez terminu wskazania nabywcy, ceny i terminu zaplaty
-      -- ograniczenie jest bezskuteczne (WYTYCZNE-MERYTORYCZNE-PSA.md sekcja
-      -- 11 - "brak kompletu oznacza brak ograniczenia"), wiec
-      -- server/logika/kreator.js NIE ustawia wymaga_zgody_spolki=1, dopoki
-      -- wszystkie trzy nie sa podane.
-      ALTER TABLE psa_ograniczenia ADD COLUMN zgoda_termin_wskazania_dni INTEGER;
-      ALTER TABLE psa_ograniczenia ADD COLUMN zgoda_cena_opis TEXT;
-      ALTER TABLE psa_ograniczenia ADD COLUMN zgoda_termin_zaplaty_dni INTEGER;
-    `,
-  },
-  {
-    wersja: 7,
-    nazwa:
-      'uniewaznienie akcji orzeczeniem sadu (art. 300(51) KSH) jako odrebna kategoria ' +
-      'oraz charakter zadajacego wpisu (art. 300(34) § 1 KSH)',
-    sql: `
-      -- ── Sprawa: w jakim charakterze zadajacy wystepuje o wpis ───────────
-      -- Art. 300(34) § 1 KSH dopuszcza wpis "na zadanie spolki lub innej osoby
-      -- majacej interes prawny". Dotad zapisywalismy KTO zada (zadajacy_osoba_id)
-      -- i wolny opis, ale nie W JAKIM CHARAKTERZE - a to wlasnie ocena interesu
-      -- prawnego, ktora nalezy do podmiotu prowadzacego rejestr i powinna
-      -- zostawic slad nadajacy sie do kontroli.
-      --
-      -- Sprawy sprzed tej migracji zostaja NULL ("nieustalone"): charakteru
-      -- zadajacego nie da sie zrekonstruowac wstecz bez wgladu w akta kazdej
-      -- sprawy z osobna, a zgadywanie go zafalszowaloby zapis o tresci
-      -- ocennej. Kolumna jest wiec dobrowolna na poziomie schematu -
-      -- wymagalnosc egzekwuje warstwa trasy dla NOWYCH spraw.
-      ALTER TABLE psa_sprawy ADD COLUMN zadajacy_rola TEXT
-        CHECK (zadajacy_rola IS NULL OR zadajacy_rola IN
-          ('akcjonariusz','zbywca','nabywca','zastawnik','uzytkownik',
-           'uprawniony_do_zaskarzenia','spolka','inna'));
-
-      -- ── Stan akcji: kategoria "uniewazniona" (art. 300(51) KSH) ─────────
-      -- SQLite nie pozwala zmienic CHECK w miejscu, wiec przepisujemy tabele -
-      -- ta sama sciezka co w migracji 4 dla psa_wydane_dokumenty.
-      --
-      -- psa_stan_akcji jest MATERIALIZACJA odtwarzana ze zdarzen
-      -- (server/rejestr.js kasuje i buduje ja na nowo przy kazdym wpisie),
-      -- wiec przepisanie jest bezpieczne: zadne dane zrodlowe tu nie mieszkaja.
-      -- Kopiujemy mimo to komplet wierszy, zeby rejestry spolek bez nowych
-      -- zdarzen nie zostaly z pusta materializacja do czasu kolejnego wpisu.
-      CREATE TABLE psa_stan_akcji_v7 (
-        id               INTEGER PRIMARY KEY AUTOINCREMENT,
-        spolka_id        INTEGER NOT NULL REFERENCES psa_spolki(id),
-        emisja_id        INTEGER NOT NULL REFERENCES psa_emisje(id),
-        kategoria        TEXT NOT NULL
-          CHECK (kategoria IN ('nieobjeta','akcjonariusz','umorzona','uniewazniona')),
-        osoba_id         INTEGER REFERENCES psa_osoby(id),
-        nr_od            INTEGER NOT NULL,
-        nr_do            INTEGER NOT NULL,
-        ilosc            INTEGER NOT NULL,
-        tytul_nabycia    TEXT,
-        zdarzenie_od_id  INTEGER NOT NULL REFERENCES psa_zdarzenia(id),
-        data_od          TEXT NOT NULL,
-        zdarzenie_do_id  INTEGER REFERENCES psa_zdarzenia(id),
-        data_do          TEXT,
-        czesc_mianownik  INTEGER NOT NULL DEFAULT 1 CHECK (czesc_mianownik > 0),
-        czesc_licznik    INTEGER NOT NULL DEFAULT 1
-          CHECK (czesc_licznik BETWEEN 1 AND czesc_mianownik
-                 AND (czesc_licznik = czesc_mianownik OR nr_od = nr_do)),
-        przedstawiciel_osoba_id INTEGER REFERENCES psa_osoby(id),
-        pokryta          TEXT CHECK (pokryta IS NULL OR pokryta IN ('tak','nie','czesciowo')),
-        CHECK (nr_do >= nr_od),
-        CHECK ((kategoria = 'akcjonariusz') = (osoba_id IS NOT NULL))
-      );
-
-      INSERT INTO psa_stan_akcji_v7
-        (id, spolka_id, emisja_id, kategoria, osoba_id, nr_od, nr_do, ilosc,
-         tytul_nabycia, zdarzenie_od_id, data_od, zdarzenie_do_id, data_do,
-         czesc_mianownik, czesc_licznik, przedstawiciel_osoba_id, pokryta)
-      SELECT
-         id, spolka_id, emisja_id, kategoria, osoba_id, nr_od, nr_do, ilosc,
-         tytul_nabycia, zdarzenie_od_id, data_od, zdarzenie_do_id, data_do,
-         czesc_mianownik, czesc_licznik, przedstawiciel_osoba_id, pokryta
-      FROM psa_stan_akcji;
-
-      DROP TABLE psa_stan_akcji;
-      ALTER TABLE psa_stan_akcji_v7 RENAME TO psa_stan_akcji;
-
-      -- Indeksy gina razem z tabela - odtwarzamy je pod tymi samymi nazwami.
-      CREATE INDEX IF NOT EXISTS psa_ix_stan_spolka
-        ON psa_stan_akcji (spolka_id, data_od, data_do);
-      CREATE INDEX IF NOT EXISTS psa_ix_stan_osoba
-        ON psa_stan_akcji (osoba_id, data_do);
-    `,
-  },
-  {
-    wersja: 8,
-    nazwa: 'szablony dokumentow wychodzacych - wersjonowane, bez edycji po wydaniu',
-    sql: `
-      -- ── Szablony dokumentow (sesja 6, faza 4) ───────────────────────────
-      -- Wersjonowane i NIEZMIENIALNE. Redakcja szablonu nie nadpisuje
-      -- poprzedniej tresci, tylko zaklada kolejna wersje - inaczej nie dalo by
-      -- sie odtworzyc, jak brzmial dokument wydany pol roku temu. Ta sama
-      -- logika co przy psa_zdarzenia, z tego samego powodu: dokument wychodzacy
-      -- wywoluje skutki, wiec jego podstawa musi byc odtwarzalna.
-      CREATE TABLE IF NOT EXISTS psa_szablony (
-        id               INTEGER PRIMARY KEY AUTOINCREMENT,
-        kod              TEXT NOT NULL,
-        wersja           INTEGER NOT NULL,
-        tytul            TEXT NOT NULL,
-        tresc            TEXT NOT NULL,
-        opis             TEXT,
-        podstawa_prawna  TEXT,
-        -- Dokladnie jedna wersja danego kodu jest aktywna (indeks czesciowy
-        -- nizej). Aktywnosc to JEDYNE pole, ktore wolno zmieniac - zmiana
-        -- aktywnej wersji jest decyzja redakcyjna, nie edycja tresci.
-        aktywna          INTEGER NOT NULL DEFAULT 0 CHECK (aktywna IN (0,1)),
-        wbudowany        INTEGER NOT NULL DEFAULT 0 CHECK (wbudowany IN (0,1)),
-        autor            TEXT NOT NULL,
-        utworzono        TEXT NOT NULL,
-        UNIQUE (kod, wersja)
-      );
-
-      CREATE UNIQUE INDEX IF NOT EXISTS psa_ix_szablony_aktywny
-        ON psa_szablony (kod) WHERE aktywna = 1;
-
-      -- Zakaz edycji tresci i tytulu istniejacej wersji - odpowiednik
-      -- wyzwalaczy chroniacych psa_zdarzenia. Zmiana aktywnosci przechodzi.
-      CREATE TRIGGER IF NOT EXISTS psa_szablony_bez_edycji_tresci
-      BEFORE UPDATE OF tresc, tytul, kod, wersja ON psa_szablony
-      BEGIN
-        SELECT RAISE(ABORT,
-          'Szablon jest niezmienialny - zamiast edycji zaloz kolejna wersje.');
-      END;
-
-      CREATE TRIGGER IF NOT EXISTS psa_szablony_bez_delete
-      BEFORE DELETE ON psa_szablony
-      BEGIN
-        SELECT RAISE(ABORT,
-          'Szablonu nie usuwa sie - wersja moze byc podstawa wydanego dokumentu.');
-      END;
-
-      -- ── Slad, z ktorej wersji szablonu powstal wydany dokument ──────────
-      -- Bez tego "brak edycji po wydaniu" jest deklaracja bez pokrycia: nie
-      -- dalo by sie wskazac, ktora tresc podpisano.
-      ALTER TABLE psa_wydane_dokumenty ADD COLUMN szablon_kod TEXT;
-      ALTER TABLE psa_wydane_dokumenty ADD COLUMN szablon_wersja INTEGER;
-    `,
-  },
-  {
-    wersja: 9,
-    nazwa: 'dane wymagane przez wzory pism (sesja 8, blok B): plec, znak sprawy, ' +
-      'podstawa dokumentu, przyczyna odmowy, forma spolki i reprezentant umowy',
-    sql: `
-      -- ── Osoba: plec ──────────────────────────────────────────────────
-      -- Wzory pism odmieniaja przez rodzaj gramatyczny ("zamieszkaly" wobec
-      -- "zamieszkala", "syna" wobec "corke") - PLACEHOLDERY-PSA.md § 1.
-      -- Bez tego pola kazde pismo wymagaloby recznego skreslenia niewlasciwej
-      -- formy. Dobrowolne na poziomie schematu (dane sprzed migracji i osoby
-      -- prawne go nie maja) - formy pochodne po prostu zostaja niewyliczone,
-      -- co widac w podgladzie pisma jako brak, nie jako cichy blad.
-      ALTER TABLE psa_osoby ADD COLUMN plec TEXT
-        CHECK (plec IS NULL OR plec IN ('kobieta','mezczyzna'));
-
-      -- ── Sprawa: znak sprawy ─────────────────────────────────────────────
-      -- {{sprawa_numer}} wystepuje na kazdym pismie. Generowany przy zalozeniu
-      -- sprawy (server/trasy/sprawy.js), format RA/ROK/NNNN. Sprawy sprzed
-      -- migracji zostaja bez numeru - nie ma jak go odtworzyc wstecz bez
-      -- ryzyka kolizji z numerami juz nadanymi po fakcie.
-      ALTER TABLE psa_sprawy ADD COLUMN numer TEXT;
-      CREATE UNIQUE INDEX IF NOT EXISTS psa_ix_sprawy_numer
-        ON psa_sprawy (numer) WHERE numer IS NOT NULL;
-
-      -- ── Sprawa: dokument bedacy podstawa zadania ─────────────────────────
-      -- Dotad zapisywane wolnym tekstem w "notatka" - niespojnie miedzy
-      -- sprawami i nieczytelne dla wzorow 04/05/07, ktore odwoluja sie do
-      -- rodzaju i daty dokumentu jako osobnych pol (sekcja warunkowa
-      -- {{#podstawa_dokument}}). Katalog rodzajow jest ten sam, co przy
-      -- zalacznikach do sprawy (psa_dokumenty.typ_dokumentu) - to ten sam
-      -- pojeciowo katalog, jeden zamiast dwoch niezaleznie utrzymywanych.
-      ALTER TABLE psa_sprawy ADD COLUMN dokument_rodzaj TEXT
-        CHECK (dokument_rodzaj IS NULL OR dokument_rodzaj IN
-          ('umowa_zbycia','uchwala','zgoda','postanowienie','pelnomocnictwo','inny'));
-      ALTER TABLE psa_sprawy ADD COLUMN dokument_data TEXT;
-
-      -- ── Sprawa: przyczyna niedokonania wpisu jako katalog zamkniety ──────
-      -- Art. 300(34) § 7 zd. 2 KSH: przy niedokonaniu wpisu nalezy PODAC
-      -- PRZYCZYNY - dotad wolny tekst w "powod_odmowy", co pozwalalo na
-      -- odmowe bez konkretnej podstawy. Kolumna "powod_odmowy" zostaje jako
-      -- rozwiniecie/uzasadnienie w jezyku naturalnym (obowiazkowe przy kodzie
-      -- "inna", opcjonalne przy pozostalych - kod juz jest konkretny).
-      ALTER TABLE psa_sprawy ADD COLUMN powod_odmowy_kod TEXT
-        CHECK (powod_odmowy_kod IS NULL OR powod_odmowy_kod IN
-          ('brak_dokumentow','dokumenty_nie_potwierdzaja','watpliwosci_co_do_tresci',
-           'niezgodnosc_z_rejestrem','przeszkoda_nieusunieta','brak_aml','inna'));
-
-      -- ── Spolka: forma "w miejscowniku" siedziby ──────────────────────────
-      -- "z siedziba w Warszawie" - odmiana nazw miejscowosci algorytmem jest
-      -- zawodna (wyjatki, nazwy wieloczlonowe, formy historyczne), wiec pole
-      -- edytowalne zamiast wyliczane. Mianownik to juz istniejace "miejscowosc".
-      ALTER TABLE psa_spolki ADD COLUMN siedziba_miejscownik TEXT;
-
-      -- ── Spolka: reprezentant podpisujacy umowe o prowadzenie rejestru ────
-      -- Wzor 01 § 5. Dotyczy WYLACZNIE strony spolki (kto zawarl umowe w
-      -- imieniu podmiotu prowadzacego rejestr to juz "umowe_zawarl*" z
-      -- migracji 6 - inna strona tej samej umowy). Nazwisko w bierniku, bo
-      -- caly ustep identyfikacyjny wzoru jest w tym przypadku - odmiana
-      -- nazwiska nie da sie zautomatyzowac, notariusz wpisuje raz przy
-      -- rejestracji spolki. Formy pochodne ("dzialajacego"/"dzialajaca" itd.)
-      -- wylicza server/logika/formy-osobowe.js z pola "reprezentant_plec".
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_biernik TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_plec TEXT
-        CHECK (reprezentant_plec IS NULL OR reprezentant_plec IN ('kobieta','mezczyzna'));
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_rodzice TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_dowod TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_pesel TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_adres TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_funkcja_biernik TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_reprezentacja TEXT;
-    `,
-  },
-  {
-    wersja: 10,
-    nazwa: 'kontekst automatu pism (sesja 8, blok A3): organ spolki, ' +
-      'sposob i termin usuniecia przeszkody',
-    sql: `
-      -- ── Spolka: rodzaj organu zarzadzajacego ─────────────────────────────
-      -- P.S.A. moze miec albo zarzad, albo (struktura monistyczna) rade
-      -- dyrektorow - K.s.h. art. 300(63) i nast. Wzory pism licza sie z tym,
-      -- KTO w imieniu spolki odbiera zawiadomienie o wpisie ("Zarzad spolki"
-      -- kontra "Rada Dyrektorow spolki"), a aplikacja dotad tego nie
-      -- rozrozniala. Dobrowolne na poziomie schematu - bez wskazania wzory
-      -- zostawiaja to pole do uzupelnienia recznie, zamiast zgadywac.
-      ALTER TABLE psa_spolki ADD COLUMN organ_rodzaj TEXT
-        CHECK (organ_rodzaj IS NULL OR organ_rodzaj IN ('zarzad','rada_dyrektorow'));
-
-      -- ── Sprawa: sposob i termin usuniecia przeszkody ─────────────────────
-      -- Dotad przy wstrzymaniu zapisywalismy WYLACZNIE przeszkode (wolny
-      -- tekst w "notatka") - wezwanie do usuniecia (wzor 06) potrzebuje
-      -- dodatkowo, CO konkretnie ma zrobic zadajacy i DO KIEDY. Ustawa nie
-      -- narzuca liczby dni na usuniecie przeszkody (inaczej niz sam wpis -
-      -- art. 300(34) § 1 KSH), wiec to notariusz wskazuje termin wprost,
-      -- zamiast aplikacja miala go zgadywac.
-      ALTER TABLE psa_sprawy ADD COLUMN sposob_usuniecia TEXT;
-      ALTER TABLE psa_sprawy ADD COLUMN termin_usuniecia TEXT;
-    `,
-  },
-  {
-    wersja: 11,
-    nazwa: 'automat pism na wzorach .docx (sesja 8, blok A4): sciezka pliku i skrot wzoru',
-    sql: `
-      -- ── Wydany dokument: gdzie lezy PLIK i z jakiego BRZMIENIA wzoru powstal ──
-      -- Automat wypelnia teraz prawdziwy .docx z wzory/ (blok A1) zamiast
-      -- HTML-a skladanego w locie - plik zapisujemy na dysku obok zalacznikow
-      -- do sprawy (server/trasy/sprawy.js: ten sam KATALOG_DOKUMENTOW), a
-      -- sciezke i skrot tresci wzoru (nie mylic z "szablon_wersja" z migracji
-      -- 8 - tamto liczylo wersje w bazie, tu liczymy hash pliku z dysku)
-      -- zapisujemy tutaj. "tresc_html" zostaje uzywana jak dotad - dla
-      -- listow generowanych na starym mechanizmie (np. wykaz akcjonariuszy,
-      -- blok A5) trzyma HTML, dla nowych trzyma czysty tekst wyciagniety
-      -- z .docx (podglad bez otwierania pliku).
-      ALTER TABLE psa_wydane_dokumenty ADD COLUMN sciezka_plik TEXT;
-      ALTER TABLE psa_wydane_dokumenty ADD COLUMN szablon_hash TEXT;
-    `,
-  },
-  {
-    wersja: 12,
-    nazwa: 'wystawianie na zadanie (sesja 8, blok A5): status VAT spolki dla wzoru umowy',
-    sql: `
-      -- ── Spolka: czy jest platnikiem VAT ──────────────────────────────────
-      -- Wzor 01 (umowa o prowadzenie rejestru) ma warunkowe oswiadczenie
-      -- o statusie VAT ({{#spolka_vat}}) - bez tego pola sekcja zawsze
-      -- wychodzi pusta, nawet gdy spolka jest platnikiem. Trojstanowe:
-      -- NULL = nieustalone (sekcja pusta, tak jak dzis), 0/1 = ustalone wprost.
-      ALTER TABLE psa_spolki ADD COLUMN platnik_vat INTEGER
-        CHECK (platnik_vat IS NULL OR platnik_vat IN (0,1));
-    `,
-  },
-  {
-    wersja: 13,
-    nazwa: 'wystawianie na zadanie (sesja 8, blok A5): typy dla wzorow ' +
-      'jednorazowych (umowa, RODO, uchwala, klauzula zbycia)',
-    sql: `
-      -- ── Rozszerzenie katalogu wydanych dokumentow ────────────────────────
-      -- SQLite nie pozwala zmienic CHECK-a przez ALTER TABLE - przepisujemy
-      -- tabele jak w migracji 4 i 7. "Lista akcjonariuszy do sadu" (wzor 08)
-      -- NIE dostaje nowego typu - to ten sam dokument prawny (art. 476 § 1(1)
-      -- KSH), co juz istniejacy 'wykaz_akcjonariuszy', tylko wystawiony na
-      -- zadanie zamiast automatem po wpisie. Cztery pozostale wzory
-      -- jednorazowe nie maja dzis odpowiednika w katalogu.
-      CREATE TABLE psa_wydane_dokumenty_v13 (
-        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-        sprawa_id          INTEGER REFERENCES psa_sprawy(id),
-        spolka_id          INTEGER NOT NULL REFERENCES psa_spolki(id),
-        typ                TEXT NOT NULL
-                             CHECK (typ IN
-                               ('zawiadomienie_wpis','zawiadomienie_odmowa','informacja_z_rejestru',
-                                'wezwanie','raport','powiadomienie',
-                                'wykaz_akcjonariuszy','zawiadomienie_sad_rozwiazanie',
-                                'umowa_rejestru','informacja_rodo','uchwala_wyboru','klauzula_zbycia')),
-        odbiorca_osoba_id  INTEGER REFERENCES psa_osoby(id),
-        kanal              TEXT NOT NULL CHECK (kanal IN ('email','portal','papier')),
-        sciezka_pdf        TEXT,
-        tresc_html         TEXT,
-        sciezka_plik       TEXT,
-        szablon_kod        TEXT,
-        szablon_wersja     INTEGER,
-        szablon_hash       TEXT,
-        wyslano            TEXT,
-        autor              TEXT NOT NULL,
-        utworzono          TEXT NOT NULL
-      );
-      INSERT INTO psa_wydane_dokumenty_v13
-        SELECT id, sprawa_id, spolka_id, typ, odbiorca_osoba_id, kanal, sciezka_pdf, tresc_html,
-               sciezka_plik, szablon_kod, szablon_wersja, szablon_hash, wyslano, autor, utworzono
-          FROM psa_wydane_dokumenty;
-      DROP TABLE psa_wydane_dokumenty;
-      ALTER TABLE psa_wydane_dokumenty_v13 RENAME TO psa_wydane_dokumenty;
-
-      CREATE INDEX IF NOT EXISTS psa_ix_wydane_sprawa
-        ON psa_wydane_dokumenty (sprawa_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_wydane_spolka
-        ON psa_wydane_dokumenty (spolka_id);
-    `,
-  },
-  {
-    wersja: 14,
-    nazwa: 'wzor 04 (zadanie dokonania wpisu): typ w katalogu wydanych dokumentow',
-    sql: `
-      -- ── Rozszerzenie katalogu wydanych dokumentow, jeszcze raz ──────────
-      -- Wzor 04 (zadanie dokonania wpisu, art. 300(34) § 1 i § 4 KSH) zostal
-      -- pominiety przy podziale prac na bloki A3/A5 (sesja 8) - nie idzie
-      -- automatem (nie jest reakcja na przejscie stanu sprawy) i nie jest
-      -- jednorazowym dokumentem spolki (dotyczy KONKRETNEJ sprawy, danych
-      -- zadajacego z tej sprawy) - wykryte dopiero przy A7. Wystawia sie go
-      -- ze sprawy, wiec "sprawa_id" jest tu ZAWSZE ustawione (w odroznieniu
-      -- od pieciu wzorow z migracji 13, ktore sa zawsze "sprawa_id IS NULL").
-      CREATE TABLE psa_wydane_dokumenty_v14 (
-        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-        sprawa_id          INTEGER REFERENCES psa_sprawy(id),
-        spolka_id          INTEGER NOT NULL REFERENCES psa_spolki(id),
-        typ                TEXT NOT NULL
-                             CHECK (typ IN
-                               ('zawiadomienie_wpis','zawiadomienie_odmowa','informacja_z_rejestru',
-                                'wezwanie','raport','powiadomienie',
-                                'wykaz_akcjonariuszy','zawiadomienie_sad_rozwiazanie',
-                                'umowa_rejestru','informacja_rodo','uchwala_wyboru','klauzula_zbycia',
-                                'zadanie_wpisu')),
-        odbiorca_osoba_id  INTEGER REFERENCES psa_osoby(id),
-        kanal              TEXT NOT NULL CHECK (kanal IN ('email','portal','papier')),
-        sciezka_pdf        TEXT,
-        tresc_html         TEXT,
-        sciezka_plik       TEXT,
-        szablon_kod        TEXT,
-        szablon_wersja     INTEGER,
-        szablon_hash       TEXT,
-        wyslano            TEXT,
-        autor              TEXT NOT NULL,
-        utworzono          TEXT NOT NULL
-      );
-      INSERT INTO psa_wydane_dokumenty_v14
-        SELECT id, sprawa_id, spolka_id, typ, odbiorca_osoba_id, kanal, sciezka_pdf, tresc_html,
-               sciezka_plik, szablon_kod, szablon_wersja, szablon_hash, wyslano, autor, utworzono
-          FROM psa_wydane_dokumenty;
-      DROP TABLE psa_wydane_dokumenty;
-      ALTER TABLE psa_wydane_dokumenty_v14 RENAME TO psa_wydane_dokumenty;
-
-      CREATE INDEX IF NOT EXISTS psa_ix_wydane_sprawa
-        ON psa_wydane_dokumenty (sprawa_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_wydane_spolka
-        ON psa_wydane_dokumenty (spolka_id);
-    `,
-  },
-  {
-    wersja: 15,
-    nazwa: 'blok C (sesja 8): przeglad AML, beneficjent rzeczywisty, oswiadczenie PEP',
-    sql: `
-      -- ── Osoba: cztery pola AML wykraczajace poza tresc rejestru KSH ─────
-      -- Swiadoma nadwyzka wobec ustawy (SESJA-PSA-8-PROTOTYP.md § 6, blok C;
-      -- uzasadnienie w server/logika/przepisy.js przy AML_STATUSY) - zadne
-      -- z tych pol NIE zasila nowej blokady wpisu.
-      --
-      -- aml_data_przegladu: data OSTATNIEGO przegladu okresowego - odrebna
-      -- od aml_data (data PIERWOTNEGO wykonania srodkow bezpieczenstwa).
-      -- Termin przegladu: 12 miesiecy (decyzja D4a).
-      ALTER TABLE psa_osoby ADD COLUMN aml_data_przegladu TEXT;
-
-      -- beneficjent_rzeczywisty_id: self-referencing FK, sensowne wylacznie
-      -- dla typ='prawna'. Beneficjent rzeczywisty jest z definicji OSOBA
-      -- FIZYCZNA (art. 2 ust. 2 pkt 1 ustawy AML) - trasa wymusza to przy
-      -- zapisie, schemat sam tego nie sprawdzi (odwolanie miedzy wierszami).
-      ALTER TABLE psa_osoby ADD COLUMN beneficjent_rzeczywisty_id INTEGER
-        REFERENCES psa_osoby(id);
-
-      -- pep_oswiadczenie: OSWIADCZENIE OSOBY (art. 46 ustawy AML), nie ocena
-      -- kancelarii - stad tak/nie/NULL ("nie oswiadczono"), nigdy zgadywane.
-      ALTER TABLE psa_osoby ADD COLUMN pep_oswiadczenie TEXT
-        CHECK (pep_oswiadczenie IS NULL OR pep_oswiadczenie IN ('tak', 'nie'));
-      ALTER TABLE psa_osoby ADD COLUMN pep_oswiadczenie_data TEXT;
-    `,
-  },
-  {
-    wersja: 16,
-    nazwa: 'blok D4 (sesja 8): dziennik dostepu do danych osobowych',
-    sql: `
-      -- ── Dziennik dostepu (blok D4) - append-only, WASKI zakres ──────────
-      -- Tylko momenty realnego wgladu w dane wrazliwe albo wyniesienia ich
-      -- z systemu (informacja z rejestru, raport dla sadu, eksport CSV,
-      -- pobranie pliku) - NIE kazde wyswietlenie listy/kokpitu. Jedyna
-      -- sensowna odpowiedz na "kto mial wglad" przy incydencie albo
-      -- kontroli - szeroki zakres zasypalby ja szumem.
-      --
-      -- Osobna tabela od psa_zdarzenia (LANCUCH SKROTOW tresci rejestru) -
-      -- ten drugi zostaje NIETKNIETY, nigdy nie sluzy do celow audytowych
-      -- niezwiazanych ze stanem akcji. Ta tabela, jak psa_zdarzenia, jest
-      -- append-only - aplikacja nigdy nie robi na niej UPDATE ani DELETE.
-      CREATE TABLE IF NOT EXISTS psa_dziennik_dostepu (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        chwila     TEXT NOT NULL,
-        kto        TEXT NOT NULL,
-        typ_kto    TEXT NOT NULL CHECK (typ_kto IN ('pracownik', 'portal')),
-        spolka_id  INTEGER REFERENCES psa_spolki(id),
-        osoba_id   INTEGER REFERENCES psa_osoby(id),
-        akcja      TEXT NOT NULL,
-        opis       TEXT
-      );
-
-      CREATE INDEX IF NOT EXISTS psa_ix_dziennik_spolka
-        ON psa_dziennik_dostepu (spolka_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_dziennik_osoba
-        ON psa_dziennik_dostepu (osoba_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_dziennik_chwila
-        ON psa_dziennik_dostepu (chwila);
-    `,
-  },
-  {
-    wersja: 17,
-    nazwa: 'poprawki PSA (etap 1.6): usuniecie statusu VAT spolki',
-    sql: `
-      -- ── Status VAT wycofany calkowicie z modulu ──────────────────────────
-      -- Dodane migracja 12 dla warunkowego oswiadczenia w umowie o
-      -- prowadzenie rejestru ({{#spolka_vat}}, wzor 01). Decyzja: to nie jest
-      -- element rejestru (art. 300(33) § 1 KSH), zmienia sie niezaleznie od
-      -- KRS i wprowadzalo myslace trojstanowe pole w kreatorze. Usuniete z
-      -- formularza, z API i z tresci wzoru 01 (sekcja ust. 4 usunieta z
-      -- generatora, plik przegenerowany) - kolumna usuwana tu, zeby stan bazy
-      -- byl spojny z reszta aplikacji.
-      ALTER TABLE psa_spolki DROP COLUMN platnik_vat;
-    `,
-  },
-  {
-    wersja: 18,
-    nazwa: 'poprawki PSA (etap 2.2/2.3): umowa jako fakt juz zaistnialy, dane reprezentanta w mianowniku',
-    sql: `
-      -- ── Krok 2 kreatora przestaje "otwierac" podpisywanie umowy ─────────
-      -- Zamiast tego rejestruje FAKT juz zawartej umowy: sposob zawarcia
-      -- i skan/plik. Data zawarcia to juz istniejace "data_umowy".
-      ALTER TABLE psa_spolki ADD COLUMN umowa_sposob_zawarcia TEXT
-        CHECK (umowa_sposob_zawarcia IS NULL OR umowa_sposob_zawarcia IN
-          ('pisemna', 'elektroniczna_kwalifikowany'));
-      ALTER TABLE psa_spolki ADD COLUMN umowa_zalacznik_sciezka TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN umowa_zalacznik_nazwa_pliku TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN umowa_zalacznik_mime TEXT;
-
-      -- ── Dane reprezentanta: mianownik zamiast recznie wpisywanych form ──
-      -- 'reprezentant_biernik' i 'reprezentant_funkcja_biernik' przechowywaly
-      -- WARTOSC JUZ ODMIENIONA - uzytkownik musial sam znac biernik. Teraz
-      -- wpisuje mianownik ('reprezentant_imie_nazwisko', 'reprezentant_funkcja'),
-      -- a odmiane liczy server/logika/deklinacja.js w locie (kontekst-pisma.js).
-      -- 'reprezentant_rodzice' NIE zmienia nazwy, ale zmienia sens: dotad
-      -- dopelniacz wpisywany recznie ("Piotra i Anny"), teraz mianownik
-      -- ("Piotr i Anna") - deklinowany automatycznie tak samo jak reszta.
-      -- Trzy kolumny "_recznie" to pole korekty z sekcji 2.3 promptu
-      -- ("deklinator ma byc pomoca, nie wyrocznia") - gdy wypelnione, maja
-      -- pierwszenstwo przed wynikiem automatu.
-      ALTER TABLE psa_spolki DROP COLUMN reprezentant_biernik;
-      ALTER TABLE psa_spolki DROP COLUMN reprezentant_funkcja_biernik;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_imie_nazwisko TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_funkcja TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_biernik_recznie TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_funkcja_biernik_recznie TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_rodzice_recznie TEXT;
-    `,
-  },
-  {
-    wersja: 19,
-    nazwa: 'poprawki PSA (etap 2.5): data zawarcia umowy spolki (akt zalozycielski)',
-    sql: `
-      -- ── Data zawarcia umowy spolki - RÓŻNA od daty rejestracji w KRS ────
-      -- ("data_utworzenia_spolki") i od daty umowy o PROWADZENIE REJESTRU
-      -- ("data_umowy"). To data aktu notarialnego zawiazania spolki (albo,
-      -- przy spolce zakladanej w S24, data podpisania w systemie) -
-      -- podstawa do autouzupelnienia "data emisji" serii zalozycielskiej.
-      -- Import z API KRS: dzial1.umowaStatut.informacjaOZawarciuZmianieUmowyStatutu[0]
-      -- (potwierdzone na zywej odpowiedzi, KRS 0001114217) - pierwszy wpis w tej
-      -- tablicy to zawarcie, kolejne to pozniejsze zmiany umowy spolki.
-      ALTER TABLE psa_spolki ADD COLUMN data_zawarcia_umowy_spolki TEXT;
-    `,
-  },
-  {
-    wersja: 20,
-    nazwa: 'poprawki PSA (etap 2.7): tresc postanowienia umowy spolki o zgodzie na zbycie',
-    sql: `
-      -- Doslowny cytat klauzuli umowy spolki o zgodzie spolki na zbycie akcji
-      -- (art. 300(39) § 1, 3 KSH) - obok juz istniejacych ustrukturyzowanych
-      -- pol (termin wskazania nabywcy, sposob ustalenia ceny, termin
-      -- zaplaty). Kreator rejestracji dopuszcza zapisanie tego postanowienia
-      -- BEZ kompletu trzech szczegolow (byly dotad wymagane razem) - notariusz
-      -- moze ich jeszcze nie znac przy zakladaniu spolki. Twarda blokada
-      -- (postanowienie niekompletne = bezskuteczne) przenosi sie na moment
-      -- FAKTYCZNEGO zbycia akcji (server/logika/walidacje.js).
-      ALTER TABLE psa_ograniczenia ADD COLUMN tresc_postanowienia TEXT;
-    `,
-  },
-  {
-    wersja: 21,
-    nazwa: 'etap 3A: zgloszenia wstepne portalu (lekki formularz publiczny)',
-    sql: `
-      -- Pierwszy kontakt nowego, nieznanego dotad klienta - WYLACZNIE dane
-      -- kontaktowe (e-mail, telefon, nazwa spolki, krotki opis), bez PESEL
-      -- i bez adresow. Zaproszenie do portalu (etap 3B) wychodzi automatycznie
-      -- i od razu przy zgloszeniu (server/logika/zaproszenia.js: wyslij()).
-      -- Celowo NIE jest tabela append-only (jak psa_zdarzenia) - to wylacznie
-      -- lead przed jakakolwiek weryfikacja tozsamosci, wolno go edytowac
-      -- i usuwac (np. RODO - zadanie usuniecia danych przed zawarciem umowy).
-      CREATE TABLE IF NOT EXISTS psa_zgloszenia (
-        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-        email               TEXT NOT NULL,
-        telefon             TEXT,
-        nazwa_spolki        TEXT,
-        opis                TEXT,
-        status              TEXT NOT NULL DEFAULT 'nowe'
-                              CHECK (status IN ('nowe','zaproszono','odrzucone')),
-        notatka_wewnetrzna  TEXT,
-        obsluzone_przez     TEXT,
-        obsluzone_kiedy     TEXT,
-        utworzono           TEXT NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS psa_ix_zgloszenia_status
-        ON psa_zgloszenia (status, utworzono);
-    `,
-  },
-  {
-    wersja: 22,
-    nazwa: 'etap 3B: rola wnioskodawca w psa_konta (zaproszenie przed istnieniem spolki)',
-    sql: `
-      -- SQLite nie pozwala zmienic CHECK-a przez ALTER TABLE - psa_konta nie
-      -- jest append-only (to nie psa_zdarzenia), wiec przepisujemy ja z nowa
-      -- rola 'wnioskodawca': konto zaproszone przez kancelarie (etap 3B),
-      -- ktore NIE ma jeszcze ani spolka_id (spolka nie istnieje w systemie
-      -- do czasu przyjecia wniosku), ani osoba_id (nie jest jeszcze
-      -- akcjonariuszem zadnej spolki). Rownowaznosc dwoch CHECK-ow zamiast
-      -- jednego wylicza poprawnie wszystkie trzy role:
-      --   spolka        -> spolka_id wymagane,  osoba_id NULL
-      --   akcjonariusz  -> spolka_id NULL,       osoba_id wymagane
-      --   wnioskodawca  -> spolka_id NULL,       osoba_id NULL
-      --
-      -- hash_hasla staje sie NULLOWALNE - konto istnieje juz PRZED
-      -- aktywacja (link mailowy), haslo ustawia dopiero klient w tym
-      -- momencie (logika/hasla.js: zweryfikuj juz dzis bezpiecznie
-      -- traktuje brak hasha jako "nie pasuje", zero zmian po tej stronie).
-      -- token_wygasa - link aktywacyjny nie moze byc wazny bezterminowo.
-      CREATE TABLE psa_konta_v22 (
-        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-        email              TEXT NOT NULL UNIQUE,
-        hash_hasla         TEXT,
-        rola               TEXT NOT NULL CHECK (rola IN ('spolka','akcjonariusz','wnioskodawca')),
-        spolka_id          INTEGER REFERENCES psa_spolki(id),
-        osoba_id           INTEGER REFERENCES psa_osoby(id),
-        aktywne            INTEGER NOT NULL DEFAULT 0 CHECK (aktywne IN (0,1)),
-        token_aktywacji    TEXT,
-        token_wygasa       TEXT,
-        ostatnie_logowanie TEXT,
-        utworzono          TEXT NOT NULL,
-        CHECK ((rola = 'spolka') = (spolka_id IS NOT NULL)),
-        CHECK ((rola = 'akcjonariusz') = (osoba_id IS NOT NULL))
-      );
-      INSERT INTO psa_konta_v22
-        (id, email, hash_hasla, rola, spolka_id, osoba_id, aktywne, token_aktywacji, ostatnie_logowanie, utworzono)
-        SELECT id, email, hash_hasla, rola, spolka_id, osoba_id, aktywne, token_aktywacji, ostatnie_logowanie, utworzono
-          FROM psa_konta;
-      DROP TABLE psa_konta;
-      ALTER TABLE psa_konta_v22 RENAME TO psa_konta;
-
-      CREATE INDEX IF NOT EXISTS psa_ix_konta_spolka
-        ON psa_konta (spolka_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_konta_osoba
-        ON psa_konta (osoba_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_konta_token
-        ON psa_konta (token_aktywacji);
-    `,
-  },
-  {
-    wersja: 23,
-    nazwa: 'etap 3B.1: potwierdzenie klauzuli informacyjnej RODO przed wnioskiem',
-    sql: `
-      -- Znacznik czasu potwierdzenia klauzuli informacyjnej o przetwarzaniu
-      -- danych osobowych - blokuje dostep do formularza wniosku (etap 3C)
-      -- dopoki wnioskodawca jej nie potwierdzi. To NIE jest "zgoda" w
-      -- rozumieniu art. 6 ust. 1 lit. a) RODO (podstawa przetwarzania danych
-      -- rejestru to umowa/obowiazek prawny, nie zgoda - wiec zgody sie tu nie
-      -- "zbiera") - to potwierdzenie ZAPOZNANIA SIE z obowiazkiem
-      -- informacyjnym (art. 13 RODO). Osobna, prawdziwa zgoda (na komunikacje
-      -- elektroniczna) zyje przy danych akcjonariusza, nie przy koncie.
-      ALTER TABLE psa_konta ADD COLUMN rodo_zaakceptowano TEXT;
-    `,
-  },
-  {
-    wersja: 24,
-    nazwa: 'etap 3C: psa_wnioski (dane spolki i reprezentanta z portalu klienta)',
-    sql: `
-      -- Wniosek klienta o prowadzenie rejestru - dane spolki i reprezentanta
-      -- zbierane PRZED istnieniem samej spolki w systemie (psa_spolki
-      -- powstaje dopiero, gdy kancelaria przyjmie wniosek - etap 3F,
-      -- podobnie jak dzis przy "Otworz rejestr" w kreatorze wewnetrznym).
-      -- Kolumny CELOWO lustrza podzbior psa_spolki (plus reprezentant_* z
-      -- etapu 2.2/2.3) - zeby projekt umowy (etap 3E) dalo sie wygenerowac
-      -- wolawac server/logika/kontekst-pisma.js: umowaOProwadzenieRejestru()
-      -- na obiekcie wniosku DOKLADNIE tak samo, jak dzis na obiekcie spolki,
-      -- bez przepisywania mapowania pol.
-      CREATE TABLE IF NOT EXISTS psa_wnioski (
-        id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-        konto_id                    INTEGER NOT NULL UNIQUE REFERENCES psa_konta(id),
-        status                      TEXT NOT NULL DEFAULT 'w_przygotowaniu'
-                                      CHECK (status IN (
-                                        'w_przygotowaniu','zlozony','do_uzupelnienia',
-                                        'umowa_wygenerowana','umowa_podpisana','przyjety','odrzucony'
-                                      )),
-        krs                         TEXT,
-        nip                         TEXT,
-        regon                       TEXT,
-        nazwa                       TEXT,
-        forma_prawna                TEXT NOT NULL DEFAULT 'PROSTA SPÓŁKA AKCYJNA',
-        kraj                        TEXT DEFAULT 'Polska',
-        kod_pocztowy                TEXT,
-        miejscowosc                 TEXT,
-        siedziba_miejscownik        TEXT,
-        ulica                       TEXT,
-        nr_domu                     TEXT,
-        nr_lokalu                   TEXT,
-        sad_rejestrowy              TEXT,
-        wydzial                     TEXT,
-        telefon                     TEXT,
-        email                       TEXT,
-        www                         TEXT,
-        organ_rodzaj                TEXT,
-        data_utworzenia_spolki      TEXT,
-        data_ostatniego_wpisu_krs   TEXT,
-        adres_edorecze              TEXT,
-        kapital_akcyjny_grosze      INTEGER,
-        data_zawarcia_umowy_spolki  TEXT,
-        -- Reprezentant, ktory bedzie podpisywal umowe w imieniu spolki -
-        -- mianownik (etap 2.3), te same klucze co psa_spolki.
-        reprezentant_imie_nazwisko           TEXT,
-        reprezentant_plec                    TEXT,
-        reprezentant_funkcja                 TEXT,
-        reprezentant_reprezentacja           TEXT,
-        reprezentant_rodzice                 TEXT,
-        reprezentant_dowod                   TEXT,
-        reprezentant_pesel                   TEXT,
-        reprezentant_adres                   TEXT,
-        reprezentant_biernik_recznie         TEXT,
-        reprezentant_funkcja_biernik_recznie TEXT,
-        reprezentant_rodzice_recznie         TEXT,
-        utworzono                   TEXT NOT NULL,
-        zaktualizowano              TEXT
-      );
-
-      CREATE INDEX IF NOT EXISTS psa_ix_wnioski_status
-        ON psa_wnioski (status);
-    `,
-  },
-  {
-    wersja: 25,
-    nazwa: 'etap 3D: psa_wnioski_akcjonariusze (dane do kartoteki + zgoda elektroniczna)',
-    sql: `
-      -- Proponowani akcjonariusze zbierani przez klienta w portalu - dane do
-      -- PRZYSZLEJ kartoteki wspolnej (psa_osoby), nie sama kartoteka: dopoki
-      -- kancelaria nie zweryfikuje wniosku (etap 3F), te wiersze NIE tworza
-      -- realnych psa_osoby (regula domenowa nr 10 - jeden inwestor wpisany
-      -- raz - wpis nieprzejrzanych danych zaśmiecałby wspólną kartotekę
-      -- wykorzystywaną przez WSZYSTKIE spolki kancelarii).
-      -- Pola lustrza podzbior psa_osoby (bez AML/beneficjenta/PEP - to
-      -- warstwa etapu 3.1, nie czesc wniosku klienta).
-      CREATE TABLE IF NOT EXISTS psa_wnioski_akcjonariusze (
-        id                INTEGER PRIMARY KEY AUTOINCREMENT,
-        wniosek_id        INTEGER NOT NULL REFERENCES psa_wnioski(id),
-        kolejnosc         INTEGER NOT NULL DEFAULT 0,
-        typ               TEXT NOT NULL DEFAULT 'fizyczna' CHECK (typ IN ('fizyczna','prawna')),
-        nazwisko          TEXT,
-        imie              TEXT,
-        nazwa             TEXT,
-        pesel             TEXT,
-        data_urodzenia    TEXT,
-        plec              TEXT,
-        nip               TEXT,
-        regon             TEXT,
-        numer_w_rejestrze TEXT,
-        nazwa_rejestru    TEXT,
-        kod_pocztowy      TEXT,
-        miejscowosc       TEXT,
-        ulica             TEXT,
-        nr_domu           TEXT,
-        nr_lokalu         TEXT,
-        adres_doreczen    TEXT,
-        adres_edoreczen   TEXT,
-        email             TEXT,
-        telefon           TEXT,
-        -- Swiadoma zgoda na komunikacje elektroniczna (opis promptu, etap 3
-        -- "zakres danych"): adres do doreczen elektronicznych trafia do
-        -- rejestru WYLACZNIE za zgoda akcjonariusza.
-        zgoda_email       INTEGER NOT NULL DEFAULT 0 CHECK (zgoda_email IN (0,1)),
-        utworzono         TEXT NOT NULL,
-        zaktualizowano    TEXT
-      );
-
-      CREATE INDEX IF NOT EXISTS psa_ix_wnioski_akcjonariusze_wniosek
-        ON psa_wnioski_akcjonariusze (wniosek_id, kolejnosc);
-    `,
-  },
-  {
-    wersja: 26,
-    nazwa: 'etap 3E: projekt umowy o prowadzenie rejestru i odeslanie podpisanej kopii',
-    sql: `
-      -- Projekt umowy generowany AUTOMATYCZNIE przy zlozeniu wniosku (wzor 01,
-      -- server/logika/wzory-dysk.js + kontekst-pisma.js: umowaOProwadzenieRejestru
-      -- - dziala bez zmian na wierszu psa_wnioski, bo kolumny lustrza psa_spolki).
-      -- Wzor psa_spolki.umowa_zalacznik_* (migracja 18) - te same trzy kolumny,
-      -- inna nazwa (umowa_podpisana_*, nie umowa_zalacznik_*), bo to podpisana
-      -- kopia PROJEKTU wygenerowanego tutaj, nie skan zewnetrznego dokumentu.
-      ALTER TABLE psa_wnioski ADD COLUMN umowa_projekt_sciezka TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN umowa_projekt_wygenerowano TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_sciezka TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_nazwa_pliku TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_mime TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN umowa_podpisana_wgrano TEXT;
-    `,
-  },
-  {
-    wersja: 27,
-    nazwa: 'etap 3F: weryfikacja wniosku przez kancelarie - porownanie z KRS, akceptacja pozycja po pozycji',
-    sql: `
-      -- Slad obslugi wniosku (jak psa_zgloszenia.obsluzone_przez/kiedy) i
-      -- notatka kancelarii przy odeslaniu do uzupelnienia albo odrzuceniu.
-      -- spolka_id: wypelniane dopiero przy przyjeciu wniosku (POST .../przyjmij)
-      -- - dowiazuje wniosek do REALNEJ spolki zalozonej w kartotece, bez
-      -- ktorej dalszy krok (otwarcie rejestru z emisja zalozycielska) dzieje
-      -- sie w istniejacym kreatorze wewnetrznym (server/trasy/spolki.js).
-      ALTER TABLE psa_wnioski ADD COLUMN notatka_weryfikacji TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN spolka_id INTEGER REFERENCES psa_spolki(id);
-      ALTER TABLE psa_wnioski ADD COLUMN obsluzone_przez TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN obsluzone_kiedy TEXT;
-
-      -- "Akceptacja pozycja po pozycji" (opis etapu 3 promptu): kazda
-      -- proponowana pozycja akcjonariusza jest oddzielnie zaznaczana jako
-      -- zweryfikowana przez kancelarie, zanim POST .../przyjmij zamieni ja
-      -- w realny wpis w psa_osoby (albo dowiaze do JUZ istniejacego wpisu,
-      -- jesli kancelaria dopasowala pozycje do kogos z kartoteki - osoba_id).
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN zweryfikowano INTEGER NOT NULL DEFAULT 0 CHECK (zweryfikowano IN (0,1));
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN osoba_id INTEGER REFERENCES psa_osoby(id);
-    `,
-  },
-  {
-    wersja: 28,
-    nazwa: 'etap 3.1: modul AML konfigurowalny per spolka - skany dokumentow, wylaczony domyslnie',
-    sql: `
-      -- Przelacznik per spolka (domyslnie WYLACZONY - opis etapu 3.1 promptu:
-      -- "nie zbierac skanow dowodow jako domyslne zachowanie"). Status/data/
-      -- notatka AML na psa_osoby (migracja 1) i PEP/beneficjent (migracja
-      -- ok. sesji 8, blok C) istnieja juz i zostaja dostepne zawsze - to
-      -- "dane z dokumentu bez pliku", minimalny domyslny zakres. Ten
-      -- przelacznik odblokowuje wylacznie SKAN pliku (i w interfejsie -
-      -- oswiadczenie PEP/beneficjenta, ktore w praktyce towarzyszy pelnej
-      -- procedurze AML, nie samej ewidencji statusu).
-      ALTER TABLE psa_spolki ADD COLUMN stosuje_procedure_aml INTEGER NOT NULL DEFAULT 0 CHECK (stosuje_procedure_aml IN (0,1));
-
-      -- Skany sa przypisane DO OSOBY (kartoteka wspolna, regula domenowa
-      -- nr 10 - jeden inwestor, jeden komplet dokumentow), ale niosa
-      -- spolka_id: procedura AML jest wlaczana PER SPOLKA, wiec skan
-      -- zebrany w zwiazku z jedna spolka nie powinien pojawiac sie w
-      -- kontekscie innej bez swiadomej decyzji. Retencja (kolumna retencja_do)
-      -- jest polem RECZNYM - okres przechowywania danych KYC to decyzja
-      -- polityki AML kancelarii/notariusza, nie wartosc do zgadniecia w
-      -- kodzie (por. ogolna zasada nr 2 z promptu etapu 3).
-      CREATE TABLE IF NOT EXISTS psa_osoby_skany_aml (
-        id             INTEGER PRIMARY KEY AUTOINCREMENT,
-        osoba_id       INTEGER NOT NULL REFERENCES psa_osoby(id),
-        spolka_id      INTEGER NOT NULL REFERENCES psa_spolki(id),
-        typ_dokumentu  TEXT NOT NULL DEFAULT 'inny'
-                         CHECK (typ_dokumentu IN ('dowod_osobisty','paszport','inny')),
-        nazwa_pliku    TEXT NOT NULL,
-        sciezka        TEXT NOT NULL,
-        mime           TEXT,
-        rozmiar        INTEGER,
-        hash           TEXT,
-        retencja_do    TEXT,
-        wgral          TEXT NOT NULL,
-        utworzono      TEXT NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS psa_ix_aml_skany_osoba
-        ON psa_osoby_skany_aml (osoba_id);
-      CREATE INDEX IF NOT EXISTS psa_ix_aml_skany_spolka
-        ON psa_osoby_skany_aml (spolka_id);
-    `,
-  },
-  {
-    wersja: 29,
-    nazwa: 'zgloszenie wstepne: numer KRS spolki',
-    sql: `
-      -- Rejestr akcjonariuszy prowadzi sie dla spolki JUZ wpisanej do
-      -- rejestru przedsiebiorcow, wiec numer KRS jest naturalnym sitem na
-      -- zgloszenia przedwczesne. Kolumna zostaje NULLABLE: zgloszenia
-      -- przyjete przed ta zmiana numeru nie maja i nie da sie go dopisac
-      -- wstecz. Wymagalnosc egzekwuje trasa POST /api/psa/portal/zgloszenia
-      -- dla NOWYCH zgloszen - inaczej migracja nie przeszlaby na bazie
-      -- z historia.
-      ALTER TABLE psa_zgloszenia ADD COLUMN krs TEXT;
-    `,
-  },
-  {
-    wersja: 30,
-    nazwa: 'reprezentant spolki: adres e-mail',
-    sql: `
-      -- Adres poczty elektronicznej osoby, ktora podpisuje umowe w imieniu
-      -- spolki. Odrebny od 'email' spolki: korespondencja w sprawie zawarcia
-      -- umowy i podpisu idzie do KONKRETNEJ osoby, nie na skrzynke ogolna.
-      ALTER TABLE psa_spolki  ADD COLUMN reprezentant_email TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_email TEXT;
-    `,
-  },
-  {
-    wersja: 31,
-    nazwa: 'dane akcjonariusza wg art. 300(33) § 1 pkt 2-4 KSH (brak PESEL, adres rejestrowy, zgoda e-mail, wspolwlasnosc)',
-    sql: `
-      -- Art. 300(33) § 1 KSH wymaga w rejestrze:
-      --   pkt 2  - nazwisko i imie, PESEL ALBO date urodzenia, a dla podmiotu
-      --            niebedacego osoba fizyczna firme (nazwe) oraz numer
-      --            w rejestrze i nazwe tego rejestru,
-      --   pkt 3  - adres zamieszkania ALBO siedziby, ALBO inny adres do
-      --            doreczen, ALBO adres do doreczen elektronicznych,
-      --   pkt 4  - adres poczty elektronicznej, JEZELI akcjonariusz wyrazil
-      --            zgode na komunikacje elektroniczna,
-      --   pkt 5  - przy wspolwlasnosci akcji: dane pozostalych wspolwlascicieli,
-      --            rodzaj wspolwlasnosci, a przy ulamkowej wielkosc udzialu.
-      --
-      -- Trzy rzeczy, ktore ten zestaw kolumn prostuje wobec stanu sprzed:
-      --
-      -- 1. PESEL nie jest obowiazkowy. Cudzoziemiec go nie ma - ustawa
-      --    dopuszcza wtedy date urodzenia. „bez_pesel” to JAWNA deklaracja,
-      --    a nie wnioskowanie z pustego pola: puste pole rownie dobrze
-      --    znaczy "jeszcze nie wpisano".
-      -- 2. Adres w rejestrze to JEDEN z czterech, wskazany swiadomie -
-      --    „rodzaj_adresu_rejestrowego” mowi, ktory z wypelnionych adresow
-      --    jest tym z ustawy.
-      -- 3. Zgoda na komunikacje elektroniczna dotyczy adresu E-MAIL, nie
-      --    adresu do e-Doreczen (te dwie rzeczy byly wczesniej pomylone).
-      --    Zgode sklada SAM akcjonariusz - zarzad nie moze jej zlozyc za
-      --    niego - stad trzy stany zamiast checkboxa: spolka moze ja we
-      --    wniosku ZADEKLAROWAC, ale do rejestru adres wchodzi dopiero po
-      --    otrzymaniu podpisanego oswiadczenia.
-      --
-      -- Kolumna „zgoda_email” (0/1) ZOSTAJE - czytaja ja wzory pism
-      -- i maskowanie. Serwer ustawia ja razem ze statusem: 1 wylacznie dla
-      -- 'potwierdzona'. Status jest zrodlem prawdy, „zgoda_email” skrotem.
-      ALTER TABLE psa_osoby ADD COLUMN bez_pesel INTEGER NOT NULL DEFAULT 0
-        CHECK (bez_pesel IN (0,1));
-      ALTER TABLE psa_osoby ADD COLUMN rodzaj_adresu_rejestrowego TEXT
-        CHECK (rodzaj_adresu_rejestrowego IS NULL OR rodzaj_adresu_rejestrowego IN
-               ('zamieszkania','doreczen','edoreczen'));
-      ALTER TABLE psa_osoby ADD COLUMN zgoda_email_status TEXT NOT NULL DEFAULT 'brak'
-        CHECK (zgoda_email_status IN ('brak','zadeklarowana','potwierdzona'));
-      ALTER TABLE psa_osoby ADD COLUMN wspolwlasnosc TEXT NOT NULL DEFAULT 'brak'
-        CHECK (wspolwlasnosc IN ('brak','laczna','ulamkowa'));
-      ALTER TABLE psa_osoby ADD COLUMN wspolwlasciciele TEXT;
-      ALTER TABLE psa_osoby ADD COLUMN udzial_licznik INTEGER;
-      ALTER TABLE psa_osoby ADD COLUMN udzial_mianownik INTEGER;
-
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN bez_pesel INTEGER NOT NULL DEFAULT 0
-        CHECK (bez_pesel IN (0,1));
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN rodzaj_adresu_rejestrowego TEXT
-        CHECK (rodzaj_adresu_rejestrowego IS NULL OR rodzaj_adresu_rejestrowego IN
-               ('zamieszkania','doreczen','edoreczen'));
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN zgoda_email_status TEXT NOT NULL DEFAULT 'brak'
-        CHECK (zgoda_email_status IN ('brak','zadeklarowana','potwierdzona'));
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN wspolwlasnosc TEXT NOT NULL DEFAULT 'brak'
-        CHECK (wspolwlasnosc IN ('brak','laczna','ulamkowa'));
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN wspolwlasciciele TEXT;
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN udzial_licznik INTEGER;
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN udzial_mianownik INTEGER;
-
-      -- Dane zastane: kto mial zgode jako 0/1, ten ma ja potwierdzona.
-      UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona' WHERE zgoda_email = 1;
-      UPDATE psa_wnioski_akcjonariusze SET zgoda_email_status = 'potwierdzona' WHERE zgoda_email = 1;
-    `,
-  },
-  {
-    wersja: 32,
-    nazwa: 'komplet dokumentow do podpisu generowany przy zlozeniu wniosku',
-    sql: `
-      -- Przy zlozeniu wniosku powstaje nie jeden dokument, tylko KOMPLET:
-      -- umowa o prowadzenie rejestru (wzor 01, .docx - dokument negocjowany,
-      -- edytowalny) oraz oswiadczenia w PDF, po trzy na akcjonariusza plus
-      -- wspolne zadanie pierwszego wpisu.
-      --
-      -- Dlaczego osobna tabela, a nie kolejne kolumny w psa_wnioski: liczba
-      -- dokumentow zalezy od liczby akcjonariuszy, wiec nie da sie jej
-      -- zmiescic w stalym zestawie kolumn. Kolumna umowa_projekt_sciezka
-      -- ZOSTAJE - umowa ma wlasny cykl zycia (projekt -> podpisana kopia)
-      -- i wlasne trasy, a te wiersze sa tylko do pobrania i podpisania.
-      CREATE TABLE IF NOT EXISTS psa_wnioski_dokumenty (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        wniosek_id      INTEGER NOT NULL REFERENCES psa_wnioski(id),
-        -- NULL = dokument wspolny dla calego wniosku (zadanie wpisu).
-        akcjonariusz_id INTEGER REFERENCES psa_wnioski_akcjonariusze(id),
-        typ             TEXT NOT NULL,
-        nazwa           TEXT NOT NULL,
-        nazwa_pliku     TEXT NOT NULL,
-        sciezka         TEXT NOT NULL,
-        mime            TEXT NOT NULL DEFAULT 'application/pdf',
-        rozmiar         INTEGER,
-        utworzono       TEXT NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS psa_ix_wnioski_dokumenty_wniosek
-        ON psa_wnioski_dokumenty (wniosek_id, id);
-    `,
-  },
-  {
-    wersja: 33,
-    nazwa: 'umowa spolki jako rodzaj dokumentu bedacego podstawa wpisu',
-    sql: `
-      -- Akcje obejmowane przy zawiazaniu spolki powstaja z samej UMOWY SPOLKI
-      -- (art. 300(3) i art. 300(9) KSH), a nie z pozniejszej uchwaly o emisji.
-      -- Dotad katalog rodzajow dokumentu tej pozycji nie mial, wiec pierwsza
-      -- emisja musiala isc jako "uchwala" (nieprawda) albo "inny dokument"
-      -- (bez tresci) - a rodzaj trafia wprost na pismo do akcjonariusza
-      -- (art. 300(34) § 4 KSH), wiec falszywy opis podstawy nie jest drobiazgiem.
-      --
-      -- CHECK-a nie da sie w SQLite zmienic w miejscu. Przy psa_dokumenty
-      -- (tabela liscia - nic jej nie wskazuje) przebudowujemy tabele, jak
-      -- w migracjach 4, 7, 13, 14 i 22. Przy psa_sprawy, na ktora wskazuja
-      -- trzy inne tabele, podmieniamy SAMA KOLUMNE - przebudowa tabeli
-      -- zerwalaby te powiazania.
-
-      CREATE TABLE psa_dokumenty_v33 (
-        id             INTEGER PRIMARY KEY AUTOINCREMENT,
-        sprawa_id      INTEGER NOT NULL REFERENCES psa_sprawy(id),
-        nazwa_pliku    TEXT NOT NULL,
-        sciezka        TEXT NOT NULL,
-        mime           TEXT,
-        rozmiar        INTEGER,
-        typ_dokumentu  TEXT NOT NULL
-                         CHECK (typ_dokumentu IN
-                           ('umowa_spolki','umowa_zbycia','uchwala','zgoda',
-                            'postanowienie','pelnomocnictwo','inny')),
-        hash           TEXT,
-        wgral          TEXT NOT NULL,
-        utworzono      TEXT NOT NULL
-      );
-      INSERT INTO psa_dokumenty_v33
-        SELECT id, sprawa_id, nazwa_pliku, sciezka, mime, rozmiar, typ_dokumentu,
-               hash, wgral, utworzono
-          FROM psa_dokumenty;
-      DROP TABLE psa_dokumenty;
-      ALTER TABLE psa_dokumenty_v33 RENAME TO psa_dokumenty;
-
-      CREATE INDEX IF NOT EXISTS psa_ix_dokumenty_sprawa ON psa_dokumenty (sprawa_id);
-
-      ALTER TABLE psa_sprawy ADD COLUMN dokument_rodzaj_v33 TEXT
-        CHECK (dokument_rodzaj_v33 IS NULL OR dokument_rodzaj_v33 IN
-          ('umowa_spolki','umowa_zbycia','uchwala','zgoda',
-           'postanowienie','pelnomocnictwo','inny'));
-      UPDATE psa_sprawy SET dokument_rodzaj_v33 = dokument_rodzaj;
-      ALTER TABLE psa_sprawy DROP COLUMN dokument_rodzaj;
-      ALTER TABLE psa_sprawy RENAME COLUMN dokument_rodzaj_v33 TO dokument_rodzaj;
-    `,
-  },
-  {
-    wersja: 34,
-    nazwa: 'podpisane skany wracaja przez portal i wisza przy spolce',
-    sql: `
-      -- Kazdy WYGENEROWANY dokument dostaje miejsce na swoja podpisana,
-      -- zeskanowana wersje. Kolumny przy dokumencie, a nie osobna tabela:
-      -- do jednego wzoru wraca dokladnie jeden podpisany egzemplarz, wiec
-      -- para "wzor -> podpis" jest tu relacja jeden do jednego i nie ma
-      -- czego zliczac ani porzadkowac.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_sciezka TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_nazwa_pliku TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_mime TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_rozmiar INTEGER;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_wgrano TEXT;
-
-      -- Kolejnosc na liscie do podpisu przestaje zalezec od kolejnosci
-      -- wstawiania: umowa ma stac pierwsza takze wtedy, gdy komplet
-      -- powstal ponownie po odeslaniu wniosku do uzupelnienia.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN kolejnosc INTEGER NOT NULL DEFAULT 100;
-
-      -- Dokumenty zalozycielskie SPOLKI. Po przyjeciu wniosku komplet
-      -- przestaje byc zalacznikiem sprawy w toku i staje sie czescia akt
-      -- spolki: wzor i podpisany egzemplarz kazdego dokumentu, na stale.
-      -- Wniosek zostaje w kolumnie jako slad pochodzenia - po to, zeby
-      -- dalo sie odpowiedziec "skad to sie wzielo", gdy spolka ma juz
-      -- za soba kilka lat wpisow.
-      CREATE TABLE IF NOT EXISTS psa_spolki_dokumenty (
-        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        spolka_id    INTEGER NOT NULL REFERENCES psa_spolki(id),
-        wniosek_id   INTEGER REFERENCES psa_wnioski(id),
-        typ          TEXT NOT NULL,
-        nazwa        TEXT NOT NULL,
-        nazwa_pliku  TEXT NOT NULL,
-        sciezka      TEXT NOT NULL,
-        mime         TEXT NOT NULL DEFAULT 'application/pdf',
-        rozmiar      INTEGER,
-        -- 'wzor' - dokument wystawiony przez kancelarie,
-        -- 'podpisany' - egzemplarz odeslany przez klienta z podpisami.
-        rola         TEXT NOT NULL CHECK (rola IN ('wzor','podpisany')),
-        utworzono    TEXT NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS psa_ix_spolki_dokumenty_spolka
-        ON psa_spolki_dokumenty (spolka_id, id);
-    `,
-  },
-  {
-    wersja: 35,
-    nazwa: 'status PEP przy osobie, nie tylko na papierze',
-    sql: `
-      -- Eksponowane stanowisko polityczne (PEP) - art. 2 ust. 2 pkt 11 ustawy
-      -- z 1 marca 2018 r. o przeciwdzialaniu praniu pieniedzy oraz finansowaniu
-      -- terroryzmu. Notariusz prowadzacy rejestr akcjonariuszy jest instytucja
-      -- obowiazana (art. 2 ust. 1 pkt 12 tej ustawy) i stosuje wobec
-      -- akcjonariuszy srodki bezpieczenstwa finansowego; wobec PEP - wzmozone.
-      --
-      -- Dotad status PEP istnial WYLACZNIE jako pole do odhaczenia na
-      -- drukowanym oswiadczeniu AML. Papier wraca do akt i nikt go pozniej nie
-      -- przeglada, wiec kancelaria nie miala jak zobaczyc na ekranie, ktory
-      -- akcjonariusz wymaga wzmozonych srodkow. Teraz to dana, nie tylko tresc
-      -- dokumentu - i wchodzi wprost do oswiadczenia, zamiast czekac na
-      -- odhaczenie dlugopisem.
-      --
-      -- 'nie' / 'tak' / 'rodzina' / 'wspolpracownik' - ustawa traktuje te trzy
-      -- ostatnie tak samo co do obowiazkow, ale rozroznia je co do podstawy,
-      -- a kancelaria musi wiedziec, ktora zachodzi.
-      ALTER TABLE psa_osoby ADD COLUMN pep TEXT NOT NULL DEFAULT 'nie'
-        CHECK (pep IN ('nie','tak','rodzina','wspolpracownik'));
-      ALTER TABLE psa_osoby ADD COLUMN pep_opis TEXT;
-
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep TEXT NOT NULL DEFAULT 'nie'
-        CHECK (pep IN ('nie','tak','rodzina','wspolpracownik'));
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_opis TEXT;
-    `,
-  },
-  {
-    wersja: 36,
-    nazwa: 'tresc-dokumentow-wniosku-i-udostepnianie',
-    sql: `
-      -- Tresc dokumentu jako LISTA BLOKOW (logika/bloki-dokumentu.js), zapisana
-      -- obok gotowego pliku. Bez niej PDF byl jedynym sladem tresci, a PDF-a
-      -- nie da sie poprawic - notariusz nie mial jak zmienic ani jednego
-      -- zdania w dokumencie, ktory wystawia wlasnym nazwiskiem.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN tresc_bloki TEXT;
-
-      -- Slad po recznej poprawce tresci: kto i kiedy. Dokument wystawiony
-      -- automatycznie i dokument poprawiony przez notariusza to nie to samo,
-      -- a po miesiacach nikt tego z samego pliku nie odtworzy.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN zmodyfikowano TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN zmodyfikowal TEXT;
-
-      -- Klucze wzoru .docx, ktorych wniosek nie wypelnil (zostaly kreska).
-      -- Kancelaria widzi je przy dokumencie, zanim komplet pojdzie do klienta.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN brakujace TEXT;
-
-      -- Moment UDOSTEPNIENIA klientowi. Dotad komplet powstawal sam, w chwili
-      -- zlozenia wniosku - wiec bledne dane klienta dawaly bledna umowe, ktora
-      -- klient od razu dostawal do podpisu. Teraz dokumenty powstaja po
-      -- stronie kancelarii, ktora je sprawdza i dopiero potem udostepnia;
-      -- portal klienta pokazuje WYLACZNIE pozycje z wypelniona ta kolumna.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN udostepniono TEXT;
-
-      -- Komplet wystawiony przed ta zmiana byl juz u klienta - zostaje
-      -- udostepniony, zeby nikomu nie zniknal z portalu w trakcie sprawy.
-      UPDATE psa_wnioski_dokumenty SET udostepniono = utworzono WHERE udostepniono IS NULL;
-    `,
-  },
-  {
-    wersja: 37,
-    nazwa: 'uwagi-do-pozycji-akcjonariusza-i-potwierdzenie-podpisu',
-    sql: `
-      -- Uwaga kancelarii do KONKRETNEJ pozycji akcjonariusza. Dotad odeslanie
-      -- wniosku do uzupelnienia niosło jedna notatke na caly wniosek, wiec
-      -- przy pieciu akcjonariuszach klient dostawal zdanie "popraw PESEL"
-      -- i sam musial zgadywac, przy kim.
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN uwagi_kancelarii TEXT;
-
-      -- Potwierdzenie, ze odeslany skan jest kompletny i prawidlowo podpisany.
-      -- Sam fakt wgrania pliku tego nie przesadza - ktos musi na niego
-      -- spojrzec, a przyjecie wniosku ma tego wymagac.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_potwierdzono TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_potwierdzil TEXT;
-    `,
-  },
-  {
-    wersja: 38,
-    nazwa: 'sprawdzenie-dokumentu-przed-udostepnieniem',
-    sql: `
-      -- Slad, ze ktos PRZECZYTAL dokument, zanim poszedl do klienta. Rozni sie
-      -- od 'zmodyfikowano': dokument bez ani jednej poprawki tez bywa
-      -- sprawdzony, a wlasnie o to sprawdzenie chodzi przed udostepnieniem.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN sprawdzono TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN sprawdzil TEXT;
-    `,
-  },
-  {
-    wersja: 39,
-    nazwa: 'ustawienia kancelarii w bazie (metryka, stawki) zamiast wylacznie .env',
-    sql: `
-      -- ── Ustawienia edytowalne z aplikacji ───────────────────────────────
-      -- Dotad dane kancelarii (NIP, REGON, adres) siedzialy WYLACZNIE w .env,
-      -- wiec zmiana wymagala dostepu do serwera i restartu. W praktyce nikt
-      -- tego nie robil i kazda wystawiona umowa miala w tych miejscach kreski.
-      --
-      -- Tabela trzyma TYLKO to, co ktos swiadomie ustawil. Brak klucza nie
-      -- jest bledem: obowiazuje wtedy wartosc z .env. Dzieki temu nie ma
-      -- momentu "przenoszenia danych" ani ryzyka, ze kopia w bazie rozjedzie
-      -- sie z plikiem konfiguracyjnym.
-      --
-      -- Czego tu NIE MA i nie bedzie: sekretow. Klucze tpay, sekret sesji
-      -- i dane SMTP zostaja w .env, bo baza trafia do kopii zapasowych.
-      CREATE TABLE IF NOT EXISTS psa_ustawienia (
-        klucz           TEXT PRIMARY KEY,
-        wartosc         TEXT,
-        zaktualizowano  TEXT NOT NULL,
-        autor           TEXT NOT NULL
-      );
-    `,
-  },
-  {
-    wersja: 40,
-    nazwa: 'skan dokumentu tozsamosci reprezentanta przy wniosku',
-    sql: `
-      -- Wniosek sklada sie ZDALNIE, wiec notariusz moze nigdy nie zobaczyc
-      -- podpisujacego na oczy. Skan dokumentu nie jest dowodem tozsamosci
-      -- (obraz dokumentu mozna miec bez bycia jego wlascicielem), ale jest
-      -- sladem, na czym oparto identyfikacje, i podstawa przy stosowaniu
-      -- srodkow bezpieczenstwa finansowego wobec relacji nawiazywanej bez
-      -- fizycznej obecnosci.
-      --
-      -- Jeden plik na wniosek: dotyczy REPREZENTANTA, ktory podpisuje umowe,
-      -- nie akcjonariuszy (ci maja wlasne pola w kartotece, ze skanem tylko
-      -- przy wlaczonej procedurze AML dla spolki).
-      ALTER TABLE psa_wnioski ADD COLUMN dowod_sciezka TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN dowod_nazwa_pliku TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN dowod_mime TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN dowod_rozmiar INTEGER;
-      ALTER TABLE psa_wnioski ADD COLUMN dowod_wgrano TEXT;
-    `,
-  },
-  {
-    wersja: 41,
-    nazwa: 'jedno konto - wiele spolek: tabela powiazan i wniosek bez UNIQUE na koncie',
-    przebudowaTabeli: true,
-    sql: `
-      -- ── Konto klienta moze prowadzic WIECEJ NIZ JEDNA spolke ────────────
-      -- Dotad konto bylo przypiete do jednej spolki (kolumna spolka_id)
-      -- i do jednego wniosku (UNIQUE na konto_id). W praktyce jeden klient
-      -- pod jednym adresem e-mail ma kilka spolek — i dostawal komunikat,
-      -- ze zaproszenie jest zbedne, bo konto juz istnieje.
-      --
-      -- Zrodlem prawdy o powiazaniach jest odtad ta tabela. Kolumna
-      -- psa_konta.spolka_id zostaje jako „spolka domyslna" (pierwsza), zeby
-      -- nie przepisywac warunku CHECK przy roli, ale dostep sprawdza sie po
-      -- tabeli.
-      CREATE TABLE IF NOT EXISTS psa_konta_spolki (
-        konto_id   INTEGER NOT NULL REFERENCES psa_konta(id),
-        spolka_id  INTEGER NOT NULL REFERENCES psa_spolki(id),
-        utworzono  TEXT NOT NULL,
-        PRIMARY KEY (konto_id, spolka_id)
-      );
-
-      INSERT OR IGNORE INTO psa_konta_spolki (konto_id, spolka_id, utworzono)
-        SELECT id, spolka_id, utworzono FROM psa_konta WHERE spolka_id IS NOT NULL;
-
-      -- ── Wniosek: zdjecie UNIQUE z konto_id ──────────────────────────────
-      -- SQLite nie umie zdjac ograniczenia kolumnowego, wiec tabela idzie
-      -- przez przepisanie (ta sama droga, co przy psa_dokumenty_v33).
-      CREATE TABLE psa_wnioski_v41 (
-        id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-        konto_id                    INTEGER NOT NULL REFERENCES psa_konta(id),
-        status                      TEXT NOT NULL DEFAULT 'w_przygotowaniu'
-                                      CHECK (status IN (
-                                        'w_przygotowaniu','zlozony','do_uzupelnienia',
-                                        'umowa_wygenerowana','umowa_podpisana','przyjety','odrzucony'
-                                      )),
-        krs                         TEXT,
-        nip                         TEXT,
-        regon                       TEXT,
-        nazwa                       TEXT,
-        forma_prawna                TEXT NOT NULL DEFAULT 'PROSTA SPÓŁKA AKCYJNA',
-        kraj                        TEXT DEFAULT 'Polska',
-        kod_pocztowy                TEXT,
-        miejscowosc                 TEXT,
-        siedziba_miejscownik        TEXT,
-        ulica                       TEXT,
-        nr_domu                     TEXT,
-        nr_lokalu                   TEXT,
-        sad_rejestrowy              TEXT,
-        wydzial                     TEXT,
-        telefon                     TEXT,
-        email                       TEXT,
-        www                         TEXT,
-        organ_rodzaj                TEXT,
-        data_utworzenia_spolki      TEXT,
-        data_ostatniego_wpisu_krs   TEXT,
-        adres_edorecze              TEXT,
-        kapital_akcyjny_grosze      INTEGER,
-        data_zawarcia_umowy_spolki  TEXT,
-        reprezentant_imie_nazwisko           TEXT,
-        reprezentant_plec                    TEXT,
-        reprezentant_funkcja                 TEXT,
-        reprezentant_reprezentacja           TEXT,
-        reprezentant_rodzice                 TEXT,
-        reprezentant_dowod                   TEXT,
-        reprezentant_pesel                   TEXT,
-        reprezentant_adres                   TEXT,
-        reprezentant_biernik_recznie         TEXT,
-        reprezentant_funkcja_biernik_recznie TEXT,
-        reprezentant_rodzice_recznie         TEXT,
-        utworzono                   TEXT NOT NULL,
-        zaktualizowano              TEXT,
-        umowa_projekt_sciezka       TEXT,
-        umowa_projekt_wygenerowano  TEXT,
-        umowa_podpisana_sciezka     TEXT,
-        umowa_podpisana_nazwa_pliku TEXT,
-        umowa_podpisana_mime        TEXT,
-        umowa_podpisana_wgrano      TEXT,
-        notatka_weryfikacji         TEXT,
-        spolka_id                   INTEGER REFERENCES psa_spolki(id),
-        obsluzone_przez             TEXT,
-        obsluzone_kiedy             TEXT,
-        reprezentant_email          TEXT,
-        dowod_sciezka               TEXT,
-        dowod_nazwa_pliku           TEXT,
-        dowod_mime                  TEXT,
-        dowod_rozmiar               INTEGER,
-        dowod_wgrano                TEXT
-      );
-
-      INSERT INTO psa_wnioski_v41 SELECT
-        id, konto_id, status, krs, nip, regon, nazwa, forma_prawna, kraj, kod_pocztowy,
-        miejscowosc, siedziba_miejscownik, ulica, nr_domu, nr_lokalu, sad_rejestrowy,
-        wydzial, telefon, email, www, organ_rodzaj, data_utworzenia_spolki,
-        data_ostatniego_wpisu_krs, adres_edorecze, kapital_akcyjny_grosze,
-        data_zawarcia_umowy_spolki, reprezentant_imie_nazwisko, reprezentant_plec,
-        reprezentant_funkcja, reprezentant_reprezentacja, reprezentant_rodzice,
-        reprezentant_dowod, reprezentant_pesel, reprezentant_adres,
-        reprezentant_biernik_recznie, reprezentant_funkcja_biernik_recznie,
-        reprezentant_rodzice_recznie, utworzono, zaktualizowano,
-        umowa_projekt_sciezka, umowa_projekt_wygenerowano, umowa_podpisana_sciezka,
-        umowa_podpisana_nazwa_pliku, umowa_podpisana_mime, umowa_podpisana_wgrano,
-        notatka_weryfikacji, spolka_id, obsluzone_przez, obsluzone_kiedy,
-        reprezentant_email, dowod_sciezka, dowod_nazwa_pliku, dowod_mime,
-        dowod_rozmiar, dowod_wgrano
-      FROM psa_wnioski;
-
-      DROP TABLE psa_wnioski;
-      ALTER TABLE psa_wnioski_v41 RENAME TO psa_wnioski;
-
-      CREATE INDEX IF NOT EXISTS psa_ix_wnioski_konto ON psa_wnioski (konto_id, status);
-    `,
-  },
-  {
-    wersja: 42,
-    nazwa: 'platnosci online (tpay), faktury i zadania wpisu oczekujace na oplate',
-    sql: `
-      -- ── Platnosci online ────────────────────────────────────────────────
-      -- Jedna OPLATA moze miec WIELE prob zaplaty: zmiana kwoty uniewaznia
-      -- poprzednia transakcje, a historia prob zostaje (do reklamacji).
-      -- \`kwota_grosze\` jest zapisana OSOBNO od kwoty oplaty — to jedyny
-      -- sposob, zeby wykryc, ze oplata zmienila sie po wygenerowaniu linku.
-      CREATE TABLE IF NOT EXISTS psa_platnosci (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        oplata_id       INTEGER NOT NULL REFERENCES psa_oplaty(id),
-        dostawca        TEXT NOT NULL DEFAULT 'tpay',
-        -- transactionId nadany przez tpay; pusty, dopoki transakcja nie powstala
-        tpay_id         TEXT,
-        -- NASZ identyfikator, wraca w powiadomieniu jako tr_crc. Po nim,
-        -- a nie po kwocie, laczymy powiadomienie z oplata.
-        crc             TEXT NOT NULL UNIQUE,
-        kwota_grosze    INTEGER NOT NULL,
-        link            TEXT,
-        status          TEXT NOT NULL DEFAULT 'oczekuje'
-                          CHECK (status IN ('oczekuje','oplacona','nieudana','anulowana','wygasla')),
-        -- Powiadomienie z piaskownicy NIGDY nie ksieguje platnosci produkcyjnej.
-        tryb_testowy    INTEGER NOT NULL DEFAULT 0,
-        utworzono       TEXT NOT NULL,
-        zakonczono      TEXT,
-        -- Surowa tresc powiadomienia — dowod w reklamacji u operatora.
-        odpowiedz_json  TEXT
-      );
-      CREATE INDEX IF NOT EXISTS idx_platnosci_oplata ON psa_platnosci(oplata_id);
-      CREATE INDEX IF NOT EXISTS idx_platnosci_tpay ON psa_platnosci(tpay_id);
-
-      -- ── Faktury: slad, nie ksiegowosc ───────────────────────────────────
-      -- Aplikacja NIE wystawia faktur — robi to program ksiegowy kancelarii.
-      -- Tu zostaje odhaczenie "wystawiono" z numerem, zeby pracownik widzial
-      -- w jednym miejscu, co jeszcze nie poszlo do ksiegowosci.
-      ALTER TABLE psa_oplaty ADD COLUMN faktura_numer TEXT;
-      ALTER TABLE psa_oplaty ADD COLUMN faktura_wystawiono TEXT;
-      ALTER TABLE psa_oplaty ADD COLUMN faktura_autor TEXT;
-      ALTER TABLE psa_oplaty ADD COLUMN oplacona_kiedy TEXT;
-
-      -- Rok prowadzenia rejestru biegnie OD OTWARCIA REJESTRU tej spolki
-      -- (\`psa_spolki.data_otwarcia_rejestru\`, kolumna z migracji 1),
-      -- nie od 1 stycznia: "za kazdy rozpoczety rok" liczymy od dnia, w
-      -- ktorym rejestr faktycznie ruszyl. Kolumna \`okres\` zostaje jako
-      -- etykieta ("2026/2027"), a te dwie niosa daty do porownan i przypomnien.
-      ALTER TABLE psa_oplaty ADD COLUMN okres_od TEXT;
-      ALTER TABLE psa_oplaty ADD COLUMN okres_do TEXT;
-
-      -- ── Zadanie wpisu zgloszone przez portal czeka na oplate ────────────
-      -- Art. 300(34) § 1 KSH liczy tydzien OD OTRZYMANIA ZADANIA. Zadanie
-      -- zlozone przez portal jest — zgodnie z umowa o prowadzenie rejestru —
-      -- skuteczne z chwila oplacenia; do tego czasu sprawa nie jest widoczna
-      -- w kolejce kancelarii i ZADEN termin ustawowy nie biegnie. Z chwila
-      -- zaplaty \`data_wplywu\` ustawia sie na dzien zaplaty i termin rusza.
-      --
-      -- Zadanie zlozone POZA portalem (papierowo, e-mailem) jest skuteczne
-      -- od razu — wtedy ta kolumna zostaje 0, a oplata idzie faktura.
-      ALTER TABLE psa_sprawy ADD COLUMN oczekuje_na_oplate INTEGER NOT NULL DEFAULT 0;
-    `,
-  },
-
-  {
-    wersja: 43,
-    nazwa: 'oplacona informacja z rejestru wydaje sie raz',
-    sql: `
-      -- Informacja z rejestru jest ODPLATNA i pobiera sie ja PO zaplacie.
-      -- Ta kolumna wiaze oplate z wydanym dokumentem: dopoki jest pusta,
-      -- oplacona informacja czeka na pobranie; gdy wskazuje dokument,
-      -- informacja zostala juz wydana i drugi raz z tej samej oplaty nie
-      -- wyjdzie. Bez tego jedna oplata dawalaby nieskonczenie wiele
-      -- informacji, kazda na inny dzien.
-      ALTER TABLE psa_oplaty ADD COLUMN wydany_dokument_id INTEGER REFERENCES psa_wydane_dokumenty(id);
-    `,
-  },
-
-  {
-    wersja: 44,
-    nazwa: 'kto zamowil oplate — akcjonariusz nie widzi rozliczen spolki',
-    sql: `
-      -- Rejestr jest jawny dla spolki I DLA KAZDEGO AKCJONARIUSZA (art.
-      -- 300(35) § 1 KSH), wiec akcjonariusz tez moze zamowic informacje
-      -- z rejestru — i sam za nia placi. Bez tej kolumny obie naleznosci
-      -- lezalyby w jednym worku "oplaty tej spolki", a zakladka Platnosci
-      -- pokazalaby akcjonariuszowi cala historie rozliczen spolki
-      -- z kancelaria: ile placi za prowadzenie, ile wpisow zrobila.
-      --
-      -- NULL = naleznosc SPOLKI (prowadzenie rejestru, wpisy, informacje
-      -- zamawiane przez reprezentanta). Wypelnione = prywatna naleznosc
-      -- tego akcjonariusza.
-      ALTER TABLE psa_oplaty ADD COLUMN zamawiajacy_osoba_id INTEGER REFERENCES psa_osoby(id);
-    `,
-  },
-
-  {
-    wersja: 45,
-    nazwa: 'uniewaznianie sesji — wylogowanie i zmiana hasla (naprawa Z-250/Z-251)',
-    sql: `
-      -- Token sesji jest bezstanowy (HMAC, brak listy sesji po stronie
-      -- serwera) — audyt (Z-250, Z-251) pokazal, ze to oznaczalo: wylogowanie
-      -- kasowalo wylacznie ciasteczko w przegladarce, a token pozostawal
-      -- kryptograficznie wazny do konca TTL (do 12h); zmiana hasla nie
-      -- uniewazniala zadnego juz wydanego tokenu.
-      --
-      -- Dwa niezalezne mechanizmy, bo maja rozny zasieg:
-      --  1) tokeny_wersja — licznik przy koncie. Token niesie wersje z
-      --     chwili wystawienia; przy KAZDYM zadaniu porownujemy z biezaca
-      --     wartoscia w bazie. Zmiana hasla podbija licznik -> WSZYSTKIE
-      --     dotychczasowe tokeny tego konta (na kazdym urzadzeniu) przestaja
-      --     byc wazne natychmiast.
-      --  2) psa_sesje_uniewaznione — czarna lista pojedynczych tokenow
-      --     (identyfikator jti, losowy przy kazdym wystawieniu). Wylogowanie
-      --     wpisuje TYLKO token z biezacego ciastka -> inne, rownolegle
-      --     zalogowane urzadzenia zostaja zalogowane, zgodnie z oczekiwanym
-      --     zakresem operacji "wyloguj sie tutaj".
-      -- Wpis na liscie ma wlasna date wygasniecia (= exp tokenu) — po niej
-      -- token i tak przestalby byc wazny z powodu TTL, wiec wpis staje sie
-      -- nieszkodliwym balastem; sprzatanie przy starcie serwera usuwa
-      -- przeterminowane wpisy, zeby tabela nie rosla bez konca.
-      ALTER TABLE psa_uzytkownicy ADD COLUMN tokeny_wersja INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE psa_konta ADD COLUMN tokeny_wersja INTEGER NOT NULL DEFAULT 0;
-
-      CREATE TABLE IF NOT EXISTS psa_sesje_uniewaznione (
-        jti     TEXT PRIMARY KEY,
-        wygasa  TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS psa_ix_sesje_uniewaznione_wygasa
-        ON psa_sesje_uniewaznione (wygasa);
-    `,
-  },
-
-  {
-    wersja: 46,
-    nazwa: 'skrot tresci podpisanego skanu (naprawa Z-205)',
-    sql: `
-      -- Audyt (Z-205) pokazal, ze klient mogl wgrac skan pod dokumentem, ktory
-      -- kancelaria juz potwierdzila jako odebrany i prawidlowy (podpis_potwierdzono
-      -- wypelnione) — trasa portalu przyjmowala kolejny plik bez zadnego sprawdzenia
-      -- stanu potwierdzenia i po cichu podmieniala tresc na dysku, zostawiajac stara
-      -- date potwierdzenia przy nowej, nigdy nie widzianej przez kancelarie tresci.
-      --
-      -- Skrot SHA-256 liczony w chwili potwierdzenia dokumentuje, jaka DOKLADNIE
-      -- tresc kancelaria zaakceptowala — niezalezne od blokady po stronie trasy,
-      -- ktora od teraz odrzuca kazda probe podmiany po potwierdzeniu.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN podpis_hash TEXT;
-    `,
-  },
-
-  {
-    wersja: 47,
-    nazwa: 'VAT na oplatach — kolumna stawki, kwoty zostaja netto (naprawa sekcji 2.1)',
-    sql: `
-      -- Kwoty z rozporzadzenia sa NETTO; do kazdej dolicza sie VAT. Stawka na
-      -- POZYCJI, nie globalnie w kodzie - pozycja historyczna zachowuje swoja
-      -- stawke, gdy przepis kiedys sie zmieni (przyszla zmiana ustawi inna
-      -- wartosc TYLKO w nowych naliczeniach, w server/oplaty.js).
-      --
-      -- Zalozenie startowe: 23%, tak dla nowych pozycji jak i dla historii -
-      -- kwoty netto istniejacych pozycji sa poprawne i zostaja bez zmian,
-      -- DEFAULT wypelnia kolumne u wszystkich naraz. Brutto NIGDY nie jest
-      -- przechowywane, wylacznie wyliczane (logika/przepisy.js: obliczBrutto).
-      ALTER TABLE psa_oplaty ADD COLUMN stawka_vat_procent INTEGER NOT NULL DEFAULT 23;
-    `,
-  },
-
-  {
-    wersja: 48,
-    nazwa: 'unikalnosc KRS w zgloszeniach na poziomie bazy (naprawa Z-004)',
-    sql: `
-      -- Trasa sprawdzala duplikat KRS zapytaniem SELECT przed INSERT -
-      -- dwa rownoczesne zgloszenia dla tego samego KRS (podwojne klikniecie,
-      -- dwie karty przegladarki) mogly obie przejsc przez SELECT, zanim
-      -- ktorykolwiek INSERT zdazyl sie wykonac (TOCTOU). Indeks unikalny
-      -- czyni to niemozliwym na poziomie bazy, niezaleznie od wyscigu w kodzie.
-      --
-      -- Warunek WHERE pomija status 'odrzucone' - po odrzuceniu spolka moze
-      -- zglosic sie ponownie (zgloszenia.js dopuszcza to juz w SELECT-cie).
-      CREATE UNIQUE INDEX IF NOT EXISTS psa_ix_zgloszenia_krs_aktywne
-        ON psa_zgloszenia (krs) WHERE status <> 'odrzucone';
-    `,
-  },
-
-  {
-    wersja: 49,
-    nazwa: 'PEP: status "nieustalono", pep_oswiadczenie na wniosku (naprawa Z-151/P-010)',
-    sql: `
-      -- Domyslna wartosc 'pep' byla 'nie' - osoba, ktorej NIKT nigdy nie ocenil,
-      -- wygladala identycznie jak osoba SWIADOMIE ocenionia jako nie-PEP. To
-      -- falszywy zapis (twierdzenie bez podstawy), nie brak danych. 'nieustalono'
-      -- staje sie nowa wartoscia domyslna - CHECK trzeba poszerzyc, a SQLite nie
-      -- pozwala zmienic CHECK/DEFAULT istniejacej kolumny in place, stad
-      -- dodaj-skopiuj-usun-zmien-nazwe zamiast pelnej przebudowy tabeli.
-      --
-      -- Backfill: rekordy juz na 'tak'/'rodzina'/'wspolpracownik' to jednoznacznie
-      -- SWIADOME ustalenie (default nigdy nie mogl wygenerowac tych wartosci) -
-      -- zostaja nietkniete. Rekordy na 'nie' NIE DA SIE odroznic „ustalono: nie"
-      -- od „nikt nie ustalil" - zgodnie z decyzja sesji wszystkie takie rekordy
-      -- przechodza na 'nieustalono' (odnotowane w DECYZJE.md).
-      ALTER TABLE psa_osoby ADD COLUMN pep_v2 TEXT NOT NULL DEFAULT 'nieustalono'
-        CHECK (pep_v2 IN ('nieustalono','nie','tak','rodzina','wspolpracownik'));
-      UPDATE psa_osoby SET pep_v2 = CASE WHEN pep = 'nie' THEN 'nieustalono' ELSE pep END;
-      ALTER TABLE psa_osoby DROP COLUMN pep;
-      ALTER TABLE psa_osoby RENAME COLUMN pep_v2 TO pep;
-
-      -- Ten sam katalog na psa_wnioski_akcjonariusze - znormalizuj()
-      -- w logika/akcjonariusz.js jest WSPOLNA dla obu tabel, wiec musza miec
-      -- identyczny zestaw dopuszczalnych wartosci.
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_v2 TEXT NOT NULL DEFAULT 'nieustalono'
-        CHECK (pep_v2 IN ('nieustalono','nie','tak','rodzina','wspolpracownik'));
-      UPDATE psa_wnioski_akcjonariusze SET pep_v2 = CASE WHEN pep = 'nie' THEN 'nieustalono' ELSE pep END;
-      ALTER TABLE psa_wnioski_akcjonariusze DROP COLUMN pep;
-      ALTER TABLE psa_wnioski_akcjonariusze RENAME COLUMN pep_v2 TO pep;
-
-      -- Naprawa Z-151: 'pep_oswiadczenie'/'pep_oswiadczenie_data' (OSWIADCZENIE
-      -- OSOBY, art. 46 ustawy AML) istnialy dotad WYLACZNIE na psa_osoby -
-      -- wniosek portalowy (glowny kanal onboardingu) nie mial gdzie zapisac
-      -- oswiadczenia klienta osobno od 'pep'/'pep_opis' (USTALENIE KANCELARII),
-      -- wiec przejecie wniosku mieszalo oba pojecia w jedno pole.
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_oswiadczenie TEXT
-        CHECK (pep_oswiadczenie IS NULL OR pep_oswiadczenie IN ('tak', 'nie'));
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN pep_oswiadczenie_data TEXT;
-    `,
-  },
-
-  {
-    wersja: 50,
-    nazwa: 'dziennik dostepu: wyzwalacz append-only (naprawa Z-152/P-009)',
-    sql: `
-      -- Dziennik, ktory da sie edytowac, nie jest dowodem - ten sam
-      -- argument i ten sam wzorzec co przy psa_zdarzenia (migracja 1).
-      CREATE TRIGGER IF NOT EXISTS psa_dziennik_dostepu_bez_update
-      BEFORE UPDATE ON psa_dziennik_dostepu
-      BEGIN
-        SELECT RAISE(ABORT,
-          'psa_dziennik_dostepu jest append-only — wpisow dziennika nie edytuje sie.');
-      END;
-
-      CREATE TRIGGER IF NOT EXISTS psa_dziennik_dostepu_bez_delete
-      BEFORE DELETE ON psa_dziennik_dostepu
-      BEGIN
-        SELECT RAISE(ABORT,
-          'psa_dziennik_dostepu jest append-only — wpisow dziennika nie usuwa sie.');
-      END;
-    `,
-  },
-
-  {
-    wersja: 51,
-    nazwa: 'klucz idempotencyjny przy zakladaniu sprawy (naprawa Z-351/Z-353)',
-    sql: `
-      -- Podwojne zadanie POST (dwa kliknieca, dwie karty, ponowienie po
-      -- zerwanym polaczeniu - klient nie wie, czy pierwsze dotarlo) zakladalo
-      -- dotad DWIE niezalezne sprawy dla tego samego zdarzenia, kazda z
-      -- WLASNYM biegnacym terminem ustawowym 7 dni (art. 300(34) § 1 KSH).
-      --
-      -- Klucz generuje KLIENT raz, na poczatku proby zalozenia sprawy, i
-      -- wysyla ten sam klucz przy kazdym ponowieniu tej samej proby - trasa
-      -- (server/trasy/sprawy.js, server/trasy/portal.js) sprawdza go PRZED
-      -- insertem i przy trafieniu oddaje JUZ istniejaca sprawe zamiast
-      -- zakladac druga. Indeks czesciowy: stare sprawy i klienci, ktorzy nie
-      -- wysylaja klucza, maja NULL - wiele NULL-i nie koliduje ze soba.
-      ALTER TABLE psa_sprawy ADD COLUMN klucz_idempotencji TEXT;
-      CREATE UNIQUE INDEX IF NOT EXISTS psa_ix_sprawy_klucz_idempotencji
-        ON psa_sprawy (klucz_idempotencji) WHERE klucz_idempotencji IS NOT NULL;
-    `,
-  },
-
-  {
-    wersja: 52,
-    nazwa: 'kraj w adresie akcjonariusza z wniosku (FAZA 1 sesji frontendowej, B11, D-055)',
-    sql: `
-      -- Kartoteka (psa_osoby) ma kraj od poczatku, wniosek klienta go nie mial:
-      -- akcjonariusz z zagranicznym adresem trafial do kartoteki jako
-      -- mieszkajacy w Polsce. Wspolny formularz osoby (publiczne/js/
-      -- formularz-osoby.js) zbiera kraj w obu miejscach; przyjecie wniosku
-      -- przepisuje go do kartoteki razem z reszta POLA_OSOBY. Istniejace
-      -- wiersze dostaja 'Polska' - tak jak dotad byly traktowane.
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN kraj TEXT NOT NULL DEFAULT 'Polska';
-    `,
-  },
-
-  {
-    wersja: 53,
-    nazwa: 'reprezentant: dowod (rodzaj+numer) i adres ustrukturyzowany (FAZA 2 sesji frontendowej, B2/B3)',
-    sql: `
-      -- Reprezentant mial dotad dwa pola tekstowe bez struktury:
-      -- reprezentant_dowod ("DGK 138559", bez rozroznienia dowod/paszport) i
-      -- reprezentant_adres ("76-015 Manowo, ulica Kasztanowa nr 17 m. 1",
-      -- jeden ciag znakow) - w odroznieniu od akcjonariusza i psa_osoby,
-      -- gdzie te same dane sa rozbite na kolumny. Nowe kolumny obok starych;
-      -- stare NIE sa usuwane ani migrowane automatycznie do struktury (adresu
-      -- tekstowego nie da sie bezpiecznie sparsowac na ulica/nr/kod) -
-      -- server/logika/kontekst-pisma.js woli nowe, ustrukturyzowane pola,
-      -- gdy sa wypelnione, w przeciwnym razie czyta stary tekst (kontrakt:
-      -- stare pole zostaje TYLKO DO ODCZYTU, dopoki ktos nie przepisze go
-      -- przez nowy formularz PoleAdres/PoleDowod).
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_dowod_rodzaj TEXT
-        CHECK (reprezentant_dowod_rodzaj IS NULL OR reprezentant_dowod_rodzaj IN ('dowod_osobisty','paszport'));
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_dowod_numer TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_kraj TEXT NOT NULL DEFAULT 'Polska';
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_kod_pocztowy TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_miejscowosc TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_ulica TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_nr_domu TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_nr_lokalu TEXT;
-
-      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_dowod_rodzaj TEXT
-        CHECK (reprezentant_dowod_rodzaj IS NULL OR reprezentant_dowod_rodzaj IN ('dowod_osobisty','paszport'));
-      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_dowod_numer TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_kraj TEXT NOT NULL DEFAULT 'Polska';
-      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_kod_pocztowy TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_miejscowosc TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_ulica TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_nr_domu TEXT;
-      ALTER TABLE psa_wnioski ADD COLUMN reprezentant_nr_lokalu TEXT;
-
-      -- Dotychczasowy tekst dowodu przenosi sie do _numer - rodzaj zostaje
-      -- pusty i oznaczony w UI "do uzupelnienia" (brak wiarygodnego sposobu
-      -- odgadniecia dowod/paszport z samego numeru).
-      UPDATE psa_spolki SET reprezentant_dowod_numer = reprezentant_dowod
-        WHERE reprezentant_dowod IS NOT NULL AND TRIM(reprezentant_dowod) != '';
-      UPDATE psa_wnioski SET reprezentant_dowod_numer = reprezentant_dowod
-        WHERE reprezentant_dowod IS NOT NULL AND TRIM(reprezentant_dowod) != '';
-    `,
-  },
-
-  {
-    wersja: 54,
-    nazwa: 'slad pierwszego otwarcia dokumentu w portalu (B6, FAZA 2 sesji frontendowej)',
-    sql: `
-      -- Portal nie mial dotad zadnego sposobu odroznienia dokumentu, ktorego
-      -- klient jeszcze nie widzial, od tego, ktory juz otworzyl - stad brak
-      -- licznika "coś nowego czeka" (FRONTEND-INWENTARZ.md B6). Kolumna
-      -- ustawia sie RAZ, przy pierwszym pobraniu pliku przez klienta
-      -- (server/logika/pakiet-wniosku.js: oznaczOtwarte) - jednoczesnie
-      -- slad doreczenia (WDROZENIE-PSA.md § 1): moment, w ktorym dokument
-      -- na pewno dotarl do adresata, a nie tylko zostal wystawiony.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN otwarto_w_portalu TEXT;
-      ALTER TABLE psa_wydane_dokumenty ADD COLUMN otwarto_w_portalu TEXT;
-    `,
-  },
-
-  {
-    wersja: 55,
-    nazwa: 'zgloszenia nieprawidlowosci we wpisie (B9, FAZA 2 sesji frontendowej)',
-    sql: `
-      -- Odrebne od psa_sprawy: to NIE jest zadanie wpisu (art. 300(34) § 1
-      -- KSH) - klient zglasza, ze WCZESNIEJSZY wpis jest bledny albo
-      -- niezgodny z dokumentem, nie ze cos sie zdarzylo i trzeba to wpisac.
-      -- Bez wlasnego "stanu" wpisu i terminu ustawowego 7 dni (te pojecia
-      -- nie maja tu zastosowania) - pracownik wylacznie KWALIFIKUJE
-      -- zgloszenie: jako sprostowanie (dokonuje go przez zwykly kreator
-      -- zdarzenia, typ "sprostowanie"), jako w istocie zadanie NOWEGO wpisu
-      -- (klient pomylil sciezki - kieruje go do wlasciwej), albo jako
-      -- "brak nieprawidlowosci" (rejestr jest poprawny).
-      --
-      -- Podstawa: obowiazek prowadzenia rejestru w sposob zapewniajacy
-      -- bezpieczenstwo i integralnosc danych (art. 300(31) § 4 KSH), prawo
-      -- do sprostowania danych osobowych (art. 16 RODO).
-      CREATE TABLE psa_zgloszenia_nieprawidlowosci (
-        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-        spolka_id             INTEGER NOT NULL REFERENCES psa_spolki(id),
-        konto_id              INTEGER NOT NULL REFERENCES psa_konta(id),
-        -- Wypelnione, gdy zgloszenie przyszlo z odnosnika PRZY KONKRETNYM
-        -- wpisie (widok "Rejestr" spolki) - puste przy ogolnym "Coś się nie
-        -- zgadza?" pod calym rejestrem.
-        zdarzenie_id          INTEGER REFERENCES psa_zdarzenia(id),
-        czego_dotyczy         TEXT NOT NULL
-                                CHECK (czego_dotyczy IN ('blad_w_danych','niezgodny_z_dokumentem','inne')),
-        opis                  TEXT NOT NULL,
-        zalacznik_sciezka     TEXT,
-        zalacznik_nazwa_pliku TEXT,
-        zalacznik_mime        TEXT,
-        zalacznik_rozmiar     INTEGER,
-        stan                  TEXT NOT NULL DEFAULT 'nowe' CHECK (stan IN ('nowe','zakwalifikowane')),
-        kwalifikacja          TEXT
-                                CHECK (kwalifikacja IN ('sprostowanie','zadanie_wpisu','brak_nieprawidlowosci')),
-        notatka_kancelarii    TEXT,
-        autor_kwalifikacji    TEXT,
-        utworzono             TEXT NOT NULL,
-        zaktualizowano        TEXT
-      );
-      CREATE INDEX IF NOT EXISTS psa_ix_zgloszenia_nieprawidlowosci_spolka
-        ON psa_zgloszenia_nieprawidlowosci (spolka_id, stan);
-      CREATE INDEX IF NOT EXISTS psa_ix_zgloszenia_nieprawidlowosci_konto
-        ON psa_zgloszenia_nieprawidlowosci (konto_id);
-    `,
-  },
-
-  {
-    wersja: 56,
-    nazwa: 'powiazanie zgloszenie -> konto -> wniosek (P2, FAZA 4 sesji frontendowej)',
-    sql: `
-      -- D-055/P2: wniosek zakladal sie dotad calkiem pusty
-      -- (wczytajLubZalozWniosek w server/trasy/portal.js), a klient wpisywal
-      -- numer KRS DRUGI RAZ, mimo ze podal go juz w publicznym formularzu
-      -- zgloszenia (psa_zgloszenia.krs) - naruszenie zasady "raz wpisane,
-      -- nigdy wiecej" (0.4 pkt 1 sesji frontendowej v2). Kolumna wskazuje
-      -- zgloszenie, z ktorego dane konto powstalo (server/logika/zaproszenia.js),
-      -- zeby przy pierwszym zalozeniu wniosku dalo sie podstawic KRS/nazwe
-      -- bez pytania o nie ponownie. NULL dla kont zalozonych inna droga
-      -- (np. bezposrednio przez pracownika, bez zgloszenia).
-      ALTER TABLE psa_konta ADD COLUMN zgloszenie_id INTEGER REFERENCES psa_zgloszenia(id);
-    `,
-  },
-  {
-    wersja: 57,
-    nazwa: 'D-R01: chwila wpisu jedyna osia czasu - usuniecie data_zdarzenia z lancucha',
-    // Kolumna wchodzila do skrotu zdarzenia (`lancuch.skrot`). Po jej usunieciu
-    // skroty zapisanych zdarzen przestalyby sie zgadzac, a zdarzen append-only
-    // nie wolno przepisywac (art. 300(31) § 4 KSH) - migracja wykonuje sie
-    // WYLACZNIE na pustym rejestrze (decyzja notariusza z 26.09.2026: brak
-    // spolek w produkcji). Baze z zapisanymi zdarzeniami trzeba zalozyc od nowa.
-    warunek(db) {
-      const ile = db.prepare('SELECT COUNT(*) AS ile FROM psa_zdarzenia').get().ile;
-      if (ile > 0) {
-        throw new Error(
-          `Migracja 57 (D-R01) wymaga pustej tabeli psa_zdarzenia, a zawiera ona ${ile} zdarzen. ` +
-            'Usun baze i uruchom aplikacje ponownie - skrotow lancucha nie przeliczamy.'
-        );
-      }
-    },
-    sql: `
-      DROP INDEX IF EXISTS psa_ix_zdarzenia_spolka;
-      ALTER TABLE psa_zdarzenia DROP COLUMN data_zdarzenia;
-      CREATE INDEX IF NOT EXISTS psa_ix_zdarzenia_spolka
-        ON psa_zdarzenia (spolka_id, data_wpisu, id);
-    `,
-  },
-  {
-    wersja: 58,
-    nazwa: 'D-31: ewidencja przekazania rejestru innemu podmiotowi',
-    sql: `
-      -- Przekazanie prowadzenia rejestru (art. 300(32) § 2 KSH - nowa umowa
-      -- spolki z innym podmiotem). Tylko ewidencja; zrodlem prawdy jest
-      -- zdarzenie „przekazanie_rejestru” w lancuchu, kolumny to jego odbicie
-      -- do szybkiej blokady wpisow. NULL = rejestr prowadzimy my.
-      ALTER TABLE psa_spolki ADD COLUMN przekazanie_data TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN przekazanie_odbiorca_typ TEXT
-        CHECK (przekazanie_odbiorca_typ IS NULL OR przekazanie_odbiorca_typ IN
-               ('notariusz','izba_notarialna','podmiot_rachunki'));
-      ALTER TABLE psa_spolki ADD COLUMN przekazanie_odbiorca_nazwa TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN przekazanie_odbiorca_identyfikator TEXT;
-      ALTER TABLE psa_spolki ADD COLUMN przekazanie_podstawa TEXT;
-    `,
-  },
-  {
-    wersja: 59,
-    nazwa: 'D-34: slownik krajow ISO 3166-1 alfa-2 i kody krajow w adresach',
-    sql: sqlSlownikaKrajow(),
-  },
-  {
-    wersja: 60,
-    nazwa: 'D-Z: osoba dzialajaca przy wpisie (notariusz albo zastepca notarialny)',
-    sql: `
-      -- Tylko do audytu: kto dzialal przy wpisie, niezaleznie od pracownika-
-      -- autora. Przy zdarzeniu zapisujemy KOPIE danych (dane_json.dzialajacy,
-      -- objeta skrotem), wiec pozniejsza zmiana slownika nie zmienia historii.
-      CREATE TABLE IF NOT EXISTS psa_osoby_dzialajace (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        imie       TEXT NOT NULL,
-        nazwisko   TEXT NOT NULL,
-        funkcja    TEXT NOT NULL CHECK (funkcja IN ('notariusz','zastepca_notarialny')),
-        aktywny    INTEGER NOT NULL DEFAULT 1 CHECK (aktywny IN (0,1)),
-        utworzono  TEXT NOT NULL
-      );
-      ALTER TABLE psa_uzytkownicy ADD COLUMN osoba_dzialajaca_id INTEGER
-        REFERENCES psa_osoby_dzialajace(id);
-    `,
-  },
-  {
-    wersja: 61,
-    nazwa: 'D-074: tryb testowy - oznaczenie bazy testowej i dziennik logowan testowych',
-    sql: `
-      -- Oznaczenie CALEJ bazy jako testowej (nie rekordow — D-044 zostaje).
-      -- Wiersz wstawia wylacznie \`npm run test:seed\` albo \`npm run test:oznacz\`
-      -- (z potwierdzeniem). Bez wiersza tryb testowy odmawia startu.
-      -- \`przesuniecie_ms\` — symulowana data (T4); \`walidator_wynik\` — wynik
-      -- atrapy walidatora podpisu (T5).
-      CREATE TABLE IF NOT EXISTS psa_baza_testowa (
-        id               INTEGER PRIMARY KEY CHECK (id = 1),
-        oznaczono        TEXT NOT NULL,
-        opis             TEXT NOT NULL,
-        przesuniecie_ms  INTEGER NOT NULL DEFAULT 0,
-        walidator_wynik  TEXT NOT NULL DEFAULT 'qes_poprawny'
-      );
-
-      -- Dziennik zdarzen uwierzytelniania trybu testowego (T6): kazde
-      -- logowanie w trybie testowym, z droga (lista kont, link, formularz).
-      CREATE TABLE IF NOT EXISTS psa_dziennik_logowan (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        chwila      TEXT NOT NULL,
-        chwila_rzeczywista TEXT NOT NULL,
-        typ_konta   TEXT NOT NULL CHECK (typ_konta IN ('pracownik', 'portal')),
-        konto_id    INTEGER NOT NULL,
-        email       TEXT NOT NULL,
-        droga       TEXT NOT NULL,
-        tryb_testowy INTEGER NOT NULL CHECK (tryb_testowy IN (0, 1))
-      );
-
-      CREATE TRIGGER IF NOT EXISTS psa_dziennik_logowan_bez_zmian
-      BEFORE UPDATE ON psa_dziennik_logowan
-      BEGIN SELECT RAISE(ABORT, 'psa_dziennik_logowan jest append-only'); END;
-
-      CREATE TRIGGER IF NOT EXISTS psa_dziennik_logowan_bez_usuwania
-      BEFORE DELETE ON psa_dziennik_logowan
-      BEGIN SELECT RAISE(ABORT, 'psa_dziennik_logowan jest append-only'); END;
-    `,
-  },
-  {
-    wersja: 62,
-    nazwa: 'D-075: podpisy - oryginal (ID, SHA-256, dlugosc), wynik walidacji, forma, podpis notariusza',
-    sql: `
-      -- W3.1/W3.4: przy GENEROWANIU dokumentu do podpisu zapisujemy unikalne ID
-      -- (w stopce PDF), skrot SHA-256 i dlugosc — podpisany plik musi zaczynac
-      -- sie dokladnie tymi bajtami (podpis przyrostowy PAdES).
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN id_dokumentu TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_sha256 TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_dlugosc INTEGER;
-
-      -- W2.4/W3.3-W3.5: wynik automatycznej walidacji po wgraniu. Nigdy nie
-      -- zaznacza checklisty (D-052) — tylko podpowiada, co sprawdzic recznie.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_wynik TEXT
-        CHECK (walidacja_wynik IS NULL OR walidacja_wynik IN ('poprawny','do_weryfikacji','odrzucony'));
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_typ TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_json TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN walidacja_kiedy TEXT;
-
-      -- W2.1: forma podpisu odnotowana przez kancelarie (m.in. oryginal
-      -- papierowy: zwykly / notarialnie poswiadczony, data otrzymania).
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN forma_podpisu TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_otrzymano TEXT;
-
-      -- W2.5: notariusz podpisuje umowe OSTATNI (QES), dopiero po waznym
-      -- podpisie spolki — plik z podpisem notariusza osobno.
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_podpis_sciezka TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_podpis_wgrano TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_walidacja_wynik TEXT;
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN notariusz_walidacja_json TEXT;
-    `,
-  },
-  {
-    wersja: 63,
-    nazwa: 'D-075: deklaracja klienta - oryginal pocztą zamiast pliku z podpisem elektronicznym',
-    sql: `
-      -- W3.8: sciezka alternatywna. Klient deklaruje, ze odsyla podpisany
-      -- ORYGINAL pocztą; otrzymanie i rodzaj podpisu odnotowuje kancelaria
-      -- (forma_podpisu, oryginal_otrzymano — migracja 62).
-      ALTER TABLE psa_wnioski_dokumenty ADD COLUMN oryginal_poczta_zadeklarowano TEXT;
-    `,
-  },
-  {
-    wersja: 64,
-    nazwa: 'Faza 3: oswiadczenia akcjonariuszy, kolejka listow, wersje stawek, dziennik informacji',
-    sql: `
-      -- W4.1/W4.2: oswiadczenia skladane OSOBISCIE przez akcjonariusza albo
-      -- nabywce (konto portalu albo link z zaproszenia) — nie przez zarzad.
-      -- Append-only: stan = ostatni wiersz dla (osoba, spolka, rodzaj).
-      -- Zgoda na komunikacje e-mail jest dana rejestru (art. 300(33) § 1 pkt 5)
-      -- — jej zlozenie/cofniecie zaklada zadanie wpisu (sprawa_id).
-      CREATE TABLE IF NOT EXISTS psa_oswiadczenia (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        osoba_id    INTEGER NOT NULL REFERENCES psa_osoby(id),
-        spolka_id   INTEGER REFERENCES psa_spolki(id),
-        rodzaj      TEXT NOT NULL CHECK (rodzaj IN ('zgoda_email', 'powiadomienia_automatyczne')),
-        zlozone     INTEGER NOT NULL CHECK (zlozone IN (0, 1)),
-        email       TEXT,
-        konto_id    INTEGER REFERENCES psa_konta(id),
-        sprawa_id   INTEGER REFERENCES psa_sprawy(id),
-        utworzono   TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS psa_ix_oswiadczenia_osoba ON psa_oswiadczenia (osoba_id, rodzaj);
-      CREATE TRIGGER IF NOT EXISTS psa_oswiadczenia_bez_zmian
-      BEFORE UPDATE ON psa_oswiadczenia
-      BEGIN SELECT RAISE(ABORT, 'psa_oswiadczenia jest append-only'); END;
-      CREATE TRIGGER IF NOT EXISTS psa_oswiadczenia_bez_usuwania
-      BEFORE DELETE ON psa_oswiadczenia
-      BEGIN SELECT RAISE(ABORT, 'psa_oswiadczenia jest append-only'); END;
-
-      -- W4.3: kolejka listow — pismo do osoby bez zgody na e-mail idzie
-      -- pocztą na adres Z REJESTRU (kopia adresu w chwili wystawienia).
-      CREATE TABLE IF NOT EXISTS psa_listy (
-        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-        wydany_dokument_id  INTEGER NOT NULL REFERENCES psa_wydane_dokumenty(id),
-        spolka_id           INTEGER NOT NULL REFERENCES psa_spolki(id),
-        sprawa_id           INTEGER REFERENCES psa_sprawy(id),
-        odbiorca_osoba_id   INTEGER REFERENCES psa_osoby(id),
-        odbiorca_nazwa      TEXT NOT NULL,
-        adres               TEXT NOT NULL,
-        rodzaj_pisma        TEXT NOT NULL,
-        status              TEXT NOT NULL DEFAULT 'do_wyslania' CHECK (status IN ('do_wyslania', 'nadany')),
-        data_nadania        TEXT,
-        numer_nadania       TEXT,
-        potwierdzenie_sciezka TEXT,
-        potwierdzenie_nazwa TEXT,
-        nadal               TEXT,
-        utworzono           TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS psa_ix_listy_status ON psa_listy (status);
-
-      -- W5.7: stawki wersjonowane z data — spolka w okresie gwarancji ceny
-      -- rozliczana wg wersji z dnia podpisania umowy.
-      CREATE TABLE IF NOT EXISTS psa_stawki_wersje (
-        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-        od_dnia             TEXT NOT NULL,
-        prowadzenie_grosze  INTEGER NOT NULL,
-        wpis_grosze         INTEGER NOT NULL,
-        informacja_grosze   INTEGER NOT NULL,
-        autor               TEXT,
-        utworzono           TEXT NOT NULL
-      );
-
-      -- W5.3/W5.6: numer informacji, odbiorca spoza kartoteki (organ),
-      -- sygnatura sprawy organu, wynagrodzenie na dokumencie.
-      ALTER TABLE psa_wydane_dokumenty ADD COLUMN numer TEXT;
-      ALTER TABLE psa_wydane_dokumenty ADD COLUMN odbiorca_opis TEXT;
-      ALTER TABLE psa_wydane_dokumenty ADD COLUMN sygnatura TEXT;
-    `,
-  },
-  {
-    wersja: 65,
-    nazwa: 'Faza 4: przeniesienie rejestru od innego podmiotu (statusy § 7.3, dokumenty, archiwum, pakiet pism)',
-    sql: `
-      -- W7.10: przeniesienie jako jawna maszyna stanów (server/logika/przeniesienie.js).
-      CREATE TABLE IF NOT EXISTS psa_przeniesienia (
-        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-        zgloszenie_id         INTEGER REFERENCES psa_zgloszenia(id),
-        wniosek_id            INTEGER REFERENCES psa_wnioski(id),
-        spolka_id             INTEGER REFERENCES psa_spolki(id),
-        krs                   TEXT,
-        nazwa                 TEXT,
-        poprzednik_typ        TEXT NOT NULL CHECK (poprzednik_typ IN ('dom_maklerski', 'notariusz', 'rada_izby')),
-        poprzednik_nazwa      TEXT,
-        okres_wypowiedzenia   TEXT,
-        status                TEXT NOT NULL DEFAULT 'zgloszone' CHECK (status IN
-                                ('zgloszone','weryfikacja','umowa_warunkowa','oczekuje_na_przekazanie',
-                                 'uzgodnienie','aktywny','wstrzymane_rozbieznosci','wygasla')),
-        data_zawarcia_umowy   TEXT,
-        data_skutecznosci     TEXT,
-        checklista_weryfikacji TEXT,
-        checklista_odbioru    TEXT,
-        rozbieznosci          TEXT,
-        protokol_sciezka      TEXT,
-        protokol_id_dokumentu TEXT,
-        protokol_sha256       TEXT,
-        protokol_dlugosc      INTEGER,
-        zatwierdzenie_sciezka TEXT,
-        zatwierdzenie_walidacja TEXT,
-        zatwierdzono          TEXT,
-        utworzono             TEXT NOT NULL,
-        zaktualizowano        TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS psa_przeniesienia_historia (
-        id                INTEGER PRIMARY KEY AUTOINCREMENT,
-        przeniesienie_id  INTEGER NOT NULL REFERENCES psa_przeniesienia(id),
-        z_statusu         TEXT,
-        na_status         TEXT NOT NULL,
-        uwagi             TEXT,
-        autor             TEXT NOT NULL,
-        utworzono         TEXT NOT NULL
-      );
-      CREATE TRIGGER IF NOT EXISTS psa_przeniesienia_historia_bez_zmian
-      BEFORE UPDATE ON psa_przeniesienia_historia BEGIN SELECT RAISE(ABORT, 'historia przeniesienia jest append-only'); END;
-      CREATE TRIGGER IF NOT EXISTS psa_przeniesienia_historia_bez_usuwania
-      BEFORE DELETE ON psa_przeniesienia_historia BEGIN SELECT RAISE(ABORT, 'historia przeniesienia jest append-only'); END;
-
-      -- Dokumenty startowe (klient), umowa i pisma (kancelaria), dane od poprzednika — ze skrótem SHA-256.
-      CREATE TABLE IF NOT EXISTS psa_przeniesienia_dokumenty (
-        id                INTEGER PRIMARY KEY AUTOINCREMENT,
-        przeniesienie_id  INTEGER NOT NULL REFERENCES psa_przeniesienia(id),
-        typ               TEXT NOT NULL CHECK (typ IN ('umowa_spolki','informacja_poprzednika','uchwala',
-                            'umowa_warunkowa','wypowiedzenie','potwierdzenie_rozwiazania','dane_poprzednika','inne')),
-        zrodlo            TEXT NOT NULL CHECK (zrodlo IN ('klient','kancelaria','poprzednik')),
-        nazwa_pliku       TEXT NOT NULL,
-        sciezka           TEXT NOT NULL,
-        sha256            TEXT NOT NULL,
-        rozmiar           INTEGER,
-        autor             TEXT NOT NULL,
-        utworzono         TEXT NOT NULL
-      );
-
-      -- W7.7: historia dotychczasowego podmiotu — archiwum TYLKO DO ODCZYTU, poza łańcuchem.
-      CREATE TABLE IF NOT EXISTS psa_przeniesienia_archiwum (
-        id                INTEGER PRIMARY KEY AUTOINCREMENT,
-        przeniesienie_id  INTEGER NOT NULL REFERENCES psa_przeniesienia(id),
-        spolka_id         INTEGER NOT NULL REFERENCES psa_spolki(id),
-        tresc             TEXT NOT NULL,
-        sha256            TEXT NOT NULL,
-        autor             TEXT NOT NULL,
-        utworzono         TEXT NOT NULL
-      );
-      CREATE TRIGGER IF NOT EXISTS psa_przeniesienia_archiwum_bez_zmian
-      BEFORE UPDATE ON psa_przeniesienia_archiwum BEGIN SELECT RAISE(ABORT, 'archiwum poprzednika jest tylko do odczytu'); END;
-      CREATE TRIGGER IF NOT EXISTS psa_przeniesienia_archiwum_bez_usuwania
-      BEFORE DELETE ON psa_przeniesienia_archiwum BEGIN SELECT RAISE(ABORT, 'archiwum poprzednika jest tylko do odczytu'); END;
-
-      -- W7.9: data skuteczności umowy (opłata roczna od niej); W7.1: rodzaj zgłoszenia.
-      ALTER TABLE psa_spolki ADD COLUMN data_skutecznosci_umowy TEXT;
-      ALTER TABLE psa_zgloszenia ADD COLUMN rodzaj TEXT NOT NULL DEFAULT 'nowy' CHECK (rodzaj IN ('nowy', 'przeniesienie'));
-
-      -- W7.4: pakiet pism przez istniejący mechanizm szablonów (edytowalne przez administratora).
-      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
-        VALUES ('przeniesienie_klauzula', 1, 'Klauzula — umowa pod warunkiem zawieszającym (§ 7.4 wytycznych)', '<h3>§ … Skuteczność umowy</h3>
-<ol>
-<li>Umowa zostaje zawarta pod warunkiem zawieszającym rozwiązania albo wygaśnięcia umowy o prowadzenie rejestru akcjonariuszy Spółki zawartej z {{poprzednik_nazwa}} („Dotychczasowa Umowa”).</li>
-<li>Umowa staje się skuteczna z chwilą rozwiązania albo wygaśnięcia Dotychczasowej Umowy. Jeżeli Dotychczasowa Umowa uległa rozwiązaniu albo wygasła przed zawarciem Umowy, Umowa jest skuteczna z chwilą jej zawarcia.</li>
-<li>Spółka zobowiązuje się złożyć oświadczenie o wypowiedzeniu Dotychczasowej Umowy w terminie 14 dni od zawarcia Umowy oraz zawiadomić Notariusza o dacie rozwiązania albo wygaśnięcia Dotychczasowej Umowy niezwłocznie, nie później niż w terminie 3 dni od jej ustalenia, przedkładając dokument potwierdzający tę datę.</li>
-<li>Jeżeli warunek, o którym mowa w ust. 1, nie ziści się w terminie 12 miesięcy od zawarcia Umowy, Umowa wygasa.</li>
-<li>Do chwili skuteczności Umowy Notariusz nie prowadzi rejestru akcjonariuszy Spółki i nie przysługuje mu wynagrodzenie.</li>
-</ol>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 89 KC (⚠️ do sprawdzenia), art. 300(32) § 2 KSH', 1, 1, 'system', '2026-11-01T00:00:00Z');
-      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
-        VALUES ('przeniesienie_uchwala', 1, 'Uchwała akcjonariuszy o wyborze notariusza (przeniesienie)', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><h2>Uchwała nr … akcjonariuszy {{spolka_nazwa}} z dnia ……</h2>
-<p>w sprawie wyboru podmiotu prowadzącego rejestr akcjonariuszy</p>
-<p>§ 1. Akcjonariusze, działając na podstawie art. 300(31) § 5 Kodeksu spółek handlowych, wybierają notariusza {{notariusz}}, prowadzącego kancelarię notarialną: {{kancelaria_adres}}, na podmiot prowadzący rejestr akcjonariuszy Spółki <strong>od chwili rozwiązania albo wygaśnięcia dotychczasowej umowy o prowadzenie rejestru akcjonariuszy</strong>.</p>
-<p>§ 2. Uchwała wchodzi w życie z chwilą podjęcia.</p>
-<p>Podpisy akcjonariuszy: ……</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(31) § 5 KSH', 1, 1, 'system', '2026-11-01T00:00:00Z');
-      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
-        VALUES ('przeniesienie_wypowiedzenie', 1, 'Wypowiedzenie dotychczasowej umowy o prowadzenie rejestru', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><p>{{spolka_nazwa}}, KRS {{spolka_krs}}</p><p>Do: {{poprzednik_nazwa}}</p>
-<h2>Wypowiedzenie umowy o prowadzenie rejestru akcjonariuszy</h2>
-<p>Działając w imieniu {{spolka_nazwa}}, wypowiadamy umowę o prowadzenie rejestru akcjonariuszy Spółki z zachowaniem terminu wypowiedzenia wynikającego z tej umowy. Zgodnie z art. 300(32) § 2 KSH informujemy, że Spółka zawarła nową umowę o prowadzenie rejestru akcjonariuszy z notariuszem {{notariusz}} (potwierdzenie w załączeniu).</p>
-<p>Prosimy o potwierdzenie daty rozwiązania umowy.</p><p>Podpis zarządu: ……</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(32) § 2 KSH', 1, 1, 'system', '2026-11-01T00:00:00Z');
-      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
-        VALUES ('przeniesienie_potwierdzenie_zawarcia', 1, 'Potwierdzenie zawarcia nowej umowy (do wypowiedzenia)', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><h2>Potwierdzenie zawarcia umowy o prowadzenie rejestru akcjonariuszy</h2>
-<p>Potwierdzam, że w dniu {{data_zawarcia}} {{spolka_nazwa}} (KRS {{spolka_krs}}) zawarła ze mną umowę o prowadzenie rejestru akcjonariuszy pod warunkiem zawieszającym rozwiązania albo wygaśnięcia umowy z {{poprzednik_nazwa}}.</p>
-<p>{{notariusz}}, {{kancelaria_nazwa}}</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(32) § 2 KSH', 1, 1, 'system', '2026-11-01T00:00:00Z');
-      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
-        VALUES ('przeniesienie_wezwanie_dom_maklerski', 1, 'Wezwanie do przekazania rejestru — dom maklerski / bank', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><p>Do: {{poprzednik_nazwa}}</p><h2>Wezwanie do przekazania rejestru akcjonariuszy</h2>
-<p>W związku z rozwiązaniem umowy o prowadzenie rejestru akcjonariuszy {{spolka_nazwa}} (KRS {{spolka_krs}}) wzywamy do przekazania notariuszowi {{notariusz}}: rejestru według stanu na dzień rozwiązania, historii wpisów, dokumentów uzasadniających wpisy, żądań w toku oraz informacji o obciążeniach i zajęciach akcji. Podstawa: umowa, art. 300(35) § 3 KSH; od 18.02.2027 — także art. 83a ust. 4ac ustawy o obrocie instrumentami finansowymi.</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(35) § 3 KSH; 🔵 art. 83a ust. 4ac u.o.i.f.', 1, 1, 'system', '2026-11-01T00:00:00Z');
-      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
-        VALUES ('przeniesienie_wezwanie_notariusz', 1, 'Wezwanie do przekazania rejestru — notariusz', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><p>Do: {{poprzednik_nazwa}}</p><h2>Wezwanie do przekazania rejestru akcjonariuszy</h2>
-<p>W związku z rozwiązaniem umowy o prowadzenie rejestru akcjonariuszy {{spolka_nazwa}} (KRS {{spolka_krs}}) prosimy o przekazanie notariuszowi {{notariusz}} rejestru według stanu na dzień rozwiązania, historii wpisów, dokumentów uzasadniających wpisy, żądań w toku oraz informacji o obciążeniach i zajęciach. Podstawa: umowa, art. 300(35) § 3 KSH.</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(35) § 3 KSH', 1, 1, 'system', '2026-11-01T00:00:00Z');
-      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
-        VALUES ('przeniesienie_wezwanie_rada_izby', 1, 'Zawiadomienie rady izby notarialnej (notariusz, który zakończył działalność)', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><p>Do: Prezes Rady {{poprzednik_nazwa}}</p><h2>Zawiadomienie o zawarciu nowej umowy o prowadzenie rejestru akcjonariuszy</h2>
-<p>Na podstawie art. 90a § 2 ustawy — Prawo o notariacie zawiadamiamy, że {{spolka_nazwa}} (KRS {{spolka_krs}}) zawarła umowę o prowadzenie rejestru akcjonariuszy z notariuszem {{notariusz}}, i wnosimy o przekazanie dokumentów rejestru.</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 90a § 2 PrNot', 1, 1, 'system', '2026-11-01T00:00:00Z');
-      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
-        VALUES ('przeniesienie_zgloszenie_krs', 1, 'Zgłoszenie do sądu rejestrowego i wniosek o wpis danych podmiotu [2027]', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><h2>Zgłoszenie zawarcia umowy o prowadzenie rejestru akcjonariuszy</h2>
-<p>Zarząd {{spolka_nazwa}} (KRS {{spolka_krs}}) zgłasza zawarcie umowy o prowadzenie rejestru akcjonariuszy z notariuszem {{notariusz}}, kancelaria: {{kancelaria_adres}} (art. 300(32) § 1(1)–1(2) KSH), i wnosi o wpis danych podmiotu prowadzącego rejestr (art. 38 ustawy o KRS). Załącznik: oświadczenie zarządu potwierdzające zawarcie umowy (art. 300(32) § 1(3) KSH). Wniosek składa się przez Portal Rejestrów Sądowych.</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(32) § 1(1)–1(3) KSH, art. 38 ustawy o KRS', 1, 1, 'system', '2026-11-01T00:00:00Z');
-      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
-        VALUES ('przeniesienie_rodo_art14', 1, 'Informacja dla akcjonariuszy (art. 14 RODO) po przejęciu rejestru', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><h2>Informacja o przetwarzaniu danych osobowych</h2>
-<p>Od {{data_skutecznosci}} rejestr akcjonariuszy {{spolka_nazwa}} prowadzi notariusz {{notariusz}} ({{kancelaria_nazwa}}, {{kancelaria_adres}}). Dane osobowe akcjonariuszy pozyskaliśmy od dotychczasowego podmiotu prowadzącego rejestr ({{poprzednik_nazwa}}) w zakresie danych rejestru (art. 300(33) KSH) — w celu prowadzenia rejestru.</p>
-<p>Jeżeli chcesz otrzymywać korespondencję z rejestru e-mailem, złóż oświadczenie o zgodzie na komunikację elektroniczną (formularz w załączeniu). Bez zgody korespondencja przychodzi pocztą, a żądania wpisu składa się pocztą albo w kancelarii.</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 14 RODO (⚠️ do sprawdzenia)', 1, 1, 'system', '2026-11-01T00:00:00Z');
-      INSERT OR IGNORE INTO psa_szablony (kod, wersja, tytul, tresc, opis, podstawa_prawna, aktywna, wbudowany, autor, utworzono)
-        VALUES ('przeniesienie_potwierdzenie_odbioru', 1, 'Potwierdzenie odbioru rejestru — dla dotychczasowego podmiotu', '<p class="projekt"><strong>PROJEKT — do akceptacji Łukasza</strong></p><p>Do: {{poprzednik_nazwa}}</p><h2>Potwierdzenie odbioru rejestru akcjonariuszy</h2>
-<p>Potwierdzam odbiór rejestru akcjonariuszy {{spolka_nazwa}} (KRS {{spolka_krs}}) według stanu na dzień {{data_skutecznosci}} wraz z dokumentami. Potwierdzenie może stanowić podstawę zawiadomienia sądu rejestrowego o rozwiązaniu umowy (od 18.02.2027 — art. 300(32) § 3 KSH).</p>
-<p>{{notariusz}}, {{kancelaria_nazwa}}</p>', 'Faza 4 — pakiet przeniesienia rejestru (SESJA-PSA-WYTYCZNE.md W7.4)', 'art. 300(32) § 3 KSH (🔵)', 1, 1, 'system', '2026-11-01T00:00:00Z');
-    `,
-  },
-  {
-    wersja: 66,
-    nazwa: 'D-092: oświadczenia osób (zgoda e-mail, powiadomienia) w kartotece — źródło i autor, poza łańcuchem rejestru',
-    sql: `
-      ALTER TABLE psa_oswiadczenia ADD COLUMN zrodlo TEXT NOT NULL DEFAULT 'portal'
-        CHECK (zrodlo IN ('portal', 'kancelaria', 'pismo'));
-      ALTER TABLE psa_oswiadczenia ADD COLUMN autor TEXT;
-    `,
-  },
-  {
-    wersja: 67,
-    nazwa: 'R4 K3: listy — status „usunięty z wysyłki” z powodem, autorem i datą (pismo zostaje)',
-    sql: `
-      CREATE TABLE psa_listy_nowa (
-        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-        wydany_dokument_id  INTEGER NOT NULL REFERENCES psa_wydane_dokumenty(id),
-        spolka_id           INTEGER NOT NULL REFERENCES psa_spolki(id),
-        sprawa_id           INTEGER REFERENCES psa_sprawy(id),
-        odbiorca_osoba_id   INTEGER REFERENCES psa_osoby(id),
-        odbiorca_nazwa      TEXT NOT NULL,
-        adres               TEXT NOT NULL,
-        rodzaj_pisma        TEXT NOT NULL,
-        status              TEXT NOT NULL DEFAULT 'do_wyslania' CHECK (status IN ('do_wyslania', 'nadany', 'usuniety')),
-        data_nadania        TEXT,
-        numer_nadania       TEXT,
-        potwierdzenie_sciezka TEXT,
-        potwierdzenie_nazwa TEXT,
-        nadal               TEXT,
-        usuniecie_powod     TEXT,
-        usunal              TEXT,
-        usunieto            TEXT,
-        utworzono           TEXT NOT NULL
-      );
-      INSERT INTO psa_listy_nowa (id, wydany_dokument_id, spolka_id, sprawa_id, odbiorca_osoba_id, odbiorca_nazwa, adres,
-        rodzaj_pisma, status, data_nadania, numer_nadania, potwierdzenie_sciezka, potwierdzenie_nazwa, nadal, utworzono)
-        SELECT id, wydany_dokument_id, spolka_id, sprawa_id, odbiorca_osoba_id, odbiorca_nazwa, adres,
-          rodzaj_pisma, status, data_nadania, numer_nadania, potwierdzenie_sciezka, potwierdzenie_nazwa, nadal, utworzono
-          FROM psa_listy;
-      DROP TABLE psa_listy;
-      ALTER TABLE psa_listy_nowa RENAME TO psa_listy;
-      CREATE INDEX IF NOT EXISTS psa_ix_listy_status ON psa_listy (status);
-    `,
-  },
-  {
-    wersja: 68,
-    nazwa: 'D-092 (przegląd R4 #2): jedna reguła zgody na e-mail — flaga ustawiona przez kancelarię = status potwierdzona',
-    sql: `
-      UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona'
-        WHERE zgoda_email = 1 AND COALESCE(zgoda_email_status, '') <> 'potwierdzona';
-      UPDATE psa_osoby SET zgoda_email = CASE WHEN zgoda_email_status = 'potwierdzona' THEN 1 ELSE 0 END;
-    `,
-  },
-  {
-    wersja: 69,
-    nazwa: 'D-092 pkt 6: dawne sprawy o zgodę na e-mail z portalu — oświadczenie w kartotece, sprawa anulowana (bez wpisu)',
-    sql: `
-      -- Najnowsze oświadczenie o zgodzie osoby, złożone dawnym trybem (z otwartą sprawą wpisu), trafia do kartoteki.
-      UPDATE psa_osoby
-         SET zgoda_email_status = CASE (SELECT o.zlozone FROM psa_oswiadczenia o WHERE o.osoba_id = psa_osoby.id
-                                          AND o.rodzaj = 'zgoda_email' ORDER BY o.utworzono DESC, o.id DESC LIMIT 1)
-                                  WHEN 1 THEN 'potwierdzona' ELSE 'brak' END,
-             email = COALESCE((SELECT o.email FROM psa_oswiadczenia o WHERE o.osoba_id = psa_osoby.id
-                                 AND o.rodzaj = 'zgoda_email' AND o.zlozone = 1 ORDER BY o.utworzono DESC, o.id DESC LIMIT 1), email)
-       WHERE id IN (SELECT o.osoba_id FROM psa_oswiadczenia o JOIN psa_sprawy s ON s.id = o.sprawa_id
-                     WHERE o.rodzaj = 'zgoda_email' AND s.stan IN ('nowa', 'weryfikacja', 'wstrzymana')
-                       AND o.id = (SELECT o2.id FROM psa_oswiadczenia o2 WHERE o2.osoba_id = o.osoba_id
-                                     AND o2.rodzaj = 'zgoda_email' ORDER BY o2.utworzono DESC, o2.id DESC LIMIT 1));
-      UPDATE psa_osoby SET zgoda_email = CASE WHEN zgoda_email_status = 'potwierdzona' THEN 1 ELSE 0 END;
-      UPDATE psa_sprawy
-         SET stan = 'anulowana', termin_do = NULL,
-             notatka = COALESCE(notatka || char(10), '') || 'Anulowano: D-092 — oświadczenie o zgodzie na e-mail zastosowane w kartotece, bez wpisu w rejestrze.'
-       WHERE stan IN ('nowa', 'weryfikacja', 'wstrzymana')
-         AND id IN (SELECT sprawa_id FROM psa_oswiadczenia WHERE rodzaj = 'zgoda_email' AND sprawa_id IS NOT NULL);
-    `,
-  },
-  {
-    wersja: 70,
-    nazwa: 'D-101: reprezentant spółki jako osoba w kartotece — dane osobowe i AML raz',
-    sql: `
-      -- Dane osobowe reprezentanta (imię i nazwisko, PESEL, płeć, adres, e-mail) czyta się z psa_osoby
-      -- (rejestr.wczytajSpolke); w spółce zostaje to, co dotyczy umowy: funkcja, sposób reprezentacji,
-      -- imiona rodziców i dokument okazany przy podpisie. Dawne kolumny reprezentant_* — gdy brak osoby.
-      ALTER TABLE psa_spolki ADD COLUMN reprezentant_osoba_id INTEGER REFERENCES psa_osoby(id);
-    `,
-  },
-  {
-    wersja: 71,
-    nazwa: 'D-108, D-115, D-116: bez imion rodziców i dowodu reprezentanta; reprezentant akcjonariusza-osoby prawnej; kilku beneficjentów',
-    sql: `
-      -- D-108: imiona rodziców i dokument tożsamości reprezentanta spółki są tylko w umowie o prowadzenie rejestru —
-      -- kopie zapisane w spółkach i w przyjętych wnioskach usuwamy (Łukasz, 7.11.2026).
-      UPDATE psa_spolki SET reprezentant_rodzice = NULL, reprezentant_rodzice_recznie = NULL, reprezentant_dowod = NULL,
-             reprezentant_dowod_rodzaj = NULL, reprezentant_dowod_numer = NULL;
-      UPDATE psa_wnioski SET reprezentant_rodzice = NULL, reprezentant_rodzice_recznie = NULL, reprezentant_dowod = NULL,
-             reprezentant_dowod_rodzaj = NULL, reprezentant_dowod_numer = NULL
-       WHERE status = 'przyjety';
-      -- D-115 (P-016): osoba fizyczna działająca za akcjonariusza-osobę prawną („Reprezentant” wg umowy tej osoby prawnej);
-      -- wpisuje klient we wniosku, kancelaria potwierdza.
-      ALTER TABLE psa_osoby ADD COLUMN reprezentant_imie TEXT;
-      ALTER TABLE psa_osoby ADD COLUMN reprezentant_nazwisko TEXT;
-      ALTER TABLE psa_osoby ADD COLUMN reprezentant_pesel TEXT;
-      ALTER TABLE psa_osoby ADD COLUMN reprezentant_funkcja TEXT;
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN reprezentant_imie TEXT;
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN reprezentant_nazwisko TEXT;
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN reprezentant_pesel TEXT;
-      ALTER TABLE psa_wnioski_akcjonariusze ADD COLUMN reprezentant_funkcja TEXT;
-      -- D-116 (P-017): kilku beneficjentów rzeczywistych — lista id osób z kartoteki; beneficjent_rzeczywisty_id
-      -- zostaje jako pierwszy z listy (zgodność wsteczna).
-      ALTER TABLE psa_osoby ADD COLUMN beneficjenci_json TEXT;
-      UPDATE psa_osoby SET beneficjenci_json = json_array(beneficjent_rzeczywisty_id) WHERE beneficjent_rzeczywisty_id IS NOT NULL;
-      -- D-122 (P-009): retencja dziennika dostępu 5 lat — wpis młodszy niż 5 lat nadal nieusuwalny (append-only),
-      -- starszy usuwa harmonogram (server/logika/dziennik-dostepu.js: usunPrzeterminowane).
-      DROP TRIGGER IF EXISTS psa_dziennik_dostepu_bez_delete;
-      CREATE TRIGGER psa_dziennik_dostepu_bez_delete
-      BEFORE DELETE ON psa_dziennik_dostepu
-      WHEN OLD.chwila >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-5 years')
-      BEGIN
-        SELECT RAISE(ABORT, 'psa_dziennik_dostepu jest append-only — usuwa się wyłącznie wpisy starsze niż 5 lat (retencja D-122).');
-      END;
-    `,
-  },
-];
-
-/**
- * D-34 - slownik krajow i kody krajow w adresach. Kod ISO 3166-1 alfa-2
- * (`*_kraj_kod`) jest zrodlem prawdy; kolumna tekstowa `*kraj` zostaje
- * (odwracalnosc, formatowanie adresow i pisma) i dostaje polska nazwe ze
- * slownika. Jedno miejsce dla WSZYSTKICH sciezek zapisu - wyzwalacze:
- * wartosc rozpoznana dokladnie (kod, nazwa polska albo angielska, bez
- * wielkosci liter) dostaje kod; nierozpoznana zostaje jak jest, z kodem
- * NULL, i trafia do raportu do recznej poprawy - nie zgadujemy.
- */
-function sqlSlownikaKrajow() {
-  const kraje = require('./dane/kraje.json');
-  const q = (t) => `'${String(t).replace(/'/g, "''")}'`;
-  const wiersze = kraje
-    .map((k) => `(${q(k.kod)}, ${q(k.nazwa)}, ${q(k.nazwa.toLocaleLowerCase('pl'))}, ${q(k.nazwa_en.toLowerCase())})`)
-    .join(',\n        ');
-  const kolumny = [
-    ['psa_spolki', 'kraj', 'kraj_kod'],
-    ['psa_spolki', 'reprezentant_kraj', 'reprezentant_kraj_kod'],
-    ['psa_osoby', 'kraj', 'kraj_kod'],
-    ['psa_wnioski', 'kraj', 'kraj_kod'],
-    ['psa_wnioski', 'reprezentant_kraj', 'reprezentant_kraj_kod'],
-    ['psa_wnioski_akcjonariusze', 'kraj', 'kraj_kod'],
-  ];
-  const kodDla = (w) => `(SELECT kod FROM psa_kraje
-          WHERE kod = upper(trim(${w})) OR nazwa_klucz = lower(trim(${w})) OR nazwa_en_klucz = lower(trim(${w})))`;
-  const czesci = kolumny.map(([tabela, pole, kod]) => {
-    const ustaw = `UPDATE ${tabela}
-          SET ${kod} = ${kodDla(`NEW.${pole}`)},
-              ${pole} = COALESCE((SELECT nazwa FROM psa_kraje WHERE kod = ${kodDla(`NEW.${pole}`)}), NEW.${pole})
-        WHERE id = NEW.id;`;
-    return `
-      ALTER TABLE ${tabela} ADD COLUMN ${kod} TEXT REFERENCES psa_kraje(kod);
-      CREATE TRIGGER ${tabela}_${pole}_kod_ins AFTER INSERT ON ${tabela}
-      BEGIN
-        ${ustaw}
-      END;
-      CREATE TRIGGER ${tabela}_${pole}_kod_upd AFTER UPDATE OF ${pole} ON ${tabela}
-      BEGIN
-        ${ustaw}
-      END;
-      UPDATE ${tabela} SET ${pole} = ${pole};`;
-  });
-  return `
-      CREATE TABLE IF NOT EXISTS psa_kraje (
-        kod             TEXT PRIMARY KEY CHECK (length(kod) = 2),
-        nazwa           TEXT NOT NULL,
-        nazwa_klucz     TEXT NOT NULL,
-        nazwa_en_klucz  TEXT NOT NULL
-      );
-      INSERT INTO psa_kraje (kod, nazwa, nazwa_klucz, nazwa_en_klucz) VALUES
-        ${wiersze};
-      ${czesci.join('\n')}
-  `;
-}
-
-/** Tabela wersji migracji modulu - wlasna, zeby nie kolidowac z innymi modulami. */
 const SQL_TABELA_WERSJI = `
   CREATE TABLE IF NOT EXISTS psa_migracje (
     wersja     INTEGER PRIMARY KEY,
@@ -2734,57 +409,74 @@ const SQL_TABELA_WERSJI = `
   );
 `;
 
+function tabelaIstnieje(db, nazwa) {
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(nazwa));
+}
+
+function bazaTestowa(db) {
+  return tabelaIstnieje(db, 'psa_baza_testowa') && Boolean(db.prepare('SELECT 1 FROM psa_baza_testowa WHERE id = 1').get());
+}
+
 /**
- * Wykonuje wszystkie niewykonane migracje. Bezpieczna do wielokrotnego
- * uruchomienia. Zwraca liste zastosowanych wersji.
+ * Zabezpieczenie U-01: zakładanie schematu od nowa kasuje obiekty `psa_*`. Wolno to zrobić tylko
+ * wtedy, gdy rejestr nie ma żadnego wpisu albo baza jest oznaczona jako testowa.
+ */
+function sprawdzMoznaZalozyc(db) {
+  if (!tabelaIstnieje(db, 'psa_zdarzenia')) return;
+  const ile = db.prepare('SELECT COUNT(*) AS ile FROM psa_zdarzenia').get().ile;
+  if (ile > 0 && !bazaTestowa(db)) {
+    throw new Error(
+      `Schemat bazy rejestru wymaga założenia od nowa, a psa_zdarzenia zawiera ${ile} wpisów, ` +
+        'a baza nie jest oznaczona jako testowa. Migracja odmawia działania — wpisów rejestru nie wolno utracić.'
+    );
+  }
+}
+
+function usunObiektyPsa(db) {
+  const obiekty = db
+    .prepare("SELECT type, name FROM sqlite_master WHERE name LIKE 'psa\\_%' ESCAPE '\\' AND sql IS NOT NULL")
+    .all()
+    .filter((o) => !ZACHOWANE.has(o.name));
+  for (const rodzaj of ['trigger', 'view', 'table']) {
+    for (const o of obiekty.filter((x) => x.type === rodzaj)) db.exec(`DROP ${rodzaj.toUpperCase()} IF EXISTS "${o.name}"`);
+  }
+  db.prepare('DELETE FROM psa_migracje').run();
+}
+
+/**
+ * Wykonuje niewykonane migracje; bazę z innym schematem zakłada od nowa (pod zabezpieczeniem).
+ * Zwraca listę zastosowanych wersji.
  */
 function uruchom(db) {
   db.exec(SQL_TABELA_WERSJI);
+  const zapisane = db.prepare('SELECT wersja, nazwa FROM psa_migracje').all();
+  const znane = (r) => MIGRACJE.some((m) => m.wersja === r.wersja && m.nazwa === r.nazwa);
+  const innySchemat = zapisane.some((r) => !znane(r)) || (zapisane.length === 0 && tabelaIstnieje(db, 'psa_spolki'));
 
-  const wykonane = new Set(
-    db.prepare('SELECT wersja FROM psa_migracje').all().map((r) => r.wersja)
-  );
+  if (innySchemat) {
+    sprawdzMoznaZalozyc(db);
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.transaction(() => usunObiektyPsa(db))();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+  }
+
+  const wykonane = new Set(db.prepare('SELECT wersja FROM psa_migracje').all().map((r) => r.wersja));
   const zastosowane = [];
-
   for (const migracja of MIGRACJE) {
     if (wykonane.has(migracja.wersja)) continue;
-
-    const transakcja = db.transaction(() => {
-      if (typeof migracja.warunek === 'function') migracja.warunek(db);
+    db.transaction(() => {
       db.exec(migracja.sql);
       db.prepare('INSERT INTO psa_migracje (wersja, nazwa, wykonano) VALUES (?, ?, ?)').run(
         migracja.wersja,
         migracja.nazwa,
         new Date().toISOString()
       );
-    });
-
-    // Przepisanie tabeli, do ktorej odwoluja sie inne (zdjecie ograniczenia
-    // kolumnowego), wymaga chwilowego wylaczenia kluczy obcych — inaczej
-    // `DROP TABLE` na rodzicu wywraca sie na dzieciach, ktore za moment i tak
-    // dostana nowego rodzica pod ta sama nazwa. To udokumentowana procedura
-    // SQLite; pragma musi stac POZA transakcja, a po niej sprawdzamy, czy
-    // zadne powiazanie nie zostalo zerwane.
-    if (!migracja.przebudowaTabeli) {
-      transakcja();
-    } else {
-      db.pragma('foreign_keys = OFF');
-      try {
-        transakcja();
-        const osierocone = db.pragma('foreign_key_check');
-        if (osierocone.length > 0) {
-          throw new Error(
-            `Migracja ${migracja.wersja} zerwala powiazania: ${JSON.stringify(osierocone.slice(0, 5))}`
-          );
-        }
-      } finally {
-        db.pragma('foreign_keys = ON');
-      }
-    }
-
+    })();
     zastosowane.push(migracja.wersja);
   }
-
   return zastosowane;
 }
 

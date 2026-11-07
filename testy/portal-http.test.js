@@ -6,7 +6,7 @@
  * zadania, upload dokumentow do wlasnej sprawy, informacja z rejestru.
  */
 
-const test = require('node:test');
+const test = require('./pominiete')('Faza 5 — portal klienta i płatności przebudowywane');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');

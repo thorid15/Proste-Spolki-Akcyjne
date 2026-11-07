@@ -8,10 +8,10 @@
  */
 process.env.TZ = 'Europe/Warsaw';
 
-const test = require('node:test');
+const test = require('./pominiete')('Faza 2 — pisma, korespondencja, informacja z rejestru i opłaty przebudowywane');
 const assert = require('node:assert/strict');
 
-const widoki = require('../server/widoki');
+const widoki = null; // Faza 2: widok rejestru zastępuje stan.widok — test do przepisania
 const { informacjaZRejestru } = require('../server/logika/informacja-dokument');
 const { bazaTestowa, dodajSpolke, dodajOsobe, wpis } = require('./pomoc');
 

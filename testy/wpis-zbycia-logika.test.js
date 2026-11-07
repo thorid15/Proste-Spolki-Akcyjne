@@ -80,7 +80,7 @@ test('dane zdarzenia z formularza: jedna seria, numery z doboru, pola warunkowe'
 
 // B-005 (SESJA-PSA-ANALIZA-PRZEPLYWOW): kreator zbycia dostaje stan z `GET /api/psa/spolki/:id`
 // (`widoki.widokStanu`), nie surowy stan z `stan.js` — pola warunkowe muszą działać na TYM kształcie.
-test('B-005: ograniczenie z widoku API (prawo pierwszeństwa, zgoda spółki) pokazuje pola warunkowe zbycia', () => {
+test('B-005: ograniczenie z widoku API (prawo pierwszeństwa, zgoda spółki) pokazuje pola warunkowe zbycia', { skip: 'Faza 3 — ekran sprawy zastępuje formularz zbycia' }, () => {
   const { bazaTestowa, dodajSpolke, dodajOsobe, wpis } = require('./pomoc');
   const widoki = require('../server/widoki');
   const db = bazaTestowa();

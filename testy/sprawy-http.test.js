@@ -1,12 +1,9 @@
 'use strict';
 
 /**
- * Testy integracyjne workflow spraw przez HTTP (sekcja 7 i 8 specyfikacji):
- * zalozenie sprawy, przejscia stanow, wpis, upload dokumentow, sprostowanie.
- *
- * Kazdy plik testowy `node --test` dostaje wlasny proces, wiec ustawienie
- * `WSPOLNA_BAZA` PRZED pierwszym `require` z `server/*` bezpiecznie izoluje
- * baze tego pliku od pozostalych testow.
+ * Faza 1 — trasy HTTP spraw, spółek, osób i plików (ekrany § 5): sesja pracownika, błędy przy
+ * polach, karta osoby z historią i zgodą e-mail (U-11, U-25), kokpit „stan na” dzień, sprawa
+ * krok po kroku, przyjęcie i pobranie pliku (§ 7 pkt 3), ustawienia tylko dla administratora.
  */
 
 const test = require('node:test');
@@ -15,9 +12,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 const PLIK_BAZY = path.join(__dirname, '..', 'dane', '.test-sprawy-http.db');
-fs.rmSync(PLIK_BAZY, { force: true });
-fs.rmSync(`${PLIK_BAZY}-wal`, { force: true });
-fs.rmSync(`${PLIK_BAZY}-shm`, { force: true });
+for (const p of [PLIK_BAZY, `${PLIK_BAZY}-wal`, `${PLIK_BAZY}-shm`]) fs.rmSync(p, { force: true });
 process.env.WSPOLNA_BAZA = PLIK_BAZY;
 process.env.KATALOG_DOKUMENTOW = path.join(__dirname, '..', 'dane', '.test-sprawy-dokumenty');
 fs.rmSync(process.env.KATALOG_DOKUMENTOW, { recursive: true, force: true });
@@ -25,700 +20,193 @@ fs.rmSync(process.env.KATALOG_DOKUMENTOW, { recursive: true, force: true });
 const app = require('../serwer');
 const { db } = require('../server/baza');
 const hasla = require('../server/logika/hasla');
+const pisma = require('../server/logika/pisma');
+const daneSpolki = require('../server/dane/spolki');
+const czas = require('../server/pomocnicze/czas');
+const { CHECKLISTA_PELNA, PDF_TESTOWY } = require('./pomoc');
 
 let serwer;
-let baza;
-let ciastkoSesji = '';
+let ADRES;
+const ciastka = {};
 
-/** Loguje sie jako pracownik testowy i zwraca naglowek `Cookie` do dalszych zadan. */
-function ciasteczkoZOdpowiedzi(odp) {
-  const surowe = typeof odp.headers.getSetCookie === 'function' ? odp.headers.getSetCookie() : [odp.headers.get('set-cookie')];
-  return surowe.filter(Boolean).map((c) => c.split(';')[0]).join('; ');
+async function zaloguj(email) {
+  const odp = await fetch(`${ADRES}/api/psa/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, haslo: 'HasloTestowe123' }),
+  });
+  assert.equal(odp.status, 200);
+  ciastka[email] = odp.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
 }
+
+async function zadanie(metoda, sciezka, cialo, { kto = 'admin@example.com', plik = null } = {}) {
+  const naglowki = { Cookie: ciastka[kto] || '', Origin: ADRES };
+  let body;
+  if (plik) {
+    body = new FormData();
+    body.append('plik', new Blob([plik.tresc]), plik.nazwa);
+  } else if (cialo !== undefined) {
+    naglowki['Content-Type'] = 'application/json';
+    body = JSON.stringify(cialo);
+  }
+  const odp = await fetch(`${ADRES}${sciezka}`, { method: metoda, headers: naglowki, body });
+  const typ = odp.headers.get('content-type') || '';
+  return { status: odp.status, naglowki: odp.headers, dane: typ.includes('json') ? await odp.json() : await odp.text() };
+}
+
+let spolka;
 
 test.before(async () => {
   serwer = app.listen(0);
-  baza = `http://localhost:${serwer.address().port}`;
-
+  ADRES = `http://localhost:${serwer.address().port}`;
   const hash = await hasla.hashuj('HasloTestowe123');
-  db()
-    .prepare(
-      `INSERT INTO psa_uzytkownicy (imie, email, hash_hasla, rola, aktywny, utworzono)
-       VALUES ('Łukasz Kozon', 'notariusz@example-test.pl', ?, 'admin', 1, ?)`
-    )
-    .run(hash, new Date().toISOString());
-
-  const odpLogin = await fetch(`${baza}/api/psa/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'notariusz@example-test.pl', haslo: 'HasloTestowe123' }),
+  const dodaj = db().prepare('INSERT INTO psa_uzytkownicy (imie, email, hash_hasla, rola, aktywny, utworzono) VALUES (?, ?, ?, ?, 1, ?)');
+  dodaj.run('Łukasz Kozon', 'admin@example.com', hash, 'admin', czas.terazIso());
+  dodaj.run('Pracownik', 'pracownik@example.com', hash, 'pracownik', czas.terazIso());
+  await zaloguj('admin@example.com');
+  await zaloguj('pracownik@example.com');
+  spolka = daneSpolki.dodaj(db(), {
+    krs: '0000555001',
+    nazwa: 'Omega P.S.A.',
+    siedziba: 'Gdynia',
+    adres: 'ul. Portowa 1, 81-001 Gdynia',
+    sad_rejestrowy: 'Sąd Rejonowy Gdańsk-Północ, VIII Wydział Gospodarczy KRS',
+    data_rejestracji: '2026-01-10',
   });
-  if (odpLogin.status !== 200) throw new Error(`Logowanie testowe nie powiodło się: ${odpLogin.status}`);
-  ciastkoSesji = ciasteczkoZOdpowiedzi(odpLogin);
 });
 
 test.after(() => {
   serwer.close();
-  fs.rmSync(PLIK_BAZY, { force: true });
-  fs.rmSync(`${PLIK_BAZY}-wal`, { force: true });
-  fs.rmSync(`${PLIK_BAZY}-shm`, { force: true });
+  for (const p of [PLIK_BAZY, `${PLIK_BAZY}-wal`, `${PLIK_BAZY}-shm`]) fs.rmSync(p, { force: true });
   fs.rmSync(process.env.KATALOG_DOKUMENTOW, { recursive: true, force: true });
 });
 
-const AUTOR = () => ({ Cookie: ciastkoSesji });
-
-async function zapytaj(metoda, sciezka, cialo) {
-  const opcje = { method: metoda, headers: { ...AUTOR() } };
-  if (cialo !== undefined) {
-    opcje.headers['Content-Type'] = 'application/json';
-    opcje.body = JSON.stringify(cialo);
+test('trasy kancelarii wymagają sesji pracownika; ustawienia i integralność — tylko administrator', async () => {
+  for (const [m, s] of [['GET', '/api/psa/sprawy'], ['GET', '/api/psa/spolki'], ['GET', '/api/psa/osoby'], ['GET', '/api/psa/pliki/1'], ['POST', '/api/psa/sprawy']]) {
+    assert.equal((await zadanie(m, s, undefined, { kto: 'nikt' })).status, 401, `${m} ${s}`);
   }
-  const odp = await fetch(baza + sciezka, opcje);
-  const dane = await odp.json();
-  return [odp.status, dane];
-}
-
-let licznikDanych = 0;
-
-/** Zestaw danych: spolka + emisja 100 akcji objeta w calosci przez Kowalskiego. */
-async function przygotujSpolke() {
-  licznikDanych += 1;
-  const sufiks = String(licznikDanych).padStart(4, '0');
-
-  const [, spolkaOdp] = await zapytaj('POST', '/api/psa/spolki', {
-    nazwa: `Testowa Sprawy P.S.A. ${sufiks}`,
-    krs: `0000${sufiks}00`,
-  });
-  const spolkaId = spolkaOdp.spolka.id;
-
-  const [, kowalski] = await zapytaj('POST', '/api/psa/osoby', {
-    typ: 'fizyczna', nazwisko: 'Kowalski', imie: `Jan${sufiks}`,
-    data_urodzenia: '1980-01-01', email: `jan.kowalski.${sufiks}@example.pl`, aml_status: 'wykonane',
-  });
-  const [, nowak] = await zapytaj('POST', '/api/psa/osoby', {
-    typ: 'fizyczna', nazwisko: 'Nowak', imie: `Anna${sufiks}`,
-    data_urodzenia: '1985-05-05', email: `anna.nowak.${sufiks}@example.pl`, aml_status: 'wykonane',
-  });
-
-  const [, emisja] = await zapytaj('POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'emisja',
-    dane: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' },
-  });
-  await zapytaj('POST', `/api/psa/spolki/${spolkaId}/zdarzenia`, {
-    typ: 'objecie',
-    dane: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: kowalski.osoba.id, ilosc: 100 }] },
-  });
-
-  return { spolkaId, kowalski: kowalski.osoba, nowak: nowak.osoba, emisjaZdarzenieId: emisja.zdarzenie.id };
-}
-
-/**
- * Z-202/P-014: przeglad AML zadajacego to WYLACZNIE sygnal informacyjny -
- * juz widoczny w kartotece osob (`trasy/osoby.js`), tu sprawdzamy, ze
- * dociera tez do kolejki spraw i do widoku pojedynczej sprawy, bez
- * blokowania niczego (sprawa zaklada sie i idzie dalej normalnie).
- */
-test('GET /api/psa/sprawy i GET /api/psa/sprawy/:id: sygnalizuja przeterminowany przeglad AML zadajacego, bez blokady', async () => {
-  const { spolkaId } = await przygotujSpolke();
-
-  const [, przeterminowany] = await zapytaj('POST', '/api/psa/osoby', {
-    typ: 'fizyczna', nazwisko: 'Przeterminowany', imie: 'Piotr',
-    data_urodzenia: '1975-01-01', email: 'piotr.przegladaml@example.pl',
-    aml_status: 'wykonane', aml_data: '2020-01-01',
-  });
-
-  const [stZal, zalozona] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'obciazenie', zrodlo: 'email',
-    zadajacy_osoba_id: przeterminowany.osoba.id, zadajacy_rola: 'akcjonariusz',
-  });
-  assert.equal(stZal, 201, JSON.stringify(zalozona));
-  assert.equal(zalozona.sprawa.zadajacy_wymaga_przegladu_aml, true, 'przeglad sprzed lat jest przeterminowany');
-
-  const [, kolejka] = await zapytaj('GET', `/api/psa/sprawy?spolka_id=${spolkaId}`);
-  const wKolejce = kolejka.sprawy.find((s) => s.id === zalozona.sprawa.id);
-  assert.ok(wKolejce, 'sprawa stoi w kolejce - sygnal AML jej nie blokuje');
-  assert.equal(wKolejce.zadajacy_wymaga_przegladu_aml, true);
-
-  const [, szczegol] = await zapytaj('GET', `/api/psa/sprawy/${zalozona.sprawa.id}`);
-  assert.equal(szczegol.sprawa.zadajacy_wymaga_przegladu_aml, true);
-
-  // Zadne surowe dane AML zadajacego nie wychodza na zewnatrz - wylacznie
-  // wyliczony sygnal boolowski.
-  assert.equal(wKolejce.zadajacy_aml_status, undefined);
-  assert.equal(wKolejce.zadajacy_aml_data, undefined);
+  assert.equal((await zadanie('GET', '/api/psa/ustawienia', undefined, { kto: 'pracownik@example.com' })).status, 403);
+  assert.equal((await zadanie('POST', '/api/psa/integralnosc', undefined, { kto: 'pracownik@example.com' })).status, 403);
+  const integralnosc = await zadanie('POST', '/api/psa/integralnosc');
+  assert.equal(integralnosc.dane.ok, true);
+  const ustawienia = await zadanie('GET', '/api/psa/ustawienia');
+  assert.ok(ustawienia.dane.kancelaria.some((p) => p.klucz === 'nazwa'));
+  assert.equal(ustawienia.dane.stawki, undefined, 'U-05: bez edycji stawek');
+  assert.equal((await zadanie('GET', '/api/psa/portal/start')).status, 404, 'portal odłączony do Fazy 5');
 });
 
-/**
- * Naprawa Z-351/Z-353: podwojne zadanie (dwa kliknieca, ponowienie po
- * zerwanym polaczeniu) zakladalo dwie NIEZALEZNE sprawy dla tego samego
- * zdarzenia, kazda z wlasnym biegnacym terminem 7-dniowym. Klucz
- * idempotencyjny generuje klient i wysyla go PONOWNIE przy kazdej
- * ponowionej probie tej samej czynnosci.
- */
-test('POST /api/psa/sprawy: ten sam klucz_idempotencji drugi raz oddaje JUZ zalozona sprawe, nie zaklada drugiej', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-  const klucz = `test-idempotencja-${Date.now()}`;
+let anna;
+let jan;
 
-  const [st1, pierwsza] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'emisja', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'spolka',
-    klucz_idempotencji: klucz,
-  });
-  assert.equal(st1, 201, JSON.stringify(pierwsza));
+test('osoby: błędy przy polach, ostrzeżenie o powtórzonym PESEL-u, karta osoby z historią i zgodą e-mail', async () => {
+  const zle = await zadanie('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwa: 'Zły PESEL', pesel: '44051401358' });
+  assert.equal(zle.status, 422);
+  assert.deepEqual(zle.dane.bledy.map((b) => b.pole).sort(), ['adres', 'pesel']);
 
-  const [st2, druga] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'emisja', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'spolka',
-    klucz_idempotencji: klucz,
-  });
-  assert.equal(st2, 200, 'ponowienie z tym samym kluczem nie zaklada drugiej sprawy');
-  assert.equal(druga.sprawa.id, pierwsza.sprawa.id);
-  assert.equal(druga.juz_istniala, true);
+  anna = (await zadanie('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwa: 'Anna Nowak', pesel: '44051401359', adres: 'ul. A 1, Gdynia' })).dane.osoba;
+  const druga = await zadanie('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwa: 'Anna N.', pesel: '44051401359', adres: 'ul. A 1' });
+  assert.equal(druga.status, 201);
+  assert.match(druga.dane.ostrzezenia[0], /Anna Nowak/);
+  jan = (await zadanie('POST', '/api/psa/osoby', { typ: 'fizyczna', nazwa: 'Jan Bez', data_urodzenia: '1985-02-03', adres: 'ul. B 2' })).dane.osoba;
 
-  const liczbaSpraw = db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy WHERE klucz_idempotencji = ?').get(klucz).n;
-  assert.equal(liczbaSpraw, 1, 'dokladnie jedna sprawa w bazie, nie dwie');
+  const edycja = await zadanie('PUT', `/api/psa/osoby/${anna.id}`, { adres: 'ul. Nowa 3, Gdynia', email: 'anna@example.com', pep: true, pep_opis: 'radna' });
+  assert.equal(edycja.status, 200);
+  assert.equal(edycja.dane.osoba.adres, 'ul. Nowa 3, Gdynia');
 
-  // Bez klucza (klient starszy albo swiadomie inna proba) zachowanie
-  // dotychczasowe - kazde zadanie zaklada nowa sprawe.
-  const [st3, trzecia] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'emisja', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'spolka',
-  });
-  assert.equal(st3, 201);
-  assert.notEqual(trzecia.sprawa.id, pierwsza.sprawa.id);
+  const bezPliku = await zadanie('PUT', `/api/psa/osoby/${anna.id}`, { zgoda_email: { zgoda: true } });
+  assert.equal(bezPliku.status, 422);
+  assert.match(bezPliku.dane.blad, /plik podpisanej zgody/);
+  const plik = await zadanie('POST', `/api/psa/osoby/${anna.id}/pliki`, undefined, { plik: { tresc: PDF_TESTOWY, nazwa: 'zgoda-podpisana.pdf' } });
+  assert.equal(plik.status, 201);
+  assert.equal((await zadanie('PUT', `/api/psa/osoby/${anna.id}`, { zgoda_email: { zgoda: true, plik_id: plik.dane.id } })).dane.osoba.zgoda_email, 1);
+  assert.equal((await zadanie('PUT', `/api/psa/osoby/${anna.id}`, { email: '' })).status, 422, 'adresu nie usuwa się przy zgodzie');
+  assert.equal((await zadanie('PUT', `/api/psa/osoby/${anna.id}`, { zgoda_email: { zgoda: false } })).status, 422, 'wycofanie wymaga daty');
+  await zadanie('PUT', `/api/psa/osoby/${anna.id}`, { zgoda_email: { zgoda: false, data: czas.dzisIso() } });
+
+  const karta = await zadanie('GET', `/api/psa/osoby/${anna.id}`);
+  assert.deepEqual(karta.dane.historia.map((h) => h.pole).sort(), ['adres', 'email', 'pep', 'pep_opis', 'zgoda_email', 'zgoda_email']);
+  assert.equal(karta.dane.historia.find((h) => h.pole === 'zgoda_email' && h.nowa === '1').plik_id, plik.dane.id);
+  assert.deepEqual(karta.dane.pliki.map((p) => p.nazwa), ['zgoda-podpisana.pdf']);
+  assert.equal((await zadanie('GET', '/api/psa/osoby?q=Nowak')).dane.length, 1);
 });
 
-test('PATCH /api/psa/sprawy/:id akcja "zmien-typ": poprawia kwalifikacje przed wpisem, odmawia po', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-
-  // Portal klienta oferuje TRZY grupy, wiec „emisja albo umorzenie" wpada
-  // jako `emisja` — pracownik po przeczytaniu dokumentu przestawia na `umorzenie`.
-  const [stZal, zalozona] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'emisja', zrodlo: 'portal',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'spolka', zadajacy_opis: 'Zgłoszenie przez portal',
+test('sprawa krok po kroku: otwarcie jednym kliknięciem, zbycie — Dalej, list, Nadano, wpis; kokpit „stan na” dzień', async () => {
+  const otwarcie = await zadanie('POST', '/api/psa/sprawy', {
+    spolka_id: spolka,
+    zadajacy: 'spolka',
+    wpisz: true,
+    checklista: CHECKLISTA_PELNA,
+    operacje: [{ typ: 'otwarcie', zrodlo: 'zalozenie', serie: [{ seria: 'A', numery: '1-100', liczba: 100, data_wpisu_krs: '2026-01-10' }], akcjonariusze: [{ osoba_id: jan.id, akcje: [{ seria: 'A', numery: '1-100', liczba: 100 }] }] }],
   });
-  assert.equal(stZal, 201, JSON.stringify(zalozona));
-  const sprawaId = zalozona.sprawa.id;
+  assert.equal(otwarcie.status, 201);
+  assert.equal(otwarcie.dane.sprawa.stan, 'wpisana');
 
-  const [stZly] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, {
-    akcja: 'zmien-typ', typ_zdarzenia: 'nie_ma_takiego',
-  });
-  assert.equal(stZly, 400, 'nieznany typ zdarzenia');
+  const nowa = await zadanie('POST', '/api/psa/sprawy', { spolka_id: spolka, zadajacy: 'osoba', zadajacy_osoba_id: anna.id, klucz_idempotencji: 'zbycie-1' });
+  assert.equal(nowa.status, 201);
+  assert.equal(nowa.dane.krok, 1);
+  assert.deepEqual(nowa.dane.bledy.map((b) => b.komunikat), ['Dodaj co najmniej jedną zmianę.']);
+  const id = nowa.dane.sprawa.id;
+  const ponownie = await zadanie('POST', '/api/psa/sprawy', { spolka_id: spolka, zadajacy: 'spolka', klucz_idempotencji: 'zbycie-1' });
+  assert.deepEqual([ponownie.status, ponownie.dane.sprawa.id], [200, id]);
 
-  const [stZmiana, poZmianie] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, {
-    akcja: 'zmien-typ', typ_zdarzenia: 'umorzenie',
+  const zapis = await zadanie('PUT', `/api/psa/sprawy/${id}`, {
+    podstawa: 'Umowa sprzedaży akcji',
+    operacje: [{ typ: 'przeniesienie', zbywca_osoba_id: jan.id, nabywcy: [{ osoba_id: anna.id, akcje: [{ seria: 'A', numery: '1-10', liczba: 10 }] }] }],
   });
-  assert.equal(stZmiana, 200);
-  assert.equal(poZmianie.sprawa.typ_zdarzenia, 'umorzenie');
-  assert.equal(poZmianie.sprawa.stan, 'nowa', 'poprawka typu nie rusza stanu sprawy');
-  assert.match(poZmianie.sprawa.notatka, /Typ zdarzenia poprawiony/);
+  assert.deepEqual(zapis.dane.bledy, []);
+  assert.deepEqual(zapis.dane.osoby.map((o) => o.nazwa), ['Jan Bez']);
+  assert.deepEqual(zapis.dane.stan_po.akcjonariusze.map((p) => [p.osoba_id, p.liczba]), [[jan.id, 90], [anna.id, 10]].sort((a, b) => a[0] - b[0]));
 
-  // Po zamknieciu sprawy typ jest juz czescia rejestru — nie edytujemy go.
-  await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'anuluj', powod: 'test' });
-  const [stPo] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, {
-    akcja: 'zmien-typ', typ_zdarzenia: 'emisja',
-  });
-  assert.equal(stPo, 400, 'sprawa zamknieta — typ zdarzenia zostaje');
+  const dalej = await zadanie('POST', `/api/psa/sprawy/${id}/krok`, { krok: 2 });
+  assert.equal(dalej.dane.krok, 2);
+  const powiadomienie = dalej.dane.osoby[0].powiadomienie;
+  assert.deepEqual([powiadomienie.kanal, powiadomienie.stan], ['list', 'do_wyslania']);
+  assert.equal((await zadanie('PUT', `/api/psa/sprawy/${id}`, { podstawa: 'x' })).status, 422, 'po kroku 1 treść tylko przez „Zmień treść”');
+
+  const zablokowany = await zadanie('POST', `/api/psa/sprawy/${id}/stan`, { stan: 'wpisana' });
+  assert.equal(zablokowany.status, 422);
+  assert.ok(zablokowany.dane.bledy.some((b) => b.pole === 'oplata'));
+
+  await zadanie('PUT', `/api/psa/sprawy/${id}`, { checklista: CHECKLISTA_PELNA, oplata: 'tak' });
+  pisma.nadano(db(), powiadomienie.id);
+  const wpis = await zadanie('POST', `/api/psa/sprawy/${id}/stan`, { stan: 'wpisana' });
+  assert.equal(wpis.status, 200);
+  assert.deepEqual([wpis.dane.sprawa.stan, wpis.dane.krok], ['wpisana', 3]);
+  assert.deepEqual(wpis.dane.pisma.filter((p) => p.typ === 'powiadomienie_wpis').map((p) => p.adresat), ['spolka', 'osoba']);
+
+  const kokpit = await zadanie('GET', `/api/psa/spolki/${spolka}`);
+  assert.equal(kokpit.dane.rejestr.otwarty, true);
+  assert.equal(kokpit.dane.wpisy.length, 2);
+  assert.equal(kokpit.dane.osoby[anna.id].nazwa, 'Anna Nowak');
+  assert.equal(kokpit.dane.oplaty[0].kwota_netto_grosze, 10000);
+  const wczoraj = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  assert.deepEqual((await zadanie('GET', `/api/psa/spolki/${spolka}?dzien=${wczoraj}`)).dane.rejestr.akcjonariusze, [], 'stan na wczoraj — przed otwarciem');
+  assert.equal((await zadanie('GET', '/api/psa/sprawy?stan=wpisana')).dane.length, 2);
 });
 
-test('pelny cykl sprawy: nowa → weryfikacja → wpisana, z zawiadomieniem bez SMTP', async () => {
-  const { spolkaId, kowalski, nowak, emisjaZdarzenieId } = await przygotujSpolke();
+test('spółka: „Edytuj” z błędami przy polach i historią', async () => {
+  const zle = await zadanie('PUT', `/api/psa/spolki/${spolka}`, { nazwa: '', email: 'zly', platnosc: 'tygodniowa' });
+  assert.equal(zle.status, 422);
+  assert.deepEqual(zle.dane.bledy.map((b) => b.pole).sort(), ['email', 'nazwa', 'platnosc']);
+  const ok = await zadanie('PUT', `/api/psa/spolki/${spolka}`, { email: 'biuro@omega.example', platnosc: 'miesieczna', krs: '0000000001' });
+  assert.deepEqual([ok.dane.email, ok.dane.platnosc, ok.dane.krs], ['biuro@omega.example', 'miesieczna', '0000555001']);
+  assert.deepEqual((await zadanie('GET', `/api/psa/spolki/${spolka}`)).dane.historia.map((h) => h.pole).sort(), ['email', 'platnosc']);
+});
 
-  const [stZal, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'zbywca', zadajacy_opis: 'Zbywca akcji',
-  });
-  assert.equal(stZal, 201);
-  assert.equal(sprawaOdp.sprawa.stan, 'nowa');
-  assert.equal(sprawaOdp.sprawa.termin.dni_pozostale, 7);
-  const sprawaId = sprawaOdp.sprawa.id;
-
-  const [stWer] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'weryfikuj' });
-  assert.equal(stWer, 200);
-
-  const [stPod, podgladOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/podglad`, {
-    dane: { emisja_zdarzenie_id: emisjaZdarzenieId, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
-  });
-  assert.equal(stPod, 200);
-  assert.equal(podgladOdp.dopuszczalne, true);
-
-  // D-R01: daty wpisu nie da sie podac ani antydatowac - backend odmawia.
-  const [stAntydata, antydata] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {
-    data_wpisu: '2020-01-01T10:00:00Z',
-    dane: { emisja_zdarzenie_id: emisjaZdarzenieId, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
-  });
-  assert.ok(stAntydata >= 400 && stAntydata < 500, `oczekiwano odmowy, jest ${stAntydata}`);
-  assert.match(JSON.stringify(antydata), /nadaje system/);
-
-  // W2.3 (D-075/D-076): bez ważnej zgody i bez powiadomienia wpis zablokowany — z przyczyną.
-  const [stBlok, blok] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {
-    dane: { emisja_zdarzenie_id: emisjaZdarzenieId, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
-  });
-  assert.equal(stBlok, 400);
-  assert.match(blok.blad, /Brak ważnej zgody na wpis.*powiadomienia/);
-  const [, przedZgoda] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
-  assert.ok(przedZgoda.sprawa.blokada_wpisu, 'widok sprawy niesie przyczynę blokady');
-
-  // W2.2: skan i zwykły oryginał pocztą = brak zgody; QES — zgoda ważna.
-  for (const forma of ['skan', 'oryginal']) {
-    const [stZla, zla] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/zgoda`, { forma });
-    assert.equal(stZla, 400, forma);
-    assert.match(zla.blad, /nie jest dopuszczalną formą/);
+test('pliki: PDF przyjęty i pobierany jako załącznik; inny format albo HTML udający PDF — „Wgraj plik PDF”', async () => {
+  const sprawa = (await zadanie('GET', '/api/psa/sprawy')).dane[0];
+  const ok = await zadanie('POST', `/api/psa/sprawy/${sprawa.id}/pliki`, undefined, { plik: { tresc: PDF_TESTOWY, nazwa: 'umowa sprzedaży.pdf' } });
+  assert.equal(ok.status, 201);
+  for (const [tresc, nazwa] of [['<html><script>alert(1)</script></html>', 'skan.pdf'], ['PK..', 'umowa.docx'], ['<svg/>', 'rys.svg']]) {
+    const zle = await zadanie('POST', `/api/psa/sprawy/${sprawa.id}/pliki`, undefined, { plik: { tresc, nazwa } });
+    assert.deepEqual([zle.status, zle.dane.blad], [422, 'Wgraj plik PDF.'], nazwa);
   }
-  // D-088: pracownik potwierdza tylko „w dopuszczalnej formie” (tak/nie) — bez wybierania formy.
-  const [stNie, nie] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/zgoda`, { dopuszczalna: false });
-  assert.equal(stNie, 400);
-  assert.match(nie.blad, /wyślij powiadomienie/);
-  const [stZgoda, poZgodzie] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/zgoda`, { dopuszczalna: true, data: '2026-11-01' });
-  assert.equal(stZgoda, 200);
-  assert.equal(poZgodzie.sprawa.zgoda_wazna, true);
-  assert.equal(poZgodzie.sprawa.zgoda_forma_nazwa, 'w dopuszczalnej formie');
-  assert.equal(poZgodzie.sprawa.blokada_wpisu, null);
-
-  const [stWpis, wpisOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/wpisz`, {
-    dane: { emisja_zdarzenie_id: emisjaZdarzenieId, zbywca_osoba_id: kowalski.id, pozycje: [{ nabywca_osoba_id: nowak.id, ilosc: 40 }] },
-  });
-  assert.equal(stWpis, 201);
-  assert.equal(wpisOdp.sprawa.stan, 'wpisana');
-  assert.equal(wpisOdp.sprawa.zdarzenie_id, wpisOdp.zdarzenie.id);
-
-  // Sam wpis NIE wysyla juz zawiadomien — sprawa laduje w kolejce zakladki
-  // „Zawiadomienia" i czeka, az pracownik domknie robote przy tej spolce.
-  assert.equal(wpisOdp.powiadomienia, undefined);
-  const [, przedWyslaniem] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
-  assert.equal(przedWyslaniem.wydane_dokumenty.length, 0);
-
-  const [stKolejka, kolejka] = await zapytaj('GET', `/api/psa/zawiadomienia?spolka_id=${spolkaId}`);
-  assert.equal(stKolejka, 200);
-  assert.equal(kolejka.razem, 1);
-  assert.deepEqual(kolejka.spolki[0].sprawy.map((x) => x.id), [sprawaId]);
-
-  // Zawiadomienia probuja sie wyslac (SMTP nieskonfigurowany w testach),
-  // ale slad w psa_wydane_dokumenty i tak powstaje - do zadajacego, spolki
-  // (zawiadomienie o wpisie) i spolki (lista akcjonariuszy do KRS, art.
-  // 300(34) § 8 KSH — generowana razem z zawiadomieniem, sprint 5).
-  const [stWyslij, wyslane] = await zapytaj('POST', '/api/psa/zawiadomienia/wyslij', { sprawa_ids: [sprawaId] });
-  assert.equal(stWyslij, 200);
-  assert.equal(wyslane.wyniki[0].pisma.length, 3);
-  assert.equal(wyslane.wyniki[0].pisma.every((p) => p.wyslano === false), true);
-  assert.match(wyslane.wyniki[0].pisma[0].powod, /SMTP|e-mail/i);
-  assert.equal(wyslane.pozostalo, 0, 'sprawa znika z kolejki po wystawieniu pisma');
-
-  // Powtorne wystawienie odpada — kolejka liczy sie z psa_wydane_dokumenty.
-  const [stPowtorka] = await zapytaj('POST', '/api/psa/zawiadomienia/wyslij', { sprawa_ids: [sprawaId] });
-  assert.equal(stPowtorka, 400);
-
-  const [, sprawaSzczegol] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
-  assert.equal(sprawaSzczegol.wydane_dokumenty.length, 3);
-  assert.equal(sprawaSzczegol.wydane_dokumenty.filter((d) => d.typ === 'zawiadomienie_wpis').length, 2);
-  assert.equal(sprawaSzczegol.wydane_dokumenty.some((d) => d.typ === 'wykaz_akcjonariuszy'), true);
-
-  const [, kokpit] = await zapytaj('GET', `/api/psa/spolki/${spolkaId}`);
-  const akcjonariat = new Map(kokpit.akcjonariusze.map((a) => [a.osoba.id, a.ilosc]));
-  assert.equal(akcjonariat.get(kowalski.id), 60);
-  assert.equal(akcjonariat.get(nowak.id), 40);
-});
-
-test('nie mozna dokonac wpisu przed przejsciem sprawy do weryfikacji', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-  const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'email', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
-  });
-  const [status, odp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/wpisz`, {
-    dane: { emisja_zdarzenie_id: 1, pozycje: [{ osoba_id: kowalski.id, ilosc: 10 }] },
-  });
-  assert.equal(status, 422);
-  assert.match(odp.bledy.join(' '), /stanu „weryfikacja”/);
-});
-
-test('wstrzymanie zamraza termin, wznowienie liczy pelne 7 dni od nowa i wysyla wezwanie', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-  const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
-  });
-  const sprawaId = sprawaOdp.sprawa.id;
-  await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'weryfikuj' });
-
-  const [stWstrz, wstrzOdp] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, {
-    akcja: 'wstrzymaj', powod: 'Brak uchwały o umorzeniu.',
-  });
-  assert.equal(stWstrz, 200);
-  assert.equal(wstrzOdp.sprawa.stan, 'wstrzymana');
-  assert.equal(wstrzOdp.sprawa.termin.zamrozony, true);
-  assert.equal(wstrzOdp.wysylka.wyslano, false, 'brak SMTP - wezwanie zapisane, nie wyslane');
-
-  const [, wznOdp] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'wznow' });
-  assert.equal(wznOdp.sprawa.stan, 'weryfikacja');
-  assert.equal(wznOdp.sprawa.termin.dni_pozostale, 7, 'pełne 7 dni od dnia wznowienia');
-
-  const [, szczegol] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
-  assert.equal(szczegol.wydane_dokumenty.some((d) => d.typ === 'wezwanie'), true);
-});
-
-test('odmowa wpisu wymaga przyczyny i wysyla zawiadomienie do zadajacego', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-  const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'email', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
-  });
-  const sprawaId = sprawaOdp.sprawa.id;
-  await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'weryfikuj' });
-
-  const [stBrak, brakOdp] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, { akcja: 'odmow' });
-  assert.equal(stBrak, 400);
-  assert.match(brakOdp.blad, /przyczyny/);
-
-  const [stBezOpisu, bezOpisuOdp] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, {
-    akcja: 'odmow', powod_odmowy_kod: 'inna',
-  });
-  assert.equal(stBezOpisu, 400);
-  assert.match(bezOpisuOdp.blad, /opisz/);
-
-  const [stOdm, odmOdp] = await zapytaj('PATCH', `/api/psa/sprawy/${sprawaId}`, {
-    akcja: 'odmow', powod_odmowy_kod: 'brak_dokumentow',
-    powod_odmowy: 'Brak wymaganej uchwały o umorzeniu.',
-  });
-  assert.equal(stOdm, 200);
-  assert.equal(odmOdp.sprawa.stan, 'odmowa');
-  assert.equal(odmOdp.sprawa.powod_odmowy_kod, 'brak_dokumentow');
-  assert.equal(odmOdp.sprawa.powod_odmowy, 'Brak wymaganej uchwały o umorzeniu.');
-  assert.equal(odmOdp.wysylka.wyslano, false);
-});
-
-test('zajecie (z urzedu) zaklada sprawe od razu w weryfikacji, bez zadajacego', async () => {
-  const { spolkaId, kowalski, emisjaZdarzenieId } = await przygotujSpolke();
-  const [, komornik] = await zapytaj('POST', '/api/psa/osoby', {
-    typ: 'prawna', nazwa: 'Komornik Sądowy przy SR', nazwisko: null,
-  });
-
-  const [stZal, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'zajecie', zrodlo: 'z_urzedu',
-  });
-  assert.equal(stZal, 201);
-  assert.equal(sprawaOdp.sprawa.stan, 'weryfikacja', 'z urzedu pomija fazę „nowa”');
-
-  const [stWpis, wpisOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/wpisz`, {
-    dane: {
-      emisja_zdarzenie_id: emisjaZdarzenieId,
-      akcjonariusz_osoba_id: kowalski.id,
-      osoba_id: komornik.osoba.id,
-      ilosc: 15,
-    },
-  });
-  assert.equal(stWpis, 201);
-  // Brak zadajacego -> zawiadomienie do spolki + lista akcjonariuszy do KRS
-  // (art. 300(34) § 8 KSH, sprint 5), oba adresowane do spolki. Wystawia je
-  // pracownik z zakladki „Zawiadomienia", nie sam wpis.
-  const [, wyslaneZUrzedu] = await zapytaj(
-    'POST', '/api/psa/zawiadomienia/wyslij', { sprawa_ids: [wpisOdp.sprawa.id] }
-  );
-  assert.equal(wyslaneZUrzedu.wyniki[0].pisma.length, 2);
-  assert.equal(wyslaneZUrzedu.wyniki[0].pisma.every((p) => p.odbiorca.startsWith('spółka')), true);
-});
-
-test('nie mozna zalozyc sprawy z_urzedu dla typu, ktory tego nie przewiduje', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-  const [status, odp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', zrodlo: 'z_urzedu', zadajacy_osoba_id: kowalski.id,
-  });
-  assert.equal(status, 400);
-  assert.match(odp.blad, /czynnością z urzędu/);
-});
-
-test('AML jako bramka: niemozliwe blokuje wpis takze w workflow sprawy', async () => {
-  const { spolkaId, kowalski, emisjaZdarzenieId } = await przygotujSpolke();
-  const [, podejrzany] = await zapytaj('POST', '/api/psa/osoby', {
-    typ: 'fizyczna', nazwisko: 'Zieliński', imie: 'Marek', data_urodzenia: '1978-03-15', aml_status: 'niemozliwe',
-  });
-
-  const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'zbywca',
-  });
-  await zapytaj('PATCH', `/api/psa/sprawy/${sprawaOdp.sprawa.id}`, { akcja: 'weryfikuj' });
-  await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/zgoda`, { forma: 'qes' });
-
-  const [status, odp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/wpisz`, {
-    dane: {
-      emisja_zdarzenie_id: emisjaZdarzenieId, zbywca_osoba_id: kowalski.id,
-      pozycje: [{ nabywca_osoba_id: podejrzany.osoba.id, ilosc: 10 }],
-    },
-  });
-  assert.equal(status, 422);
-  assert.match(odp.bledy.join(' '), /środków bezpieczeństwa finansowego/);
-
-  const [, sprawaPoNiepowodzeniu] = await zapytaj('GET', `/api/psa/sprawy/${sprawaOdp.sprawa.id}`);
-  assert.equal(sprawaPoNiepowodzeniu.sprawa.stan, 'weryfikacja', 'nieudany wpis nie zmienia stanu sprawy');
-});
-
-test('upload dokumentu do sprawy i pobranie go z powrotem', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-  const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
-  });
-  const sprawaId = sprawaOdp.sprawa.id;
-
-  const tresc = '%PDF-1.4 to nie jest prawdziwy PDF, ale wystarczy do testu uploadu.';
-  const formularz = new FormData();
-  formularz.append('typ_dokumentu', 'uchwala');
-  formularz.append('pliki', new Blob([tresc], { type: 'application/pdf' }), 'uchwala-umorzenie.pdf');
-
-  const odpUpload = await fetch(`${baza}/api/psa/sprawy/${sprawaId}/dokumenty`, {
-    method: 'POST',
-    headers: { ...AUTOR() },
-    body: formularz,
-  });
-  assert.equal(odpUpload.status, 201);
-  const uploadOdp = await odpUpload.json();
-  assert.equal(uploadOdp.dokumenty.length, 1);
-  assert.equal(uploadOdp.dokumenty[0].nazwa_pliku, 'uchwala-umorzenie.pdf');
-
-  const dokumentId = uploadOdp.dokumenty[0].id;
-  const odpPlik = await fetch(`${baza}/api/psa/sprawy/${sprawaId}/dokumenty/${dokumentId}`, {
-    headers: { ...AUTOR() },
-  });
-  assert.equal(odpPlik.status, 200);
-  const pobranaTresc = await odpPlik.text();
-  assert.equal(pobranaTresc, tresc);
-
-  const [, szczegol] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
-  assert.equal(szczegol.dokumenty.length, 1);
-  assert.equal(szczegol.dokumenty[0].typ_dokumentu, 'uchwala');
-});
-
-test('odrzuca plik o niedozwolonym rozszerzeniu', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-  const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier', zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
-  });
-
-  const formularz = new FormData();
-  formularz.append('typ_dokumentu', 'inny');
-  formularz.append('pliki', new Blob(['echo zla-koncowka'], { type: 'application/x-sh' }), 'skrypt.sh');
-
-  const odp = await fetch(`${baza}/api/psa/sprawy/${sprawaOdp.sprawa.id}/dokumenty`, {
-    method: 'POST',
-    headers: { ...AUTOR() },
-    body: formularz,
-  });
-  assert.equal(odp.status, 400);
-  const tresc = await odp.json();
-  assert.match(tresc.blad, /Niedozwolone rozszerzenie/);
-});
-
-test('sprostowanie przez dedykowany endpoint /api/psa/zdarzenia/:id/sprostuj', async () => {
-  const { emisjaZdarzenieId } = await przygotujSpolke();
-
-  const [, przedSprostowaniem] = await zapytaj('GET', `/api/psa/zdarzenia/${emisjaZdarzenieId}`);
-  assert.equal(przedSprostowaniem.mozna_sprostowac, true);
-
-  const [status, odp] = await zapytaj('POST', `/api/psa/zdarzenia/${emisjaZdarzenieId}/sprostuj`, {
-    uzasadnienie: 'Błędna cena emisyjna.',
-    zamiast: { typ: 'emisja', dane: { seria: 'A', ilosc: 100, cena_emisyjna_grosze: 500 } },
-  });
-  assert.equal(status, 201);
-
-  const [, poSprostowaniu] = await zapytaj('GET', `/api/psa/zdarzenia/${emisjaZdarzenieId}`);
-  assert.equal(poSprostowaniu.mozna_sprostowac, false);
-  assert.equal(poSprostowaniu.sprostowane_przez, odp.zdarzenie.id);
-});
-
-test('sprostowanie bez uzasadnienia jest odrzucane na poziomie API', async () => {
-  const { emisjaZdarzenieId } = await przygotujSpolke();
-  const [status, odp] = await zapytaj('POST', `/api/psa/zdarzenia/${emisjaZdarzenieId}/sprostuj`, {
-    uzasadnienie: '',
-  });
-  assert.equal(status, 400);
-  assert.match(odp.blad, /uzasadnienia/);
-});
-
-test('integralnosc lancucha pozostaje ok po calym cyklu operacji', async () => {
-  const [, odp] = await zapytaj('GET', '/api/psa/integralnosc');
-  assert.equal(odp.ok, true);
-});
-
-test('charakter zadajacego: wymagany, ze slownika, a „inna osoba” wymaga uzasadnienia', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-
-  // Brak charakteru - art. 300(34) § 1 KSH wymaga ustalenia interesu prawnego.
-  const [stBrak, odpBrak] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id,
-  });
-  assert.equal(stBrak, 400);
-  assert.match(odpBrak.blad, /w jakim charakterze/i);
-
-  // Wartosc spoza slownika.
-  const [stObca] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'komornik',
-  });
-  assert.equal(stObca, 400);
-
-  // "inna osoba" BEZ wykazania interesu prawnego - odrzucone.
-  const [stInna, odpInna] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'inna',
-  });
-  assert.equal(stInna, 400);
-  assert.match(odpInna.blad, /interes prawny/i);
-
-  // "inna osoba" Z uzasadnieniem - katalog nie jest zamkniety, wiec przechodzi.
-  const [stOk, odpOk] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'inna',
-    zadajacy_opis: 'Wierzyciel akcjonariusza z tytulu wykonalnego',
-  });
-  assert.equal(stOk, 201);
-  assert.equal(odpOk.sprawa.zadajacy_rola, 'inna');
-});
-
-test('sciezka z urzedu nie wymaga charakteru zadajacego (art. 300(34) § 2 KSH)', async () => {
-  const { spolkaId } = await przygotujSpolke();
-  const [st, odp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'zajecie', zrodlo: 'z_urzedu',
-  });
-  assert.equal(st, 201);
-  assert.equal(odp.sprawa.zadajacy_rola, null);
-});
-
-// ─────────────────────────────────────────────────────────────
-// Sesja 8, blok B — znak sprawy, podstawa dokumentu, plec, dane spolki
-// ─────────────────────────────────────────────────────────────
-
-test('znak sprawy: nadawany automatycznie, sekwencyjnie, w formacie RA/ROK/NNNN', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-
-  const [, pierwsza] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz', data_wplywu: '2026-03-01',
-  });
-  const [, druga] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz', data_wplywu: '2026-03-15',
-  });
-
-  assert.match(pierwsza.sprawa.numer, /^RA\/2026\/\d{4}$/);
-  assert.match(druga.sprawa.numer, /^RA\/2026\/\d{4}$/);
-  assert.notEqual(pierwsza.sprawa.numer, druga.sprawa.numer);
-  const [, kolejnaWTymRoku] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz', data_wplywu: '2026-03-20',
-  });
-  const numeryTegoRoku = [pierwsza, druga, kolejnaWTymRoku].map((o) => Number(o.sprawa.numer.split('/')[2]));
-  assert.deepEqual(
-    [...numeryTegoRoku].sort((a, b) => a - b),
-    numeryTegoRoku,
-    'kolejne sprawy dostaja rosnace numery'
-  );
-});
-
-test('podstawa dokumentu: rodzaj i data podaje sie razem, katalog jest zamkniety', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-
-  const [stSam, odpSam] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz', dokument_rodzaj: 'uchwala',
-  });
-  assert.equal(stSam, 400);
-  assert.match(odpSam.blad, /razem/);
-
-  const [stObcy] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
-    dokument_rodzaj: 'faktura', dokument_data: '2026-01-01',
-  });
-  assert.equal(stObcy, 400);
-
-  const [stOk, odpOk] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
-    dokument_rodzaj: 'uchwala', dokument_data: '2026-01-15',
-  });
-  assert.equal(stOk, 201);
-  assert.equal(odpOk.sprawa.dokument_rodzaj, 'uchwala');
-  assert.equal(odpOk.sprawa.dokument_data, '2026-01-15');
-});
-
-test('osoba: plec jest dobrowolna i ograniczona do katalogu', async () => {
-  const [stObca] = await zapytaj('POST', '/api/psa/osoby', {
-    typ: 'fizyczna', nazwisko: 'Testowy', plec: 'nieznana',
-  });
-  assert.equal(stObca, 400);
-
-  const [stOk, odpOk] = await zapytaj('POST', '/api/psa/osoby', {
-    typ: 'fizyczna', nazwisko: 'Testowy', plec: 'mezczyzna',
-  });
-  assert.equal(stOk, 201);
-  assert.equal(odpOk.osoba.plec, 'mezczyzna');
-});
-
-test('spolka: dane reprezentanta umowy zapisuja sie w mianowniku, bez pol odmiany', async () => {
-  const [, spolkaOdp] = await zapytaj('POST', '/api/psa/spolki', {
-    nazwa: 'Reprezentant Test P.S.A.',
-    krs: '0000999888',
-    miejscowosc: 'Warszawa',
-    reprezentant_imie_nazwisko: 'Jan Kowalski',
-    reprezentant_funkcja: 'Prezes Zarządu',
-    reprezentant_rodzice: 'Piotr i Anna',
-    reprezentant_email: 'j.kowalski@example.pl',
-  });
-  assert.equal(spolkaOdp.spolka.miejscowosc, 'Warszawa');
-  assert.equal(spolkaOdp.spolka.reprezentant_imie_nazwisko, 'Jan Kowalski');
-  assert.equal(spolkaOdp.spolka.reprezentant_funkcja, 'Prezes Zarządu');
-  // Wszystko zapisuje sie doslownie - pisma nie odmieniaja tych wartosci.
-  assert.equal(spolkaOdp.spolka.reprezentant_rodzice ?? null, null, 'D-108: imiona rodziców tylko do umowy — bez zapisu w spółce');
-  assert.equal(spolkaOdp.spolka.reprezentant_email, 'j.kowalski@example.pl');
-});
-
-// ─────────────────────────────────────────────────────────────
-// Wzór 04 — żądanie dokonania wpisu, na żądanie ze SPRAWY (blok A7)
-// ─────────────────────────────────────────────────────────────
-
-test('sprawa: wzor 04 - lista wzorow, podglad bez zapisu, wystawienie z zapisem i plikiem do pobrania', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-  const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
-    dokument_rodzaj: 'uchwala', dokument_data: '2026-01-15',
-  });
-  const sprawaId = sprawaOdp.sprawa.id;
-
-  const [stLista, listaOdp] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}/dokumenty/wystaw`);
-  assert.equal(stLista, 200);
-  assert.deepEqual(listaOdp.wzory, [{ kod: '04', nazwa: 'Żądanie dokonania wpisu' }]);
-
-  const [stPodglad, podgladOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/dokumenty/04/podglad`);
-  assert.equal(stPodglad, 200);
-  assert.match(podgladOdp.tekst, /ŻĄDANIE DOKONANIA WPISU/);
-  const [, szczegolPrzedWystawieniem] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
-  assert.equal(szczegolPrzedWystawieniem.wydane_dokumenty.length, 0, 'podglad nie zostawia sladu');
-
-  const [stWystaw, wystawOdp] = await zapytaj('POST', `/api/psa/sprawy/${sprawaId}/dokumenty/04`);
-  assert.equal(stWystaw, 201);
-  assert.ok(wystawOdp.id);
-
-  const wiersz = db().prepare('SELECT * FROM psa_wydane_dokumenty WHERE id = ?').get(wystawOdp.id);
-  assert.equal(wiersz.typ, 'zadanie_wpisu');
-  assert.equal(wiersz.sprawa_id, sprawaId);
-  assert.equal(wiersz.szablon_kod, '04');
-  assert.ok(wiersz.szablon_hash.length > 0);
-  assert.ok(wiersz.sciezka_plik);
-
-  const odpPlik = await fetch(`${baza}/api/psa/sprawy/${sprawaId}/wydane/${wystawOdp.id}/plik`, { headers: { ...AUTOR() } });
-  assert.equal(odpPlik.status, 200);
-  assert.match(odpPlik.headers.get('content-type'), /wordprocessingml/);
-  const bufor = Buffer.from(await odpPlik.arrayBuffer());
-  assert.equal(bufor.readUInt32LE(0), 0x04034b50, 'poprawne archiwum ZIP');
-
-  const [, szczegol] = await zapytaj('GET', `/api/psa/sprawy/${sprawaId}`);
-  assert.equal(szczegol.wydane_dokumenty.length, 1);
-});
-
-test('sprawa: nieznany kod wzoru na trasach dokumentow daje 404', async () => {
-  const { spolkaId, kowalski } = await przygotujSpolke();
-  const [, sprawaOdp] = await zapytaj('POST', '/api/psa/sprawy', {
-    spolka_id: spolkaId, typ_zdarzenia: 'umorzenie', zrodlo: 'papier',
-    zadajacy_osoba_id: kowalski.id, zadajacy_rola: 'akcjonariusz',
-  });
-  const [status] = await zapytaj('POST', `/api/psa/sprawy/${sprawaOdp.sprawa.id}/dokumenty/99/podglad`);
-  assert.equal(status, 404);
+  const pobranie = await zadanie('GET', `/api/psa/pliki/${ok.dane.id}`);
+  assert.equal(pobranie.status, 200);
+  assert.equal(pobranie.naglowki.get('x-content-type-options'), 'nosniff');
+  assert.match(pobranie.naglowki.get('content-disposition'), /^attachment; filename\*=UTF-8''umowa%20sprzeda%C5%BCy\.pdf$/);
+  const naDysku = db().prepare('SELECT sciezka FROM psa_pliki WHERE id = ?').get(ok.dane.id).sciezka;
+  assert.match(naDysku, /^[0-9a-f-]{36}\.pdf$/, 'losowa nazwa na dysku');
+  assert.equal((await zadanie('GET', '/api/psa/pliki/999')).status, 404);
+  assert.equal(db().prepare("SELECT COUNT(*) AS ile FROM psa_dziennik WHERE akcja = 'pobranie_pliku'").get().ile, 1);
 });

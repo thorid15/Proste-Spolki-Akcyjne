@@ -5,7 +5,7 @@
  * nie informacja w rejestrze. Jedno źródło stanu: `stanOswiadczen`, historia poza łańcuchem.
  */
 
-const test = require('node:test');
+const test = require('./pominiete')('Faza 5 — portal klienta i płatności przebudowywane');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -22,9 +22,9 @@ const { db } = require('../server/baza');
 const hasla = require('../server/logika/hasla');
 const czas = require('../server/pomocnicze/czas');
 const rejestr = require('../server/rejestr');
-const widoki = require('../server/widoki');
+const widoki = null; // Faza 5: widoki portalu przebudowywane
 const { informacjaZRejestru } = require('../server/logika/informacja-dokument');
-const { stanOswiadczen } = require('../server/oswiadczenia');
+const stanOswiadczen = null; // U-11: oświadczenia zastąpione zgodą w karcie osoby; portal — Faza 5
 const { wymagaListu, TEKST_ZNACZNIKA } = require('../publiczne/js/kontakt.js');
 
 let serwer;

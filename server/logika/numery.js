@@ -3,10 +3,7 @@
 /**
  * Algebra zakresow numerow akcji.
  *
- * Regula domenowa nr 4: numery akcji przydziela APLIKACJA. Uzytkownik podaje
- * wylacznie ilosc. Algorytm: FIFO po najnizszym wolnym numerze w serii,
- * z mozliwoscia recznego nadpisania zakresu (rzadki przypadek - np.
- * przeniesienie konkretnych obciazonych akcji).
+ * U-26: numery akcji (seria, numery i liczba) wpisuje zawsze pracownik — aplikacja ich nie dobiera.
  *
  * Zakres = { nr_od, nr_do } - obustronnie DOMKNIETY, numery calkowite >= 1.
  * Zbior zakresow trzymamy zawsze w postaci znormalizowanej: posortowany
@@ -116,86 +113,6 @@ function nakladaja(a, b) {
   return przeciecie(a, b).length > 0;
 }
 
-/**
- * Przydzial FIFO: bierze `ile` akcji od najnizszego wolnego numeru.
- * Zwraca znormalizowany zbior zakresow.
- *
- * Rzuca BladZakresu, gdy dostepnych akcji jest za malo - to blokada,
- * nie ostrzezenie (sekcja 16 specyfikacji).
- */
-function przydzielFifo(dostepne, ile) {
-  const liczba = Number(ile);
-  if (!Number.isInteger(liczba) || liczba < 1) {
-    throw new BladZakresu('Liczba akcji musi być dodatnią liczbą całkowitą.');
-  }
-  const pula = normalizuj(dostepne);
-  const dostepnych = ilosc(pula);
-  if (dostepnych < liczba) {
-    throw new BladZakresu(
-      `Brak pokrycia: żądano ${liczba} akcji, dostępnych jest ${dostepnych}.`
-    );
-  }
-  const wynik = [];
-  let pozostalo = liczba;
-  for (const z of pula) {
-    if (pozostalo === 0) break;
-    const wZakresie = z.nr_do - z.nr_od + 1;
-    const biore = Math.min(wZakresie, pozostalo);
-    wynik.push({ nr_od: z.nr_od, nr_do: z.nr_od + biore - 1 });
-    pozostalo -= biore;
-  }
-  return normalizuj(wynik);
-}
-
-/**
- * Reczne nadpisanie zakresu (sciezka rzadka - np. przeniesienie konkretnych
- * akcji obciazonych zastawem). Sprawdza, ze wskazane numery sa dostepne
- * i ze ich liczba zgadza sie z deklarowana iloscia.
- */
-function przydzielWskazane(dostepne, zakresy, ile) {
-  const wskazane = normalizuj(zakresy);
-  if (wskazane.length === 0) {
-    throw new BladZakresu('Nie wskazano żadnych numerów akcji.');
-  }
-  const pula = normalizuj(dostepne);
-  const pozaPula = roznica(wskazane, pula);
-  if (pozaPula.length > 0) {
-    throw new BladZakresu(
-      `Wskazane numery nie są dostępne: ${opisz(pozaPula)}. Dostępne: ${opisz(pula) || 'brak'}.`
-    );
-  }
-  if (ile !== undefined && ile !== null && Number(ile) !== ilosc(wskazane)) {
-    throw new BladZakresu(
-      `Wskazany zakres obejmuje ${ilosc(wskazane)} akcji, a zadeklarowano ${Number(ile)}.`
-    );
-  }
-  return wskazane;
-}
-
-/**
- * Jednolite wejscie dla kreatora: jesli podano `zakresy` - tryb reczny,
- * w przeciwnym razie FIFO po `ilosc`.
- */
-function przydziel(dostepne, { ilosc: ile, zakresy } = {}) {
-  if (Array.isArray(zakresy) && zakresy.length > 0) {
-    return przydzielWskazane(dostepne, zakresy, ile);
-  }
-  return przydzielFifo(dostepne, ile);
-}
-
-/** Pelny zakres serii z parametrow emisji. */
-function zakresEmisji({ nr_pierwszy, ilosc: ile }) {
-  const od = Number(nr_pierwszy);
-  const liczba = Number(ile);
-  if (!Number.isInteger(od) || od < 1) {
-    throw new BladZakresu('Numer pierwszej akcji emisji musi być liczbą całkowitą ≥ 1.');
-  }
-  if (!Number.isInteger(liczba) || liczba < 1) {
-    throw new BladZakresu('Liczba akcji w emisji musi być dodatnią liczbą całkowitą.');
-  }
-  return [{ nr_od: od, nr_do: od + liczba - 1 }];
-}
-
 /** Czytelny zapis zakresow: "1–100, 150–160, 200". */
 function opisz(zakresy) {
   return normalizuj(zakresy)
@@ -203,10 +120,7 @@ function opisz(zakresy) {
     .join(', ');
 }
 
-/**
- * Parsuje zapis reczny: "1-100, 150–160, 200" (akceptuje myslnik i polpauze).
- * Uzywane tylko w sciezce nadpisania zakresu.
- */
+/** Parsuje zapis numerów wpisany przez pracownika: "1-100, 150–160, 200" (myślnik albo półpauza). */
 function parsuj(tekst) {
   const czesci = String(tekst || '')
     .split(',')
@@ -234,10 +148,6 @@ module.exports = {
   roznica,
   zawiera,
   nakladaja,
-  przydzielFifo,
-  przydzielWskazane,
-  przydziel,
-  zakresEmisji,
   opisz,
   parsuj,
 };

@@ -12,7 +12,7 @@
  *     odmawia startu (`sprawdzStart`), ZANIM uruchomi migracje;
  *   - poza trybem testowym trasy `/test/*` nie sa rejestrowane (404),
  *     a atrapy (skrzynka, KRS, tpay, walidator) niedostepne;
- *   - kazde logowanie w trybie testowym trafia do `psa_dziennik_logowan`.
+ *   - kazde logowanie w trybie testowym trafia do `psa_dziennik`.
  *
  * Logowanie testowe NIE ma wlasnego endpointu ani tokenu: lista kont na
  * ekranie logowania wola zwykle `POST /login` znanym haslem kont testowych,
@@ -158,15 +158,12 @@ function zapiszLogowanie(db, { typKonta, kontoId, email, droga }) {
   if (!konfiguracja.TRYB_TESTOWY) return;
   const dozwolone = ['lista_kont', 'link_testowy', 'formularz', 'link_aktywacyjny'];
   db.prepare(
-    `INSERT INTO psa_dziennik_logowan (chwila, chwila_rzeczywista, typ_konta, konto_id, email, droga, tryb_testowy)
-     VALUES (?, ?, ?, ?, ?, ?, 1)`
+    `INSERT INTO psa_dziennik (chwila, kto, typ_kto, akcja, opis) VALUES (?, ?, ?, 'logowanie', ?)`
   ).run(
     czas.terazIso(),
-    new Date().toISOString(),
-    typKonta,
-    kontoId,
     String(email),
-    dozwolone.includes(droga) ? droga : 'formularz'
+    typKonta === 'pracownik' ? 'pracownik' : 'portal',
+    `konto #${kontoId}; droga: ${dozwolone.includes(droga) ? droga : 'formularz'}; chwila rzeczywista ${new Date().toISOString()}; tryb testowy`
   );
 }
 

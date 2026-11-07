@@ -43,42 +43,6 @@ test('przeciecie i zawieranie', () => {
   assert.equal(n.nakladaja([{ nr_od: 1, nr_do: 10 }], [{ nr_od: 11, nr_do: 20 }]), false);
 });
 
-test('przydzial FIFO bierze najnizsze wolne numery', () => {
-  const dostepne = [
-    { nr_od: 1, nr_do: 10 },
-    { nr_od: 21, nr_do: 30 },
-  ];
-  assert.deepEqual(n.przydzielFifo(dostepne, 5), [{ nr_od: 1, nr_do: 5 }]);
-  assert.deepEqual(n.przydzielFifo(dostepne, 10), [{ nr_od: 1, nr_do: 10 }]);
-  // Przekroczenie pierwszej dziury - przydzial siega do nastepnego zakresu.
-  assert.deepEqual(n.przydzielFifo(dostepne, 13), [
-    { nr_od: 1, nr_do: 10 },
-    { nr_od: 21, nr_do: 23 },
-  ]);
-});
-
-test('przydzial FIFO blokuje przy braku pokrycia - to blokada, nie ostrzezenie', () => {
-  assert.throws(
-    () => n.przydzielFifo([{ nr_od: 1, nr_do: 10 }], 11),
-    (e) => e instanceof n.BladZakresu && /żądano 11 akcji, dostępnych jest 10/.test(e.message)
-  );
-});
-
-test('reczne wskazanie zakresu sprawdza dostepnosc i zgodnosc ilosci', () => {
-  const dostepne = [{ nr_od: 1, nr_do: 100 }];
-  assert.deepEqual(n.przydzielWskazane(dostepne, [{ nr_od: 50, nr_do: 59 }], 10), [
-    { nr_od: 50, nr_do: 59 },
-  ]);
-  assert.throws(
-    () => n.przydzielWskazane(dostepne, [{ nr_od: 95, nr_do: 105 }], 11),
-    /nie są dostępne/
-  );
-  assert.throws(
-    () => n.przydzielWskazane(dostepne, [{ nr_od: 50, nr_do: 59 }], 5),
-    /obejmuje 10 akcji, a zadeklarowano 5/
-  );
-});
-
 test('parsowanie i opis zapisu numerow', () => {
   assert.deepEqual(n.parsuj('1-10, 21, 30–35'), [
     { nr_od: 1, nr_do: 10 },
@@ -89,7 +53,3 @@ test('parsowanie i opis zapisu numerow', () => {
   assert.throws(() => n.parsuj('abc'), /Nie rozumiem zapisu numerów/);
 });
 
-test('zakres emisji liczy sie od numeru pierwszej akcji', () => {
-  assert.deepEqual(n.zakresEmisji({ nr_pierwszy: 1, ilosc: 100 }), [{ nr_od: 1, nr_do: 100 }]);
-  assert.deepEqual(n.zakresEmisji({ nr_pierwszy: 501, ilosc: 50 }), [{ nr_od: 501, nr_do: 550 }]);
-});

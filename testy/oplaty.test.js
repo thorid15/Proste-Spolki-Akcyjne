@@ -6,7 +6,7 @@
  * z nowelizacja/stawkami. Baza w pamieci (`testy/pomoc.js`).
  */
 
-const test = require('node:test');
+const test = require('./pominiete')('Faza 2 — pisma, korespondencja, informacja z rejestru i opłaty przebudowywane');
 const assert = require('node:assert/strict');
 
 const { bazaTestowa, dodajSpolke } = require('./pomoc');
