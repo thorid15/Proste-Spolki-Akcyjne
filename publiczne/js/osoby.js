@@ -175,7 +175,7 @@ function SekcjaZaproszeniaPortal({ osobaId, emailPodpowiedz }) {
 /**
  * D-102: zmiana danych z rejestru (art. 300(33) § 1 pkt 5 KSH) osoby z akcjami — kartoteka ich nie nadpisuje,
  * tylko proponuje wpis „Zmiana danych akcjonariusza”: sprawa z wypełnionymi danymi (przed → po), otwarta od razu
- * w „Sprawdzeniu i wpisie”. Kartoteka jest wspólna — wpis zmienia dane osoby we wszystkich rejestrach.
+ * w „Sprawdzeniu i wpisie”. D-107: jeden wpis obejmuje łącznie rejestry wszystkich spółek, w których osoba ma akcje.
  */
 function PropozycjaZmianyDanych({ osoba, zmiana, przyZamknieciu }) {
   const [pracuje, ustawPracuje] = useState(false);
@@ -206,13 +206,13 @@ function PropozycjaZmianyDanych({ osoba, zmiana, przyZamknieciu }) {
         Zmienione dane ({Object.keys(zmiana.po).map((k) => ETYKIETY_POL_REJESTRU[k] || k).join(', ')}) są wpisane do rejestru akcjonariuszy —
         zmienia je wpis (art. 300(33) § 1 pkt 5 KSH). Pozostałe zmiany zapisano w kartotece.
       </p>
-      {zmiana.spolki.length > 1 && <p className="male wyciszony">Kartoteka jest wspólna — wpis w jednej spółce zmieni dane osoby we wszystkich rejestrach.</p>}
-      <div className="pion" style={{ gap: 'var(--od-8)' }}>
-        {zmiana.spolki.map((s) => (
-          <button key={s.id} type="button" className="btn btn-glowny" disabled={pracuje} onClick={() => zaloz(s.id)}>
-            {pracuje ? 'Zakładanie sprawy…' : `Załóż wpis zmiany danych — ${s.nazwa}`}
-          </button>
-        ))}
+      {zmiana.spolki.length > 1 && (
+        <p className="male wyciszony">Wpis obejmie łącznie rejestry spółek: {zmiana.spolki.map((s) => s.nazwa).join(', ')}.</p>
+      )}
+      <div>
+        <button type="button" className="btn btn-glowny" disabled={pracuje} onClick={() => zaloz(zmiana.spolki[0].id)}>
+          {pracuje ? 'Zakładanie sprawy…' : 'Załóż wpis zmiany danych'}
+        </button>
       </div>
     </Modal>
   );

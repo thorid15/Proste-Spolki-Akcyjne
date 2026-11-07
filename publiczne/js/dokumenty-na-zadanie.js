@@ -6,7 +6,7 @@
    ogląda podgląd na REALNYCH danych spółki, albo od razu wystawia. */
 
 const OPISY_PODPOWIEDZI_WZOROW = {
-  '01': 'Dane spółki, reprezentanta i stawek pobierają się same z kartoteki i konfiguracji.',
+  '01': 'Dane spółki, reprezentanta i stawek pobierają się same z kartoteki i konfiguracji. Imiona rodziców i dokument tożsamości reprezentanta wpisz poniżej — nie są nigdzie zapisywane.',
   '02': 'W całości automatyczny — kancelaria i forma podpisu reprezentanta.',
   '03': 'Wynik głosowania nie ma miejsca w rejestrze (to nie jest zdarzenie rejestrowe) — wpisz go poniżej.',
   '08': 'Adresatem jest sąd rejestrowy spółki. Adres sądu nie jest w rejestrze — możesz go wpisać poniżej.',
@@ -33,6 +33,23 @@ function PolaUchwaly({ uchwala, ustawUchwale }) {
         <Pole etykieta="Głosy wstrzymujące"><input type="number" min="0" {...pole('glosyWstrzymujace')} /></Pole>
       </div>
       <Pole etykieta="Procent głosów" podpowiedz="np. „100%”"><input type="text" {...pole('procentGlosow')} /></Pole>
+    </>
+  );
+}
+
+/** D-108: pola ad hoc dla wzoru 01 (umowa) — imiona rodziców i dokument tożsamości reprezentanta, bez zapisu. */
+function PolaUmowy({ reprezentant, ustawReprezentanta }) {
+  return (
+    <>
+      <Pole etykieta="Imiona rodziców reprezentanta">
+        <input type="text" value={reprezentant.rodzice || ''} placeholder="np. Piotr i Anna" onChange={(z) => ustawReprezentanta((p) => ({ ...p, rodzice: z.target.value }))} />
+      </Pole>
+      <PoleDowod
+        etykieta="Dokument tożsamości reprezentanta"
+        rodzaj={reprezentant.dowod_rodzaj} numer={reprezentant.dowod_numer}
+        przyZmianie={(latka) => ustawReprezentanta((p) => ({ ...p, ...latka }))}
+        idPrefiks="umowa-reprezentant"
+      />
     </>
   );
 }
@@ -80,6 +97,7 @@ function ModalWystawDokumentu({ spolkaId, bazowyUrl, kontekstNazwa = 'spółki',
   const { dane: lista, ladowanie: ladowanieListy } = useDane(`${url}/dokumenty/wystaw`);
   const [kod, ustawKod] = useState(null);
   const [uchwala, ustawUchwale] = useState({});
+  const [reprezentant, ustawReprezentanta] = useState({});
   const [adresat, ustawAdresat] = useState({ nazwa: '', adres: '' });
   const [klauzula, ustawKlauzule] = useState({});
   const [zbywcaId, ustawZbywce] = useState(null);
@@ -90,6 +108,7 @@ function ModalWystawDokumentu({ spolkaId, bazowyUrl, kontekstNazwa = 'spółki',
   const [blad, ustawBlad] = useState(null);
 
   function cialoZadania() {
+    if (kod === '01') return { reprezentant };
     if (kod === '03') return { uchwala };
     if (kod === '08') return { adresat_nazwa: adresat.nazwa || null, adresat_adres: adresat.adres || null };
     if (kod === '10') return { klauzula, zbywca_osoba_id: zbywcaId, nabywca_osoba_id: nabywcaId };
@@ -182,6 +201,7 @@ function ModalWystawDokumentu({ spolkaId, bazowyUrl, kontekstNazwa = 'spółki',
       <Komunikat odmiana="blad" tresc={blad} />
       <Komunikat odmiana="info" tresc={OPISY_PODPOWIEDZI_WZOROW[kod]} />
 
+      {kod === '01' && <PolaUmowy reprezentant={reprezentant} ustawReprezentanta={ustawReprezentanta} />}
       {kod === '03' && <PolaUchwaly uchwala={uchwala} ustawUchwale={ustawUchwale} />}
       {kod === '08' && <PolaListySadu adresat={adresat} ustawAdresat={ustawAdresat} />}
       {kod === '10' && (
