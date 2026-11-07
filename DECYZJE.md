@@ -1666,6 +1666,41 @@
   równowartość 15 000 EUR — dziś procedurę AML włącza się ręcznie przełącznikiem przy spółce (etap 3.1). Wymaga ustalenia,
   z czego liczyć wartość (kapitał akcyjny, cena emisyjna, cena z umowy zbycia).
 
+### D-125–D-154 — Uproszczenie modułu: decyzje U-01…U-30 (Łukasz, 7.11.2026)
+
+- Obszar: cały moduł. Źródło i pełna treść: `CLAUDE-PSA-UPROSZCZENIE.md` § 2 (tam, gdzie `CLAUDE-PSA.md` albo `SESJA-*.md` mówią co innego, obowiązuje ta specyfikacja). Poniżej streszczenie; „zastępuje” — ostatnia kolumna § 2.
+- Decyzje:
+  1. **D-125 (U-01)** Jeden nowy schemat bazowy zamiast 71 migracji, bez zgodności wstecz (w bazie nie ma prawdziwych wpisów); do końca Fazy 6 schemat wolno edytować. Zastępuje migracje 1–71.
+  2. **D-126 (U-02)** Automatycznie naliczają się tylko opłata za prowadzenie rejestru i informacja zamawiana w portalu; przy operacji odpłatnej pracownik wybiera „Opłata 100 zł netto” albo „Bez opłaty” (bez wartości domyślnej, najwyżej jedna opłata na sprawę); informacja wydawana przez pracownika — 50 zł albo bez (organ — bez). Zastępuje podstan `oczekuje_na_oplate` i automatyczną opłatę za wpis.
+  3. **D-127 (U-03)** Dokumenty do podpisu przy zawarciu umowy, każdy osobno: umowa o prowadzenie rejestru (spółka, potem notariusz — QES; PEP reprezentanta w treści, RODO jako załącznik), uchwała akcjonariuszy o wyborze podmiotu (pomijana przy własnej uchwale klienta albo wyborze w umowie spółki), zgoda na korespondencję e-mail dla każdego akcjonariusza bez konta; plus umowa spółki wgrywana bez podpisu. Zastępuje komplet dokumentów wniosku.
+  4. **D-128 (U-04)** Wzory pism w Markdown (`wzory/*.md`), wynik zawsze PDF (pdfkit), wygląd zdefiniowany raz; `npm run wzory` — podgląd każdego wzoru; treść wzorów Word przeniesiona 1:1. Zastępuje `docx.js`, `zip.js`, `wzory-dysk.js`, `dokumenty-tresc.js`, `bloki-dokumentu.js`, `psa_szablony`.
+  5. **D-129 (U-05)** Stawki jako stałe w `przepisy.js`, bez edycji i wersji w aplikacji. Zastępuje D-085, `psa_stawki_wersje`.
+  6. **D-130 (U-06)** AML bez blokady systemowej: stała pozycja checklisty odhaczana przez pracownika; praktyka kancelarii bez zmian; dokumenty AML to zwykłe pliki osoby, data weryfikacji w kartotece. Zastępuje D-010, D-117, `aml_status`, `psa_osoby_skany_aml`, `stosuje_procedure_aml`.
+  7. **D-131 (U-07)** Przejęcie rejestru: zaznaczenie „przejęcie” we wniosku + dotychczasowy podmiot i data przejęcia; umowa bez warunku; „Otwórz rejestr” od dnia przejęcia (wpis `otwarcie` ze stanem z dokumentów poprzednika); bez osobnego procesu, statusów, protokołu, okresu wypowiedzenia i opłaty za przejęcie. Zastępuje D-084, `psa_przeniesienia*`, umowę pod warunkiem.
+  8. **D-132 (U-08)** Zgłoszenie i wniosek to jedna encja (formularz publiczny od razu zakłada wniosek); pozycja menu „Zgłoszenia” znika.
+  9. **D-133 (U-09)** Pisma powstają automatycznie, wysyła je pracownik jednym kliknięciem po podglądzie; ekran „Korespondencja” to jedno miejsce dla wszystkiego, co wychodzi z rejestru; niewysłane i błędy — w „Do zrobienia”. Zastępuje kolejkę „Zawiadomienia” i ekran listów do wysyłki.
+  10. **D-134 (U-10)** Pisma e-mailem z PDF w załączniku do adresatów ze zgodą na korespondencję e-mail (spółka — z umowy); bez zgody — list; treść e-maila krótka, bez danych osobowych; pismo widać też w portalu.
+  11. **D-135 (U-11)** Zgoda na korespondencję e-mail i żądanie powiadomień to jedna zgoda (przełącznik w karcie osoby); włączenie przez pracownika wymaga pliku podpisanej zgody, wyłączenie — daty; historia w `psa_historia_danych`. Zastępuje zgodę w 3 miejscach, `psa_oswiadczenia`.
+  12. **D-136 (U-12)** Aplikacja nie liczy głosów (to nie jest dana rejestru). Zastępuje głosy w `kontekst-pisma.js`.
+  13. **D-137 (U-13)** Usunięte: zgłoszenie nieprawidłowości, dokumenty na żądanie (uchwała przechodzi do dokumentów wniosku), podgląd systemu, edycja szablonów, współwłasność w kartotece, ręczne wystawianie pism.
+  14. **D-138 (U-14)** Zamiast statusu spółki — stan rejestru: otwarty / zamknięty (z powodem); opłata za prowadzenie przysługuje, dopóki rejestr jest otwarty. Zastępuje `w_likwidacji`, `zawieszona`, odstępstwo 22.
+  15. **D-139 (U-15)** Tekst zamiast słowników: podstawa wpisu, przyczyna odmowy; żądający: spółka, osoba z kartoteki, organ (tylko przy zajęciu) albo brak. Zastępuje kody odmowy ×7, role ×8, rodzaje dokumentu ×7.
+  16. **D-140 (U-16)** Usunięte pola bez skutku: `charakter_wpisu`, `dni_wstrzymania`, źródło sprawy, REGON, telefon, „ostatnia zmiana” w kartotece. Zastępuje D-027.
+  17. **D-141 (U-17)** Rodzaj akcji wyliczany (uprzywilejowana, gdy ma adnotację „uprawnienie”); pokrycie przy emisji — obowiązkowe pytanie tak/nie, „nie” = adnotacja „niepokryte”. Zastępuje D-112, D-114, pokrycie ×4.
+  18. **D-142 (U-18)** Nieprawidłowy PESEL (suma kontrolna albo data) blokuje zapis. Zastępuje ostrzeżenie bez blokady.
+  19. **D-143 (U-19)** Wniosek odrzucony albo porzucony (90 dni bez zmian): dane klienta usuwane automatycznie; zostają KRS, daty i stan. Zastępuje bezterminowe przechowywanie.
+  20. **D-144 (U-20)** Kontrola integralności łańcucha — na żądanie, przycisk w Ustawieniach, bez harmonogramu.
+  21. **D-145 (U-21)** Emisja tylko z datą wpisu do KRS i od razu z obejmującymi — jeden wpis; warunkowa emisja (art. 300¹¹⁷–300¹¹⁸) nadal poza zakresem. Zastępuje odstępstwa 3–4 w README.
+  22. **D-146 (U-22)** „Stan na” — tylko dzień. Zastępuje dokładność do minuty (sprint 6, poz. 2.3).
+  23. **D-147 (U-23)** Jedno konto na osobę (logowanie e-mailem), zakres z danych przez `zakresKonta(konto)`: osoba działająca za spółkę widzi wszystko o spółce, akcjonariusz — swoje sprawy, pisma i opłaty oraz informację bez danych z art. 300³⁵ § 1¹ KSH; zakres akcjonariusza wymaga zgody na e-mail i wygasa po zbyciu wszystkich akcji (D-039). Zastępuje role `akcjonariusz`, `wnioskodawca`, `spolka` i konto spółki.
+  24. **D-148 (U-24)** Informacja zamawiana w portalu — stan na koniec wybranego dnia: domyślnie i najpóźniej wczorajszego, najwcześniej dnia otwarcia; pierwszą można zamówić dzień po otwarciu. Dotyczy wyłącznie portalu — pracownik wydaje informację w każdej chwili, według stanu na dowolny dzień.
+  25. **D-149 (U-25)** Zmiana danych osoby albo spółki nie jest wpisem: edycja w miejscu + wiersze historii w `psa_historia_danych` (append-only); bez sprawy, terminu, opłaty, powiadomień i zdarzeń w łańcuchu. Zastępuje typy `zmiana_danych_akcjonariusza`, `zmiana_danych_spolki`.
+  26. **D-150 (U-26)** Numery akcji zawsze wpisuje pracownik (seria, numery, liczba) w każdej operacji; bez doboru automatycznego i skrótów; liczba niezgodna z numerami — błąd przy polu. Zastępuje dobór automatyczny (`logika/kreator.js`, `wpis-zbycia-logika.js`).
+  27. **D-151 (U-27)** Informacja z rejestru zawiera tylko dane z art. 300³³ § 1 KSH, PESEL albo datę urodzenia (D-076), numer informacji i „stan na” (układ — spec § 4); bez wynagrodzenia, podstawy prawnej, odbiorcy, ceny emisyjnej (znika z modelu i formularzy), NIP, REGON, udziału procentowego i dat umowy i otwarcia rejestru.
+  28. **D-152 (U-28)** List: „Nadano” jednym kliknięciem zapisuje dzisiejszą datę — bez numeru nadania i skanu potwierdzenia.
+  29. **D-153 (U-29)** Nazwy pism jak w art. 300³⁴ § 9 KSH: powiadomienie o zamierzonym wpisie / o wpisie / o odmowie; „zawiadomienie” tylko wobec sądu (art. 300³² § 3); przychodzące to „pliki”, wychodzące — „pisma”.
+  30. **D-154 (U-30)** Opłata za prowadzenie rejestru do wyboru we wniosku: raz w roku (1 200 zł netto, domyślnie) albo co miesiąc (100 zł netto); wybór wchodzi do umowy, zmienia go tylko kancelaria; po zamknięciu rejestru nowe opłaty nie powstają. Zastępuje tylko opłatę roczną.
+
 ---
 
 ## Decyzje otwarte
