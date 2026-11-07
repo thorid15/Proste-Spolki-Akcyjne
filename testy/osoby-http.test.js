@@ -438,3 +438,25 @@ test('D-102: dane z rejestru osoby z akcjami zmienia wpis — kartoteka proponuj
   assert.equal(bez.zmiana_rejestrowa, null);
   assert.equal(bez.osoba.miejscowosc, 'Sopot', 'osoba bez akcji — zwykła edycja kartoteki');
 });
+
+test('D-107: zmiana danych akcjonariusza wpisuje się łącznie w rejestrach wszystkich jego spółek', async () => {
+  const rejestr = require('../server/rejestr');
+  const teraz = new Date().toISOString();
+  const nowaSpolka = (nazwa) => Number(db().prepare(`INSERT INTO psa_spolki (nazwa, forma_prawna, status, utworzono) VALUES (?, 'PROSTA SPÓŁKA AKCYJNA', 'aktywna', ?)`).run(nazwa, teraz).lastInsertRowid);
+  const [a, b] = [nowaSpolka('D-107 A P.S.A.'), nowaSpolka('D-107 B P.S.A.')];
+  const [, osoba] = await zapytaj('POST', '/api/psa/osoby', { typ: 'fizyczna', imie: 'Ewa', nazwisko: 'Wielospółkowa', data_urodzenia: '1979-01-01', kraj: 'Polska', kod_pocztowy: '80-001', miejscowosc: 'Gdańsk', nr_domu: '1' });
+  for (const s of [a, b]) {
+    const em = rejestr.dokonajWpisu(db(), { spolkaId: s, typ: 'emisja', wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-10' }, autor: 'Test' });
+    rejestr.dokonajWpisu(db(), { spolkaId: s, typ: 'objecie', wejscie: { emisja_zdarzenie_id: em.zdarzenie.id, pozycje: [{ osoba_id: osoba.osoba.id, ilosc: 10 }] }, autor: 'Test' });
+  }
+  const podglad = rejestr.przygotujPodglad(db(), { spolkaId: a, typ: 'zmiana_danych_akcjonariusza', wejscie: { osoba_id: osoba.osoba.id, po: { miejscowosc: 'Sopot' } } });
+  assert.ok(podglad.ostrzezenia.some((o) => o.includes('D-107 B P.S.A.')), 'podgląd zapowiada wpis łączny');
+
+  const wynik = rejestr.dokonajWpisu(db(), { spolkaId: a, typ: 'zmiana_danych_akcjonariusza', wejscie: { osoba_id: osoba.osoba.id, po: { miejscowosc: 'Sopot' } }, autor: 'Test' });
+  const zmiany = (s) => db().prepare("SELECT dane_json FROM psa_zdarzenia WHERE spolka_id = ? AND typ = 'zmiana_danych_akcjonariusza'").all(s).map((z) => JSON.parse(z.dane_json));
+  assert.equal(zmiany(a).length, 1);
+  assert.equal(zmiany(b).length, 1, 'ten sam wpis w rejestrze drugiej spółki');
+  assert.deepEqual([zmiany(b)[0].przed, zmiany(b)[0].po], [{ miejscowosc: 'Gdańsk' }, { miejscowosc: 'Sopot' }]);
+  assert.equal(db().prepare('SELECT miejscowosc FROM psa_osoby WHERE id = ?').get(osoba.osoba.id).miejscowosc, 'Sopot');
+  assert.ok(wynik.ostrzezenia.some((o) => o.startsWith('Wpis dokonano łącznie')));
+});

@@ -417,17 +417,13 @@ e-mail „do zaproszenia”), bez wpisu w `DECYZJE.md`; D-099 ją zastępuje.
 Ekrany i przejścia kreatora zostają 3 / 3 — jak w zbyciu: po „Podstawie” adres zmienia się z `#/spolki/:id/zdarzenie` na `#/sprawy/:id`
 (ten sam kreator, krok 3). Cel „1 ekran” z § 1 wymagałby pozostania na jednym adresie — możliwe bez zmian serwera, do decyzji.
 
-**Do decyzji (wynikło przy wdrożeniu):**
-1. **D-102 — kartoteka wspólna dla wszystkich spółek.** Wpis „Zmiana danych akcjonariusza” zmienia rekord osoby (`psa_osoby`), więc dane
-   zmieniają się we wszystkich rejestrach, w których osoba ma akcje — także bez wpisu w rejestrze drugiej spółki (model sprzed etapu 4).
-   Okno propozycji to mówi; czy przy kilku spółkach zakładać wpis w każdej (wymaga zmiany porównania „przed/po” w serwerze)?
-2. **D-101 — dowód osobisty i imiona rodziców reprezentanta zostały w spółce** (kartoteka nie ma tych pól; dokument okazany przy podpisie
-   umowy). Przenieść do kartoteki — rozszerzenie `psa_osoby` i formularza osoby.
-3. **A-005 — katalog rodzajów dokumentu** nie ma „umowy zastawu / użytkowania”, „oświadczenia akcjonariusza” ani „zawiadomienia organu
-   egzekucyjnego” (§ 4) — dla tych typów domyślnie „inny dokument”. Rozszerzenie katalogu wymaga migracji (ograniczenia `CHECK`).
-4. **A-022** — `Metryka` (pasek wskaźników w kokpicie) zostaje: to inna rola niż lista „etykieta — wartość”.
+**Rozstrzygnięte 7.11.2026 (D-107–D-111, `DECYZJE.md`):** zmiana danych akcjonariusza wpisuje się łącznie w rejestrach
+wszystkich jego spółek (D-107 — wdrożone); imiona rodziców i dokument tożsamości reprezentanta tylko do umowy, bez zapisu
+(D-108 — wdrożone; wzór 01 na żądanie ma pola w formularzu wystawienia); katalog rodzajów dokumentu bez zmian (D-109);
+„Okres wypowiedzenia” zostaje (D-110); każda spółka przez nowo przyjęty wniosek — bez przenoszenia dawnych reprezentantów
+do kartoteki (D-111). Otwarte: cel „1 ekran” kreatora (adres strony po „Podstawie”). `Metryka` (pasek wskaźników) zostaje.
 
-Mapy procesów i danych (`MAPA-PROCESOW.md`, `MAPA-DANYCH.md`) i `BLEDY.md` opisują stan sprzed etapu 4 — zostawione jako zapis analizy.
+`MAPA-PROCESOW.md` odświeżona po etapie 4 (7.11.2026). `MAPA-DANYCH.md` i `BLEDY.md` — zapis analizy sprzed wdrożenia.
 
 Testy etapu 4: `testy/wdrozenie-analizy.test.js` (D-097, A-005, D-102, D-101), `testy/osoby-http.test.js` (D-102 — kartoteka nie nadpisuje
 danych z rejestru), `testy/wnioski-kancelaria-http.test.js` (D-101 — reprezentant z wniosku w kartotece); e2e: `wpisy-ogolne.spec.js`

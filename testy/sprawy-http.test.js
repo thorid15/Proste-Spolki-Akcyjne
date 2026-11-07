@@ -665,7 +665,7 @@ test('spolka: dane reprezentanta umowy zapisuja sie w mianowniku, bez pol odmian
   assert.equal(spolkaOdp.spolka.reprezentant_imie_nazwisko, 'Jan Kowalski');
   assert.equal(spolkaOdp.spolka.reprezentant_funkcja, 'Prezes Zarządu');
   // Wszystko zapisuje sie doslownie - pisma nie odmieniaja tych wartosci.
-  assert.equal(spolkaOdp.spolka.reprezentant_rodzice, 'Piotr i Anna');
+  assert.equal(spolkaOdp.spolka.reprezentant_rodzice ?? null, null, 'D-108: imiona rodziców tylko do umowy — bez zapisu w spółce');
   assert.equal(spolkaOdp.spolka.reprezentant_email, 'j.kowalski@example.pl');
 });
 

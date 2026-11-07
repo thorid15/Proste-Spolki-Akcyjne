@@ -1612,6 +1612,24 @@
   11. **D-105** Numery akcji dobierane automatycznie we wszystkich typach (jak D-091), ręcznie za przyciskiem.
   12. **D-106** PESEL ze złą sumą kontrolną — ostrzeżenie bez blokady (cudzoziemcy, stare nadania), pokazane także przy zapisie.
 
+### D-107–D-111 — Rozstrzygnięcia po etapie 4 analizy przepływów (Łukasz, 7.11.2026)
+
+- Obszar: kartoteka, reprezentant spółki, podstawa wpisu, przeniesienie rejestru (`docs/analiza/RAPORT-PRZEPLYWY.md` § 9 „Do decyzji”)
+- Decyzje:
+  1. **D-107** Zmiana danych akcjonariusza (D-102) obejmuje łącznie wpisy we wszystkich spółkach, w których osoba ma akcje:
+     jeden wpis „Zmiana danych akcjonariusza” zapisuje to samo zdarzenie (przed → po) w rejestrze każdej z tych spółek,
+     w jednej transakcji, a dopiero potem zmienia kartotekę. Skutek w kodzie: `server/rejestr.js` (`_wykonajWpis`,
+     `inneSpolkiAkcjonariusza`), podgląd zapowiada wpis łączny, okno propozycji w kartotece — jeden przycisk.
+  2. **D-108** Imiona rodziców i dokument tożsamości reprezentanta spółki nie są zapisywane ani w danych spółki, ani w kartotece —
+     potrzebne są tylko do umowy o prowadzenie rejestru: podaje się je we wniosku (umowa z wniosku) albo przy wystawieniu wzoru 01
+     na żądanie. Skutek w kodzie: pola usunięte z formularza spółki i z `POLA_SPOLKI` (nie przechodzą z wniosku do spółki);
+     wzór 01 bierze je z formularza wystawienia. Wartości zapisane w spółkach przed tą decyzją zostają w bazie nieużywane.
+  3. **D-109** Katalog rodzajów dokumentu podstawy wpisu bez zmian (bez „umowy zastawu”, „oświadczenia”, „zawiadomienia organu”) —
+     dla tych typów domyślnie „inny dokument”.
+  4. **D-110** Pole „Okres wypowiedzenia (jeśli znany)” w zgłoszeniu przeniesienia rejestru zostaje (A-029).
+  5. **D-111** Każda spółka trafia do rejestru przez nowo przyjęty wniosek — reprezentantów spółek już zapisanych nie przenosi się
+     do kartoteki (bez migracji danych); D-101 działa od przyjęcia wniosku.
+
 ---
 
 ## Decyzje otwarte

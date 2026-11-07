@@ -54,13 +54,14 @@ const POLA_SPOLKI = [
   // Reprezentant - wszystkie dane w MIANOWNIKU. Pisma nie odmieniaja ich
   // przez przypadki, tylko opisuja etykieta ("imiona rodzicow:", "dzialajacy
   // jako:"), wiec zadne pole korekty odmiany nie jest potrzebne.
-  'reprezentant_imie_nazwisko', 'reprezentant_rodzice', 'reprezentant_pesel',
+  // D-108: imiona rodziców i dokument tożsamości reprezentanta NIE są danymi spółki — podaje się je tylko
+  // przy wystawieniu umowy o prowadzenie rejestru (wniosek portalu albo wzór 01 na żądanie), bez zapisu.
+  'reprezentant_imie_nazwisko', 'reprezentant_pesel',
   'reprezentant_funkcja', 'reprezentant_reprezentacja', 'reprezentant_email',
   // B2/B3 (FAZA 2, migracja 53) — dowód i adres ustrukturyzowane. Stare
   // `reprezentant_dowod`/`reprezentant_adres` NIE są już w tej liście: nie
   // da się ich nadpisać z formularza, zostają tylko do odczytu w piśmie
   // (`server/logika/kontekst-pisma.js`), dopóki nie zastąpią ich te pola.
-  'reprezentant_dowod_rodzaj', 'reprezentant_dowod_numer',
   // D-101: reprezentant jako osoba w kartotece — dane osobowe z `psa_osoby` (rejestr.wczytajSpolke).
   'reprezentant_osoba_id',
   'reprezentant_kraj', 'reprezentant_kod_pocztowy', 'reprezentant_miejscowosc',
@@ -1034,8 +1035,15 @@ function stanAkcjonariatuNaDzis(spolkaId, dzis, { zGlosami = false } = {}) {
 function budujKontekstNaZadanie(kod, spolka, cialo) {
   const dzis = czas.dzisIso();
   switch (kod) {
-    case '01':
-      return kontekstPisma.umowaOProwadzenieRejestru({ spolka, dzis });
+    case '01': {
+      // D-108: imiona rodziców i dokument tożsamości reprezentanta — tylko z formularza wystawienia, bez zapisu.
+      const r = cialo.reprezentant || {};
+      const doUmowy = {
+        reprezentant_rodzice: r.rodzice || null, reprezentant_dowod: null,
+        reprezentant_dowod_rodzaj: r.dowod_rodzaj || null, reprezentant_dowod_numer: r.dowod_numer || null,
+      };
+      return kontekstPisma.umowaOProwadzenieRejestru({ spolka: { ...spolka, ...doUmowy }, dzis });
+    }
     case '02':
       return kontekstPisma.informacjaRodo({ spolka });
     case '03': {
