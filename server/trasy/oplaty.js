@@ -1,377 +1,53 @@
 'use strict';
 
-/**
- * Trasy `/api/psa/oplaty/...` - rozliczenia (sekcja 8 specyfikacji).
- */
+/** Opłaty (§ 5): filtr do zapłaty / opłacone / wszystkie, „Opłacona”, numer faktury, „Anuluj” (powód), CSV. */
 
 const express = require('express');
-
 const { db } = require('../baza');
-const oplaty = require('../oplaty');
-const platnosci = require('../platnosci');
-const przepisy = require('../logika/przepisy');
-const przypomnienia = require('../logika/przypomnienia');
-const dziennikDostepu = require('../logika/dziennik-dostepu');
 const czas = require('../pomocnicze/czas');
-const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
-const { wymagajAdmina } = require('../pomocnicze/autoryzacja');
+const oplaty = require('../oplaty');
+const { asy } = require('../pomocnicze/odpowiedzi');
 
 const router = express.Router();
 
-const TYPY = ['prowadzenie', 'wpis', 'informacja'];
-const STATUSY = ['naliczona', 'zafakturowana', 'oplacona', 'anulowana'];
-
-/** Rok (2026) albo dwa lata rozdzielone ukosnikiem (2026/2027) — Z-109. */
-const WZORZEC_OKRESU = /^\d{4}(\/\d{4})?$/;
-
-/** Kancelaria widzi netto + VAT + brutto (sekcja 2.1 promptu naprawczego). */
-function widokWiersza(w) {
-  const brutto = przepisy.obliczBrutto(w.kwota_grosze, w.stawka_vat_procent);
-  return {
-    ...w,
-    kwota_zl: w.kwota_grosze / 100,
-    kwota_brutto_grosze: brutto,
-    kwota_brutto_zl: brutto / 100,
-  };
-}
-
-/**
- * Rozliczenia SPOLKA PO SPOLCE — tak, jak pracownik o nich mysli:
- * „co jest do zafakturowania u tej spolki", a nie „wszystkie naleznosci
- * kancelarii posortowane po dacie".
- */
 router.get(
-  '/wg-spolek',
+  '/',
   asy((zad, odp) => {
-    const wiersze = db()
-      .prepare(
-        `SELECT o.*, s.nazwa AS spolka_nazwa, s.krs AS spolka_krs,
-                s.data_otwarcia_rejestru,
-                (SELECT COUNT(*) FROM psa_platnosci p
-                  WHERE p.oplata_id = o.id AND p.status = 'oplacona')  AS online,
-                os.nazwisko AS zamawiajacy_nazwisko, os.imie AS zamawiajacy_imie,
-                os.nazwa AS zamawiajacy_nazwa
-           FROM psa_oplaty o
-           JOIN psa_spolki s ON s.id = o.spolka_id
-           LEFT JOIN psa_osoby os ON os.id = o.zamawiajacy_osoba_id
-          WHERE o.status != 'anulowana'
-          ORDER BY s.nazwa COLLATE NOCASE, o.data_naliczenia DESC, o.id DESC`
-      )
-      .all();
-
-    const wgSpolki = new Map();
-    for (const w of wiersze) {
-      if (!wgSpolki.has(w.spolka_id)) {
-        wgSpolki.set(w.spolka_id, {
-          spolka_id: w.spolka_id,
-          spolka_nazwa: w.spolka_nazwa,
-          spolka_krs: w.spolka_krs,
-          data_otwarcia_rejestru: w.data_otwarcia_rejestru,
-          oplaty: [],
-          do_zaplaty_grosze: 0,
-          bez_faktury_grosze: 0,
-          do_zaplaty_brutto_grosze: 0,
-          bez_faktury_brutto_grosze: 0,
-        });
-      }
-      const grupa = wgSpolki.get(w.spolka_id);
-      const widok = widokWiersza(w);
-      grupa.oplaty.push({
-        ...widok,
-        oplacona_online: w.online > 0,
-        zamawiajacy: w.zamawiajacy_osoba_id
-          ? (w.zamawiajacy_nazwa || [w.zamawiajacy_nazwisko, w.zamawiajacy_imie].filter(Boolean).join(' '))
-          : null,
-      });
-      // Sumy netto (`*_grosze`) i brutto (`*_brutto_grosze`) — kancelaria widzi obie (drobne R4).
-      if (w.status !== 'oplacona') {
-        grupa.do_zaplaty_grosze += w.kwota_grosze;
-        grupa.do_zaplaty_brutto_grosze += widok.kwota_brutto_grosze;
-      }
-      if (!w.faktura_wystawiono) {
-        grupa.bez_faktury_grosze += w.kwota_grosze;
-        grupa.bez_faktury_brutto_grosze += widok.kwota_brutto_grosze;
-      }
-    }
-
-    // Zadania zgloszone przez portal, ktore czekaja na oplate. NIE STOJA
-    // w kolejce spraw (zadne nie zostalo jeszcze skutecznie zlozone), ale
-    // kancelaria musi je widziec — inaczej portal bylby czarna dziura,
-    // w ktorej zgloszenie znika bez sladu dla obu stron.
-    const czekajaceZadania = db()
-      .prepare(
-        `SELECT sp.id, sp.spolka_id, sp.typ_zdarzenia, sp.data_wplywu, s.nazwa AS spolka_nazwa,
-                o.id AS oplata_id, o.kwota_grosze
-           FROM psa_sprawy sp
-           JOIN psa_spolki s ON s.id = sp.spolka_id
-           LEFT JOIN psa_oplaty o ON o.sprawa_id = sp.id AND o.typ = 'wpis' AND o.status != 'anulowana'
-          WHERE sp.oczekuje_na_oplate = 1 AND sp.stan = 'nowa'
-          ORDER BY sp.data_wplywu`
-      )
-      .all();
-
-    odp.json({
-      spolki: [...wgSpolki.values()],
-      // Okresy prowadzenia, ktore zaraz sie koncza — przypomnienie, ze
-      // trzeba naliczyc kolejny rok i wystawic fakture.
-      do_odnowienia: oplaty.okresyDoOdnowienia(db(), { dni: 45 }),
-      czekajace_zadania: czekajaceZadania,
-    });
+    odp.json(oplaty.lista(db(), { filtr: zad.query.filtr || 'do_zaplaty' }));
   })
 );
 
-/**
- * Odhaczenie faktury. Aplikacja NIE wystawia faktur — robi to program
- * ksiegowy kancelarii. Tu zostaje slad: numer i data, zeby pracownik
- * widzial w jednym miejscu, co jeszcze nie poszlo do ksiegowosci.
- */
-router.patch(
+router.get(
+  '/csv',
+  asy((zad, odp) => {
+    const tresc = oplaty.csv(oplaty.lista(db(), { filtr: zad.query.filtr || 'wszystkie' }));
+    odp.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="oplaty-${czas.dzisIso()}.csv"`,
+      'X-Content-Type-Options': 'nosniff',
+    });
+    odp.send(`﻿${tresc}`);
+  })
+);
+
+router.post(
+  '/:id/oplacona',
+  asy((zad, odp) => {
+    odp.json(oplaty.oplacona(db(), zad.params.id));
+  })
+);
+
+router.post(
+  '/:id/anuluj',
+  asy((zad, odp) => {
+    odp.json(oplaty.anuluj(db(), zad.params.id, (zad.body || {}).powod));
+  })
+);
+
+router.put(
   '/:id/faktura',
   asy((zad, odp) => {
-    const id = Number(zad.params.id);
-    const oplata = oplaty.wczytaj(db(), id);
-    if (!oplata) throw nieZnaleziono('Nie odnaleziono opłaty.');
-
-    const cialo = zad.body || {};
-    const wystawiona = cialo.wystawiona !== false;
-    const numer = cialo.numer ? String(cialo.numer).trim() : null;
-
-    db()
-      .prepare(
-        `UPDATE psa_oplaty
-            SET faktura_wystawiono = ?, faktura_numer = ?, faktura_autor = ?, zaktualizowano = ?
-          WHERE id = ?`
-      )
-      .run(
-        wystawiona ? czas.terazIso() : null,
-        wystawiona ? numer : null,
-        wystawiona ? autor(zad) : null,
-        czas.terazIso(),
-        id
-      );
-
-    // Odhaczenie faktury SAMO przenosi naleznosc z „naliczona" na
-    // „zafakturowana" — to jest dokladnie to, co odhaczenie znaczy, a osobne
-    // klikniecie w liste statusow bylo powtarzaniem tej samej informacji.
-    // Naleznosci juz oplaconej ani anulowanej nie ruszamy.
-    if (oplata.status === 'naliczona' && wystawiona) {
-      oplaty.zmienStatus(db(), { id, status: 'zafakturowana' });
-    } else if (oplata.status === 'zafakturowana' && !wystawiona) {
-      oplaty.zmienStatus(db(), { id, status: 'naliczona' });
-    }
-
-    odp.json({ oplata: widokWiersza(oplaty.wczytaj(db(), id)) });
-  })
-);
-
-/**
- * Awaryjne odpytanie operatora o stan platnosci — gdy powiadomienie nie
- * doszlo. Ksieguje dokladnie tak samo jak powiadomienie, wiec skutek jest
- * identyczny; to nie jest "recznie oznacz jako oplacona".
- */
-router.post(
-  '/platnosci/:id/sprawdz',
-  asy(async (zad, odp) => {
-    let wynik;
-    try {
-      wynik = await platnosci.sprawdzUOperatora(db(), Number(zad.params.id));
-    } catch (e) {
-      throw bledneZadanie(e.message);
-    }
-    odp.json({ status: wynik.status, zaksiegowano: wynik.zaksiegowano });
-  })
-);
-
-/**
- * Przypomnienia o konczacym sie roku prowadzenia rejestru — nalicza kolejny
- * okres i wysyla wiadomosc z linkiem do zaplaty. Uruchamiane recznie przez
- * pracownika; docelowo moze je wolac zadanie cykliczne.
- */
-router.post(
-  '/przypomnienia',
-  asy(async (zad, odp) => {
-    const dni = (zad.body || {}).dni != null ? Number((zad.body || {}).dni) : 30;
-    if (!Number.isInteger(dni) || dni < 0 || dni > 365) {
-      throw bledneZadanie('Wyprzedzenie musi być liczbą dni od 0 do 365.');
-    }
-    const wyniki = await przypomnienia.wyslijPrzypomnienia(db(), { dni, autor: autor(zad) });
-    const wyslane = wyniki.filter((w) => w.wyslano).length;
-    odp.json({
-      wyniki,
-      komunikat: wyniki.length === 0
-        ? 'Żadnej spółce nie kończy się właśnie okres prowadzenia rejestru.'
-        : `Przypomnienia: ${wyslane} z ${wyniki.length} poszło e-mailem.`,
-    });
-  })
-);
-
-/** Naliczenie kolejnych okresow prowadzenia tym spolkom, ktorym rok sie konczy. */
-router.post(
-  '/odnowienia',
-  wymagajAdmina,
-  asy((zad, odp) => {
-    const dni = (zad.body || {}).dni != null ? Number((zad.body || {}).dni) : 0;
-    if (!Number.isInteger(dni) || dni < 0 || dni > 365) {
-      throw bledneZadanie('Wyprzedzenie musi być liczbą dni od 0 do 365.');
-    }
-    const { naliczone, pominiete } = oplaty.naliczOdnowienia(db(), { dni, autor: autor(zad) });
-    odp.json({
-      naliczone: naliczone.map(widokWiersza),
-      pominiete: pominiete.map(widokWiersza),
-      komunikat: naliczone.length === 0
-        ? 'Żadnej spółce nie kończy się właśnie okres prowadzenia rejestru.'
-        : `Naliczono kolejny rok prowadzenia rejestru dla ${naliczone.length} spółek.`,
-    });
-  })
-);
-
-/** Lista z filtrami + suma w groszach (do nagłówka ekranu). */
-router.get(
-  '/',
-  asy((zad, odp) => {
-    const warunki = [];
-    const parametry = [];
-
-    if (zad.query.spolka_id) {
-      warunki.push('o.spolka_id = ?');
-      parametry.push(Number(zad.query.spolka_id));
-    }
-    if (zad.query.typ) {
-      warunki.push('o.typ = ?');
-      parametry.push(String(zad.query.typ));
-    }
-    if (zad.query.status) {
-      warunki.push('o.status = ?');
-      parametry.push(String(zad.query.status));
-    }
-    if (zad.query.okres) {
-      warunki.push('o.okres = ?');
-      parametry.push(String(zad.query.okres));
-    }
-
-    const gdzie = warunki.length ? `WHERE ${warunki.join(' AND ')}` : '';
-    const wiersze = db()
-      .prepare(
-        `SELECT o.*, s.nazwa AS spolka_nazwa
-           FROM psa_oplaty o
-           JOIN psa_spolki s ON s.id = o.spolka_id
-           ${gdzie}
-          ORDER BY o.data_naliczenia DESC, o.id DESC`
-      )
-      .all(...parametry);
-
-    const sumaGrosze = wiersze
-      .filter((w) => w.status !== 'anulowana')
-      .reduce((s, w) => s + w.kwota_grosze, 0);
-
-    odp.json({ oplaty: wiersze.map(widokWiersza), suma_grosze: sumaGrosze });
-  })
-);
-
-/** CSV do eksportu zestawienia (sekcja 14 - "eksport zestawienia"). */
-router.get(
-  '/eksport',
-  asy((zad, odp) => {
-    const warunki = [];
-    const parametry = [];
-    if (zad.query.spolka_id) {
-      warunki.push('o.spolka_id = ?');
-      parametry.push(Number(zad.query.spolka_id));
-    }
-    if (zad.query.typ) {
-      warunki.push('o.typ = ?');
-      parametry.push(String(zad.query.typ));
-    }
-    if (zad.query.status) {
-      warunki.push('o.status = ?');
-      parametry.push(String(zad.query.status));
-    }
-    if (zad.query.okres) {
-      warunki.push('o.okres = ?');
-      parametry.push(String(zad.query.okres));
-    }
-    const gdzie = warunki.length ? `WHERE ${warunki.join(' AND ')}` : '';
-    const wiersze = db()
-      .prepare(
-        `SELECT o.*, s.nazwa AS spolka_nazwa
-           FROM psa_oplaty o
-           JOIN psa_spolki s ON s.id = o.spolka_id
-           ${gdzie}
-          ORDER BY o.data_naliczenia DESC, o.id DESC`
-      )
-      .all(...parametry);
-
-    // Wyniesienie zestawienia oplat z systemu - blok D4, zakres WASKI.
-    dziennikDostepu.zapisz(db(), {
-      kto: autor(zad), typKto: 'pracownik',
-      spolkaId: zad.query.spolka_id ? Number(zad.query.spolka_id) : null,
-      akcja: dziennikDostepu.AKCJE.EKSPORT, opis: 'eksport CSV — zestawienie opłat',
-    });
-
-    const csv = oplaty.eksportujCsv(wiersze);
-    const BOM = String.fromCharCode(0xfeff);
-    odp.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    odp.setHeader('Content-Disposition', `attachment; filename="oplaty-${czas.dzisIso()}.csv"`);
-    // BOM na poczatku - Excel PL otwiera UTF-8 CSV bez krzakow tylko z BOM.
-    // `fromCharCode` zamiast literalnego znaku w zrodle - zeby plik zrodlowy
-    // nie zalezal od tego, czy edytor zachowa niewidzialny U+FEFF bez zmian.
-    odp.send(BOM + csv);
-  })
-);
-
-/** Reczny wpis oplaty - np. informacja wydana na miejscu, korekta. */
-router.post(
-  '/',
-  asy((zad, odp) => {
-    const kto = autor(zad);
-    const cialo = zad.body || {};
-
-    const spolkaId = Number(cialo.spolka_id);
-    if (!db().prepare('SELECT id FROM psa_spolki WHERE id = ?').get(spolkaId)) {
-      throw bledneZadanie('Nie odnaleziono spółki.');
-    }
-    const typ = String(cialo.typ || '');
-    if (!TYPY.includes(typ)) throw bledneZadanie(`Typ opłaty musi być jednym z: ${TYPY.join(', ')}.`);
-    if (typ === 'prowadzenie' && !cialo.okres) {
-      throw bledneZadanie('Opłata za prowadzenie rejestru wymaga wskazania okresu (roku).');
-    }
-    if (cialo.okres && !WZORZEC_OKRESU.test(String(cialo.okres))) {
-      throw bledneZadanie('Okres musi być rokiem (np. 2026) albo dwoma latami rozdzielonymi ukośnikiem (np. 2026/2027).');
-    }
-    // Kwota niepodana = domyslna stawka kancelarii, zawsze poprawna — walidacja
-    // (Z-101..Z-104) dotyczy WYLACZNIE reczne podanej kwoty, nienumeryczna
-    // wartosc ma dac 400, nie 500 z rzuconego Number(NaN) w warstwie serwisu.
-    if (cialo.kwota_grosze !== undefined && cialo.kwota_grosze !== null && cialo.kwota_grosze !== '') {
-      const walidacja = przepisy.walidujKwoteGrosze(typ, cialo.kwota_grosze);
-      if (!walidacja.ok) throw bledneZadanie(walidacja.powod);
-    }
-
-    const wpis = oplaty.dodajOplateReczna(db(), {
-      spolkaId,
-      sprawaId: cialo.sprawa_id ? Number(cialo.sprawa_id) : null,
-      typ,
-      kwotaGrosze: cialo.kwota_grosze,
-      okres: cialo.okres ? String(cialo.okres) : null,
-      notatka: cialo.notatka ? String(cialo.notatka).trim() : null,
-      autor: kto,
-    });
-
-    odp.status(201).json({ oplata: widokWiersza(wpis) });
-  })
-);
-
-/** Zmiana statusu (naliczona → zafakturowana → oplacona; albo anulowana). */
-router.patch(
-  '/:id',
-  asy((zad, odp) => {
-    const id = Number(zad.params.id);
-    if (!oplaty.wczytaj(db(), id)) throw nieZnaleziono('Nie odnaleziono opłaty.');
-
-    const status = String((zad.body || {}).status || '');
-    if (!STATUSY.includes(status)) throw bledneZadanie(`Status musi być jednym z: ${STATUSY.join(', ')}.`);
-
-    const wpis = oplaty.zmienStatus(db(), { id, status });
-    odp.json({ oplata: widokWiersza(wpis) });
+    odp.json(oplaty.ustawFakture(db(), zad.params.id, (zad.body || {}).numer_faktury));
   })
 );
 

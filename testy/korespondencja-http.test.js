@@ -93,3 +93,23 @@ test('e-mail bez skonfigurowanej poczty: „Wyślij” zapisuje błąd z przyczy
   assert.match(odp.dane.odpowiedz_serwera, /nie jest skonfigurowana/);
   assert.ok((await zadanie('GET', '/api/psa/korespondencja?filtr=bledy')).dane.some((x) => x.id === wyd.dane.pismo_id));
 });
+
+test('Opłaty: lista do zapłaty, „Opłacona”, numer faktury, anulowanie z powodem, eksport CSV', async () => {
+  const s = spolkaZRejestrem();
+  const pierwsza = await zadanie('POST', `/api/psa/spolki/${s}/informacja`, { odbiorca: 'spolka', oplata: 'tak' });
+  const druga = await zadanie('POST', `/api/psa/spolki/${s}/informacja`, { odbiorca: 'spolka', oplata: 'tak' });
+  const doZaplaty = (await zadanie('GET', '/api/psa/oplaty?filtr=do_zaplaty')).dane.filter((o) => o.spolka_id === s);
+  assert.deepEqual(doZaplaty.map((o) => o.pismo_id).sort(), [pierwsza.dane.pismo_id, druga.dane.pismo_id].sort());
+  const [a, b] = doZaplaty;
+  const opl = await zadanie('POST', `/api/psa/oplaty/${a.id}/oplacona`);
+  assert.deepEqual([opl.status, opl.dane.stan], [200, 'oplacona']);
+  const fv = await zadanie('PUT', `/api/psa/oplaty/${a.id}/faktura`, { numer_faktury: 'FV 1/11/2026' });
+  assert.equal(fv.dane.numer_faktury, 'FV 1/11/2026');
+  assert.equal((await zadanie('POST', `/api/psa/oplaty/${b.id}/anuluj`, {})).status, 422);
+  assert.equal((await zadanie('POST', `/api/psa/oplaty/${b.id}/anuluj`, { powod: 'Wydana omyłkowo' })).dane.stan, 'anulowana');
+  const csv = await zadanie('GET', '/api/psa/oplaty/csv?filtr=wszystkie');
+  assert.equal(csv.status, 200);
+  assert.match(csv.naglowki.get('content-type'), /text\/csv/);
+  assert.match(csv.naglowki.get('content-disposition'), /attachment; filename="oplaty-/);
+  assert.ok(csv.dane.toString().includes('FV 1/11/2026'));
+});
