@@ -330,12 +330,12 @@ function renderuj(typ, k, numer) {
 async function pdf(db, id) {
   const p = wczytaj(db, id);
   const katalog = konfiguracja.KATALOG_DOKUMENTOW;
-  if (p.plik) return fs.readFileSync(path.join(katalog, path.basename(p.plik)));
+  if (p.plik && fs.existsSync(path.join(katalog, path.basename(p.plik)))) return fs.readFileSync(path.join(katalog, path.basename(p.plik)));
   const { bufor } = await renderuj(p.typ, p.kontekst, p.numer);
   const nazwa = `pismo-${crypto.randomUUID()}.pdf`;
   fs.mkdirSync(katalog, { recursive: true });
   fs.writeFileSync(path.join(katalog, nazwa), bufor, { flag: 'wx' });
-  if (!danePisma.zapiszPlik(db, id, nazwa, crypto.createHash('sha256').update(bufor).digest('hex'))) {
+  if (!danePisma.zapiszPlik(db, id, nazwa, crypto.createHash('sha256').update(bufor).digest('hex'), p.plik)) {
     fs.rmSync(path.join(katalog, nazwa));
     return pdf(db, id);
   }
@@ -356,6 +356,13 @@ function nadano(db, id) {
   const p = wczytaj(db, id);
   if (p.kanal !== 'list') throw new BladWalidacji(['„Nadano” dotyczy wyłącznie listów.']);
   return zmienStan(db, id, 'wyslane', { wyslano: czas.dzisIso() });
+}
+
+/** Usuwa niewysłane pisma, które przestały być potrzebne — razem z ich plikami PDF. */
+function usunNiewyslane(db, warunek) {
+  for (const plik of danePisma.usunNiewyslane(db, warunek)) {
+    fs.rmSync(path.join(konfiguracja.KATALOG_DOKUMENTOW, path.basename(plik)), { force: true });
+  }
 }
 
 /** Ważne (wysłane, nieunieważnione) powiadomienie o zamierzonym wpisie do osoby w sprawie. */
@@ -381,7 +388,7 @@ module.exports = {
   zmienStan,
   nadano,
   powiadomienieWyslane,
-  usunNiewyslane: danePisma.usunNiewyslane,
+  usunNiewyslane,
   uniewaznijWyslane: danePisma.uniewaznijWyslane,
   lista: danePisma.lista,
 };

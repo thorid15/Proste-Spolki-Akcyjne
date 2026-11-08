@@ -54,14 +54,13 @@ function ustawStan(db, id, stan, { wyslano = null, idWiadomosci = null, odpowied
   ).run(stan, wyslano, idWiadomosci, odpowiedzSerwera, Number(id));
 }
 
-/** Usuwa niewysłane pisma spełniające warunek (pismo przestało być potrzebne). */
+/** Usuwa niewysłane pisma spełniające warunek (pismo przestało być potrzebne); zwraca ich pliki PDF. */
 function usunNiewyslane(db, { sprawaId, typ, adresatOsobaId = null }) {
-  return db
-    .prepare(
-      `DELETE FROM psa_pisma WHERE sprawa_id = ? AND typ = ? AND stan <> 'wyslane'
-         AND (? IS NULL OR adresat_osoba_id = ?)`
-    )
-    .run(Number(sprawaId), typ, adresatOsobaId, adresatOsobaId).changes;
+  const warunek = `sprawa_id = ? AND typ = ? AND stan <> 'wyslane' AND (? IS NULL OR adresat_osoba_id = ?)`;
+  const arg = [Number(sprawaId), typ, adresatOsobaId, adresatOsobaId];
+  const pliki = db.prepare(`SELECT plik FROM psa_pisma WHERE ${warunek} AND plik IS NOT NULL`).all(...arg).map((w) => w.plik);
+  db.prepare(`DELETE FROM psa_pisma WHERE ${warunek}`).run(...arg);
+  return pliki;
 }
 
 /** Wysłane pisma danego typu w sprawie tracą ważność (R2: zmiana treści po kroku 1). */
@@ -78,9 +77,32 @@ function nastepnyNumer(db, przedrostek) {
   return `${przedrostek}${String(nr).padStart(4, '0')}`;
 }
 
-/** Zapisuje plik PDF pisma — tylko raz (zwraca false, gdy pismo ma już plik). */
-function zapiszPlik(db, id, plik, sha256) {
-  return db.prepare('UPDATE psa_pisma SET plik = ?, sha256 = ? WHERE id = ? AND plik IS NULL').run(plik, sha256, Number(id)).changes === 1;
+/**
+ * Zapisuje plik PDF pisma — tylko raz (false, gdy ktoś zapisał go wcześniej). `dotychczasowy` — plik,
+ * którego zabrakło na dysku (np. po wycofanej transakcji), może zostać zastąpiony.
+ */
+function zapiszPlik(db, id, plik, sha256, dotychczasowy = null) {
+  return (
+    db.prepare('UPDATE psa_pisma SET plik = ?, sha256 = ? WHERE id = ? AND plik IS ?').run(plik, sha256, Number(id), dotychczasowy).changes === 1
+  );
 }
 
-module.exports = { wczytaj, lista, dodaj, ustawStan, nastepnyNumer, zapiszPlik, usunNiewyslane, uniewaznijWyslane };
+const WARUNKI_KORESPONDENCJI = {
+  do_wyslania: "p.stan = 'do_wyslania' AND p.kanal <> 'portal'",
+  listy: "p.stan = 'do_wyslania' AND p.kanal = 'list'",
+  bledy: "p.stan = 'blad'",
+  wyslane: "p.stan = 'wyslane'",
+};
+
+/** Ekran „Korespondencja”: pisma według filtra, z firmą spółki. */
+function korespondencja(db, filtr) {
+  return db
+    .prepare(
+      `SELECT p.*, s.nazwa AS spolka_nazwa FROM psa_pisma p LEFT JOIN psa_spolki s ON s.id = p.spolka_id
+       WHERE ${WARUNKI_KORESPONDENCJI[filtr]} ORDER BY COALESCE(p.wyslano, p.utworzono) DESC, p.id DESC`
+    )
+    .all()
+    .map(zWiersza);
+}
+
+module.exports = { wczytaj, lista, dodaj, ustawStan, nastepnyNumer, zapiszPlik, korespondencja, usunNiewyslane, uniewaznijWyslane };

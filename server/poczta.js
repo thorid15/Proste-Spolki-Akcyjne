@@ -40,7 +40,7 @@ const transportSmtp = {
         auth: { user: konfiguracja.SMTP.user, pass: konfiguracja.SMTP.pass },
       });
     }
-    await polaczenieSmtp.sendMail(wiadomosc);
+    return polaczenieSmtp.sendMail(wiadomosc);
   },
 };
 
@@ -84,7 +84,7 @@ function skonfigurowane() {
  * @param {{ filename: string, content: Buffer }[]} [zalaczniki] - np. wypelniony
  *   wzor .docx — klient dostaje gotowy plik do podpisu.
  */
-async function wyslij({ do: adresat, temat, html, zalaczniki }) {
+async function wyslij({ do: adresat, temat, tekst, html, zalaczniki }) {
   if (!adresat) {
     return {
       wyslano: false,
@@ -99,20 +99,22 @@ async function wyslij({ do: adresat, temat, html, zalaczniki }) {
     from: konfiguracja.SMTP.from || konfiguracja.SMTP.user || konfiguracja.KANCELARIA.email || 'rejestr@example.invalid',
     to: adresat,
     subject: temat,
+    text: tekst,
     html,
     attachments: zalaczniki && zalaczniki.length ? zalaczniki : undefined,
   };
+  let info;
   try {
-    await wybor.transport.wyslij(wiadomosc);
+    info = await wybor.transport.wyslij(wiadomosc);
   } catch (e) {
     return { wyslano: false, status: 'blad', powod: `Błąd wysyłki e-mail: ${e.message}` };
   }
   if (wybor.nazwa === 'skrzynka-testowa') {
     // Przeplyw idzie dalej jak po wysylce (o to chodzi w trybie testowym),
     // ale status mowi wprost, ze nic nie wyszlo z serwera.
-    return { wyslano: true, testowa: true, status: 'testowa', powod: 'testowa — niewysłana (skrzynka testowa)' };
+    return { wyslano: true, testowa: true, status: 'testowa', powod: 'testowa — niewysłana (skrzynka testowa)', idWiadomosci: info && info.id };
   }
-  return { wyslano: true, status: 'wyslano', powod: null };
+  return { wyslano: true, status: 'wyslano', powod: null, idWiadomosci: (info && info.messageId) || null, odpowiedz: (info && info.response) || null };
 }
 
 module.exports = { wyslij, skonfigurowane, zarejestrujTransport, wybierzTransport };
