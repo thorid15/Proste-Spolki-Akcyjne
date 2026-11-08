@@ -9,6 +9,7 @@ niezależnie od tego, co jest zainstalowane na serwerze kancelarii.
 |---|---|
 | `LiberationSerif-Regular.ttf` | tekst dokumentu |
 | `LiberationSerif-Bold.ttf` | nagłówki i wyróżnienia |
+| `LiberationSerif-Italic.ttf` | kursywa we wzorach (`*tekst*`) |
 
 **Dlaczego Liberation Serif.** Ma pełny komplet polskich znaków i metryki
 zgodne z Times New Roman — tym samym krojem, którym złożone są wzory `.docx`
