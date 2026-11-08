@@ -151,4 +151,10 @@ function wydajInformacje(db, { spolkaId, odbiorca = {}, dzien = null, sygnatura 
   })();
 }
 
-module.exports = { wydajInformacje };
+/** Pełna informacja (jak dla spółki) bez wydawania pisma — do eksportu rejestru. */
+function pdfInformacji(db, spolkaId, dzien) {
+  const k = { ...pisma.kontekst(db, 'informacja', { spolka_id: spolkaId, adresat: 'spolka' }), ...tresc(db, rejestr.stanSpolki(db, spolkaId, dzien), dzien, ROLA.spolka, null), numer: 'eksport' };
+  return pisma.renderuj('informacja', k, `eksport · stan na ${dataPl(dzien)}`).then((w) => w.bufor);
+}
+
+module.exports = { wydajInformacje, pdfInformacji };

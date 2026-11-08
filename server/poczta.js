@@ -3,8 +3,8 @@
 /**
  * Wysylka e-mail — JEDEN punkt dla calej aplikacji (T1, SESJA-PSA-WYTYCZNE.md).
  *
- * Kazda wiadomosc (zaproszenie, dokumenty do podpisu, zawiadomienia,
- * powiadomienia, przypomnienia) idzie przez `wyslij()`. Transport jest
+ * Kazda wiadomosc (pisma z Korespondencji, zaproszenia, przypomnienia)
+ * idzie przez `wyslij()`. Transport jest
  * wymienny (`POCZTA_TRANSPORT`):
  *   - `smtp` — nodemailer; docelowo Microsoft 365 (biuro@notariusz.gdansk.pl,
  *     smtp.office365.com:587 albo osobny transport Graph API dopisany przez
@@ -13,9 +13,8 @@
  *     wychodzi z serwera; dostepny WYLACZNIE w trybie testowym (D-074).
  *
  * Bez transportu wysylka nie rzuca wyjatku, tylko zwraca
- * `{ wyslano: false, status: 'blad', powod }` — slad w `psa_wydane_dokumenty`
- * i tak powstaje, a `wyslano` zostaje `NULL` do czasu wysylki recznej. Nigdy
- * cichy sukces.
+ * `{ wyslano: false, status: 'blad', powod }` — pismo przechodzi w stan „blad”
+ * z ta przyczyna (Korespondencja). Nigdy cichy sukces.
  *
  * Wynik: `{ wyslano, status, powod, testowa? }`, gdzie `status` to
  * `wyslano` | `testowa` (skrzynka testowa — niewysłana) | `brak_adresu` | `blad`.
@@ -81,8 +80,7 @@ function skonfigurowane() {
 }
 
 /**
- * @param {{ filename: string, content: Buffer }[]} [zalaczniki] - np. wypelniony
- *   wzor .docx — klient dostaje gotowy plik do podpisu.
+ * @param {{ filename: string, content: Buffer }[]} [zalaczniki] - np. pismo PDF (U-10).
  */
 async function wyslij({ do: adresat, temat, tekst, html, zalaczniki }) {
   if (!adresat) {

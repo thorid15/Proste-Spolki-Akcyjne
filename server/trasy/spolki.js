@@ -11,6 +11,8 @@ const { db } = require('../baza');
 const czas = require('../pomocnicze/czas');
 const rejestr = require('../rejestr');
 const informacje = require('../informacje');
+const eksport = require('../eksport');
+const dziennik = require('../logika/dziennik-dostepu');
 const sprawy = require('../sprawy');
 const stanLogika = require('../logika/stan');
 const walidacje = require('../logika/walidacje');
@@ -95,6 +97,23 @@ router.post(
       kto: autor(zad),
     });
     odp.status(201).json({ pismo_id: wynik.pismoId, numer: wynik.numer });
+  })
+);
+
+
+/** Eksport całego rejestru do ZIP (art. 90a PrNot) — z wpisem do dziennika. */
+router.get(
+  '/:id/eksport',
+  asy(async (zad, odp) => {
+    const spolka = wymagajSpolki(zad);
+    const plik = await eksport.zbudujEksport(db(), spolka.id);
+    dziennik.zapisz(db(), { kto: autor(zad), typKto: 'pracownik', spolkaId: spolka.id, akcja: dziennik.AKCJE.EKSPORT, opis: 'eksport ZIP' });
+    odp.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="rejestr-${spolka.krs}-${czas.dzisIso()}.zip"`,
+      'X-Content-Type-Options': 'nosniff',
+    });
+    odp.send(plik);
   })
 );
 

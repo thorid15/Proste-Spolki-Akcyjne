@@ -36,12 +36,11 @@ const MOUNTY = [
   { prefiks: '/api/psa/spolki', plik: 'spolki', gateMount: 'wymagajPracownika' },
   { prefiks: '/api/psa/osoby', plik: 'osoby', gateMount: 'wymagajPracownika' },
   { prefiks: '/api/psa/sprawy', plik: 'sprawy', gateMount: 'wymagajPracownika' },
-  { prefiks: '/api/psa/zdarzenia', plik: 'zdarzenia', gateMount: 'wymagajPracownika' },
+  { prefiks: '/api/psa/pliki', plik: 'pliki', gateMount: 'wymagajPracownika' },
+  { prefiks: '/api/psa/korespondencja', plik: 'korespondencja', gateMount: 'wymagajPracownika' },
   { prefiks: '/api/psa/oplaty', plik: 'oplaty', gateMount: 'wymagajPracownika' },
-  { prefiks: '/api/psa/szablony', plik: 'szablony', gateMount: 'wymagajPracownika' },
   { prefiks: '/api/psa/zgloszenia', plik: 'zgloszenia', gateMount: 'wymagajPracownika' },
   { prefiks: '/api/psa/wnioski', plik: 'wnioski', gateMount: 'wymagajPracownika' },
-  { prefiks: '/api/psa/zawiadomienia', plik: 'zawiadomienia', gateMount: 'wymagajPracownika' },
   { prefiks: '/api/psa', plik: 'pozostale', gateMount: null },
 ];
 

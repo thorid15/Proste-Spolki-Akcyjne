@@ -380,6 +380,7 @@ module.exports = {
   nazwaWzoru,
   dataPl,
   kanal,
+  kontekst,
   utworz,
   wczytaj,
   tekst,

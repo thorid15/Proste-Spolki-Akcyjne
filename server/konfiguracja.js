@@ -37,7 +37,7 @@ wczytajEnv(path.join(KATALOG_GLOWNY, '.env'));
 
 /**
  * Naprawa Z-306 — kancelaria dziala WYLACZNIE w Europie/Warszawie, a
- * `data_wpisu` na zawiadomieniach o wpisie musi byc czasem LOKALNYM
+ * `data_wpisu` na powiadomieniach o wpisie musi byc czasem LOKALNYM
  * (patrz `pomocnicze/czas.js`, ktory czyta strefe z `Date` procesu). Zla
  * strefa nie rzuca zadnego bledu w trakcie dzialania - po cichu przesuwa
  * godziny na oficjalnych dokumentach notarialnych, do wykrycia dopiero
@@ -61,7 +61,7 @@ const strefaFaktyczna = Intl.DateTimeFormat().resolvedOptions().timeZone;
 if (strefaFaktyczna !== STREFA_WYMAGANA) {
   throw new Error(
     `Serwer wymaga strefy czasowej "${STREFA_WYMAGANA}" (zmienna TZ) - kancelaria dziala wylacznie w tej ` +
-      `strefie, a data i godzina wpisu na zawiadomieniach musza byc czasem lokalnym kancelarii. Wykryto ` +
+      `strefie, a data i godzina wpisu na powiadomieniach musza byc czasem lokalnym kancelarii. Wykryto ` +
       `strefe "${strefaFaktyczna}" (TZ=${process.env.TZ}). Ustaw TZ=${STREFA_WYMAGANA} w .env albo w ` +
       'srodowisku procesu.'
   );
@@ -176,7 +176,7 @@ const konfiguracja = {
     www: tekst('KANCELARIA_WWW', 'https://notariusz.gdansk.pl'),
     www_psa: tekst('KANCELARIA_WWW_PSA', tekst('KANCELARIA_WWW', 'https://notariusz.gdansk.pl')),
 
-    // Atomowe - na potrzeby wzorow .docx (PLACEHOLDERY-PSA.md, sekcja KANCELARIA).
+    // Dane kancelarii do pism (wzory/*.md) — domyslne, nadpisywane w Ustawieniach.
     // Wszystkie w MIANOWNIKU: pisma opisuja dane etykieta ("notariusz: ...",
     // "siedziba: ..."), wiec zadna forma odmieniona nie jest juz potrzebna.
     kancelaria_ulica: tekst('KANCELARIA_ULICA', ''),

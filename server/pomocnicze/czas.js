@@ -4,7 +4,7 @@
  * Daty i czas w kanonie ISO 8601 (master: daty ISO 8601).
  *
  * `data_wpisu` musi byc czasem LOKALNYM kancelarii co do sekundy - trafia
- * na zawiadomienia o wpisie jako "data i godzina wpisu". Zapisujemy ja
+ * na powiadomienia o wpisie jako "data i godzina wpisu". Zapisujemy ja
  * z przesunieciem strefy, zeby byla jednoznaczna takze po zmianie czasu.
  * Strefe ustawia zmienna `TZ` (domyslnie Europe/Warsaw).
  */

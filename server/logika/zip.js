@@ -3,15 +3,14 @@
 /**
  * Czytanie i zapisywanie archiwów ZIP — bez zależności zewnętrznych.
  *
- * Plik `.docx` to zwykły ZIP z kilkunastoma częściami XML. Do jego obsługi
- * wystarczy `zlib` z biblioteki standardowej Node (`inflateRawSync` /
+ * Służy eksportowi rejestru (art. 90a PrNot). Wystarczy `zlib` z biblioteki standardowej Node (`inflateRawSync` /
  * `deflateRawSync`) plus ręcznie napisane czytanie nagłówków. Master, sekcja 4:
  * żadnych bibliotek — a ZIP jest na tyle prostym formatem, że jego obsługa
  * mieści się w jednym pliku i nie wymaga kompromisu.
  *
- * Zakres celowo ograniczony do tego, co produkuje Word:
+ * Zakres celowo ograniczony:
  *   — metoda 0 (bez kompresji) i 8 (deflate),
- *   — brak ZIP64 (pliki .docx nie zbliżają się do 4 GB),
+ *   — brak ZIP64 (archiwa poniżej 4 GB),
  *   — brak szyfrowania.
  * Wszystko poza tym kończy się czytelnym błędem zamiast cichego uszkodzenia
  * dokumentu.
@@ -149,7 +148,7 @@ function rozpakuj(wpis) {
   return dane;
 }
 
-/** Wpisy archiwum jako mapa nazwa → Buffer (wygodne przy czytaniu .docx). */
+/** Wpisy archiwum jako mapa nazwa → Buffer. */
 function rozpakujWszystko(bufor) {
   const czesci = new Map();
   for (const wpis of czytaj(bufor)) czesci.set(wpis.nazwa, rozpakuj(wpis));

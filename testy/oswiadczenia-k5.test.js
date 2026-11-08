@@ -23,7 +23,7 @@ const hasla = require('../server/logika/hasla');
 const czas = require('../server/pomocnicze/czas');
 const rejestr = require('../server/rejestr');
 const widoki = null; // Faza 5: widoki portalu przebudowywane
-const { informacjaZRejestru } = require('../server/logika/informacja-dokument');
+const informacjaZRejestru = null; // Faza 2: informacja z rejestru — server/informacje.js (test do przepisania w Fazie 5)
 const stanOswiadczen = null; // U-11: oświadczenia zastąpione zgodą w karcie osoby; portal — Faza 5
 const { wymagaListu, TEKST_ZNACZNIKA } = require('../publiczne/js/kontakt.js');
 

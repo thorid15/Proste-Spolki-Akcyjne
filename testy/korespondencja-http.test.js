@@ -28,7 +28,7 @@ async function zadanie(metoda, sciezka, cialo, { zalogowany = true } = {}) {
   if (cialo !== undefined) naglowki['Content-Type'] = 'application/json';
   const odp = await fetch(`${ADRES}${sciezka}`, { method: metoda, headers: naglowki, body: cialo === undefined ? undefined : JSON.stringify(cialo) });
   const typ = odp.headers.get('content-type') || '';
-  const dane = typ.includes('json') ? await odp.json() : typ.includes('pdf') || typ.includes('csv') ? Buffer.from(await odp.arrayBuffer()) : await odp.text();
+  const dane = typ.includes('json') ? await odp.json() : /pdf|csv|zip/.test(typ) ? Buffer.from(await odp.arrayBuffer()) : await odp.text();
   return { status: odp.status, naglowki: odp.headers, dane };
 }
 
@@ -112,4 +112,13 @@ test('Opłaty: lista do zapłaty, „Opłacona”, numer faktury, anulowanie z p
   assert.match(csv.naglowki.get('content-type'), /text\/csv/);
   assert.match(csv.naglowki.get('content-disposition'), /attachment; filename="oplaty-/);
   assert.ok(csv.dane.toString().includes('FV 1/11/2026'));
+});
+
+test('eksport ZIP z kokpitu: plik do pobrania, ślad w dzienniku', async () => {
+  const s = spolkaZRejestrem();
+  const odp = await zadanie('GET', `/api/psa/spolki/${s}/eksport`);
+  assert.equal(odp.status, 200);
+  assert.equal(odp.naglowki.get('content-type'), 'application/zip');
+  assert.match(odp.naglowki.get('content-disposition'), /^attachment; filename="rejestr-\d{10}-\d{4}-\d{2}-\d{2}\.zip"$/);
+  assert.equal(db().prepare("SELECT COUNT(*) AS ile FROM psa_dziennik WHERE akcja = 'eksport' AND spolka_id = ?").get(s).ile, 1);
 });
