@@ -49,4 +49,10 @@ function ustawFakture(db, id, numer) {
   db.prepare('UPDATE psa_oplaty SET numer_faktury = ? WHERE id = ?').run(numer, Number(id));
 }
 
-module.exports = { dodaj, wczytaj, lista, ustawStan, ustawFakture };
+/** Ostatni naliczony okres opłaty za prowadzenie („RRRR-MM-DD..RRRR-MM-DD”) albo null. */
+function ostatniOkresProwadzenia(db, spolkaId) {
+  const w = db.prepare("SELECT okres FROM psa_oplaty WHERE spolka_id = ? AND typ = 'prowadzenie' ORDER BY okres DESC LIMIT 1").get(Number(spolkaId));
+  return w ? w.okres : null;
+}
+
+module.exports = { dodaj, wczytaj, lista, ustawStan, ustawFakture, ostatniOkresProwadzenia };

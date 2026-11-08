@@ -37,8 +37,13 @@ function zapisz(db, { kto, typKto, spolkaId = null, osobaId = null, akcja, opis 
 
 /**
  * D-122 (P-009): retencja dziennika dostępu — 5 lat od wpisu (jak dokumentacja środków AML, art. 49 ustawy AML;
- * rozliczalność RODO). Starsze wpisy usuwa harmonogram raz na dobę.
+ * rozliczalność RODO). Starsze wpisy usuwa proces dzienny (`server/proces-dzienny.js`).
  */
+/** Czy w dzienniku jest już wpis danej czynności z danym opisem (np. wysłane przypomnienie). */
+function zapisano(db, akcja, opis) {
+  return Boolean(db.prepare('SELECT 1 FROM psa_dziennik WHERE akcja = ? AND opis = ? LIMIT 1').get(akcja, opis));
+}
+
 const RETENCJA_LAT = 5;
 function usunPrzeterminowane(db, { teraz = new Date() } = {}) {
   const granica = new Date(teraz);
@@ -46,4 +51,4 @@ function usunPrzeterminowane(db, { teraz = new Date() } = {}) {
   return db.prepare('DELETE FROM psa_dziennik WHERE chwila < ?').run(granica.toISOString()).changes;
 }
 
-module.exports = { zapisz, usunPrzeterminowane, RETENCJA_LAT, AKCJE };
+module.exports = { zapisz, zapisano, usunPrzeterminowane, RETENCJA_LAT, AKCJE };

@@ -7,7 +7,9 @@
 
 const czas = require('./pomocnicze/czas');
 const przepisy = require('./logika/przepisy');
+const terminy = require('./logika/terminy');
 const daneOplaty = require('./dane/oplaty');
+const daneSpolki = require('./dane/spolki');
 const { BladWalidacji } = require('./logika/walidacje');
 
 const PRZEJSCIA = {
@@ -80,4 +82,49 @@ function csv(wiersze) {
   return `${[naglowek.join(';'), ...linie].join('\r\n')}\r\n`;
 }
 
-module.exports = { PRZEJSCIA, FILTRY, lista, oplacona, anuluj, ustawFakture, csv };
+/** Początek k-tego okresu od dnia otwarcia: co `miesiecy` miesięcy, ten sam dzień (31 → ostatni dzień miesiąca). */
+function poczatekOkresu(otwarcie, k, miesiecy) {
+  const [rok, mies, dzien] = otwarcie.split('-').map(Number);
+  const t = mies - 1 + k * miesiecy;
+  const r = rok + Math.floor(t / 12);
+  const m = (t % 12) + 1;
+  const ostatni = new Date(Date.UTC(r, m, 0)).getUTCDate();
+  return `${r}-${String(m).padStart(2, '0')}-${String(Math.min(dzien, ostatni)).padStart(2, '0')}`;
+}
+
+/**
+ * U-30: opłaty za prowadzenie rejestru — rocznie (w rocznicę otwarcia) albo co miesiąc (w dniu
+ * otwarcia); każda rata osobno, okres „RRRR-MM-DD..RRRR-MM-DD”. Nadrabia dni bez uruchomienia,
+ * zaczyna od końca ostatniego naliczonego okresu (zmiana sposobu płatności niczego nie dubluje),
+ * po zamknięciu rejestru nie nalicza. Zwraca liczbę nowych opłat.
+ */
+function naliczProwadzenie(db, { dzis = czas.dzisIso(), autor = 'proces dzienny' } = {}) {
+  return db.transaction(() => {
+    let nowe = 0;
+    for (const s of daneSpolki.zRejestrem(db)) {
+      const otwarcie = czas.dzienLokalny(s.data_otwarcia);
+      const zamkniecie = s.data_zamkniecia ? czas.dzienLokalny(s.data_zamkniecia) : null;
+      const ostatni = daneOplaty.ostatniOkresProwadzenia(db, s.id);
+      const od = ostatni ? terminy.dodajDni(ostatni.split('..')[1], 1) : otwarcie;
+      const miesiecy = s.platnosc === 'miesieczna' ? 1 : 12;
+      for (let k = 0; ; k += 1) {
+        const start = poczatekOkresu(otwarcie, k, miesiecy);
+        if (start > dzis || (zamkniecie && start >= zamkniecie)) break;
+        if (start < od) continue;
+        daneOplaty.dodaj(db, {
+          spolka_id: s.id,
+          typ: 'prowadzenie',
+          platnik: 'spolka',
+          okres: `${start}..${terminy.dodajDni(poczatekOkresu(otwarcie, k + 1, miesiecy), -1)}`,
+          kwota_netto_grosze: miesiecy === 1 ? przepisy.STAWKI_GROSZE.PROWADZENIE_MIESIECZNIE : przepisy.STAWKI_GROSZE.PROWADZENIE_ROCZNIE,
+          stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
+          autor,
+        });
+        nowe += 1;
+      }
+    }
+    return nowe;
+  })();
+}
+
+module.exports = { PRZEJSCIA, FILTRY, lista, oplacona, anuluj, ustawFakture, csv, kwota, poczatekOkresu, naliczProwadzenie };

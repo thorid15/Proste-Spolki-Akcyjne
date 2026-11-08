@@ -64,4 +64,9 @@ function ustawStanRejestru(db, id, { data_otwarcia, data_zamkniecia, powod_zamkn
   );
 }
 
-module.exports = { POLA_EDYCJI, wczytaj, lista, dodaj, zmien, ustawStanRejestru };
+/** Spółki z otwartym kiedykolwiek rejestrem — do naliczania opłat i przypomnień. */
+function zRejestrem(db) {
+  return db.prepare('SELECT * FROM psa_spolki WHERE data_otwarcia IS NOT NULL ORDER BY id').all();
+}
+
+module.exports = { POLA_EDYCJI, wczytaj, lista, dodaj, zmien, ustawStanRejestru, zRejestrem };

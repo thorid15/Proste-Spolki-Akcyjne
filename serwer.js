@@ -16,7 +16,7 @@ const migracje = require('./server/migracje');
 const { posrednikBledow } = require('./server/pomocnicze/odpowiedzi');
 const autoryzacja = require('./server/pomocnicze/autoryzacja');
 const auth = require('./server/trasy/auth');
-const { uruchomRetencjeDziennika } = require('./server/logika/harmonogram');
+const { uruchomProcesDzienny } = require('./server/logika/harmonogram');
 const trybTestowy = require('./server/tryb-testowy');
 
 const aplikacja = express();
@@ -182,7 +182,7 @@ if (require.main === module) {
       console.log(`[psa] baza: ${konfiguracja.WSPOLNA_BAZA}`);
       console.log(`[psa] portal klienta: ${konfiguracja.PORTAL_WLACZONY ? 'włączony' : 'wyłączony (PORTAL_WLACZONY=false)'}`);
     });
-    uruchomRetencjeDziennika(db());
+    uruchomProcesDzienny(db());
   });
 }
 

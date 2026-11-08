@@ -119,6 +119,8 @@ const CEL_WEWNETRZNY = {
 const STAWKI_GROSZE = {
   /** prowadzenie rejestru: 1200 zl za kazdy rozpoczety rok. */
   PROWADZENIE_ROCZNIE: 120000,
+  /** prowadzenie rejestru płatne co miesiąc (U-30): 100 zl za miesiąc. */
+  PROWADZENIE_MIESIECZNIE: 10000,
   /** wpis w rejestrze: 100 zl. */
   WPIS: 10000,
   /** informacja z rejestru: 50 zl. */
