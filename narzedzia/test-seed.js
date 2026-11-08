@@ -90,6 +90,17 @@ async function main() {
   dodajPracownika.run('Notariusz Testowy', 'notariusz@example.com', hash, 'admin', teraz);
   dodajPracownika.run('Pracownik Testowy', 'pracownik@example.com', hash, 'pracownik', teraz);
 
+  // Dane kancelarii do pism (Ustawienia) — fikcyjne.
+  const ustaw = db().prepare('INSERT OR REPLACE INTO psa_ustawienia (klucz, wartosc, zaktualizowano, autor) VALUES (?, ?, ?, ?)');
+  for (const [k, v] of Object.entries({
+    notariusz_mianownik: 'Notariusz Testowy',
+    kancelaria_ulica: 'ul. Próbna 1',
+    kancelaria_kod: '80-001',
+    kancelaria_miasto: 'Gdańsk',
+    kancelaria_nip: '5840000000',
+    email: 'rejestr@kancelaria.example',
+  })) ustaw.run(k, v, teraz, 'test:seed');
+
   const app = require('../serwer');
   const serwer = app.listen(0);
   await new Promise((r) => serwer.once('listening', r));
@@ -163,6 +174,12 @@ async function main() {
     operacje: [{ typ: 'przeniesienie', zbywca_osoba_id: jan.id, nabywcy: [{ osoba_id: ewa.id, akcje: [{ seria: 'A', numery: '601-650', liczba: 50 }] }] }],
   });
   await zapytaj('POST', `/api/psa/sprawy/${zbycie.sprawa.id}/krok`, { krok: 2 });
+
+  // Faza 2: opłata za prowadzenie (proces dzienny), informacja z rejestru, powiadomienie o otwarciu wysłane e-mailem.
+  require('../server/oplaty').naliczProwadzenie(db());
+  await zapytaj('POST', `/api/psa/spolki/${alfa}/informacja`, { odbiorca: 'osoba', osoba_id: anna.id, oplata: 'tak' });
+  const doSpolki = (await zapytaj('GET', '/api/psa/korespondencja?filtr=do_wyslania')).find((p) => p.spolka_id === alfa && p.typ === 'powiadomienie_wpis');
+  await zapytaj('POST', `/api/psa/korespondencja/${doSpolki.id}/wyslij`);
 
   serwer.close();
   console.log(`\n[test:seed] Gotowe: ${PLIK}`);

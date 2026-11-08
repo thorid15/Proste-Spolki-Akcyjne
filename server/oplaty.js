@@ -66,8 +66,10 @@ function ustawFakture(db, id, numer) {
 }
 
 const kwota = (grosze) => (grosze / 100).toFixed(2).replace('.', ',');
+/** Pole CSV; tekst zaczynający się od =, +, -, @ dostaje apostrof — Excel nie uruchomi go jako formuły. */
 function pole(v) {
-  const t = v == null ? '' : String(v);
+  const s = v == null ? '' : String(v);
+  const t = typeof v === 'string' && /^[=+\-@]/.test(s) ? `'${s}` : s;
   return /[";\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 }
 

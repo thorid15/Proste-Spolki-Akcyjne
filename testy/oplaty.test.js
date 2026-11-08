@@ -56,3 +56,9 @@ test('CSV: nagłówek, średnik jako separator, kwoty z przecinkiem, pola ze śr
   assert.equal(linie.length, 3);
   assert.ok(linie[1].includes(';"Alfa; prosta spółka akcyjna";') && linie[1].includes(';100,00;123,00;do zapłaty;'), linie[1]);
 });
+
+test('CSV: komórka zaczynająca się od =, +, -, @ nie staje się formułą w Excelu', () => {
+  const linia = oplaty.csv([{ utworzono: '2026-11-08', spolka_nazwa: '=HYPERLINK("http://x")', platnik_nazwa: '+48 1', rodzaj: 'Wpis', okres: null, kwota_netto_grosze: 100, kwota_brutto_grosze: 123, stan: 'do_zaplaty', numer_faktury: '@x', oplacono: null }]).split('\r\n')[1];
+  assert.ok(linia.includes(`;"'=HYPERLINK(""http://x"")";'+48 1;`), linia);
+  assert.ok(linia.includes(";'@x;"), linia);
+});

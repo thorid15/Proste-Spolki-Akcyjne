@@ -47,7 +47,7 @@ test('poz. 23: siedziba osoby prawnej i adres do doręczeń nie są adresem zami
   assert.equal(maskowanie.zamaskujOsobe({ ...OSOBA, rodzaj_adresu: 'doreczen' }, rola, 99).adres, OSOBA.adres);
   const prawna = { id: 8, typ: 'prawna', nazwa: 'Gamma sp. z o.o.', numer_rejestru: '0000123456', adres: 'ul. Morska 3, Gdynia', rodzaj_adresu: 'glowny' };
   assert.equal(maskowanie.zamaskujOsobe(prawna, rola, 99).adres, prawna.adres);
-  assert.equal(maskowanie.opisOsoby(prawna, rola, 99), 'Gamma sp. z o.o.\nnr w rejestrze 0000123456\nul. Morska 3, Gdynia');
+  assert.equal(maskowanie.opisOsoby(prawna, rola, 99), 'Gamma sp. z o.o., nr w rejestrze 0000123456\nul. Morska 3, Gdynia');
   assert.equal(maskowanie.opisOsoby(OSOBA, rola, 99), 'Jan Kowalski');
 });
 

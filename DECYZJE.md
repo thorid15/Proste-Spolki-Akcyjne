@@ -1733,6 +1733,23 @@
   wpisu — zostaje ważna po „Zmień treść” (w przeciwieństwie do wysłanych powiadomień, które tracą ważność — R2). Odnotowanie zgody: osoba,
   „dopuszczalna forma”, data, opcjonalnie plik (D-088). Potwierdza zachowanie z D-163; bez zmian w kodzie.
 
+### D-169–D-180 — Faza 2 uproszczenia: rozstrzygnięcia wykonawcze (8.11.2026; raport `raporty/FAZA-2.md`)
+
+- Obszar: pisma, Korespondencja, informacja z rejestru, opłaty, proces dzienny. Decyzje podjęte przy wykonaniu specyfikacji — do akceptacji Łukasza razem z raportem.
+- Decyzje:
+  1. **D-169** Wzory w Markdown: treść Word 1:1 poza elementami usuniętymi decyzjami — REGON spółki (U-16), głosy w uchwale (U-12), nazwy pism (U-29), charakter wpisu (U-16); w pismach kancelarii podstawa prawna jednym wierszem pod tytułem, pouczenia bez odesłań w nawiasach (§ 4); NIP spółki tylko w umowie; po firmie nie dopisuje się „prosta spółka akcyjna” (firma ją zawiera).
+  2. **D-170** Umowa, uchwała i zgoda zachowują odesłania do przepisów (to akty stron). W umowie: „§ 15” → „§ 13” (adresy są w § 13); bez imion rodziców i dowodu reprezentanta (formularz z § 6 ich nie zbiera); dodane oświadczenie PEP (U-03), akapity o przejęciu (U-07) i płatności miesięcznej (U-30). Lista akcjonariuszy do KRS — jeden blok podpisów członków zarządu albo rady dyrektorów (imion nie przechowujemy). Zgoda e-mail: „pkt 4” → „pkt 5” i zdanie o przesyłaniu powiadomień (U-11).
+  3. **D-171** Pismo dostaje przy czynności numer (PSA/RRRR/NNNN; informacja — INF/RRRR/NNNN) i migawkę treści; PDF powstaje przy pierwszym podglądzie, pobraniu albo wysyłce i od tej chwili jest ten sam (SHA-256 w `psa_pisma`).
+  4. **D-172** Brak ulicy, kodu albo miejscowości kancelarii w Ustawieniach blokuje utworzenie pisma (a więc i wpis) komunikatem „Uzupełnij dane kancelarii w Ustawieniach”.
+  5. **D-173** Informacja z rejestru ma nagłówek kancelarii (bez daty) — wspólny wygląd pism; w treści tylko części z § 4.
+  6. **D-174** Wersja informacji dla akcjonariusza ukrywa u pozostałych PESEL, datę urodzenia, adres zamieszkania i e-mail; siedziba osoby prawnej i adres do doręczeń są widoczne (§ 3.5 poz. 23). Maskowanie białą listą na nowym modelu osoby.
+  7. **D-175** W tabeli „Akcje” liczba = liczba akcji wyemitowanych w serii; numery umorzone — osobny wiersz pod tabelą, tylko gdy są.
+  8. **D-176** Korespondencja: „Wyślij ponownie” tylko ze stanu „blad”; filtr „do wysłania” = e-maile i listy (bez kanału „portal” — Faza 5); podgląd PDF „inline”; niewysłane pismo usuwa się razem z plikiem PDF.
+  9. **D-177** Opłaty: CSV dla Excela (średnik, przecinek dziesiętny, BOM).
+  10. **D-178** Opłata za prowadzenie: okres „RRRR-MM-DD..RRRR-MM-DD”; proces dzienny nalicza od końca ostatniego okresu (nadrabia przerwy, zmiana rocznej na miesięczną nie dubluje); pierwsza opłata w dniu otwarcia; anulowany okres nie powstaje ponownie.
+  11. **D-179** Przypomnienie o kolejnym roku: e-mail do spółki 30 dni przed rocznicą, raz (ślad w dzienniku), tylko przy płatności rocznej i adresie e-mail spółki.
+  12. **D-180** Retencja U-19: wniosek odrzucony — od razu, roboczy albo złożony — po 90 dniach bez zmian; znikają dane klienta, checklista, notatka, dotychczasowy podmiot, pliki, niewysłane pisma i konto założone tylko dla wniosku; wysłane pisma zostają jako dowód.
+
 ---
 
 ## Decyzje otwarte

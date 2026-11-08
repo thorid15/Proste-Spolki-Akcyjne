@@ -76,13 +76,14 @@ const dataPl = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4
 function opisOsoby(osoba, rola, odbiorcaOsobaId = null) {
   const o = zamaskujOsobe(osoba, rola, odbiorcaOsobaId);
   const jawne = (v) => v != null && v !== '' && v !== ZASLONA;
-  const linie = [o.nazwa];
+  let id = null;
   if (o.typ === 'prawna') {
-    if (jawne(o.numer_rejestru)) linie.push(`nr w rejestrze ${o.numer_rejestru}`);
-  } else if (jawne(o.pesel)) linie.push(`PESEL ${o.pesel}`);
-  else if (jawne(o.data_urodzenia)) linie.push(`ur. ${dataPl(o.data_urodzenia)}`);
-  if (jawne(o.adres)) linie.push(o.rodzaj_adresu === 'doreczen' ? `adres do doręczeń: ${o.adres}` : o.adres);
-  if (jawne(o.email) && o.zgoda_email) linie.push(o.email);
+    if (jawne(o.numer_rejestru)) id = `nr w rejestrze ${o.numer_rejestru}`;
+  } else if (jawne(o.pesel)) id = `PESEL ${o.pesel}`;
+  else if (jawne(o.data_urodzenia)) id = `ur. ${dataPl(o.data_urodzenia)}`;
+  const adres = jawne(o.adres) ? (o.rodzaj_adresu === 'doreczen' ? `adres do doręczeń: ${o.adres}` : o.adres) : null;
+  const email = jawne(o.email) && o.zgoda_email ? o.email : null;
+  const linie = [[o.nazwa, id].filter(Boolean).join(', '), [adres, email].filter(Boolean).join(', ')].filter(Boolean);
   return linie.join('\n');
 }
 

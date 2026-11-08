@@ -167,3 +167,23 @@ test('każde wydanie informacji trafia do dziennika', () => {
   assert.deepEqual([w.kto, w.typ_kto, w.spolka_id, w.osoba_id], ['Test', 'pracownik', s, a]);
   assert.match(w.opis, /^INF\/\d{4}\/0001/);
 });
+
+test('§ 4: spółka z 10 akcjonariuszami i 3 seriami — informacja na jednej stronie', async () => {
+  const db = bazaTestowa();
+  const s = dodajSpolke(db);
+  const osoby = Array.from({ length: 10 }, (_, i) =>
+    dodajOsobe(db, { nazwa: `Katarzyna Przykładowa-Nowak ${i + 1}`, data_urodzenia: null, pesel: '44051401359', adres: 'ul. Długa 125/14, 80-001 Gdańsk', email: `k${i}@przyklad.example` })
+  );
+  db.prepare(`UPDATE psa_osoby SET zgoda_email = 1`).run();
+  otworz(db, s, {
+    serie: [['A', 400], ['B', 300], ['C', 300]].map(([seria, l]) => ({ seria, numery: `1-${l}`, liczba: l, data_wpisu_krs: '2026-01-10' })),
+    akcjonariusze: osoby.map((o, i) => {
+      const [seria, k] = i < 4 ? ['A', i] : i < 7 ? ['B', i - 4] : ['C', i - 7];
+      return { osoba_id: o, akcje: [{ seria, numery: `${k * 100 + 1}-${k * 100 + 100}`, liczba: 100 }] };
+    }),
+  });
+  const { pismoId } = informacje.wydajInformacje(db, { spolkaId: s, odbiorca: { rodzaj: 'spolka' }, oplata: 'nie', kto: 'Test' });
+  const p = pisma.wczytaj(db, pismoId);
+  const { strony } = await pisma.renderuj('informacja', p.kontekst, p.numer);
+  assert.equal(strony, 1);
+});
