@@ -24,13 +24,14 @@ function lista(db, { sprawaId = null, spolkaId = null } = {}) {
 function dodaj(db, p) {
   const w = db
     .prepare(
-      `INSERT INTO psa_pisma (typ, spolka_id, sprawa_id, wniosek_id, adresat, adresat_osoba_id, adresat_opis, sygnatura,
+      `INSERT INTO psa_pisma (typ, numer, spolka_id, sprawa_id, wniosek_id, adresat, adresat_osoba_id, adresat_opis, sygnatura,
          kanal, kontekst_json, autor, utworzono)
-       VALUES (@typ, @spolka_id, @sprawa_id, @wniosek_id, @adresat, @adresat_osoba_id, @adresat_opis, @sygnatura,
+       VALUES (@typ, @numer, @spolka_id, @sprawa_id, @wniosek_id, @adresat, @adresat_osoba_id, @adresat_opis, @sygnatura,
          @kanal, @kontekst_json, @autor, @utworzono)`
     )
     .run({
       typ: p.typ,
+      numer: p.numer,
       spolka_id: p.spolka_id ?? null,
       sprawa_id: p.sprawa_id ?? null,
       wniosek_id: p.wniosek_id ?? null,
@@ -70,4 +71,16 @@ function uniewaznijWyslane(db, { sprawaId, typ }) {
     .run(czas.terazIso(), Number(sprawaId), typ).changes;
 }
 
-module.exports = { wczytaj, lista, dodaj, ustawStan, usunNiewyslane, uniewaznijWyslane };
+/** Kolejny numer pisma z danym przedrostkiem (np. „PSA/2026/”): NNNN od 0001. */
+function nastepnyNumer(db, przedrostek) {
+  const w = db.prepare('SELECT numer FROM psa_pisma WHERE numer LIKE ? ORDER BY numer DESC LIMIT 1').get(`${przedrostek}%`);
+  const nr = w ? Number(w.numer.slice(przedrostek.length)) + 1 : 1;
+  return `${przedrostek}${String(nr).padStart(4, '0')}`;
+}
+
+/** Zapisuje plik PDF pisma — tylko raz (zwraca false, gdy pismo ma już plik). */
+function zapiszPlik(db, id, plik, sha256) {
+  return db.prepare('UPDATE psa_pisma SET plik = ?, sha256 = ? WHERE id = ? AND plik IS NULL').run(plik, sha256, Number(id)).changes === 1;
+}
+
+module.exports = { wczytaj, lista, dodaj, ustawStan, nastepnyNumer, zapiszPlik, usunNiewyslane, uniewaznijWyslane };

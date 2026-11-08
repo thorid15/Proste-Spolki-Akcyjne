@@ -23,7 +23,9 @@ const hasla = require('../server/logika/hasla');
 const pisma = require('../server/logika/pisma');
 const daneSpolki = require('../server/dane/spolki');
 const czas = require('../server/pomocnicze/czas');
-const { CHECKLISTA_PELNA, PDF_TESTOWY } = require('./pomoc');
+const { CHECKLISTA_PELNA, PDF_TESTOWY, ustawKancelarie } = require('./pomoc');
+
+ustawKancelarie(db());
 
 let serwer;
 let ADRES;

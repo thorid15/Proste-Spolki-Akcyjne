@@ -31,3 +31,6 @@ playwright-report/
 testy/e2e/raport/zrzuty/
 testy/e2e/raport/czesci/
 testy/e2e/raport/arkusze/
+
+# Podgląd wzorów pism (npm run wzory)
+wzory/podglad/

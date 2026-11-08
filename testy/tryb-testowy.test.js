@@ -197,7 +197,8 @@ test('T4: symulowana data działa na bramkę 2027 i nie cofa się przed ostatnie
   const spolkaId = require('../server/dane/spolki').dodaj(db(), {
     krs: '0000990777', nazwa: 'Spółka do testu daty', siedziba: 'Gdańsk', adres: 'ul. Testowa 1', sad_rejestrowy: 'SR Gdańsk', data_rejestracji: '2027-03-01',
   });
-  const { dodajOsobe, otworz } = require('./pomoc');
+  const { dodajOsobe, otworz, ustawKancelarie } = require('./pomoc');
+  ustawKancelarie(db());
   const osoba = dodajOsobe(db());
   otworz(db(), spolkaId, {
     serie: [{ seria: 'A', numery: '1-10', liczba: 10, data_wpisu_krs: '2027-03-01' }],

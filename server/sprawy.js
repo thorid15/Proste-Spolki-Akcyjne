@@ -83,7 +83,7 @@ function utworzPowiadomienia(db, sprawa, sym, kto) {
       sprawa_id: sprawa.id,
       adresat: 'osoba',
       adresat_osoba_id: id,
-      kontekst: { operacje: sym.operacje },
+      dane: { stanPo: sym.po, operacje: sym.operacje },
       autor: kto,
     });
   }

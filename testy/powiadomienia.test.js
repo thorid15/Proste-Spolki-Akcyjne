@@ -223,7 +223,7 @@ test('§ 7: powiadomienie o wpisie — spółka (e-mail z umowy) i żądający; 
   sprawy.zmienStan(ctx.db, id, 'wpisana', {}, 'Test');
   const oWpisie = pisma.lista(ctx.db, { sprawaId: id }).filter((p) => p.typ === 'powiadomienie_wpis');
   assert.deepEqual(oWpisie.map((p) => [p.adresat, p.adresat_osoba_id, p.kanal, p.stan]), [['spolka', null, 'email', 'do_wyslania'], ['osoba', ctx.c, 'list', 'do_wyslania']]);
-  assert.deepEqual(oWpisie[0].kontekst.zdarzenia, [daneRejestr.zdarzeniaSpolki(ctx.db, ctx.s).pop().id]);
+  assert.equal(oWpisie[0].kontekst.wpis_data, pisma.dataPl(czas.dzisIso()));
 
   assert.throws(
     () => sprawy.zaloz(ctx.db, { spolka_id: ctx.s, zadajacy: 'spolka', wpisz: true, checklista: CHECKLISTA_PELNA, oplata: 'nie', operacje: [{ typ: 'przeniesienie', zbywca_osoba_id: ctx.a, nabywcy: [{ osoba_id: ctx.c, akcje: [akcje('30', 1)] }] }] }, 'Test'),

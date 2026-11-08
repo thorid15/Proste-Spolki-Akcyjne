@@ -12,9 +12,24 @@ const n = require('../server/logika/numery');
 const daneSpolki = require('../server/dane/spolki');
 const daneOsoby = require('../server/dane/osoby');
 
+/** Dane kancelarii potrzebne w każdym piśmie (Ustawienia). */
+const KANCELARIA = {
+  notariusz_mianownik: 'Anna Przykładowa',
+  kancelaria_ulica: 'ul. Próbna 1',
+  kancelaria_kod: '80-001',
+  kancelaria_miasto: 'Gdańsk',
+  kancelaria_nip: '5840000000',
+};
+
+function ustawKancelarie(db) {
+  const wstaw = db.prepare("INSERT OR REPLACE INTO psa_ustawienia (klucz, wartosc, zaktualizowano, autor) VALUES (?, ?, '2026-01-01', 'test')");
+  for (const [k, v] of Object.entries(KANCELARIA)) wstaw.run(k, v);
+}
+
 function bazaTestowa() {
   const db = baza.otworz(':memory:');
   migracje.uruchom(db);
+  ustawKancelarie(db);
   return db;
 }
 
@@ -102,4 +117,4 @@ const PDF_TESTOWY =
   '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\n' +
   'trailer<</Root 1 0 R>>\n%%EOF\n';
 
-module.exports = { bazaTestowa, dodajSpolke, dodajOsobe, wpisz, otworz, akcjonariat, CHECKLISTA_PELNA, PDF_TESTOWY };
+module.exports = { bazaTestowa, ustawKancelarie, dodajSpolke, dodajOsobe, wpisz, otworz, akcjonariat, CHECKLISTA_PELNA, PDF_TESTOWY };

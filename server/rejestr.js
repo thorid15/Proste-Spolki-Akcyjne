@@ -180,8 +180,8 @@ function wpisz(db, sprawa, kto) {
   // Niewysłane powiadomienia o zamierzonym wpisie nie są już potrzebne.
   pisma.usunNiewyslane(db, { sprawaId: sprawa.id, typ: 'powiadomienie_zamierzony' });
   // art. 300(34) § 7 KSH: o dokonanym wpisie — żądający i spółka.
-  const kontekst = { zdarzenia: zapisane.map((z) => z.id) };
-  const wspolne = { spolka_id: sprawa.spolka_id, sprawa_id: sprawa.id, kontekst, autor: kto };
+  const dane = { stanPo: po, operacje: sym.operacje, chwila };
+  const wspolne = { spolka_id: sprawa.spolka_id, sprawa_id: sprawa.id, dane, autor: kto };
   pisma.utworz(db, 'powiadomienie_wpis', { ...wspolne, adresat: 'spolka' });
   const zadajacy = adresatZadajacy(sprawa);
   if (zadajacy && zadajacy.adresat !== 'spolka') pisma.utworz(db, 'powiadomienie_wpis', { ...wspolne, ...zadajacy });

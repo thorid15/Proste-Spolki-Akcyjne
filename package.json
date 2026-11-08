@@ -20,7 +20,8 @@
     "dokumentacja": "node narzedzia/dokumentacja-baza.js && node narzedzia/dokumentacja-endpointy.js",
     "test:seed": "node narzedzia/test-seed.js",
     "test:link": "node narzedzia/test-link.js",
-    "test:oznacz": "node narzedzia/test-oznacz.js"
+    "test:oznacz": "node narzedzia/test-oznacz.js",
+    "wzory": "node narzedzia/wzory.js"
   },
   "dependencies": {
     "bcrypt": "6.0.0",
