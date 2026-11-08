@@ -25,6 +25,9 @@ const TYPY = {
   informacja: 'Informacja z rejestru akcjonariuszy',
 };
 
+/** Plik wzoru w `wzory/` dla typu pisma. */
+const nazwaWzoru = (typ) => typ.replace(/_/g, '-');
+
 const PRZEJSCIA = {
   do_wyslania: ['wyslane', 'blad'],
   blad: ['wyslane', 'blad'],
@@ -82,6 +85,7 @@ function powiadomienieWyslane(db, sprawaId, osobaId) {
 module.exports = {
   TYPY,
   PRZEJSCIA,
+  nazwaWzoru,
   kanal,
   utworz,
   zmienStan,
