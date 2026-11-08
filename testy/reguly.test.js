@@ -18,56 +18,45 @@ const { bazaTestowa, dodajSpolke, dodajOsobe, otworz } = require('./pomoc');
 const OSOBA = {
   id: 7,
   typ: 'fizyczna',
-  nazwisko: 'Kowalski',
-  imie: 'Jan',
+  nazwa: 'Jan Kowalski',
   pesel: '44051401359',
   data_urodzenia: '1944-05-14',
-  kod_pocztowy: '30-002',
-  miejscowosc: 'Kraków',
-  ulica: 'Długa',
-  nr_domu: '5',
+  adres: 'ul. Długa 5, 30-002 Kraków',
+  rodzaj_adresu: 'glowny',
   email: 'jan@example.pl',
-  telefon: '600100200',
-  aml_status: 'wykonane',
-  aml_notatka: 'weryfikacja na podstawie dowodu osobistego',
+  zgoda_email: 1,
+  aml_data: '2026-01-01',
   uwagi: 'notatka wewnętrzna',
-  pep: 'tak',
+  pep: 1,
   pep_opis: 'radny gminy',
-  beneficjent_rzeczywisty_id: 42,
 };
 
-test('REGUŁA 9: inny akcjonariusz nie widzi PESEL, daty urodzenia ani adresu', () => {
+test('REGUŁA 9: inny akcjonariusz nie widzi PESEL, daty urodzenia, adresu zamieszkania ani e-maila', () => {
   const wynik = maskowanie.zamaskujOsobe(OSOBA, przepisy.ROLE_ODBIORCY.AKCJONARIUSZ, 99);
-
   assert.equal(wynik.zamaskowane, true);
-  for (const pole of ['pesel', 'data_urodzenia', 'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu']) {
+  for (const pole of ['pesel', 'data_urodzenia', 'adres', 'email']) {
     assert.equal(wynik[pole], maskowanie.ZASLONA, `pole ${pole} musi być zasłonięte`);
   }
-  // Dane kontaktowe innych akcjonariuszy też nie wychodzą (sekcja 10).
-  assert.equal(wynik.email, maskowanie.ZASLONA);
-  assert.equal(wynik.telefon, maskowanie.ZASLONA);
-  // Notatki AML i uwagi wewnętrzne nie opuszczają kancelarii w żadnym wariancie.
-  assert.equal(wynik.aml_notatka, undefined);
-  assert.equal(wynik.aml_status, undefined);
-  assert.equal(wynik.uwagi, undefined);
-  // Naprawa Z-150 (dociągnięcie audytu): status PEP i beneficjent rzeczywisty
-  // to też dane kancelaryjne, nie treść rejestru — poprzednia wersja usuwała
-  // tylko 4 z ~14 pól wrażliwych, PEP/beneficjent wyciekały nawet do peera.
-  assert.equal(wynik.pep, undefined);
-  assert.equal(wynik.pep_opis, undefined);
-  assert.equal(wynik.beneficjent_rzeczywisty_id, undefined);
-  // Nazwisko pozostaje - rejestr jest jawny dla akcjonariuszy co do składu.
-  assert.equal(wynik.nazwisko, 'Kowalski');
+  // AML, PEP i uwagi to dane kancelarii, nie treść rejestru — nie wychodzą w żadnym wariancie.
+  for (const pole of ['aml_data', 'uwagi', 'pep', 'pep_opis']) assert.equal(wynik[pole], undefined, pole);
+  assert.equal(wynik.nazwa, 'Jan Kowalski');
+});
+
+test('poz. 23: siedziba osoby prawnej i adres do doręczeń nie są adresem zamieszkania — widoczne dla akcjonariusza', () => {
+  const rola = przepisy.ROLE_ODBIORCY.AKCJONARIUSZ;
+  assert.equal(maskowanie.zamaskujOsobe({ ...OSOBA, rodzaj_adresu: 'doreczen' }, rola, 99).adres, OSOBA.adres);
+  const prawna = { id: 8, typ: 'prawna', nazwa: 'Gamma sp. z o.o.', numer_rejestru: '0000123456', adres: 'ul. Morska 3, Gdynia', rodzaj_adresu: 'glowny' };
+  assert.equal(maskowanie.zamaskujOsobe(prawna, rola, 99).adres, prawna.adres);
+  assert.equal(maskowanie.opisOsoby(prawna, rola, 99), 'Gamma sp. z o.o.\nnr w rejestrze 0000123456\nul. Morska 3, Gdynia');
+  assert.equal(maskowanie.opisOsoby(OSOBA, rola, 99), 'Jan Kowalski');
 });
 
 test('Z-150: rola „spółka”/„organ” ma pełny wgląd do treści rejestru (PESEL), ale AML/PEP nie wychodzi poza kancelarię', () => {
   for (const rola of [przepisy.ROLE_ODBIORCY.SPOLKA, przepisy.ROLE_ODBIORCY.ORGAN]) {
     const wynik = maskowanie.zamaskujOsobe(OSOBA, rola);
     assert.equal(wynik.pesel, OSOBA.pesel, `rola ${rola} musi widzieć PESEL (treść rejestru)`);
-    assert.equal(wynik.aml_status, undefined, `rola ${rola} nie może widzieć aml_status`);
-    assert.equal(wynik.aml_notatka, undefined, `rola ${rola} nie może widzieć aml_notatka`);
+    assert.equal(wynik.aml_data, undefined, `rola ${rola} nie może widzieć aml_data`);
     assert.equal(wynik.pep, undefined, `rola ${rola} nie może widzieć pep`);
-    assert.equal(wynik.beneficjent_rzeczywisty_id, undefined, `rola ${rola} nie może widzieć beneficjenta rzeczywistego`);
     assert.equal(wynik.uwagi, undefined, `rola ${rola} nie może widzieć uwagi`);
   }
 });

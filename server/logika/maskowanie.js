@@ -55,34 +55,35 @@ function zamaskujOsobe(osoba, rola, odbiorcaOsobaId = null) {
     zamaskowane_pola.push(klucz);
     if (POLA_Z_PLACEHOLDEREM.includes(klucz)) wynik[klucz] = ZASLONA;
   }
+  // Poz. 23: maskuje się wyłącznie adres zamieszkania osoby fizycznej — siedziba osoby prawnej
+  // i adres do doręczeń są jawne dla każdego akcjonariusza.
+  if (wynik.adres === ZASLONA && (osoba.typ === 'prawna' || osoba.rodzaj_adresu === 'doreczen')) {
+    wynik.adres = osoba.adres;
+    zamaskowane_pola.splice(zamaskowane_pola.indexOf('adres'), 1);
+  }
   wynik.zamaskowane = true;
   wynik.zamaskowane_pola = zamaskowane_pola;
   return wynik;
 }
 
-/** Skrocony podpis osoby do tabel - bez danych wrazliwych z definicji. */
-function oznaczenieOsoby(osoba) {
-  if (!osoba) return 'nieznany';
-  if (osoba.typ === 'prawna') {
-    return osoba.nazwa || `podmiot #${osoba.id}`;
-  }
-  return [osoba.nazwisko, osoba.imie].filter(Boolean).join(' ') || `osoba #${osoba.id}`;
-}
+const dataPl = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 
 /**
- * Identyfikator podmiotu widoczny dla kazdego odbiorcy: dla osob prawnych
- * numer w rejestrze (jawny z natury), dla osob fizycznych NIC - PESEL
- * i data urodzenia sa wrazliwe.
+ * Opis akcjonariusza do informacji z rejestru (U-27): imię i nazwisko albo firma, PESEL albo data
+ * urodzenia (osoba prawna — numer w rejestrze), adres, e-mail przy zgodzie — wyłącznie pola, które
+ * przepuszcza biała lista odbiorcy. Bez dopisków o pominięciu.
  */
-function jawnyIdentyfikator(osoba) {
-  if (!osoba) return null;
-  if (osoba.typ === 'prawna') {
-    const numer = osoba.numer_w_rejestrze || osoba.krs || null;
-    const rejestr = osoba.nazwa_rejestru || (numer ? 'KRS' : null);
-    if (numer) return `${rejestr} ${numer}`;
-    if (osoba.nip) return `NIP ${osoba.nip}`;
-  }
-  return null;
+function opisOsoby(osoba, rola, odbiorcaOsobaId = null) {
+  const o = zamaskujOsobe(osoba, rola, odbiorcaOsobaId);
+  const jawne = (v) => v != null && v !== '' && v !== ZASLONA;
+  const linie = [o.nazwa];
+  if (o.typ === 'prawna') {
+    if (jawne(o.numer_rejestru)) linie.push(`nr w rejestrze ${o.numer_rejestru}`);
+  } else if (jawne(o.pesel)) linie.push(`PESEL ${o.pesel}`);
+  else if (jawne(o.data_urodzenia)) linie.push(`ur. ${dataPl(o.data_urodzenia)}`);
+  if (jawne(o.adres)) linie.push(o.rodzaj_adresu === 'doreczen' ? `adres do doręczeń: ${o.adres}` : o.adres);
+  if (jawne(o.email) && o.zgoda_email) linie.push(o.email);
+  return linie.join('\n');
 }
 
 /**
@@ -98,4 +99,4 @@ function widziWrazliweDaneInnych(rola) {
   return przepisy.POLA_WRAZLIWE.some((pole) => lista.includes(pole));
 }
 
-module.exports = { ZASLONA, zamaskujOsobe, oznaczenieOsoby, jawnyIdentyfikator, widziWrazliweDaneInnych };
+module.exports = { ZASLONA, zamaskujOsobe, opisOsoby, widziWrazliweDaneInnych };

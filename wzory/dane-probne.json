@@ -51,7 +51,7 @@
     "spolka_nip": "5840000001",
     "spolka_email": "zarzad@przyklad.example",
     "reprezentant": "Maria Zarządna",
-    "reprezentant_pesel": "80010100005",
+    "reprezentant_pesel": "44051401359",
     "reprezentant_adres": "ul. Krótka 3, 80-003 Gdańsk",
     "reprezentant_funkcja": "członek zarządu",
     "reprezentant_reprezentacja": "jednoosobowo",
@@ -91,7 +91,7 @@
     ],
     "umorzone": [],
     "akcjonariusze": [
-      { "opis": "Ewa Przykład\nPESEL 80010100005\nul. Morska 7, 81-001 Gdynia\newa@przyklad.example", "seria": "A", "numery": "1–100", "liczba": "100", "data_wpisu": "15.01.2026", "pokryte": "tak" },
+      { "opis": "Ewa Przykład\nPESEL 44051401359\nul. Morska 7, 81-001 Gdynia\newa@przyklad.example", "seria": "A", "numery": "1–100", "liczba": "100", "data_wpisu": "15.01.2026", "pokryte": "tak" },
       { "opis": "Piotr Testowy\nur. 01.02.1975\nul. Polna 9, 00-001 Warszawa", "seria": "A", "numery": "101–200", "liczba": "100", "data_wpisu": "15.01.2026", "pokryte": "tak" },
       { "opis": "Piotr Testowy\nur. 01.02.1975\nul. Polna 9, 00-001 Warszawa", "seria": "B", "numery": "1–50", "liczba": "50", "data_wpisu": "02.03.2026", "pokryte": "nie" }
     ],

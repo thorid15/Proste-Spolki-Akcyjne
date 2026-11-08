@@ -10,6 +10,7 @@ const express = require('express');
 const { db } = require('../baza');
 const czas = require('../pomocnicze/czas');
 const rejestr = require('../rejestr');
+const informacje = require('../informacje');
 const sprawy = require('../sprawy');
 const stanLogika = require('../logika/stan');
 const walidacje = require('../logika/walidacje');
@@ -75,6 +76,25 @@ router.put(
     if (bledy.length > 0) throw new walidacje.BladWalidacji(bledy);
     daneSpolki.zmien(db(), spolka.id, zmiany, autor(zad));
     odp.json(daneSpolki.wczytaj(db(), spolka.id));
+  })
+);
+
+
+/** „Informacja z rejestru” w kokpicie (§ 4, U-24): pracownik — dowolny dzień od otwarcia, także dziś. */
+router.post(
+  '/:id/informacja',
+  asy((zad, odp) => {
+    const spolka = wymagajSpolki(zad);
+    const b = zad.body || {};
+    const wynik = informacje.wydajInformacje(db(), {
+      spolkaId: spolka.id,
+      odbiorca: { rodzaj: b.odbiorca, osobaId: b.osoba_id, opis: b.organ },
+      sygnatura: b.sygnatura,
+      dzien: b.dzien || null,
+      oplata: b.oplata,
+      kto: autor(zad),
+    });
+    odp.status(201).json({ pismo_id: wynik.pismoId, numer: wynik.numer });
   })
 );
 

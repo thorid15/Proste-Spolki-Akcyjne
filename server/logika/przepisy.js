@@ -189,51 +189,14 @@ const FORMY_PRAWNE_ZABRONIONE = [
  * dodatkowymi juz istniejacymi w systemie. Jedyna zmiana wprowadzona przez
  * nowelizacje to ZAKAZ udostepniania ponizszych pol pozostalym akcjonariuszom.
  */
-const POLA_WRAZLIWE = [
-  'pesel',
-  'data_urodzenia',
-  'kod_pocztowy',
-  'miejscowosc',
-  'ulica',
-  'nr_domu',
-  'nr_lokalu',
-];
+const POLA_WRAZLIWE = ['pesel', 'data_urodzenia', 'adres'];
 
-/** Pola kontaktowe - nie sa "danymi rejestru" w rozumieniu art. 300(33), nie pokazujemy ich obcym. */
-const POLA_KONTAKTOWE = ['email', 'telefon', 'adres_doreczen', 'adres_edoreczen'];
+const POLA_KONTAKTOWE = ['email'];
 
-/**
- * Tozsamosc i tresc rejestru dostepna KAZDEJ roli, ktora w ogole ma prawo
- * widziec osobe (wlacznie z zamaskowanym akcjonariuszem-peer) - nigdy
- * PESEL/adres/kontakt (POLA_WRAZLIWE/POLA_KONTAKTOWE, osobno dopuszczane
- * per rola nizej) i nigdy dane kancelaryjne (POLA_KANCELARYJNE).
- */
-const POLA_TOZSAMOSCI = [
-  'id',
-  'typ',
-  'nazwisko',
-  'imie',
-  'nazwa',
-  'nip',
-  'regon',
-  'numer_w_rejestrze',
-  'nazwa_rejestru',
-  'kraj',
-  'plec',
-  'rodzaj_adresu_rejestrowego',
-  'bez_pesel',
-];
+const POLA_TOZSAMOSCI = ['id', 'typ', 'nazwa', 'numer_rejestru', 'rodzaj_adresu'];
 
-/**
- * D-092 (przegląd R4 #9): stan zgody na e-mail to dane kartoteki — nie dla innych akcjonariuszy.
- * Spółka i organ dostają go (spółka potrzebuje go, żeby w informacji pokazać adres e-mail).
- */
-const POLA_OSWIADCZEN = ['zgoda_email', 'zgoda_email_status'];
+const POLA_OSWIADCZEN = ['zgoda_email'];
 
-/**
- * Role odbiorcy informacji z rejestru. Decyduja o zakresie maskowania.
- * PRZEPISY-PSA.md art. 300(35) § 1, § 1(1), § 4.
- */
 const ROLE_ODBIORCY = {
   /** Kancelaria prowadzaca rejestr - pelny wglad z definicji. */
   KANCELARIA: 'kancelaria',
