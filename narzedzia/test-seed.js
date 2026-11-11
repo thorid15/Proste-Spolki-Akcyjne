@@ -97,7 +97,7 @@ async function main() {
     kancelaria_ulica: 'ul. Próbna 1',
     kancelaria_kod: '80-001',
     kancelaria_miasto: 'Gdańsk',
-    kancelaria_nip: '5840000000',
+    kancelaria_nip: '5840000016',
     email: 'rejestr@kancelaria.example',
   })) ustaw.run(k, v, teraz, 'test:seed');
 

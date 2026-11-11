@@ -1,749 +1,192 @@
-/* osoby.js — kartoteka wspólna (reguła domenowa nr 10).
-   `parsujPesel` żyje w pesel.js (etap 3D - portal.html go też potrzebuje,
-   bez ładowania całego osoby.js), wczytanym wcześniej w index.html. */
-
-const PUSTA_OSOBA = {
-  typ: 'fizyczna',
-  nazwisko: '', imie: '', nazwa: '', plec: '',
-  pesel: '', data_urodzenia: '',
-  nip: '', regon: '', numer_w_rejestrze: '', nazwa_rejestru: '',
-  kraj: 'Polska', kod_pocztowy: '', miejscowosc: '', ulica: '', nr_domu: '', nr_lokalu: '',
-  adres_doreczen: '', adres_edoreczen: '', email: '', telefon: '',
-  zgoda_email: 0, aml_status: 'brak', aml_data: '', aml_notatka: '', uwagi: '',
-  // Art. 300(33) § 1 pkt 2-5 KSH — patrz server/logika/akcjonariusz.js.
-  bez_pesel: 0, rodzaj_adresu_rejestrowego: 'zamieszkania', zgoda_email_status: 'brak',
-  wspolwlasnosc: 'brak', wspolwlasciciele: '', udzial_licznik: '', udzial_mianownik: '',
-  // Sesja 8, blok C — przegląd okresowy, beneficjent rzeczywisty, oświadczenie PEP:
-  aml_data_przegladu: '', beneficjent_rzeczywisty_id: null,
-  pep_oswiadczenie: '', pep_oswiadczenie_data: '',
-  // Etap 14 — status PEP jako DANA (ocena kancelarii, katalog z przepisy.js),
-  // obok `pep_oswiadczenie`, ktore jest oswiadczeniem zlozonym przez osobe.
-  // Naprawa Z-151/P-010: domyslnie NIEUSTALONO, nie „nie” — nikt jeszcze
-  // nie ocenil tej osoby, a to nie to samo, co swiadome „nie jest PEP”.
-  pep: 'nieustalono', pep_opis: '',
-};
-
-const TYPY_DOKUMENTU_AML = [
-  { wartosc: 'dowod_osobisty', etykieta: 'dowód osobisty' },
-  { wartosc: 'paszport', etykieta: 'paszport' },
-  { wartosc: 'inny', etykieta: 'inny' },
-];
-
-/** Skany dokumentow AML (etap 3.1) - widoczne wylacznie, gdy wybrana spolka ma wlaczona procedure. */
-function SekcjaSkanowAml({ osobaId, spolkaId }) {
-  const [skany, ustawSkany] = useState([]);
-  const [ladowanie, ustawLadowanie] = useState(true);
-  const [typDokumentu, ustawTypDokumentu] = useState('dowod_osobisty');
-  const [retencjaDo, ustawRetencjaDo] = useState('');
-  const [plik, ustawPlik] = useState(null);
-  const [wgrywanie, ustawWgrywanie] = useState(false);
-  const [blad, ustawBlad] = useState(null);
-
-  function wczytaj() {
-    ustawLadowanie(true);
-    API.get(`/api/psa/osoby/${osobaId}/aml-skany?spolka_id=${spolkaId}`)
-      .then((w) => ustawSkany(w.skany))
-      .catch(() => ustawSkany([]))
-      .finally(() => ustawLadowanie(false));
-  }
-  useEffect(wczytaj, [osobaId, spolkaId]);
-
-  async function wgraj() {
-    if (!plik) return;
-    ustawWgrywanie(true);
-    ustawBlad(null);
-    try {
-      const formularz = new FormData();
-      formularz.append('spolka_id', String(spolkaId));
-      formularz.append('typ_dokumentu', typDokumentu);
-      if (retencjaDo) formularz.append('retencja_do', retencjaDo);
-      formularz.append('plik', plik);
-      const odp = await fetch(`/api/psa/osoby/${osobaId}/aml-skany`, { method: 'POST', body: formularz });
-      const tresc = await odp.json().catch(() => ({}));
-      if (!odp.ok) throw new Error(tresc.blad || `Nie udało się przesłać pliku (błąd ${odp.status}).`);
-      ustawPlik(null);
-      wczytaj();
-    } catch (e) {
-      ustawBlad(e.message);
-    } finally {
-      ustawWgrywanie(false);
-    }
-  }
-
-  return (
-    <Pole
-      etykieta="Skany dokumentów tożsamości"
-      podpowiedz="Pobranie skanu zostawia ślad w dzienniku dostępu. Okres przechowywania (retencja) ustala kancelaria — zgodnie z polityką AML, nie automatycznie."
-    >
-      <Komunikat odmiana="blad" tresc={blad} />
-      {!ladowanie && skany.length > 0 && (
-        <ul className="lista-plaska" style={{ marginBottom: 8 }}>
-          {skany.map((s) => (
-            <li key={s.id}>
-              <a href={`/api/psa/osoby/${osobaId}/aml-skany/${s.id}/plik`} target="_blank" rel="noopener">
-                {nazwaPlikuDoWyswietlenia({ nazwaOryginalna: s.nazwa_pliku, rodzaj: 'skan-aml', data: s.utworzono })}
-              </a>{' '}
-              <span className="podpowiedz">
-                ({TYPY_DOKUMENTU_AML.find((t) => t.wartosc === s.typ_dokumentu)?.etykieta || s.typ_dokumentu}
-                {s.retencja_do ? ` · retencja do ${s.retencja_do}` : ''})
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="siatka-3">
-        <select aria-label="Rodzaj dokumentu tożsamości" value={typDokumentu} onChange={(z) => ustawTypDokumentu(z.target.value)}>
-          {TYPY_DOKUMENTU_AML.map((t) => <option key={t.wartosc} value={t.wartosc}>{t.etykieta}</option>)}
-        </select>
-        <PoleDaty wartosc={retencjaDo} przyZmianie={ustawRetencjaDo} />
-        <input type="file" aria-label="Skan dokumentu tożsamości" accept=".pdf,.jpg,.jpeg,.png" onChange={(z) => ustawPlik(z.target.files[0] || null)} />
-      </div>
-      <button className="btn btn-maly" onClick={wgraj} disabled={!plik || wgrywanie} style={{ marginTop: 8 }}>
-        {wgrywanie ? 'Przesyłanie…' : 'Dodaj skan'}
-      </button>
-    </Pole>
-  );
-}
-
-/**
- * Kartoteka: dane osoby w PANELU BOCZNYM (formularz dłuższy niż 4 pola nie
- * jest modalem — FAZA 1 pkt 5). Pola wspólne z wnioskiem klienta renderuje
- * `FormularzOsoby` (formularz-osoby.js); tu dochodzą wyłącznie dane
- * kancelarii: AML, PEP, beneficjent, notatki wewnętrzne.
- *
- * `przyWyborzeIstniejacej` — gdy panel otwiera wybór z kartoteki, a wpisany
- * PESEL / NIP / KRS należy już do kogoś, można wybrać tę osobę zamiast
- * zakładać drugą (reguła domenowa nr 10, D-042).
- */
-/**
- * D-116 (P-017): beneficjenci rzeczywiści osoby prawnej — domyślnie jedno pole, „Dodaj beneficjenta” dokłada kolejne.
- * Wskazuje ich sama spółka (D-118); brak to ostrzeżenie przy wpisie, nie blokada.
- */
-function ListaBeneficjentow({ lista, przyZmianie, wyklucz }) {
-  const wybrani = lista.filter(Boolean);
-  return (
-    <Pole etykieta="Beneficjenci rzeczywiści" podpowiedz="Osoby fizyczne sprawujące kontrolę nad podmiotem (art. 2 ust. 2 pkt 1 ustawy AML) — wskazuje je spółka.">
-      <div className="pion" style={{ gap: 'var(--od-8)' }}>
-        {lista.map((id, i) => (
-          <div key={i} className="rzad" style={{ gap: 8, alignItems: 'center' }}>
-            <div style={{ flex: 1 }}>
-              <WyborZKartoteki
-                wartosc={id}
-                typFiltr="fizyczna"
-                wyklucz={[...wyklucz, ...wybrani.filter((x) => x !== id)]}
-                placeholder="Szukaj osoby fizycznej w kartotece…"
-                przyZmianie={(nowy) => przyZmianie(lista.map((x, j) => (j === i ? nowy : x)))}
-              />
-            </div>
-            {lista.length > 1 && (
-              <button type="button" className="btn btn-maly btn-cichy" onClick={() => przyZmianie(lista.filter((_, j) => j !== i))}>Usuń</button>
-            )}
-          </div>
-        ))}
-        <div><button type="button" className="btn btn-sm" onClick={() => przyZmianie([...lista, null])}>Dodaj beneficjenta</button></div>
-      </div>
-    </Pole>
-  );
-}
-
-/**
- * D-102: zmiana danych z rejestru (art. 300(33) § 1 pkt 5 KSH) osoby z akcjami — kartoteka ich nie nadpisuje,
- * tylko proponuje wpis „Zmiana danych akcjonariusza”: sprawa z wypełnionymi danymi (przed → po), otwarta od razu
- * w „Sprawdzeniu i wpisie”. D-107: jeden wpis obejmuje łącznie rejestry wszystkich spółek, w których osoba ma akcje.
- */
-function PropozycjaZmianyDanych({ osoba, zmiana, przyZamknieciu }) {
-  const [pracuje, ustawPracuje] = useState(false);
-  const [blad, ustawBlad] = useState(null);
-  const klucz = useRef(crypto.randomUUID());
-  async function zaloz(spolkaId) {
-    ustawPracuje(true);
-    ustawBlad(null);
-    try {
-      const odp = await API.post('/api/psa/sprawy', {
-        spolka_id: spolkaId, typ_zdarzenia: 'zmiana_danych_akcjonariusza', zrodlo: 'papier',
-        zadajacy_osoba_id: osoba.id, zadajacy_rola: 'akcjonariusz', data_wplywu: fmt.dzisIso(), klucz_idempotencji: klucz.current,
-      });
-      const id = odp.sprawa.id;
-      if (odp.sprawa.stan === 'nowa') await API.patch(`/api/psa/sprawy/${id}`, { akcja: 'weryfikuj' });
-      const formularz = { osoba_id: osoba.id, po: zmiana.po };
-      await API.post(`/api/psa/sprawy/${id}/podglad`, { dane: { ...formularz, _formularz: formularz, _typ: 'zmiana_danych_akcjonariusza' } });
-      idz(`/sprawy/${id}`);
-    } catch (e) {
-      ustawBlad(e.message);
-      ustawPracuje(false);
-    }
-  }
-  return (
-    <Modal tytul="Zmiana danych wpisanych do rejestru" przyZamknieciu={przyZamknieciu} stopka={<button type="button" className="btn" onClick={przyZamknieciu}>Nie teraz</button>}>
-      <Komunikat odmiana="blad" tresc={blad} />
-      <p>
-        Zmienione dane ({Object.keys(zmiana.po).map((k) => ETYKIETY_POL_REJESTRU[k] || k).join(', ')}) są wpisane do rejestru akcjonariuszy —
-        zmienia je wpis (art. 300(33) § 1 pkt 5 KSH). Pozostałe zmiany zapisano w kartotece.
-      </p>
-      {zmiana.spolki.length > 1 && (
-        <p className="male wyciszony">Wpis obejmie łącznie rejestry spółek: {zmiana.spolki.map((s) => s.nazwa).join(', ')}.</p>
-      )}
-      <div>
-        <button type="button" className="btn btn-glowny" disabled={pracuje} onClick={() => zaloz(zmiana.spolki[0].id)}>
-          {pracuje ? 'Zakładanie sprawy…' : 'Załóż wpis zmiany danych'}
-        </button>
-      </div>
-    </Modal>
-  );
-}
-
-const ETYKIETY_POL_REJESTRU = {
-  nazwisko: 'nazwisko', imie: 'imię', nazwa: 'firma', kod_pocztowy: 'kod pocztowy', miejscowosc: 'miejscowość', ulica: 'ulica',
-  nr_domu: 'nr domu', nr_lokalu: 'nr lokalu', adres_doreczen: 'adres do doręczeń', adres_edoreczen: 'adres do doręczeń elektronicznych',
-};
-
-/** `przyZmianieRejestrowej(zmiana)` — kreator wpisu przejmuje zmianę danych z rejestru (D-102) zamiast propozycji sprawy. */
-function PanelOsoby({ osoba, przyZamknieciu, przyZapisie, przyWyborzeIstniejacej, przyZmianieRejestrowej }) {
-  const [zmianaRejestrowa, ustawZmianeRejestrowa] = useState(null);
-  const [dane, ustawDane] = useState(() => osobaDoFormularza(osoba, PUSTA_OSOBA));
-  const ostrzezeniePesel = !Number(dane.bez_pesel) && dane.pesel ? walidujPesel(String(dane.pesel)).ostrzezenie || null : null;
-  const [blad, ustawBlad] = useState(null);
-  const [zapisywanie, ustawZapisywanie] = useState(false);
-  const [brakiPokazane, ustawBrakiPokazane] = useState(false);
-  const edycja = Boolean(osoba && osoba.id);
-  const walidacja = useWalidacjaOsoby(dane, { tryb: 'kancelaria' });
-  const idPrefiks = 'kartoteka';
-  const poczatkowe = useRef(JSON.stringify(dane));
-  const zmienione = () => JSON.stringify(dane) !== poczatkowe.current;
-  useBlokadaWyjscia(() => zmienione() && !zapisywanie && !zmianaRejestrowa);
-  async function anuluj() {
-    if (zmienione() && !(await potwierdz({ tytul: 'Niezapisane dane', tresc: 'Zamknąć bez zapisania wprowadzonych danych?', akcja: 'Zamknij bez zapisania', zamknij: 'Wróć do formularza', niebezpieczna: true }))) return;
-    przyZamknieciu();
-  }
-
-  // Etap 3.1: procedura AML (skan/PEP/beneficjent) jest wlaczana PER SPOLKA,
-  // a osoba (kartoteka wspolna) moze byc akcjonariuszem w kilku - wybor
-  // "kontekstu" decyduje, ktorej spolki przelacznik gate'uje ten formularz.
-  const [spolkiOsoby, ustawSpolkiOsoby] = useState([]);
-  const [kontekstSpolkaId, ustawKontekstSpolkaId] = useState(null);
-  useEffect(() => {
-    if (!edycja) return;
-    API.get(`/api/psa/osoby/${osoba.id}/spolki`)
-      .then((w) => {
-        ustawSpolkiOsoby(w.spolki);
-        if (w.spolki.length === 1) ustawKontekstSpolkaId(w.spolki[0].id);
-      })
-      .catch(() => ustawSpolkiOsoby([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [edycja, osoba && osoba.id]);
-  const kontekstSpolka = spolkiOsoby.find((s) => s.id === kontekstSpolkaId) || null;
-  const stosujeAml = Boolean(kontekstSpolka && Number(kontekstSpolka.stosuje_procedure_aml));
-
-  const zmien = (latka) => ustawDane((p) => ({ ...p, ...latka }));
-  const pole = (klucz) => ({
-    value: dane[klucz] ?? '',
-    onChange: (z) => zmien({ [klucz]: z.target.value }),
-  });
-
-  // Ten sam PESEL / NIP / numer KRS już w kartotece — pokazujemy to PRZY
-  // polu, z możliwością wybrania istniejącej osoby (D-042: ostrzeżenie, nie
-  // blokada — ta sama osoba bywa w wielu spółkach, ale ma mieć jeden rekord).
-  const [kolizje, ustawKolizje] = useState({});
-  const identyfikatory = { pesel: dane.typ !== 'prawna' ? dane.pesel : '', nip: dane.typ === 'prawna' ? dane.nip : '', numer_w_rejestrze: dane.typ === 'prawna' ? dane.numer_w_rejestrze : '' };
-  const sygnaturaId = JSON.stringify(identyfikatory);
-  useEffect(() => {
-    const uchwyt = setTimeout(() => {
-      const wynik = {};
-      const zapytania = Object.entries(identyfikatory)
-        .filter(([k, v]) => v && (k === 'pesel' ? /^\d{11}$/.test(v) : String(v).replace(/\D/g, '').length >= 9))
-        .map(([k, v]) => API.get(`/api/psa/osoby?q=${encodeURIComponent(v)}`)
-          .then((o) => {
-            const inna = o.osoby.find((x) => String(x[k] || '') === String(v) && (!edycja || x.id !== osoba.id));
-            if (inna) wynik[k] = inna;
-          })
-          .catch(() => {}));
-      Promise.all(zapytania).then(() => ustawKolizje(wynik));
-    }, 300);
-    return () => clearTimeout(uchwyt);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sygnaturaId]);
-
-  const ostrzezeniaIdentyfikatora = Object.fromEntries(Object.entries(kolizje).map(([k, inna]) => [k, (
-    <div className="kolizja-kartoteki" role="status" key={k}>
-      <span>W kartotece jest już <strong>{inna.oznaczenie}</strong> z tym numerem.</span>
-      {przyWyborzeIstniejacej
-        ? <button type="button" className="btn btn-maly" onClick={() => przyWyborzeIstniejacej(inna)}>Wybierz tę osobę</button>
-        : <a href={`#/osoby/${inna.id}`} onClick={przyZamknieciu}>Otwórz jej dane</a>}
-    </div>
-  )]));
-
-  async function zapisz(mimoBrakow = false) {
-    if (!walidacja.czyPoprawne && !mimoBrakow) {
-      walidacja.pokazWszystkie();
-      ustawBrakiPokazane(true);
-      return;
-    }
-    ustawZapisywanie(true);
-    ustawBlad(null);
-    try {
-      const wynik = edycja
-        ? await API.put(`/api/psa/osoby/${osoba.id}`, dane)
-        : await API.post('/api/psa/osoby', dane);
-      if (wynik.zmiana_rejestrowa && przyZmianieRejestrowej) {
-        przyZmianieRejestrowej(wynik.zmiana_rejestrowa, wynik.osoba);
-        return;
-      }
-      if (wynik.zmiana_rejestrowa) {
-        ustawZmianeRejestrowa({ ...wynik.zmiana_rejestrowa, osoba: wynik.osoba });
-        return;
-      }
-      przyZapisie(wynik.osoba);
-    } catch (e) {
-      ustawBlad(e.message);
-    } finally {
-      ustawZapisywanie(false);
-    }
-  }
-
-  const listaBledow = listaBledowOsoby(walidacja.widoczne, idPrefiks);
-  if (zmianaRejestrowa) {
-    return <PropozycjaZmianyDanych osoba={zmianaRejestrowa.osoba} zmiana={zmianaRejestrowa} przyZamknieciu={() => przyZapisie(zmianaRejestrowa.osoba)} />;
-  }
-  return (
-    <Modal
-      panel
-      tytul={edycja ? 'Dane osoby' : 'Nowa osoba w kartotece'}
-      przyZamknieciu={anuluj}
-      stopka={
-        <>
-          {/* D-106: zła suma kontrolna PESEL — ostrzeżenie także przy zapisie, bez blokady (cudzoziemcy, stare nadania). */}
-          {ostrzezeniePesel && <span className="male wyciszony" role="status" style={{ marginRight: 'auto' }}>{ostrzezeniePesel}</span>}
-          <button type="button" className="btn" onClick={anuluj}>Anuluj</button>
-          <button type="button" className="btn btn-glowny" onClick={() => zapisz(false)} disabled={zapisywanie}>
-            {zapisywanie ? 'Zapisywanie…' : edycja ? 'Zapisz zmiany' : 'Dodaj do kartoteki'}
-          </button>
-        </>
-      }
-    >
-      {brakiPokazane && listaBledow.length > 0 && (
-        <>
-          <PodsumowanieBledow bledy={listaBledow} tytul="Brakuje danych potrzebnych do wpisu" />
-          <p className="male wyciszony" style={{ marginTop: 'calc(-1 * var(--od-8))' }}>
-            Osobę można zapisać także bez kompletu — braki wrócą jako przeszkoda przy wpisie.{' '}
-            <button type="button" className="btn-tekstowy" onClick={() => zapisz(true)} disabled={zapisywanie}>
-              Zapisz mimo braków
-            </button>
-          </p>
-        </>
-      )}
-      <Komunikat odmiana="blad" tresc={blad} />
-
-      <FormularzOsoby
-        dane={dane}
-        przyZmianie={zmien}
-        tryb="kancelaria"
-        bledy={walidacja.widoczne}
-        przyOpuszczeniu={walidacja.dotknij}
-        idPrefiks={idPrefiks}
-        ostrzezeniaIdentyfikatora={ostrzezeniaIdentyfikatora}
-      />
-
-      <div className="rozdzielacz" />
-      <h3 className="grupa-pol-legenda">Dane kancelarii — nie trafiają do portalu ani na wydruki dla klienta</h3>
-
-      <div className="siatka-2">
-        <Pole
-          etykieta="Środki bezpieczeństwa finansowego (AML)"
-          podpowiedz="Notariusz prowadzący rejestr jest instytucją obowiązaną. Brak możliwości zastosowania środków = przeszkoda wpisu."
-        >
-          <select {...pole('aml_status')}>
-            <option value="brak">nie wykonano</option>
-            <option value="wykonane">wykonane</option>
-            <option value="niemozliwe">niemożliwe do zastosowania</option>
-          </select>
-        </Pole>
-        <Pole etykieta="Data weryfikacji AML">
-          <PoleDaty wartosc={dane.aml_data || ''} przyZmianie={(v) => zmien({ aml_data: v })} />
-        </Pole>
-      </div>
-      <div className="siatka-2">
-        <Pole etykieta="Data ostatniego przeglądu AML" podpowiedz="Przegląd okresowy co 12 miesięcy — nie blokuje wpisu, jest tylko przypomnieniem.">
-          <PoleDaty wartosc={dane.aml_data_przegladu || ''} przyZmianie={(v) => zmien({ aml_data_przegladu: v })} />
-        </Pole>
-        <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 8 }}>
-          <ZnacznikPrzegladuAml wymaga={edycja && osoba.wymaga_przegladu_aml} />
-        </div>
-      </div>
-      {/* Status PEP jest DANĄ osoby, nie tylko treścią oświadczenia: wobec
-          osoby zajmującej eksponowane stanowisko polityczne kancelaria
-          stosuje wzmożone środki bezpieczeństwa finansowego, więc musi go
-          widzieć na ekranie, a nie odczytywać z papieru w aktach.
-
-          Naprawa Z-151/P-010: trzy stany, nie przełącznik — „nieustalono”
-          (nikt jeszcze nie ocenił) musi wyglądać INACZEJ niż świadome „nie
-          jest PEP”, inaczej niesprawdzona osoba wygląda tak samo jak
-          sprawdzona. */}
-      <Pole
-        etykieta="Eksponowane stanowisko polityczne (PEP)"
-        podpowiedz="Osoba pełniąca znaczącą funkcję publiczną, członek jej rodziny albo bliski współpracownik — ustawa o przeciwdziałaniu praniu pieniędzy. Wobec takiej osoby stosuje się WZMOŻONE środki bezpieczeństwa finansowego. To OCENA KANCELARII, nie oświadczenie osoby (patrz pole niżej)."
-      >
-        <select
-          value={dane.pep || 'nieustalono'}
-          onChange={(z) => {
-            const v = z.target.value;
-            zmien({ pep: v, pep_opis: ['tak', 'rodzina', 'wspolpracownik'].includes(v) ? dane.pep_opis : '' });
-          }}
-        >
-          <option value="nieustalono">Nieustalono</option>
-          <option value="nie">Nie jest PEP</option>
-          <option value="tak">Zajmuje eksponowane stanowisko polityczne</option>
-          <option value="rodzina">Jest członkiem rodziny takiej osoby</option>
-          <option value="wspolpracownik">Jest bliskim współpracownikiem takiej osoby</option>
-        </select>
-      </Pole>
-      {['tak', 'rodzina', 'wspolpracownik'].includes(dane.pep) && (
-        <Pole
-          etykieta={dane.pep === 'tak' ? 'Stanowisko lub funkcja' : 'Osoba i charakter relacji'}
-          wymagane
-          podpowiedz="Trafia wprost do oświadczenia AML przygotowanego do podpisu."
-        >
-          <input type="text" {...pole('pep_opis')} />
-        </Pole>
-      )}
-
-      <Pole etykieta="Notatka AML" podpowiedz="Nigdy nie trafia na wydruki dla klienta.">
-        <textarea {...pole('aml_notatka')} style={{ minHeight: 70 }} />
-      </Pole>
-
-
-      {edycja && spolkiOsoby.length > 0 && (
-        <Pole
-          etykieta="Kontekst procedury AML"
-          podpowiedz="Procedura AML (skan dokumentu, PEP, beneficjent) jest włączana per spółka — wybierz, w kontekście której spółki chcesz nią zarządzać."
-        >
-          <select value={kontekstSpolkaId ?? ''} onChange={(z) => ustawKontekstSpolkaId(z.target.value ? Number(z.target.value) : null)}>
-            <option value="">— nie wybrano —</option>
-            {spolkiOsoby.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nazwa}{Number(s.stosuje_procedure_aml) ? '' : ' (procedura AML wyłączona)'}
-              </option>
-            ))}
-          </select>
-        </Pole>
-      )}
-
-      {!stosujeAml ? (
-        <Komunikat
-          odmiana="info"
-          tresc={
-            kontekstSpolka
-              ? 'Wybrana spółka nie ma włączonej procedury AML — zbierane są wyłącznie dane z dokumentu tożsamości powyżej, bez pliku, oświadczenia PEP ani beneficjenta rzeczywistego.'
-              : 'Wybierz spółkę powyżej, żeby zarządzać skanem dokumentu, oświadczeniem PEP i beneficjentem rzeczywistym (dostępne wyłącznie, gdy spółka ma włączoną procedurę AML).'
-          }
-        />
-      ) : (
-        <>
-          {dane.typ === 'prawna' && (
-            <ListaBeneficjentow
-              lista={dane.beneficjenci && dane.beneficjenci.length ? dane.beneficjenci : [dane.beneficjent_rzeczywisty_id || null]}
-              przyZmianie={(lista) => zmien({ beneficjenci: lista })}
-              wyklucz={edycja ? [osoba.id] : []}
-            />
-          )}
-
-          <div className="siatka-2">
-            <Pole
-              etykieta="Oświadczenie o statusie PEP"
-              podpowiedz="Oświadczenie SKŁADANE PRZEZ OSOBĘ (art. 46 ustawy AML) — nie ocena ani domysł kancelarii."
-            >
-              <select {...pole('pep_oswiadczenie')}>
-                <option value="">— nie oświadczono —</option>
-                <option value="tak">oświadcza, że JEST osobą zajmującą eksponowane stanowisko polityczne</option>
-                <option value="nie">oświadcza, że NIE JEST osobą zajmującą eksponowane stanowisko polityczne</option>
-              </select>
-            </Pole>
-            <Pole etykieta="Data oświadczenia PEP">
-              <PoleDaty
-                wartosc={dane.pep_oswiadczenie_data || ''}
-                przyZmianie={(v) => zmien({ pep_oswiadczenie_data: v })}
-              />
-            </Pole>
-          </div>
-
-          <SekcjaSkanowAml osobaId={osoba.id} spolkaId={kontekstSpolkaId} />
-        </>
-      )}
-
-      <Pole etykieta="Uwagi wewnętrzne" podpowiedz="Nigdy nie trafiają na wydruki.">
-        <textarea {...pole('uwagi')} style={{ minHeight: 70 }} />
-      </Pole>
-    </Modal>
-  );
-}
-
-/**
- * K4 (FAZA 3 sesji frontendowej v2): dwie różne osoby o tym samym imieniu
- * i nazwisku wyglądają na liście identycznie — `oznaczenie` samo nie
- * odróżnia „Jan Kowalski” od „Jan Kowalski”. Maskujemy identyfikator
- * (ostatnie cyfry widoczne, reszta zasłonięta) — kartoteka i tak pokazuje
- * pełny numer po otwarciu profilu, tu chodzi wyłącznie o odróżnienie
- * wiersza, nie o jego identyfikację.
- */
-function maskujIdentyfikator(tekst) {
-  const cyfry = String(tekst || '').replace(/\D/g, '');
-  if (cyfry.length < 4) return null;
-  return `${'•'.repeat(cyfry.length - 4)}${cyfry.slice(-4)}`;
-}
+/* osoby.js — kartoteka osób i karta osoby (§ 5): „Edytuj” w miejscu z historią (U-25), bez sprawy;
+   zgoda na e-mail — przełącznik (włączenie: plik podpisanej zgody, wyłączenie: data — U-11),
+   „Dokument zgody do podpisu”; PEP, AML; akcje w spółkach; sprawy; konto w portalu; historia. */
 
 function EkranOsob() {
-  const [szukaj, ustawSzukaj] = useParametrAdresu('q', '');
-  const [zapytanie, ustawZapytanie] = useState('');
-  const [formularz, ustawFormularz] = useState(null);
-  const { dane, ladowanie, odswiez } = useDane(`/api/psa/osoby?q=${encodeURIComponent(zapytanie)}`);
-
-  useEffect(() => {
-    const uchwyt = setTimeout(() => ustawZapytanie(szukaj), 250);
-    return () => clearTimeout(uchwyt);
-  }, [szukaj]);
-
-  const osoby = (dane && dane.osoby) || [];
-  const liczbaWgOznaczenia = new Map();
-  for (const o of osoby) liczbaWgOznaczenia.set(o.oznaczenie, (liczbaWgOznaczenia.get(o.oznaczenie) || 0) + 1);
-
+  const [q, ustawQ] = useParametrAdresu('q', '');
+  const [nowa, ustawNowa] = useState(false);
+  const [ostrzezenia, ustawOstrzezenia] = useState([]);
+  const { dane, blad } = useDane(`/api/psa/osoby?q=${encodeURIComponent(q)}&limit=100`);
   return (
-    <>
-      <div className="pasek-narzedzi">
-        <Szukajka wartosc={szukaj} przyZmianie={ustawSzukaj} placeholder="Szukaj po nazwisku, PESEL, NIP, e-mailu…" />
-        <button className="btn btn-glowny" style={{ marginLeft: 'auto' }} onClick={() => ustawFormularz({})}>
-          Nowa osoba
-        </button>
-      </div>
-
-      {ladowanie ? (
-        <Spinner />
-      ) : osoby.length === 0 ? (
-        <Karta>
-          <Pusto
-            tytul="Kartoteka jest pusta"
-            opis={
-              zapytanie
-                ? 'Żadna osoba nie pasuje do wyszukiwania.'
-                : 'Dodaj pierwszą osobę — będzie dostępna we wszystkich prowadzonych rejestrach.'
-            }
-            akcja={
-              !zapytanie && (
-                <button className="btn btn-glowny" onClick={() => ustawFormularz({})}>
-                  Nowa osoba
-                </button>
-              )
-            }
+    <Karta
+      akcje={!nowa && <button type="button" className="btn btn-glowny" onClick={() => ustawNowa(true)}>Nowa osoba</button>}
+    >
+      {nowa && (
+        <Karta tytul="Nowa osoba">
+          <NowaOsoba
+            przyZapisie={(o, ostrz) => { ustawNowa(false); if (ostrz.length) ustawOstrzezenia(ostrz); else idz(`/osoby/${o.id}`); }}
+            przyAnulowaniu={() => ustawNowa(false)}
           />
         </Karta>
-      ) : (
-        <Karta scisla>
-          <table className="tabela">
-            <thead>
-              <tr>
-                <th>Oznaczenie</th>
-                <th>Rodzaj</th>
-                <th>Identyfikator jawny</th>
-                <th>AML</th>
-                <th className="do-prawej">Spółki</th>
-                <th />
+      )}
+      {ostrzezenia.length > 0 && <Komunikat odmiana="uwaga" tytul="Zapisano — sprawdź" lista={ostrzezenia} />}
+      <Szukajka wartosc={q} przyZmianie={ustawQ} placeholder="Nazwisko, firma, PESEL, KRS albo e-mail…" />
+      {blad && <Bledy blad={blad} />}
+      {!dane && !blad && <Spinner />}
+      {dane && !dane.length && <Pusto tytul="Brak osób" opis={q ? 'Nikt nie pasuje do wyszukiwania.' : 'Kartoteka jest pusta.'} />}
+      {dane && dane.length > 0 && (
+        <table className="tabela">
+          <thead><tr><th>Osoba</th><th>Identyfikator i adres</th><th>E-mail</th></tr></thead>
+          <tbody>
+            {dane.map((o) => (
+              <tr key={o.id} className="klikalna" onClick={() => idz(`/osoby/${o.id}`)}>
+                <td><a href={`#/osoby/${o.id}`}>{o.nazwa}</a></td>
+                <td>{opisOsoby(o)}</td>
+                <td>{o.email ? `${o.email}${o.zgoda_email ? ' (zgoda)' : ''}` : '—'}</td>
               </tr>
-            </thead>
-            <tbody>
-              {osoby.map((o) => {
-                const zduplikowane = liczbaWgOznaczenia.get(o.oznaczenie) > 1;
-                const identyfikatorRozrozniajacy = zduplikowane
-                  ? maskujIdentyfikator(o.typ === 'prawna' ? o.numer_w_rejestrze : o.pesel)
-                  : null;
-                return (
-                  <tr key={o.id}>
-                    <td style={{ fontWeight: 500 }}>
-                      {o.oznaczenie}
-                      {zduplikowane && (
-                        <div className="wiersz-podtytul">
-                          {[o.data_urodzenia ? fmt.data(o.data_urodzenia) : null, identyfikatorRozrozniajacy]
-                            .filter(Boolean).join(' · ') || 'brak dodatkowych danych do odróżnienia'}
-                        </div>
-                      )}
-                    </td>
-                    <td className="wyciszony">
-                      {o.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
-                    </td>
-                    <td className="kol-dane">{o.jawny_identyfikator || '—'}</td>
-                    <td>
-                      <div className="row-g" style={{ gap: 8 }}>
-                        <StatusAml status={o.aml_status} />
-                        <ZnacznikPrzegladuAml wymaga={o.wymaga_przegladu_aml} />
-                      </div>
-                    </td>
-                    <td className="do-prawej">{o.liczba_spolek || 0}</td>
-                    <td className="do-prawej">
-                      <button className="btn btn-maly" onClick={() => idz(`/osoby/${o.id}`)}>
-                        Otwórz
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Karta>
+  );
+}
+
+const POLA_KARTY = ['typ', 'nazwa', 'pesel', 'data_urodzenia', 'numer_rejestru', 'adres', 'rodzaj_adresu', 'email', 'pep', 'pep_opis', 'aml_data', 'uwagi'];
+
+function ZgodaEmail({ osoba, pliki, spolki, poZmianie }) {
+  const [tryb, ustawTryb] = useState(null);
+  const [plik, ustawPlik] = useState('');
+  const [data, ustawDate] = useState(fmt.dzisIso());
+  const [spolka, ustawSpolke] = useState(spolki[0] ? spolki[0].spolka_id : '');
+  const c = useCzynnosc();
+  const zmien = (zgoda) => c.wykonaj(async () => { await API.put(`/api/psa/osoby/${osoba.id}`, { zgoda_email: zgoda }); ustawTryb(null); poZmianie(); });
+  const dokument = () => c.wykonaj(async () => {
+    const w = await API.post(`/api/psa/osoby/${osoba.id}/dokument-zgody`, { spolka_id: spolka });
+    window.open(adresPdf(w.pismo_id), '_blank', 'noopener');
+    poZmianie();
+  });
+  return (
+    <Karta tytul="Korespondencja e-mail">
+      <Przelacznik
+        wlaczony={Boolean(osoba.zgoda_email) || tryb === 'wlacz'}
+        przyZmianie={(w) => ustawTryb(w === Boolean(osoba.zgoda_email) ? null : w ? 'wlacz' : 'wylacz')}
+        etykieta="Zgoda na korespondencję e-mail"
+        opis="Zgoda obejmuje też powiadomienia z rejestru e-mailem."
+      />
+      {tryb === 'wlacz' && (
+        <div className="podsekcja">
+          <Pole etykieta="Plik podpisanej zgody" podpowiedz="Najpierw dodaj plik do karty osoby (Pliki).">
+            <select value={plik} onChange={(e) => ustawPlik(e.target.value)}>
+              <option value="">— wybierz —</option>
+              {pliki.map((f) => <option key={f.id} value={f.id}>{f.nazwa}</option>)}
+            </select>
+          </Pole>
+          <div className="rzad">
+            <button type="button" className="btn btn-glowny btn-maly" disabled={c.trwa} onClick={() => zmien({ zgoda: true, plik_id: Number(plik) || null })}>Włącz zgodę</button>
+            <button type="button" className="btn btn-maly" onClick={() => ustawTryb(null)}>Anuluj</button>
+          </div>
+        </div>
+      )}
+      {tryb === 'wylacz' && (
+        <div className="podsekcja">
+          <Pole etykieta="Data wycofania zgody"><PoleDaty wartosc={data} przyZmianie={ustawDate} max={fmt.dzisIso()} /></Pole>
+          <div className="rzad">
+            <button type="button" className="btn btn-glowny btn-maly" disabled={c.trwa} onClick={() => zmien({ zgoda: false, data })}>Wyłącz zgodę</button>
+            <button type="button" className="btn btn-maly" onClick={() => ustawTryb(null)}>Anuluj</button>
+          </div>
+        </div>
+      )}
+      {!osoba.zgoda_email && spolki.length > 0 && (
+        <div className="rzad">
+          {spolki.length > 1 && (
+            <select aria-label="Spółka" value={spolka} onChange={(e) => ustawSpolke(Number(e.target.value))}>
+              {spolki.map((s) => <option key={s.spolka_id} value={s.spolka_id}>{s.nazwa}</option>)}
+            </select>
+          )}
+          <button type="button" className="btn btn-maly" disabled={c.trwa} onClick={dokument}>Dokument zgody do podpisu</button>
+        </div>
+      )}
+      <Bledy blad={c.blad} />
+    </Karta>
+  );
+}
+
+function EkranOsoby({ osobaId }) {
+  const { dane, blad, odswiez } = useDane(`/api/psa/osoby/${osobaId}`);
+  const [edycja, ustawEdycje] = useState(null);
+  const [ostrzezenia, ustawOstrzezenia] = useState([]);
+  const c = useCzynnosc();
+  useBlokadaWyjscia(() => Boolean(edycja && dane) && POLA_KARTY.some((k) => (edycja[k] ?? null) !== (dane.osoba[k] ?? null)));
+  if (blad) return <Bledy blad={blad} />;
+  if (!dane) return <Spinner />;
+  const o = dane.osoba;
+  const { pola } = bledyApi(c.blad);
+  const spolki = [...new Map(dane.akcje.map((a) => [a.spolka_id, a])).values()];
+  const zapisz = () => c.wykonaj(async () => {
+    const w = await API.put(`/api/psa/osoby/${o.id}`, Object.fromEntries(POLA_KARTY.map((k) => [k, edycja[k] ?? null])));
+    ustawOstrzezenia(w.ostrzezenia || []);
+    ustawEdycje(null);
+    odswiez();
+  });
+
+  return (
+    <div className="ekran-osoby">
+      <NaglowekStrony
+        tytul={o.nazwa}
+        kontekst={opisOsoby(o)}
+        akcje={!edycja && <button type="button" className="btn btn-glowny" onClick={() => ustawEdycje({ ...o })}>Edytuj</button>}
+      />
+      {ostrzezenia.length > 0 && <Komunikat odmiana="uwaga" lista={ostrzezenia} />}
+      {edycja ? (
+        <Karta tytul="Dane osoby">
+          <PolaOsoby osoba={edycja} przyZmianie={ustawEdycje} bledy={pola} pelne />
+          {c.blad && !Object.keys(pola).length && <Bledy blad={c.blad} />}
+          <div className="rzad">
+            <button type="button" className="btn btn-glowny" onClick={zapisz} disabled={c.trwa}>Zapisz</button>
+            <button type="button" className="btn" onClick={() => ustawEdycje(null)}>Anuluj</button>
+          </div>
+        </Karta>
+      ) : (
+        <Karta tytul="Dane osoby">
+          <ListaDanych pary={[
+            ['Rodzaj', o.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'],
+            o.typ === 'prawna' ? ['Numer w rejestrze', o.numer_rejestru] : o.pesel ? ['PESEL', o.pesel] : ['Data urodzenia', fmt.data(o.data_urodzenia)],
+            [o.rodzaj_adresu === 'doreczen' ? 'Adres do doręczeń' : o.typ === 'prawna' ? 'Siedziba' : 'Adres zamieszkania', o.adres],
+            ['E-mail', o.email],
+            ['PEP', o.pep ? `tak — ${o.pep_opis || 'bez opisu'}` : 'nie'],
+            ['Weryfikacja AML', o.aml_data ? fmt.data(o.aml_data) : 'brak'],
+            o.uwagi && ['Uwagi', o.uwagi],
+          ]}
+          />
         </Karta>
       )}
-
-      {formularz && (
-        <PanelOsoby
-          osoba={formularz.id ? formularz : null}
-          przyZamknieciu={() => ustawFormularz(null)}
-          przyZapisie={() => {
-            ustawFormularz(null);
-            odswiez();
-          }}
-        />
-      )}
-    </>
+      <ZgodaEmail osoba={o} pliki={dane.pliki} spolki={spolki} poZmianie={odswiez} />
+      <Karta tytul="Pliki (AML, zgody)">
+        <ListaPlikow pliki={dane.pliki} />
+        <DodajPlik adres={`/api/psa/osoby/${o.id}/pliki`} przyDodaniu={odswiez} />
+      </Karta>
+      <Karta tytul="Akcje w spółkach">
+        {!dane.akcje.length ? <p className="male drugorzedny">Brak akcji.</p> : (
+          <table className="tabela">
+            <thead><tr><th>Spółka</th><th>Seria</th><th>Numery</th></tr></thead>
+            <tbody>
+              {dane.akcje.map((a, i) => (
+                <tr key={i}>
+                  <td><a href={`#/spolki/${a.spolka_id}`}>{a.nazwa}</a></td>
+                  <td>{a.seria}</td>
+                  <td>{a.nr_od === a.nr_do ? a.nr_od : `${a.nr_od}–${a.nr_do}`}{a.czesc_licznik ? ` (${a.czesc_licznik}/${a.czesc_mianownik})` : ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Karta>
+      <Karta tytul="Sprawy">
+        {!dane.sprawy.length ? <p className="male drugorzedny">Brak spraw z żądania tej osoby.</p> : (
+          <ul>
+            {dane.sprawy.map((s) => <li key={s.id}><a href={`#/sprawy/${s.id}`}>Sprawa nr {s.id}</a> — {s.spolka}, {STANY_SPRAWY[s.stan]}</li>)}
+          </ul>
+        )}
+      </Karta>
+      <Karta tytul="Konto w portalu">
+        <p>{dane.konto ? (dane.konto.aktywne ? 'Konto aktywne.' : 'Konto nieaktywne.') : 'Brak konta.'}</p>
+      </Karta>
+      <Sekcja tytul="Historia zmian" licznik={dane.historia.length}>
+        <HistoriaZmian historia={dane.historia} />
+      </Sekcja>
+    </div>
   );
 }
 
-/**
- * K4 (FAZA 3 sesji frontendowej v2): „Otwórz” z listy prowadzi tutaj —
- * pełny profil osoby, nie panel edycji. Dane, spółki (z liczbą akcji
- * i odnośnikiem do kokpitu) i sprawy, w których osoba jest żądającą.
- * Edycja zostaje tym samym `PanelOsoby`, otwieranym stąd.
- */
-const NAZWY_ZRODLA_OSWIADCZENIA = { portal: 'portal', kancelaria: 'kancelaria', pismo: 'pismo' };
-const NAZWY_RODZAJU_OSWIADCZENIA = { zgoda_email: 'zgoda na e-mail', powiadomienia_automatyczne: 'powiadomienia automatyczne' };
-
-function SekcjaKartoteki({ tytul, children }) {
-  return (
-    <section className="kartoteka-sekcja">
-      <h3 className="kartoteka-sekcja-tytul">{tytul}</h3>
-      {children}
-    </section>
-  );
-}
-
-/**
- * R4 K2: kartoteka osoby w jednym, zwartym widoku — Identyfikacja → Adresy → Kontakt i oświadczenia
- * (D-092: stan, znacznik „list”, historia) → AML → Akcje w spółkach → Sprawy (5 ostatnich).
- */
-function EkranProfiluOsoby({ osobaId }) {
-  const { dane, ladowanie, blad, odswiez } = useDane(`/api/psa/osoby/${osobaId}`);
-  const spolki = useDane(`/api/psa/osoby/${osobaId}/spolki`);
-  const sprawy = useDane(`/api/psa/osoby/${osobaId}/sprawy`);
-  const [edycja, ustawEdycje] = useState(false);
-  const [wszystkieSprawy, ustawWszystkieSprawy] = useState(false);
-
-  if (ladowanie) return <Spinner />;
-  if (blad || !dane) {
-    return <Komunikat odmiana="blad" tresc={blad ? blad.message : 'Nie odnaleziono osoby w kartotece.'} />;
-  }
-  const osoba = dane.osoba;
-  const osw = dane.oswiadczenia || { stan: {}, historia: [] };
-  const listaSpraw = (sprawy.dane && sprawy.dane.sprawy) || [];
-  const widoczneSprawy = wszystkieSprawy ? listaSpraw : listaSpraw.slice(0, 5);
-  const takNie = (v) => (v ? 'tak' : 'nie');
-
-  return (
-    <>
-      <div className="okruszki">
-        <button onClick={() => idz('/osoby')}>Kartoteka osób</button> → {osoba.oznaczenie}
-      </div>
-
-      <NaglowekStrony
-        tytul={osoba.oznaczenie}
-        kontekst={osoba.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
-        akcje={<button className="btn btn-glowny" onClick={() => ustawEdycje(true)}>Edytuj dane</button>}
-      />
-
-      <div className="karta kartoteka-osoby">
-        <SekcjaKartoteki tytul="Identyfikacja">
-          <ListaDanych pary={osoba.typ === 'prawna' ? [
-            ['Nazwa', osoba.nazwa],
-            ['Numer w rejestrze', osoba.numer_w_rejestrze],
-            ['NIP', osoba.nip],
-          ] : [
-            ['Imię i nazwisko', [osoba.imie, osoba.nazwisko].filter(Boolean).join(' ')],
-            ['PESEL', osoba.pesel],
-            ['Data urodzenia', osoba.data_urodzenia ? fmt.data(osoba.data_urodzenia) : null],
-          ]} />
-        </SekcjaKartoteki>
-
-        <SekcjaKartoteki tytul="Adresy">
-          <ListaDanych pary={[
-            [osoba.typ === 'prawna' ? 'Siedziba' : 'Adres zamieszkania', formatujAdres(osoba)],
-            osoba.adres_doreczen ? ['Adres do doręczeń', osoba.adres_doreczen] : null,
-            osoba.adres_edoreczen ? ['Adres do e-doręczeń', osoba.adres_edoreczen] : null,
-          ]} />
-        </SekcjaKartoteki>
-
-        <SekcjaKartoteki tytul="Kontakt i oświadczenia">
-          <ListaDanych pary={[
-            ['E-mail', osoba.email],
-            ['Telefon', osoba.telefon],
-            ['Zgoda na e-mail', <>{takNie(osw.stan.zgodaEmail)} <ZnacznikKontaktu osoba={osoba} /></>],
-            ['Powiadomienia automatyczne', takNie(osw.stan.powiadomieniaAutomatyczne)],
-            ['Ostatnia zmiana', osw.stan.zmieniono ? fmt.dataCzas(osw.stan.zmieniono) : null],
-          ]} />
-          {osw.historia.length > 0 && (
-            <details className="kartoteka-historia">
-              <summary>Historia oświadczeń ({osw.historia.length})</summary>
-              <ListaDanych pary={osw.historia.map((h) => [
-                fmt.dataCzas(h.utworzono),
-                `${NAZWY_RODZAJU_OSWIADCZENIA[h.rodzaj] || h.rodzaj}: ${h.zlozone ? 'złożone' : 'cofnięte'} · ${NAZWY_ZRODLA_OSWIADCZENIA[h.zrodlo] || h.zrodlo}${h.autor ? ` · ${h.autor}` : ''}`,
-              ])} />
-            </details>
-          )}
-        </SekcjaKartoteki>
-
-        <SekcjaKartoteki tytul="AML">
-          <ListaDanych pary={[
-            ['Status', <StatusAml status={osoba.aml_status} />],
-            ['Data weryfikacji', osoba.aml_data ? fmt.data(osoba.aml_data) : null],
-          ]} />
-        </SekcjaKartoteki>
-
-        <SekcjaKartoteki tytul="Akcje w spółkach">
-          {spolki.ladowanie ? <Spinner /> : !spolki.dane || spolki.dane.spolki.length === 0 ? (
-            <div className="przyciemnione">Ta osoba nie jest dziś akcjonariuszem żadnej spółki.</div>
-          ) : (
-            <ListaDanych pary={spolki.dane.spolki.map((s) => [
-              <a href={`#/spolki/${s.id}`} onClick={(z) => { z.preventDefault(); idz(`/spolki/${s.id}`); }}>{s.nazwa}</a>,
-              `${fmt.liczba(s.ilosc_akcji)} akcji${s.serie ? ` · seria ${s.serie.split(',').join(', ')}` : ''}`,
-            ])} />
-          )}
-        </SekcjaKartoteki>
-
-        <SekcjaKartoteki tytul="Sprawy">
-          {sprawy.ladowanie ? <Spinner /> : listaSpraw.length === 0 ? (
-            <div className="przyciemnione">Ta osoba nie żądała jeszcze żadnego wpisu.</div>
-          ) : (
-            <>
-              <ListaDanych pary={widoczneSprawy.map((s) => [
-                fmt.data(s.data_wplywu),
-                <a href={`#/sprawy/${s.id}`} onClick={(z) => { z.preventDefault(); idz(`/sprawy/${s.id}`); }}>
-                  {s.typ_nazwa || s.typ_zdarzenia} · {s.spolka_nazwa} · {NAZWY_STANU_SPRAWY[s.stan] || s.stan}
-                </a>,
-              ])} />
-              {!wszystkieSprawy && listaSpraw.length > 5 && (
-                <button className="btn btn-sm" onClick={() => ustawWszystkieSprawy(true)}>Pokaż wszystkie ({listaSpraw.length})</button>
-              )}
-            </>
-          )}
-        </SekcjaKartoteki>
-      </div>
-
-      {edycja && (
-        <PanelOsoby
-          osoba={osoba}
-          przyZamknieciu={() => ustawEdycje(false)}
-          przyZapisie={() => {
-            ustawEdycje(false);
-            odswiez();
-          }}
-        />
-      )}
-    </>
-  );
-}
-
-window.PanelOsoby = PanelOsoby;
-window.EkranOsob = EkranOsob;
-window.EkranProfiluOsoby = EkranProfiluOsoby;
+Object.assign(window, { EkranOsob, EkranOsoby });

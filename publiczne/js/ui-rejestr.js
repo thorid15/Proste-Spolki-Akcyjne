@@ -30,21 +30,7 @@ function dataSlownie(iso) {
   return `${Number(d)} ${MIESIACE_DOPELNIACZ[nrMiesiaca]} ${r}`;
 }
 
-/** Zakres numerów akcji zawsze z PÓŁPAUZĄ, nigdy z dywizem (2.2). */
-function zakresNumerow(od, doN) {
-  return od === doN ? String(od) : `${od}–${doN}`;
-}
-
-function dodajDniIso(iso, dni) {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + dni);
-  return d.toISOString().slice(0, 10);
-}
-
 window.fmt.dataSlownie = dataSlownie;
-window.fmt.zakresNumerow = zakresNumerow;
-window.fmt.dodajDniIso = dodajDniIso;
-
 
 /* ═════════════════════════════════════════════════════
    IKONY
@@ -165,68 +151,6 @@ function KwotaNettoBrutto({ netto, brutto }) {
   );
 }
 
-/**
- * R4 K5 (D-092): znacznik przy osobie bez zgody na e-mail albo bez adresu — korespondencja idzie listem.
- * Przy zgodzie nic się nie pokazuje (bez pozytywnego znacznika). `zawsze` — np. w kolejce listów.
- */
-function ZnacznikKontaktu({ osoba, zawsze = false }) {
-  if (!zawsze && (!osoba || !wymagaListu(osoba))) return null;
-  return (
-    <span className="znacznik-kontaktu" title={PODPOWIEDZ_ZNACZNIKA}>
-      <Pigulka odmiana="sygnal">{TEKST_ZNACZNIKA}</Pigulka>
-      <span className="sr-only">{PODPOWIEDZ_ZNACZNIKA}</span>
-    </span>
-  );
-}
-
-/** Znacznik dla osoby wskazanej tylko identyfikatorem (wybór z kartoteki, żądający w sprawie). */
-function ZnacznikKontaktuOsoby({ osobaId }) {
-  const { dane } = useDane(osobaId ? `/api/psa/osoby/${osobaId}` : null, [osobaId]);
-  return osobaId && dane ? <ZnacznikKontaktu osoba={dane.osoba} /> : null;
-}
-
-/** R4 K1: jedna kolumna sprawy — wszystkie karty i kroki tej samej szerokości (48rem; na telefonie pełna). */
-function KolumnaSprawy({ children }) {
-  return <div className="kolumna-sprawy">{children}</div>;
-}
-
-/**
- * R4 K1: jeden pasek akcji — wyrównany do prawej, drugorzędne po lewej, jeden główny skrajny prawy;
- * na telefonie w pionie, główny na górze. `akcje`: [{ etykieta, przyKlik, glowna?, niebezpieczna?, wylaczona? }].
- */
-/**
- * Jeden pasek akcji dla wszystkich ekranów (A-021): akcje drugorzędne, potem jedna główna. `duze` — nawigacja kroku
- * kreatora (duże przyciski, „Wstecz” z lewej, „Dalej” z prawej; dawny `NawigacjaKreatora`). Akcja wyłączona z `powod`
- * mówi, dlaczego jest wyłączona.
- */
-function PasekAkcji({ akcje, duze = false }) {
-  const idPowodu = useId();
-  const widoczne = (akcje || []).filter(Boolean);
-  if (!widoczne.length) return null;
-  const kolejnosc = [...widoczne.filter((a) => !a.glowna), ...widoczne.filter((a) => a.glowna).slice(0, 1)];
-  const powod = kolejnosc.find((a) => a.wylaczona && a.powod);
-  return (
-    <>
-      {powod && <p className="nawigacja-powod" id={idPowodu}>{powod.powod}</p>}
-      <div className={duze ? 'nawigacja-kreatora bez-druku' : 'pasek-akcji bez-druku'}>
-        {duze && !kolejnosc.some((a) => !a.glowna) && <span />}
-        {kolejnosc.map((a) => (
-          <button
-            key={a.etykieta}
-            type={duze ? 'button' : undefined}
-            className={`btn ${duze ? 'btn-nawigacja' : 'btn-sm'}${a.glowna ? ' btn-glowny' : ''}${a.niebezpieczna ? ' btn-danger' : ''}`}
-            onClick={a.przyKlik}
-            disabled={a.wylaczona}
-            aria-describedby={a.wylaczona && a.powod ? idPowodu : undefined}
-          >
-            {a.etykieta}
-          </button>
-        ))}
-      </div>
-    </>
-  );
-}
-
 function Karta({ tytul, akcje, scisla, tight, dzieci, children }) {
   const tresc = children ?? dzieci;
   if (scisla || tight) {
@@ -269,36 +193,6 @@ const ODMIANY_PIGULKI = {
   zielony: 'rejestr', oliwka: 'mosiadz', bordo: 'sygnal',
 };
 
-const NAZWY_STATUSU = {
-  aktywna: 'aktywna',
-  w_likwidacji: 'w likwidacji',
-  zawieszona: 'zawieszona',
-  wykreslona: 'wykreślona',
-  umorzona: 'umorzona',
-  w_umarzaniu: 'w umarzaniu',
-};
-const ODMIANY_STATUSU = {
-  aktywna: 'rejestr', w_likwidacji: 'mosiadz', w_umarzaniu: 'mosiadz', wykreslona: 'sygnal', umorzona: 'sygnal',
-};
-
-function StatusSpolki({ status }) {
-  return <Pigulka odmiana={ODMIANY_STATUSU[status]}>{NAZWY_STATUSU[status] || status}</Pigulka>;
-}
-
-const NAZWY_AML = { brak: 'AML: brak', wykonane: 'AML: wykonane', niemozliwe: 'AML: niemożliwe' };
-const ODMIANY_AML = { brak: 'mosiadz', wykonane: 'rejestr', niemozliwe: 'sygnal' };
-
-function StatusAml({ status }) {
-  if (!status) return null;
-  return <Pigulka odmiana={ODMIANY_AML[status]}>{NAZWY_AML[status] || status}</Pigulka>;
-}
-
-/** Sygnał dezaktualizacji przeglądu AML (blok C1, sesja 8) — NIE blokada, tylko przypomnienie. */
-function ZnacznikPrzegladuAml({ wymaga }) {
-  if (!wymaga) return null;
-  return <Pigulka odmiana="mosiadz">wymaga przeglądu</Pigulka>;
-}
-
 /**
  * Komunikat błędu bywa renderowany na GÓRZE długiego formularza, a przycisk
  * zapisu jest na jego DOLE — po nieudanym zapisie użytkownik zostaje przy
@@ -340,20 +234,6 @@ function Licznik({ wartosc, opis }) {
       <span aria-hidden="true">{wartosc}</span>
       <span className="sr-only">{opis ? `${wartosc} ${opis}` : `${wartosc} do zrobienia`}</span>
     </span>
-  );
-}
-
-/** Błędy blokujące i ostrzeżenia — dwie różne rzeczy, dwa różne komunikaty. */
-function Wyniki({ bledy, ostrzezenia }) {
-  return (
-    <>
-      <Komunikat
-        odmiana="blad"
-        tytul={bledy && bledy.length === 1 ? 'Wpis nie może zostać dokonany:' : 'Wpis nie może zostać dokonany — przeszkody:'}
-        lista={bledy}
-      />
-      <Komunikat odmiana="uwaga" tytul="Do sprawdzenia:" lista={ostrzezenia} />
-    </>
   );
 }
 
@@ -526,58 +406,9 @@ function NaglowekStrony({ tytul, kontekst, akcje }) {
   );
 }
 
-
 /* ═════════════════════════════════════════════════════
    KOMPONENTY UKŁADU
    ═════════════════════════════════════════════════════ */
-
-/**
- * Kafel statystyki: etykieta, liczba, zmiana pod spodem, ikona w kwadracie.
- * Kafelek ikony ma jeden wspólny odcień dla wszystkich kafli — kolor w tej
- * aplikacji niesie znaczenie, a tutaj nie miałby żadnego (patrz nagłówek
- * rejestr.css). Kafle rozróżnia ikona i liczba, nie barwa.
- */
-function Kafel({ etykieta, wartosc, delta, deltaOdmiana, ikona, przyKlik }) {
-  const tresc = (
-    <>
-      <div style={{ minWidth: 0 }}>
-        <div className="kafel-etykieta">{etykieta}</div>
-        <div className="kafel-wartosc">{wartosc}</div>
-        {delta && <div className={`kafel-delta ${deltaOdmiana || ''}`}>{delta}</div>}
-      </div>
-      {ikona && <div className="kafel-ikona"><Ikona nazwa={ikona} rozmiar={20} /></div>}
-    </>
-  );
-  if (przyKlik) {
-    return (
-      <button className="kafel" onClick={przyKlik} style={{ cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
-        {tresc}
-      </button>
-    );
-  }
-  return <div className="kafel">{tresc}</div>;
-}
-
-/** Wiersz listy z kafelkiem ikony — aktywne sprawy, dokumenty, powiadomienia. */
-function WierszListy({ ikona, tytul, podtytul, prawo, data, przyKlik }) {
-  return (
-    <button className="wiersz" onClick={przyKlik} disabled={!przyKlik}>
-      {ikona && <span className="wiersz-ikona"><Ikona nazwa={ikona} rozmiar={17} /></span>}
-      <span className="wiersz-tresc">
-        <span className="wiersz-tytul" style={{ display: 'block' }} title={typeof tytul === 'string' ? tytul : undefined}>{tytul}</span>
-        {podtytul && (
-          <span className="wiersz-podtytul" style={{ display: 'block' }} title={typeof podtytul === 'string' ? podtytul : undefined}>
-            {podtytul}
-          </span>
-        )}
-      </span>
-      <span className="wiersz-prawo">
-        {prawo}
-        {data && <span className="wiersz-data">{data}</span>}
-      </span>
-    </button>
-  );
-}
 
 /**
  * Pasek metryki: pary etykieta/wartość w pionie. Wspólny dla kokpitu spółki
@@ -615,20 +446,6 @@ function Zakladki({ zakladki, biezaca, przyZmianie }) {
   );
 }
 
-/** Pasek metryki: pary etykieta/wartość w jednym rzędzie, pod tytułem ekranu. */
-function Metryka({ pozycje }) {
-  return (
-    <div className="metryka">
-      {pozycje.filter(Boolean).map((p, i) => (
-        <div className="metryka-poz" key={i}>
-          <div className="metryka-etykieta">{p.etykieta}</div>
-          <div className={`metryka-wartosc ${p.dane ? 'dane' : ''}`}>{p.wartosc || '—'}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /** Pole szukania z ikoną w środku — używane w paskach narzędzi list. */
 function Szukajka({ wartosc, przyZmianie, placeholder = 'Szukaj…' }) {
   return (
@@ -638,97 +455,6 @@ function Szukajka({ wartosc, przyZmianie, placeholder = 'Szukaj…' }) {
     </div>
   );
 }
-
-/** Lista szybkich akcji w prawej szynie. */
-function SzybkieAkcje({ akcje }) {
-  return (
-    <div className="szybkie">
-      {akcje.map((a) => (
-        <button key={a.nazwa} className="szybkie-poz" onClick={a.przyKlik}>
-          <Ikona nazwa={a.ikona || 'plus'} rozmiar={16} />
-          <span>{a.nazwa}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** Stronicowanie tabeli: zakres po lewej, numery po prawej. */
-function Stronicowanie({ strona, stron, odPozycji, doPozycji, razem, przyZmianie }) {
-  if (stron <= 1) {
-    return (
-      <div className="stronicowanie">
-        <span>{razem === 0 ? 'Brak pozycji' : `${odPozycji}–${doPozycji} z ${razem}`}</span>
-      </div>
-    );
-  }
-  // Przy wielu stronach pokazujemy okno wokół bieżącej, z wielokropkiem.
-  const numery = [];
-  const dodaj = (n) => { if (!numery.includes(n)) numery.push(n); };
-  dodaj(1);
-  for (let n = strona - 1; n <= strona + 1; n += 1) if (n > 1 && n < stron) dodaj(n);
-  dodaj(stron);
-  numery.sort((a, b) => a - b);
-
-  return (
-    <div className="stronicowanie">
-      <span>{odPozycji}–{doPozycji} z {razem}</span>
-      <div className="strony">
-        <button className="strona" disabled={strona === 1} onClick={() => przyZmianie(strona - 1)} aria-label="Poprzednia strona">
-          <Ikona nazwa="strzalkaLewo" rozmiar={14} />
-        </button>
-        {numery.map((n, i) => (
-          <React.Fragment key={n}>
-            {i > 0 && numery[i - 1] !== n - 1 && <span className="wyciszony">…</span>}
-            <button className={`strona ${n === strona ? 'aktywna' : ''}`} onClick={() => przyZmianie(n)}>{n}</button>
-          </React.Fragment>
-        ))}
-        <button className="strona" disabled={strona === stron} onClick={() => przyZmianie(strona + 1)} aria-label="Następna strona">
-          <Ikona nazwa="strzalkaPrawo" rozmiar={14} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Wykres iskrowy — czysty SVG, bez bibliotek wykresów.
- * `punkty` to tablica liczb; skala dobiera się do zakresu danych.
- */
-function Iskra({ punkty, podpisy }) {
-  if (!punkty || punkty.length < 2) return null;
-  const SZ = 600;
-  const WY = 64;
-  const margines = 4;
-  const maks = Math.max(...punkty);
-  const min = Math.min(...punkty);
-  const rozpietosc = maks - min || 1;
-  const x = (i) => (i / (punkty.length - 1)) * SZ;
-  const y = (v) => WY - margines - ((v - min) / rozpietosc) * (WY - margines * 2);
-
-  const linia = punkty.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const wypelnienie = `${linia} L${SZ},${WY} L0,${WY} Z`;
-
-  return (
-    <div>
-      <svg className="iskra" viewBox={`0 0 ${SZ} ${WY}`} preserveAspectRatio="none" aria-hidden="true">
-        <path className="iskra-wypelnienie" d={wypelnienie} />
-        <path className="iskra-linia" d={linia} vectorEffect="non-scaling-stroke" />
-        <circle className="iskra-punkt" cx={x(punkty.length - 1)} cy={y(punkty[punkty.length - 1])} r="3" />
-      </svg>
-      {podpisy && (
-        <div className="rzad-rozdzielony" style={{ marginTop: 'var(--od-4)' }}>
-          {podpisy.map((p, i) => <span key={i} className="podstawa-prawna">{p}</span>)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ═════════════════════════════════════════════════════
-   POLA (sekcja 2.6) — projekt od nowa
-   Etykieta ZAWSZE nad polem, nigdy jako placeholder.
-   ═════════════════════════════════════════════════════ */
 
 /**
  * Pole formularza — wzorzec GOV.UK Design System (FAZA 1 pkt 3):
@@ -894,176 +620,77 @@ function Kalendarz({ wartosc, przyWyborze, min, max, przyZamknieciu }) {
 }
 
 /**
- * Pole daty segmentowe DD.MM.RRRR (sekcja 2.6).
- *
- * Trzy sekcje z automatycznym przejściem, wyłącznie cyfry, wklejenie
- * w dowolnym separatorze, strzałki góra/dół zmieniają wartość sekcji.
- * Kalendarz NIE otwiera się sam przy fokusie — jest za osobnym przyciskiem.
- * Pod polem data słownie jako potwierdzenie zrozumienia wpisu.
- *
- * `wartosc`/`przyZmianie` operują na ISO `RRRR-MM-DD` — segmenty są
- * wyłącznie sposobem wpisywania, nie formatem danych.
+ * Pole daty (§ 5): jedno pole DD.MM.RRRR — kropki wstawiają się same, wklejenie w dowolnym
+ * separatorze, ikona kalendarza w polu. `wartosc`/`przyZmianie` — ISO `RRRR-MM-DD` (pusta: '').
  */
-function PoleDaty({ wartosc, przyZmianie, min, max, blad, skroty = false, autoFocus, wylaczone = false, id, 'aria-describedby': opis, 'aria-invalid': niepoprawne }) {
-  const [dzien, ustawDzien] = useState('');
-  const [miesiac, ustawMiesiac] = useState('');
-  const [rok, ustawRok] = useState('');
+function PoleDaty({ wartosc, przyZmianie, min, max, blad, autoFocus, wylaczone = false, id, 'aria-describedby': opis, 'aria-invalid': niepoprawne }) {
+  const naTekst = (iso) => (iso && iso.length >= 10 ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : '');
+  const [tekst, ustawTekst] = useState(naTekst(wartosc));
   const [kalendarz, ustawKalendarz] = useState(false);
-  const refDzien = useRef(null);
-  const refMiesiac = useRef(null);
-  const refRok = useRef(null);
+  const [bladZakresu, ustawBladZakresu] = useState(null);
 
-  // Synchronizacja z zewnątrz (np. pigułka „dziś", kalendarz, reset formularza).
   useEffect(() => {
-    if (wartosc && wartosc.length >= 10) {
-      ustawRok(wartosc.slice(0, 4));
-      ustawMiesiac(wartosc.slice(5, 7));
-      ustawDzien(wartosc.slice(8, 10));
-    } else if (!wartosc) {
-      ustawRok(''); ustawMiesiac(''); ustawDzien('');
-    }
+    if (wartosc && wartosc.length >= 10) ustawTekst(naTekst(wartosc));
+    else if (!wartosc && /^\d{2}\.\d{2}\.\d{4}$/.test(tekst)) ustawTekst('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wartosc]);
 
-  // A-035: `min`/`max` dotyczą też daty wpisanej z klawiatury (dawniej tylko kalendarza) — data spoza zakresu
-  // nie trafia do formularza, a pod polem jest powód.
-  const [bladZakresu, ustawBladZakresu] = useState(null);
-  function zglos(d, m, r) {
-    if (d.length === 2 && m.length === 2 && r.length === 4) {
-      const iso = `${r}-${m}-${d}`;
-      const poza = (max && iso > max) ? `Data nie może być późniejsza niż ${max.split('-').reverse().join('.')}.`
-        : (min && iso < min) ? `Data nie może być wcześniejsza niż ${min.split('-').reverse().join('.')}.` : null;
-      ustawBladZakresu(poza);
-      przyZmianie(poza ? '' : iso);
-    } else {
-      ustawBladZakresu(null);
-      przyZmianie('');
-    }
+  function zglos(iso) {
+    const poza = !iso ? null : max && iso > max ? `Data nie może być późniejsza niż ${naTekst(max)}.`
+      : min && iso < min ? `Data nie może być wcześniejsza niż ${naTekst(min)}.` : null;
+    ustawBladZakresu(poza);
+    przyZmianie(iso && !poza ? iso : '');
   }
 
-  function zmien(ktore, surowa) {
-    const cyfry = surowa.replace(/\D/g, '');
-    if (ktore === 'd') {
-      const v = cyfry.slice(0, 2);
-      ustawDzien(v);
-      zglos(v, miesiac, rok);
-      if (v.length === 2) refMiesiac.current && refMiesiac.current.focus();
-    } else if (ktore === 'm') {
-      const v = cyfry.slice(0, 2);
-      ustawMiesiac(v);
-      zglos(dzien, v, rok);
-      if (v.length === 2) refRok.current && refRok.current.focus();
-    } else {
-      const v = cyfry.slice(0, 4);
-      ustawRok(v);
-      zglos(dzien, miesiac, v);
-    }
+  function zmien(surowa) {
+    const c = surowa.replace(/\D/g, '').slice(0, 8);
+    const t = [c.slice(0, 2), c.slice(2, 4), c.slice(4, 8)].filter(Boolean).join('.');
+    ustawTekst(c.length === 2 || c.length === 4 ? `${t}.` : t);
+    zglos(c.length === 8 ? parsujDate(t) : null);
   }
 
-  /** Strzałki góra/dół zmieniają wartość sekcji; Backspace na pustej cofa fokus. */
-  function klawisz(ktore, z) {
-    const granice = { d: [1, 31], m: [1, 12], r: [1900, 2999] };
-    const biezace = { d: dzien, m: miesiac, r: rok }[ktore];
-    if (z.key === 'ArrowUp' || z.key === 'ArrowDown') {
-      z.preventDefault();
-      const [dolna, gorna] = granice[ktore];
-      const krok = z.key === 'ArrowUp' ? 1 : -1;
-      let nowa = (biezace === '' ? (ktore === 'r' ? Number(fmt.dzisIso().slice(0, 4)) : dolna) : Number(biezace) + krok);
-      if (nowa < dolna) nowa = gorna;
-      if (nowa > gorna) nowa = dolna;
-      const tekst = String(nowa).padStart(ktore === 'r' ? 4 : 2, '0');
-      if (ktore === 'd') { ustawDzien(tekst); zglos(tekst, miesiac, rok); }
-      else if (ktore === 'm') { ustawMiesiac(tekst); zglos(dzien, tekst, rok); }
-      else { ustawRok(tekst); zglos(dzien, miesiac, tekst); }
-      return;
-    }
-    if (z.key === 'Backspace' && biezace === '') {
-      if (ktore === 'm') refDzien.current && refDzien.current.focus();
-      if (ktore === 'r') refMiesiac.current && refMiesiac.current.focus();
-    }
-  }
-
-  /** Wklejenie w dowolnym separatorze: 12.03.2026, 12-03-2026, 12/03/2026, ISO 2026-03-12. */
   function wklej(z) {
-    const tekst = (z.clipboardData || window.clipboardData).getData('text').trim();
-    if (!tekst) return;
-    const iso = parsujDate(tekst.slice(0, 10)) || parsujDate(tekst);
+    const iso = parsujDate((z.clipboardData || window.clipboardData).getData('text').trim().slice(0, 10));
     if (!iso) return;
     z.preventDefault();
-    ustawRok(iso.slice(0, 4)); ustawMiesiac(iso.slice(5, 7)); ustawDzien(iso.slice(8, 10));
-    przyZmianie(iso);
+    ustawTekst(naTekst(iso));
+    zglos(iso);
   }
 
-  // Data słownie pod polem zniknęła (zasada 0.4 pkt 7): ta sama informacja
-  // dwa razy na ekranie to szum, a format dd.mm.rrrr jest jednoznaczny.
-  const dzis = fmt.dzisIso();
-
   return (
-    <>
-      <div className="pole-daty">
-        <div
-          className={`data-segmenty ${blad || niepoprawne || bladZakresu ? 'bledne' : ''} ${wylaczone ? 'wylaczone' : ''}`}
-          onPaste={wklej}
-          role="group"
-          // R4 STOP 1 (WCAG 2.5.5): cała ramka pola jest celem dotyku — klik obok cyfr ustawia kursor w dniu.
-          onClick={(z) => { if (z.target === z.currentTarget && refDzien.current && !wylaczone) refDzien.current.focus(); }}
-        >
-          <input
-            ref={refDzien} className="data-segment" data-szer="2" inputMode="numeric" id={id}
-            aria-describedby={opis} aria-invalid={niepoprawne}
-            placeholder="DD" value={dzien} autoFocus={autoFocus} disabled={wylaczone}
-            onChange={(z) => zmien('d', z.target.value)}
-            onKeyDown={(z) => klawisz('d', z)}
-            aria-label="Dzień"
-          />
-          <span className="data-rozdzielacz">.</span>
-          <input
-            ref={refMiesiac} className="data-segment" data-szer="2" inputMode="numeric"
-            placeholder="MM" value={miesiac} disabled={wylaczone} aria-invalid={niepoprawne}
-            onChange={(z) => zmien('m', z.target.value)}
-            onKeyDown={(z) => klawisz('m', z)}
-            aria-label="Miesiąc"
-          />
-          <span className="data-rozdzielacz">.</span>
-          <input
-            ref={refRok} className="data-segment" data-szer="4" inputMode="numeric"
-            placeholder="RRRR" value={rok} disabled={wylaczone} aria-invalid={niepoprawne}
-            onChange={(z) => zmien('r', z.target.value)}
-            onKeyDown={(z) => klawisz('r', z)}
-            aria-label="Rok"
-          />
-        </div>
-
-        {!wylaczone && (
-          <div className="kalendarz-kotwica">
-            <button
-              className="btn btn-maly"
-              onClick={() => ustawKalendarz((k) => !k)}
-              aria-label="Otwórz kalendarz"
-              aria-expanded={kalendarz}
-            >
-              ▦
-            </button>
-            {kalendarz && (
-              <Kalendarz
-                wartosc={wartosc}
-                min={min}
-                max={max}
-                przyWyborze={przyZmianie}
-                przyZamknieciu={() => ustawKalendarz(false)}
-              />
-            )}
-          </div>
-        )}
-
-        {skroty && !wylaczone && (
-          <div className="pigulki-skrotow">
-            <button className="btn btn-maly btn-cichy" onClick={() => przyZmianie(dzis)}>dziś</button>
-            <button className="btn btn-maly btn-cichy" onClick={() => przyZmianie(dodajDniIso(dzis, -1))}>wczoraj</button>
-          </div>
-        )}
-      </div>
-      {bladZakresu && <p className="pole-blad" role="alert"><span className="sr-only">Błąd: </span>{bladZakresu}</p>}
-    </>
+    <div className="pole-daty">
+      <input
+        id={id}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder="DD.MM.RRRR"
+        className={`pole-daty-wejscie ${blad || bladZakresu ? 'bledne' : ''}`}
+        value={tekst}
+        onChange={(z) => zmien(z.target.value)}
+        onKeyDown={(z) => { if (z.key === 'Backspace' && tekst.endsWith('.')) { z.preventDefault(); ustawTekst(tekst.slice(0, -2)); zglos(null); } }}
+        onPaste={wklej}
+        disabled={wylaczone}
+        autoFocus={autoFocus}
+        aria-describedby={opis}
+        aria-invalid={niepoprawne || Boolean(bladZakresu) || undefined}
+      />
+      {!wylaczone && (
+        <button type="button" className="pole-daty-ikona" onClick={() => ustawKalendarz((k) => !k)} aria-label="Wybierz datę z kalendarza" aria-expanded={kalendarz}>
+          <Ikona nazwa="kalendarz" rozmiar={16} />
+        </button>
+      )}
+      {kalendarz && (
+        <Kalendarz
+          wartosc={wartosc}
+          min={min}
+          max={max}
+          przyWyborze={(iso) => { ustawTekst(naTekst(iso)); zglos(iso); }}
+          przyZamknieciu={() => ustawKalendarz(false)}
+        />
+      )}
+      {bladZakresu && <p className="pole-blad">{bladZakresu}</p>}
+    </div>
   );
 }
 PoleDaty.przyjmujeId = true;
@@ -1210,307 +837,9 @@ function PoleHaslo({ wartosc, przyZmianie, autoComplete, id, autoFocus, blad, 'a
 }
 PoleHaslo.przyjmujeId = true;
 
-/**
- * Wybór z kartoteki (2.6) — JEDEN komponent wyboru osoby w całej aplikacji
- * (dawny `WyborOsoby` z ui.js wchłonięty w FAZIE 1).
- *
- * Szuka po nazwisku, imieniu, firmie, PESEL, NIP i numerze KRS od drugiego
- * znaku; wynik pokazuje zamaskowany identyfikator i liczbę spółek, w których
- * osoba już jest (reguła domenowa nr 10 — jeden inwestor wpisywany raz).
- * „+ Nowa osoba w kartotece" jest zawsze na końcu listy: nowej osoby nie
- * zakłada się w innym ekranie.
- */
-function WyborZKartoteki({
-  wartosc, przyZmianie, placeholder = 'Nazwisko, firma, PESEL albo KRS…', wyklucz = [], typFiltr = null,
-  id, 'aria-describedby': opis, 'aria-invalid': niepoprawne,
-}) {
-  const [szukaj, ustawSzukaj] = useState('');
-  const [wyniki, ustawWyniki] = useState([]);
-  const [otwarte, ustawOtwarte] = useState(false);
-  const [podswietlony, ustawPodswietlony] = useState(0);
-  const [wybrana, ustawWybrana] = useState(null);
-  const [nowaOsoba, ustawNowaOsoba] = useState(false);
-  const idListy = useId();
-
-  useEffect(() => {
-    if (!wartosc) { ustawWybrana(null); return; }
-    if (wybrana && wybrana.id === wartosc) return;
-    API.get(`/api/psa/osoby/${wartosc}`)
-      .then((o) => ustawWybrana(o.osoba))
-      .catch(() => ustawWybrana(null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wartosc]);
-
-  // Od drugiego znaku: przy ~500 spółkach lista po jednej literze jest
-  // bezużyteczna, a nazwiska dwuliterowe („Ng", „Li") istnieją.
-  const zapytanie = szukaj.trim();
-  useEffect(() => {
-    if (zapytanie.length < 2) { ustawWyniki([]); return undefined; }
-    const uchwyt = setTimeout(() => {
-      const filtr = typFiltr ? `&typ=${encodeURIComponent(typFiltr)}` : '';
-      API.get(`/api/psa/osoby?q=${encodeURIComponent(zapytanie)}${filtr}`)
-        .then((o) => {
-          ustawWyniki(o.osoby.filter((x) => !wyklucz.includes(x.id)));
-          ustawPodswietlony(0);
-        })
-        .catch(() => ustawWyniki([]));
-    }, 180);
-    return () => clearTimeout(uchwyt);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zapytanie, typFiltr, wyklucz.join(',')]);
-
-  function wybierz(osoba) {
-    przyZmianie(osoba.id);
-    ustawWybrana(osoba);
-    ustawSzukaj('');
-    ustawOtwarte(false);
-  }
-
-  const pozycji = wyniki.length + 1; // ostatnia: „+ Nowa osoba"
-  function klawisz(z) {
-    if (!otwarte || zapytanie.length < 2) return;
-    if (z.key === 'ArrowDown') { z.preventDefault(); ustawPodswietlony((p) => Math.min(p + 1, pozycji - 1)); }
-    if (z.key === 'ArrowUp') { z.preventDefault(); ustawPodswietlony((p) => Math.max(p - 1, 0)); }
-    if (z.key === 'Escape') { ustawOtwarte(false); }
-    if (z.key === 'Enter') {
-      z.preventDefault();
-      if (podswietlony < wyniki.length) wybierz(wyniki[podswietlony]);
-      else { ustawOtwarte(false); ustawNowaOsoba(true); }
-    }
-  }
-
-  if (wybrana) {
-    return (
-      <div className="kartoteka-wybrana">
-        <span>
-          <span className="kartoteka-wybrana-nazwa">{wybrana.oznaczenie}</span>
-          <span className="kartoteka-poz-meta">
-            {wybrana.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
-            {wybrana.jawny_identyfikator ? ` · ${wybrana.jawny_identyfikator}` : ''}
-            {wybrana.aml_status && wybrana.aml_status !== 'wykonane' ? ' · AML niepotwierdzony' : ''}
-          </span>
-        </span>
-        <button
-          type="button"
-          className="btn btn-maly btn-cichy"
-          id={id}
-          onClick={() => { przyZmianie(null); ustawWybrana(null); }}
-        >
-          Zmień osobę
-        </button>
-      </div>
-    );
-  }
-
-  const listaWidoczna = otwarte && zapytanie.length >= 2;
-  return (
-    <div className="kartoteka">
-      <input
-        type="search"
-        id={id}
-        value={szukaj}
-        placeholder={placeholder}
-        role="combobox"
-        aria-expanded={listaWidoczna}
-        aria-controls={idListy}
-        aria-autocomplete="list"
-        aria-describedby={opis}
-        aria-invalid={niepoprawne}
-        autoComplete="off"
-        onChange={(z) => { ustawSzukaj(z.target.value); ustawOtwarte(true); }}
-        onFocus={() => ustawOtwarte(true)}
-        onBlur={() => setTimeout(() => ustawOtwarte(false), 150)}
-        onKeyDown={klawisz}
-      />
-      {listaWidoczna && (
-        <div className="kartoteka-lista" id={idListy} role="listbox">
-          {wyniki.length === 0 && <div className="kartoteka-pusto">Nikt w kartotece nie pasuje do „{zapytanie}”.</div>}
-          {wyniki.map((o, i) => (
-            <button
-              type="button"
-              key={o.id}
-              role="option"
-              aria-selected={i === podswietlony}
-              className={`kartoteka-poz ${i === podswietlony ? 'podswietlona' : ''}`}
-              onMouseDown={(z) => { z.preventDefault(); wybierz(o); }}
-            >
-              <div>{o.oznaczenie}</div>
-              <div className="kartoteka-poz-meta">
-                {o.typ === 'prawna' ? 'osoba prawna' : 'osoba fizyczna'}
-                {o.jawny_identyfikator ? ` · ${o.jawny_identyfikator}` : ''}
-                {o.liczba_spolek ? ` · w ${o.liczba_spolek} ${fmt.odmien(o.liczba_spolek, 'spółce', 'spółkach', 'spółkach')}` : ''}
-              </div>
-            </button>
-          ))}
-          <button
-            type="button"
-            role="option"
-            aria-selected={podswietlony === wyniki.length}
-            className={`kartoteka-poz kartoteka-nowa ${podswietlony === wyniki.length ? 'podswietlona' : ''}`}
-            onMouseDown={(z) => { z.preventDefault(); ustawOtwarte(false); ustawNowaOsoba(true); }}
-          >
-            + Nowa osoba w kartotece
-          </button>
-        </div>
-      )}
-
-      {nowaOsoba && (
-        <PanelOsoby
-          osoba={podpowiedzNowejOsoby(zapytanie, typFiltr)}
-          przyZamknieciu={() => ustawNowaOsoba(false)}
-          przyZapisie={(osoba) => { ustawNowaOsoba(false); wybierz(osoba); }}
-          przyWyborzeIstniejacej={(osoba) => { ustawNowaOsoba(false); wybierz(osoba); }}
-        />
-      )}
-    </div>
-  );
-}
-WyborZKartoteki.przyjmujeId = true;
-
-/** Wpisany tekst przechodzi do nowej osoby tam, gdzie pasuje (raz wpisane — nigdy więcej). */
-function podpowiedzNowejOsoby(tekst, typFiltr) {
-  const t = String(tekst || '').trim();
-  const osoba = typFiltr ? { typ: typFiltr } : {};
-  if (/^\d{11}$/.test(t)) return { ...osoba, typ: 'fizyczna', pesel: t };
-  if (/^\d{10}$/.test(t)) return { ...osoba, typ: 'prawna', numer_w_rejestrze: t, nazwa_rejestru: 'KRS' };
-  if (!t || /\d/.test(t)) return osoba;
-  return osoba.typ === 'prawna' ? { ...osoba, nazwa: t } : { ...osoba, nazwisko: t };
-}
-
-/* ═════════════════════════════════════════════════════
-   PALETA POLECEŃ (2.3) — Ctrl/⌘+K
-   ═════════════════════════════════════════════════════ */
-
-function PaletaPolecen({ przyZamknieciu }) {
-  const [pytanie, ustawPytanie] = useState('');
-  const [wyniki, ustawWyniki] = useState({ spolki: [], osoby: [], sprawy: [] });
-  const [podswietlony, ustawPodswietlony] = useState(0);
-
-  useEscape(przyZamknieciu);
-
-  useEffect(() => {
-    const q = pytanie.trim();
-    if (q.length < 2) { ustawWyniki({ spolki: [], osoby: [], sprawy: [] }); return undefined; }
-    const uchwyt = setTimeout(() => {
-      Promise.all([
-        API.get(`/api/psa/spolki?q=${encodeURIComponent(q)}`).catch(() => ({ spolki: [] })),
-        API.get(`/api/psa/osoby?q=${encodeURIComponent(q)}`).catch(() => ({ osoby: [] })),
-      ]).then(([s, o]) => {
-        ustawWyniki({
-          spolki: (s.spolki || []).slice(0, 6),
-          osoby: (o.osoby || []).slice(0, 5),
-          sprawy: [],
-        });
-        ustawPodswietlony(0);
-      });
-    }, 140);
-    return () => clearTimeout(uchwyt);
-  }, [pytanie]);
-
-  // Płaska lista pozycji — indeks podświetlenia biegnie przez wszystkie grupy.
-  const pozycje = useMemo(() => {
-    const lista = [];
-    for (const s of wyniki.spolki) {
-      lista.push({ grupa: 'Spółki', ikona: 'spolki', etykieta: s.nazwa, meta: s.krs ? `KRS ${s.krs}` : '', idz: `/spolki/${s.id}` });
-    }
-    for (const o of wyniki.osoby) {
-      lista.push({ grupa: 'Osoby', ikona: 'osoby', etykieta: o.oznaczenie, meta: o.jawny_identyfikator || '', idz: '/osoby' });
-    }
-    if (pytanie.trim().length < 2) {
-      lista.push({ grupa: 'Polecenia', ikona: 'sprawy', etykieta: 'Kolejka spraw', meta: '', idz: '/sprawy' });
-      lista.push({ grupa: 'Polecenia', ikona: 'spolki', etykieta: 'Spółki', meta: '', idz: '/spolki' });
-      lista.push({ grupa: 'Polecenia', ikona: 'osoby', etykieta: 'Kartoteka osób', meta: '', idz: '/osoby' });
-      lista.push({ grupa: 'Polecenia', ikona: 'plus', etykieta: 'Nowa spółka', meta: '', idz: '/spolki/nowa' });
-    }
-    return lista;
-  }, [wyniki, pytanie]);
-
-  function uruchom(p) {
-    idz(p.idz);
-    przyZamknieciu();
-  }
-
-  function klawisz(z) {
-    if (z.key === 'ArrowDown') { z.preventDefault(); ustawPodswietlony((p) => Math.min(p + 1, pozycje.length - 1)); }
-    if (z.key === 'ArrowUp') { z.preventDefault(); ustawPodswietlony((p) => Math.max(p - 1, 0)); }
-    if (z.key === 'Enter' && pozycje[podswietlony]) { z.preventDefault(); uruchom(pozycje[podswietlony]); }
-  }
-
-  let ostatniaGrupa = null;
-
-  return (
-    <div
-      className="paleta-nakladka"
-      onMouseDown={(z) => { if (z.target === z.currentTarget) przyZamknieciu(); }}
-    >
-      <div className="paleta">
-        <div className="paleta-pole-rzad">
-          <Ikona nazwa="szukaj" rozmiar={20} />
-          <input
-            className="paleta-pole"
-            autoFocus
-            value={pytanie}
-            placeholder="Szukaj spółki, osoby albo sprawy…"
-            onChange={(z) => ustawPytanie(z.target.value)}
-            onKeyDown={klawisz}
-          />
-        </div>
-        <div className="paleta-wyniki">
-          {pozycje.length === 0 && pytanie.trim().length >= 2 && (
-            <div className="paleta-poz wyciszony">Nic nie pasuje do „{pytanie.trim()}".</div>
-          )}
-          {pozycje.map((p, i) => {
-            const naglowek = p.grupa !== ostatniaGrupa ? p.grupa : null;
-            ostatniaGrupa = p.grupa;
-            return (
-              <React.Fragment key={`${p.grupa}-${p.etykieta}-${i}`}>
-                {naglowek && <div className="paleta-grupa">{naglowek}</div>}
-                <button
-                  className={`paleta-poz ${i === podswietlony ? 'podswietlona' : ''}`}
-                  onMouseDown={(z) => { z.preventDefault(); uruchom(p); }}
-                  onMouseEnter={() => ustawPodswietlony(i)}
-                >
-                  <Ikona nazwa={p.ikona || 'strzalkaPrawo'} rozmiar={16} />
-                  <span className="paleta-poz-etykieta">{p.etykieta}</span>
-                  {p.meta && <span className="paleta-poz-meta">{p.meta}</span>}
-                </button>
-              </React.Fragment>
-            );
-          })}
-        </div>
-        <div className="paleta-stopka">
-          <span><span className="klawisz">↑</span> <span className="klawisz">↓</span> nawigacja</span>
-          <span><span className="klawisz">↵</span> otwórz</span>
-          <span><span className="klawisz">esc</span> zamknij</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Globalny skrót Ctrl/⌘+K. Zwraca stan i sterowanie paletą. */
-function usePaletaPolecen() {
-  const [otwarta, ustawOtwarta] = useState(false);
-  useEffect(() => {
-    const przy = (z) => {
-      if ((z.metaKey || z.ctrlKey) && z.key.toLowerCase() === 'k') {
-        z.preventDefault();
-        ustawOtwarta((o) => !o);
-      }
-    };
-    window.addEventListener('keydown', przy);
-    return () => window.removeEventListener('keydown', przy);
-  }, []);
-  return { otwarta, otworz: () => ustawOtwarta(true), zamknij: () => ustawOtwarta(false) };
-}
-
 window.Ikona = Ikona;
-window.Kafel = Kafel;
-window.WierszListy = WierszListy;
 window.Zakladki = Zakladki;
-window.Metryka = Metryka;
 window.Szukajka = Szukajka;
-window.SzybkieAkcje = SzybkieAkcje;
 /* ─────────────────────────────────────────────────────
    AUTOZAPIS FORMULARZA
    Formularz nie ma przycisku „Zapisz”: każda zmiana leci na serwer sama,
@@ -1608,8 +937,6 @@ function StanZapisu({ stan }) {
   );
 }
 
-window.Stronicowanie = Stronicowanie;
-window.Iskra = Iskra;
 /* ─────────────────────────────────────────────────
    KREATOR: NAGŁÓWEK KROKU, LISTA PODMIOTÓW, NAWIGACJA
 
@@ -1621,6 +948,58 @@ window.Iskra = Iskra;
    Dane wielu osób zbiera się listą, nie stosem rozwiniętych formularzy —
    widać całość, a szczegóły otwiera się po jednym.
    ───────────────────────────────────────────────── */
+
+/**
+ * R4 K5 (D-092): znacznik przy osobie bez zgody na e-mail albo bez adresu — korespondencja idzie listem.
+ * Przy zgodzie nic się nie pokazuje (bez pozytywnego znacznika). `zawsze` — np. w kolejce listów.
+ */
+function ZnacznikKontaktu({ osoba, zawsze = false }) {
+  if (!zawsze && (!osoba || !wymagaListu(osoba))) return null;
+  return (
+    <span className="znacznik-kontaktu" title={PODPOWIEDZ_ZNACZNIKA}>
+      <Pigulka odmiana="sygnal">{TEKST_ZNACZNIKA}</Pigulka>
+      <span className="sr-only">{PODPOWIEDZ_ZNACZNIKA}</span>
+    </span>
+  );
+}
+
+/**
+ * R4 K1: jeden pasek akcji — wyrównany do prawej, drugorzędne po lewej, jeden główny skrajny prawy;
+ * na telefonie w pionie, główny na górze. `akcje`: [{ etykieta, przyKlik, glowna?, niebezpieczna?, wylaczona? }].
+ */
+/**
+ * Jeden pasek akcji dla wszystkich ekranów (A-021): akcje drugorzędne, potem jedna główna. `duze` — nawigacja kroku
+ * kreatora (duże przyciski, „Wstecz” z lewej, „Dalej” z prawej; dawny `NawigacjaKreatora`). Akcja wyłączona z `powod`
+ * mówi, dlaczego jest wyłączona.
+ */
+function PasekAkcji({ akcje, duze = false }) {
+  const idPowodu = useId();
+  const widoczne = (akcje || []).filter(Boolean);
+  if (!widoczne.length) return null;
+  const kolejnosc = [...widoczne.filter((a) => !a.glowna), ...widoczne.filter((a) => a.glowna).slice(0, 1)];
+  const powod = kolejnosc.find((a) => a.wylaczona && a.powod);
+  return (
+    <>
+      {powod && <p className="nawigacja-powod" id={idPowodu}>{powod.powod}</p>}
+      <div className={duze ? 'nawigacja-kreatora bez-druku' : 'pasek-akcji bez-druku'}>
+        {duze && !kolejnosc.some((a) => !a.glowna) && <span />}
+        {kolejnosc.map((a) => (
+          <button
+            key={a.etykieta}
+            type={duze ? 'button' : undefined}
+            className={`btn ${duze ? 'btn-nawigacja' : 'btn-sm'}${a.glowna ? ' btn-glowny' : ''}${a.niebezpieczna ? ' btn-danger' : ''}`}
+            onClick={a.przyKlik}
+            disabled={a.wylaczona}
+            aria-describedby={a.wylaczona && a.powod ? idPowodu : undefined}
+          >
+            {a.etykieta}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
 
 /** Tytuł kroku kreatora i jedno zdanie o tym, po co ten krok jest. */
 function KrokNaglowek({ tytul, opis }) {
@@ -1892,6 +1271,8 @@ function StopkaKancelarii({ kancelaria, szerokosc }) {
 window.StopkaKancelarii = StopkaKancelarii;
 window.skrocAdresWww = skrocAdresWww;
 window.KrokNaglowek = KrokNaglowek;
+window.ZnacznikKontaktu = ZnacznikKontaktu;
+window.PasekAkcji = PasekAkcji;
 window.WierszPodmiotu = WierszPodmiotu;
 window.WierszDodania = WierszDodania;
 window.NawigacjaKreatora = NawigacjaKreatora;
@@ -1900,10 +1281,6 @@ window.Przelacznik = Przelacznik;
 window.Spinner = Spinner;
 window.Karta = Karta;
 window.ListaDanych = ListaDanych;
-window.KolumnaSprawy = KolumnaSprawy;
-window.ZnacznikKontaktu = ZnacznikKontaktu;
-window.ZnacznikKontaktuOsoby = ZnacznikKontaktuOsoby;
-window.PasekAkcji = PasekAkcji;
 window.Pigulka = Pigulka;
 window.Komunikat = Komunikat;
 window.Pusto = Pusto;
@@ -1917,9 +1294,6 @@ window.PoleLiczbowe = PoleLiczbowe;
 window.PoleKwoty = PoleKwoty;
 window.PoleHaslo = PoleHaslo;
 window.Kalendarz = Kalendarz;
-window.WyborZKartoteki = WyborZKartoteki;
-window.PaletaPolecen = PaletaPolecen;
-window.usePaletaPolecen = usePaletaPolecen;
 window.dataSlownie = dataSlownie;
 window.useAutozapis = useAutozapis;
 window.StanZapisu = StanZapisu;

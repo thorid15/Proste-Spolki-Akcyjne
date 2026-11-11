@@ -15,6 +15,8 @@ const { BladWalidacji } = require('../logika/walidacje');
 const daneOsoby = require('../dane/osoby');
 const danePliki = require('../dane/pliki');
 const historia = require('../dane/historia');
+const daneSpolki = require('../dane/spolki');
+const pisma = require('../logika/pisma');
 const pliki = require('../pomocnicze/pliki');
 const { asy, autor, nieZnaleziono, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
 
@@ -95,6 +97,25 @@ router.put(
       if (cialo.zgoda_email !== undefined) zmienZgode(daneOsoby.wczytaj(db(), osoba.id), cialo.zgoda_email || {}, autor(zad));
     }).immediate();
     odp.json({ osoba: daneOsoby.wczytaj(db(), osoba.id), ostrzezenia: wynikOstrzezen });
+  })
+);
+
+/** „Dokument zgody do podpisu” (U-03, U-11) — pismo do akcjonariusza dla wskazanej spółki. */
+router.post(
+  '/:id/dokument-zgody',
+  asy((zad, odp) => {
+    const osoba = wymagajOsoby(zad);
+    const spolka = daneSpolki.wczytaj(db(), (zad.body || {}).spolka_id);
+    if (!spolka) throw new BladWalidacji([{ pole: 'spolka_id', komunikat: 'Wskaż spółkę.' }]);
+    if (!osoba.email) throw new BladWalidacji([{ pole: 'email', komunikat: 'Podaj adres e-mail osoby — wpisuje się go do dokumentu zgody.' }]);
+    const id = pisma.utworz(db(), 'zgoda_email', {
+      spolka_id: spolka.id,
+      adresat: 'osoba',
+      adresat_osoba_id: osoba.id,
+      kontekst: { akcjonariusz: osoba.nazwa, akcjonariusz_adres: osoba.adres, akcjonariusz_email: osoba.email },
+      autor: autor(zad),
+    });
+    odp.status(201).json({ pismo_id: id });
   })
 );
 

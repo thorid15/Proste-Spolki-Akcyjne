@@ -1,1081 +1,298 @@
-/* spolki.js — lista spółek i rejestracja nowej spółki (sesja 6, faza 3).
+/* spolki.js — lista spółek i kokpit spółki (§ 5): „stan na” dzień, dane spółki („Edytuj” w miejscu,
+   U-25), akcjonariusze, akcje z obciążeniami i adnotacjami („Zmień” / „Wykreśl” — nowa sprawa),
+   historia wpisów („Sprostuj”), akta, opłaty. Przycisk główny „Nowy wpis”, obok „Informacja z rejestru”. */
 
-   Kreator ma cztery kroki i dotyka logiki domenowej TYLKO tam, gdzie sesja to
-   wprost dopuszcza: pola rozszerzonego importu KRS i ograniczeń z umowy
-   spółki (server/logika/kreator.js, migracja v6). Krok 4 zapisuje spółkę
-   (`POST /api/psa/spolki`, jeśli jeszcze nie istnieje z poprzedniej próby),
-   a potem KOMPLET zdarzeń założycielskich jednym wywołaniem
-   `POST /:id/otworz-rejestr` — atomowo, patrz `rejestr.otworzRejestr`. */
-
-const PUSTA_SPOLKA = {
-  krs: '', nip: '', regon: '', nazwa: '', forma_prawna: 'PROSTA SPÓŁKA AKCYJNA',
-  kraj: 'Polska', kod_pocztowy: '', miejscowosc: '',
-  ulica: '', nr_domu: '', nr_lokalu: '',
-  sad_rejestrowy: '', wydzial: '', telefon: '', email: '', www: '',
-  data_utworzenia_spolki: '', adres_edorecze: '',
-  // Data zawarcia UMOWY SPÓŁKI (akt założycielski / akt notarialny, przy S24
-  // — data podpisania w systemie) — etap 2.5 poprawek. Różna od daty
-  // rejestracji w KRS powyżej i od daty umowy o prowadzenie rejestru niżej;
-  // podstawa autouzupełnienia „data emisji” serii założycielskiej.
-  data_zawarcia_umowy_spolki: '',
-  kapital_akcyjny_grosze: null,
-  status: 'aktywna', opis: '', uwagi: '',
-  organ_rodzaj: '',
-  data_uchwaly_wyboru: '', data_umowy: '', data_otwarcia_rejestru: '',
-  // Stroną umowy po stronie podmiotu prowadzącego rejestr zawsze jest
-  // kancelaria (etap 2.1 poprawek) — bez wyboru w kreatorze.
-  umowe_zawarl: 'notariusz', umowe_zawarl_imie_nazwisko: '', dodatkowe_informacje_umowa_spolki: '',
-  zakaz_glosu_zastawnika_umowa: '', ograniczenie_dziedziczenia_umowa: '',
-  // Umowa jako fakt już zaistniały (etap 2.2) — sposób zawarcia; data
-  // zawarcia to już istniejące `data_umowy` powyżej. Załącznik trzymany
-  // osobno w stanie kreatora (plik, nie pole tekstowe) — patrz `umowaZalacznik`.
-  umowa_sposob_zawarcia: '',
-  // Reprezentant — wszystkie dane w mianowniku, tak jak w dokumencie
-  // tożsamości. Pisma nie odmieniają ich przez przypadki, tylko opisują
-  // etykietą („imiona rodziców:", „działający jako:").
-  // D-101: reprezentant jako osoba w kartotece — dane osobowe i AML raz; w spółce zostaje funkcja.
-  // D-108: imiona rodziców i dokument tożsamości — tylko do umowy, bez zapisu. Dawne pola osobowe — gdy brak osoby.
-  reprezentant_osoba_id: null,
-  reprezentant_imie_nazwisko: '', reprezentant_pesel: '',
-  reprezentant_funkcja: '', reprezentant_reprezentacja: '', reprezentant_email: '',
-  // B2/B3 — dowód i adres ustrukturyzowane (migracja 53); stare
-  // `reprezentant_dowod`/`reprezentant_adres` zostają tylko do odczytu w
-  // piśmie, gdy te pola są jeszcze puste (`kontekst-pisma.js`).
-  reprezentant_kraj: 'Polska', reprezentant_kod_pocztowy: '', reprezentant_miejscowosc: '',
-  reprezentant_ulica: '', reprezentant_nr_domu: '', reprezentant_nr_lokalu: '',
-};
-
-const PUSTA_EMISJA_ZALOZYCIELSKA = {
-  // Cena emisyjna NIE jest tu wspolna dla calej emisji (etap 2.6 poprawek) -
-  // rozne osoby moga wnosic rozne kwoty za akcje w tej samej emisji
-  // zalozycielskiej (np. rozne aporty); cena zyje przy kazdej pozycji
-  // akcjonariatu nizej.
-  seria: '', nr_pierwszy: 1, ilosc: '',
-  data_emisji: '', data_wpisu_krs: '', rodzaj_akcji: 'zwykla', tytul: '', obowiazki_wobec_spolki: '',
-  podstawa_prawna: '',
-};
-
-const PUSTA_ZGODA_SPOLKI = {
-  wymaga_zgody_spolki: false,
-  // Doslowny cytat klauzuli - przydatny nawet zanim szczegoly nizej sa znane
-  // (etap 2.7 poprawek).
-  tresc_postanowienia: '',
-  zgoda_termin_wskazania_dni: '',
-  zgoda_cena_opis: '',
-  zgoda_termin_zaplaty_dni: '',
-  prawo_pierwszenstwa: false,
-};
-
-const KROKI_REJESTRACJI = ['Spółka', 'Umowa o prowadzenie rejestru', 'Pierwsza emisja i akcjonariat', 'Weryfikacja'];
-
-/* Checklista otwarcia rejestru — sesja 6, faza 3, sekcja 3 (krok 4). Nie jest
-   powiązana z katalogiem typów zdarzeń (nie ma zdarzenia „otwarcie
-   rejestru") — to samodzielna lista dla tego jednego kreatora. */
-const CHECKLISTA_OTWARCIA = [
-  { kod: 'forma', tresc: 'Forma prawna potwierdzona jako prosta spółka akcyjna.' },
-  { kod: 'wpis_krs', tresc: 'Spółka wpisana do KRS, data wpisu ustalona.' },
-  { kod: 'uchwala', tresc: 'Uchwała akcjonariuszy o wyborze podmiotu prowadzącego rejestr, skan wgrany.' },
-  // W2.5 (wytyczne § 2): umowa wymaga uchwały akcjonariuszy i sprawdzenia reprezentacji w KRS.
-  { kod: 'reprezentacja', tresc: 'Reprezentacja spółki przy umowie sprawdzona według KRS (odpis aktualny).' },
-  { kod: 'umowa', tresc: 'Umowa o prowadzenie rejestru podpisana, skan wgrany, wskazany podpisujący.' },
-  { kod: 'jedna_umowa', tresc: 'Spółka nie ma innej aktywnej umowy o prowadzenie rejestru.' },
-  { kod: 'dane_z_umowy', tresc: 'Dane z umowy spółki przeniesione: seria, numery, uprzywilejowanie, cena emisyjna, wkłady.' },
-  { kod: 'ograniczenia', tresc: 'Ograniczenia w rozporządzaniu akcją wprowadzone.' },
-  { kod: 'bilans', tresc: 'Bilans akcji zgadza się z liczbą wyemitowanych.' },
-  { kod: 'zakres_danych', tresc: 'Umowa spółki nie wymaga ujawniania danych, których system nie obsługuje.' },
-  { kod: 'aml', tresc: 'Ustalono zakres AML wobec osób podlegających wpisowi.' },
-];
-
-/** Jedna pozycja akcjonariatu w kroku 3 — osoba, ilość, pokrycie, ewentualny wkład pracą/usługami. */
-function PozycjaZalozycielska({ pozycja, ustawPozycje, usun, mozna_usunac, wyklucz }) {
-  const [wkladNiepieniezny, ustawWkladNiepieniezny] = useState(
-    Boolean(pozycja.rodzaj_swiadczenia || pozycja.czas_swiadczenia)
-  );
-
+function EkranSpolek() {
+  const [q, ustawQ] = useParametrAdresu('q', '');
+  const { dane, blad } = useDane(`/api/psa/spolki?q=${encodeURIComponent(q)}`);
   return (
     <Karta>
-      <div className="siatka-2">
-        <Pole etykieta="Obejmujący akcje" wymagane>
-          <WyborZKartoteki
-            wartosc={pozycja.osoba_id}
-            wyklucz={wyklucz}
-            przyZmianie={(id) => ustawPozycje({ ...pozycja, osoba_id: id })}
-          />
-        </Pole>
-        <Pole etykieta="Liczba akcji" wymagane>
-          <PoleLiczbowe
-            wartosc={pozycja.ilosc ?? ''}
-            sufiks="akcji"
-            przyZmianie={(v) => ustawPozycje({ ...pozycja, ilosc: v })}
-          />
-        </Pole>
-      </div>
-      <div className="siatka-2">
-        <Pole etykieta="Wzmianka o pokryciu" podpowiedz="art. 300(33) § 1 pkt 9 KSH — zostaw puste, jeśli nieustalone.">
-          <select
-            value={pozycja.pokryta || ''}
-            onChange={(z) => ustawPozycje({ ...pozycja, pokryta: z.target.value })}
-          >
-            <option value="">— nieustalone —</option>
-            <option value="tak">pokryta w całości</option>
-            <option value="czesciowo">pokryta częściowo</option>
-            <option value="nie">niepokryta</option>
-          </select>
-        </Pole>
-        {!wkladNiepieniezny && (
-          <Pole
-            etykieta="Cena emisyjna (za akcję)"
-            podpowiedz="Kwota wniesiona za jedną akcję przez TEGO akcjonariusza — może się różnić między akcjonariuszami. Do kontroli spójności z kapitałem akcyjnym (krok 1)."
-          >
-            <PoleKwoty
-              grosze={pozycja.cena_emisyjna_grosze ?? null}
-              przyZmianie={(v) => ustawPozycje({ ...pozycja, cena_emisyjna_grosze: v })}
-            />
-          </Pole>
-        )}
-      </div>
-      {!wkladNiepieniezny ? (
-        <button className="btn btn-maly" onClick={() => ustawWkladNiepieniezny(true)}>
-          Wkład w postaci pracy lub usług
-        </button>
-      ) : (
-        <div className="siatka-2">
-          <Pole etykieta="Rodzaj świadczenia" podpowiedz="art. 300(9) § 1 KSH — np. świadczenie usług programistycznych.">
-            <input
-              type="text"
-              value={pozycja.rodzaj_swiadczenia || ''}
-              onChange={(z) => ustawPozycje({ ...pozycja, rodzaj_swiadczenia: z.target.value })}
-            />
-          </Pole>
-          <Pole etykieta="Czas świadczenia">
-            <input
-              type="text"
-              value={pozycja.czas_swiadczenia || ''}
-              onChange={(z) => ustawPozycje({ ...pozycja, czas_swiadczenia: z.target.value })}
-              placeholder="np. 24 miesiące od dnia objęcia"
-            />
-          </Pole>
-        </div>
-      )}
-      <Pole etykieta="Uprawnienia szczególne" podpowiedz="Opcjonalne — zapisze się jako osobny wpis przypisany temu akcjonariuszowi.">
-        <textarea
-          value={pozycja.uprawnienia_szczegolne || ''}
-          onChange={(z) => ustawPozycje({ ...pozycja, uprawnienia_szczegolne: z.target.value })}
-        />
-      </Pole>
-      {mozna_usunac && (
-        <button className="btn btn-maly btn-sygnal" onClick={usun}>Usuń</button>
+      <Szukajka wartosc={q} przyZmianie={ustawQ} placeholder="Firma albo KRS…" />
+      {blad && <Bledy blad={blad} />}
+      {!dane && !blad && <Spinner />}
+      {dane && !dane.length && <Pusto tytul="Brak spółek" opis={q ? 'Żadna spółka nie pasuje do wyszukiwania.' : 'Spółki pojawią się po otwarciu rejestru z wniosku.'} />}
+      {dane && dane.length > 0 && (
+        <table className="tabela">
+          <thead><tr><th>Firma</th><th>KRS</th><th>Siedziba</th><th>Rejestr</th></tr></thead>
+          <tbody>
+            {dane.map((s) => (
+              <tr key={s.id} className="klikalna" onClick={() => idz(`/spolki/${s.id}`)}>
+                <td><a href={`#/spolki/${s.id}`}>{s.nazwa}</a></td>
+                <td>{s.krs}</td>
+                <td>{s.siedziba}</td>
+                <td>{s.data_zamkniecia ? `zamknięty ${fmt.data(s.data_zamkniecia)}` : s.data_otwarcia ? `otwarty ${fmt.data(s.data_otwarcia)}` : 'nieotwarty'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </Karta>
   );
 }
 
-/**
- * Naprawa Z-005: spółka z portalu ma trafiać na TEN SAM ekran otwarcia
- * rejestru (checklista 10 punktów + krok akcjonariatu), co spółka zakładana
- * wewnętrznie — dotąd po przyjęciu wniosku pracownik lądował w zwykłym
- * kokpicie i musiał sam wiedzieć, że "Dodaj akcjonariusza" tam nie przechodzi
- * przez żadną checklistę. `spolkaIstniejaca` (pełny rekord z `GET /:id`,
- * rola kancelaria) uruchamia kreator od razu na kroku 2 — dane spółki i
- * umowy są już w bazie (formularz wniosku je zebrał), więc kroki 0-1 nie
- * mają czego pytać ponownie. Liczby akcji per akcjonariusz NIE dają się
- * przenieść z wniosku — `psa_wnioski_akcjonariusze` ich nie przechowuje
- * (formularz klienta zbiera tożsamość, nie kapitał) — pracownik wpisuje je
- * tu samodzielnie, tak jak przy spółce zakładanej wewnętrznie.
- */
-/** D-101: dane osobowe reprezentanta z kartoteki nie są kopiowane do spółki (jedno źródło — `psa_osoby`). */
-const POLA_OSOBOWE_REPREZENTANTA = [
-  'reprezentant_imie_nazwisko', 'reprezentant_pesel', 'reprezentant_email', 'reprezentant_plec', 'reprezentant_kraj',
-  'reprezentant_kod_pocztowy', 'reprezentant_miejscowosc', 'reprezentant_ulica', 'reprezentant_nr_domu', 'reprezentant_nr_lokalu',
+const POLA_SPOLKI = [
+  ['nazwa', 'Firma'], ['krs', 'KRS', true], ['siedziba', 'Siedziba'], ['adres', 'Adres'], ['sad_rejestrowy', 'Sąd rejestrowy'],
+  ['data_rejestracji', 'Data rejestracji spółki'], ['nip', 'NIP (do faktur)'], ['email', 'E-mail spółki (korespondencja)'],
+  ['umowe_zawarl', 'Umowę zawarł'], ['platnosc', 'Opłata za prowadzenie'],
 ];
-function daneSpolkiDoZapisu(dane) {
-  if (!dane.reprezentant_osoba_id) return dane;
-  return Object.fromEntries(Object.entries(dane).filter(([k]) => !POLA_OSOBOWE_REPREZENTANTA.includes(k)));
-}
+const PLATNOSC = { roczna: 'raz w roku', miesieczna: 'co miesiąc' };
 
-function EkranNowejSpolki({ spolkaIstniejaca, akcjonariuszeWniosku = [] } = {}) {
-  const [krok, ustawKrokWewn] = useState(spolkaIstniejaca ? 2 : 0);
-  // Najdalszy osiągnięty krok — do niego pasek kroków jest klikalny (0.4 pkt 8).
-  const [osiagniety, ustawOsiagniety] = useState(spolkaIstniejaca ? 2 : 0);
-  const [pokazBraki, ustawPokazBraki] = useState(false);
-  function ustawKrok(nowy) {
-    const k = typeof nowy === 'function' ? nowy(krok) : nowy;
-    ustawPokazBraki(false);
-    ustawOsiagniety((o) => Math.max(o, k));
-    ustawKrokWewn(k);
-  }
-  const [dane, ustawDane] = useState(spolkaIstniejaca ? { ...PUSTA_SPOLKA, ...spolkaIstniejaca } : PUSTA_SPOLKA);
-  const [surowyJson, ustawSurowyJson] = useState(null);
-  const [pokazJson, ustawPokazJson] = useState(false);
-  const [skladOrganu, ustawSkladOrganu] = useState([]);
-  const [pobieranie, ustawPobieranie] = useState(false);
-  const [komunikatKrs, ustawKomunikatKrs] = useState(null);
-  const [pobranoZKrsBezAde, ustawPobranoZKrsBezAde] = useState(false);
-  const [sadZaproponowany, ustawSadZaproponowany] = useState(false);
-  const [umowaZalacznik, ustawUmowaZalacznik] = useState(null);
-  // K6 (FAZA 3 sesji frontendowej v2): dane pobrane z KRS pokazują się jako
-  // podsumowanie tylko do odczytu („Czy to Twoja spółka?") — pełny
-  // edytowalny formularz wraca dopiero po „Popraw" albo gdy API zawiodło
-  // (0.4 pkt 2). Dla spółki z przyjętego wniosku (krok 0 nieodwiedzany bez
-  // cofania) i tak nieistotne — startuje jak dotąd.
-  const [trybReczny, ustawTrybReczny] = useState(Boolean(spolkaIstniejaca));
-  const ostatniPobranyKrs = useRef(null);
-
-  const [emisja, ustawEmisje] = useState(PUSTA_EMISJA_ZALOZYCIELSKA);
-  // K2 (FAZA 3 sesji frontendowej v2): osoby z przyjętego wniosku podstawione
-  // od razu — pracownik nie wybiera ich drugi raz z kartoteki, wpisuje tylko
-  // liczbę akcji i cenę (D-053: bez liczby akcji we wniosku, uzupełnia je
-  // kancelaria z umowy spółki).
-  const [pozycje, ustawPozycjeState] = useState(
-    akcjonariuszeWniosku.length > 0
-      ? akcjonariuszeWniosku.map((a) => ({ osoba_id: a.osoba_id }))
-      : [{}]
-  );
-  const [zgoda, ustawZgode] = useState(PUSTA_ZGODA_SPOLKI);
-
-  // Etap 2.5: data emisji założycielskiej = data zawarcia umowy spółki
-  // (krok 1) — autouzupełnienie JEDNORAZOWE, użytkownik może nadpisać.
-  // „Data wpisu emisji do KRS” NIE ma tu osobnego stanu — dla emisji
-  // założycielskiej zawsze i wyłącznie mirroruje „datę rejestracji w KRS”
-  // (pole w kroku 3 jest read-only, patrz niżej), bo emisja pierwotna
-  // rejestruje się razem ze spółką, nie osobno.
-  useEffect(() => {
-    if (dane.data_zawarcia_umowy_spolki && !emisja.data_emisji) {
-      ustawEmisje((p) => ({ ...p, data_emisji: dane.data_zawarcia_umowy_spolki }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dane.data_zawarcia_umowy_spolki]);
-
-  useEffect(() => {
-    if (dane.data_zawarcia_umowy_spolki && !emisja.podstawa_prawna) {
-      ustawEmisje((p) => ({ ...p, podstawa_prawna: `umowa spółki z dnia ${fmt.data(dane.data_zawarcia_umowy_spolki)}` }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dane.data_zawarcia_umowy_spolki]);
-
-  const [odhaczone, ustawOdhaczone] = useState({});
-  const [spolkaId, ustawSpolkaId] = useState(spolkaIstniejaca ? spolkaIstniejaca.id : null);
-  const [zapisywanie, ustawZapisywanie] = useState(false);
-  const [blad, ustawBlad] = useState(null);
-
-  const pole = (klucz) => ({
-    value: dane[klucz] ?? '',
-    onChange: (z) => ustawDane((p) => ({ ...p, [klucz]: z.target.value })),
+function DaneSpolki({ spolka, poZapisie }) {
+  const [edycja, ustawEdycje] = useState(null);
+  const c = useCzynnosc();
+  const { pola } = bledyApi(c.blad);
+  const zapisz = () => c.wykonaj(async () => {
+    const zmiany = Object.fromEntries(POLA_SPOLKI.filter(([k, , staly]) => !staly && edycja[k] !== spolka[k]).map(([k]) => [k, edycja[k]]));
+    await API.put(`/api/psa/spolki/${spolka.id}`, zmiany);
+    ustawEdycje(null);
+    poZapisie();
   });
-
-  async function pobierzZKrs() {
-    const numer = String(dane.krs || '').replace(/\D/g, '');
-    ustawPobieranie(true);
-    ustawKomunikatKrs(null);
-    try {
-      const wynik = await API.get(`/api/psa/spolki/z-krs/${numer}`);
-      ustawSurowyJson(wynik.surowa || null);
-      if (!wynik.znaleziono) {
-        ustawKomunikatKrs({ odmiana: 'uwaga', tresc: wynik.komunikat });
-        ustawTrybReczny(true);
-      } else if (wynik.dopuszczalna === false) {
-        ustawKomunikatKrs({ odmiana: 'blad', tresc: wynik.komunikat });
-        ustawTrybReczny(true);
-      } else {
-        const { sklad_organu, ...reszta } = wynik.dane;
-        const pobrane = Object.fromEntries(
-          Object.entries(reszta).filter(([, v]) => v !== null && v !== '')
-        );
-        ustawDane((p) => ({ ...p, ...pobrane }));
-        ustawSkladOrganu(sklad_organu || []);
-        ustawPobranoZKrsBezAde(!wynik.dane.adres_edorecze);
-        ustawSadZaproponowany(Boolean(wynik.sad_rejestrowy_propozycja));
-        ustawKomunikatKrs(
-          (wynik.ostrzezenia || []).length
-            ? { odmiana: 'uwaga', tresc: wynik.ostrzezenia.join(' ') }
-            : null
-        );
-        // K6: dane z KRS jako podsumowanie tylko do odczytu — pracownik
-        // sprawdza je jako „Czy to Twoja spółka?" i albo przechodzi dalej,
-        // albo klika „Popraw", żeby wrócić do edytowalnego formularza.
-        ustawTrybReczny(false);
-      }
-    } catch (e) {
-      ustawKomunikatKrs({ odmiana: 'uwaga', tresc: `${e.message} Uzupełnij dane ręcznie.` });
-      ustawTrybReczny(true);
-    } finally {
-      ustawPobieranie(false);
-    }
-  }
-
-  // K6: pobranie startuje samo po wpisaniu 10 cyfr — bez osobnego
-  // przycisku (0.4 pkt 2). Nie odpala się drugi raz dla tego samego
-  // numeru (np. gdy pracownik wraca na krok 0 z „Popraw").
-  useEffect(() => {
-    if (spolkaIstniejaca) return undefined;
-    const numer = String(dane.krs || '').replace(/\D/g, '');
-    if (numer.length !== 10 || numer === ostatniPobranyKrs.current) return undefined;
-    const uchwyt = setTimeout(() => {
-      ostatniPobranyKrs.current = numer;
-      pobierzZKrs();
-    }, 400);
-    return () => clearTimeout(uchwyt);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dane.krs]);
-
-  function ustawPozycje(i, nowa) {
-    ustawPozycjeState((p) => p.map((x, j) => (j === i ? nowa : x)));
-  }
-  function dodajPozycje() {
-    ustawPozycjeState((p) => [...p, {}]);
-  }
-  function usunPozycje(i) {
-    ustawPozycjeState((p) => p.filter((_, j) => j !== i));
-  }
-
-  const ileAkcji = Number(emisja.ilosc) || 0;
-  const sumaObjeta = pozycje.reduce((s, p) => s + (Number(p.ilosc) || 0), 0);
-  const przekroczonyBilans = ileAkcji > 0 && sumaObjeta > ileAkcji;
-
-  // Kontrola spojnosci (etap 2.6): cena emisyjna jest teraz per akcjonariusz
-  // (moze sie roznic - np. rozne aporty), nie jedna wspolna cena emisji.
-  // Wklad praca/uslugami (art. 300(9) § 1 KSH) nie ma ceny - wylaczony z sumy.
-  const pozycjeWyceniane = pozycje.filter((p) => !p.rodzaj_swiadczenia && !p.czas_swiadczenia);
-  const sumaWkladowGrosze = pozycjeWyceniane.reduce(
-    (s, p) => s + (Number(p.ilosc) || 0) * (Number(p.cena_emisyjna_grosze) || 0),
-    0
-  );
-  const wszystkieWycenione =
-    pozycjeWyceniane.length > 0 &&
-    pozycjeWyceniane.every((p) => p.cena_emisyjna_grosze != null && p.cena_emisyjna_grosze !== '');
-  const kapitalNiezgodny =
-    wszystkieWycenione &&
-    dane.kapital_akcyjny_grosze != null &&
-    sumaWkladowGrosze !== Number(dane.kapital_akcyjny_grosze);
-
-  // Niekompletnosc NIE blokuje juz kreatora (etap 2.7 poprawek) - postanowienie
-  // niekompletne jest bezskuteczne, ale to sprawdza sie dopiero przy
-  // faktycznym zbyciu akcji (server/logika/walidacje.js), nie przy zakladaniu
-  // spolki. Flaga zostaje wylacznie do miekkiego komunikatu informacyjnego.
-  const zgodaNiekompletna =
-    zgoda.wymaga_zgody_spolki &&
-    (!zgoda.zgoda_termin_wskazania_dni || !zgoda.zgoda_cena_opis.trim() || !zgoda.zgoda_termin_zaplaty_dni);
-
-  const mozeDalejZ0 = Boolean(dane.nazwa && dane.nazwa.trim());
-
-  // K2 (FAZA 3 sesji frontendowej v2, D-052): system NIE zaznacza pozycji
-  // checklisty sam, ale BLOKUJE zaznaczenie tych dwóch, które umie
-  // rozstrzygnąć negatywnie — inaczej odznaczenie w całości checklisty (np.
-  // przez skok bezpośrednio na krok „Weryfikacja" pasekiem kroków, z
-  // pominięciem walidacji „Dalej" na kroku 2) kończyło się odrzuceniem
-  // zapisu przez serwer PO kliknięciu „Otwórz rejestr" — ślepy zaułek,
-  // którego ma nie być z konstrukcji. Pozostałe pozycje (np. „jedna_umowa")
-  // wymagają oceny pracownika — system nie ma skąd wziąć tej wiedzy.
-  const BLOKADY_CHECKLISTY = {
-    wpis_krs: !dane.data_utworzenia_spolki
-      ? {
-          powod: 'Brak daty wpisu emisji do KRS — bez niej akcje formalnie nie istnieją (art. 300(30) § 2 KSH).',
-          krok: 2,
-          pole: 'otwarcie-data-krs',
-        }
-      : null,
-    bilans: przekroczonyBilans
-      ? { powod: 'Akcjonariusze obejmują więcej akcji, niż wyemitowano — zmniejsz którąś z pozycji.', krok: 2, pole: null }
-      : null,
-  };
-  const wszystkoOdhaczone = CHECKLISTA_OTWARCIA.every((p) => !BLOKADY_CHECKLISTY[p.kod] && odhaczone[p.kod]);
-
-  /* „Dalej" nie jest wyłączany z powodu braków (FAZA 1 pkt 3, 0.4 pkt 8) —
-     kliknięcie pokazuje podsumowanie braków z odnośnikami do pól. */
-  function brakiKroku(k) {
-    const b = [];
-    if (k === 0 && !mozeDalejZ0) b.push({ pole: 'otwarcie-nazwa', tresc: 'Wpisz firmę (nazwę) spółki.' });
-    if (k === 2) {
-      if (!emisja.seria) b.push({ pole: 'otwarcie-seria', tresc: 'Wpisz oznaczenie serii, np. A.' });
-      if (!(ileAkcji > 0)) b.push({ pole: 'otwarcie-ilosc', tresc: 'Wpisz liczbę akcji w emisji.' });
-      if (!emisja.data_emisji) b.push({ pole: 'otwarcie-data-emisji', tresc: 'Wpisz datę emisji.' });
-      if (!dane.data_utworzenia_spolki) {
-        b.push({ pole: 'otwarcie-data-krs', tresc: 'Wpisz datę wpisu emisji do KRS — bez niej akcje nie istnieją (art. 300(30) § 2 KSH).' });
-      }
-      if (przekroczonyBilans) b.push({ pole: null, tresc: 'Akcjonariusze obejmują więcej akcji, niż wyemitowano — zmniejsz którąś z pozycji.' });
-      if (pozycje.length === 0 || !pozycje.every((p) => p.osoba_id)) b.push({ pole: null, tresc: 'Wybierz z kartoteki każdego akcjonariusza.' });
-      if (!pozycje.every((p) => Number(p.ilosc) > 0)) b.push({ pole: null, tresc: 'Wpisz liczbę akcji przy każdym akcjonariuszu.' });
-    }
-    return b;
-  }
-  const braki = brakiKroku(krok);
-  function dalej() {
-    if (braki.length) { ustawPokazBraki(true); return; }
-    ustawKrok((k) => k + 1);
-  }
-
-  async function otworzRejestr() {
-    ustawZapisywanie(true);
-    ustawBlad(null);
-    try {
-      let id = spolkaId;
-      if (!id) {
-        const wynikSpolki = await API.post('/api/psa/spolki', daneSpolkiDoZapisu(dane));
-        id = wynikSpolki.spolka.id;
-        ustawSpolkaId(id);
-      } else {
-        // Naprawa K2 (FAZA 3 sesji frontendowej v2): spółka istniejąca (z
-        // przyjętego wniosku) startuje kreator od kroku 2 — jeśli pracownik
-        // wróci do kroku 0/1 i uzupełni np. datę uchwały o wyborze albo datę
-        // umowy o prowadzenie rejestru, te zmiany NIE zapisywały się nigdzie
-        // (w odróżnieniu od ścieżki nowej spółki, gdzie `dane` idzie w
-        // całości w POST powyżej) — kokpit potem pokazywał „–" mimo
-        // wypełnionego pola w kreatorze. `wyczysc()` po stronie serwera i tak
-        // filtruje do znanych kolumn spółki.
-        await API.put(`/api/psa/spolki/${id}`, daneSpolkiDoZapisu(dane));
-      }
-
-      if (umowaZalacznik) {
-        const formularz = new FormData();
-        formularz.append('plik', umowaZalacznik);
-        const odpZalacznika = await fetch(`/api/psa/spolki/${id}/umowa-zalacznik`, { method: 'POST', body: formularz });
-        if (!odpZalacznika.ok) {
-          const tresc = await odpZalacznika.json().catch(() => ({}));
-          throw new Error(tresc.blad || `Nie udało się wgrać załącznika umowy (błąd ${odpZalacznika.status}).`);
-        }
-      }
-
-      const zdarzenia = [
-        {
-          typ: 'emisja',
-          klucz_tymczasowy: 'emisja-1',
-          dane: {
-            seria: emisja.seria,
-            data_emisji: emisja.data_emisji || null,
-            nr_pierwszy: emisja.nr_pierwszy || 1,
-            ilosc: ileAkcji,
-            // Bez wspolnej ceny emisyjnej - patrz cena_emisyjna_grosze przy
-            // kazdej pozycji akcjonariatu nizej (etap 2.6 poprawek).
-            // Emisja zalozycielska rejestruje sie razem ze spolka - zawsze
-            // mirroruje date rejestracji w KRS (krok 1), pole w kroku 3 jest
-            // read-only (etap 2.5 poprawek).
-            data_wpisu_krs: dane.data_utworzenia_spolki || null,
-            rodzaj_akcji: emisja.rodzaj_akcji,
-            tytul: emisja.tytul,
-            podstawa_prawna: emisja.podstawa_prawna || null,
-            obowiazki_wobec_spolki: emisja.obowiazki_wobec_spolki,
-          },
-        },
-        {
-          typ: 'objecie',
-          dane: {
-            emisja_zdarzenie_id: { __odwolanie_do_partii: 'emisja-1' },
-            pozycje: pozycje.map((p) => ({
-              osoba_id: p.osoba_id,
-              ilosc: Number(p.ilosc),
-              pokryta: p.pokryta || null,
-              cena_emisyjna_grosze: p.cena_emisyjna_grosze ?? null,
-              rodzaj_swiadczenia: p.rodzaj_swiadczenia || null,
-              czas_swiadczenia: p.czas_swiadczenia || null,
-            })),
-          },
-        },
-      ];
-
-      if (zgoda.wymaga_zgody_spolki || zgoda.prawo_pierwszenstwa) {
-        zdarzenia.push({
-          typ: 'ograniczenie',
-          dane: {
-            zakres: 'wszystkie',
-            wymaga_zgody_spolki: zgoda.wymaga_zgody_spolki,
-            tresc_postanowienia: zgoda.wymaga_zgody_spolki ? zgoda.tresc_postanowienia || null : null,
-            zgoda_termin_wskazania_dni: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_termin_wskazania_dni || null : null,
-            zgoda_cena_opis: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_cena_opis || null : null,
-            zgoda_termin_zaplaty_dni: zgoda.wymaga_zgody_spolki ? zgoda.zgoda_termin_zaplaty_dni || null : null,
-            prawo_pierwszenstwa: zgoda.prawo_pierwszenstwa,
-            opis: 'Ograniczenie ustanowione umową spółki, odnotowane przy otwarciu rejestru.',
-          },
-        });
-      }
-
-      for (const p of pozycje) {
-        if (p.uprawnienia_szczegolne && p.uprawnienia_szczegolne.trim()) {
-          zdarzenia.push({
-            typ: 'uprawnienie',
-              dane: {
-              rodzaj: 'uprawnienie',
-              zakres: 'akcjonariusz',
-              osoba_id: p.osoba_id,
-              tresc: p.uprawnienia_szczegolne.trim(),
-            },
-          });
-        }
-      }
-
-      await API.post(`/api/psa/spolki/${id}/otworz-rejestr`, { zdarzenia, checklista: odhaczone });
-      idz(`/spolki/${id}`);
-    } catch (e) {
-      const szczegoly = e.dane && Array.isArray(e.dane.bledy) ? e.dane.bledy : null;
-      ustawBlad(szczegoly && szczegoly.length ? szczegoly.join(' ') : e.message);
-    } finally {
-      ustawZapisywanie(false);
-    }
-  }
-
-  return (
-    <>
-      <div className="okruszki">
-        <button onClick={() => idz('/spolki')}>Spółki</button>
-        {' → '}
-        {spolkaIstniejaca ? (
-          <button onClick={() => idz(`/spolki/${spolkaIstniejaca.id}`)}>{spolkaIstniejaca.nazwa}</button>
-        ) : 'nowa spółka'}
-        {spolkaIstniejaca && ' → otwarcie rejestru'}
-      </div>
-      <div className="pasek-gorny">
-        <div>
-          <div className="tytul-strony">{spolkaIstniejaca ? `Otwarcie rejestru — ${dane.nazwa}` : 'Nowa spółka'}</div>
-          <div className="podtytul-strony">
-            {spolkaIstniejaca
-              ? 'Spółka i akcjonariusze są już w kartotece (wniosek z portalu) — dokończ otwarcie rejestru: wpisz akcjonariat założycielski i przejdź checklistę.'
-              : 'Rejestr prowadzimy wyłącznie dla prostych spółek akcyjnych — art. 300(31) § 1 KSH. ' +
-                'Spółka w chwili powstania ma już akcje — kreator odzwierciedla to od razu.'}
-          </div>
-        </div>
-      </div>
-
-      <Kroki kroki={KROKI_REJESTRACJI} biezacy={krok} osiagniety={osiagniety} przyWyborze={ustawKrok} />
-      <Komunikat odmiana="blad" tresc={blad} />
-      {pokazBraki && braki.length > 0 && <PodsumowanieBledow bledy={braki} />}
-
-      <Karta>
-        {krok === 0 && (
-          <>
-            <Pole
-              etykieta="Numer KRS"
-              podpowiedz="Dane pobierzemy same z otwartego API rejestru przedsiębiorców po wpisaniu 10 cyfr; przy niepowodzeniu uzupełnisz je ręcznie — awaria API nie blokuje rejestracji."
-            >
-              <input type="text" {...pole('krs')} maxLength={10} placeholder="0000123456" />
-              {pobieranie && <div className="podstawa-prawna">Pobieranie z rejestru przedsiębiorców…</div>}
-            </Pole>
-
-            {komunikatKrs && <Komunikat odmiana={komunikatKrs.odmiana} tresc={komunikatKrs.tresc} />}
-
-            {surowyJson && (
-              <Pole etykieta="Odpowiedź KRS" podpowiedz="Sprawdź na żywych danych, że mapowanie poniższych pól jest poprawne — zwłaszcza kapitał akcyjny i adres do doręczeń elektronicznych.">
-                <button className="btn btn-maly" onClick={() => ustawPokazJson((p) => !p)}>
-                  {pokazJson ? 'Ukryj odpowiedź KRS' : 'Pokaż odpowiedź KRS'}
-                </button>
-                {pokazJson && (
-                  <pre className="dane" style={{ maxHeight: 320, overflow: 'auto', padding: 12, background: 'var(--karta)', border: '1px solid var(--linia)', borderRadius: 'var(--r-sm)', marginTop: 8 }}>
-                    {JSON.stringify(surowyJson, null, 2)}
-                  </pre>
-                )}
-              </Pole>
-            )}
-
-            {/* K6: dane pobrane z KRS — podsumowanie tylko do odczytu,
-                „Czy to Twoja spółka?" zamiast formularza do przepisania
-                (0.4 pkt 2). Pełny edytowalny formularz wraca po „Popraw"
-                albo gdy KRS nie odpowiedział / odrzucił numer. */}
-            {!trybReczny && surowyJson ? (
-              <>
-                <div className="card-h">Czy to Twoja spółka?</div>
-                <div className="metryka-pion">
-                  <MetrykaPoz etykieta="Firma (nazwa)" wartosc={dane.nazwa} dane />
-                  <MetrykaPoz etykieta="Adres siedziby" wartosc={formatujAdres(dane)} dane />
-                  <MetrykaPoz etykieta="NIP" wartosc={dane.nip} dane />
-                  <MetrykaPoz etykieta="REGON" wartosc={dane.regon} dane />
-                  <MetrykaPoz
-                    etykieta="Sąd rejestrowy"
-                    wartosc={[dane.sad_rejestrowy, dane.wydzial].filter(Boolean).join(', ') || null}
-                    podpowiedz={sadZaproponowany ? 'Zaproponowany na podstawie siedziby — sprawdź przed zapisaniem.' : undefined}
-                  />
-                  <MetrykaPoz etykieta="Kapitał akcyjny" wartosc={dane.kapital_akcyjny_grosze != null ? fmt.zlote(dane.kapital_akcyjny_grosze) : null} dane />
-                  <MetrykaPoz etykieta="Data rejestracji w KRS" wartosc={fmt.data(dane.data_utworzenia_spolki)} dane />
-                </div>
-                {skladOrganu.length > 0 && (
-                  <Pole etykieta="Skład organu reprezentującego" podpowiedz="Wyłącznie informacyjne — rejestr akcjonariuszy nie prowadzi własnej ewidencji osób w organach spółki.">
-                    <div className="lista-wierszy">
-                      {skladOrganu.map((o, i) => (
-                        <div key={i} className="wiersz-podtytul">
-                          {[o.imiona, o.nazwisko].filter(Boolean).join(' ')}
-                          {o.funkcja ? ` — ${o.funkcja}` : ''}
-                        </div>
-                      ))}
-                    </div>
-                  </Pole>
-                )}
-                <button className="btn btn-sm" onClick={() => ustawTrybReczny(true)}>Popraw</button>
-              </>
-            ) : (
-              <>
-                {/* A-002: te same pola danych spółki co we wniosku portalu (P3). */}
-                <PolaDanychSpolki
-                  dane={dane} ustawDane={ustawDane} pole={pole} idNazwy="otwarcie-nazwa"
-                  podpowiedzi={{
-                    sad_rejestrowy: sadZaproponowany ? 'Zaproponowano na podstawie siedziby spółki — sprawdź przed zapisaniem.' : undefined,
-                    adres_edorecze: pobranoZKrsBezAde ? 'Brak w KRS — uzupełnij ręcznie. ADE często nie jest ujawniony w KRS, tylko w bazie adresów elektronicznych.' : undefined,
-                    data_zawarcia_umowy_spolki: 'Data aktu notarialnego zawiązania spółki — przy spółce zakładanej w S24 data podpisania w systemie. Różna od daty rejestracji w KRS. Uzupełnia „datę emisji” pierwszej emisji w kroku 3.',
-                  }}
-                />
-
-                {skladOrganu.length > 0 && (
-                  <Pole etykieta="Skład organu reprezentującego" podpowiedz="Wyłącznie informacyjne — rejestr akcjonariuszy nie prowadzi własnej ewidencji osób w organach spółki.">
-                    <div className="lista-wierszy">
-                      {skladOrganu.map((o, i) => (
-                        <div key={i} className="wiersz-podtytul">
-                          {[o.imiona, o.nazwisko].filter(Boolean).join(' ')}
-                          {o.funkcja ? ` — ${o.funkcja}` : ''}
-                        </div>
-                      ))}
-                    </div>
-                  </Pole>
-                )}
-              </>
-            )}
-          </>
-        )}
-
-        {krok === 1 && (
-          <>
-            <div className="card-h">Umowa o prowadzenie rejestru</div>
-            <div className="siatka-3">
-              <Pole etykieta="Data uchwały o wyborze" podpowiedz="art. 300(32) § 1 KSH">
-                <PoleDaty wartosc={dane.data_uchwaly_wyboru} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_uchwaly_wyboru: v }))} />
-              </Pole>
-              <Pole
-                etykieta="Data umowy o prowadzenie rejestru"
-                ostrzezenie={dane.data_uchwaly_wyboru && dane.data_umowy && dane.data_uchwaly_wyboru > dane.data_umowy
-                  ? 'Uchwała o wyborze jest późniejsza niż umowa — sprawdź daty (D-113).' : undefined}
-              >
-                <PoleDaty wartosc={dane.data_umowy} przyZmianie={(v) => ustawDane((p) => ({ ...p, data_umowy: v }))} />
-              </Pole>
-              <Pole
-                etykieta="Data otwarcia rejestru"
-                podpowiedz="Ustawia się automatycznie w chwili faktycznego otwarcia rejestru (krok „Otwarcie rejestru” niżej) — nie da się jej wpisać wcześniej (Z-019)."
-              >
-                <PoleDaty wartosc={dane.data_otwarcia_rejestru} wylaczone />
-              </Pole>
-            </div>
-            <div className="siatka-2">
-              <Pole etykieta="Sposób zawarcia umowy" wymagane>
-                <select {...pole('umowa_sposob_zawarcia')}>
-                  <option value="">— wybierz —</option>
-                  <option value="pisemna">pisemna</option>
-                  <option value="elektroniczna_kwalifikowany">elektroniczna, z podpisem kwalifikowanym</option>
-                </select>
-              </Pole>
-              <Pole etykieta="Skan / plik umowy (PDF)" podpowiedz="Załącznik do już zawartej umowy.">
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  onChange={(z) => ustawUmowaZalacznik(z.target.files[0] || null)}
-                />
-                {umowaZalacznik && <div className="podpowiedz">{umowaZalacznik.name}</div>}
-              </Pole>
-            </div>
-
-            <div className="rozdzielacz" />
-            <div className="card-h">Reprezentant spółki, który podpisał umowę</div>
-            <Pole
-              etykieta="Reprezentant (z kartoteki)"
-              podpowiedz="Osoba, która w imieniu SPÓŁKI podpisała umowę — dane osobowe i AML raz, w kartotece. Kogoś spoza kartoteki dodaj przez „+ Nowa osoba w kartotece”."
-            >
-              <WyborZKartoteki wartosc={dane.reprezentant_osoba_id || null} typFiltr="fizyczna" przyZmianie={(id) => ustawDane((p) => ({ ...p, reprezentant_osoba_id: id }))} />
-            </Pole>
-            {!dane.reprezentant_osoba_id && dane.reprezentant_imie_nazwisko && (
-              <Komunikat
-                odmiana="info"
-                tresc={`Reprezentant wpisany wcześniej poza kartoteką: ${dane.reprezentant_imie_nazwisko}. Wybierz tę osobę z kartoteki (albo dodaj ją) — pisma wezmą dane z kartoteki.`}
-              />
-            )}
-            {/* D-108: imiona rodziców i dokument tożsamości — tylko przy wystawieniu umowy, bez zapisu. */}
-            <Pole etykieta="Funkcja">
-              <input type="text" {...pole('reprezentant_funkcja')} placeholder="np. Prezes Zarządu" />
-            </Pole>
-
-            <div className="rozdzielacz" />
-            <div className="card-h">Ograniczenia z umowy spółki</div>
-            <Komunikat
-              odmiana="info"
-              tresc="Dane o ograniczeniach z umowy spółki (art. 300(34) § 6 KSH) służą przyszłej kontroli przy zbyciu akcji. Uzupełnij, co wiesz teraz — resztę można dopisać później, przed pierwszym zbyciem."
-            />
-
-            <label className="chk">
-              <input
-                type="checkbox"
-                checked={zgoda.wymaga_zgody_spolki}
-                onChange={(z) => ustawZgode((p) => ({ ...p, wymaga_zgody_spolki: z.target.checked }))}
-              />
-              <span className="chk-tresc">
-                Zbycie akcji wymaga zgody spółki
-                <div className="podstawa-prawna">art. 300(39) § 1, 3 KSH</div>
-              </span>
-            </label>
-            {zgoda.wymaga_zgody_spolki && (
-              <>
-                <Pole
-                  etykieta="Treść postanowienia umowy spółki"
-                  podpowiedz="Dosłowny cytat klauzuli — przydatny przy zbyciu akcji, nawet zanim szczegóły niżej zostaną ustalone."
-                >
-                  <textarea
-                    value={zgoda.tresc_postanowienia}
-                    onChange={(z) => ustawZgode((p) => ({ ...p, tresc_postanowienia: z.target.value }))}
-                  />
-                </Pole>
-                <Sekcja tytul="Szczegóły postanowienia (termin, cena, zapłata) — opcjonalne teraz">
-                  <div className="siatka-3">
-                    <Pole etykieta="Termin wskazania innego nabywcy (dni)" podpowiedz="Nie dłuższy niż miesiąc (art. 300(39) § 3 KSH).">
-                      <PoleLiczbowe sufiks="dni" max={31} wartosc={zgoda.zgoda_termin_wskazania_dni} przyZmianie={(v) => ustawZgode((p) => ({ ...p, zgoda_termin_wskazania_dni: v }))} />
-                    </Pole>
-                    <Pole etykieta="Termin zapłaty (dni)">
-                      <PoleLiczbowe sufiks="dni" wartosc={zgoda.zgoda_termin_zaplaty_dni} przyZmianie={(v) => ustawZgode((p) => ({ ...p, zgoda_termin_zaplaty_dni: v }))} />
-                    </Pole>
-                    <Pole etykieta="Sposób ustalenia ceny">
-                      <input type="text" value={zgoda.zgoda_cena_opis} onChange={(z) => ustawZgode((p) => ({ ...p, zgoda_cena_opis: z.target.value }))} />
-                    </Pole>
-                  </div>
-                </Sekcja>
-                {zgodaNiekompletna && (
-                  <Komunikat
-                    odmiana="info"
-                    tresc="Postanowienie jest na razie bezskuteczne bez kompletu tych trzech pól (art. 300(39) KSH) — można je uzupełnić później, przed pierwszym wpisem zbycia akcji tej spółki."
-                  />
-                )}
-              </>
-            )}
-
-            <Sekcja tytul="Postanowienia umowy spółki" domyslnieOtwarta>
-              <label className="chk">
-                <input
-                  type="checkbox"
-                  checked={zgoda.prawo_pierwszenstwa}
-                  onChange={(z) => ustawZgode((p) => ({ ...p, prawo_pierwszenstwa: z.target.checked }))}
-                />
-                <span className="chk-tresc">
-                  Pozostałym akcjonariuszom przysługuje prawo pierwszeństwa
-                  <div className="podstawa-prawna">art. 300(42) KSH</div>
-                </span>
-              </label>
-
-              <Pole etykieta="Zakaz prawa głosu zastawnika lub użytkownika" podpowiedz="art. 300(23) § 2 KSH">
-                <select {...pole('zakaz_glosu_zastawnika_umowa')}>
-                  <option value="">umowa spółki nie ogranicza</option>
-                  <option value="zakazane">umowa spółki zakazuje wprost</option>
-                  <option value="wymaga_zgody_organu">umowa spółki uzależnia od zgody organu</option>
-                </select>
-              </Pole>
-              <Pole etykieta="Ograniczenie podziału akcji między spadkobierców" podpowiedz="art. 300(41) § 3 KSH — treść klauzuli, zostaw puste jeśli umowa spółki nie ogranicza.">
-                <textarea {...pole('ograniczenie_dziedziczenia_umowa')} />
-              </Pole>
-            </Sekcja>
-
-            <Pole etykieta="Dodatkowe informacje ujawniane w rejestrze" podpowiedz="art. 300(33) § 2 KSH">
-              <textarea {...pole('dodatkowe_informacje_umowa_spolki')} />
-            </Pole>
-          </>
-        )}
-
-        {krok === 2 && (
-          <>
-            <div className="card-h">Pierwsza emisja</div>
-            <div className="siatka-3">
-              <Pole etykieta="Oznaczenie serii" id="otwarcie-seria">
-                <input type="text" value={emisja.seria} onChange={(z) => ustawEmisje((p) => ({ ...p, seria: z.target.value }))} placeholder="A" />
-              </Pole>
-              <Pole etykieta="Liczba akcji" id="otwarcie-ilosc">
-                <PoleLiczbowe sufiks="akcji" wartosc={emisja.ilosc} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, ilosc: v }))} />
-              </Pole>
-              <Pole etykieta="Numer pierwszej akcji" podpowiedz="Domyślnie 1.">
-                <PoleLiczbowe wartosc={emisja.nr_pierwszy} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, nr_pierwszy: v || 1 }))} />
-              </Pole>
-            </div>
-            <div className="siatka-3">
-              <Pole
-                etykieta="Data emisji"
-                id="otwarcie-data-emisji"
-                podpowiedz="Przy emisji założycielskiej to data zawarcia umowy spółki (krok 1) — uzupełniona automatycznie, można nadpisać."
-              >
-                <PoleDaty wartosc={emisja.data_emisji} przyZmianie={(v) => ustawEmisje((p) => ({ ...p, data_emisji: v }))} />
-              </Pole>
-              <Pole
-                etykieta="Data wpisu emisji do KRS"
-                id="otwarcie-data-krs"
-                podpowiedz="Emisja założycielska rejestruje się razem ze spółką — to zawsze data rejestracji w KRS z kroku 1. Bez tej daty nie można dokonać wpisu akcji do rejestru akcjonariuszy (art. 300(30) § 2 KSH)."
-              >
-                {/* Naprawa (FRONTEND-INWENTARZ.md §8, zlapane w zadaniu (a)):
-                    pole bylo `wylaczone` (tylko-do-odczytu) bez zadnego innego
-                    miejsca do jego uzupelnienia w tej sciezce - kreator
-                    otwarcia rejestru dla ISTNIEJACEJ spolki (z przyjetego
-                    wniosku) startuje wprost na tym kroku (`krok=2`), wiec krok
-                    1 ("Spolka"), gdzie normalnie edytuje sie ten sam
-                    `dane.data_utworzenia_spolki`, nigdy nie jest odwiedzany
-                    bez cofania sie. Puste pole po pelnym odhaczeniu checklisty
-                    konczylo sie odrzuceniem zapisu bez zadnej wczesniejszej
-                    zapowiedzi. Teraz edytowalne wprost tutaj - to wciaz TO
-                    SAMO pole `dane.data_utworzenia_spolki`, nie kopia. */}
-                <PoleDaty
-                  wartosc={dane.data_utworzenia_spolki || ''}
-                  przyZmianie={(v) => ustawDane((p) => ({ ...p, data_utworzenia_spolki: v }))}
-                />
-              </Pole>
-              <Pole etykieta="Rodzaj akcji" podpowiedz="art. 300(33) § 1 pkt 4 KSH">
-                <select value={emisja.rodzaj_akcji} onChange={(z) => ustawEmisje((p) => ({ ...p, rodzaj_akcji: z.target.value }))}>
-                  <option value="zwykla">zwykła</option>
-                  <option value="uprzywilejowana">uprzywilejowana</option>
-                  <option value="zalozycielska">założycielska</option>
-                </select>
-              </Pole>
-            </div>
-            <Pole etykieta="Tytuł emisji"><input type="text" value={emisja.tytul} onChange={(z) => ustawEmisje((p) => ({ ...p, tytul: z.target.value }))} placeholder="Emisja założycielska" /></Pole>
-            <Pole etykieta="Podstawa emisji" podpowiedz='Np. „umowa spółki z dnia 04.07.2024” — uzupełniona automatycznie, można nadpisać.'>
-              <input type="text" value={emisja.podstawa_prawna} onChange={(z) => ustawEmisje((p) => ({ ...p, podstawa_prawna: z.target.value }))} />
-            </Pole>
-            <Pole etykieta="Obowiązki wobec spółki związane z akcją" podpowiedz="art. 300(33) § 1 pkt 11 KSH — opcjonalne.">
-              <textarea value={emisja.obowiazki_wobec_spolki} onChange={(z) => ustawEmisje((p) => ({ ...p, obowiazki_wobec_spolki: z.target.value }))} />
-            </Pole>
-
-            <div className="rozdzielacz" />
-            <div className="card-h">Akcjonariat</div>
-            {pozycje.map((p, i) => (
-              <PozycjaZalozycielska
-                key={i}
-                pozycja={p}
-                ustawPozycje={(nowa) => ustawPozycje(i, nowa)}
-                usun={() => usunPozycje(i)}
-                mozna_usunac={pozycje.length > 1}
-                wyklucz={pozycje.filter((_, j) => j !== i).map((x) => x.osoba_id).filter(Boolean)}
-              />
-            ))}
-            <button className="btn btn-maly" onClick={dodajPozycje}>+ Dodaj akcjonariusza</button>
-
-            <Komunikat
-              odmiana={przekroczonyBilans ? 'blad' : 'info'}
-              tresc={
-                `Objęto ${fmt.liczba(sumaObjeta)} z ${fmt.liczba(ileAkcji)} wyemitowanych akcji.` +
-                (przekroczonyBilans ? ' To więcej niż wyemitowano — zmniejsz którąś z pozycji.' : '') +
-                (!przekroczonyBilans && sumaObjeta < ileAkcji && ileAkcji > 0 ? ' Reszta zostanie zapisana jako nieobjęta.' : '')
-              }
-            />
-            {pozycjeWyceniane.length > 0 && sumaWkladowGrosze > 0 && (
-              <Komunikat
-                odmiana={kapitalNiezgodny ? 'uwaga' : 'info'}
-                tresc={
-                  `Suma wkładów pieniężnych i aportowych: ${fmt.zlote(sumaWkladowGrosze)}` +
-                  (dane.kapital_akcyjny_grosze != null ? ` — kapitał akcyjny z KRS: ${fmt.zlote(dane.kapital_akcyjny_grosze)}.` : '.') +
-                  (kapitalNiezgodny ? ' Kwoty się różnią — sprawdź przed otwarciem rejestru.' : '') +
-                  (!wszystkieWycenione ? ' Nie wszystkie pozycje mają wpisaną cenę emisyjną — suma jest niepełna.' : '')
-                }
-              />
-            )}
-          </>
-        )}
-
-        {krok === 3 && (
-          <>
-            <div className="card-h">Weryfikacja przed otwarciem rejestru</div>
-            <div className="checklista">
-              {CHECKLISTA_OTWARCIA.map((p) => {
-                const blokada = BLOKADY_CHECKLISTY[p.kod];
-                return (
-                  <div key={p.kod}>
-                    <label className="chk">
-                      <input
-                        type="checkbox"
-                        checked={!blokada && Boolean(odhaczone[p.kod])}
-                        disabled={Boolean(blokada)}
-                        onChange={(z) => ustawOdhaczone((o) => ({ ...o, [p.kod]: z.target.checked }))}
-                      />
-                      <span className="chk-tresc">{p.tresc}</span>
-                    </label>
-                    {blokada && (
-                      <p className="nawigacja-powod" style={{ marginLeft: 28 }}>
-                        {blokada.powod}{' '}
-                        <button
-                          type="button"
-                          className="btn-tekstowy"
-                          onClick={() => {
-                            ustawKrok(blokada.krok);
-                            if (blokada.pole) {
-                              setTimeout(() => document.getElementById(blokada.pole)?.focus(), 50);
-                            }
-                          }}
-                        >
-                          Uzupełnij
-                        </button>
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <Komunikat
-              odmiana="info"
-              tresc={`${dane.nazwa || '(bez nazwy)'} — seria ${emisja.seria || '?'}, ${fmt.liczba(ileAkcji)} akcji, ${pozycje.length} ${fmt.odmien(pozycje.length, 'akcjonariusz', 'akcjonariuszy', 'akcjonariuszy')}.`}
-            />
-            {!wszystkoOdhaczone && (
-              <div className="podstawa-prawna">Przycisk „Otwórz rejestr” pozostaje nieaktywny do czasu odhaczenia całej checklisty.</div>
-            )}
-            <p className="zdanie-nieodwracalne">Otwarcia rejestru nie można cofnąć — możliwe jest tylko sprostowanie.</p>
-          </>
-        )}
-
-        <div className="kreator-stopka">
-          <button
-            className="btn"
-            onClick={() => (krok === 0 ? idz('/spolki') : ustawKrok((k) => k - 1))}
-          >
-            {krok === 0 ? 'Anuluj' : 'Wstecz'}
-          </button>
-          <div className="kreator-stopka-prawa">
-            {krok < KROKI_REJESTRACJI.length - 1 ? (
-              <button className="btn btn-glowny" onClick={dalej}>
-                Dalej
-              </button>
-            ) : (
-              <button className="btn btn-glowny btn-duzy" onClick={otworzRejestr} disabled={!wszystkoOdhaczone || zapisywanie}>
-                {zapisywanie ? 'Otwieranie rejestru…' : 'Otwórz rejestr'}
-              </button>
-            )}
-          </div>
-        </div>
+  if (!edycja) {
+    return (
+      <Karta tytul="Dane spółki" akcje={<button type="button" className="btn btn-maly" onClick={() => ustawEdycje({ ...spolka })}>Edytuj</button>}>
+        <ListaDanych pary={POLA_SPOLKI.map(([k, nazwa]) => [nazwa, k === 'data_rejestracji' ? fmt.data(spolka[k]) : k === 'platnosc' ? PLATNOSC[spolka[k]] : spolka[k]])} />
       </Karta>
-    </>
+    );
+  }
+  return (
+    <Karta tytul="Dane spółki">
+      <div className="siatka-2">
+        {POLA_SPOLKI.filter(([, , staly]) => !staly).map(([k, nazwa]) => (
+          <Pole key={k} etykieta={nazwa} blad={pola[k]} opcjonalne={['nip', 'email', 'umowe_zawarl'].includes(k)}>
+            {k === 'data_rejestracji' ? <PoleDaty wartosc={edycja[k] || ''} przyZmianie={(v) => ustawEdycje({ ...edycja, [k]: v })} max={fmt.dzisIso()} />
+              : k === 'platnosc' ? (
+                <select value={edycja[k]} onChange={(e) => ustawEdycje({ ...edycja, [k]: e.target.value })}>
+                  <option value="roczna">raz w roku</option>
+                  <option value="miesieczna">co miesiąc</option>
+                </select>
+              ) : <input type="text" value={edycja[k] || ''} onChange={(e) => ustawEdycje({ ...edycja, [k]: e.target.value })} />}
+          </Pole>
+        ))}
+      </div>
+      {c.blad && !Object.keys(pola).length && <Bledy blad={c.blad} />}
+      <div className="rzad">
+        <button type="button" className="btn btn-glowny" onClick={zapisz} disabled={c.trwa}>Zapisz</button>
+        <button type="button" className="btn" onClick={() => ustawEdycje(null)}>Anuluj</button>
+      </div>
+    </Karta>
   );
 }
 
-/**
- * Naprawa Z-005 — wejście do kreatora (krok 2, "otwarcie rejestru") dla
- * spółki, która już istnieje w kartotece (przyjęty wniosek z portalu).
- * Pobiera pełny rekord tak jak kokpit (`GET /:id`, rola kancelaria
- * domyślna — bez maskowania) i dopiero z nim montuje `EkranNowejSpolki`.
- */
-function EkranOtwarciaRejestru({ spolkaId }) {
-  const { dane, ladowanie, blad } = useDane(`/api/psa/spolki/${spolkaId}`);
-  const wniosek = useDane(`/api/psa/spolki/${spolkaId}/wniosek-akcjonariusze`);
-  if (ladowanie || wniosek.ladowanie) return <Spinner />;
-  if (blad || !dane) return <Komunikat odmiana="blad" tresc={blad ? blad.message : 'Nie odnaleziono spółki.'} />;
+/** „Informacja z rejestru” (§ 4, U-24): odbiorca, dzień (także dziś), opłata 50 zł albo bez (organ — bez). */
+function FormularzInformacji({ spolka, osoby, przyZamknieciu }) {
+  const [f, ustawF] = useState({ odbiorca: 'spolka', osoba_id: null, organ: '', sygnatura: '', dzien: fmt.dzisIso(), oplata: null });
+  const [wynik, ustawWynik] = useState(null);
+  const c = useCzynnosc();
+  const { pola } = bledyApi(c.blad);
+  const akcjonariusze = [...new Set(Object.keys(osoby || {}).map(Number))];
+  const wydaj = () => c.wykonaj(async () => ustawWynik(await API.post(`/api/psa/spolki/${spolka.id}/informacja`, f)));
   return (
-    <EkranNowejSpolki
-      spolkaIstniejaca={dane.spolka}
-      akcjonariuszeWniosku={(wniosek.dane && wniosek.dane.akcjonariusze) || []}
-    />
+    <Karta tytul="Informacja z rejestru">
+      {wynik ? (
+        <>
+          <Komunikat odmiana="rejestr" tresc={`Wydano informację ${wynik.numer}. Pismo jest w Korespondencji.`} />
+          <div className="rzad">
+            <a className="btn btn-glowny" href={adresPdf(wynik.pismo_id)} target="_blank" rel="noopener">Pobierz PDF</a>
+            <button type="button" className="btn" onClick={przyZamknieciu}>Zamknij</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="siatka-2">
+            <Pole etykieta="Odbiorca" blad={pola.odbiorca}>
+              <select value={f.odbiorca} onChange={(e) => ustawF({ ...f, odbiorca: e.target.value })}>
+                <option value="spolka">spółka</option>
+                <option value="osoba">akcjonariusz</option>
+                <option value="organ">sąd, prokurator, komornik, organ egzekucyjny</option>
+              </select>
+            </Pole>
+            <Pole etykieta="Stan na koniec dnia" blad={pola.dzien}>
+              <PoleDaty wartosc={f.dzien} przyZmianie={(d) => ustawF({ ...f, dzien: d })} min={spolka.data_otwarcia ? spolka.data_otwarcia.slice(0, 10) : undefined} max={fmt.dzisIso()} />
+            </Pole>
+          </div>
+          {f.odbiorca === 'osoba' && (
+            <Pole etykieta="Akcjonariusz" blad={pola.odbiorca}>
+              <select value={f.osoba_id || ''} onChange={(e) => ustawF({ ...f, osoba_id: Number(e.target.value) || null })}>
+                <option value="">— wybierz —</option>
+                {akcjonariusze.map((id) => <option key={id} value={id}>{nazwaOsoby(osoby, id)}</option>)}
+              </select>
+            </Pole>
+          )}
+          {f.odbiorca === 'organ' && (
+            <div className="siatka-2">
+              <Pole etykieta="Organ" blad={pola.odbiorca}><input type="text" value={f.organ} onChange={(e) => ustawF({ ...f, organ: e.target.value })} /></Pole>
+              <Pole etykieta="Sygnatura" blad={pola.sygnatura}><input type="text" value={f.sygnatura} onChange={(e) => ustawF({ ...f, sygnatura: e.target.value })} /></Pole>
+            </div>
+          )}
+          {f.odbiorca !== 'organ' && (
+            <Pole etykieta="Opłata" blad={pola.oplata}>
+              <div className="rzad" role="group">
+                {[['tak', 'Opłata 50 zł netto'], ['nie', 'Bez opłaty']].map(([v, n]) => (
+                  <button key={v} type="button" className={`btn btn-maly ${f.oplata === v ? 'btn-glowny' : ''}`} aria-pressed={f.oplata === v} onClick={() => ustawF({ ...f, oplata: v })}>{n}</button>
+                ))}
+              </div>
+            </Pole>
+          )}
+          {c.blad && !Object.keys(pola).length && <Bledy blad={c.blad} />}
+          <div className="rzad">
+            <button type="button" className="btn btn-glowny" onClick={wydaj} disabled={c.trwa}>Wydaj informację</button>
+            <button type="button" className="btn" onClick={przyZamknieciu}>Anuluj</button>
+          </div>
+        </>
+      )}
+    </Karta>
   );
 }
 
-function EkranSpolek() {
-  const [szukaj, ustawSzukaj] = useParametrAdresu('q', '');
-  const [zapytanie, ustawZapytanie] = useState('');
-  const [status, ustawStatus] = useParametrAdresu('status', 'wszystkie');
-  const [strona, ustawStrone] = useParametrAdresu('strona', 1);
-  const { dane, ladowanie } = useDane(`/api/psa/spolki?q=${encodeURIComponent(zapytanie)}`);
+/** Operacja zmiany albo wykreślenia obciążenia/adnotacji — wypełniona danymi wiersza. */
+function zmianaAtrybutu(a, operacja) {
+  const obciazenie = ['zastaw', 'uzytkowanie', 'zajecie'].includes(a.rodzaj);
+  return {
+    typ: obciazenie ? 'obciazenie' : 'adnotacja',
+    operacja,
+    atrybut: { zdarzenie_id: a.zdarzenie_id, pozycja: a.pozycja },
+    akcje: [{ seria: a.seria, numery: numeryDoPola(a.zakresy), liczba: String(a.zakresy.reduce((s, z) => s + z.nr_do - z.nr_od + 1, 0)) }],
+    ...(operacja === 'zmiana_prawa_glosu' ? { prawo_glosu: !a.prawo_glosu } : {}),
+  };
+}
 
-  useEffect(() => {
-    const uchwyt = setTimeout(() => ustawZapytanie(szukaj), 250);
-    return () => clearTimeout(uchwyt);
-  }, [szukaj]);
-
-  const spolki = (dane && dane.spolki) || [];
-
-  // Filtrowanie i stronicowanie po stronie klienta: endpoint zwraca komplet,
-  // a przy 500 rejestrach lista i tak mieści się w jednym zapytaniu.
-  const widoczne = spolki.filter((s) => status === 'wszystkie' || s.status === status);
-  const NA_STRONE = 12;
-  const stron = Math.max(Math.ceil(widoczne.length / NA_STRONE), 1);
-  const biezaca = Math.min(strona, stron);
-  const wycinek = widoczne.slice((biezaca - 1) * NA_STRONE, biezaca * NA_STRONE);
+function EkranKokpitu({ spolkaId }) {
+  const [dzien, ustawDzien] = useParametrAdresu('dzien', '');
+  const { dane, blad, odswiez } = useDane(`/api/psa/spolki/${spolkaId}${dzien ? `?dzien=${dzien}` : ''}`);
+  const [informacja, ustawInformacje] = useState(false);
+  const [zamkniecie, ustawZamkniecie] = useState(false);
+  const [powod, ustawPowod] = useState('');
+  const c = useCzynnosc();
+  if (blad) return <Bledy blad={blad} />;
+  if (!dane) return <Spinner />;
+  const { spolka, rejestr: w, osoby } = dane;
+  const otwarty = Boolean(spolka.data_otwarcia) && !spolka.data_zamkniecia;
+  const nowa = (d) => c.wykonaj(() => zalozSprawe(spolka.id, d));
 
   return (
-    <>
-      <div className="pasek-narzedzi">
-        <Szukajka
-          wartosc={szukaj}
-          przyZmianie={(v) => { ustawSzukaj(v); ustawStrone(1); }}
-          placeholder="Szukaj po nazwie, numerze KRS lub NIP…"
-        />
-        <select aria-label="Filtruj spółki wg statusu" value={status} onChange={(z) => { ustawStatus(z.target.value); ustawStrone(1); }}>
-          <option value="wszystkie">Status: wszystkie</option>
-          <option value="aktywna">aktywna</option>
-          <option value="w_likwidacji">w likwidacji</option>
-          <option value="zawieszona">zawieszona</option>
-          <option value="wykreslona">wykreślona</option>
-        </select>
-        <span className="podstawa-prawna" style={{ marginLeft: 'auto' }}>
-          {widoczne.length === spolki.length
-            ? `${fmt.liczba(spolki.length)} ${fmt.odmien(spolki.length, 'rejestr', 'rejestry', 'rejestrów')}`
-            : `${fmt.liczba(widoczne.length)} z ${fmt.liczba(spolki.length)}`}
-        </span>
-        <button className="btn btn-glowny" onClick={() => idz('/spolki/nowa')}>
-          <Ikona nazwa="plus" rozmiar={16} /> Dodaj spółkę
-        </button>
+    <div className="ekran-kokpitu">
+      <NaglowekStrony
+        tytul={spolka.nazwa}
+        kontekst={(
+          <span className="rzad">
+            <span>KRS {spolka.krs}</span>
+            <span>{spolka.data_zamkniecia ? `rejestr zamknięty ${fmt.data(spolka.data_zamkniecia)}` : spolka.data_otwarcia ? `rejestr otwarty ${fmt.data(spolka.data_otwarcia)}` : 'rejestr nieotwarty'}</span>
+          </span>
+        )}
+        akcje={(
+          <span className="rzad">
+            <button type="button" className="btn" onClick={() => ustawInformacje(true)} disabled={!spolka.data_otwarcia}>Informacja z rejestru</button>
+            <PrzyciskGlowny etykieta="Nowy wpis" przyKlik={() => nowa({})} powod={otwarty ? null : 'Rejestr nie jest otwarty.'} trwa={c.trwa} />
+            <Wiecej akcje={[
+              { etykieta: 'Eksport rejestru (ZIP)', przyKlik: () => { window.location.href = `/api/psa/spolki/${spolka.id}/eksport`; } },
+              otwarty && { etykieta: 'Zamknij rejestr', przyKlik: () => ustawZamkniecie(true), niebezpieczna: true },
+            ]}
+            />
+          </span>
+        )}
+      />
+      <Bledy blad={c.blad} />
+      {zamkniecie && (
+        <Modal
+          tytul="Zamknięcie rejestru"
+          przyZamknieciu={() => ustawZamkniecie(false)}
+          stopka={(
+            <>
+              <button type="button" className="btn" onClick={() => ustawZamkniecie(false)}>Anuluj</button>
+              <button type="button" className="btn btn-danger" disabled={!powod || c.trwa} onClick={() => nowa({ zadajacy: 'spolka', operacje: [{ typ: 'zamkniecie', powod }] })}>Załóż sprawę zamknięcia</button>
+            </>
+          )}
+        >
+          <Pole etykieta="Powód">
+            <select value={powod} onChange={(e) => ustawPowod(e.target.value)}>
+              <option value="">— wybierz —</option>
+              <option value="przekazanie">przekazanie rejestru innemu podmiotowi</option>
+              <option value="wykreslenie_spolki">wykreślenie spółki z KRS</option>
+              <option value="rozwiazanie_umowy">rozwiązanie umowy</option>
+            </select>
+          </Pole>
+          <p className="male drugorzedny">Zamknięcie jest wpisem — przejdzie przez sprawę (checklista, „Dokonaj wpisu”).</p>
+        </Modal>
+      )}
+      {informacja && <FormularzInformacji spolka={spolka} osoby={osoby} przyZamknieciu={() => ustawInformacje(false)} />}
+
+      <div className="stan-na-dzien">
+        <Pole etykieta="Stan na dzień" podpowiedz={dzien ? undefined : 'Puste — stan bieżący.'}>
+          <PoleDaty wartosc={dzien} przyZmianie={ustawDzien} max={fmt.dzisIso()} />
+        </Pole>
       </div>
 
-      {ladowanie ? (
-        <Spinner />
-      ) : widoczne.length === 0 ? (
-        <Karta>
-          <Pusto
-            ikona="spolki"
-            tytul={zapytanie || status !== 'wszystkie' ? 'Nic nie pasuje do filtrów' : 'Nie prowadzisz jeszcze żadnego rejestru'}
-            opis={
-              zapytanie || status !== 'wszystkie'
-                ? 'Zmień frazę wyszukiwania albo status, żeby zobaczyć więcej.'
-                : 'Dodaj spółkę, żeby otworzyć dla niej rejestr akcjonariuszy.'
-            }
-            akcja={
-              zapytanie || status !== 'wszystkie' ? (
-                <button className="btn" onClick={() => { ustawSzukaj(''); ustawStatus('wszystkie'); }}>
-                  Wyczyść filtry
-                </button>
-              ) : (
-                <button className="btn btn-glowny" onClick={() => idz('/spolki/nowa')}>
-                  <Ikona nazwa="plus" rozmiar={16} /> Dodaj spółkę
-                </button>
-              )
-            }
-          />
-        </Karta>
-      ) : (
-        <Karta scisla>
-          <table className="tabela">
-            <thead>
-              <tr>
-                <th>Spółka</th>
-                <th>Status</th>
-                <th className="do-prawej">Serie</th>
-                <th className="do-prawej">Akcjonariusze</th>
-                <th className="do-prawej">Akcje</th>
-                <th>Ostatnie zdarzenie</th>
-                <th className="kol-strzalka" />
+      <Karta tytul="Akcjonariusze"><TabelaAkcjonariuszy widok={w} osoby={osoby} /></Karta>
+      <Karta tytul="Akcje">
+        <TabelaSerii widok={w} />
+        <h4>Obciążenia i adnotacje</h4>
+        <TabelaAtrybutow
+          widok={w}
+          osoby={osoby}
+          akcje={otwarty && !dzien ? (a) => (
+            <>
+              {['zastaw', 'uzytkowanie'].includes(a.rodzaj) && <button type="button" className="btn btn-maly btn-cichy" onClick={() => nowa({ operacje: [zmianaAtrybutu(a, 'zmiana_prawa_glosu')] })}>Zmień</button>}
+              <button type="button" className="btn btn-maly btn-cichy" onClick={() => nowa({ zadajacy: a.rodzaj === 'zajecie' ? 'organ' : 'spolka', operacje: [zmianaAtrybutu(a, 'wykreslenie')] })}>Wykreśl</button>
+            </>
+          ) : null}
+        />
+      </Karta>
+      <DaneSpolki spolka={spolka} poZapisie={odswiez} />
+
+      <Sekcja tytul="Historia wpisów" licznik={dane.wpisy.length}>
+        <table className="tabela">
+          <thead><tr><th>Nr</th><th>Wpis</th><th>Data</th><th>Sprawa</th><th><span className="sr-only">Czynności</span></th></tr></thead>
+          <tbody>
+            {[...dane.wpisy].reverse().map((z) => (
+              <tr key={z.id}>
+                <td>{z.id}</td>
+                <td>{NAZWY_TYPOW[z.typ] || z.typ}{z.wycofany ? ' (wycofany)' : z.sprostowany ? ' (sprostowany)' : ''}</td>
+                <td>{fmt.data(z.data_wpisu)}</td>
+                <td>{z.sprawa_id ? <a href={`#/sprawy/${z.sprawa_id}`}>{z.sprawa_id}</a> : '—'}</td>
+                <td>{otwarty && !['sprostowanie', 'zamkniecie'].includes(z.typ) && !z.wycofany && (
+                  <button type="button" className="btn btn-maly btn-cichy" onClick={() => nowa({ zadajacy: 'brak', operacje: [{ typ: 'sprostowanie', zdarzenie_id: z.id, tryb: 'zastap' }] })}>Sprostuj</button>
+                )}</td>
               </tr>
-            </thead>
-            <tbody>
-              {wycinek.map((s) => (
-                <tr key={s.id} className="klikalna" onClick={() => idz(`/spolki/${s.id}`)}>
-                  <td>
-                    {/* A-034: nazwa jako łącze — wiersz osiągalny z klawiatury (i do otwarcia w nowej karcie). */}
-                    <div className="tekst-obciety" style={{ fontWeight: 500 }} title={s.nazwa}><a className="lacze-wiersza" href={`#/spolki/${s.id}`}>{s.nazwa}</a></div>
-                    <div className="wiersz-podtytul">
-                      {s.krs ? `KRS ${s.krs}` : 'bez numeru KRS'}
-                      {s.miejscowosc ? ` · ${s.miejscowosc}` : ''}
-                    </div>
-                  </td>
-                  <td><StatusSpolki status={s.status} /></td>
-                  <td className="do-prawej">{fmt.liczba(s.liczba_emisji)}</td>
-                  <td className="do-prawej">{fmt.liczba(s.liczba_akcjonariuszy)}</td>
-                  <td className="do-prawej">{fmt.liczba(s.liczba_akcji)}</td>
-                  <td className="kol-dane wyciszony">{fmt.data(s.ostatnie_zdarzenie)}</td>
-                  <td className="kol-strzalka"><Ikona nazwa="strzalkaPrawo" rozmiar={15} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <Stronicowanie
-            strona={biezaca}
-            stron={stron}
-            odPozycji={(biezaca - 1) * NA_STRONE + 1}
-            doPozycji={Math.min(biezaca * NA_STRONE, widoczne.length)}
-            razem={widoczne.length}
-            przyZmianie={ustawStrone}
-          />
-        </Karta>
-      )}
-    </>
+            ))}
+          </tbody>
+        </table>
+      </Sekcja>
+      <Sekcja tytul="Sprawy" licznik={dane.sprawy.length}>
+        <table className="tabela">
+          <thead><tr><th>Nr</th><th>Wpływ</th><th>Stan</th></tr></thead>
+          <tbody>
+            {dane.sprawy.map((s) => (
+              <tr key={s.id}><td><a href={`#/sprawy/${s.id}`}>{s.id}</a></td><td>{fmt.data(s.data_wplywu)}</td><td>{STANY_SPRAWY[s.stan]}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </Sekcja>
+      <Sekcja tytul="Akta — pliki i pisma" licznik={dane.pliki.length + dane.pisma.length}>
+        <ListaPlikow pliki={dane.pliki} />
+        <TabelaPism pisma={dane.pisma.map((x) => ({ ...x, pismo: NAZWY_PISM[x.typ], adresat_nazwa: (x.kontekst || {}).adresat_nazwa }))} poZmianie={odswiez} />
+      </Sekcja>
+      <Sekcja tytul="Opłaty" licznik={dane.oplaty.length}>
+        <TabelaOplat oplaty={dane.oplaty} poZmianie={odswiez} />
+      </Sekcja>
+      <Sekcja tytul="Historia zmian danych" licznik={dane.historia.length}>
+        <HistoriaZmian historia={dane.historia} />
+      </Sekcja>
+    </div>
   );
 }
 
+function HistoriaZmian({ historia }) {
+  if (!historia.length) return <p className="male drugorzedny">Brak zmian.</p>;
+  return (
+    <table className="tabela">
+      <thead><tr><th>Kiedy</th><th>Pole</th><th>Było</th><th>Jest</th><th>Kto</th></tr></thead>
+      <tbody>
+        {historia.map((h) => (
+          <tr key={h.id}><td>{fmt.data(h.kiedy)}</td><td>{h.pole}</td><td>{h.stara ?? '—'}</td><td>{h.nowa ?? '—'}</td><td>{h.kto}</td></tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
-window.EkranSpolek = EkranSpolek;
-window.EkranNowejSpolki = EkranNowejSpolki;
-window.EkranOtwarciaRejestru = EkranOtwarciaRejestru;
+Object.assign(window, { EkranSpolek, EkranKokpitu, HistoriaZmian });

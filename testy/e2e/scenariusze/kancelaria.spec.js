@@ -1,313 +1,171 @@
 'use strict';
 
 /**
- * Kancelaria — procesy poza kreatorem wpisu (K1–K3, K6, K7, K11–K14) i ścieżka „spółka żąda wpisu, a nie ma jej
- * w kartotece”. Dane: `test:seed` (Alfa, Gamma — wniosek z dokumentami u klienta, przeniesienia w każdym statusie § 7.3).
+ * Kancelaria — ekrany z § 5 (Faza 3), każdy scenariusz przy 1440 i 390 px. Dane: `test:seed` — Alfa Testowa P.S.A.
+ * (e-mail spółki), Anna Testowa (zgoda e-mail), Jan Bezzgody (bez zgody, akcje A 601–1000), Ewa Ułamkowa;
+ * sprawa nr 2 — zbycie Jan → Ewa (A 601–650) po kroku 1, powiadomienie listem czeka na „Nadano”.
  */
 
-const { test, zaloguj, api } = require('../pomocnicze/srodowisko');
+const { test, expect, zaloguj, api } = require('../pomocnicze/srodowisko');
 const { rozpocznij, krok, zakoncz } = require('../pomocnicze/krok');
 const ui = require('../pomocnicze/ui');
 
 const szer = (ti) => Number(ti.project.name);
-const DZIS = new Date().toISOString().slice(0, 10);
-const PDF = { name: 'protokol-podpisany.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% dane fikcyjne\n%%EOF\n') };
 
-async function start(page, testInfo, scenariusz, proces, persona = 'notariusz') {
-  rozpocznij(page, testInfo, { scenariusz, proces, szerokosc: szer(testInfo), persona });
+async function start(page, testInfo, scenariusz, proces) {
+  rozpocznij(page, testInfo, { scenariusz, proces, szerokosc: szer(testInfo), persona: 'notariusz' });
   await zaloguj(page, 'notariusz@example.com', 'kancelaria');
 }
 
-test('K13: kartoteka — nowa osoba, edycja danych i AML', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'kartoteka', 'K13 kartoteka');
-  await krok(page, 'Kartoteka osób', async () => {
-    await page.goto('/#/osoby');
-    await ui.gotowe(page, 'Nowa osoba');
-  });
-  await krok(page, 'Nowa osoba — formularz', async () => {
-    await page.getByRole('button', { name: 'Nowa osoba', exact: true }).first().click();
-    await ui.wpisz(page, 'Imię', 'Edward');
-    await ui.wpisz(page, 'Nazwisko', 'Ewidencyjny');
-    await ui.wpisz(page, 'Numer PESEL', '79072213578').catch(() => {});
-    await ui.wpisz(page, 'Kod pocztowy', '80-005');
-    await ui.wpisz(page, 'Miejscowość', 'Gdańsk');
-    await ui.wpisz(page, 'Ulica', 'Ewidencyjna').catch(() => {});
-    await ui.wpisz(page, 'Nr domu', '5');
-    await page.getByRole('button', { name: 'Dodaj do kartoteki' }).click();
-    await page.getByRole('button', { name: 'Dodaj do kartoteki' }).waitFor({ state: 'detached', timeout: 10000 });
-  });
-  await krok(page, 'Profil osoby — edycja i AML', async () => {
-    await page.goto('/#/osoby/1');
-    await ui.gotowe(page, 'Edytuj dane');
-    await page.getByRole('button', { name: 'Edytuj dane' }).click();
-    await ui.wpisz(page, 'Telefon', '500100200');
-    await ui.pole(page, 'Środki bezpieczeństwa finansowego (AML)').locator('select').selectOption({ index: 1 }).catch(() => {});
-    await page.getByRole('button', { name: 'Zapisz zmiany' }).click();
-    await page.getByRole('button', { name: 'Zapisz zmiany' }).waitFor({ state: 'detached', timeout: 10000 });
-  });
-  await zakoncz(page);
-});
+/** Czeka, aż autozapis treści sprawy skończy, a „Dalej” będzie aktywne. */
+async function dalej(page) {
+  await page.getByText('Zapisano', { exact: true }).first().waitFor({ timeout: 10000 });
+  const b = page.getByRole('button', { name: 'Dalej', exact: true });
+  await expect(b).toBeEnabled({ timeout: 10000 });
+  await b.click();
+  await ui.gotowe(page, 'Osoby do powiadomienia');
+}
 
-test('K14: opłaty — nowa opłata ręczna', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'oplaty', 'K14 opłaty');
-  await krok(page, 'Opłaty', async () => {
-    await page.goto('/#/oplaty');
-    await ui.gotowe(page, '+ Nowa opłata');
-  });
-  await krok(page, 'Nowa opłata', async () => {
-    await page.getByRole('button', { name: '+ Nowa opłata' }).click();
-    await ui.pole(page, 'Spółka').locator('select').selectOption({ index: 1 });
-    await ui.pole(page, 'Rodzaj opłaty').locator('select').selectOption({ index: 1 });
-    await ui.wpisz(page, 'Rok (okres)', '2026').catch(() => {});
-    await page.getByRole('button', { name: 'Zapisz', exact: true }).click();
-    await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
-  });
-  await zakoncz(page);
-});
+const kafel = (page, nazwa) => page.locator('.kafel-osoby').filter({ hasText: nazwa });
+const wiersz = (page, tekst) => page.getByRole('row').filter({ hasText: tekst });
 
-test('K1–K2: zgłoszenia wstępne i obsługa wniosku Gamma (zakładki)', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'wniosek-kancelaria', 'K1 zgłoszenia, K2 wniosek');
-  await krok(page, 'Zgłoszenia wstępne', async () => {
-    await page.goto('/#/zgloszenia');
-    await ui.gotowe(page);
-  });
-  await krok(page, 'Wnioski', async () => {
-    await page.goto('/#/wnioski');
-    await ui.gotowe(page, 'Gamma');
-  });
-  for (const zakladka of ['Dane spółki', 'Akcjonariusze', 'Dokumenty', 'Decyzja']) {
-    await krok(page, `Wniosek — ${zakladka}`, async () => {
-      if (!page.url().includes('/wnioski/1')) await page.goto('/#/wnioski/1');
-      await page.getByRole('tab', { name: new RegExp(zakladka) }).or(page.getByRole('button', { name: new RegExp(`^${zakladka}`) })).first().click();
-      await page.waitForTimeout(500);
-      if (zakladka === 'Akcjonariusze') {
-        const sprawdz = page.getByRole('button', { name: 'Zapisz i oznacz jako sprawdzony' }).first();
-        if (await sprawdz.isVisible().catch(() => false)) await sprawdz.click();
-      }
-    });
-  }
-  await zakoncz(page);
-});
-
-test('K3a: nowa spółka w kancelarii — pomiar pól w każdym z 4 kroków', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'nowa-spolka-kancelaria', 'K3a otwarcie rejestru — nowa spółka');
-  await krok(page, 'Spółki → Nowa spółka', async () => {
-    await page.goto('/#/spolki');
-    await page.getByRole('button', { name: 'Dodaj spółkę' }).first().click();
-    await ui.gotowe(page, 'Numer KRS');
-  });
-  await krok(page, 'Krok 1 — Spółka (Pobierz z KRS)', async () => {
-    await ui.wpisz(page, 'Numer KRS', '0000990003');
-    const pobierz = page.getByRole('button', { name: /Pobierz z KRS|Pobierz/ }).first();
-    if (await pobierz.isVisible().catch(() => false)) await pobierz.click();
-    await page.waitForTimeout(800);
-  });
-  for (const [nr, nazwa] of [[2, 'Umowa o prowadzenie rejestru'], [3, 'Pierwsza emisja i akcjonariat'], [4, 'Weryfikacja']]) {
-    await krok(page, `Krok ${nr} — ${nazwa} (pomiar)`, async () => {
-      await page.locator('.kroki, nav, ol').getByText(nazwa).first().click();
-      await page.waitForTimeout(500);
-    });
-  }
-  await zakoncz(page);
-});
-
-test('K3c: przejęcie rejestru (Theta, „Uzgodnienie”) — checklista odbioru, protokół, „Aktywny”', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'przejecie-rejestru', 'K3c przejęcie rejestru');
-  const { przeniesienia } = await api(page, 'GET', '/api/psa/przeniesienia');
-  const theta = przeniesienia.find((p) => p.status === 'uzgodnienie');
-  await krok(page, 'Przeniesienia — lista', async () => {
-    await page.goto('/#/przeniesienia');
-    await ui.gotowe(page, 'Theta');
-  });
-  await krok(page, 'Przeniesienie — Etap 6 checklista odbioru', async () => {
-    await page.goto(`/#/przeniesienia/${theta.id}`);
-    await ui.gotowe(page, 'Etap 6');
-    const karta = page.locator('.karta', { hasText: 'Etap 6' });
-    const pola = karta.locator('input[type="checkbox"]');
-    // Checklista zapisuje się na serwerze po każdym kliknięciu — stan pola zmienia się po odpowiedzi.
-    for (let i = 0; i < await pola.count(); i += 1) {
-      if (!(await pola.nth(i).isChecked())) { await pola.nth(i).click(); await page.waitForTimeout(300); }
-    }
-  });
-  // „Aktywny” ustawia dopiero otwarcie rejestru zdarzeniem PRZEJĘCIE (server/trasy/spolki.js:939) — bez osobnego przejścia.
-  // B-004 (naprawione): „Otwórz rejestr” prowadzi wprost do kreatora otwarcia (PRZEJĘCIE), nie do kokpitu.
-  await krok(page, 'Otwórz rejestr → kreator otwarcia (PRZEJĘCIE)', async () => {
-    await page.getByRole('button', { name: 'Otwórz rejestr', exact: true }).click();
-    await page.waitForURL(/#\/spolki\/\d+\/otworz/, { timeout: 10000 });
-    await ui.gotowe(page);
-  });
-  // D-095: otwarcie (to samo API co kreator otwarcia) bez wgrywania podpisanego protokołu — protokół i jego skrót
-  // powstają przy otwarciu, w zdarzeniu PRZEJĘCIE.
-  await krok(page, 'Otwarcie rejestru — PRZEJĘCIE z protokołem (D-095)', async () => {
-    const osoba = (await api(page, 'POST', '/api/psa/osoby', { typ: 'fizyczna', imie: 'Teodor', nazwisko: 'Przejmowany', kraj: 'Polska', kod_pocztowy: '80-014', miejscowosc: 'Gdańsk', nr_domu: '14', aml_status: 'wykonane', bez_pesel: 1, data_urodzenia: '1970-01-01' })).osoba;
-    const lista = ['forma', 'wpis_krs', 'uchwala', 'reprezentacja', 'umowa', 'jedna_umowa', 'dane_z_umowy', 'ograniczenia', 'bilans', 'zakres_danych', 'aml'];
-    const wynik = await api(page, 'POST', `/api/psa/spolki/${theta.spolka_id}/otworz-rejestr`, {
-      checklista: Object.fromEntries(lista.map((k) => [k, true])),
-      zdarzenia: [
-        { typ: 'emisja', klucz_tymczasowy: 'e1', dane: { seria: 'A', nr_pierwszy: 1, ilosc: 100, data_wpisu_krs: '2025-03-15', rodzaj_akcji: 'zwykla' } },
-        { typ: 'objecie', dane: { emisja_zdarzenie_id: { __odwolanie_do_partii: 'e1' }, pozycje: [{ osoba_id: osoba.id, ilosc: 100, pokryta: 'tak' }] } },
-      ],
-    });
-    const idPrzejecia = wynik.zdarzenia.find((z) => z.typ === 'przejecie').id;
-    const zdarzenie = await api(page, 'GET', `/api/psa/zdarzenia/${idPrzejecia}`);
-    const przejecie = JSON.stringify(zdarzenie).match(/"protokol":\{[^}]*"sha256":"[0-9a-f]{64}"/);
-    const { przeniesienia: po } = await api(page, 'GET', '/api/psa/przeniesienia');
-    if (po.find((x) => x.id === theta.id).status !== 'aktywny') throw new Error('przeniesienie nie jest „Aktywny” po otwarciu');
-    if (!przejecie) throw new Error(`brak skrótu protokołu w PRZEJĘCIU: ${JSON.stringify(zdarzenie).slice(0, 300)}`);
-  });
-  await zakoncz(page);
-});
-
-test('D-103: sprostowanie zdarzenia — przycisk „Sprostuj” w historii zdarzeń kokpitu', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'sprostowanie-z-historii', 'K8 sprostowanie (jedna droga)');
-  await krok(page, 'Kokpit → historia zdarzeń', async () => {
+test('zbycie: zbywca bez zgody na e-mail — list w Korespondencji, „Nadano”, wpis, powiadomienia o wpisie, wysyłka', async ({ page }, testInfo) => {
+  await start(page, testInfo, 'zbycie-list', 'Sprawa: zbycie akcji');
+  let adresSprawy = null;
+  let numerListu = null;
+  await krok(page, 'Kokpit — Nowy wpis', async () => {
     await page.goto('/#/spolki/1');
-    await ui.gotowe(page, 'Alfa Testowa');
-    const sprostuj = page.getByRole('button', { name: 'Sprostuj', exact: true });
-    if (!(await sprostuj.first().isVisible().catch(() => false))) await page.getByRole('button', { name: /Historia zdarzeń/ }).first().click();
-    await sprostuj.first().waitFor({ timeout: 10000 });
+    await ui.gotowe(page, 'Akcjonariusze');
+    await page.getByRole('button', { name: 'Nowy wpis' }).click();
+    await ui.gotowe(page, 'Dodaj zmianę');
+    adresSprawy = new URL(page.url()).hash;
   });
-  await krok(page, 'Sprostuj — uzasadnienie i zapis', async () => {
-    await page.getByRole('button', { name: 'Sprostuj', exact: true }).first().click();
-    await page.getByRole('dialog').locator('textarea').last().fill('Oczywista omyłka pisarska w opisie (dane fikcyjne).');
-    await page.getByRole('dialog').getByRole('button', { name: 'Zapisz sprostowanie' }).click();
-    await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 10000 });
+  await krok(page, 'Krok 1 — żądający, zmiana, podstawa', async () => {
+    await ui.wybierz(page, 'Kto żąda wpisu', 'osoba z kartoteki');
+    await ui.wybierzZKartoteki(page, 'Osoba żądająca', 'Ułamkowa');
+    await ui.przycisk(page, 'Przeniesienie');
+    await ui.wybierzZKartoteki(page, 'Zbywca', 'Bezzgody');
+    await ui.wybierzZKartoteki(page, 'Nabywca 1', 'Ułamkowa');
+    await ui.wpisz(page, 'Seria', 'A');
+    await ui.wpisz(page, 'Numery', '951-1000');
+    await ui.wpisz(page, 'Liczba', '50');
+    await ui.wpisz(page, 'Opis dokumentu', 'Umowa sprzedaży akcji (dane testowe)');
   });
-  await zakoncz(page);
-});
-
-test('D-102: zmiana adresu akcjonariusza w kartotece — propozycja wpisu, sprawa z wypełnionymi danymi', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'zmiana-adresu-kartoteka', 'K13 kartoteka → K4 zmiana danych (D-102)');
-  await krok(page, 'Kartoteka — nowy adres akcjonariusza', async () => {
-    await page.goto('/#/osoby/1');
-    await ui.gotowe(page, 'Edytuj dane');
-    await page.getByRole('button', { name: 'Edytuj dane' }).click();
-    await ui.wpisz(page, 'Miejscowość', 'Sopot');
-    await page.getByRole('button', { name: 'Zapisz zmiany' }).click();
-    const mimo = page.getByRole('button', { name: 'Zapisz mimo braków' });
-    if (await mimo.isVisible({ timeout: 1500 }).catch(() => false)) await mimo.click();
-    await ui.gotowe(page, 'Zmiana danych wpisanych do rejestru');
+  await krok(page, 'Dalej — powiadomienie listem', async () => {
+    await dalej(page);
+    await kafel(page, 'Jan Bezzgody').getByText('Powiadomienie — list').waitFor();
+    const p = await api(page, 'GET', `/api/psa/sprawy/${adresSprawy.split('/').pop()}`);
+    numerListu = p.osoby[0].powiadomienie.numer;
   });
-  await krok(page, 'Propozycja wpisu → sprawa w „Sprawdzeniu i wpisie”', async () => {
-    await page.getByRole('button', { name: /Załóż wpis zmiany danych/ }).first().click();
-    await page.getByRole('button', { name: 'Dokonaj wpisu' }).waitFor({ timeout: 15000 });
-    await page.getByText('Sopot').first().waitFor({ timeout: 10000 });
+  await krok(page, 'Korespondencja — Nadano', async () => {
+    await page.getByRole('button', { name: 'Korespondencja' }).filter({ visible: true }).first().click();
+    await ui.przycisk(page, 'Listy do nadania');
+    const w = wiersz(page, numerListu);
+    await w.getByRole('button', { name: 'Nadano' }).click();
+    await expect(w).toHaveCount(0, { timeout: 10000 });
   });
-  await krok(page, 'Wpis — adres w kartotece dopiero po wpisie', async () => {
-    const przed = await api(page, 'GET', '/api/psa/osoby/1');
-    if (przed.osoba.miejscowosc === 'Sopot') throw new Error('D-102: adres zmieniony w kartotece bez wpisu');
+  await krok(page, 'Sprawdzenie — checklista, opłata', async () => {
+    await page.goto(`/${adresSprawy}`);
+    await ui.gotowe(page, 'Osoby do powiadomienia');
+    await kafel(page, 'Jan Bezzgody').getByText(/^Wysłano /).waitFor();
     await ui.checklista(page);
-    await page.getByRole('button', { name: 'Dokonaj wpisu' }).click();
-    await page.getByRole('button', { name: 'Wróć do kokpitu spółki' }).waitFor({ timeout: 15000 });
-    const po = await api(page, 'GET', '/api/psa/osoby/1');
-    if (po.osoba.miejscowosc !== 'Sopot') throw new Error(`D-102: po wpisie miejscowość = ${po.osoba.miejscowosc}`);
+    await ui.przycisk(page, 'Bez opłaty');
+    await expect(page.getByRole('button', { name: 'Dokonaj wpisu' })).toBeEnabled({ timeout: 10000 });
+  });
+  await krok(page, 'Dokonaj wpisu', async () => {
+    await ui.przycisk(page, 'Dokonaj wpisu');
+    await page.getByRole('dialog').getByRole('button', { name: 'Dokonaj wpisu' }).click();
+    await ui.gotowe(page, 'Powiadomienia o wpisie');
+    await wiersz(page, 'Alfa Testowa').filter({ hasText: 'e-mail' }).waitFor();
+    await wiersz(page, 'Ewa Ułamkowa').filter({ hasText: 'list' }).waitFor();
+  });
+  await krok(page, 'Wyślij pisma', async () => {
+    await ui.przycisk(page, 'Wyślij pisma');
+    await wiersz(page, 'Alfa Testowa').getByText('Wysłane').waitFor({ timeout: 10000 });
+  });
+  await krok(page, 'Korespondencja — wysłane', async () => {
+    await page.goto('/#/korespondencja?filtr=wyslane');
+    await wiersz(page, 'Alfa Testowa').filter({ hasText: 'Powiadomienie o wpisie' }).first().waitFor();
   });
   await zakoncz(page);
 });
 
-test('K6: sprawa z portalu — weryfikacja przy otwarciu, kreator wpisu od kroku „Co” (D-097, D-098, A-006)', async ({ page }, testInfo) => {
-  rozpocznij(page, testInfo, { scenariusz: 'sprawa-z-portalu', proces: 'K6 sprawa z portalu', szerokosc: szer(testInfo), persona: 'Zarząd Alfa → notariusz' });
-  await zaloguj(page, 'zarzad@example.com', 'portal');
-  const { sprawa } = await api(page, 'POST', '/api/psa/portal/zadania', { spolka_id: 1, typ_zdarzenia: 'zdarzenie_inne', opis: 'Zwyczajne walne zgromadzenie (dane fikcyjne).' });
-  await page.context().clearCookies();
-  await zaloguj(page, 'notariusz@example.com', 'kancelaria');
-  await krok(page, 'Kolejka spraw', async () => {
-    await page.goto('/#/sprawy');
-    await ui.gotowe(page);
+test('zmiana treści po kroku 1: niewysłane powiadomienie znika, wysłane traci ważność — powstaje nowe', async ({ page }, testInfo) => {
+  await start(page, testInfo, 'zmiana-tresci', 'Sprawa: Zmień treść (R2)');
+  const przed = await api(page, 'GET', '/api/psa/sprawy/2');
+  const stare = przed.osoby[0].powiadomienie;
+  await krok(page, 'Sprawa po kroku 1 — Nadano w kafelku', async () => {
+    await page.goto('/#/sprawy/2');
+    await ui.gotowe(page, 'Osoby do powiadomienia');
+    await kafel(page, 'Jan Bezzgody').getByRole('button', { name: 'Nadano' }).click();
+    await kafel(page, 'Jan Bezzgody').getByText(/^Wysłano /).waitFor();
   });
-  await krok(page, 'Sprawa — weryfikacja sama przy otwarciu (D-098), kreator od „Co się zmienia”', async () => {
-    await page.goto(`/#/sprawy/${sprawa.id}`);
-    await ui.gotowe(page, 'Co się zmienia');
-    for (const n of ['Rozpocznij weryfikację', 'Ustal podstawę wpisu']) {
-      if (await page.getByRole('button', { name: n }).count()) throw new Error(`D-097/D-098: „${n}” nadal na ekranie`);
-    }
-    // A-006: sprawa z portalu — rodzaj wpisu kwalifikuje pracownik (okno tylko z typem; podstawa to krok 2 kreatora).
-    await ui.przycisk(page, 'Zmień rodzaj wpisu');
-    await ui.pole(page, 'Rodzaj wpisu').locator('select').waitFor();
-    await ui.przycisk(page, 'Anuluj');
-    const opis = ui.pole(page, 'Opis zdarzenia').locator('textarea');
-    if (!(await opis.inputValue())) await opis.fill('Zwyczajne walne zgromadzenie (dane fikcyjne).');
-    await ui.przycisk(page, 'Dalej');
-    await ui.pole(page, 'Data dokumentu').waitFor({ timeout: 10000 });
+  await krok(page, 'Więcej — Zmień treść', async () => {
+    await ui.przycisk(page, 'Więcej');
+    await page.getByRole('menuitem', { name: 'Zmień treść' }).click();
+    await ui.gotowe(page, 'Dodaj zmianę');
+    await ui.wpisz(page, 'Numery', '601-640');
+    await ui.wpisz(page, 'Liczba', '40');
   });
-  await krok(page, 'Podstawa — rodzaj dokumentu z typu (A-006), tylko data', async () => {
-    await ui.wpiszDate(page, 'Data dokumentu', DZIS);
-    await ui.przycisk(page, 'Dalej');
-    await page.getByRole('button', { name: 'Dokonaj wpisu' }).waitFor({ timeout: 15000 });
-  });
-  await krok(page, 'Sprawdzenie i wpis', async () => {
-    await ui.checklista(page);
-    await page.getByRole('button', { name: 'Dokonaj wpisu' }).click();
-    await page.getByRole('button', { name: 'Wróć do kokpitu spółki' }).waitFor({ timeout: 15000 });
+  await krok(page, 'Dalej — nowe powiadomienie', async () => {
+    await dalej(page);
+    await kafel(page, 'Jan Bezzgody').getByText('Powiadomienie — list').waitFor();
+    const po = await api(page, 'GET', '/api/psa/sprawy/2');
+    const nowe = po.osoby[0].powiadomienie;
+    if (!nowe || nowe.id === stare.id || nowe.stan !== 'do_wyslania') throw new Error(`oczekiwano nowego powiadomienia, jest ${JSON.stringify(nowe)}`);
+    if (!po.pisma.find((p) => p.id === stare.id).uniewaznione) throw new Error('wysłane powiadomienie nie straciło ważności');
   });
   await zakoncz(page);
 });
 
-test('K7: przeszkoda (brak danych) — wstrzymanie i wznowienie sprawy zbycia', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'przeszkoda', 'K7 wstrzymanie / wznowienie');
-  await krok(page, 'Sprawa zbycia (seed) — Wstrzymaj', async () => {
-    await page.goto('/#/sprawy/1');
-    await page.getByRole('button', { name: 'Wstrzymaj' }).first().click();
-    await ui.wpisz(page, 'Przeszkoda uniemożliwiająca wpis', 'Brak adresu nabywcy w dokumencie (dane fikcyjne).');
-    // Przycisk w oknie nazywa czynność (A-017): „Wstrzymaj sprawę”, nie „Potwierdź”.
-    await page.getByRole('dialog').getByRole('button', { name: 'Wstrzymaj sprawę' }).click();
-    await page.getByRole('button', { name: 'Wznów' }).waitFor({ timeout: 10000 });
+test('karta osoby: „Edytuj” w miejscu, historia zmian; nowa osoba z kartoteki', async ({ page }, testInfo) => {
+  await start(page, testInfo, 'karta-osoby', 'Karta osoby (U-25)');
+  await krok(page, 'Karta osoby — Edytuj', async () => {
+    await page.goto('/#/osoby/2');
+    await ui.gotowe(page, 'Jan Bezzgody');
+    await ui.przycisk(page, 'Edytuj');
+    await ui.wpisz(page, 'Adres', 'ul. Nowa 7, 80-004 Gdańsk');
+    await ui.przycisk(page, 'Zapisz');
+    await page.getByText('ul. Nowa 7, 80-004 Gdańsk').first().waitFor();
   });
-  await krok(page, 'Wznów', async () => {
-    await page.getByRole('button', { name: 'Wznów' }).click();
-    await page.getByRole('button', { name: 'Wstrzymaj' }).first().waitFor({ timeout: 10000 });
+  await krok(page, 'Historia zmian', async () => {
+    await page.getByRole('button', { name: /Historia zmian/ }).click();
+    await wiersz(page, 'adres').filter({ hasText: 'ul. Nowa 7' }).waitFor();
   });
-  await zakoncz(page);
-});
-
-test('K11: usunięcie listu z wysyłki (przed nadaniem)', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'list-usun-z-wysylki', 'K11 kolejka listów');
-  await krok(page, 'Listy do wysyłki', async () => {
-    await page.goto('/#/listy');
-    await ui.gotowe(page, 'Usuń z wysyłki');
-  });
-  await krok(page, 'Usuń z wysyłki — powód', async () => {
-    await page.getByRole('button', { name: 'Usuń z wysyłki' }).first().click();
-    await page.getByRole('dialog').locator('textarea, input[type="text"]').first().fill('Zbywca wyraził zgodę w kancelarii (dane fikcyjne).');
-    await page.getByRole('dialog').getByRole('button', { name: 'Usuń z wysyłki' }).click();
-    await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 10000 });
+  await krok(page, 'Kartoteka — nowa osoba', async () => {
+    await page.goto('/#/osoby');
+    await ui.przycisk(page, 'Nowa osoba');
+    await ui.wpisz(page, 'Imię i nazwisko', 'Edward Ewidencyjny');
+    await ui.wpisz(page, 'PESEL', '44051401359');
+    await ui.wpisz(page, 'Adres', 'ul. Krótka 2, 80-001 Gdańsk');
+    await ui.przycisk(page, 'Zapisz osobę');
+    await ui.gotowe(page, 'Edward Ewidencyjny');
   });
   await zakoncz(page);
 });
 
-test('K12: informacja z rejestru — kokpit (druk) i dla organu (dziennik)', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'informacja-kancelaria', 'K12 informacja z rejestru');
-  await krok(page, 'Kokpit → informacja z rejestru', async () => {
-    await page.goto('/#/spolki/1/wydruk');
-    await ui.gotowe(page);
+test('pola dat: pełny format DD.MM.RRRR widoczny bez ucięcia', async ({ page }, testInfo) => {
+  await start(page, testInfo, 'pola-dat', 'Pole daty (§ 5)');
+  const sprawdz = async (etykieta) => {
+    const pole = ui.pole(page, etykieta).locator('.pole-daty-wejscie');
+    const { wartosc, uciete } = await pole.evaluate((e) => ({ wartosc: e.value, uciete: e.scrollWidth > e.clientWidth }));
+    if (!/^\d{2}\.\d{2}\.\d{4}$/.test(wartosc)) throw new Error(`${etykieta}: wartość „${wartosc}”`);
+    if (uciete) throw new Error(`${etykieta}: data ucięta przy ${szer(testInfo)} px`);
+  };
+  await krok(page, 'Kokpit — Stan na dzień', async () => {
+    await page.goto('/#/spolki/1');
+    await ui.gotowe(page, 'Akcjonariusze');
+    await ui.wpiszDate(page, 'Stan na dzień', '2026-03-31');
+    await sprawdz('Stan na dzień');
   });
-  await krok(page, 'Dla organu — dziennik informacji', async () => {
-    await page.goto('/#/informacje');
-    await ui.pole(page, 'Spółka').locator('select').selectOption({ index: 1 });
-    await ui.wpisz(page, 'Organ (odbiorca)', 'Komornik Sądowy przy SR Testowym');
-    await ui.wpisz(page, 'Sygnatura sprawy', 'KM 2/26');
-    await page.getByRole('button', { name: /Wydaj/ }).click();
-    await page.getByText(/Wydano informację nr/).waitFor({ timeout: 10000 });
-  });
-  await zakoncz(page);
-});
-
-test('D-096: żądanie spółki — spółka z rejestru jako żądający, bez dopisywania do kartoteki', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'spolka-zadajacy', 'K4 podstawa — spółka jako żądający (D-096)');
-  await krok(page, 'Nowa emisja → Co się zmienia', async () => {
-    await page.goto('/#/spolki/1/zdarzenie?typ=emisja');
-    await ui.gotowe(page, 'Co się zmienia');
-    await ui.wpisz(page, 'Oznaczenie serii', 'B');
-    await ui.wpisz(page, 'Liczba akcji', '100');
-    await ui.wpiszDate(page, 'Data wpisu emisji do KRS', DZIS);
-    await ui.przycisk(page, 'Dalej');
-  });
-  await krok(page, 'Podstawa: żądający = spółka (domyślnie) → Dalej', async () => {
-    await ui.pole(page, 'Żądający wpisu').getByText('Alfa Testowa').waitFor({ timeout: 5000 });
-    if (await ui.pole(page, 'Żądający wpisu').getByRole('combobox').count()) throw new Error('D-096: wybór z kartoteki zamiast spółki');
-    await ui.wpiszDate(page, 'Data dokumentu', DZIS);
-    await ui.przycisk(page, 'Dalej');
-    await page.getByRole('button', { name: 'Dokonaj wpisu' }).waitFor({ timeout: 15000 });
+  await krok(page, 'Sprawa — Data wpływu żądania (kropki wstawiają się same)', async () => {
+    await page.getByRole('button', { name: 'Nowy wpis' }).click();
+    await ui.gotowe(page, 'Dodaj zmianę');
+    const pole = ui.pole(page, 'Data wpływu żądania').locator('.pole-daty-wejscie');
+    await pole.fill('');
+    await pole.pressSequentially('01112026');
+    await expect(pole).toHaveValue('01.11.2026');
+    await sprawdz('Data wpływu żądania');
   });
   await zakoncz(page);
 });

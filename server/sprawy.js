@@ -279,6 +279,10 @@ function podglad(db, id) {
   wynik.bledy = sym.bledy;
   wynik.stan_przed = stanLogika.widok(sym.przed);
   wynik.stan_po = sym.po ? stanLogika.widok(sym.po) : null;
+  const idOsob = new Set(
+    [wynik.stan_przed, wynik.stan_po].filter(Boolean).flatMap((w) => [...w.akcjonariusze, ...w.atrybuty].map((x) => x.osoba_id)).filter(Boolean)
+  );
+  wynik.nazwy = Object.fromEntries([...idOsob].map((oid) => [oid, { nazwa: (daneOsoby.wczytaj(db, oid) || {}).nazwa }]));
   wynik.osoby = osoby.wszystkie.map((oid) => ({
     osoba_id: oid,
     nazwa: (daneOsoby.wczytaj(db, oid) || {}).nazwa,

@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Ustawienia (tylko administrator): dane kancelarii i kontrola integralności rejestru na żądanie
- * (U-20).
+ * Pulpit („Do zrobienia”, § 5) oraz Ustawienia (tylko administrator): dane kancelarii i kontrola
+ * integralności rejestru na żądanie (U-20).
  */
 
 const express = require('express');
@@ -10,11 +10,20 @@ const express = require('express');
 const { db } = require('../baza');
 const rejestr = require('../rejestr');
 const ustawienia = require('../logika/ustawienia');
+const pulpit = require('../pulpit');
 const dziennik = require('../logika/dziennik-dostepu');
 const { asy, autor, bledneZadanie } = require('../pomocnicze/odpowiedzi');
-const { wymagajAdmina } = require('../pomocnicze/autoryzacja');
+const { wymagajAdmina, wymagajPracownika } = require('../pomocnicze/autoryzacja');
 
 const router = express.Router();
+
+router.get(
+  '/pulpit',
+  wymagajPracownika,
+  asy((zad, odp) => {
+    odp.json(pulpit.doZrobienia(db()));
+  })
+);
 
 router.get(
   '/ustawienia',

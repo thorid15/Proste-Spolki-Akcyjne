@@ -11,19 +11,13 @@ function pole(page, etykieta) {
   return page.locator('.pole').filter({ has: page.locator(':scope > .pole-etykieta', { hasText: etykieta }) }).first();
 }
 
-/** Data w `PoleDaty` (segmenty DD MM RRRR) albo w natywnym `<input type="date">`. `data` — 'RRRR-MM-DD'. */
+/** Data w `PoleDaty` (jedno pole DD.MM.RRRR). `data` — 'RRRR-MM-DD'. */
 async function wpiszDate(page, etykieta, data) {
-  const p = pole(page, etykieta);
   const [r, m, d] = data.split('-');
-  const natywne = p.locator('input[type="date"]');
-  if (await natywne.count()) { await natywne.fill(data); return; }
-  await p.getByLabel('Dzień').fill(d);
-  await p.getByLabel('Miesiąc').fill(m);
-  await p.getByLabel('Rok').fill(r);
-  await p.getByLabel('Rok').blur();
+  await pole(page, etykieta).locator('.pole-daty-wejscie').fill(`${d}.${m}.${r}`);
 }
 
-/** `WyborZKartoteki`: wpisuje fragment i wybiera pierwszą pasującą osobę. */
+/** `WyborOsoby`: wpisuje fragment i wybiera pierwszą pasującą osobę. */
 async function wybierzZKartoteki(page, etykieta, szukaj) {
   const p = pole(page, etykieta);
   const wejscie = p.getByRole('combobox');
@@ -61,32 +55,16 @@ async function gotowe(page, tekst) {
   await page.waitForLoadState('networkidle').catch(() => {});
 }
 
-/**
- * Checklista weryfikacji (człowiek odhacza — D-052): zaznacza każdą pozycję poza „uzasadnionymi wątpliwościami”
- * i czeka, aż „Dokonaj wpisu” będzie aktywne. Podgląd wczytuje się asynchronicznie i bywa, że przerysowuje listę
- * po zaznaczeniu — wtedy jeszcze raz (do 3 prób).
- */
+/** Checklista sprawy (R5): odhacza wszystkie pozycje i czeka na zapis. */
 async function checklista(page) {
-  const wpis = page.getByRole('button', { name: 'Dokonaj wpisu' }).first();
-  for (let proba = 0; proba < 3; proba += 1) {
-    const pola = page.locator('.karta input[type="checkbox"]:visible');
-    for (let i = 0; i < await pola.count(); i += 1) {
-      const p = pola.nth(i);
-      const tekst = await p.evaluate((el) => (el.closest('label') || el.parentElement).textContent).catch(() => '');
-      if (/wątpliwości|wyraziła zgodę na wpis/i.test(tekst)) continue;
-      if (!(await p.isChecked().catch(() => true))) await p.check().catch(() => {});
+  const karta = page.locator('.karta').filter({ has: page.getByText('Checklista', { exact: true }) });
+  const pola = karta.locator('input[type="checkbox"]');
+  for (let i = 0; i < await pola.count(); i += 1) {
+    if (!(await pola.nth(i).isChecked())) {
+      await pola.nth(i).check();
+      await page.waitForLoadState('networkidle').catch(() => {});
     }
-    await page.waitForTimeout(400);
-    if (await wpis.isEnabled().catch(() => false)) return;
   }
 }
 
-/** `PanelOsoby` w trybie edycji: „Zapisz zmiany” (i „Zapisz mimo braków”, gdy dane osoby testowej są niepełne). */
-async function zapiszOsobe(page) {
-  await page.getByRole('button', { name: 'Zapisz zmiany' }).click();
-  const mimo = page.getByRole('button', { name: 'Zapisz mimo braków' });
-  if (await mimo.isVisible({ timeout: 1500 }).catch(() => false)) await mimo.click();
-  await page.getByRole('button', { name: 'Zapisz zmiany' }).waitFor({ state: 'detached', timeout: 10000 });
-}
-
-module.exports = { pole, wpiszDate, wybierzZKartoteki, wybierz, wpisz, przycisk, gotowe, checklista, zapiszOsobe };
+module.exports = { pole, wpiszDate, wybierzZKartoteki, wybierz, wpisz, przycisk, gotowe, checklista };

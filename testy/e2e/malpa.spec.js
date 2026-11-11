@@ -18,34 +18,19 @@ const { CZESCI } = require('./pomocnicze/krok');
 const ui = require('./pomocnicze/ui');
 
 const K = 'notariusz@example.com';
+// Ekrany kancelarii (§ 5). Portal — Faza 5 (trasy portalu nie są jeszcze zamontowane).
 const EKRANY = [
   { nazwa: 'k-pulpit', konto: K, app: 'kancelaria', adres: '/#/', nawigacja: true },
+  { nazwa: 'k-sprawy', konto: K, app: 'kancelaria', adres: '/#/sprawy' },
+  { nazwa: 'k-sprawa-krok2', konto: K, app: 'kancelaria', adres: '/#/sprawy/2' },
+  { nazwa: 'k-sprawa-wpisana', konto: K, app: 'kancelaria', adres: '/#/sprawy/1' },
   { nazwa: 'k-spolki', konto: K, app: 'kancelaria', adres: '/#/spolki' },
   { nazwa: 'k-kokpit', konto: K, app: 'kancelaria', adres: '/#/spolki/1' },
-  { nazwa: 'k-sprawy', konto: K, app: 'kancelaria', adres: '/#/sprawy' },
-  { nazwa: 'k-sprawa-zbycia', konto: K, app: 'kancelaria', adres: '/#/sprawy/1' },
-  { nazwa: 'k-kreator-wpisu', konto: K, app: 'kancelaria', adres: '/#/spolki/1/zdarzenie?typ=emisja' },
-  { nazwa: 'k-kreator-zbycia', konto: K, app: 'kancelaria', adres: '/#/spolki/1/zdarzenie?typ=przeniesienie' },
   { nazwa: 'k-osoby', konto: K, app: 'kancelaria', adres: '/#/osoby' },
   { nazwa: 'k-osoba', konto: K, app: 'kancelaria', adres: '/#/osoby/1' },
-  { nazwa: 'k-listy', konto: K, app: 'kancelaria', adres: '/#/listy' },
-  { nazwa: 'k-zawiadomienia', konto: K, app: 'kancelaria', adres: '/#/zawiadomienia' },
-  { nazwa: 'k-przeniesienia', konto: K, app: 'kancelaria', adres: '/#/przeniesienia' },
-  { nazwa: 'k-przeniesienie', konto: K, app: 'kancelaria', adres: '/#/przeniesienia/5' },
-  { nazwa: 'k-wnioski', konto: K, app: 'kancelaria', adres: '/#/wnioski' },
-  { nazwa: 'k-wniosek', konto: K, app: 'kancelaria', adres: '/#/wnioski/1' },
+  { nazwa: 'k-korespondencja', konto: K, app: 'kancelaria', adres: '/#/korespondencja' },
   { nazwa: 'k-oplaty', konto: K, app: 'kancelaria', adres: '/#/oplaty' },
-  { nazwa: 'k-informacje', konto: K, app: 'kancelaria', adres: '/#/informacje' },
-  { nazwa: 'k-zgloszenia', konto: K, app: 'kancelaria', adres: '/#/zgloszenia' },
-  { nazwa: 'p-start', konto: 'zarzad@example.com', app: 'portal', adres: '/portal.html#/', nawigacja: true },
-  { nazwa: 'p-spolka', konto: 'zarzad@example.com', app: 'portal', adres: '/portal.html#/spolka/1' },
-  { nazwa: 'p-informacja', konto: 'zarzad@example.com', app: 'portal', adres: '/portal.html#/informacja/1' },
-  { nazwa: 'p-zgloszenie', konto: 'zarzad@example.com', app: 'portal', adres: '/portal.html#/zgloszenie/1' },
-  { nazwa: 'p-zgloszenie-bledu', konto: 'zarzad@example.com', app: 'portal', adres: '/portal.html#/zgloszenie-bledu/1' },
-  { nazwa: 'p-platnosci', konto: 'anna.zgoda@example.com', app: 'portal', adres: '/portal.html#/platnosci' },
-  { nazwa: 'p-konto', konto: 'anna.zgoda@example.com', app: 'portal', adres: '/portal.html#/konto' },
-  { nazwa: 'p-wniosek-dokumenty', konto: 'gamma.zarzad@example.com', app: 'portal', adres: '/portal.html#/wniosek' },
-  { nazwa: 'p-zglos-sie', konto: null, app: 'portal', adres: '/portal.html#/zglos-sie' },
+  { nazwa: 'k-ustawienia', konto: K, app: 'kancelaria', adres: '/#/ustawienia' },
 ];
 
 /** Kandydaci do kliknięcia — widoczne, aktywne; poza ekranem startowym tylko z obszaru treści (`#tresc`). */
@@ -53,7 +38,7 @@ const WYBIERZ = (zNawigacja) => {
   const widoczny = (el) => { const s = getComputedStyle(el); const r = el.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 1 && r.height > 1; };
   return [...document.querySelectorAll('button, a[href], [role="button"], [role="tab"]')]
     .filter((e) => widoczny(e) && !e.disabled && !e.closest('#psa-pasek-testowy'))
-    .filter((e) => !/wyloguj/i.test(e.textContent) && !e.classList.contains('przeskocz-do-tresci'))
+    .filter((e) => !/wyloguj/i.test(e.textContent) && !e.classList.contains('przeskocz-do-tresci') && e.getAttribute('aria-current') !== 'page')
     .filter((e) => zNawigacja || e.closest('#tresc, main') || !document.querySelector('#tresc, main'));
 };
 const OPIS = (e) => (e.getAttribute('aria-label') || e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60);
@@ -109,12 +94,13 @@ for (const ekran of EKRANY) {
         window.__malpa = { zmiany: 0 };
         new MutationObserver((m) => { window.__malpa.zmiany += m.length; }).observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
       });
-      let zadania = 0; let nawigacja = false; let okno = false; let pobranie = false;
+      let zadania = 0; let nawigacja = false; let okno = false; let pobranie = false; let wyborPliku = false;
       const naZadanie = (r) => { if (!/\.(png|jpg|svg|woff2?|css)$/.test(r.url())) zadania += 1; };
       const naNaw = (f) => { if (f === page.mainFrame()) nawigacja = true; };
       const naOkno = (p) => { okno = true; p.close().catch(() => {}); };
       const naPobranie = () => { pobranie = true; };
-      page.on('request', naZadanie); page.on('framenavigated', naNaw); context.on('page', naOkno); page.on('download', naPobranie);
+      const naWyborPliku = () => { wyborPliku = true; };
+      page.on('request', naZadanie); page.on('framenavigated', naNaw); context.on('page', naOkno); page.on('download', naPobranie); page.on('filechooser', naWyborPliku);
       const adresPrzed = page.url();
       // Przycisk wysyłający formularz z niespełnionym `required` — przeglądarka pokaże własny dymek (niewidoczny w DOM).
       const walidacjaNatywna = await cel.evaluate((e) => Boolean(e.form && (e.type === 'submit' || !e.getAttribute('type')) && !e.form.checkValidity()));
@@ -128,11 +114,11 @@ for (const ekran of EKRANY) {
       let zmiany = 0;
       while (Date.now() - start < 2000) {
         zmiany = await page.evaluate(() => (window.__malpa ? window.__malpa.zmiany : 1)).catch(() => 1);
-        if (zmiany || zadania || nawigacja || okno || pobranie || page.url() !== adresPrzed) break;
+        if (zmiany || zadania || nawigacja || okno || pobranie || wyborPliku || page.url() !== adresPrzed) break;
         await page.waitForTimeout(150);
       }
-      page.off('request', naZadanie); page.off('framenavigated', naNaw); context.off('page', naOkno); page.off('download', naPobranie);
-      if (!zmiany && !zadania && !nawigacja && !okno && !pobranie && page.url() === adresPrzed && dialogi.length === p0.dialogi) {
+      page.off('request', naZadanie); page.off('framenavigated', naNaw); context.off('page', naOkno); page.off('download', naPobranie); page.off('filechooser', naWyborPliku);
+      if (!zmiany && !zadania && !nawigacja && !okno && !pobranie && !wyborPliku && page.url() === adresPrzed && dialogi.length === p0.dialogi) {
         problemy.push({ element: k.tekst, problem: walidacjaNatywna
           ? 'walidacja natywna przeglądarki (dymek „wypełnij to pole”) zamiast komunikatu aplikacji'
           : 'martwy przycisk (brak zmiany DOM, żądania, nawigacji w 2 s)' });
@@ -179,55 +165,28 @@ test('małpa: błędne dane w polach', async ({ page }) => {
     }
   };
   const etap = async (fn) => { try { await fn(); } catch (e) { wyniki.push({ gdzie: 'przygotowanie', uwaga: String(e.message).split('\n')[0].slice(0, 160) }); } };
-  // Kartoteka — PESEL z błędną sumą kontrolną, data urodzenia z przyszłości.
+  const jutro = new Date(Date.now() + 86400000 * 30).toISOString().slice(0, 10);
+  // Kartoteka — nowa osoba z PESEL o błędnej sumie kontrolnej (U-18: blokuje zapis).
   await etap(async () => {
     await page.goto('/#/osoby');
     await page.getByRole('button', { name: 'Nowa osoba', exact: true }).first().click();
-    await ui.wpisz(page, 'Imię', 'Gustaw'); await ui.wpisz(page, 'Nazwisko', 'Błędny');
+    await ui.wpisz(page, 'Imię i nazwisko', 'Gustaw Błędny');
+    await ui.wpisz(page, 'Adres', 'ul. Krzywa 1, 80-001 Gdańsk');
   });
-  await sprawdz('kartoteka — nowa osoba', 'Numer PESEL', '85031502484 (zła suma)', async () => {
-    await ui.wpisz(page, 'Numer PESEL', '85031502484');
-    await ui.pole(page, 'Numer PESEL').locator('input').first().blur();
-  }, async () => true);
-  // Kreator wpisu (D-097) — data dokumentu i data wpływu z przyszłości w kroku „Podstawa”.
+  await sprawdz('kartoteka — nowa osoba', 'PESEL', '85031502484 (zła suma)', async () => {
+    await ui.wpisz(page, 'PESEL', '85031502484');
+    await page.getByRole('button', { name: 'Zapisz osobę' }).click();
+  }, async () => !(await page.getByRole('button', { name: 'Zapisz osobę' }).count()));
+  // Sprawa (krok 1) — data wpływu z przyszłości.
   await etap(async () => {
-    await page.goto('/#/spolki/1/zdarzenie?typ=emisja');
-    await ui.gotowe(page, 'Co się zmienia');
-    await ui.wpisz(page, 'Oznaczenie serii', 'B'); await ui.wpisz(page, 'Liczba akcji', '100');
-    await ui.przycisk(page, 'Dalej');
-    await ui.pole(page, 'Data dokumentu').waitFor();
+    await page.goto('/#/spolki/1');
+    await page.getByRole('button', { name: 'Nowy wpis' }).click();
+    await ui.gotowe(page, 'Dodaj zmianę');
   });
-  const jutro = new Date(Date.now() + 86400000 * 30).toISOString().slice(0, 10);
-  await sprawdz('kreator — Podstawa', 'Data dokumentu', `${jutro} (przyszłość)`, async () => ui.wpiszDate(page, 'Data dokumentu', jutro), async () => true);
-  await etap(async () => { await ui.przycisk(page, 'Rodzaj dokumentu, data wpływu, notatka'); });
-  await sprawdz('kreator — Podstawa', 'Data wpływu', `${jutro} (przyszłość)`, async () => ui.wpiszDate(page, 'Data wpływu', jutro), async () => true);
-  // Zbycie — data umowy zbycia z przyszłości.
-  await etap(async () => {
-    await page.goto('/#/spolki/1/zdarzenie?typ=przeniesienie');
-    await page.getByText('Co się zbywa').first().waitFor();
-    await ui.wybierz(page, 'Zbywca', 'Testowa'); await ui.wpisz(page, 'Liczba zbywanych akcji', 5); await ui.wybierzZKartoteki(page, 'Nabywca', 'Nabywczyni');
-    await ui.przycisk(page, 'Dalej');
-    await ui.gotowe(page, 'Data umowy zbycia');
-  });
-  await sprawdz('zbycie — Podstawa', 'Data umowy zbycia', `${jutro} (przyszłość)`, async () => ui.wpiszDate(page, 'Data umowy zbycia', jutro),
-    async () => page.getByRole('button', { name: 'Dalej', exact: true }).isEnabled());
-  // Kolejka listów — data nadania z przyszłości.
-  await etap(async () => {
-    await page.goto('/#/listy');
-    await page.getByRole('button', { name: 'Nadano' }).first().click();
-  });
-  await sprawdz('listy — nadanie', 'Data nadania', `${jutro} (przyszłość)`, async () => { await ui.wpiszDate(page, 'Data nadania', jutro); await ui.wpisz(page, 'Numer nadania', 'RR1PL'); },
-    async () => page.getByRole('button', { name: 'Zapisz nadanie' }).isEnabled());
-  // Portal (publiczny) — KRS z literami.
-  await etap(async () => {
-    await page.context().clearCookies();
-    await page.goto('/portal.html#/zglos-sie');
-    await ui.wpisz(page, 'E-mail', 'zly.krs@example.com');
-  });
-  await sprawdz('portal — Zgłoś się', 'Numer KRS spółki', '00009ABC01 (po próbie wysłania)', async () => {
-    await ui.wpisz(page, 'Numer KRS spółki', '00009ABC01');
-    await page.getByRole('button', { name: 'Zgłoś spółkę' }).click();
-  }, async () => !(await page.getByText(/dziesięć cyfr/).count()));
+  await sprawdz('sprawa — Treść', 'Data wpływu żądania', `${jutro} (przyszłość)`, async () => ui.wpiszDate(page, 'Data wpływu żądania', jutro), async () => true);
+  // Kokpit — „Stan na dzień” z przyszłości.
+  await etap(async () => { await page.goto('/#/spolki/1'); await ui.gotowe(page, 'Akcjonariusze'); });
+  await sprawdz('kokpit', 'Stan na dzień', `${jutro} (przyszłość)`, async () => ui.wpiszDate(page, 'Stan na dzień', jutro), async () => true);
   fs.mkdirSync(CZESCI, { recursive: true });
   fs.writeFileSync(path.join(CZESCI, 'malpa-bledne-dane.json'), JSON.stringify({ malpa: true, ekran: 'błędne dane', adres: '—', elementy: wyniki.length, problemy: wyniki.filter((w) => w.odrzucone === false).map((w) => ({ element: `${w.gdzie}: ${w.pole}`, problem: w.ostrzezenie ? `przyjmuje z ostrzeżeniem (bez blokady): ${w.wartosc}` : `przyjmuje oczywiście błędną wartość bez komunikatu: ${w.wartosc}` })), sprawdzone: wyniki }, null, 2));
 });

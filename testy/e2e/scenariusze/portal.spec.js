@@ -11,6 +11,8 @@ const { test, zaloguj, api } = require('../pomocnicze/srodowisko');
 const { rozpocznij, krok, zakoncz } = require('../pomocnicze/krok');
 const ui = require('../pomocnicze/ui');
 
+test.skip(true, 'Faza 5 — portal klienta przebudowywany (trasy portalu nie są zamontowane)');
+
 const szer = (ti) => Number(ti.project.name);
 const PDF = { name: 'dokument.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% dane fikcyjne\n%%EOF\n') };
 const JPG = { name: 'dowod.jpg', mimeType: 'image/jpeg', buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1, 0xff, 0xd9]) };

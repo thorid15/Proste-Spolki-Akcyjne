@@ -1760,6 +1760,18 @@
   4. **D-184** Umowa § 11 ust. 3: zamiast „warunkiem … jest uiszczenie Taksy” — „Taksa jest należna za każdą z czynności, o których mowa w ust. 1.” Umowa nie uzależnia wpisu od opłaty (R4).
   5. **D-185** Akapity umowy o przejęciu rejestru (U-07) i płatności miesięcznej (U-30) oraz oświadczenie PEP reprezentanta (U-03) — akceptacja treści odłożona; do tego czasu zostają w brzmieniu z Fazy 2 (D-170). Pozycja w „Decyzjach otwartych”.
 
+### D-186–D-192 — Faza 3 uproszczenia: ekrany kancelarii (11.11.2026; raport `raporty/FAZA-3.md`)
+
+- Obszar: interfejs kancelarii (§ 5). Decyzje podjęte przy wykonaniu specyfikacji — do akceptacji Łukasza razem z raportem.
+- Decyzje:
+  1. **D-186** Pulpit: `GET /api/psa/pulpit` — sprawy w toku po terminie albo z terminem do 2 dni, sprawy wstrzymane z nowym plikiem, pisma z błędem wysyłki (na górze) i do wysłania; wiersz prowadzi do sprawy albo do Korespondencji z otwartym podglądem pisma. Wnioski, podpisy i przejęcia dochodzą w Fazie 4.
+  2. **D-187** Pole daty: jedno pole tekstowe DD.MM.RRRR (szerokość z zapasem na pełny format), kropki wstawiają się same, wklejenie w dowolnym separatorze, ikona kalendarza w polu. Zastępuje pole segmentowe (DD | MM | RRRR) — wspólne z portalem.
+  3. **D-188** Ekran sprawy: treść zapisuje się sama 0,6 s po zmianie, „Dalej” zapisuje przed przejściem; przycisk główny wyszarzony z krótkim powodem (pełna lista „Przed wpisem” pod treścią); „Wstrzymaj” (treść wezwania) i „Wznów” (data usunięcia przeszkody) — formularz w miejscu, „Odmów” — okno z przyczyną (czynność nieodwracalna), „Wycofaj” i „Dokonaj wpisu” — potwierdzenie; zaznaczenie checklisty widać od razu, zapis w tle. Po wpisie przycisk „Wyślij pisma” wysyła e-maile; listy — „Drukuj” i „Nadano” w wierszu; gdy wszystko wysłane, przycisku głównego nie ma.
+  4. **D-189** Kokpit: „Zmień” (zastaw, użytkowanie — prawo głosu) i „Wykreśl” zakładają sprawę z operacją wypełnioną danymi wiersza (wykreślenie zajęcia — żądający organ); „Sprostuj” — sprawa bez żądającego z treścią wpisu do poprawienia albo wycofania; „Zamknij rejestr” — sprawa z wpisem zamknięcia (checklista i „Dokonaj wpisu”, nie jednym kliknięciem); „Informacja z rejestru” — formularz w kokpicie (odbiorca, dzień, opłata), wynik: PDF i pismo w Korespondencji.
+  5. **D-190** Karta osoby: „Dokument zgody do podpisu” — `POST /api/psa/osoby/:id/dokument-zgody` (spółka do wyboru, gdy osoba ma akcje w kilku; wymaga adresu e-mail); pismo trafia do Korespondencji, kanał według R9. Włączenie zgody — wybór pliku z plików karty osoby.
+  6. **D-191** Usunięte poza listą fazy: `kokpit.js`, `wydruk.js`, `uzytkownicy.js`, `wpis-zbycia.js` (zastąpione nowymi ekranami), niepodłączone ekrany `wnioski.js`, `zgloszenia.js`, `przeniesienia.js` (trasy odłączone od Fazy 1; Faza 4 buduje ekran wniosku od nowa) i nieużywane komponenty `ui-rejestr.js` (m.in. `WyborZKartoteki`, `PaletaPolecen`, `Kafel`, `StatusAml`). Do Faz 4–5: pozycja menu „Wnioski” i „Nowa spółka”, osoby zawierające umowy w Ustawieniach, „Działają za spółkę”, „Zaproś do portalu”.
+  7. **D-192** e2e: scenariusze kancelarii przy 1440 i 390 px; `portal.spec.js` — `test.skip` „Faza 5”; `uklad-ekrany.spec.js` (regresje R4 usuniętych ekranów) usunięty; małpa — ekrany kancelarii, rozpoznaje okno wyboru pliku i pomija bieżącą pozycję menu. `test:seed`: poprawny NIP kancelarii (5840000016) — poprzedni nie przechodził walidacji Ustawień.
+
 ---
 
 ## Decyzje otwarte

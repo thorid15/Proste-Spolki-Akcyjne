@@ -212,3 +212,17 @@ test('pliki: PDF przyjęty i pobierany jako załącznik; inny format albo HTML u
   assert.equal((await zadanie('GET', '/api/psa/pliki/999')).status, 404);
   assert.equal(db().prepare("SELECT COUNT(*) AS ile FROM psa_dziennik WHERE akcja = 'pobranie_pliku'").get().ile, 1);
 });
+
+test('karta osoby: dokument zgody do podpisu (pismo do Korespondencji); Pulpit — lista „Do zrobienia”', async () => {
+  const bezSpolki = await zadanie('POST', `/api/psa/osoby/${anna.id}/dokument-zgody`, {});
+  assert.equal(bezSpolki.status, 422);
+  const bezEmaila = await zadanie('POST', `/api/psa/osoby/${jan.id}/dokument-zgody`, { spolka_id: spolka });
+  assert.equal(bezEmaila.status, 422);
+  const dok = await zadanie('POST', `/api/psa/osoby/${anna.id}/dokument-zgody`, { spolka_id: spolka });
+  assert.equal(dok.status, 201);
+  const p = pisma.wczytaj(db(), dok.dane.pismo_id);
+  assert.deepEqual([p.typ, p.adresat_osoba_id, p.kanal], ['zgoda_email', anna.id, 'list']);
+  const pulpit = await zadanie('GET', '/api/psa/pulpit');
+  assert.equal(pulpit.status, 200);
+  assert.ok(pulpit.dane.some((x) => x.sciezka === `/korespondencja?pismo=${p.id}`));
+});
