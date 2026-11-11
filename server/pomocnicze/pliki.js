@@ -89,4 +89,4 @@ function wyslij(odp, plik) {
   odp.sendFile(pelna);
 }
 
-module.exports = { LIMIT_BAJTOW, TYPY, trescPasuje, odbierz, przyjmij, wyslij };
+module.exports = { TYPY, odbierz, przyjmij, wyslij };

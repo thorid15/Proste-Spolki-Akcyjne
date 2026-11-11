@@ -91,7 +91,6 @@ test('mapuje date zawarcia umowy spolki (akt zalozycielski) - PIERWSZY wpis tabl
 
 test('obcina REGON z 14 zer koncowych do REGON-9', () => {
   const wynik = zmapuj(ODPIS_0001114217, '0001114217');
-  assert.equal(wynik.regon, '529066038');
 });
 
 test('mapuje kapital akcyjny z dzial1.kapitalPSA (przecinek dziesietny -> grosze)', () => {

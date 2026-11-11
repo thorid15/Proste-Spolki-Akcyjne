@@ -57,12 +57,3 @@ function KontaTestowe({ aplikacja, przyZalogowaniu }) {
   );
 }
 
-/** „Zaloguj (tryb testowy)” — otwiera ten sam link, który poszedł do skrzynki testowej. */
-function PrzyciskLinkuTestowego({ link }) {
-  if (!stanTrybuTestowego() || !link) return null;
-  return (
-    <a className="btn btn-glowny" href={link} style={{ marginLeft: 'var(--od-2)' }}>
-      Zaloguj (tryb testowy)
-    </a>
-  );
-}

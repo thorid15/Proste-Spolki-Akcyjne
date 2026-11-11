@@ -7,13 +7,14 @@
 
 const express = require('express');
 
+const konfiguracja = require('../konfiguracja');
+
 const { db } = require('../baza');
 const hasla = require('../logika/hasla');
 const limiter = require('../logika/limiter');
 const czas = require('../pomocnicze/czas');
 const { asy, bledneZadanie, nieZnaleziono, nieAutoryzowany } = require('../pomocnicze/odpowiedzi');
 const autoryzacja = require('../pomocnicze/autoryzacja');
-const trybTestowy = require('../tryb-testowy');
 
 const router = express.Router();
 
@@ -63,9 +64,11 @@ router.post(
       .run(czas.terazIso(), uzytkownik.id);
 
     autoryzacja.zalogujPracownika(zad, odp, uzytkownik.id);
-    trybTestowy.zapiszLogowanie(db(), {
-      typKonta: 'pracownik', kontoId: uzytkownik.id, email: uzytkownik.email, droga: (zad.body || {}).droga_testowa,
-    });
+    if (konfiguracja.TRYB_TESTOWY) {
+      require('../tryb-testowy').zapiszLogowanie(db(), {
+        typKonta: 'pracownik', kontoId: uzytkownik.id, email: uzytkownik.email, droga: (zad.body || {}).droga_testowa,
+      });
+    }
     odp.json({ uzytkownik: widokUzytkownika({ ...uzytkownik, ostatnie_logowanie: czas.terazIso() }) });
   })
 );

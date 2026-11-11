@@ -151,12 +151,6 @@ async function zalozTransakcje({ kwotaGrosze, opis, crc, urlPowrotu, urlPowiadom
   };
 }
 
-/** Awaryjne odpytanie o stan transakcji, gdy powiadomienie nie doszlo. */
-async function stanTransakcji(tpayId) {
-  const dane = await zadanie(`/transactions/${encodeURIComponent(tpayId)}`);
-  return { status: mapujStatus(dane && dane.status), surowy: (dane && dane.status) || '', surowe: dane };
-}
-
 /**
  * Uniewaznienie transakcji u OPERATORA. Bez tego zmiana kwoty zostawiala
  * u tpay zywy link na stara kwote — klient, ktory mial go w mailu, mogl
@@ -336,15 +330,11 @@ function kwotaNaGrosze(tekst) {
 }
 
 module.exports = {
-  BladTpay,
   skonfigurowany,
   sprawdzPodpisJws,
   zAdresuOperatora,
-  ADRESY_OPERATORA,
   zalozTransakcje,
-  stanTransakcji,
   anulujTransakcje,
-  mapujStatus,
   sprawdzPodpisItn,
   statusZPowiadomienia,
   kwotaNaGrosze,

@@ -11,7 +11,6 @@
 const konfiguracja = require('./konfiguracja');
 const przepisy = require('./logika/przepisy');
 const { parseKrsDate } = require('./logika/daty-krs');
-const { normalizujRegon } = require('./logika/regon');
 const { ustalSadRejestrowy } = require('./logika/sad-rejestrowy');
 
 const LIMIT_CZASU_MS = 8000;
@@ -89,8 +88,6 @@ function zmapuj(odpowiedz, numerKrs) {
     'kapitalAkcyjny',
   ]);
 
-  const { regon } = normalizujRegon(zeSciezek(podmiot, ['identyfikatory.regon']));
-
   // Fallback sadu rejestrowego (sekcja 1.7 poprawek) - API nie zwraca tego
   // pola (patrz komentarz wyzej), wiec dopasowujemy wg gminy siedziby spolki
   // z tej samej odpowiedzi. Baza (server/dane/sady-rejestrowe.json) pokrywa
@@ -109,7 +106,6 @@ function zmapuj(odpowiedz, numerKrs) {
     nazwa: zeSciezek(podmiot, ['nazwa']) || null,
     forma_prawna: zeSciezek(podmiot, ['formaPrawna']) || null,
     nip: zeSciezek(podmiot, ['identyfikatory.nip']) || null,
-    regon,
     kraj: zeSciezek(adres, ['adres.kraj', 'siedziba.kraj']) || 'Polska',
     kod_pocztowy: zeSciezek(adres, ['adres.kodPocztowy']) || null,
     miejscowosc: zeSciezek(adres, ['adres.miejscowosc', 'siedziba.miejscowosc']) || null,
@@ -216,11 +212,6 @@ async function pobierzZKrs(numerKrs) {
 
   if (!dane.nazwa) {
     ostrzezenia.push('API KRS nie zwróciło nazwy spółki — sprawdź i uzupełnij ręcznie.');
-  }
-
-  if (dane.regon) {
-    const { ostrzezenie } = normalizujRegon(dane.regon);
-    if (ostrzezenie) ostrzezenia.push(ostrzezenie);
   }
 
   const sadZaproponowany = dane.sad_rejestrowy_propozycja;

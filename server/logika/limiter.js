@@ -92,6 +92,11 @@ function zanotujNieudana(ip, identyfikator) {
   zanotuj(kluczIp(ip));
 }
 
+/** Liczy każdą próbę (nie tylko nieudaną) tylko na liczniku identyfikatora — limit czynności, np. zamówień. */
+function zanotujProbe(ip, identyfikator) {
+  zanotuj(klucz(ip, identyfikator));
+}
+
 /**
  * Udane logowanie czysci licznik TEGO KONTA, ale NIE licznika adresu:
  * atakujacy, ktory po dwudziestu probach trafil jedno konto, nie ma dostac
@@ -101,4 +106,4 @@ function wyczyscPoUdanej(ip, identyfikator) {
   proby.delete(klucz(ip, identyfikator));
 }
 
-module.exports = { sprawdz, zanotujNieudana, wyczyscPoUdanej, OKNO_MS, LIMIT, LIMIT_IP };
+module.exports = { sprawdz, zanotujNieudana, zanotujProbe, wyczyscPoUdanej, LIMIT, LIMIT_IP };

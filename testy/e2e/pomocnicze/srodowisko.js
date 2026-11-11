@@ -5,7 +5,7 @@
  *
  * Każdy test dostaje WŁASNY serwer w trybie testowym na świeżej bazie z `test:seed`
  * (osobny katalog `dane-testowe/e2e/<n>/`, osobny port) — to jest reset danych przed scenariuszem
- * (ta sama baza co w `npm run scenariusz:testowy`, bez jego kontroli ✓/✗).
+ * (ta sama baza co w `npm run test:seed`).
  *
  * Strażnik: zanim scenariusz ruszy, serwer MUSI pokazać panel trybu testowego (`/test`) i skrzynkę
  * testową (`/test/skrzynka`) — w trybie testowym `poczta.js` zawsze pisze do skrzynki (atrapa wysyłki).

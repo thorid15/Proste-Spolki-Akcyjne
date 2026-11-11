@@ -51,4 +51,4 @@ function usunPrzeterminowane(db, { teraz = new Date() } = {}) {
   return db.prepare('DELETE FROM psa_dziennik WHERE chwila < ?').run(granica.toISOString()).changes;
 }
 
-module.exports = { zapisz, zapisano, usunPrzeterminowane, RETENCJA_LAT, AKCJE };
+module.exports = { zapisz, zapisano, usunPrzeterminowane, AKCJE };

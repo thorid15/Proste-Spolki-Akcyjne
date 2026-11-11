@@ -119,4 +119,4 @@ async function waliduj({ plik, oryginal = null, atrapa = null }) {
   return { wynik: WYNIKI.DO_WERYFIKACJI, typ, komunikat: KOMUNIKATY.przyjety, kontrole };
 }
 
-module.exports = { WYNIKI, KOMUNIKATY, waliduj, format, pdfMaPodpis, sprawdzOryginal };
+module.exports = { WYNIKI, waliduj, format, sprawdzOryginal };

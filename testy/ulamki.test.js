@@ -58,8 +58,7 @@ test('waliduj: mianownik musi byc dodatni, licznik miedzy 1 a mianownikiem, wyni
   assert.throws(() => u.waliduj({ licznik: 1.5, mianownik: 3 }), u.BladUlamka);
 });
 
-test('naProcent i opisz sluza wylacznie wyswietlaniu (regula domenowa 4a)', () => {
-  assert.equal(u.naProcent({ licznik: 1, mianownik: 4 }), 25);
+test('opisz sluzy wylacznie wyswietlaniu (regula domenowa 4a)', () => {
   assert.equal(u.opisz({ licznik: 1, mianownik: 3 }), '1/3');
 });
 

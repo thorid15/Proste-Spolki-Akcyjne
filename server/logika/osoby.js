@@ -102,4 +102,4 @@ function identyfikator(osoba) {
   return osoba.data_urodzenia ? `ur. ${osoba.data_urodzenia}` : null;
 }
 
-module.exports = { POLA_EDYCJI, poprawnyPesel, dataZPesel, sprawdz, opis, identyfikator, EMAIL };
+module.exports = { POLA_EDYCJI, poprawnyPesel, sprawdz, opis, identyfikator, EMAIL };

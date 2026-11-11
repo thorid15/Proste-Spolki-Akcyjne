@@ -683,12 +683,10 @@ function widok(stan, dzien = null) {
 module.exports = {
   BladStanu,
   K,
-  porownajZdarzenia,
   odtworzStan,
   sprawdzBilans,
   ktoTraci,
   checklista,
-  POZYCJE_CHECKLISTY,
   widok,
   otwarte,
 };

@@ -10,6 +10,9 @@
 > nie ma jeszcze odpowiedzi Łukasza pod blokiem „Pytanie" w pliku źródłowym. Wszystkie 15 trafia więc
 > do sekcji „Decyzje otwarte", nie do rejestru decyzji — nic tu nie jest zgadywane. Gdy Łukasz
 > odpowie, kolejna sesja dokumentacyjna przenosi je stąd jako nowe wpisy `D-0xx`.
+>
+> Ścieżki w starszych wpisach: `testy-audyt/`, `frontend-audyt/`, `RAPORT-STANU-PSA.md`, `CLAUDE-PSA-UPROSZCZENIE.md`,
+> `CLAUDE-PSA.md` i pliki `SESJA-*.md` są od Faz 0 i 6 uproszczenia w `docs/archiwum/`.
 
 ---
 
@@ -1803,6 +1806,17 @@
   9. **D-212** Konto w portalu: e-mail tylko do odczytu (zmianę adresu robi kancelaria w karcie osoby, potem „Wyślij nowy link”), zmiana hasła wymaga obecnego i wylogowuje inne urządzenia, zgoda na e-mail — przełącznik u osoby z akcjami. Po przyjęciu wniosku menu Start · Konto, bez ekranów wniosku.
   10. **D-213** Usunięte: trasa zgłoszeń nieprawidłowości (U-13), test starego portalu i manifestu tras (`blok-d-http`), testy płatności dotyczące podstanu sprawy i okresu prowadzenia (okresy pokrywa `proces-dzienny.test.js`). Zero testów pominiętych „Faza 5”.
   11. **D-214** `test:seed`: konta portalu — zarząd Alfy (`alfa.zarzad@example.com`, działa za spółkę) i Anna Testowa (akcjonariuszka ze zgodą). e2e: dwa scenariusze portalu i krok „Start zamiast wniosku po przyjęciu”; małpa — cztery nowe ekrany portalu. Pominięte przejście widoku przy szybkiej zmianie adresu nie jest już błędem JS.
+
+### D-215–D-220 — Faza 6 uproszczenia: porządki, bezpieczeństwo, dokumentacja (11.11.2026; raport `raporty/FAZA-6.md`)
+
+- Obszar: martwy kod, § 7 specyfikacji uproszczenia, dokumentacja. Decyzje podjęte przy wykonaniu specyfikacji — do akceptacji Łukasza razem z raportem.
+- Decyzje:
+  1. **D-215** (Łukasz, 11.11.2026) Faza 5 zaakceptowana. Umowa: § 12 ust. 3 — Spółka niezwłocznie zawiadamia notariusza o odwołaniu lub wygaśnięciu umocowania osoby działającej za Spółkę, także korzystającej z portalu klienta (dalsze ustępy przenumerowane). Osoba z kontem nie zgłasza drugiej spółki formularzem publicznym — drugą spółkę zakłada kancelaria („Nowa spółka”).
+  2. **D-216** Usunięte bez zastępstwa: nieużywane funkcje i stałe (`widziWrazliweDaneInnych`, `nowelizacjaObowiazuje`, `stawkaGrosze`, `naProcent`, `opiszLiczbeAkcji`, `wymagajKonta`, `posrednik`, `brakUprawnien`, terminy przeniesień i inne stałe bez czytelnika), eksporty bez wywołujących, awaryjne odpytanie tpay, REGON z odpisu KRS (`logika/regon.js`; U-16), `narzedzia/scenariusz-e2e*.js` (zastępuje je e2e), `testy/pominiete.js`. Czytnik ZIP przeniesiony do `testy/zip-czytaj.js` — aplikacja tylko zapisuje archiwa.
+  3. **D-217** Konfiguracja: dane kancelarii wyłącznie w Ustawieniach (`psa_ustawienia`) — bez `KANCELARIA_*`, `NOTARIUSZ_*`, `PODPISUJACY_*`, `NAZWA_IZBY`, `POKAZ_ZNAK_IZBY`, `PODGLAD_SYSTEMU`, `POCZTA_TRANSPORT`, `PODPIS_*`, `TPAY_URL_POWROTU`. Poczta: tryb testowy — skrzynka; poza nim wyłącznie SMTP z TLS (`requireTLS`). `nodemailer` 10.0.10 → 10.5.0 i `npm audit fix` (zależności Expressu) — 0 podatności.
+  4. **D-218** Bezpieczeństwo (§ 7): lista tras `testy/trasy-dozwolone.txt` porównywana z introspekcją (`narzedzia/trasy.js`, routery z jednej listy `ROUTERY_API` w `serwer.js`); `Origin` innej strony przy żądaniu zmieniającym stan — 403 (wyjątek ITN; brak nagłówka przepuszczany); CSP bez `unsafe-inline` poza trybem testowym; `Referrer-Policy: same-origin` (odstępstwo od `no-referrer` — inaczej `Origin: null` przy własnych POST); moduły trybu testowego wczytywane tylko przy fladze; `PORTAL_WLACZONY=false` — portal 503; limit 10 zamówień informacji na konto w 15 minut.
+  5. **D-219** Dokumentacja: `README.md` i `ARCHITEKTURA-PSA.md` od nowa (stan faktyczny, reguły domenowe); `PRZEPISY-PSA.md` — tylko kolumna „Element” mapy w § 11; `npm run dokumentacja` → `docs/endpointy-api.md`, `docs/schemat-bazy.txt`. Do `docs/archiwum/`: `CLAUDE-PSA-UPROSZCZENIE.md`, `RAPORT-STANU-PSA.md`, `testy-audyt/`, `frontend-audyt/`.
+  6. **D-220** Portal, „Zgłoś zmianę”: „Wyślij” wyszarzony z powodem, dopóki opis ma mniej niż 5 znaków (zamiast odpowiedzi 422 z serwera).
 
 ---
 

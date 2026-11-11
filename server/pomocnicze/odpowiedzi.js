@@ -20,7 +20,6 @@ class BladZadania extends Error {
 const bledneZadanie = (k, s) => new BladZadania(400, k, s);
 const nieZnaleziono = (k = 'Nie odnaleziono zasobu.') => new BladZadania(404, k);
 const nieAutoryzowany = (k = 'Ta operacja wymaga zalogowania.') => new BladZadania(401, k);
-const brakUprawnien = (k = 'Brak uprawnień do tej operacji.') => new BladZadania(403, k);
 
 /** Opakowanie handlera - wyjatki trafiaja do wspolnego posrednika bledow. */
 function asy(handler) {
@@ -113,7 +112,6 @@ module.exports = {
   bledneZadanie,
   nieZnaleziono,
   nieAutoryzowany,
-  brakUprawnien,
   asy,
   autor,
   dalejPoUploadzie,

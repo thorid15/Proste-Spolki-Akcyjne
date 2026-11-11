@@ -271,23 +271,6 @@ test('to samo powiadomienie dwa razy ksieguje raz', async () => {
   assert.ok(po.oplacono, 'data zaplaty zapisana');
 });
 
-test('awaryjne odpytanie ksieguje tak samo jak powiadomienie', async () => {
-  const oplata = dodajOplate({ kwotaGrosze: 4200 });
-  const { platnosc } = await platnosci.przygotujZaplate(db(), {
-    oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
-  });
-
-  zachowanieAtrapy = { blad: null, status: 'pending' };
-  const czeka = await platnosci.sprawdzUOperatora(db(), platnosc.id);
-  assert.equal(czeka.zaksiegowano, false);
-
-  zachowanieAtrapy = { blad: null, status: 'correct' };
-  const zaplacone = await platnosci.sprawdzUOperatora(db(), platnosc.id);
-  assert.equal(zaplacone.zaksiegowano, true);
-  assert.equal(db().prepare('SELECT stan FROM psa_oplaty WHERE id = ?').get(oplata.id).stan, 'oplacona');
-  zachowanieAtrapy = { blad: null, status: 'pending' };
-});
-
 test('token operatora odnawia sie po odrzuceniu — jedno ponowienie, nie petla', async () => {
   tpay._zapomnijToken();
   const oplata = dodajOplate();
@@ -448,18 +431,6 @@ test('zmiana kwoty uniewaznia stara transakcje TAKZE u operatora', async () => {
     anulowane.includes(pierwsza.platnosc.tpay_id),
     `operator dostal polecenie uniewaznienia ${pierwsza.platnosc.tpay_id}; anulowane: ${anulowane.join(',')}`
   );
-});
-
-test('odpytanie zapisuje stan inny niz „oplacona”, zamiast zostawiac „oczekuje” bez konca', async () => {
-  const oplata = dodajOplate({ kwotaGrosze: 3100 });
-  const { platnosc } = await platnosci.przygotujZaplate(db(), {
-    oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
-  });
-  zachowanieAtrapy = { blad: null, status: 'declined' };
-  const wynik = await platnosci.sprawdzUOperatora(db(), platnosc.id);
-  assert.equal(wynik.status, 'nieudana');
-  assert.equal(db().prepare('SELECT status FROM psa_platnosci WHERE id = ?').get(platnosc.id).status, 'nieudana');
-  zachowanieAtrapy = { blad: null, status: 'pending' };
 });
 
 test('adresy operatora rozpoznawane, takze w zapisie IPv4-w-IPv6', () => {

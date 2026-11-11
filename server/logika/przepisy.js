@@ -33,49 +33,11 @@
 // ─────────────────────────────────────────────────────────────
 
 const TERMINY = {
-  /** PRZEPISY-PSA.md art. 300(34) § 1 🟢 - wpis nie pozniej niz 7 dni od otrzymania zadania. */
+  /**
+   * PRZEPISY-PSA.md art. 300(34) § 1 🟢 - wpis nie pozniej niz 7 dni od otrzymania zadania; po usunieciu
+   * przeszkody termin biegnie od nowa (`server/logika/terminy.js`).
+   */
   WPIS_DNI: 7,
-
-  /**
-   * PRZEPISY-PSA.md art. 300(34) § 1 zd. 2 🟢 - przy przeszkodzie termin
-   * biegnie od nowa, liczony od dnia jej usuniecia (nie: doliczany do reszty
-   * starego terminu - patrz `server/logika/terminy.js`).
-   */
-  WPIS_PO_USUNIECIU_PRZESZKODY_DNI: 7,
-
-  /** PRZEPISY-PSA.md art. 300(32) § 2 🟢 - minimalny okres wypowiedzenia umowy przez podmiot prowadzacy rejestr. */
-  WYPOWIEDZENIE_MIESIACE: 3,
-
-  /**
-   * PRZEPISY-PSA.md art. 300(32) § 3 🔵 - podmiot prowadzacy rejestr
-   * zawiadamia SAD REJESTROWY o wygasnieciu/rozwiazaniu umowy, w terminie
-   * 7 dni od tej daty. Drugi zegar ustawowy modulu, obok terminu wpisu.
-   */
-  ZAWIADOMIENIE_SADU_DNI: 7,
-
-  /**
-   * Przeniesienie rejestru (wytyczne § 7.4, klauzula umowy warunkowej):
-   * wypowiedzenie dotychczasowej umowy w 14 dni od zawarcia (ust. 3), termin
-   * ostateczny warunku 12 miesięcy (ust. 4), ostrzeżenie przed nim.
-   */
-  PRZENIESIENIE_WYPOWIEDZENIE_DNI: 14,
-  PRZENIESIENIE_TERMIN_WARUNKU_MIESIECY: 12,
-  PRZENIESIENIE_OSTRZEZENIE_DNI: 30,
-
-  /**
-   * PRZEPISY-PSA.md art. 300(33) § 3 🔵 - wszelkie zmiany danych z § 1
-   * pkt 1-4 oraz 9-11 zarzad zglasza PODMIOTOWI PROWADZACEMU REJESTR (do nas,
-   * nie do sadu rejestrowego - poprawka erraty nr 4) w terminie 7 dni od
-   * zdarzenia. Nasza rola: przypomnienie, nie egzekucja.
-   */
-  ZGLOSZENIE_ZMIANY_PRZEZ_ZARZAD_DNI: 7,
-
-  /**
-   * PRZEPISY-PSA.md art. 300(9) § 1 🟢 - wklady wnoszone w calosci w ciagu
-   * trzech lat od wpisu spolki do KRS. Wylacznie przypomnienie (decyzja nr 8,
-   * sekcja 15 CLAUDE-PSA.md) - termin sam w sobie nie blokuje wpisow.
-   */
-  WNIESIENIE_WKLADOW_LATA: 3,
 };
 
 /** Progi ostrzegania o zblizajacym sie terminie (sekcja 9 - pulpit). */
@@ -149,13 +111,6 @@ function obliczBrutto(nettoGrosze, vatProcent = STAWKA_VAT_PROCENT) {
 // ─────────────────────────────────────────────────────────────
 // ZAKRES PODMIOTOWY
 // ─────────────────────────────────────────────────────────────
-
-/**
- * PRZEPISY-PSA.md art. 300(31) § 1 pkt 2 🟢 - notariusz prowadzi rejestr
- * WYLACZNIE dla prostych spolek akcyjnych (regula domenowa nr 11).
- * Walidacja przy dodawaniu spolki.
- */
-const FORMA_PRAWNA_WYMAGANA = 'PROSTA SPÓŁKA AKCYJNA';
 
 /** Warianty zapisu formy prawnej spotykane w KRS i we wpisach recznych. */
 const FORMA_PRAWNA_WARIANTY = [
@@ -237,14 +192,6 @@ const BIALE_LISTY = {
   [ROLE_ODBIORCY.AKCJONARIUSZ]: [...POLA_TOZSAMOSCI, ...POLA_KONTAKTOWE],
 };
 
-/** Katalog organow z art. 300(35) § 4 KSH - do wyboru na wydruku informacji. */
-const ORGANY_UPRAWNIONE = [
-  'sąd',
-  'prokurator',
-  'komornik sądowy',
-  'administracyjny organ egzekucyjny',
-];
-
 // ─────────────────────────────────────────────────────────────
 // PODSTAWY PRAWNE - teksty na wydruki i do uzasadnien
 // ─────────────────────────────────────────────────────────────
@@ -302,36 +249,6 @@ const PODSTAWY = {
 };
 
 /**
- * Data wejscia w zycie nowelizacji Dz.U. 2026 poz. 176 oraz koniec okresu
- * przejsciowego na zgloszenie podmiotu prowadzacego rejestr do KRS.
- */
-const NOWELIZACJA = {
-  DZIENNIK: 'Dz.U. 2026 poz. 176',
-  WEJSCIE_W_ZYCIE: '2027-02-18',
-  KONIEC_OKRESU_PRZEJSCIOWEGO: '2027-05-18',
-};
-
-/** Czy na dany dzien obowiazuje juz nowelizacja. */
-function nowelizacjaObowiazuje(dataIso) {
-  const dzien = String(dataIso || '').slice(0, 10);
-  return dzien >= NOWELIZACJA.WEJSCIE_W_ZYCIE;
-}
-
-/** Zwraca stawke w groszach dla typu oplaty. */
-function stawkaGrosze(typ) {
-  switch (typ) {
-    case 'prowadzenie':
-      return STAWKI_GROSZE.PROWADZENIE_ROCZNIE;
-    case 'wpis':
-      return STAWKI_GROSZE.WPIS;
-    case 'informacja':
-      return STAWKI_GROSZE.INFORMACJA;
-    default:
-      throw new Error(`Nieznany typ opłaty: ${typ}`);
-  }
-}
-
-/**
  * Czy podana forma prawna kwalifikuje spolke do prowadzenia rejestru przez
  * notariusza. Zwraca { dozwolona, powod }.
  */
@@ -375,18 +292,10 @@ module.exports = {
   STAWKI_GROSZE,
   STAWKA_VAT_PROCENT,
   obliczBrutto,
-  FORMA_PRAWNA_WYMAGANA,
-  FORMA_PRAWNA_WARIANTY,
-  FORMY_PRAWNE_ZABRONIONE,
   POLA_WRAZLIWE,
   POLA_KONTAKTOWE,
   POLA_TOZSAMOSCI,
   ROLE_ODBIORCY,
   BIALE_LISTY,
-  ORGANY_UPRAWNIONE,
-  PODSTAWY,
-  NOWELIZACJA,
-  nowelizacjaObowiazuje,
-  stawkaGrosze,
   ocenFormePrawna,
 };

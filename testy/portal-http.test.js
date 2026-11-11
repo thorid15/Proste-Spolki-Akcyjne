@@ -17,6 +17,7 @@ const fs = require('node:fs');
 const PLIK_BAZY = path.join(__dirname, '..', 'dane', '.test-portal-http.db');
 for (const p of [PLIK_BAZY, `${PLIK_BAZY}-wal`, `${PLIK_BAZY}-shm`]) fs.rmSync(p, { force: true });
 process.env.WSPOLNA_BAZA = PLIK_BAZY;
+process.env.PORTAL_WLACZONY = 'true';
 process.env.KATALOG_DOKUMENTOW = path.join(__dirname, '..', 'dane', '.test-portal-dokumenty');
 fs.rmSync(process.env.KATALOG_DOKUMENTOW, { recursive: true, force: true });
 const SEKRET_ITN = 'sekret-itn-portalu';

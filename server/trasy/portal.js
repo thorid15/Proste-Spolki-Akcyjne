@@ -127,10 +127,13 @@ router.get('/pisma/:id', asy(async (zad, odp) => {
   odp.send(pdf);
 }));
 
-/** „Zamów informację” — zwraca opłatę, którą front od razu przekazuje do „Zapłać”. */
+/** „Zamów informację” — zwraca opłatę, którą front od razu przekazuje do „Zapłać”. Limit: 10 zamówień w 15 minut (§ 7 pkt 11). */
 router.post('/informacja', asy((zad, odp) => {
   const b = zad.body || {};
-  odp.status(201).json({ oplata_id: portal.zamowInformacje(db(), konto(zad), { spolka_id: b.spolka_id, dzien: b.dzien || null }) });
+  const k = konto(zad);
+  limiter.sprawdz(zad.ip, `informacja:${k.id}`, { limit: 10, bezLicznikaIp: true });
+  limiter.zanotujProbe(zad.ip, `informacja:${k.id}`);
+  odp.status(201).json({ oplata_id: portal.zamowInformacje(db(), k, { spolka_id: b.spolka_id, dzien: b.dzien || null }) });
 }));
 
 router.post('/oplaty/:id/zaplac', asy(async (zad, odp) => odp.json({ link: await portal.zaplac(db(), konto(zad), Number(zad.params.id)) })));

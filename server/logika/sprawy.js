@@ -38,4 +38,4 @@ function otwarta(sprawa) {
   return sprawa.stan === 'w_toku' || sprawa.stan === 'wstrzymana';
 }
 
-module.exports = { OPISY_STANOW, PRZEJSCIA, sprawdzPrzejscie, krok, otwarta };
+module.exports = { PRZEJSCIA, sprawdzPrzejscie, krok, otwarta };

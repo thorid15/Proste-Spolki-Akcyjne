@@ -441,41 +441,41 @@ rejestru akcjonariuszy zgodnie z przepisami ustawy**.
 
 | Przepis | Element |
 |---|---|
-| 300³⁰ § 2, 300¹⁰⁷ § 3, 592 § 3 | blokada wpisu akcji bez `data_wpisu_krs` emisji |
-| 300³¹ § 2 | niezmiennik bilansu akcji |
-| 300³¹ § 4 | append-only + łańcuch skrótów + endpoint integralności |
-| 300³² § 1²  🔵 | pole „kto zawarł umowę" (notariusz / zastępca / osoba upoważniona) |
-| 300³² § 1³  🔵 | szablon „oświadczenie zarządu o zawarciu umowy" |
-| 300³² § 2 | blokada rozwiązania umowy bez wskazania nowego podmiotu |
-| 300³² § 3  🔵 | drugi zegar 7 dni + zawiadomienie sądu (system teleinformatyczny) |
-| 300³³ § 1 pkt 4 | pole `rodzaj_akcji` |
-| 300³³ § 1 pkt 9 | pole pokrycia akcji |
-| 300³³ § 1 pkt 11, § 2 | obowiązki wobec spółki + dodatkowe informacje z umowy spółki |
-| 300³³ § 3  🔵 | nowy typ sprawy: zgłoszenie zmiany danych przez zarząd |
-| 300³⁴ § 1 | zegar 7 dni z zawieszeniem |
-| 300³⁴ § 2 | ścieżka „z urzędu", bez opłaty, bez powiadomienia |
-| 300³⁴ § 3 | krok powiadomienia zainteresowanego / zgoda |
-| 300³⁴ § 4 | typ zdarzenia `zobowiazanie` |
-| 300³⁴ § 5 | checklista + przełącznik „uzasadnione wątpliwości" |
-| 300³⁴ § 6 | walidacja ograniczeń |
-| 300³⁴ § 7 | zawiadomienia o wpisie / odmowie |
-| 300³⁴ § 8 | **generowanie listy akcjonariuszy do KRS** |
-| 300³⁴ § 9  🔵 | kanały powiadomień + żądanie adresata |
-| 300³⁵ § 1¹ 🔵 | maskowanie PESEL / daty urodzenia / adresu |
-| 300³⁵ § 3 | informacja z rejestru — także **papierowa** |
-| 300³⁵ § 4  🔵 | zapytania organów + sygnatura postępowania |
-| 300² § 3 + 300⁴³ | ułamkowe części akcji przypisane do numeru |
-| 300⁹ § 2–3 | uchwała zarządu o pokryciu; równomierne zaliczanie |
-| 300²³ § 2 | prawo głosu zastawnika + zakaz z umowy spółki |
-| 300³⁷ § 2 | rozróżnienie wpisu konstytutywnego i deklaratoryjnego |
-| 300³⁸ § 3–4 | wspólny przedstawiciel współuprawnionych |
-| 300⁴⁰ | blokada zbycia akcji nie w pełni pokrytej bez zgody spółki |
-| 300⁴² | ścieżka prawa pierwszeństwa |
-| 300⁴⁵ § 2 | kolejność: wpis umorzenia → spłata |
-| 300⁵¹ | typ zdarzenia: unieważnienie akcji orzeczeniem sądu |
-| 300¹¹⁷–300¹¹⁸ | warunkowa emisja: dyspozycja zarządu, wpis konstytutywny |
-| 300⁸⁷ § 1, 300⁹¹, 300⁹³ | znaczenie adresu e-mail; lista uprawnionych na WZ |
-| 476 § 1¹ 🔵 | wykaz akcjonariuszy przy wykreśleniu spółki |
+| 300³⁰ § 2, 300¹⁰⁷ § 3, 592 § 3 | blokada R6: emisja tylko z wiarygodną datą wpisu do KRS, od razu z obejmującymi (U-21) |
+| 300³¹ § 2 | niezmiennik bilansu akcji — blokada R6 (`stan.js`) |
+| 300³¹ § 4 | wpisy tylko dopisywane (wyzwalacze) + łańcuch skrótów + „Sprawdź integralność rejestru” w Ustawieniach (U-20) |
+| 300³² § 1²  🔵 | pole „kto zawarł umowę” — wybór z osób zawierających umowy (Ustawienia) przy podpisie notariusza |
+| 300³² § 1³  🔵 | — (brak osobnego pisma; dokumenty przy zawarciu umowy — U-03) |
+| 300³² § 2 | przejęcie: zaznaczenie we wniosku i wpis `otwarcie` od dnia przejęcia (U-07); przekazanie: wpis `zamkniecie` z powodem |
+| 300³² § 3  🔵 | — (zawiadomienie sądu po zamknięciu rejestru — czynność kancelarii poza aplikacją) |
+| 300³³ § 1 pkt 4 | rodzaj akcji wyliczany z adnotacji „uprawnienie” (U-17) |
+| 300³³ § 1 pkt 9 | przy emisji obowiązkowe „pokryte: tak/nie”; „nie” = adnotacja „niepokryte” (U-17) |
+| 300³³ § 1 pkt 11, § 2 | adnotacje „obowiązek” i „inna” na akcjach |
+| 300³³ § 3  🔵 | portal „Zgłoś zmianę” → sprawa w toku; zmiana danych spółki/osoby — „Edytuj” z historią (U-25) |
+| 300³⁴ § 1 | termin 7 dni z zawieszeniem przy wstrzymaniu (`terminy.js`) |
+| 300³⁴ § 2 | z urzędu ⇔ zajęcie: bez opłaty, bez powiadomienia (R3) |
+| 300³⁴ § 3 | `ktoTraci()` + powiadomienie o zamierzonym wpisie albo zgoda na wpis — blokada R6 (R2) |
+| 300³⁴ § 4 | podstawa wpisu — opis, data i pliki w sprawie (bez osobnego typu wpisu) |
+| 300³⁴ § 5 | checklista sprawy: trzy pozycje stałe + pozycje z atrybutów akcji (R5) |
+| 300³⁴ § 6 | pozycja checklisty „Ograniczenie uwzględnione” przy akcjach z adnotacją „ograniczenie” |
+| 300³⁴ § 7 | powiadomienie o wpisie / o odmowie (z przyczyną), Korespondencja |
+| 300³⁴ § 8 | egzemplarz powiadomienia o wpisie dla spółki z listą akcjonariuszy do KRS |
+| 300³⁴ § 9  🔵 | kanał pisma według zgody na e-mail (R9); portal: pisma na koncie osoby i u działających za spółkę |
+| 300³⁵ § 1¹ 🔵 | maskowanie białą listą pól według odbiorcy (`maskowanie.js`) |
+| 300³⁵ § 3 | informacja z rejestru — PDF e-mailem, listem albo w portalu (U-24, U-27) |
+| 300³⁵ § 4  🔵 | informacja dla organu: nazwa i sygnatura w `psa_pisma`, bez opłaty |
+| 300² § 3 + 300⁴³ | ułamki przypisane do jednego numeru akcji (`ulamki.js`, CHECK w schemacie) |
+| 300⁹ § 2–3 | adnotacja „niepokryte”, wykreślana po pokryciu (bez liczenia kwot wpłat) |
+| 300²³ § 2 | obciążenie z prawem głosu (ustanowienie, zmiana) + pozycja checklisty „Umowa spółki nie wyłącza prawa głosu” |
+| 300³⁷ § 2 | — (bez pola w sprawie — U-16) |
+| 300³⁸ § 3–4 | adnotacja „inna” na akcji (wspólny przedstawiciel); ułamki w stanie akcji |
+| 300⁴⁰ | pozycja checklisty „Zgoda spółki na zbycie” przy akcjach niepokrytych |
+| 300⁴² | adnotacja „ograniczenie” + pozycja checklisty |
+| 300⁴⁵ § 2 | wpis `umorzenie` (podstawa: uchwała) |
+| 300⁵¹ | wpis `umorzenie` z podstawą „orzeczenie sądu” |
+| 300¹¹⁷–300¹¹⁸ | — (warunkowa emisja poza zakresem — U-21) |
+| 300⁸⁷ § 1, 300⁹¹, 300⁹³ | zgoda na e-mail w karcie osoby; informacja z rejestru na wybrany dzień (U-24) |
+| 476 § 1¹ 🔵 | informacja z rejestru i eksport ZIP (art. 90a PrNot) |
 
 ---
 

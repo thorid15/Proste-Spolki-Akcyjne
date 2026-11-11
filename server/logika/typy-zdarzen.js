@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Typy wpisów — 8 operacji na akcjach (CLAUDE-PSA-UPROSZCZENIE.md § 3.1). Różnice w obrębie
+ * Typy wpisów — 8 operacji na akcjach (ARCHITEKTURA-PSA.md § 5). Różnice w obrębie
  * typu (operacja, rodzaj, podstawa, ułamek) są polami operacji, nie osobnymi typami.
  *
  * Kogo powiadomić i co sprawdzić nie zależy od typu — liczy to `stan.ktoTraci` i

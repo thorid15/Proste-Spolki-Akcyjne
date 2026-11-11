@@ -344,7 +344,8 @@ function EkranZmiany() {
   const c = useCzynnosc();
   const { pola } = bledyApi(c.blad);
   const wyslij = (z) => {
-    z.preventDefault();
+    if (z) z.preventDefault();
+    if (opis.trim().length < 5) return;
     c.wykonaj(async () => {
       const { id } = await API.post('/api/psa/portal/sprawy', { spolka_id: spolka, opis, klucz });
       for (const plik of pliki) await wgrajPlik(`/api/psa/portal/sprawy/${id}/pliki`, plik);
@@ -370,7 +371,7 @@ function EkranZmiany() {
         </Pole>
         {c.blad && !pola.opis && <Bledy blad={c.blad} />}
         <div className="rzad">
-          <button type="submit" className="btn btn-glowny" disabled={c.trwa}>Wyślij</button>
+          <PrzyciskGlowny etykieta="Wyślij" przyKlik={() => wyslij()} powod={opis.trim().length < 5 ? 'Opisz, co się zmieniło.' : null} trwa={c.trwa} />
           <a href={`#/?spolka=${spolka}`}>Anuluj</a>
         </div>
       </form>

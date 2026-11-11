@@ -77,4 +77,4 @@ function odpowiedz(numerKrs) {
   return { status: 200, ok: true, json: async () => JSON.parse(JSON.stringify(tresc)) };
 }
 
-module.exports = { odpowiedz, NUMERY: Object.keys(ODPISY) };
+module.exports = { odpowiedz };

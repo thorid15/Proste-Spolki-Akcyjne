@@ -231,36 +231,7 @@ function przyjmijPowiadomienie(db, pola) {
   return { ok: true, powod: null, zaksiegowano: true, ...wynik };
 }
 
-/**
- * Awaryjne odpytanie o stan transakcji — gdy powiadomienie nie doszlo.
- * Uzywa tej samej sciezki ksiegowania, wiec skutek jest identyczny.
- */
-async function sprawdzUOperatora(db, platnoscId) {
-  const platnosc = wczytajPlatnosc(db, platnoscId);
-  if (!platnosc) throw new Error('Nie odnaleziono płatności.');
-  if (!platnosc.tpay_id) throw new Error('Ta próba nie ma transakcji u operatora.');
-  if (platnosc.status === 'oplacona') return { status: 'oplacona', zaksiegowano: false };
-
-  const { status, surowe } = await tpay.stanTransakcji(platnosc.tpay_id);
-  if (status !== 'oplacona') {
-    // Stan inny niz „zaplacone" zapisujemy — inaczej nieudana albo anulowana
-    // transakcja wisialaby u nas jako „oczekuje" bez konca.
-    if (status !== 'oczekuje') {
-      db.prepare('UPDATE psa_platnosci SET status = ?, zakonczono = ? WHERE id = ?')
-        .run(status, czas.terazIso(), platnosc.id);
-    }
-    return { status, zaksiegowano: false, surowe };
-  }
-  const wynik = db.transaction(() =>
-    zaksieguj(db, { platnosc, opisPowiadomienia: JSON.stringify({ zrodlo: 'odpytanie', surowe }) }))();
-  return { status: 'oplacona', zaksiegowano: true, ...wynik };
-}
-
 module.exports = {
   przygotujZaplate,
   przyjmijPowiadomienie,
-  sprawdzUOperatora,
-  opisPlatnosci,
-  wczytajOplate,
-  wczytajPlatnosc,
 };

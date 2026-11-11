@@ -26,7 +26,6 @@ const baza = require('../server/baza');
 const migracje = require('../server/migracje');
 const tryb = require('../server/tryb-testowy');
 const czas = require('../server/pomocnicze/czas');
-const przepisy = require('../server/logika/przepisy');
 
 // Baza oznaczona PRZED zaladowaniem serwera — inaczej straznik odmowi startu.
 {
@@ -187,11 +186,9 @@ test('T3: atrapa KRS odpowiada dla numerów testowych w kształcie API', async (
   assert.equal(wynik.dane.forma_prawna, 'PROSTA SPÓŁKA AKCYJNA');
 });
 
-test('T4: symulowana data działa na bramkę 2027 i nie cofa się przed ostatnie zdarzenie', () => {
-  assert.equal(przepisy.nowelizacjaObowiazuje(czas.dzisIso()), czas.dzisIso() >= '2027-02-18');
+test('T4: symulowana data działa na czas rejestru i nie cofa się przed ostatnie zdarzenie', () => {
   tryb.ustawDate(db(), '2027-03-01');
   assert.equal(czas.dzisIso(), '2027-03-01');
-  assert.equal(przepisy.nowelizacjaObowiazuje(czas.dzisIso()), true);
   assert.equal(db().prepare('SELECT przesuniecie_ms FROM psa_baza_testowa').get().przesuniecie_ms, czas.przesuniecie());
 
   // Zdarzenie zapisane „w przyszłości” blokuje powrót przed jego chwilę.

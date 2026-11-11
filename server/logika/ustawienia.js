@@ -3,23 +3,13 @@
 /**
  * Ustawienia kancelarii — metryka edytowalna z aplikacji. Stawki są stałymi w `przepisy.js` (U-05).
  *
- * Zasada: `.env` jest DOMYSLNA, baza jest NADPISANIEM. Klucza nie ma
- * w `psa_ustawienia` -> obowiazuje wartosc z pliku konfiguracyjnego, tak jak
- * dzialalo to zawsze. Notariusz zapisuje wlasna wartosc -> od tej chwili
- * liczy sie baza. Nie ma wiec momentu "przenoszenia danych" ani drugiej
- * kopii tego samego, ktora moze sie rozjechac.
- *
- * Dlaczego w ogole baza: zeby zmienic NIP albo adres w `.env`, trzeba miec
- * dostep do serwera i zrestartowac aplikacje. W praktyce tego sie nie robi,
- * wiec kazda wystawiona umowa miala w tych miejscach kreski. Do tego z pliku
- * nie wida, co jest wpisane, nic tego nie sprawdza i nie zostaje slad, kto
- * zmienil dane, ktore trafiaja do aktow.
+ * Jedyne źródło danych kancelarii (dane do pism, stopka, osoby zawierające umowy) — ekran Ustawienia,
+ * z historią zmian w dzienniku. Pole nieustawione jest puste.
  *
  * Czego tu NIE MA: sekretow. Klucze tpay, sekret sesji i dane SMTP zostaja
  * w `.env` — baza trafia do kopii zapasowych i eksportow.
  */
 
-const konfiguracja = require('../konfiguracja');
 const czas = require('../pomocnicze/czas');
 
 /**
@@ -60,13 +50,10 @@ function zBazy(db) {
   return wynik;
 }
 
-/**
- * Metryka kancelarii w tym samym ksztalcie, co `konfiguracja.KANCELARIA` —
- * wolno ja podstawic wszedzie tam, gdzie dotad czytano stala.
- */
+/** Metryka kancelarii — jedyne źródło: `psa_ustawienia` (ekran Ustawienia); puste pola mają wartość ''. */
 function kancelaria(db) {
   const ustawione = zBazy(db);
-  const wynik = { ...konfiguracja.KANCELARIA };
+  const wynik = { ...Object.fromEntries([...KLUCZE_KANCELARII].map((k) => [k, ''])), nazwa: 'Kancelaria Notarialna', podpisujacy_funkcja: 'Notariusz' };
   for (const klucz of KLUCZE_KANCELARII) {
     if (ustawione[klucz] != null && String(ustawione[klucz]).trim() !== '') {
       wynik[klucz] = ustawione[klucz];
@@ -78,6 +65,7 @@ function kancelaria(db) {
     wynik.adres = [wynik.kancelaria_ulica, [wynik.kancelaria_kod, wynik.kancelaria_miasto]
       .filter(Boolean).join(' ')].filter(Boolean).join(', ');
   }
+  if (!wynik.podpisujacy_mianownik) wynik.podpisujacy_mianownik = wynik.notariusz_mianownik;
   if (!wynik.www_psa) wynik.www_psa = wynik.www;
   return wynik;
 }
@@ -176,5 +164,9 @@ function osobyZawierajaceUmowy(db) {
 }
 
 module.exports = {
-  POLA_KANCELARII, kancelaria, doEkranu, bledy, zapisz, nipPoprawny, osobyZawierajaceUmowy,
+  kancelaria,
+  doEkranu,
+  bledy,
+  zapisz,
+  osobyZawierajaceUmowy,
 };

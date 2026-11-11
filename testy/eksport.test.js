@@ -13,7 +13,7 @@ process.env.KATALOG_DOKUMENTOW = fs.mkdtempSync(path.join(os.tmpdir(), 'psa-eksp
 const { bazaTestowa, dodajSpolke, dodajOsobe, otworz, PDF_TESTOWY } = require('./pomoc');
 const eksport = require('../server/eksport');
 const informacje = require('../server/informacje');
-const zip = require('../server/logika/zip');
+const zip = require('./zip-czytaj');
 const czas = require('../server/pomocnicze/czas');
 
 test('eksport: README, informacja PDF, historia wpisów z łańcuchem, pliki spółki i pisma', async () => {

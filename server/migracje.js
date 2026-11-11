@@ -481,4 +481,4 @@ function uruchom(db) {
   return zastosowane;
 }
 
-module.exports = { uruchom, MIGRACJE };
+module.exports = { uruchom };

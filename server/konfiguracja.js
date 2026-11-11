@@ -106,14 +106,6 @@ const konfiguracja = {
   SESJA_SEKRET: tekst('SESJA_SEKRET', null),
   KRS_API_URL: tekst('KRS_API_URL', 'https://api-krs.ms.gov.pl/api/krs'),
   PORTAL_WLACZONY: flaga('PORTAL_WLACZONY', false),
-  /**
-   * Ekran `/podglad` to katalog komponentow systemu wizualnego - narzedzie
-   * DEWELOPERSKIE, nie ekran pracy notariusza (nie ma zadnej funkcji poza
-   * pokazaniem, jak wygladaja przyciski, pola i tabele). Domyslnie
-   * WYLACZONY: nie pojawia sie w menu i trasa oddaje "nie ma takiej strony".
-   * Wlacza sie go swiadomie przy pracach nad interfejsem.
-   */
-  PODGLAD_SYSTEMU: flaga('PODGLAD_SYSTEMU', false),
   // Adres portalu klienta w mailach zapraszajacych (etap 3B) - link
   // aktywacyjny musi wskazywac na PUBLICZNY adres, nie na "localhost".
   URL_PORTALU: tekst('URL_PORTALU', `http://localhost:${liczba('PORT', 3005)}/portal.html`),
@@ -149,78 +141,7 @@ const konfiguracja = {
     notification_secret: tekst('TPAY_NOTIFICATION_SECRET', null),
     api_url: tekst('TPAY_API_URL', 'https://api.tpay.com'),
     tryb_testowy: flaga('TPAY_TRYB_TESTOWY', false),
-    // Adres, z ktorego klient wraca po zaplacie. Musi byc PUBLICZNY.
-    url_powrotu: tekst('TPAY_URL_POWROTU', null),
   },
-  /**
-   * Naglowek dokumentow - odpowiednik `rdzen_kancelaria` z mastera.
-   *
-   * Pola ponizej `email`/`telefon` sa ATOMOWE (blok A2 sesji 8) - wzory z
-   * `wzory/` odwoluja sie do `kancelaria_ulica`, `kancelaria_kod` itd. z
-   * osobna, bo zdanie "ulica X, 00-000 Miasto" sklada sie inaczej w kazdym
-   * pismie. Pola `adres`/`miejscowosc` zostaja NIETKNIETE - czyta je istniejacy
-   * automat zawiadomien (logika/dokumenty-tresc.js) i raporty; dublowanie na
-   * dwa ksztalty jest tansze niz przepisywanie dzialajacego kodu.
-   */
-  KANCELARIA: {
-    nazwa: tekst('KANCELARIA_NAZWA', 'Kancelaria Notarialna Łukasz Kozon'),
-    adres: tekst('KANCELARIA_ADRES', ''),
-    miejscowosc: tekst('KANCELARIA_MIEJSCOWOSC', ''),
-    telefon: tekst('KANCELARIA_TELEFON', ''),
-    email: tekst('KANCELARIA_EMAIL', ''),
-
-    // Strona kancelarii - stopka aplikacji i portalu klienta. `www_psa` to
-    // adres zakladki "Proste Spolki Akcyjne" (informacje o prowadzeniu
-    // rejestru). Gdy nie podano dokladnego adresu zakladki, odsylamy na
-    // strone glowna - lepiej niz link, ktory konczy sie bledem 404.
-    www: tekst('KANCELARIA_WWW', 'https://notariusz.gdansk.pl'),
-    www_psa: tekst('KANCELARIA_WWW_PSA', tekst('KANCELARIA_WWW', 'https://notariusz.gdansk.pl')),
-
-    // Dane kancelarii do pism (wzory/*.md) — domyslne, nadpisywane w Ustawieniach.
-    // Wszystkie w MIANOWNIKU: pisma opisuja dane etykieta ("notariusz: ...",
-    // "siedziba: ..."), wiec zadna forma odmieniona nie jest juz potrzebna.
-    kancelaria_ulica: tekst('KANCELARIA_ULICA', ''),
-    kancelaria_kod: tekst('KANCELARIA_KOD', ''),
-    kancelaria_miasto: tekst('KANCELARIA_MIASTO', ''),
-    kancelaria_nip: tekst('KANCELARIA_NIP', ''),
-    kancelaria_regon: tekst('KANCELARIA_REGON', ''),
-    notariusz_mianownik: tekst('NOTARIUSZ_MIANOWNIK', 'Łukasz Kozon'),
-    podpisujacy_funkcja: tekst('PODPISUJACY_FUNKCJA', 'Notariusz'),
-    podpisujacy_mianownik: tekst('PODPISUJACY_MIANOWNIK', tekst('NOTARIUSZ_MIANOWNIK', 'Łukasz Kozon')),
-
-    // Etap 4.7: rejestr prowadzi KANCELARIA (art. 300(31) § 1 KSH), nie izba
-    // notarialna - znak izby na nagłówku raportu mógłby sugerować, że
-    // dokument pochodzi od samorządu. Domyślnie WYŁĄCZONY; do rozstrzygnięcia
-    // z notariuszem, czy i którą izbę pokazywać.
-    pokaz_znak_izby: flaga('POKAZ_ZNAK_IZBY', false),
-    nazwa_izby: tekst('NAZWA_IZBY', 'Izba Notarialna'),
-  },
-
-  /**
-   * Poczta (T1, SESJA-PSA-WYTYCZNE.md). Kazda wiadomosc idzie przez
-   * `server/poczta.js: wyslij()`, a ten wybiera transport:
-   *   - `smtp` — nodemailer (docelowo Microsoft 365, biuro@notariusz.gdansk.pl),
-   *   - `skrzynka-testowa` — plik .eml na dysku, nic nie wychodzi z serwera
-   *     (WYLACZNIE w trybie testowym — poza nim odmowa wysylki).
-   * Puste = `smtp`, jesli skonfigurowany; inaczej wysylka konczy sie
-   * widocznym bledem, nigdy cichym sukcesem.
-   */
-  POCZTA_TRANSPORT: tekst('POCZTA_TRANSPORT', null),
-
-  /**
-   * Podpisy (Faza 2, D-075).
-   *   - `mobywatel_url` — usługa podpisu kwalifikowanego mObywatel (nowa karta,
-   *     brak API — klient podpisuje sam),
-   *   - `limit_bajtow` — limit pliku w mObywatelu (5 MB, wytyczne § 3).
-   * Po wgraniu tylko test „czy plik jest podpisany”; resztę sprawdza pracownik (D-086).
-   */
-  PODPIS: {
-    mobywatel_url: tekst('PODPIS_MOBYWATEL_URL', 'https://podpis.mobywatel.gov.pl'),
-    limit_bajtow: liczba('PODPIS_LIMIT_BAJTOW', 5 * 1024 * 1024),
-    // Podpis zaufany (profil zaufany) na gov.pl — wynik zwykle jako plik .xml (XAdES), D-087.
-    pz_url: tekst('PODPIS_PZ_URL', 'https://www.gov.pl/web/gov/podpisz-dokument-elektronicznie-wykorzystaj-podpis-zaufany'),
-  },
-
   /**
    * Tryb testowy (T1-T6, DECYZJE.md D-074). Wlacza go WYLACZNIE zmienna
    * `PSA_TRYB_TESTOWY` (w `.env`). Serwer odmawia startu przy
