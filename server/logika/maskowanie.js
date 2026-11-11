@@ -55,6 +55,11 @@ function zamaskujOsobe(osoba, rola, odbiorcaOsobaId = null) {
     zamaskowane_pola.push(klucz);
     if (POLA_Z_PLACEHOLDEREM.includes(klucz)) wynik[klucz] = ZASLONA;
   }
+  // D-182: e-mail jest daną rejestru tylko przy zgodzie na korespondencję e-mail (art. 300³³ § 1 pkt 5).
+  if (wynik.email && wynik.email !== ZASLONA && !osoba.zgoda_email) {
+    wynik.email = ZASLONA;
+    zamaskowane_pola.push('email');
+  }
   // Poz. 23: maskuje się wyłącznie adres zamieszkania osoby fizycznej — siedziba osoby prawnej
   // i adres do doręczeń są jawne dla każdego akcjonariusza.
   if (wynik.adres === ZASLONA && (osoba.typ === 'prawna' || osoba.rodzaj_adresu === 'doreczen')) {
@@ -72,8 +77,9 @@ const dataPl = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4
  * Opis akcjonariusza do informacji z rejestru (U-27): imię i nazwisko albo firma, PESEL albo data
  * urodzenia (osoba prawna — numer w rejestrze), adres, e-mail przy zgodzie — wyłącznie pola, które
  * przepuszcza biała lista odbiorcy. Bez dopisków o pominięciu.
+ * Wynik: `{ nazwa, id, adres, email }` (brak danej = null).
  */
-function opisOsoby(osoba, rola, odbiorcaOsobaId = null) {
+function czesciOpisu(osoba, rola, odbiorcaOsobaId = null) {
   const o = zamaskujOsobe(osoba, rola, odbiorcaOsobaId);
   const jawne = (v) => v != null && v !== '' && v !== ZASLONA;
   let id = null;
@@ -82,9 +88,8 @@ function opisOsoby(osoba, rola, odbiorcaOsobaId = null) {
   } else if (jawne(o.pesel)) id = `PESEL ${o.pesel}`;
   else if (jawne(o.data_urodzenia)) id = `ur. ${dataPl(o.data_urodzenia)}`;
   const adres = jawne(o.adres) ? (o.rodzaj_adresu === 'doreczen' ? `adres do doręczeń: ${o.adres}` : o.adres) : null;
-  const email = jawne(o.email) && o.zgoda_email ? o.email : null;
-  const linie = [[o.nazwa, id].filter(Boolean).join(', '), [adres, email].filter(Boolean).join(', ')].filter(Boolean);
-  return linie.join('\n');
+  const email = jawne(o.email) && osoba.zgoda_email ? o.email : null;
+  return { nazwa: o.nazwa, id, adres, email };
 }
 
 /**
@@ -100,4 +105,4 @@ function widziWrazliweDaneInnych(rola) {
   return przepisy.POLA_WRAZLIWE.some((pole) => lista.includes(pole));
 }
 
-module.exports = { ZASLONA, zamaskujOsobe, opisOsoby, widziWrazliweDaneInnych };
+module.exports = { ZASLONA, zamaskujOsobe, czesciOpisu, widziWrazliweDaneInnych };

@@ -36,7 +36,7 @@ const TYPY = {
   informacja: 'Informacja z rejestru akcjonariuszy',
 };
 
-/** Pisma z datą i miejscem w nagłówku (listy); informacja ma nagłówek kancelarii bez daty. */
+/** Pisma z datą i miejscem w nagłówku (listy); informacja ma własny nagłówek (znak, kancelaria). */
 const LISTY = new Set(['powiadomienie_zamierzony', 'powiadomienie_wpis', 'powiadomienie_odmowa', 'wezwanie']);
 
 /** Plik wzoru w `wzory/` dla typu pisma. */
@@ -308,11 +308,24 @@ function tekst(db, id) {
   return wzory.tekst(wzory.wypelnij(wzory.wczytaj(nazwaWzoru(p.typ)), p.kontekst).bloki);
 }
 
-/** PDF z pól wzoru — wspólny wygląd, nagłówek kancelarii w listach i informacji. */
+/** PDF z pól wzoru — wspólny wygląd pism z nagłówkiem kancelarii w listach; informacja — własny wygląd. */
 function renderuj(typ, k, numer) {
   const { bloki } = wzory.wypelnij(wzory.wczytaj(nazwaWzoru(typ)), k);
+  const autor = `Kancelaria Notarialna, notariusz: ${k.notariusz}`;
+  if (typ === 'informacja') {
+    const naglowek = {
+      nazwa: 'Kancelaria Notarialna',
+      rola: 'podmiot prowadzący rejestr akcjonariuszy',
+      linie: [
+        `notariusz ${k.notariusz}`,
+        k.kancelaria_adres,
+        [k.kancelaria_email, k.kancelaria_telefon && `tel. ${k.kancelaria_telefon}`].filter(Boolean).join(' · '),
+      ].filter(Boolean),
+    };
+    return wzory.pdf(bloki, { numer, naglowek, tytul: TYPY[typ], autor, wyglad: 'informacja' });
+  }
   const naglowek =
-    LISTY.has(typ) || typ === 'informacja'
+    LISTY.has(typ)
       ? {
           lewy: [
             `Kancelaria Notarialna, notariusz: ${k.notariusz}`,
@@ -320,10 +333,10 @@ function renderuj(typ, k, numer) {
             [k.kancelaria_email, k.kancelaria_telefon && `tel. ${k.kancelaria_telefon}`].filter(Boolean).join(', '),
             'podmiot prowadzący rejestr akcjonariuszy',
           ].filter(Boolean),
-          prawy: LISTY.has(typ) ? `${k.kancelaria_miasto}, dnia ${k.data} r.` : null,
+          prawy: `${k.kancelaria_miasto}, dnia ${k.data} r.`,
         }
       : null;
-  return wzory.pdf(bloki, { numer, naglowek, tytul: TYPY[typ], autor: `Kancelaria Notarialna, notariusz: ${k.notariusz}` });
+  return wzory.pdf(bloki, { numer, naglowek, tytul: TYPY[typ], autor });
 }
 
 /** PDF pisma — powstaje raz; kolejne wywołania zwracają ten sam plik. */

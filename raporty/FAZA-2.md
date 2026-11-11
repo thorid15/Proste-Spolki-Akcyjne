@@ -34,3 +34,6 @@ Próbne PDF-y informacji: `raporty/FAZA-2-informacja-pelna.pdf` i `raporty/FAZA-
 2. Umowa § 11 ust. 3: „warunkiem … dokonania Wpisu … jest uiszczenie Taksy”, a R4 mówi, że opłata nigdy nie warunkuje wpisu. Zostawić zapis w umowie?
 3. Czy e-mail innych akcjonariuszy ma być widoczny w informacji dla akcjonariusza (art. 300³⁵ § 1¹ go nie wymienia; dziś ukryty — D-174)?
 4. Akapity o przejęciu i racie miesięcznej w umowie oraz oświadczenie PEP — proszę o akceptację treści (D-170).
+
+## Po odpowiedziach Łukasza (11.11.2026, D-181–D-185)
+Informacja z rejestru wróciła do wyglądu sprzed Fazy 2 (znak, EB Garamond i Inter, metryka, sekcje I.–IV.) — pozostałe pisma bez zmian; próbne PDF-y powyżej wygenerowane ponownie. E-mail akcjonariuszy jawny także w wersji dla akcjonariusza. Umowa: § 6 i RODO pkt 3a — aplikacja kancelarii; § 11 ust. 3 — „Taksa jest należna…”. Pytanie 4 — akceptacja później.

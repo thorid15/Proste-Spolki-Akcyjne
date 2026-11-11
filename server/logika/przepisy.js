@@ -233,7 +233,8 @@ const BIALE_LISTY = {
   [ROLE_ODBIORCY.WLASCICIEL_DANYCH]: null,
   [ROLE_ODBIORCY.SPOLKA]: [...POLA_TOZSAMOSCI, ...POLA_OSWIADCZEN, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
   [ROLE_ODBIORCY.ORGAN]: [...POLA_TOZSAMOSCI, ...POLA_OSWIADCZEN, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
-  [ROLE_ODBIORCY.AKCJONARIUSZ]: POLA_TOZSAMOSCI,
+  // D-182: e-mail innych akcjonariuszy jawny (przy zgodzie — `maskowanie.js`); art. 300³⁵ § 1¹ go nie wymienia.
+  [ROLE_ODBIORCY.AKCJONARIUSZ]: [...POLA_TOZSAMOSCI, ...POLA_KONTAKTOWE],
 };
 
 /** Katalog organow z art. 300(35) § 4 KSH - do wyboru na wydruku informacji. */

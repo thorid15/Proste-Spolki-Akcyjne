@@ -9,8 +9,9 @@
  * `---` = podział strony, `[podpis: A | B]` = blok podpisów. Wartości pól wstawia się po
  * rozbiorze Markdownu, więc żaden znak w danych nie zmienia układu pisma.
  *
- * Wygląd jest wspólny dla wszystkich pism i zdefiniowany tylko tutaj: krój Liberation Serif,
- * A4, nagłówek z danymi kancelarii (opcjonalny), stopka „numer · strona X z N”.
+ * Wygląd zdefiniowany tylko tutaj, dwa warianty: „pismo” — wspólny dla wszystkich pism (Liberation
+ * Serif, A4, nagłówek z danymi kancelarii, stopka „numer · strona X z N”) i „informacja” — informacja
+ * z rejestru dla klienta (znak notariatu, EB Garamond i Inter, metryka, tabele bez siatki).
  */
 
 const fs = require('node:fs');
@@ -19,11 +20,6 @@ const PDFDocument = require('pdfkit');
 
 const KATALOG_WZOROW = path.join(__dirname, '..', '..', 'wzory');
 const KATALOG_CZCIONEK = path.join(KATALOG_WZOROW, 'czcionki');
-const CZCIONKI = {
-  zwykla: 'LiberationSerif-Regular.ttf',
-  gruba: 'LiberationSerif-Bold.ttf',
-  kursywa: 'LiberationSerif-Italic.ttf',
-};
 
 const POCZ = '';
 const KON = '';
@@ -275,19 +271,60 @@ function wczytaj(nazwa) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 3. PDF — jeden wygląd dla wszystkich pism
+// 3. PDF — dwa wyglądy: „pismo” (wszystkie pisma) i „informacja” (informacja z rejestru)
 // ─────────────────────────────────────────────────────────────
 
-const ROZMIAR = 11;
-const ROZMIAR_TABELI = 9.5;
-const ODSTEP = 2;
-const MARGINESY = { top: 57, bottom: 64, left: 71, right: 57 };
-const PAD = 3;
+const MM = 72 / 25.4;
+const ZNAK_NOTARIATU = path.join(__dirname, '..', '..', 'publiczne', 'obrazy', 'notariat.png');
 
-function pdf(bloki, { numer = '', naglowek = null, tytul = '', autor = '' } = {}) {
+/** Barwy informacji — te same co w aplikacji (`publiczne/style/rejestr.css`). */
+const KOLOR = { tekst: '#14181C', szary: '#565E68', jasny: '#8A929C', zielen: '#1F4D3D', tlo: '#F1F5F2', linia: '#E6E8E3' };
+
+const WYGLADY = {
+  pismo: {
+    czcionki: { zwykla: 'LiberationSerif-Regular.ttf', gruba: 'LiberationSerif-Bold.ttf', kursywa: 'LiberationSerif-Italic.ttf' },
+    marginesy: { top: 57, bottom: 64, left: 71, right: 57 },
+    rozmiar: 11,
+    tabela: 9.5,
+  },
+  // Informacja z rejestru: dokument dla klienta — znak notariatu, EB Garamond w tytułach,
+  // Inter w treści (cyfry tabelaryczne), tabele bez siatki, kolor tylko w liniach i metryce.
+  informacja: {
+    czcionki: { zwykla: 'Inter-Regular.otf', gruba: 'Inter-SemiBold.otf', kursywa: 'Inter-Regular.otf', tytul: 'EBGaramond12-Regular.otf' },
+    marginesy: { top: 12 * MM, bottom: 16 * MM, left: 16 * MM, right: 16 * MM },
+    rozmiar: 9.5,
+    tabela: 8.5,
+  },
+};
+
+const ODSTEP = 2;
+const PAD = 3;
+const RZYMSKIE = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+
+/**
+ * Komórka informacji: pogrubiony początek i dalszy tekst = nazwa w pierwszym wierszu, reszta
+ * mniejszym, szarym krojem pod nią (np. akcjonariusz: nazwa, potem PESEL, adres, e-mail).
+ */
+function komorka(runs) {
+  const r = runs.filter((o) => o.tekst.trim());
+  if (r.length > 1 && r[0].gruby) {
+    const dalej = naTekst(r.slice(1)).split('\n').map((s) => s.trim()).filter(Boolean);
+    return { glowna: r[0].tekst.trim(), gruba: true, dalej };
+  }
+  return { glowna: naTekst(r), gruba: r.length > 0 && r.every((o) => o.gruby), dalej: [] };
+}
+
+function pdf(bloki, { numer = '', naglowek = null, tytul = '', autor = '', wyglad = 'pismo' } = {}) {
+  const W = WYGLADY[wyglad];
+  if (!W) throw new Error(`Nieznany wygląd „${wyglad}”.`);
+  const ozdobny = wyglad === 'informacja';
+  const { marginesy: MARGINESY, rozmiar: ROZMIAR, tabela: ROZMIAR_TABELI } = W;
+  // Cyfry tabelaryczne tylko w kolumnach liczb (do prawej) — w Inter `tnum` rozsuwa też łączniki.
+  const TNUM = { features: ['tnum'] };
+
   return new Promise((zrealizuj, odrzuc) => {
     const doc = new PDFDocument({ size: 'A4', margins: MARGINESY, bufferPages: true, info: { Title: tytul, Author: autor } });
-    for (const [nazwa, plik] of Object.entries(CZCIONKI)) doc.registerFont(nazwa, path.join(KATALOG_CZCIONEK, plik));
+    for (const [nazwa, plik] of Object.entries(W.czcionki)) doc.registerFont(nazwa, path.join(KATALOG_CZCIONEK, plik));
     const czesci = [];
     doc.on('data', (c) => czesci.push(c));
     doc.on('error', odrzuc);
@@ -305,21 +342,46 @@ function pdf(bloki, { numer = '', naglowek = null, tytul = '', autor = '' } = {}
       if (doc.y + wysokosc > dol()) doc.addPage();
     };
     const czcionka = (r) => (r.gruby ? 'gruba' : r.kursywa ? 'kursywa' : 'zwykla');
+    const kreska = (x1, x2, y, grubosc, kolor) => doc.save().lineWidth(grubosc).strokeColor(kolor).moveTo(x1, y).lineTo(x2, y).stroke().restore();
 
     const runy = (runs, x, szerokosc, opcje = {}) => {
       const r = runs.filter((o) => o.tekst);
       if (r.length === 0) return;
       zapewnij(ROZMIAR + ODSTEP);
       loguj(naTekst(r));
+      doc.fillColor(opcje.kolor || (ozdobny ? KOLOR.tekst : 'black'));
       r.forEach((o, i) => {
-        doc.font(opcje.gruby ? 'gruba' : czcionka(o)).fontSize(opcje.rozmiar || ROZMIAR);
+        doc.font(opcje.czcionka || (opcje.gruby ? 'gruba' : czcionka(o))).fontSize(opcje.rozmiar || ROZMIAR);
         const o2 = { width: szerokosc, align: opcje.align || 'justify', lineGap: ODSTEP, continued: i < r.length - 1 };
         if (i === 0) doc.text(o.tekst, x, doc.y, o2);
         else doc.text(o.tekst, o2);
       });
+      doc.fillColor('black');
     };
 
-    if (naglowek) {
+    // ── Nagłówek ──
+    if (naglowek && ozdobny) {
+      const y0 = doc.y;
+      const wysZnaku = 13 * MM;
+      if (fs.existsSync(ZNAK_NOTARIATU)) doc.image(ZNAK_NOTARIATU, lewo, y0, { height: wysZnaku });
+      const sz = szer * 0.6;
+      const x = lewo + szer - sz;
+      doc.font('tytul').fontSize(12.5).fillColor(KOLOR.tekst);
+      loguj(naglowek.nazwa);
+      doc.text(naglowek.nazwa, x, y0 - 2, { width: sz, align: 'right' });
+      doc.font('zwykla').fontSize(7.5).fillColor(KOLOR.zielen);
+      loguj(naglowek.rola);
+      doc.text(naglowek.rola, x, doc.y + 1, { width: sz, align: 'right', characterSpacing: 0.15 });
+      doc.fontSize(8).fillColor(KOLOR.szary);
+      for (const linia of naglowek.linie || []) {
+        loguj(linia);
+        doc.text(linia, x, doc.y + 0.5, { width: sz, align: 'right', lineGap: 0.5 });
+      }
+      const y = Math.max(y0 + wysZnaku, doc.y) + 3 * MM;
+      kreska(lewo, lewo + szer, y, 1.5, KOLOR.zielen);
+      doc.fillColor('black');
+      doc.y = y + 6 * MM;
+    } else if (naglowek) {
       const y0 = doc.y;
       doc.font('zwykla').fontSize(9);
       for (const linia of naglowek.lewy || []) {
@@ -335,33 +397,76 @@ function pdf(bloki, { numer = '', naglowek = null, tytul = '', autor = '' } = {}
       doc.y = Math.max(yLewy, doc.y) + 18;
     }
 
-    const tabela = (b) => {
+    // ── Tabele ──
+    const szerokosciKolumn = (b, rozmiarNaglowka, naglowekGruby) => {
       const kolumn = b.naglowek.length;
-      doc.fontSize(ROZMIAR_TABELI);
       const wszystkie = [b.naglowek, ...b.wiersze];
       const naturalna = [];
       const minimalna = [];
+      const odstep = ozdobny ? 2.5 * MM : 2 * PAD + 1;
+      // Informacja: etykieta kolumny może zająć dwa wiersze; komórka „nazwa + dane” mierzona
+      // tak, jak jest rysowana (nazwa większym krojem, dane mniejszym).
+      const pomiar = (t, glowa, k) => {
+        if (glowa && ozdobny) {
+          doc.font('gruba').fontSize(rozmiarNaglowka);
+          const sz = (x) => doc.widthOfString(x, { characterSpacing: 0.5 }) + x.length * 0.5 + 1;
+          const min = Math.max(...t.split(/\s+/).map(sz));
+          return { nat: Math.min(sz(t), Math.max(min, sz(t) / 2 + 6)), pelna: sz(t), min };
+        }
+        const o = ozdobny && b.wyrownanie[k] === 'prawo' ? TNUM : {};
+        doc.font(glowa && naglowekGruby ? 'gruba' : 'zwykla').fontSize(glowa ? rozmiarNaglowka : ROZMIAR_TABELI);
+        let nat = Math.max(...t.split('\n').map((linia) => doc.widthOfString(linia, o)));
+        const min = Math.max(...t.split(/\s+/).map((slowo) => doc.widthOfString(slowo, o)));
+        return { nat, min };
+      };
+      const pelne = [];
       for (let k = 0; k < kolumn; k += 1) {
         let nat = 0;
+        let pelna = 0;
         let min = 0;
         for (const w of wszystkie) {
-          const t = naTekst(w[k] || []);
-          doc.font(w === b.naglowek ? 'gruba' : 'zwykla');
-          for (const linia of t.split('\n')) nat = Math.max(nat, doc.widthOfString(linia));
-          for (const slowo of t.split(/\s+/)) min = Math.max(min, doc.widthOfString(slowo));
+          const glowa = w === b.naglowek;
+          const c = ozdobny && !glowa ? komorka(w[k] || []) : null;
+          let m;
+          if (c && c.dalej.length) {
+            doc.font('gruba').fontSize(ROZMIAR_TABELI + 0.5);
+            const n = doc.widthOfString(c.glowna);
+            doc.font('zwykla').fontSize(ROZMIAR_TABELI - 1.5);
+            const d = c.dalej.map((linia) => doc.widthOfString(linia));
+            const slowa = c.dalej.join(' ').split(/\s+/).map((x) => doc.widthOfString(x));
+            m = { nat: Math.max(n, ...d), min: Math.max(...slowa, n / 2) };
+          } else {
+            const t = naTekst(w[k] || []);
+            m = pomiar(glowa && ozdobny ? t.toUpperCase() : t, glowa, k);
+          }
+          nat = Math.max(nat, m.nat);
+          pelna = Math.max(pelna, m.pelna || m.nat);
+          min = Math.max(min, m.min);
         }
-        naturalna.push(Math.min(nat, szer * 0.6) + 2 * PAD + 1);
-        minimalna.push(min + 2 * PAD + 1);
+        naturalna.push(Math.min(nat, szer * 0.6) + odstep);
+        pelne.push(Math.min(pelna, szer * 0.6) + odstep);
+        minimalna.push(min + odstep);
       }
+      const sumaPelnych = pelne.reduce((a, c) => a + c, 0);
+      if (ozdobny && sumaPelnych <= szer) return pelne.map((s) => (s * szer) / sumaPelnych);
       const sumaNat = naturalna.reduce((a, c) => a + c, 0);
       const sumaMin = minimalna.reduce((a, c) => a + c, 0);
-      let szerokosci;
-      if (sumaNat <= szer) szerokosci = naturalna.map((s) => (s * szer) / sumaNat);
-      else if (sumaMin <= szer) {
+      if (sumaNat <= szer) return naturalna.map((s) => (s * szer) / sumaNat);
+      // Najpierw zwęża się tylko najszersza kolumna (w informacji — akcjonariusz), reszta zostaje naturalna.
+      const najszersza = naturalna.indexOf(Math.max(...naturalna));
+      const reszta = szer - (sumaNat - naturalna[najszersza]);
+      if (ozdobny && reszta >= minimalna[najszersza]) return naturalna.map((s, k) => (k === najszersza ? reszta : s));
+      if (sumaMin <= szer) {
         const zapas = naturalna.map((s, k) => s - minimalna[k]);
         const sumaZapasu = zapas.reduce((a, c) => a + c, 0) || 1;
-        szerokosci = minimalna.map((m, k) => m + ((szer - sumaMin) * zapas[k]) / sumaZapasu);
-      } else szerokosci = minimalna.map((m) => (m * szer) / sumaMin);
+        return minimalna.map((m, k) => m + ((szer - sumaMin) * zapas[k]) / sumaZapasu);
+      }
+      return minimalna.map((m) => (m * szer) / sumaMin);
+    };
+
+    const tabela = (b) => {
+      doc.fontSize(ROZMIAR_TABELI);
+      const szerokosci = szerokosciKolumn(b, ROZMIAR_TABELI, true);
 
       const wysokosc = (w, gruby) => {
         let h = 0;
@@ -405,9 +510,177 @@ function pdf(bloki, { numer = '', naglowek = null, tytul = '', autor = '' } = {}
       doc.y += ROZMIAR * 0.6;
     };
 
+    // Informacja: tabela bez siatki — etykiety kapitalikami, wiersze rozdzielone włosową linią.
+    const ROZMIAR_ETYKIETY = 6.5;
+    const PADY = 1.25 * MM;
+    const PADX = 2.5 * MM;
+    const tabelaOzdobna = (b) => {
+      const szerokosci = szerokosciKolumn(b, ROZMIAR_ETYKIETY, true);
+      const wyrownaj = (k) => ({ lewo: 'left', prawo: 'right', srodek: 'center' })[b.wyrownanie[k] || 'lewo'];
+      const pole = (k) => szerokosci[k] - (k === szerokosci.length - 1 ? 0 : PADX);
+      const etykieta = { lineGap: 0.5, characterSpacing: 0.5 };
+      const zwyklyK = (k) => (b.wyrownanie[k] === 'prawo' ? { ...TNUM, lineGap: 1 } : { lineGap: 1 });
+
+      const hNaglowka = () => {
+        doc.font('gruba').fontSize(ROZMIAR_ETYKIETY);
+        return Math.max(...b.naglowek.map((runs, k) => doc.heightOfString(naTekst(runs).toUpperCase() || ' ', { ...etykieta, width: pole(k) }))) + 1.5 * MM;
+      };
+      const hKomorki = (runs, k) => {
+        const c = komorka(runs);
+        doc.font(c.gruba ? 'gruba' : 'zwykla').fontSize(c.dalej.length ? ROZMIAR_TABELI + 0.5 : ROZMIAR_TABELI);
+        let h = doc.heightOfString(c.glowna || ' ', { ...zwyklyK(k), width: pole(k) });
+        if (c.dalej.length) {
+          doc.font('zwykla').fontSize(ROZMIAR_TABELI - 1.5);
+          h += 0.5 + doc.heightOfString(c.dalej.join('\n'), { lineGap: 0.2, width: pole(k) });
+        }
+        return h;
+      };
+      const hWiersza = (w) => Math.max(...w.map(hKomorki)) + 2 * PADY;
+
+      const rysujNaglowek = () => {
+        const y = doc.y;
+        const h = hNaglowka();
+        let x = lewo;
+        doc.font('gruba').fontSize(ROZMIAR_ETYKIETY).fillColor(KOLOR.szary);
+        b.naglowek.forEach((runs, k) => {
+          const t = naTekst(runs);
+          if (t) {
+            loguj(t, { kolumna: k, wiersz: -1 });
+            doc.text(t.toUpperCase(), x, y, { ...etykieta, width: pole(k), align: wyrownaj(k) });
+          }
+          x += szerokosci[k];
+        });
+        kreska(lewo, lewo + szer, y + h, 0.75, KOLOR.jasny);
+        doc.x = lewo;
+        doc.y = y + h;
+      };
+      const rysujWiersz = (w, nr) => {
+        const y = doc.y;
+        const h = hWiersza(w);
+        let x = lewo;
+        w.forEach((runs, k) => {
+          const c = komorka(runs);
+          if (c.glowna || c.dalej.length) loguj(naTekst(runs), { kolumna: k, wiersz: nr });
+          doc.font(c.gruba ? 'gruba' : 'zwykla').fontSize(c.dalej.length ? ROZMIAR_TABELI + 0.5 : ROZMIAR_TABELI).fillColor(KOLOR.tekst);
+          doc.text(c.glowna, x, y + PADY, { ...zwyklyK(k), width: pole(k), align: wyrownaj(k) });
+          if (c.dalej.length) {
+            doc.font('zwykla').fontSize(ROZMIAR_TABELI - 1.5).fillColor(KOLOR.szary);
+            doc.text(c.dalej.join('\n'), x, doc.y + 0.5, { lineGap: 0.2, width: pole(k), align: wyrownaj(k) });
+          }
+          x += szerokosci[k];
+        });
+        kreska(lewo, lewo + szer, y + h, 0.5, KOLOR.linia);
+        doc.x = lewo;
+        doc.y = y + h;
+      };
+
+      zapewnij(hNaglowka() + (b.wiersze[0] ? hWiersza(b.wiersze[0]) : 0));
+      rysujNaglowek();
+      b.wiersze.forEach((w, n) => {
+        if (doc.y + hWiersza(w) > dol()) {
+          doc.addPage();
+          rysujNaglowek();
+        }
+        rysujWiersz(w, n);
+      });
+      doc.fillColor('black');
+      doc.y += 2.5 * MM;
+    };
+
+    // Informacja: metryka — trzy fakty identyfikujące wypis, na zielonkawym tle z linią po lewej.
+    const metryka = (b) => {
+      const wagi = [1.6, 1, 1.2].slice(0, b.naglowek.length);
+      const suma = wagi.reduce((a, c) => a + c, 0);
+      const padX = 5 * MM;
+      const padY = 3 * MM;
+      const odstep = 6 * MM;
+      const wnetrze = szer - 2 * padX - odstep * (wagi.length - 1);
+      const kol = wagi.map((w) => (w * wnetrze) / suma);
+      const wartosci = (b.wiersze[0] || []).map((runs) => komorka(runs));
+      const hEtykiety = 6.5 + 1.2 * MM;
+      const hWartosci = (c, k) => {
+        doc.font(c.gruba ? 'gruba' : 'zwykla').fontSize(10);
+        return doc.heightOfString([c.glowna, ...c.dalej].join('\n') || ' ', { width: kol[k], lineGap: 1 });
+      };
+      const h = 2 * padY + hEtykiety + Math.max(...wartosci.map(hWartosci));
+      zapewnij(h);
+      const y = doc.y;
+      doc.save().rect(lewo, y, szer, h).fill(KOLOR.tlo).restore();
+      doc.save().rect(lewo, y, 2, h).fill(KOLOR.zielen).restore();
+      let x = lewo + padX;
+      b.naglowek.forEach((runs, k) => {
+        const etykieta = naTekst(runs);
+        loguj(etykieta, { kolumna: k, wiersz: -1 });
+        doc.font('gruba').fontSize(6.5).fillColor(KOLOR.zielen).text(etykieta.toUpperCase(), x, y + padY, { width: kol[k], characterSpacing: 0.7 });
+        const c = wartosci[k] || { glowna: '', dalej: [] };
+        loguj(naTekst((b.wiersze[0] || [])[k] || []), { kolumna: k, wiersz: 0 });
+        doc.fillColor(KOLOR.tekst).font(c.gruba ? 'gruba' : 'zwykla').fontSize(10);
+        doc.text(c.glowna, x, y + padY + hEtykiety, { width: kol[k], lineGap: 1 });
+        if (c.dalej.length) doc.font('zwykla').text(c.dalej.join('\n'), x, doc.y, { width: kol[k], lineGap: 1 });
+        x += kol[k] + odstep;
+      });
+      doc.fillColor('black');
+      doc.x = lewo;
+      doc.y = y + h + 6 * MM;
+    };
+
+    // Informacja: tabela bez nagłówka (pusty pierwszy wiersz) = pary „etykieta — wartość”.
+    const pary = (b) => {
+      const kolEtykiety = 46 * MM;
+      const kolWartosci = szer - kolEtykiety - 4 * MM;
+      b.wiersze.forEach((w, n) => {
+        const etykieta = naTekst(w[0] || []);
+        const c = komorka(w.slice(1).flat());
+        doc.font(c.gruba ? 'gruba' : 'zwykla').fontSize(ROZMIAR);
+        const h = Math.max(12, doc.heightOfString([c.glowna, ...c.dalej].join('\n') || ' ', { width: kolWartosci, lineGap: 1 }));
+        zapewnij(h + 1 * MM);
+        const y = doc.y;
+        loguj(`${etykieta} | ${naTekst(w.slice(1).flat())}`, { wiersz: n });
+        doc.font('zwykla').fontSize(8.5).fillColor(KOLOR.szary).text(etykieta, lewo, y + 1, { width: kolEtykiety });
+        doc.font(c.gruba ? 'gruba' : 'zwykla').fontSize(ROZMIAR).fillColor(KOLOR.tekst);
+        doc.text([c.glowna, ...c.dalej].join('\n'), lewo + kolEtykiety + 4 * MM, y, { width: kolWartosci, lineGap: 1 });
+        doc.x = lewo;
+        doc.y = y + h + 1 * MM;
+      });
+      doc.fillColor('black');
+      doc.y += 2 * MM;
+    };
+
+    let sekcja = 0;
+    let poTytule = false;
     for (const b of bloki) {
       doc.x = lewo;
-      if (b.typ === 'naglowek') {
+      const zaTytulem = poTytule;
+      poTytule = false;
+      if (ozdobny && b.typ === 'naglowek' && b.poziom === 1) {
+        doc.font('tytul').fontSize(21).fillColor(KOLOR.tekst);
+        loguj(naTekst(b.runs));
+        doc.text(naTekst(b.runs), lewo, doc.y, { width: szer });
+        doc.fillColor('black');
+        doc.y += 2.5 * MM;
+        poTytule = true;
+      } else if (ozdobny && b.typ === 'naglowek') {
+        zapewnij(70);
+        doc.y += sekcja === 0 ? 0 : 2.5 * MM;
+        const nr = `${RZYMSKIE[sekcja] || sekcja + 1}.`;
+        sekcja += 1;
+        loguj(naTekst(b.runs));
+        doc.font('tytul').fontSize(13.5).fillColor(KOLOR.jasny).text(`${nr} `, lewo, doc.y, { continued: true });
+        doc.fillColor(KOLOR.tekst).text(naTekst(b.runs));
+        const y = doc.y + 1 * MM;
+        kreska(lewo, lewo + szer, y, 0.5, KOLOR.linia);
+        doc.fillColor('black');
+        doc.y = y + 2.5 * MM;
+      } else if (ozdobny && b.typ === 'tabela' && zaTytulem) {
+        metryka(b);
+      } else if (ozdobny && b.typ === 'tabela' && b.naglowek.every((k) => !naTekst(k))) {
+        pary(b);
+      } else if (ozdobny && b.typ === 'tabela') {
+        tabelaOzdobna(b);
+      } else if (ozdobny && b.typ === 'akapit') {
+        runy(b.runs, lewo, szer, { rozmiar: 8.5, kolor: KOLOR.szary, align: 'left' });
+        doc.y += 2.5 * MM;
+      } else if (b.typ === 'naglowek') {
         const rozmiar = b.poziom === 1 ? 13 : ROZMIAR;
         zapewnij(rozmiar * 4);
         doc.y += b.poziom === 1 ? 4 : 6;
@@ -451,14 +724,24 @@ function pdf(bloki, { numer = '', naglowek = null, tytul = '', autor = '' } = {}
       }
     }
 
+    // ── Stopka ──
     const zakres = doc.bufferedPageRange();
     for (let i = 0; i < zakres.count; i += 1) {
       doc.switchToPage(zakres.start + i);
       const stopka = [numer, `strona ${i + 1} z ${zakres.count}`].filter(Boolean).join(' · ');
-      doc.page.margins.bottom = 0;
-      doc.font('zwykla').fontSize(8);
       teksty.push({ strona: i + 1, tekst: stopka });
-      doc.text(stopka, lewo, doc.page.height - 40, { width: szer, align: 'center', lineBreak: false });
+      doc.page.margins.bottom = 0;
+      if (ozdobny) {
+        const y = doc.page.height - 12 * MM;
+        kreska(lewo, lewo + szer, y, 0.5, KOLOR.linia);
+        doc.font('zwykla').fontSize(7.5).fillColor(KOLOR.jasny);
+        doc.text(numer, lewo, y + 2.5 * MM, { width: szer / 2, lineBreak: false });
+        doc.text(`strona ${i + 1} z ${zakres.count}`, lewo + szer / 2, y + 2.5 * MM, { width: szer / 2, align: 'right', lineBreak: false });
+        doc.fillColor('black');
+      } else {
+        doc.font('zwykla').fontSize(8);
+        doc.text(stopka, lewo, doc.page.height - 40, { width: szer, align: 'center', lineBreak: false });
+      }
       doc.page.margins.bottom = MARGINESY.bottom;
     }
     doc.on('end', () => zrealizuj({ bufor: Buffer.concat(czesci), strony: zakres.count, teksty }));

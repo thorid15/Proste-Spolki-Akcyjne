@@ -41,6 +41,12 @@ function rodzajSerii(e, atrybuty) {
   return upr.map((a) => `uprzywilejowane nr ${n.opisz(a.zakresy)}: ${a.tresc}`).join('; ') + (wszystkie ? '' : '; pozostałe zwykłe');
 }
 
+/** Akcjonariusz w informacji: nazwa (pogrubiona) i dane w wierszu pod nią — identyfikator, adres, e-mail. */
+function opisAkcjonariusza(db, osobaId, rola, odbiorcaOsobaId) {
+  const { nazwa, id, adres, email } = maskowanie.czesciOpisu(daneOsoby.wczytaj(db, osobaId), rola, odbiorcaOsobaId);
+  return { nazwa, dane: [id, adres, email].filter(Boolean).join(' · ') };
+}
+
 /** Pola wzoru `informacja` — stan rejestru na koniec dnia, dane osób według odbiorcy. */
 function tresc(db, stan, dzien, rola, odbiorcaOsobaId) {
   const w = stanLogika.widok(stan, dzien);
@@ -57,7 +63,7 @@ function tresc(db, stan, dzien, rola, odbiorcaOsobaId) {
     })),
     umorzone: umorzone.map((e, i) => ({ seria: e.seria, numery: n.opisz(e.umorzone), dalej: i < umorzone.length - 1 })),
     akcjonariusze: w.akcjonariusze.map((p) => ({
-      opis: maskowanie.opisOsoby(daneOsoby.wczytaj(db, p.osoba_id), rola, odbiorcaOsobaId),
+      ...opisAkcjonariusza(db, p.osoba_id, rola, odbiorcaOsobaId),
       seria: p.seria,
       numery: n.opisz(p.zakresy),
       liczba: p.czesc ? `${p.czesc.licznik}/${p.czesc.mianownik}` : String(p.liczba),

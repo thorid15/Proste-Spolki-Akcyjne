@@ -31,12 +31,15 @@ const OSOBA = {
   pep_opis: 'radny gminy',
 };
 
-test('REGUŁA 9: inny akcjonariusz nie widzi PESEL, daty urodzenia, adresu zamieszkania ani e-maila', () => {
+test('REGUŁA 9: inny akcjonariusz nie widzi PESEL, daty urodzenia ani adresu zamieszkania; e-mail przy zgodzie — jawny (D-182)', () => {
   const wynik = maskowanie.zamaskujOsobe(OSOBA, przepisy.ROLE_ODBIORCY.AKCJONARIUSZ, 99);
   assert.equal(wynik.zamaskowane, true);
-  for (const pole of ['pesel', 'data_urodzenia', 'adres', 'email']) {
+  for (const pole of ['pesel', 'data_urodzenia', 'adres']) {
     assert.equal(wynik[pole], maskowanie.ZASLONA, `pole ${pole} musi być zasłonięte`);
   }
+  assert.equal(wynik.email, OSOBA.email);
+  assert.equal(wynik.zgoda_email, undefined, 'stan zgody innych osób nie wychodzi');
+  assert.equal(maskowanie.zamaskujOsobe({ ...OSOBA, zgoda_email: 0 }, przepisy.ROLE_ODBIORCY.AKCJONARIUSZ, 99).email, maskowanie.ZASLONA);
   // AML, PEP i uwagi to dane kancelarii, nie treść rejestru — nie wychodzą w żadnym wariancie.
   for (const pole of ['aml_data', 'uwagi', 'pep', 'pep_opis']) assert.equal(wynik[pole], undefined, pole);
   assert.equal(wynik.nazwa, 'Jan Kowalski');
@@ -47,8 +50,9 @@ test('poz. 23: siedziba osoby prawnej i adres do doręczeń nie są adresem zami
   assert.equal(maskowanie.zamaskujOsobe({ ...OSOBA, rodzaj_adresu: 'doreczen' }, rola, 99).adres, OSOBA.adres);
   const prawna = { id: 8, typ: 'prawna', nazwa: 'Gamma sp. z o.o.', numer_rejestru: '0000123456', adres: 'ul. Morska 3, Gdynia', rodzaj_adresu: 'glowny' };
   assert.equal(maskowanie.zamaskujOsobe(prawna, rola, 99).adres, prawna.adres);
-  assert.equal(maskowanie.opisOsoby(prawna, rola, 99), 'Gamma sp. z o.o., nr w rejestrze 0000123456\nul. Morska 3, Gdynia');
-  assert.equal(maskowanie.opisOsoby(OSOBA, rola, 99), 'Jan Kowalski');
+  assert.deepEqual(maskowanie.czesciOpisu(prawna, rola, 99), { nazwa: 'Gamma sp. z o.o.', id: 'nr w rejestrze 0000123456', adres: 'ul. Morska 3, Gdynia', email: null });
+  assert.deepEqual(maskowanie.czesciOpisu(OSOBA, rola, 99), { nazwa: 'Jan Kowalski', id: null, adres: null, email: 'jan@example.pl' });
+  assert.equal(maskowanie.czesciOpisu({ ...OSOBA, zgoda_email: 0 }, rola, 99).email, null, 'e-mail bez zgody nie jest daną rejestru');
 });
 
 test('Z-150: rola „spółka”/„organ” ma pełny wgląd do treści rejestru (PESEL), ale AML/PEP nie wychodzi poza kancelarię', () => {

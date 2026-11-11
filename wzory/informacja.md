@@ -1,13 +1,17 @@
 # Informacja z rejestru akcjonariuszy
 
-## nr {{numer}} · stan na {{stan_na}}
+| Spółka | Stan na | Numer informacji |
+|---|---|---|
+| **{{spolka_firma}}** KRS {{spolka_krs}} | **{{stan_na}}** | {{numer}} |
 
 ### Spółka
 
-{{spolka_firma}} \
-siedziba: {{spolka_siedziba}}, adres: {{spolka_adres}} \
-{{spolka_sad}}, KRS {{spolka_krs}} \
-data rejestracji spółki: {{spolka_data_rejestracji}}
+| | |
+|---|---|
+| Siedziba | {{spolka_siedziba}} |
+| Adres | {{spolka_adres}} |
+| Sąd rejestrowy | {{spolka_sad}} |
+| Data rejestracji spółki | {{spolka_data_rejestracji}} |
 
 ### Akcje
 
@@ -24,7 +28,7 @@ Numery umorzone: {{#lista umorzone}}seria {{seria}}: {{numery}}{{#jesli dalej}};
 
 | Akcjonariusz | Seria | Numery | Liczba | Data wpisu | Pokryte w całości |
 |---|---|---|--:|---|---|
-{{#lista akcjonariusze}}| {{opis}} | {{seria}} | {{numery}} | {{liczba}} | {{data_wpisu}} | {{pokryte}} |
+{{#lista akcjonariusze}}| **{{nazwa}}** {{dane}} | {{seria}} | {{numery}} | {{liczba}} | {{data_wpisu}} | {{pokryte}} |
 {{/lista}}
 {{#jesli obciazenia}}
 

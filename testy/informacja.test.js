@@ -57,15 +57,11 @@ test('informacja dla spółki: wyłącznie części z § 4, pełne dane, bez kwo
   const { pismoId } = informacje.wydajInformacje(db, { spolkaId: s, odbiorca: { rodzaj: 'spolka' }, dzien: czas.dzisIso(), oplata: 'nie', kto: 'Test' });
   const p = pisma.wczytaj(db, pismoId);
   assert.match(p.numer, /^INF\/\d{4}\/0001$/);
-  assert.deepEqual(naglowki(db, pismoId), [
-    'Informacja z rejestru akcjonariuszy',
-    `nr ${p.numer} · stan na ${pisma.dataPl(czas.dzisIso())}`,
-    'Spółka',
-    'Akcje',
-    'Akcjonariusze',
-  ]);
+  assert.deepEqual(naglowki(db, pismoId), ['Informacja z rejestru akcjonariuszy', 'Spółka', 'Akcje', 'Akcjonariusze']);
   const t = tekst(db, pismoId);
-  for (const fragment of ['Alfa prosta spółka akcyjna', 'KRS ', 'data rejestracji spółki: 10.01.2026', 'A | 1–300 | 300 | zwykłe | 10.01.2026',
+  assert.ok(t.includes(`Spółka | Stan na | Numer informacji\nAlfa prosta spółka akcyjna KRS `), t);
+  assert.ok(t.includes(`| ${pisma.dataPl(czas.dzisIso())} | ${p.numer}`), 'metryka: stan na i numer');
+  for (const fragment of ['Alfa prosta spółka akcyjna', 'Data rejestracji spółki | 10.01.2026', 'A | 1–300 | 300 | zwykłe | 10.01.2026',
     'PESEL 44051401359', 'ur. 01.02.1975', 'ul. Klonowa 2, 80-200 Gdańsk', 'anna@a.example', 'nr w rejestrze 0000123456', '| tak']) {
     assert.ok(t.includes(fragment), `brak „${fragment}”`);
   }
@@ -86,13 +82,14 @@ test('obciążenia i ograniczenia — sekcja tylko, gdy są; uprzywilejowanie w 
   void a;
 });
 
-test('maskowanie: akcjonariusz widzi swoje dane, u innych — bez PESEL, daty urodzenia, adresu zamieszkania i e-maila', () => {
+test('maskowanie: akcjonariusz widzi swoje dane, u innych — bez PESEL, daty urodzenia i adresu zamieszkania; e-mail jawny (D-182)', () => {
   const { db, s, a } = rejestr();
   const { pismoId } = informacje.wydajInformacje(db, { spolkaId: s, odbiorca: { rodzaj: 'osoba', osobaId: a }, dzien: czas.dzisIso(), oplata: 'nie', kto: 'Test' });
   const t = tekst(db, pismoId);
   assert.ok(t.includes('PESEL 44051401359') && t.includes('ul. Lipowa 1, 80-100 Gdańsk') && t.includes('anna@a.example'));
   assert.ok(t.includes('Bartosz B'));
-  for (const ukryte of ['ur. 01.02.1975', 'ul. Klonowa 2', 'b@b.example']) assert.ok(!t.includes(ukryte), `widać „${ukryte}”`);
+  for (const ukryte of ['ur. 01.02.1975', 'ul. Klonowa 2']) assert.ok(!t.includes(ukryte), `widać „${ukryte}”`);
+  assert.ok(t.includes('b@b.example'), 'e-mail innego akcjonariusza (przy zgodzie) jest jawny');
   assert.ok(t.includes('Gamma sp. z o.o.') && t.includes('ul. Morska 3, 81-001 Gdynia'), 'siedziba osoby prawnej nie jest adresem zamieszkania');
   assert.ok(!/pomini|ukryt|zamaskow/i.test(t), 'bez dopisków o pominięciu');
   assert.equal(pisma.wczytaj(db, pismoId).adresat_osoba_id, a);

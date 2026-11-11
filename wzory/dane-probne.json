@@ -91,9 +91,9 @@
     ],
     "umorzone": [],
     "akcjonariusze": [
-      { "opis": "Ewa Przykład\nPESEL 44051401359\nul. Morska 7, 81-001 Gdynia\newa@przyklad.example", "seria": "A", "numery": "1–100", "liczba": "100", "data_wpisu": "15.01.2026", "pokryte": "tak" },
-      { "opis": "Piotr Testowy\nur. 01.02.1975\nul. Polna 9, 00-001 Warszawa", "seria": "A", "numery": "101–200", "liczba": "100", "data_wpisu": "15.01.2026", "pokryte": "tak" },
-      { "opis": "Piotr Testowy\nur. 01.02.1975\nul. Polna 9, 00-001 Warszawa", "seria": "B", "numery": "1–50", "liczba": "50", "data_wpisu": "02.03.2026", "pokryte": "nie" }
+      { "nazwa": "Ewa Przykład", "dane": "PESEL 44051401359 · ul. Morska 7, 81-001 Gdynia · ewa@przyklad.example", "seria": "A", "numery": "1–100", "liczba": "100", "data_wpisu": "15.01.2026", "pokryte": "tak" },
+      { "nazwa": "Piotr Testowy", "dane": "ur. 01.02.1975 · ul. Polna 9, 00-001 Warszawa", "seria": "A", "numery": "101–200", "liczba": "100", "data_wpisu": "15.01.2026", "pokryte": "tak" },
+      { "nazwa": "Piotr Testowy", "dane": "ur. 01.02.1975 · ul. Polna 9, 00-001 Warszawa", "seria": "B", "numery": "1–50", "liczba": "50", "data_wpisu": "02.03.2026", "pokryte": "nie" }
     ],
     "obciazenia": [
       { "numery": "A 101–120", "tresc": "zastaw", "uprawniony": "Bank Przykładowy S.A.", "prawo_glosu": "tak", "data_wpisu": "20.03.2026" }

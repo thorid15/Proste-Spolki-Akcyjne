@@ -17,10 +17,10 @@ zostawia widoczne obwódki.
 Używany w dwóch miejscach:
 
 - `publiczne/js/ui-rejestr.js` — stopka obu aplikacji (`ZNAK_NOTARIATU`),
-- `server/logika/informacja-dokument.js` — główka informacji z rejestru.
+- `server/logika/wzory.js` — nagłówek informacji z rejestru (PDF, wygląd „informacja”).
 
-Oba miejsca mają zapas na wypadek, gdyby pliku zabrakło: stopka nie pokazuje
-wtedy nic, wydruk wraca do ramki z nazwą znaku. Żadne z nich nie rysuje
+Oba miejsca mają zapas na wypadek, gdyby pliku zabrakło: stopka i nagłówek
+informacji nie pokazują wtedy znaku. Żadne z nich nie rysuje
 godła samodzielnie — znaków samorządu notarialnego się nie odtwarza ani nie
 generuje. Gdyby znak trzeba było wymienić, wystarczy podmienić ten plik.
 

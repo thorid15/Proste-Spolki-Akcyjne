@@ -1750,6 +1750,16 @@
   11. **D-179** Przypomnienie o kolejnym roku: e-mail do spółki 30 dni przed rocznicą, raz (ślad w dzienniku), tylko przy płatności rocznej i adresie e-mail spółki.
   12. **D-180** Retencja U-19: wniosek odrzucony — od razu, roboczy albo złożony — po 90 dniach bez zmian; znikają dane klienta, checklista, notatka, dotychczasowy podmiot, pliki, niewysłane pisma i konto założone tylko dla wniosku; wysłane pisma zostają jako dowód.
 
+### D-181–D-185 — Odpowiedzi do raportu Fazy 2 (Łukasz, 11.11.2026)
+
+- Obszar: wygląd informacji z rejestru, umowa o prowadzenie rejestru, maskowanie.
+- Decyzje:
+  1. **D-181** Pisma są proste (wspólny wygląd „pismo” — bez zmian), ale **informacja z rejestru**, którą pobierają klient i pracownik, ma wygląd sprzed Fazy 2: znak „Notariat Rzeczypospolitej Polskiej” i dane kancelarii w nagłówku, zielona linia, tytuł krojem EB Garamond, treść krojem Inter, metryka (spółka z KRS · stan na · numer informacji) na zielonkawym tle, sekcje numerowane I., II., …, tabele bez siatki z etykietami kapitalikami, akcjonariusz — nazwa pogrubiona, dane szarym drobniejszym krojem pod nią; stopka: numer i „strona X z N”. Zastępuje D-173 i zdanie § 4 „jedna czcionka” (bez kroju o stałej szerokości — cyfry tabelaryczne Inter w kolumnach liczb). Treść bez zmian (U-27): firma i KRS stoją w metryce, więc sekcja „Spółka” podaje siedzibę, adres, sąd i datę rejestracji. Wygląd zdefiniowany raz, w `logika/wzory.js` (wariant „informacja”); kroje w `wzory/czcionki/` (OFL). Spółka do 10 akcjonariuszy i 3 serii nadal na jednej stronie (test).
+  2. **D-182** E-mail pozostałych akcjonariuszy jest jawny w informacji dla akcjonariusza (art. 300³⁵ § 1¹ KSH go nie wymienia) — tylko przy zgodzie na korespondencję e-mail, bo wtedy jest daną rejestru. Zastępuje D-174 w części dotyczącej e-maila; PESEL, data urodzenia i adres zamieszkania nadal ukryte. Stanu zgody innych osób akcjonariusz nie dostaje.
+  3. **D-183** Umowa § 6 i informacja RODO pkt 3a: rejestr prowadzi się w aplikacji, za pomocą której notariusz prowadzi rejestry w swojej kancelarii — w postaci elektronicznej, w sposób zapewniający bezpieczeństwo i integralność danych (art. 300³¹ § 3 i 4 KSH); odbiorcy danych — podmioty przetwarzające w imieniu kancelarii, w szczególności dostawcy usług informatycznych tej aplikacji. Bez odwołań do systemu Krajowej Rady Notarialnej.
+  4. **D-184** Umowa § 11 ust. 3: zamiast „warunkiem … jest uiszczenie Taksy” — „Taksa jest należna za każdą z czynności, o których mowa w ust. 1.” Umowa nie uzależnia wpisu od opłaty (R4).
+  5. **D-185** Akapity umowy o przejęciu rejestru (U-07) i płatności miesięcznej (U-30) oraz oświadczenie PEP reprezentanta (U-03) — akceptacja treści odłożona; do tego czasu zostają w brzmieniu z Fazy 2 (D-170). Pozycja w „Decyzjach otwartych”.
+
 ---
 
 ## Decyzje otwarte
@@ -1757,6 +1767,11 @@
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w
 > `testy-audyt/PYTANIA-DO-LUKASZA.md` albo bezpośrednio), kolejna sesja dokumentacyjna przenosi
 > odpowiedź tutaj jako nowy wpis `D-0xx` w sekcji „Decyzje”.
+
+### Z raportu Fazy 2 uproszczenia (D-185)
+
+- **Treść akapitów umowy** — przejęcie rejestru (§ 3 pkt 1, § 4 ust. 3), płatność miesięczna (§ 11 ust. 6)
+  i oświadczenie PEP reprezentanta (§ 3 pkt 5): Łukasz zaakceptuje je później.
 
 ### Z `testy-audyt/PYTANIA-DO-LUKASZA.md` — P-001–P-017 (odpowiedzi 7.11.2026: D-112–D-123)
 

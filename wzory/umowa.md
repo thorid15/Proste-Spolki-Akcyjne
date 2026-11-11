@@ -80,7 +80,7 @@ W związku z zawarciem niniejszej Umowy Spółka oświadcza, że:
 
 ## § 6. Forma prowadzenia Rejestru
 
-Rejestr prowadzony jest w postaci elektronicznej, przy wykorzystaniu oprogramowania do prowadzenia Rejestru Akcjonariuszy Prostej Spółki Akcyjnej udostępnionego przez Krajową Radę Notarialną na stronie internetowej https://rejestry-notarialne.pl, zapewniającego bezpieczeństwo i integralność danych zawartych w Rejestrze.
+Rejestr prowadzony jest w postaci elektronicznej (art. 300³¹ § 3 Kodeksu spółek handlowych), w aplikacji, za pomocą której Notariusz prowadzi rejestry akcjonariuszy w swojej kancelarii notarialnej, w sposób zapewniający bezpieczeństwo i integralność zawartych w nim danych (art. 300³¹ § 4 Kodeksu spółek handlowych).
 
 ## § 7. Treść Rejestru
 
@@ -135,7 +135,7 @@ Rejestr prowadzony jest w postaci elektronicznej, przy wykorzystaniu oprogramowa
   b) za dokonanie Wpisu – maksymalna stawka wynosi {{taksa_wpis}} zł ({{taksa_wpis_slownie}});
   c) za udzielenie informacji z Rejestru, o której mowa w art. 300³⁵ § 3 Kodeksu spółek handlowych – maksymalna stawka wynosi {{taksa_informacja}} zł ({{taksa_informacja_slownie}}).
 2. Do kwot wskazanych w ust. 1 dolicza się podatek od towarów i usług (VAT) według stawki obowiązującej w dniu dokonania czynności.
-3. Warunkiem rozpoczęcia prowadzenia Rejestru, dokonania Wpisu oraz udzielenia informacji z Rejestru jest uiszczenie Taksy.
+3. Taksa jest należna za każdą z czynności, o których mowa w ust. 1.
 4. Spółka wyraża zgodę na otrzymywanie faktur w postaci elektronicznej.
 5. Niezależnie od Taksy Notariuszowi przysługuje zwrot poniesionych wydatków, w szczególności kosztów obowiązkowej korespondencji wynikającej z przepisów prawa, kierowanej do Spółki lub Akcjonariuszy i wysłanej pocztą tradycyjną. Zwrot wydatków następuje w terminie 7 dni od doręczenia Spółce faktury lub noty obciążeniowej.
 {{#jesli platnosc_miesieczna}}
@@ -221,7 +221,7 @@ Zgodnie z art. 13 ust. 1 i 2 Rozporządzenia Parlamentu Europejskiego i Rady (UE
   a) zawarcia umowy o prowadzenie rejestru akcjonariuszy zgodnie z art. 300³² ustawy z dnia 15 września 2000 r. – Kodeks spółek handlowych (podstawa: art. 6 ust. 1 lit. b i c RODO);
   b) prowadzenia rejestru akcjonariuszy przez Kancelarię zgodnie z art. 300³¹ ustawy z dnia 15 września 2000 r. – Kodeks spółek handlowych (podstawa: art. 6 ust. 1 lit. c RODO).
 3. W związku z przetwarzaniem danych w celach, o których mowa w pkt 2, odbiorcami danych osobowych będą:
-  a) podmioty przetwarzające dane w naszym imieniu: Krajowa Rada Notarialna prowadząca system Rejestry Notarialne, w którym udostępniony jest rejestr akcjonariuszy (odbiorcy w rozumieniu art. 4 pkt 9 RODO);
+  a) podmioty przetwarzające dane w naszym imieniu, w szczególności dostawcy usług informatycznych zapewniający działanie aplikacji, w której Kancelaria prowadzi rejestr akcjonariuszy (odbiorcy w rozumieniu art. 4 pkt 9 RODO);
   b) organy państwowe oraz organy ochrony prawnej (Policja, sąd, prokuratura) – w związku z prowadzonym postępowaniem.
 4. Dane osobowe będą przechowywane przez okres prowadzenia rejestru akcjonariuszy, a także po jego zakończeniu przez czas, w którym przepisy nakazują nam przechowywać dane w celach archiwalnych, lub do czasu cofnięcia zgody na przetwarzanie danych (dotyczy adresu poczty elektronicznej).
 5. W związku z przetwarzaniem Pani/Pana danych osobowych może Pani/Pan złożyć do nas wniosek o: dostęp do danych oraz o kopię danych, sprostowanie danych, usunięcie danych przetwarzanych bezpodstawnie, ograniczenie przetwarzania i przenoszenie danych, a także skorzystać z prawa do wniesienia sprzeciwu. Zakres każdego z tych praw oraz sytuacje, kiedy można z nich skorzystać, wynikają z przepisów prawa. To, z którego uprawnienia może Pani/Pan korzystać, zależeć będzie m.in. od podstawy prawnej oraz celu przetwarzania Pani/Pana danych przez Administratora.
