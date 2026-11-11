@@ -63,20 +63,12 @@ test('T1: bez trybu testowego i bez SMTP wysyłka kończy się widocznym błęde
   assert.match(wynik.powod, /nie jest skonfigurowana/);
 });
 
-test('T1: skrzynka testowa poza trybem testowym jest odrzucana', async () => {
-  const przed = konfiguracja.POCZTA_TRANSPORT;
-  konfiguracja.POCZTA_TRANSPORT = 'skrzynka-testowa';
-  try {
-    const wynik = await poczta.wyslij({ do: 'ktos@example.com', temat: 'x', html: '<p>x</p>' });
-    assert.equal(wynik.wyslano, false);
-    assert.match(wynik.powod, /wyłącznie w trybie testowym/);
-  } finally {
-    konfiguracja.POCZTA_TRANSPORT = przed;
-  }
+test('§ 7 pkt 9: poza trybem testowym moduły trybu testowego nie są wczytane', () => {
+  assert.deepEqual(Object.keys(require.cache).filter((p) => p.includes(`${path.sep}tryb-testowy${path.sep}`)), []);
 });
 
 test('T2: poza trybem testowym odpowiedź formularza zgłoszenia bez pola link_testowy', async () => {
-  const odp = await fetch(`${ADRES}/api/psa/portal/zgloszenia`, {
+  const odp = await fetch(`${ADRES}/api/psa/portal/zgloszenie`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: 'klient@example.com', krs: '0000990003' }),

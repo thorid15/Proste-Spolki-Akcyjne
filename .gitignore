@@ -30,8 +30,7 @@ playwright-report/
 # Tester e2e (SESJA-PSA-ANALIZA-PRZEPLYWOW): zrzuty i części wyników — generowane
 testy/e2e/raport/zrzuty/
 testy/e2e/raport/czesci/
-
-# Tester e2e (SESJA-PSA-ANALIZA-PRZEPLYWOW): zrzuty i części wyników — generowane
-testy/e2e/raport/zrzuty/
-testy/e2e/raport/czesci/
 testy/e2e/raport/arkusze/
+
+# Podgląd wzorów pism (npm run wzory)
+wzory/podglad/

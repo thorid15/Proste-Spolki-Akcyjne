@@ -4,11 +4,11 @@
  * Platnosci online — warstwa, ktora laczy tpay z oplatami kancelarii.
  *
  * Podzial jak w reszcie modulu: `logika/tpay.js` zna protokol i pieniadze,
- * ten plik zna BAZE i skutki zaplaty. Skutkow jest dokladnie trzy:
- *   1. oplata przechodzi w `oplacona`,
- *   2. zadanie wpisu zlozone przez portal staje sie skuteczne (art. 300(34)
- *      § 1 KSH — od tej chwili, i dopiero od tej, biegnie tydzien),
- *   3. informacja z rejestru staje sie do pobrania.
+ * ten plik zna BAZE i skutki zaplaty. Skutki sa dwa:
+ *   1. oplata przechodzi w `oplacona` (tabela przejsc w `oplaty.js`),
+ *   2. informacja z rejestru zamowiona w portalu staje sie do pobrania
+ *      (pismo `wyslane` kanalem „portal”). Oplata nigdy nie warunkuje
+ *      terminu ani wpisu (R4).
  */
 
 const crypto = require('node:crypto');
@@ -17,11 +17,9 @@ const konfiguracja = require('./konfiguracja');
 const tpay = require('./logika/tpay');
 const ustawienia = require('./logika/ustawienia');
 const przepisy = require('./logika/przepisy');
-const terminy = require('./logika/terminy');
+const pisma = require('./logika/pisma');
+const oplaty = require('./oplaty');
 const czas = require('./pomocnicze/czas');
-
-/** Statusy oplaty, ktore da sie jeszcze zaplacic. */
-const DO_ZAPLATY = new Set(['naliczona', 'zafakturowana']);
 
 /**
  * Jak dlugo wazny jest wygenerowany link. Operator NIE MA pola daty
@@ -45,7 +43,7 @@ function wczytajPlatnosc(db, id) {
 /**
  * Najswiezsza wazna proba zaplaty tej oplaty — na TE SAMA kwote. Kwota to
  * BRUTTO (naprawa sekcji 2.1 promptu naprawczego): klient placi kwote
- * z VAT, `psa_oplaty.kwota_grosze` zostaje netto wylacznie w ksiegowosci
+ * z VAT, `psa_oplaty.kwota_netto_grosze` zostaje netto wylacznie w ksiegowosci
  * kancelarii.
  */
 function aktualnaProba(db, oplata, bruttoGrosze) {
@@ -85,14 +83,12 @@ function opisPlatnosci(db, oplata) {
 async function przygotujZaplate(db, { oplataId, urlPowiadomienia, urlPowrotu }) {
   const oplata = wczytajOplate(db, oplataId);
   if (!oplata) throw new Error('Nie odnaleziono opłaty.');
-  if (oplata.status === 'oplacona') throw new Error('Ta opłata jest już opłacona.');
-  if (!DO_ZAPLATY.has(oplata.status)) throw new Error(`Opłata ma status „${oplata.status}” — nie można jej opłacić.`);
+  if (oplata.stan !== 'do_zaplaty') throw new Error('Ta opłata jest już rozliczona.');
   if (!tpay.skonfigurowany()) throw new Error('Płatności online nie są włączone.');
 
-  // Klient placi BRUTTO — kwota_grosze w psa_oplaty zostaje netto (patrz
-  // logika/przepisy.js: obliczBrutto). Liczona na tej jednej pozycji, nie
-  // na zadnej sumie.
-  const bruttoGrosze = przepisy.obliczBrutto(oplata.kwota_grosze, oplata.stawka_vat_procent);
+  // Klient placi BRUTTO — kwota_netto_grosze w psa_oplaty zostaje netto
+  // (logika/przepisy.js: obliczBrutto). Liczona na tej jednej pozycji.
+  const bruttoGrosze = przepisy.obliczBrutto(oplata.kwota_netto_grosze, oplata.stawka_vat_procent);
 
   const istniejaca = aktualnaProba(db, oplata, bruttoGrosze);
   if (istniejaca && !wygasl(istniejaca)) return { platnosc: istniejaca, nowa: false };
@@ -155,44 +151,20 @@ async function przygotujZaplate(db, { oplataId, urlPowiadomienia, urlPowrotu }) 
 }
 
 /**
- * Ksieguje zaplate: oplata na `oplacona`, a jesli wisiala przy niej sprawa
- * zgloszona przez portal — sprawa staje sie skuteczna.
- *
- * Dzien zaplaty jest dniem OTRZYMANIA ZADANIA (art. 300(34) § 1 KSH), wiec
- * przestawiamy `data_wplywu` i przeliczamy termin od nowa. Do tej chwili
- * zaden termin ustawowy nie biegl, bo zadania jeszcze nie bylo.
+ * Ksieguje zaplate: proba i oplata na `oplacona`; pismo informacji zamowionej
+ * w portalu — `wyslane` (do pobrania). Wywolywane w transakcji.
  */
 function zaksieguj(db, { platnosc, opisPowiadomienia }) {
-  const teraz = czas.terazIso();
-  const dzis = czas.dzisIso();
-
   db.prepare("UPDATE psa_platnosci SET status = 'oplacona', zakonczono = ?, odpowiedz_json = ? WHERE id = ?")
-    .run(teraz, opisPowiadomienia ?? null, platnosc.id);
-
+    .run(czas.terazIso(), opisPowiadomienia ?? null, platnosc.id);
   const oplata = wczytajOplate(db, platnosc.oplata_id);
-  if (!oplata || oplata.status === 'oplacona') return { oplata, sprawa: null };
-
-  db.prepare("UPDATE psa_oplaty SET status = 'oplacona', oplacona_kiedy = ?, zaktualizowano = ? WHERE id = ?")
-    .run(teraz, teraz, oplata.id);
-
-  let sprawa = null;
-  if (oplata.sprawa_id) {
-    sprawa = db.prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(oplata.sprawa_id);
-    if (sprawa && sprawa.oczekuje_na_oplate === 1) {
-      const termin = terminy.policzTermin(
-        { data_wplywu: dzis, stan: 'nowa', wstrzymana_od: null, wznowiona_od: null },
-        dzis
-      );
-      db.prepare(
-        `UPDATE psa_sprawy
-            SET oczekuje_na_oplate = 0, data_wplywu = ?, termin_do = ?, zaktualizowano = ?
-          WHERE id = ?`
-      ).run(dzis, termin.termin_do, teraz, sprawa.id);
-      sprawa = db.prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawa.id);
-    }
+  if (!oplata || oplata.stan !== 'do_zaplaty') return { oplata };
+  oplaty.oplacona(db, oplata.id);
+  if (oplata.pismo_id) {
+    const p = pisma.wczytaj(db, oplata.pismo_id);
+    if (p.kanal === 'portal' && p.stan === 'do_wyslania') pisma.zmienStan(db, p.id, 'wyslane');
   }
-
-  return { oplata: wczytajOplate(db, oplata.id), sprawa };
+  return { oplata: wczytajOplate(db, oplata.id) };
 }
 
 /**
@@ -259,37 +231,7 @@ function przyjmijPowiadomienie(db, pola) {
   return { ok: true, powod: null, zaksiegowano: true, ...wynik };
 }
 
-/**
- * Awaryjne odpytanie o stan transakcji — gdy powiadomienie nie doszlo.
- * Uzywa tej samej sciezki ksiegowania, wiec skutek jest identyczny.
- */
-async function sprawdzUOperatora(db, platnoscId) {
-  const platnosc = wczytajPlatnosc(db, platnoscId);
-  if (!platnosc) throw new Error('Nie odnaleziono płatności.');
-  if (!platnosc.tpay_id) throw new Error('Ta próba nie ma transakcji u operatora.');
-  if (platnosc.status === 'oplacona') return { status: 'oplacona', zaksiegowano: false };
-
-  const { status, surowe } = await tpay.stanTransakcji(platnosc.tpay_id);
-  if (status !== 'oplacona') {
-    // Stan inny niz „zaplacone" zapisujemy — inaczej nieudana albo anulowana
-    // transakcja wisialaby u nas jako „oczekuje" bez konca.
-    if (status !== 'oczekuje') {
-      db.prepare('UPDATE psa_platnosci SET status = ?, zakonczono = ? WHERE id = ?')
-        .run(status, czas.terazIso(), platnosc.id);
-    }
-    return { status, zaksiegowano: false, surowe };
-  }
-  const wynik = db.transaction(() =>
-    zaksieguj(db, { platnosc, opisPowiadomienia: JSON.stringify({ zrodlo: 'odpytanie', surowe }) }))();
-  return { status: 'oplacona', zaksiegowano: true, ...wynik };
-}
-
 module.exports = {
-  DO_ZAPLATY,
   przygotujZaplate,
   przyjmijPowiadomienie,
-  sprawdzUOperatora,
-  opisPlatnosci,
-  wczytajOplate,
-  wczytajPlatnosc,
 };

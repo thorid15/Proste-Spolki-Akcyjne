@@ -1,458 +1,99 @@
-/* oplaty.js — rozliczenia (sekcja 1, 5, 8 specyfikacji).
+/* oplaty.js — Opłaty (§ 5): filtr, eksport CSV; w wierszu „Opłacona”, w „Więcej” numer faktury
+   i „Anuluj” z powodem. Numer faktury to pole, nie stan (§ 3.3). Tabela wspólna z kokpitem. */
 
-   Naliczanie samo: wpis odpłatny (workflow sprawy), informacja z rejestru
-   (kancelaria i portal), prowadzenie rejestru (wsadowo, raz na rok). Ten
-   ekran to wyłącznie PODGLĄD i ręczne korekty/status — logika naliczania
-   żyje w server/oplaty.js. */
+const FILTRY_OPLAT = [['do_zaplaty', 'Do zapłaty'], ['oplacone', 'Opłacone'], ['wszystkie', 'Wszystkie']];
+const RODZAJE_OPLAT = { prowadzenie: 'Prowadzenie rejestru', wpis: 'Wpis', informacja: 'Informacja z rejestru' };
+const STANY_OPLAT = { do_zaplaty: 'do zapłaty', oplacona: 'opłacona', anulowana: 'anulowana' };
+const brutto = (o) => o.kwota_brutto_grosze ?? Math.round((o.kwota_netto_grosze * (100 + o.stawka_vat_procent)) / 100);
 
-const TYP_ETYKIETA = {
-  prowadzenie: 'Prowadzenie rejestru (rocznie)',
-  wpis: 'Wpis w rejestrze',
-  informacja: 'Informacja z rejestru',
-};
-
-const STATUS_ZNACZNIK = {
-  naliczona: 'neutralna',
-  zafakturowana: 'neutralna',
-  oplacona: 'rejestr',
-  anulowana: 'sygnal',
-};
-
-const STATUS_ETYKIETA = {
-  naliczona: 'naliczona',
-  zafakturowana: 'zafakturowana',
-  oplacona: 'opłacona',
-  anulowana: 'anulowana',
-};
-
-function ModalNowaOplata({ spolki, stawki, przyZamknieciu, przyZapisie }) {
-  const [dane, ustawDane] = useState({ spolka_id: '', typ: 'informacja', okres: '', kwota_grosze: '', notatka: '' });
-  const [blad, ustawBlad] = useState(null);
-  const [zapisywanie, ustawZapisywanie] = useState(false);
-
-  const pole = (k) => ({ value: dane[k] ?? '', onChange: (z) => ustawDane((p) => ({ ...p, [k]: z.target.value })) });
-  const rokBiezacy = new Date().getFullYear();
-
-  async function zapisz() {
-    ustawZapisywanie(true);
-    ustawBlad(null);
-    try {
-      const wynik = await API.post('/api/psa/oplaty', {
-        ...dane,
-        spolka_id: Number(dane.spolka_id),
-        kwota_grosze: dane.kwota_grosze === '' ? undefined : Math.round(Number(dane.kwota_grosze) * 100),
-      });
-      przyZapisie(wynik.oplata);
-    } catch (e) {
-      ustawBlad(e.message);
-    } finally {
-      ustawZapisywanie(false);
-    }
-  }
-
-  const stawkaDomyslna = stawki ? stawki[{ prowadzenie: 'PROWADZENIE_ROCZNIE', wpis: 'WPIS', informacja: 'INFORMACJA' }[dane.typ]] : null;
-
-  return (
-    <Modal
-      tytul="Nowa opłata"
-      przyZamknieciu={przyZamknieciu}
-      szerokosc={480}
-      stopka={
-        <>
-          <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-          <button className="btn btn-glowny" onClick={zapisz} disabled={zapisywanie || !dane.spolka_id}>
-            {zapisywanie ? 'Zapisywanie…' : 'Zapisz'}
-          </button>
-        </>
-      }
-    >
-      <Komunikat odmiana="blad" tresc={blad} />
-      <Pole etykieta="Spółka" wymagane>
-        <select {...pole('spolka_id')}>
-          <option value="">— wybierz —</option>
-          {spolki.map((s) => <option key={s.id} value={s.id}>{s.nazwa}</option>)}
-        </select>
-      </Pole>
-      <Pole etykieta="Rodzaj opłaty" wymagane>
-        <select {...pole('typ')}>
-          <option value="informacja">Informacja z rejestru</option>
-          <option value="wpis">Wpis w rejestrze</option>
-          <option value="prowadzenie">Prowadzenie rejestru (rocznie)</option>
-        </select>
-      </Pole>
-      {dane.typ === 'prowadzenie' && (
-        <Pole etykieta="Rok (okres)" wymagane>
-          <input type="number" {...pole('okres')} placeholder={String(rokBiezacy)} />
-        </Pole>
-      )}
-      <Pole
-        etykieta="Kwota (zł)"
-        podpowiedz={stawkaDomyslna != null ? `Zostaw puste, aby użyć stawki kancelarii: ${fmt.zlote(stawkaDomyslna)}.` : undefined}
-      >
-        <input type="number" step="0.01" min="0" {...pole('kwota_grosze')} placeholder={stawkaDomyslna != null ? String(stawkaDomyslna / 100) : ''} />
-      </Pole>
-      <Pole etykieta="Notatka"><textarea {...pole('notatka')} /></Pole>
-    </Modal>
-  );
-}
-
-/**
- * Naliczenie kolejnego roku prowadzenia rejestru.
- *
- * Nie po kalendarzu, tylko po ROCZNICY kazdej spolki: rok prowadzenia
- * biegnie od dnia otwarcia jej rejestru (§ 15b pkt 1 — "za kazdy rozpoczety
- * rok"), wiec kazda spolka ma wlasny termin. Wyprzedzenie mowi, jak daleko
- * w przod patrzec — 0 znaczy "tylko te, ktorym okres wlasnie sie konczy".
- */
-function ModalOdnowienia({ przyZamknieciu, przyNaliczeniu }) {
-  const [dni, ustawDni] = useState('30');
-  const [zapisywanie, ustawZapisywanie] = useState(false);
-  const [blad, ustawBlad] = useState(null);
-  const [wynik, ustawWynik] = useState(null);
-
-  async function nalicz() {
-    ustawZapisywanie(true);
-    ustawBlad(null);
-    try {
-      const odpowiedz = await API.post('/api/psa/oplaty/odnowienia', { dni: Number(dni) });
-      ustawWynik(odpowiedz);
-      przyNaliczeniu();
-    } catch (e) {
-      ustawBlad(e.message);
-    } finally {
-      ustawZapisywanie(false);
-    }
-  }
-
-  return (
-    <Modal
-      tytul="Nalicz kolejny rok prowadzenia rejestru"
-      przyZamknieciu={przyZamknieciu}
-      szerokosc={520}
-      stopka={
-        wynik
-          ? <button className="btn btn-glowny" onClick={przyZamknieciu}>Zamknij</button>
-          : (
-            <>
-              <button className="btn" onClick={przyZamknieciu}>Anuluj</button>
-              <button className="btn btn-glowny" onClick={nalicz} disabled={zapisywanie}>
-                {zapisywanie ? 'Naliczanie…' : 'Nalicz'}
-              </button>
-            </>
-          )
-      }
-    >
-      <Komunikat odmiana="blad" tresc={blad} />
-      {wynik ? (
-        <Komunikat odmiana="ok" tresc={wynik.komunikat} lista={wynik.naliczone.map((o) => `${o.spolka_nazwa || `spółka #${o.spolka_id}`} — ${o.okres}`)} />
-      ) : (
-        <Pole
-          etykieta="Z wyprzedzeniem (dni)"
-          podpowiedz="Nalicza kolejny okres tym spółkom, którym bieżący kończy się w tylu dniach. Idempotentne — można uruchomić wielokrotnie."
-        >
-          <input type="number" min="0" max="365" value={dni} onChange={(z) => ustawDni(z.target.value)} />
-        </Pole>
-      )}
-    </Modal>
-  );
-}
-
-/**
- * Jedna nalezność w widoku kancelarii. Poza kwotą i stanem niesie ODHACZENIE
- * FAKTURY — aplikacja faktur nie wystawia (robi to program księgowy), ale
- * bez tego znacznika pracownik nie ma gdzie zobaczyć, co jeszcze nie poszło
- * do księgowości.
- */
-function WierszOplatyKancelarii({ oplata, przyZmianie }) {
-  const [edycjaFaktury, ustawEdycjeFaktury] = useState(false);
-  const [numer, ustawNumer] = useState(oplata.faktura_numer || '');
-  const [pracuje, ustawPracuje] = useState(false);
-
-  async function ustawFakture(wystawiona) {
-    ustawPracuje(true);
-    try {
-      await API.patch(`/api/psa/oplaty/${oplata.id}/faktura`, { wystawiona, numer });
-      ustawEdycjeFaktury(false);
-      przyZmianie();
-    } finally {
-      ustawPracuje(false);
-    }
-  }
-
-  async function zmienStatus(status) {
-    ustawPracuje(true);
-    try {
-      await API.patch(`/api/psa/oplaty/${oplata.id}`, { status });
-      przyZmianie();
-    } finally {
-      ustawPracuje(false);
-    }
-  }
-
-  return (
-    <tr>
-      <td>
-        <div style={{ fontWeight: 500 }}>{TYP_ETYKIETA[oplata.typ] || oplata.typ}</div>
-        {oplata.zamawiajacy && (
-          <div className="male przyciemnione">zamówił: {oplata.zamawiajacy}</div>
-        )}
-      </td>
-      <td className="przyciemnione">
-        {oplata.okres_od && oplata.okres_do
-          ? `${fmt.data(oplata.okres_od)} – ${fmt.data(oplata.okres_do)}`
-          : (oplata.okres || '—')}
-      </td>
-      <td className="prawo">
-        <KwotaNettoBrutto netto={oplata.kwota_grosze} brutto={oplata.kwota_brutto_grosze} />
-      </td>
-      <td>
-        <Pigulka odmiana={STATUS_ZNACZNIK[oplata.status]}>{STATUS_ETYKIETA[oplata.status]}</Pigulka>
-        {oplata.oplacona_online && <div className="male przyciemnione">online</div>}
-      </td>
-      <td>
-        {oplata.faktura_wystawiono ? (
-          <span className="male">
-            <Pigulka odmiana="rejestr">wystawiona</Pigulka>
-            {oplata.faktura_numer ? ` ${oplata.faktura_numer}` : ''}
-            <button className="btn-tekstowy" disabled={pracuje} onClick={() => ustawFakture(false)}>cofnij</button>
-          </span>
-        ) : edycjaFaktury ? (
-          <span className="row-g">
-            <input
-              type="text"
-              placeholder="numer faktury"
-              value={numer}
-              onChange={(z) => ustawNumer(z.target.value)}
-              style={{ maxWidth: 150 }}
-            />
-            <button className="btn btn-maly btn-glowny" disabled={pracuje} onClick={() => ustawFakture(true)}>
-              Zapisz
-            </button>
-            <button className="btn btn-maly" onClick={() => ustawEdycjeFaktury(false)}>Anuluj</button>
-          </span>
-        ) : (
-          <button className="btn btn-maly" onClick={() => ustawEdycjeFaktury(true)}>Odhacz fakturę</button>
-        )}
-      </td>
-      <td className="prawo">
-        {/* Zamiast listy czterech statusow — dwie akcje, ktore pracownik
-            rzeczywiscie wykonuje recznie. „Zafakturowana" ustawia sie sama
-            przy odhaczeniu faktury, „oplacona" przychodzi z platnosci
-            online; reczne oznaczenie zostaje dla przelewu na rachunek
-            kancelarii. Lista pozwalala tez cofnac oplacona na naliczona,
-            czego nikt nigdy nie chcial zrobic swiadomie. */}
-        <span className="rzad" style={{ justifyContent: 'flex-end', gap: 'var(--od-8)' }}>
-          {oplata.status !== 'oplacona' && (
-            <button
-              className="btn-tekstowy"
-              disabled={pracuje}
-              title="Wpłata poza portalem — np. przelew na rachunek kancelarii"
-              onClick={() => zmienStatus('oplacona')}
-            >
-              Oznacz opłaconą
-            </button>
-          )}
-          {oplata.status !== 'oplacona' && (
-            <button className="btn-tekstowy" disabled={pracuje} onClick={() => zmienStatus('anulowana')}>
-              Anuluj
-            </button>
-          )}
-        </span>
-      </td>
-    </tr>
-  );
-}
-
-/**
- * Rozliczenia kancelarii — SPOLKA PO SPOLCE, bo tak pracownik o nich mysli:
- * „co jest do zafakturowania u tej spolki", a nie „wszystkie naleznosci
- * kancelarii posortowane po dacie". Plaska lista z filtrami zostala tylko
- * tam, gdzie jest naprawde potrzebna — w eksporcie CSV do ksiegowosci.
- */
-function EkranOplat() {
-  const sesja = useSesja();
-  const [modalNowa, ustawModalNowa] = useState(false);
-  const [modalOdnowienia, ustawModalOdnowienia] = useState(false);
-  const [blad, ustawBlad] = useState(null);
-  const [tylkoNierozliczone, ustawTylkoNierozliczone] = useState(true);
-  const [przypomina, ustawPrzypomina] = useState(false);
-  const [wynikPrzypomnien, ustawWynikPrzypomnien] = useState(null);
-
-  const { dane, ladowanie, odswiez } = useDane('/api/psa/oplaty/wg-spolek');
-  const { dane: spolkiOdp } = useDane('/api/psa/spolki');
-  const { dane: meta } = useDane('/api/psa/meta');
-
-  async function przypomnij() {
-    ustawPrzypomina(true);
-    ustawBlad(null);
-    try {
-      const wynik = await API.post('/api/psa/oplaty/przypomnienia', { dni: 30 });
-      ustawWynikPrzypomnien(wynik);
-      odswiez();
-    } catch (e) {
-      ustawBlad(e.message);
-    } finally {
-      ustawPrzypomina(false);
-    }
-  }
-
-  if (ladowanie) return <Spinner />;
-  if (!dane) return <Komunikat odmiana="blad" tresc="Nie udało się wczytać rozliczeń." />;
-
-  const spolki = spolkiOdp ? spolkiOdp.spolki : [];
-  const suma = (pole) => dane.spolki.reduce((s, g) => s + (g[pole] || 0), 0);
-  const widoczne = dane.spolki.filter((g) => !tylkoNierozliczone || g.do_zaplaty_grosze > 0 || g.bez_faktury_grosze > 0);
-
+function WierszOplaty({ o, poZmianie, zeSpolka }) {
+  const [tryb, ustawTryb] = useState(null);
+  const [tekst, ustawTekst] = useState('');
+  const c = useCzynnosc();
+  const { pola } = bledyApi(c.blad);
+  const wykonaj = (fn) => c.wykonaj(async () => { await fn(); ustawTryb(null); poZmianie(); });
   return (
     <>
-      <div className="pasek-gorny">
-        <div className="row-g" style={{ flexWrap: 'wrap' }}>
-          <span className="stan-skrot">
-            <span className="stan-skrot-etykieta">Do zapłaty</span>
-            <KwotaNettoBrutto netto={suma('do_zaplaty_grosze')} brutto={suma('do_zaplaty_brutto_grosze')} />
-          </span>
-          <span className="stan-skrot">
-            <span className="stan-skrot-etykieta">Bez faktury</span>
-            <KwotaNettoBrutto netto={suma('bez_faktury_grosze')} brutto={suma('bez_faktury_brutto_grosze')} />
-          </span>
-        </div>
-        <div className="row-g">
-          {dane.do_odnowienia.length > 0 && (
-            <button className="btn" disabled={przypomina} onClick={przypomnij}>
-              {przypomina ? 'Wysyłanie…' : 'Wyślij przypomnienia'}
-            </button>
+      <tr>
+        <td>{fmt.data(o.utworzono)}</td>
+        {zeSpolka && <td><a href={`#/spolki/${o.spolka_id}`}>{o.spolka_nazwa}</a></td>}
+        <td>{RODZAJE_OPLAT[o.typ]}{o.okres ? <div className="male drugorzedny">{o.okres.split('..').map(fmt.data).join(' – ')}</div> : null}</td>
+        <td>{o.platnik_nazwa || (o.platnik === 'spolka' ? 'spółka' : '—')}</td>
+        <td className="liczba">{fmt.zlote(o.kwota_netto_grosze)}<div className="male drugorzedny">brutto {fmt.zlote(brutto(o))}</div></td>
+        <td>{STANY_OPLAT[o.stan]}{o.oplacono ? ` ${fmt.data(o.oplacono)}` : ''}{o.numer_faktury ? <div className="male drugorzedny">FV {o.numer_faktury}</div> : null}</td>
+        <td>
+          {o.stan === 'do_zaplaty' && (
+            <span className="rzad">
+              <button type="button" className="btn btn-maly btn-glowny" disabled={c.trwa} onClick={() => wykonaj(() => API.post(`/api/psa/oplaty/${o.id}/oplacona`))}>Opłacona</button>
+              <Wiecej akcje={[
+                { etykieta: 'Numer faktury', przyKlik: () => { ustawTekst(o.numer_faktury || ''); ustawTryb('faktura'); } },
+                { etykieta: 'Anuluj', przyKlik: () => { ustawTekst(''); ustawTryb('anuluj'); }, niebezpieczna: true },
+              ]}
+              />
+            </span>
           )}
-          {sesja.uzytkownik && sesja.uzytkownik.rola === 'admin' && (
-            <button className="btn" onClick={() => ustawModalOdnowienia(true)}>Nalicz kolejny rok</button>
+          {o.stan === 'oplacona' && !o.numer_faktury && (
+            <button type="button" className="btn btn-maly btn-cichy" onClick={() => { ustawTekst(''); ustawTryb('faktura'); }}>Numer faktury</button>
           )}
-          <a className="btn" href="/api/psa/oplaty/eksport">Eksportuj CSV</a>
-          <button className="btn btn-glowny" onClick={() => ustawModalNowa(true)}>+ Nowa opłata</button>
-        </div>
-      </div>
-
-      <Komunikat odmiana="blad" tresc={blad} />
-      {wynikPrzypomnien && (
-        <Komunikat
-          odmiana="ok"
-          tytul={wynikPrzypomnien.komunikat}
-          lista={wynikPrzypomnien.wyniki
-            .filter((w) => !w.wyslano)
-            .map((w) => `${w.spolka_nazwa || `spółka #${w.spolka_id}`}: ${w.powod}`)}
-        />
-      )}
-
-      {/* Zgloszenia, ktore czekaja na oplate, NIE STOJA w kolejce spraw —
-          zadne nie zostalo jeszcze skutecznie zlozone. Kancelaria musi je
-          jednak widziec, zeby portal nie byl czarna dziura. */}
-      {dane.czekajace_zadania && dane.czekajace_zadania.length > 0 && (
-        <Komunikat
-          odmiana="info"
-          tytul={`Zgłoszenia czekające na opłatę: ${dane.czekajace_zadania.length}`}
-          tresc="Nie stoją w kolejce spraw — żądanie wpisu dochodzi do skutku z chwilą zapłaty i dopiero wtedy zaczyna biec termin ustawowy."
-          lista={dane.czekajace_zadania.map((z) =>
-            `${z.spolka_nazwa}: ${z.typ_zdarzenia}, zgłoszono ${fmt.data(z.data_wplywu)}`
-            + (z.kwota_grosze ? ` — ${fmt.zlote(z.kwota_grosze)}` : ''))}
-        />
-      )}
-
-      {/* Rok prowadzenia biegnie od rocznicy KAZDEJ SPOLKI z osobna, wiec
-          bez tego przypomnienia termin przepada niezauwazony. */}
-      {dane.do_odnowienia.length > 0 && (
-        <Komunikat
-          odmiana="uwaga"
-          tytul={`Kończy się rok prowadzenia rejestru — ${fmt.odmien(dane.do_odnowienia.length, 'spółka', 'spółki', 'spółek')}`}
-          tresc="Nalicz kolejny okres i wystaw fakturę, zanim bieżący się skończy."
-          lista={dane.do_odnowienia.map((w) =>
-            `${w.spolka_nazwa}: okres do ${fmt.data(w.okres_do)}`
-            + (w.dni_do_konca >= 0 ? ` (${w.dni_do_konca} dni)` : ' — już minął')
-          )}
-        />
-      )}
-
-      <div className="row-g" style={{ marginBottom: 'var(--od-12)' }}>
-        <label className="row-g" style={{ gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={tylkoNierozliczone}
-            onChange={(z) => ustawTylkoNierozliczone(z.target.checked)}
-          />
-          <span>Tylko spółki z czymś do rozliczenia</span>
-        </label>
-      </div>
-
-      {widoczne.length === 0 ? (
-        <Karta>
-          <Pusto ikona="oplaty" tytul="Wszystko rozliczone" opis="Żadna spółka nie ma nieopłaconych ani niezafakturowanych należności." />
-        </Karta>
-      ) : (
-        widoczne.map((grupa) => (
-          <Sekcja
-            key={grupa.spolka_id}
-            tytul={grupa.spolka_nazwa}
-            licznik={grupa.oplaty.length}
-            domyslnieOtwarta={grupa.do_zaplaty_grosze > 0}
-            akcje={
-              <button className="btn btn-maly" onClick={() => idz(`/spolki/${grupa.spolka_id}`)}>
-                Kokpit spółki
+        </td>
+      </tr>
+      {tryb && (
+        <tr className="wiersz-formularza">
+          <td colSpan={zeSpolka ? 7 : 6}>
+            <span className="rzad">
+              <Pole etykieta={tryb === 'faktura' ? 'Numer faktury' : 'Powód anulowania'} blad={pola.powod || pola.numer_faktury}>
+                <input type="text" value={tekst} onChange={(e) => ustawTekst(e.target.value)} />
+              </Pole>
+              <button
+                type="button"
+                className="btn btn-maly btn-glowny"
+                disabled={c.trwa}
+                onClick={() => wykonaj(() => (tryb === 'faktura'
+                  ? API.put(`/api/psa/oplaty/${o.id}/faktura`, { numer_faktury: tekst })
+                  : API.post(`/api/psa/oplaty/${o.id}/anuluj`, { powod: tekst })))}
+              >
+                {tryb === 'faktura' ? 'Zapisz' : 'Anuluj opłatę'}
               </button>
-            }
-          >
-            <div className="sekcja-tresc">
-              <div className="row-g" style={{ marginBottom: 'var(--od-12)', flexWrap: 'wrap' }}>
-                <span className="male przyciemnione row-g" style={{ alignItems: 'center' }}>
-                  Do zapłaty: <KwotaNettoBrutto netto={grupa.do_zaplaty_grosze} brutto={grupa.do_zaplaty_brutto_grosze} />
-                </span>
-                <span className="male przyciemnione row-g" style={{ alignItems: 'center' }}>
-                  Bez faktury: <KwotaNettoBrutto netto={grupa.bez_faktury_grosze} brutto={grupa.bez_faktury_brutto_grosze} />
-                </span>
-                {grupa.data_otwarcia_rejestru && (
-                  <span className="male przyciemnione">
-                    Rejestr otwarty {fmt.data(grupa.data_otwarcia_rejestru)}
-                  </span>
-                )}
-              </div>
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Rodzaj</th>
-                    <th>Okres</th>
-                    <th className="prawo">Kwota</th>
-                    <th>Stan</th>
-                    <th>Faktura</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {grupa.oplaty.map((o) => (
-                    <WierszOplatyKancelarii
-                      key={o.id}
-                      oplata={o}
-                      przyZmianie={() => { ustawBlad(null); odswiez(); }}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Sekcja>
-        ))
-      )}
-
-      {modalNowa && (
-        <ModalNowaOplata
-          spolki={spolki}
-          stawki={meta ? meta.stawki_grosze : null}
-          przyZamknieciu={() => ustawModalNowa(false)}
-          przyZapisie={() => { ustawModalNowa(false); odswiez(); }}
-        />
-      )}
-      {modalOdnowienia && (
-        <ModalOdnowienia
-          przyZamknieciu={() => ustawModalOdnowienia(false)}
-          przyNaliczeniu={odswiez}
-        />
+              <button type="button" className="btn btn-maly" onClick={() => ustawTryb(null)}>Wróć</button>
+            </span>
+            {c.blad && !Object.keys(pola).length && <Bledy blad={c.blad} />}
+          </td>
+        </tr>
       )}
     </>
   );
 }
 
-window.EkranOplat = EkranOplat;
+function TabelaOplat({ oplaty, poZmianie, zeSpolka = false }) {
+  if (!oplaty.length) return <p className="male drugorzedny">Brak opłat.</p>;
+  return (
+    <table className="tabela">
+      <thead>
+        <tr>
+          <th>Data</th>{zeSpolka && <th>Spółka</th>}<th>Za co</th><th>Płatnik</th><th className="liczba">Netto</th><th>Stan</th><th><span className="sr-only">Czynności</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {oplaty.map((o) => <WierszOplaty key={o.id} o={o} poZmianie={poZmianie} zeSpolka={zeSpolka} />)}
+      </tbody>
+    </table>
+  );
+}
+
+function EkranOplat() {
+  const [filtr, ustawFiltr] = useParametrAdresu('filtr', 'do_zaplaty');
+  const { dane, blad, odswiez } = useDane(`/api/psa/oplaty?filtr=${filtr}`);
+  return (
+    <Karta>
+      <div className="rzad-rozdzielony">
+        <Filtr opcje={FILTRY_OPLAT} wartosc={filtr} przyZmianie={ustawFiltr} />
+        <a className="btn btn-maly" href={`/api/psa/oplaty/csv?filtr=${filtr}`} download>Eksport CSV</a>
+      </div>
+      {blad && <Bledy blad={blad} />}
+      {!dane && !blad && <Spinner />}
+      {dane && <TabelaOplat oplaty={dane} poZmianie={odswiez} zeSpolka />}
+    </Karta>
+  );
+}
+
+Object.assign(window, { EkranOplat, TabelaOplat });

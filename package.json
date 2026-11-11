@@ -12,22 +12,21 @@
     "start": "node serwer.js",
     "dev": "node narzedzia/buduj-front.js --dev",
     "test": "node --test \"testy/*.test.js\"",
-    "scenariusz": "node narzedzia/scenariusz-e2e.js",
-    "scenariusz:testowy": "node narzedzia/scenariusz-e2e.js --tryb-testowy",
     "zrzuty": "playwright test -c testy/e2e/playwright.config.js",
     "e2e": "playwright test -c testy/e2e/e2e.config.js",
     "e2e:malpa": "playwright test -c testy/e2e/e2e-malpa.config.js",
     "dokumentacja": "node narzedzia/dokumentacja-baza.js && node narzedzia/dokumentacja-endpointy.js",
     "test:seed": "node narzedzia/test-seed.js",
     "test:link": "node narzedzia/test-link.js",
-    "test:oznacz": "node narzedzia/test-oznacz.js"
+    "test:oznacz": "node narzedzia/test-oznacz.js",
+    "wzory": "node narzedzia/wzory.js"
   },
   "dependencies": {
     "bcrypt": "6.0.0",
     "better-sqlite3": "11.10.0",
     "express": "4.22.3",
     "multer": "1.4.5-lts.2",
-    "nodemailer": "10.0.10",
+    "nodemailer": "10.5.0",
     "pdfkit": "0.20.2"
   },
   "engines": {

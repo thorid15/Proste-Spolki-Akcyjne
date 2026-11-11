@@ -1,0 +1,250 @@
+### psa_atrybuty
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - zdarzenie_id INTEGER NOT NULL
+  - pozycja INTEGER NOT NULL DEFAULT 0
+  - rodzaj TEXT NOT NULL
+  - seria TEXT NOT NULL
+  - nr_od INTEGER NOT NULL
+  - nr_do INTEGER NOT NULL
+  - osoba_id INTEGER
+  - tresc TEXT
+  - prawo_glosu INTEGER NOT NULL DEFAULT 0
+  - zdarzenie_od_id INTEGER NOT NULL
+  - data_od TEXT NOT NULL
+  - zdarzenie_do_id INTEGER
+  - data_do TEXT
+### psa_baza_testowa
+  - id INTEGER PK
+  - oznaczono TEXT NOT NULL
+  - opis TEXT NOT NULL
+  - przesuniecie_ms INTEGER NOT NULL DEFAULT 0
+  - walidator_wynik TEXT NOT NULL DEFAULT 'qes_poprawny'
+### psa_dziennik
+  - id INTEGER PK
+  - chwila TEXT NOT NULL
+  - kto TEXT NOT NULL
+  - typ_kto TEXT NOT NULL
+  - spolka_id INTEGER
+  - osoba_id INTEGER
+  - akcja TEXT NOT NULL
+  - opis TEXT
+### psa_emisje
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - seria TEXT NOT NULL
+  - nr_od INTEGER NOT NULL
+  - nr_do INTEGER NOT NULL
+  - data_wpisu_krs TEXT NOT NULL
+### psa_historia_danych
+  - id INTEGER PK
+  - osoba_id INTEGER
+  - spolka_id INTEGER
+  - pole TEXT NOT NULL
+  - stara TEXT
+  - nowa TEXT
+  - plik_id INTEGER
+  - kto TEXT NOT NULL
+  - kiedy TEXT NOT NULL
+### psa_konta
+  - id INTEGER PK
+  - email TEXT NOT NULL
+  - hash_hasla TEXT
+  - osoba_id INTEGER
+  - wniosek_id INTEGER
+  - aktywne INTEGER NOT NULL DEFAULT 0
+  - token_aktywacji TEXT
+  - token_wygasa TEXT
+  - regulamin_zaakceptowano TEXT
+  - ostatnie_logowanie TEXT
+  - tokeny_wersja INTEGER NOT NULL DEFAULT 0
+  - utworzono TEXT NOT NULL
+### psa_migracje
+  - wersja INTEGER PK
+  - nazwa TEXT NOT NULL
+  - wykonano TEXT NOT NULL
+### psa_oplaty
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - typ TEXT NOT NULL
+  - platnik TEXT NOT NULL
+  - platnik_osoba_id INTEGER
+  - sprawa_id INTEGER
+  - pismo_id INTEGER
+  - okres TEXT
+  - kwota_netto_grosze INTEGER NOT NULL
+  - stawka_vat_procent INTEGER NOT NULL
+  - stan TEXT NOT NULL DEFAULT 'do_zaplaty'
+  - powod_anulowania TEXT
+  - numer_faktury TEXT
+  - oplacono TEXT
+  - autor TEXT NOT NULL
+  - utworzono TEXT NOT NULL
+### psa_osoby
+  - id INTEGER PK
+  - typ TEXT NOT NULL
+  - nazwa TEXT NOT NULL
+  - pesel TEXT
+  - data_urodzenia TEXT
+  - numer_rejestru TEXT
+  - adres TEXT NOT NULL
+  - rodzaj_adresu TEXT NOT NULL DEFAULT 'glowny'
+  - email TEXT
+  - zgoda_email INTEGER NOT NULL DEFAULT 0
+  - pep INTEGER NOT NULL DEFAULT 0
+  - pep_opis TEXT
+  - aml_data TEXT
+  - uwagi TEXT
+  - utworzono TEXT NOT NULL
+### psa_pisma
+  - id INTEGER PK
+  - typ TEXT NOT NULL
+  - numer TEXT
+  - spolka_id INTEGER
+  - sprawa_id INTEGER
+  - wniosek_id INTEGER
+  - adresat TEXT NOT NULL
+  - adresat_osoba_id INTEGER
+  - adresat_opis TEXT
+  - sygnatura TEXT
+  - kanal TEXT NOT NULL
+  - stan TEXT NOT NULL DEFAULT 'do_wyslania'
+  - kontekst_json TEXT NOT NULL DEFAULT '{}'
+  - plik TEXT
+  - sha256 TEXT
+  - uniewaznione TEXT
+  - id_wiadomosci TEXT
+  - odpowiedz_serwera TEXT
+  - wyslano TEXT
+  - autor TEXT NOT NULL
+  - utworzono TEXT NOT NULL
+### psa_platnosci
+  - id INTEGER PK
+  - oplata_id INTEGER NOT NULL
+  - dostawca TEXT NOT NULL DEFAULT 'tpay'
+  - tpay_id TEXT
+  - crc TEXT NOT NULL
+  - kwota_grosze INTEGER NOT NULL
+  - link TEXT
+  - status TEXT NOT NULL DEFAULT 'oczekuje'
+  - tryb_testowy INTEGER NOT NULL DEFAULT 0
+  - utworzono TEXT NOT NULL
+  - zakonczono TEXT
+  - odpowiedz_json TEXT
+### psa_pliki
+  - id INTEGER PK
+  - spolka_id INTEGER
+  - osoba_id INTEGER
+  - sprawa_id INTEGER
+  - wniosek_id INTEGER
+  - nazwa TEXT NOT NULL
+  - sciezka TEXT NOT NULL
+  - typ TEXT NOT NULL
+  - sha256 TEXT NOT NULL
+  - wgral TEXT NOT NULL
+  - wgrano TEXT NOT NULL
+  - dokument TEXT
+  - stan_podpisu TEXT
+  - powod_odrzucenia TEXT
+### psa_reprezentanci
+  - spolka_id INTEGER NOT NULL PK
+  - osoba_id INTEGER NOT NULL PK
+  - dodano TEXT NOT NULL
+### psa_sesje_uniewaznione
+  - jti TEXT PK
+  - wygasa TEXT NOT NULL
+### psa_spolki
+  - id INTEGER PK
+  - krs TEXT NOT NULL
+  - nazwa TEXT NOT NULL
+  - siedziba TEXT NOT NULL
+  - adres TEXT NOT NULL
+  - sad_rejestrowy TEXT NOT NULL
+  - data_rejestracji TEXT NOT NULL
+  - nip TEXT
+  - email TEXT
+  - umowe_zawarl TEXT
+  - platnosc TEXT NOT NULL DEFAULT 'roczna'
+  - data_otwarcia TEXT
+  - data_zamkniecia TEXT
+  - powod_zamkniecia TEXT
+  - utworzono TEXT NOT NULL
+### psa_sprawy
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - stan TEXT NOT NULL DEFAULT 'w_toku'
+  - zadajacy TEXT NOT NULL
+  - zadajacy_osoba_id INTEGER
+  - zadajacy_opis TEXT
+  - data_wplywu TEXT NOT NULL
+  - wstrzymana_od TEXT
+  - wznowiona_od TEXT
+  - operacje_json TEXT NOT NULL DEFAULT '[]'
+  - podstawa TEXT
+  - podstawa_data TEXT
+  - tresc_zatwierdzona TEXT
+  - checklista_json TEXT NOT NULL DEFAULT '{}'
+  - dopisane_json TEXT NOT NULL DEFAULT '[]'
+  - zgody_json TEXT NOT NULL DEFAULT '[]'
+  - oplata TEXT
+  - przyczyna_odmowy TEXT
+  - klucz_idempotencji TEXT
+  - autor TEXT NOT NULL
+  - utworzono TEXT NOT NULL
+  - zmieniono TEXT NOT NULL
+### psa_stan_akcji
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - seria TEXT NOT NULL
+  - kategoria TEXT NOT NULL
+  - osoba_id INTEGER
+  - nr_od INTEGER NOT NULL
+  - nr_do INTEGER NOT NULL
+  - czesc_licznik INTEGER NOT NULL DEFAULT 1
+  - czesc_mianownik INTEGER NOT NULL DEFAULT 1
+  - zdarzenie_od_id INTEGER NOT NULL
+  - data_od TEXT NOT NULL
+  - zdarzenie_do_id INTEGER
+  - data_do TEXT
+### psa_ustawienia
+  - klucz TEXT PK
+  - wartosc TEXT
+  - zaktualizowano TEXT NOT NULL
+  - autor TEXT NOT NULL
+### psa_uzytkownicy
+  - id INTEGER PK
+  - imie TEXT NOT NULL
+  - email TEXT NOT NULL
+  - hash_hasla TEXT NOT NULL
+  - rola TEXT NOT NULL DEFAULT 'pracownik'
+  - aktywny INTEGER NOT NULL DEFAULT 1
+  - ostatnie_logowanie TEXT
+  - utworzono TEXT NOT NULL
+  - tokeny_wersja INTEGER NOT NULL DEFAULT 0
+### psa_wnioski
+  - id INTEGER PK
+  - stan TEXT NOT NULL DEFAULT 'roboczy'
+  - krs TEXT NOT NULL
+  - przejecie INTEGER NOT NULL DEFAULT 0
+  - dotychczasowy_podmiot TEXT
+  - data_przejecia TEXT
+  - dane_json TEXT NOT NULL DEFAULT '{}'
+  - krs_json TEXT NOT NULL DEFAULT '{}'
+  - umowe_zawarl TEXT
+  - checklista_json TEXT NOT NULL DEFAULT '{}'
+  - notatka TEXT
+  - spolka_id INTEGER
+  - utworzono TEXT NOT NULL
+  - zmieniono TEXT NOT NULL
+### psa_zdarzenia
+  - id INTEGER PK
+  - spolka_id INTEGER NOT NULL
+  - typ TEXT NOT NULL
+  - data_wpisu TEXT NOT NULL
+  - autor TEXT NOT NULL
+  - sprawa_id INTEGER NOT NULL
+  - dane_json TEXT NOT NULL
+  - zdarzenie_prostowane_id INTEGER
+  - uzasadnienie TEXT
+  - hash_poprzedni TEXT NOT NULL
+  - hash TEXT NOT NULL

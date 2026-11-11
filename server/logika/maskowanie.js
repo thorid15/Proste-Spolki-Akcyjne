@@ -55,47 +55,41 @@ function zamaskujOsobe(osoba, rola, odbiorcaOsobaId = null) {
     zamaskowane_pola.push(klucz);
     if (POLA_Z_PLACEHOLDEREM.includes(klucz)) wynik[klucz] = ZASLONA;
   }
+  // D-182: e-mail jest daną rejestru tylko przy zgodzie na korespondencję e-mail (art. 300³³ § 1 pkt 5).
+  if (wynik.email && wynik.email !== ZASLONA && !osoba.zgoda_email) {
+    wynik.email = ZASLONA;
+    zamaskowane_pola.push('email');
+  }
+  // Poz. 23: maskuje się wyłącznie adres zamieszkania osoby fizycznej — siedziba osoby prawnej
+  // i adres do doręczeń są jawne dla każdego akcjonariusza.
+  if (wynik.adres === ZASLONA && (osoba.typ === 'prawna' || osoba.rodzaj_adresu === 'doreczen')) {
+    wynik.adres = osoba.adres;
+    zamaskowane_pola.splice(zamaskowane_pola.indexOf('adres'), 1);
+  }
   wynik.zamaskowane = true;
   wynik.zamaskowane_pola = zamaskowane_pola;
   return wynik;
 }
 
-/** Skrocony podpis osoby do tabel - bez danych wrazliwych z definicji. */
-function oznaczenieOsoby(osoba) {
-  if (!osoba) return 'nieznany';
-  if (osoba.typ === 'prawna') {
-    return osoba.nazwa || `podmiot #${osoba.id}`;
-  }
-  return [osoba.nazwisko, osoba.imie].filter(Boolean).join(' ') || `osoba #${osoba.id}`;
-}
+const dataPl = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 
 /**
- * Identyfikator podmiotu widoczny dla kazdego odbiorcy: dla osob prawnych
- * numer w rejestrze (jawny z natury), dla osob fizycznych NIC - PESEL
- * i data urodzenia sa wrazliwe.
+ * Opis akcjonariusza do informacji z rejestru (U-27): imię i nazwisko albo firma, PESEL albo data
+ * urodzenia (osoba prawna — numer w rejestrze), adres, e-mail przy zgodzie — wyłącznie pola, które
+ * przepuszcza biała lista odbiorcy. Bez dopisków o pominięciu.
+ * Wynik: `{ nazwa, id, adres, email }` (brak danej = null).
  */
-function jawnyIdentyfikator(osoba) {
-  if (!osoba) return null;
-  if (osoba.typ === 'prawna') {
-    const numer = osoba.numer_w_rejestrze || osoba.krs || null;
-    const rejestr = osoba.nazwa_rejestru || (numer ? 'KRS' : null);
-    if (numer) return `${rejestr} ${numer}`;
-    if (osoba.nip) return `NIP ${osoba.nip}`;
-  }
-  return null;
+function czesciOpisu(osoba, rola, odbiorcaOsobaId = null) {
+  const o = zamaskujOsobe(osoba, rola, odbiorcaOsobaId);
+  const jawne = (v) => v != null && v !== '' && v !== ZASLONA;
+  let id = null;
+  if (o.typ === 'prawna') {
+    if (jawne(o.numer_rejestru)) id = `nr w rejestrze ${o.numer_rejestru}`;
+  } else if (jawne(o.pesel)) id = `PESEL ${o.pesel}`;
+  else if (jawne(o.data_urodzenia)) id = `ur. ${dataPl(o.data_urodzenia)}`;
+  const adres = jawne(o.adres) ? (o.rodzaj_adresu === 'doreczen' ? `adres do doręczeń: ${o.adres}` : o.adres) : null;
+  const email = jawne(o.email) && osoba.zgoda_email ? o.email : null;
+  return { nazwa: o.nazwa, id, adres, email };
 }
 
-/**
- * Czy biala lista danej roli w ogole ujawnia POLA_WRAZLIWE (PESEL, data
- * urodzenia, adres) cudzych osob - Z-152/P-009: `zamaskowane` z
- * `zamaskujOsobe` mowi "cokolwiek zostalo ukryte" (np. samo AML/PEP dla
- * roli "spolka" tez to ustawia), a dziennik dostepu ma odpowiadac na
- * WEZSZE pytanie: czy dane WRAZLIWE wyszly niezamaskowane.
- */
-function widziWrazliweDaneInnych(rola) {
-  const lista = przepisy.BIALE_LISTY[rola];
-  if (lista === null) return true;
-  return przepisy.POLA_WRAZLIWE.some((pole) => lista.includes(pole));
-}
-
-module.exports = { ZASLONA, zamaskujOsobe, oznaczenieOsoby, jawnyIdentyfikator, widziWrazliweDaneInnych };
+module.exports = { ZASLONA, zamaskujOsobe, czesciOpisu };

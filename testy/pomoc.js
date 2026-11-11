@@ -1,146 +1,120 @@
 'use strict';
 
-/**
- * Wspolne rusztowanie testow: baza w pamieci + skroty do budowania zdarzen.
- */
+/** Wspólne rusztowanie testów: baza w pamięci, spółka, osoby i wpis przez sprawę (R1). */
 
 const baza = require('../server/baza');
 const migracje = require('../server/migracje');
-const rejestr = require('../server/rejestr');
 const czas = require('../server/pomocnicze/czas');
+const sprawy = require('../server/sprawy');
+const rejestr = require('../server/rejestr');
+const stan = require('../server/logika/stan');
+const n = require('../server/logika/numery');
+const daneSpolki = require('../server/dane/spolki');
+const daneOsoby = require('../server/dane/osoby');
 
-/** Swiezia baza w pamieci z wykonanymi migracjami. */
+/** Dane kancelarii potrzebne w każdym piśmie (Ustawienia). */
+const KANCELARIA = {
+  notariusz_mianownik: 'Anna Przykładowa',
+  kancelaria_ulica: 'ul. Próbna 1',
+  kancelaria_kod: '80-001',
+  kancelaria_miasto: 'Gdańsk',
+  kancelaria_nip: '5840000000',
+};
+
+function ustawKancelarie(db) {
+  const wstaw = db.prepare("INSERT OR REPLACE INTO psa_ustawienia (klucz, wartosc, zaktualizowano, autor) VALUES (?, ?, '2026-01-01', 'test')");
+  for (const [k, v] of Object.entries(KANCELARIA)) wstaw.run(k, v);
+}
+
 function bazaTestowa() {
   const db = baza.otworz(':memory:');
   migracje.uruchom(db);
+  ustawKancelarie(db);
   return db;
 }
 
+let krs = 1000;
 function dodajSpolke(db, nadpisania = {}) {
-  const dane = {
-    krs: '0000111222',
-    nip: '5252525252',
-    regon: null,
+  krs += 1;
+  return daneSpolki.dodaj(db, {
+    krs: String(krs).padStart(10, '0'),
     nazwa: 'Testowa P.S.A.',
-    forma_prawna: 'PROSTA SPÓŁKA AKCYJNA',
-    status: 'aktywna',
-    data_umowy: '2026-01-02',
-    opis: null,
-    uwagi: null,
-    zakaz_glosu_zastawnika_umowa: null,
-    utworzono: czas.terazIso(),
+    siedziba: 'Gdańsk',
+    adres: 'ul. Testowa 1, 80-001 Gdańsk',
+    sad_rejestrowy: 'Sąd Rejonowy Gdańsk-Północ w Gdańsku, VII Wydział Gospodarczy KRS',
+    data_rejestracji: '2026-01-10',
     ...nadpisania,
-  };
-  const wynik = db
-    .prepare(
-      `INSERT INTO psa_spolki
-         (krs, nip, regon, nazwa, forma_prawna, status, data_umowy, opis, uwagi,
-          zakaz_glosu_zastawnika_umowa, utworzono)
-       VALUES
-         (@krs, @nip, @regon, @nazwa, @forma_prawna, @status, @data_umowy, @opis, @uwagi,
-          @zakaz_glosu_zastawnika_umowa, @utworzono)`
-    )
-    .run(dane);
-  return Number(wynik.lastInsertRowid);
-}
-
-function dodajOsobe(db, nadpisania = {}) {
-  const dane = {
-    typ: 'fizyczna',
-    nazwisko: 'Kowalski',
-    imie: 'Jan',
-    nazwa: null,
-    pesel: null,
-    // D-076 (W6.1): nowy wpis osoby fizycznej wymaga PESEL albo daty urodzenia.
-    data_urodzenia: '1980-01-01',
-    aml_status: 'wykonane',
-    utworzono: czas.terazIso(),
-    ...nadpisania,
-  };
-  const wynik = db
-    .prepare(
-      `INSERT INTO psa_osoby (typ, nazwisko, imie, nazwa, pesel, data_urodzenia, aml_status, utworzono)
-       VALUES (@typ, @nazwisko, @imie, @nazwa, @pesel, @data_urodzenia, @aml_status, @utworzono)`
-    )
-    .run(dane);
-  return Number(wynik.lastInsertRowid);
-}
-
-/**
- * Skrot: dokonuje wpisu i zwraca zapisane zdarzenie.
- *
- * Emisje domyslnie dostaja `data_wpisu_krs` rowna dacie zdarzenia - wiekszosc
- * testow sprawdza logike NIEZWIAZANA z regula domenowa 12 (blokada wpisu akcji
- * przed wpisem emisji do KRS, sprint 5) i zaklada, ze akcje juz istnieja.
- * Testy TEJ konkretnej blokady nadpisuja `data_wpisu_krs: null` wprost.
- */
-function wpis(db, spolkaId, typ, data, wejscie, opcje = {}) {
-  const wejscieFinalne = typ === 'emisja' ? { data_wpisu_krs: data, ...wejscie } : wejscie;
-  // D-R01: `data` to chwila wpisu z zegara wstrzykiwanego w testach
-  // (`RRRR-MM-DD` = poludnie tego dnia czasu kancelarii).
-  return rejestr.dokonajWpisu(db, {
-    spolkaId,
-    typ,
-    teraz: data,
-    wejscie: wejscieFinalne,
-    autor: opcje.autor || 'Test',
   });
 }
 
+function dodajOsobe(db, nadpisania = {}) {
+  return daneOsoby.dodaj(db, {
+    typ: 'fizyczna',
+    nazwa: 'Jan Kowalski',
+    data_urodzenia: '1980-01-01',
+    adres: 'ul. Długa 5, 30-002 Kraków',
+    ...nadpisania,
+  });
+}
+
+/** Wszystkie pozycje checklisty odhaczone — testy, które nie dotyczą checklisty. */
+const CHECKLISTA_PELNA = {
+  zadajacy: true,
+  dokumenty: true,
+  identyfikacja: true,
+  ograniczenie: true,
+  zgoda_spolki: true,
+  zajecie: true,
+  prawo_glosu: true,
+};
+
 /**
- * Najkrotszy poprawny plik PDF — do testow wgrywania skanow.
- *
- * Serwer sprawdza SYGNATURE tresci, nie samo rozszerzenie nazwy (plik
- * „skan.pdf" o tresci HTML wracal wczesniej do pracownika jako wykonywalna
- * strona), wiec atrapa musi zaczynac sie od `%PDF-`.
+ * Sprawa doprowadzona do wpisu: „Dalej”, zgody na wpis wszystkich osób z R2, pełna checklista,
+ * opłata „nie” (gdy wymagana). Zwraca id sprawy.
  */
+function wpisz(db, spolkaId, operacje, { zadajacy = 'spolka', zadajacy_osoba_id: osobaId, zadajacy_opis: opis, oplata } = {}) {
+  const { id } = sprawy.zaloz(
+    db,
+    { spolka_id: spolkaId, zadajacy, zadajacy_osoba_id: osobaId, zadajacy_opis: opis, operacje, checklista: CHECKLISTA_PELNA },
+    'Test'
+  );
+  sprawy.dalej(db, id, 'Test');
+  const p = sprawy.podglad(db, id);
+  sprawy.zmien(
+    db,
+    id,
+    {
+      zgody: p.osoby.map((o) => ({ osoba_id: o.osoba_id, dopuszczalna: true, data: czas.dzisIso() })),
+      oplata: oplata !== undefined ? oplata : p.oplata.wymagana ? 'nie' : null,
+    },
+    'Test'
+  );
+  sprawy.zmienStan(db, id, 'wpisana', {}, 'Test');
+  return id;
+}
+
+/** Otwarcie rejestru (założenie) z podanymi seriami i akcjonariuszami. */
+function otworz(db, spolkaId, tresc) {
+  return wpisz(db, spolkaId, [{ typ: 'otwarcie', zrodlo: 'zalozenie', umorzone: [], atrybuty: [], ...tresc }]);
+}
+
+/** Akcjonariat w zwartej postaci: { 'osoba:seria': '1–10, 15' }, ułamki jako ' (1/2)'. */
+function akcjonariat(db, spolkaId) {
+  const w = stan.widok(rejestr.stanSpolki(db, spolkaId));
+  const wynik = {};
+  for (const p of w.akcjonariusze) {
+    const k = `${p.osoba_id}:${p.seria}`;
+    const opis = n.opisz(p.zakresy) + (p.czesc ? ` (${p.czesc.licznik}/${p.czesc.mianownik})` : '');
+    wynik[k] = wynik[k] ? `${wynik[k]}; ${opis}` : opis;
+  }
+  return wynik;
+}
+
+/** Najkrótszy poprawny plik PDF — do testów wgrywania. */
 const PDF_TESTOWY =
   '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n' +
   '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
   '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\n' +
   'trailer<</Root 1 0 R>>\n%%EOF\n';
 
-/**
- * Akcjonariusz KOMPLETNY wobec art. 300(33) § 1 KSH - nazwisko, PESEL i adres.
- * Od etapu "dane akcjonariuszy sa wymagane" zlozenie wniosku z brakami konczy
- * sie odmowa, wiec kazda przymiarka, ktora idzie dalej niz sam formularz,
- * musi wyjsc od pelnego zestawu. Uzycie: { ...AKCJONARIUSZ_PELNY, nazwisko: 'X' }.
- */
-const AKCJONARIUSZ_PELNY = {
-  typ: 'fizyczna',
-  imie: 'Anna',
-  nazwisko: 'Nowak',
-  pesel: '85050512345',
-  kod_pocztowy: '80-280',
-  miejscowosc: 'Gdansk',
-  ulica: 'Boleslawa Lesmiana 3/U10',
-  // E-mail operacyjny (Z-006/P-004) - obowiazkowy do zlozenia wniosku,
-  // niezalezny od zgody na e-mail W REJESTRZE (Z-157).
-  email: 'anna.nowak@example-test.pl',
-};
-
-/** Zdarzenie w formie "surowej" - do testow czystej logiki, bez bazy. */
-function zdarzenie(id, typ, data, dane) {
-  return { id, typ, data_wpisu: data, dane };
-}
-
-/**
- * „Podpisany" plik dokumentu z kompletu wniosku (D-075): oryginał wystawiony
- * przez kancelarię + dopisany na końcu słownik podpisu (jak podpis
- * przyrostowy PAdES). Walidator (D-086) daje „do weryfikacji” przez pracownika
- * — plik zostaje przyjęty. Prawdziwego podpisu tu nie ma.
- */
-function podpisanyPdf(db, dokumentId, dopisek = '') {
-  const fs = require('node:fs');
-  const path = require('node:path');
-  const konfiguracja = require('../server/konfiguracja');
-  const w = db.prepare('SELECT sciezka FROM psa_wnioski_dokumenty WHERE id = ?').get(dokumentId);
-  const oryginal = fs.readFileSync(path.join(konfiguracja.KATALOG_DOKUMENTOW, w.sciezka));
-  return Buffer.concat([
-    oryginal,
-    Buffer.from(`\n% podpis testowy ${dopisek}\n9999 0 obj\n<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached `
-      + '/ByteRange [0 0 0 0] /Contents <00> >>\nendobj\n%%EOF\n'),
-  ]);
-}
-
-module.exports = { bazaTestowa, dodajSpolke, dodajOsobe, wpis, zdarzenie, PDF_TESTOWY, AKCJONARIUSZ_PELNY, podpisanyPdf };
+module.exports = { bazaTestowa, ustawKancelarie, dodajSpolke, dodajOsobe, wpisz, otworz, akcjonariat, CHECKLISTA_PELNA, PDF_TESTOWY };

@@ -1,69 +1,33 @@
 'use strict';
 
 /**
- * Pulpit, integralnosc, katalogi (meta), naglowek kancelarii i stuby 501.
+ * Pulpit („Do zrobienia”, § 5) oraz Ustawienia (tylko administrator): dane kancelarii i kontrola
+ * integralności rejestru na żądanie (U-20).
  */
 
 const express = require('express');
 
 const { db } = require('../baza');
 const rejestr = require('../rejestr');
-const widoki = require('../widoki');
-const dokumentyTresc = require('../logika/dokumenty-tresc');
-const przepisy = require('../logika/przepisy');
-const formyPodpisu = require('../logika/formy-podpisu');
-const typyZdarzen = require('../logika/typy-zdarzen');
-const terminy = require('../logika/terminy');
-const dziennikDostepu = require('../logika/dziennik-dostepu');
-const konfiguracja = require('../konfiguracja');
 const ustawienia = require('../logika/ustawienia');
-const czas = require('../pomocnicze/czas');
-const { asy, autor, bledneZadanie, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
-const { wymagajPracownika } = require('../pomocnicze/autoryzacja');
-
-/** Sprint bieżąco obsługiwany przez kreator - decyduje o `typy_w_kreatorze`. */
-const SPRINT_KREATORA = typyZdarzen.SPRINT_KREATORA;
+const pulpit = require('../pulpit');
+const dziennik = require('../logika/dziennik-dostepu');
+const { asy, autor, bledneZadanie } = require('../pomocnicze/odpowiedzi');
+const { wymagajAdmina, wymagajPracownika } = require('../pomocnicze/autoryzacja');
 
 const router = express.Router();
 
-/**
- * D-34 — raport wartosci kraju, ktorych nie rozpoznano w slowniku ISO
- * (kod NULL przy niepustej nazwie). Do recznej poprawy - aplikacja nie
- * zgaduje kraju z niepewnej nazwy.
- */
-const POLA_KRAJU = [
-  ['psa_spolki', 'kraj', 'kraj_kod', 'nazwa', 'spółka'],
-  ['psa_spolki', 'reprezentant_kraj', 'reprezentant_kraj_kod', 'nazwa', 'spółka — reprezentant'],
-  ['psa_osoby', 'kraj', 'kraj_kod', "COALESCE(nazwa, trim(COALESCE(imie, '') || ' ' || COALESCE(nazwisko, '')))", 'osoba'],
-  ['psa_wnioski', 'kraj', 'kraj_kod', 'nazwa', 'wniosek — spółka'],
-  ['psa_wnioski', 'reprezentant_kraj', 'reprezentant_kraj_kod', 'nazwa', 'wniosek — reprezentant'],
-  ['psa_wnioski_akcjonariusze', 'kraj', 'kraj_kod', "COALESCE(nazwa, trim(COALESCE(imie, '') || ' ' || COALESCE(nazwisko, '')))", 'wniosek — akcjonariusz'],
-];
-
 router.get(
-  '/kraje/do-poprawy',
+  '/pulpit',
   wymagajPracownika,
   asy((zad, odp) => {
-    const pozycje = POLA_KRAJU.flatMap(([tabela, pole, kod, nazwa, rodzaj]) =>
-      db()
-        .prepare(
-          `SELECT id, ${nazwa} AS nazwa, ${pole} AS wartosc FROM ${tabela}
-            WHERE ${kod} IS NULL AND ${pole} IS NOT NULL AND trim(${pole}) != ''`
-        )
-        .all()
-        .map((w) => ({ rodzaj, tabela, pole, ...w }))
-    );
-    odp.json({ pozycje });
+    odp.json(pulpit.doZrobienia(db()));
   })
 );
 
-/**
- * Ustawienia kancelarii — metryka i stawki. Wartosci pochodza z bazy, a gdy
- * czegos tam nie ustawiono — z `.env`; pole `z_bazy` mowi, ktore to.
- */
 router.get(
   '/ustawienia',
-  wymagajPracownika,
+  wymagajAdmina,
   asy((zad, odp) => {
     odp.json(ustawienia.doEkranu(db()));
   })
@@ -71,21 +35,17 @@ router.get(
 
 router.put(
   '/ustawienia',
-  wymagajPracownika,
+  wymagajAdmina,
   asy((zad, odp) => {
     const zmiany = zad.body || {};
     const bledy = ustawienia.bledy(zmiany);
-    if (bledy.length > 0) {
-      throw bledneZadanie('Nie zapisano — popraw wskazane pola.', bledy);
-    }
+    if (bledy.length > 0) throw bledneZadanie('Nie zapisano — popraw wskazane pola.', bledy);
     const zmienione = ustawienia.zapisz(db(), zmiany, autor(zad));
-
-    // Te dane trafiaja do KAZDEJ wystawianej umowy, wiec zmiana zostawia
-    // slad tak samo jak pobranie pliku z akt.
     if (zmienione.length > 0) {
-      dziennikDostepu.zapisz(db(), {
-        kto: autor(zad), typKto: 'pracownik', spolkaId: null,
-        akcja: dziennikDostepu.AKCJE.ZMIANA_USTAWIEN,
+      dziennik.zapisz(db(), {
+        kto: autor(zad),
+        typKto: 'pracownik',
+        akcja: dziennik.AKCJE.ZMIANA_USTAWIEN,
         opis: `zmieniono ustawienia: ${zmienione.join(', ')}`,
       });
     }
@@ -93,445 +53,11 @@ router.put(
   })
 );
 
-/**
- * Katalogi domenowe dla UI. Front NIE powiela slownikow ani stawek -
- * wszystko pochodzi z `logika/przepisy.js` (sekcja 16 specyfikacji).
- *
- * Naprawa Z-001/Z-252: trasa byla jedyna w tym pliku bez `wymagajPracownika`
- * - niespojnosc modelu autoryzacji wzgledem reszty `/api/psa/*`, choc audyt
- * nie znalazl tu zadnych danych osobowych ani danych konkretnej spolki
- * (wylacznie slowniki i stawki DOMYSLNE ze zrodla). Portal klienta z tej
- * trasy nie korzysta wcale - jedyny konsument, ktory odpytywal ja PRZED
- * zalogowaniem, byl naprawiony rownolegle w `publiczne/js/app.js`.
- */
-router.get(
-  '/meta',
-  wymagajPracownika,
-  asy((zad, odp) => {
-    odp.json({
-      portal_wlaczony: konfiguracja.PORTAL_WLACZONY,
-      podglad_systemu: konfiguracja.PODGLAD_SYSTEMU,
-      typy_zdarzen: typyZdarzen.TYPY,
-      typy_w_kreatorze: typyZdarzen.dostepneWKreatorze(SPRINT_KREATORA).map((t) => t.kod),
-      zrodla_sprawy: przepisy.ZRODLA_SPRAWY,
-      stany_sprawy: przepisy.STANY_SPRAWY,
-      stawki_grosze: przepisy.STAWKI_GROSZE,
-      stawki_maksymalne_grosze: przepisy.STAWKI_MAKSYMALNE_GROSZE,
-      terminy: przepisy.TERMINY,
-      progi_terminu: przepisy.PROGI_TERMINU,
-      cel_wewnetrzny: przepisy.CEL_WEWNETRZNY,
-      statusy_spolki: przepisy.STATUSY_SPOLKI,
-      statusy_emisji: przepisy.STATUSY_EMISJI,
-      aml_statusy: przepisy.AML_STATUSY,
-      role_odbiorcy: przepisy.ROLE_ODBIORCY,
-      organy_uprawnione: przepisy.ORGANY_UPRAWNIONE,
-      rodzaje_akcji: przepisy.RODZAJE_AKCJI,
-      stany_pokrycia: przepisy.STANY_POKRYCIA,
-      umowe_zawarl: przepisy.UMOWE_ZAWARL,
-      charakter_wpisu: przepisy.CHARAKTER_WPISU,
-      podstawy: przepisy.PODSTAWY,
-      pola_wrazliwe: przepisy.POLA_WRAZLIWE,
-      // W2.2 — formy zgody na wpis z jednego źródła (formy-podpisu.js).
-      formy_zgody_na_wpis: formyPodpisu.regula(formyPodpisu.DOKUMENTY.ZGODA_NA_WPIS).formy
-        .map((kod) => ({ kod, nazwa: formyPodpisu.NAZWY_FORM[kod] })),
-      uwaga_zgody_na_wpis: formyPodpisu.regula(formyPodpisu.DOKUMENTY.ZGODA_NA_WPIS).uwaga,
-      dzisiaj: czas.dzisIso(),
-    });
-  })
-);
-
-/**
- * Liczniki kolejek dla szyny nawigacji - male znaczniki przy pozycjach menu.
- *
- * Liczy sie WYLACZNIE to, co czeka na ruch KANCELARII, nie wszystko, co
- * istnieje: zgloszenie w stanie "nowe" (do oceny), wniosek z odeslana
- * podpisana umowa (do weryfikacji) i sprawa w toku. Pozycje czekajace na
- * ruch klienta (wniosek w przygotowaniu, wygenerowana umowa jeszcze
- * niepodpisana) licznika NIE podbijaja - inaczej znacznik pokazywalby
- * prace, ktorej nie da sie wykonac.
- *
- * "Spolki" i "Kartoteka osob" licznikow nie maja z zalozenia - to katalogi,
- * nie kolejki.
- */
-router.get(
-  '/liczniki',
-  wymagajPracownika,
-  asy((zad, odp) => {
-    const wiersz = db()
-      .prepare(
-        `SELECT
-           (SELECT COUNT(*) FROM psa_zgloszenia WHERE status = 'nowe')            AS zgloszenia,
-           -- Naprawa B5 (FRONTEND-INWENTARZ.md): 'zlozony' czeka na wystawienie
-           -- dokumentow przez kancelarie (patrz STATUSY_WYSTAWIENIA w
-           -- wnioski.js), 'umowa_podpisana' czeka na jej weryfikacje i
-           -- przyjecie - oba stany czekaja na RUCH KANCELARII, nie klienta
-           -- ('do_uzupelnienia'/'umowa_wygenerowana' czekaja na klienta i
-           -- swiadomie NIE sa tu liczone).
-           (SELECT COUNT(*) FROM psa_wnioski
-             WHERE status IN ('zlozony', 'umowa_podpisana'))                      AS wnioski,
-           -- Zadania nieoplacone nie licza sie do kolejki: jeszcze ich nie ma
-           -- (art. 300(34) § 1 KSH liczy termin od otrzymania zadania).
-           (SELECT COUNT(*) FROM psa_sprawy
-             WHERE stan IN ('nowa','weryfikacja','wstrzymana')
-               AND oczekuje_na_oplate = 0)                                        AS sprawy,
-           -- Wpisy dokonane, o ktorych nikt jeszcze nie zawiadomil zadajacego
-           -- ani spolki (art. 300(34) § 7 KSH). Liczone z psa_wydane_dokumenty,
-           -- zeby nie trzymac drugiego zrodla prawdy — patrz
-           -- server/trasy/zawiadomienia.js.
-           (SELECT COUNT(*) FROM psa_sprawy sp
-             WHERE sp.stan = 'wpisana'
-               AND NOT EXISTS (SELECT 1 FROM psa_wydane_dokumenty w
-                                WHERE w.sprawa_id = sp.id
-                                  AND w.typ = 'zawiadomienie_wpis'))              AS zawiadomienia,
-           -- W4.3: pisma do osób bez zgody na e-mail czekające na nadanie.
-           (SELECT COUNT(*) FROM psa_listy WHERE status = 'do_wyslania')        AS listy`
-      )
-      .get();
-    odp.json({ liczniki: wiersz });
-  })
-);
-
-/**
- * W6.2 / W6.5 — zadania z terminem do „Do zrobienia” (za bramką 18.02.2027,
- * jedna funkcja czasu). Zgłoszenia do sądu i KRS składa się przez Portal
- * Rejestrów Sądowych — tu tylko przypomnienie i projekt treści, bez automatu.
- */
-function zadaniaTerminowe(dzis) {
-  const zadania = [];
-  if (!przepisy.nowelizacjaObowiazuje(dzis)) return zadania;
-  // W6.2 — art. 300(32) § 3 KSH: zawiadomienie sądu o rozwiązaniu/wygaśnięciu umowy w 7 dni.
-  const rozwiazane = db().prepare(
-    `SELECT s.id, s.nazwa, COALESCE(s.data_zakonczenia_umowy, s.przekazanie_data) AS data_konca FROM psa_spolki s
-      WHERE COALESCE(s.data_zakonczenia_umowy, s.przekazanie_data) IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM psa_wydane_dokumenty w WHERE w.spolka_id = s.id AND w.typ = 'zawiadomienie_sad_rozwiazanie')`
-  ).all();
-  for (const r of rozwiazane) {
-    if (!przepisy.nowelizacjaObowiazuje(r.data_konca)) continue;
-    zadania.push({
-      klucz: `sad-${r.id}`, rodzaj: 'zawiadomienie_sadu', spolka_id: r.id, spolka_nazwa: r.nazwa,
-      tytul: 'Zawiadom sąd rejestrowy o rozwiązaniu albo wygaśnięciu umowy (PRS)',
-      termin: terminy.dodajDni(String(r.data_konca).slice(0, 10), przepisy.TERMINY.ZAWIADOMIENIE_SADU_DNI),
-      podstawa: 'art. 300(32) § 3 KSH',
-    });
-  }
-  // W6.5 — art. 29 ustawy zmieniającej: rejestry istniejące 18.02.2027 — wniosek do KRS w 3 miesiące.
-  if (dzis <= przepisy.NOWELIZACJA.KONIEC_OKRESU_PRZEJSCIOWEGO) {
-    const istniejace = db().prepare(
-      `SELECT s.id, s.nazwa FROM psa_spolki s
-        WHERE s.status = 'aktywna' AND COALESCE(s.data_otwarcia_rejestru, substr(s.utworzono, 1, 10)) < ?
-          AND NOT EXISTS (SELECT 1 FROM psa_wydane_dokumenty w WHERE w.spolka_id = s.id AND w.typ = 'raport'
-                            AND w.tresc_html LIKE '[przypomnienie-krs]%')`
-    ).all(przepisy.NOWELIZACJA.WEJSCIE_W_ZYCIE);
-    for (const r of istniejace) {
-      zadania.push({
-        klucz: `krs-${r.id}`, rodzaj: 'przypomnienie_krs', spolka_id: r.id, spolka_nazwa: r.nazwa,
-        tytul: 'Przypomnij zarządowi o zgłoszeniu podmiotu prowadzącego rejestr do KRS',
-        termin: przepisy.NOWELIZACJA.KONIEC_OKRESU_PRZEJSCIOWEGO,
-        podstawa: 'art. 29 ustawy z 23.01.2026 (Dz.U. 2026 poz. 176), art. 300(32) § 1(1) KSH',
-      });
-    }
-  }
-  return zadania.sort((a, b) => String(a.termin).localeCompare(String(b.termin)));
-}
-
-/**
- * W6.5 — projekt przypomnienia dla zarządu („PROJEKT — do akceptacji Łukasza”).
- * Zapisuje ślad (typ `raport`, znacznik `[przypomnienie-krs]`) — zadanie znika z pulpitu.
- */
 router.post(
-  '/spolki/:id/przypomnienie-krs',
-  wymagajPracownika,
-  asy((zad, odp) => {
-    if (!przepisy.nowelizacjaObowiazuje(czas.dzisIso())) {
-      return odp.status(501).json(jeszczeNieaktywne('art. 29 ustawy zmieniającej', 'Przypomnienie o zgłoszeniu do KRS.'));
-    }
-    const spolka = rejestr.wczytajSpolke(db(), Number(zad.params.id));
-    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
-    const k = ustawienia.kancelaria(db());
-    const html = `[przypomnienie-krs]<p><strong>PROJEKT — do akceptacji Łukasza</strong></p>
-<p>Szanowni Państwo,</p>
-<p>od 18 lutego 2027 r. zarząd spółki ${spolka.nazwa}${spolka.krs ? ` (KRS ${spolka.krs})` : ''} zgłasza do sądu rejestrowego
-zawarcie umowy o prowadzenie rejestru akcjonariuszy (art. 300(32) § 1(1)–1(3) KSH). Spółki, których rejestr był prowadzony
-w dniu 18 lutego 2027 r., składają wniosek w ciągu 3 miesięcy, tj. do ${przepisy.NOWELIZACJA.KONIEC_OKRESU_PRZEJSCIOWEGO}
-(art. 29 ustawy z 23 stycznia 2026 r.). Zgłoszenie wskazuje: ${k.notariusz_mianownik || 'notariusza'}, siedzibę i adres kancelarii
-(${k.adres || '—'}); dołącza się oświadczenie zarządu potwierdzające zawarcie umowy. Wniosek składa się przez Portal Rejestrów Sądowych.</p>
-<p>${k.nazwa}</p>`;
-    db().prepare(
-      `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, kanal, tresc_html, autor, utworzono) VALUES (?, 'raport', 'papier', ?, ?, ?)`
-    ).run(spolka.id, html, autor(zad), czas.terazIso());
-    odp.json({ tresc_html: html.replace('[przypomnienie-krs]', '') });
-  })
-);
-
-/** Pulpit: spolki + dyskretny znacznik integralnosci + liczniki. */
-router.get(
-  '/pulpit',
-  wymagajPracownika,
-  asy((zad, odp) => {
-    const spolki = db()
-      .prepare(
-        `SELECT s.id, s.nazwa, s.krs, s.status, s.data_umowy,
-                (SELECT COUNT(DISTINCT sa.osoba_id) FROM psa_stan_akcji sa
-                  WHERE sa.spolka_id = s.id AND sa.data_do IS NULL
-                    AND sa.kategoria = 'akcjonariusz')  AS liczba_akcjonariuszy,
-                (SELECT COALESCE(SUM(sa.ilosc), 0) FROM psa_stan_akcji sa
-                  WHERE sa.spolka_id = s.id AND sa.data_do IS NULL
-                    AND sa.kategoria = 'akcjonariusz')  AS liczba_akcji,
-                (SELECT COALESCE(SUM(sa.ilosc), 0) FROM psa_stan_akcji sa
-                  WHERE sa.spolka_id = s.id AND sa.data_do IS NULL
-                    AND sa.kategoria = 'nieobjeta')     AS akcje_nieobjete,
-                (SELECT MAX(z.data_wpisu) FROM psa_zdarzenia z
-                  WHERE z.spolka_id = s.id)             AS ostatnie_zdarzenie
-           FROM psa_spolki s
-          ORDER BY ostatnie_zdarzenie DESC NULLS LAST, s.nazwa COLLATE NOCASE`
-      )
-      .all();
-
-    const liczniki = db()
-      .prepare(
-        `SELECT
-           (SELECT COUNT(*) FROM psa_spolki)                                AS spolki,
-           (SELECT COUNT(*) FROM psa_spolki WHERE status = 'aktywna')       AS spolki_aktywne,
-           (SELECT COUNT(*) FROM psa_osoby)                                 AS osoby,
-           (SELECT COUNT(*) FROM psa_zdarzenia)                             AS zdarzenia,
-           (SELECT COUNT(DISTINCT osoba_id) FROM psa_stan_akcji
-             WHERE data_do IS NULL AND kategoria = 'akcjonariusz')          AS akcjonariusze`
-      )
-      .get();
-
-    const integralnosc = rejestr.zweryfikujIntegralnosc(db());
-
-    // Sprawy w toku, posortowane po pozostalym czasie (sekcja 9 - pulpit,
-    // <=2 dni = wyroznienie --burgundy, po terminie = wyroznienie).
-    const dzis = czas.dzisIso();
-    const sprawyWiersze = db()
-      .prepare(
-        `SELECT sp.*, s.nazwa AS spolka_nazwa
-           FROM psa_sprawy sp
-           JOIN psa_spolki s ON s.id = sp.spolka_id
-          WHERE sp.stan IN ('nowa','weryfikacja','wstrzymana')
-            AND sp.oczekuje_na_oplate = 0`
-      )
-      .all();
-    const sprawy = sprawyWiersze
-      .map((s) => ({
-        id: s.id,
-        spolka_id: s.spolka_id,
-        spolka_nazwa: s.spolka_nazwa,
-        // Typ surowy obok nazwy — pulpit dobiera po nim ikonę wiersza
-        // (sesja 6, faza 1). Data wpływu jako druga informacja w wierszu.
-        typ_zdarzenia: s.typ_zdarzenia,
-        typ_nazwa: typyZdarzen.istnieje(s.typ_zdarzenia) ? typyZdarzen.typ(s.typ_zdarzenia).nazwa : s.typ_zdarzenia,
-        data_wplywu: s.data_wplywu,
-        stan: s.stan,
-        termin: terminy.policzTermin(s, dzis),
-      }))
-      .sort((a, b) => {
-        if ((a.stan === 'wstrzymana') !== (b.stan === 'wstrzymana')) return a.stan === 'wstrzymana' ? 1 : -1;
-        return (a.termin.dni_pozostale ?? 999) - (b.termin.dni_pozostale ?? 999);
-      });
-
-    // Zgłoszenia, wnioski i zawiadomienia „Do zrobienia" (K1) — te SAME
-    // warunki co w `/liczniki` wyżej, żeby liczba przy pozycji menu i wiersz
-    // w sekcji pulpitu zawsze się zgadzały (jedno źródło definicji).
-    const zgloszeniaWiersze = db()
-      .prepare(
-        `SELECT id, nazwa_spolki, email, utworzono FROM psa_zgloszenia
-          WHERE status = 'nowe' ORDER BY utworzono ASC`
-      )
-      .all();
-    const wnioskiWiersze = db()
-      .prepare(
-        `SELECT w.id, w.nazwa, w.status, w.zaktualizowano, w.utworzono, k.email AS konto_email
-           FROM psa_wnioski w JOIN psa_konta k ON k.id = w.konto_id
-          WHERE w.status IN ('zlozony', 'umowa_podpisana')
-          ORDER BY w.zaktualizowano ASC, w.utworzono ASC`
-      )
-      .all();
-    const zawiadomieniaWiersze = db()
-      .prepare(
-        `SELECT sp.spolka_id, s.nazwa AS spolka_nazwa, COUNT(*) AS ile, MIN(sp.zaktualizowano) AS najstarsze
-           FROM psa_sprawy sp
-           JOIN psa_spolki s ON s.id = sp.spolka_id
-          WHERE sp.stan = 'wpisana'
-            AND NOT EXISTS (SELECT 1 FROM psa_wydane_dokumenty w
-                             WHERE w.sprawa_id = sp.id AND w.typ = 'zawiadomienie_wpis')
-          GROUP BY sp.spolka_id
-          ORDER BY najstarsze ASC`
-      )
-      .all();
-
-    // W3.6 — wynik walidacji podpisu trafia do „Do zrobienia”: podpisy wgrane
-    // (albo oryginały zadeklarowane) czekające na ręczne potwierdzenie (D-052).
-    const podpisyWiersze = db()
-      .prepare(
-        `SELECT d.id, d.wniosek_id, d.nazwa, d.walidacja_wynik, d.oryginal_poczta_zadeklarowano,
-                COALESCE(d.walidacja_kiedy, d.podpis_wgrano, d.oryginal_poczta_zadeklarowano) AS kiedy,
-                w.nazwa AS wniosek_nazwa
-           FROM psa_wnioski_dokumenty d JOIN psa_wnioski w ON w.id = d.wniosek_id
-          WHERE d.podpis_potwierdzono IS NULL
-            AND (d.podpis_sciezka IS NOT NULL OR d.oryginal_poczta_zadeklarowano IS NOT NULL)
-            AND w.status NOT IN ('przyjety', 'odrzucony')
-          ORDER BY kiedy ASC`
-      )
-      .all();
-
-    odp.json({
-      zadania_terminowe: (() => {
-        // Faza 4 — przeniesienia: wygaśnięcie po 12 miesiącach, przypomnienia (W7.5), zadania ręczne (W7.8).
-        const przen = require('../przeniesienia');
-        przen.zastosujWygasniecia(db(), dzis);
-        return [...zadaniaTerminowe(dzis), ...przen.zadaniaPoPrzejeciu(db(), dzis)]
-          .sort((a, b) => String(a.termin).localeCompare(String(b.termin)));
-      })(),
-      listy: db().prepare(
-        `SELECT l.id, l.odbiorca_nazwa, l.rodzaj_pisma, l.utworzono, s.nazwa AS spolka_nazwa
-           FROM psa_listy l JOIN psa_spolki s ON s.id = l.spolka_id
-          WHERE l.status = 'do_wyslania' ORDER BY l.utworzono ASC`
-      ).all(),
-      spolki,
-      liczniki: { ...liczniki, sprawy_w_toku: sprawy.length },
-      integralnosc: {
-        ok: integralnosc.ok,
-        sprawdzono: integralnosc.sprawdzono,
-        blad: integralnosc.blad,
-      },
-      sprawy: { dostepne: true, pozycje: sprawy },
-      zgloszenia: zgloszeniaWiersze,
-      wnioski: wnioskiWiersze,
-      zawiadomienia: zawiadomieniaWiersze,
-      podpisy: podpisyWiersze,
-      dzisiaj: dzis,
-    });
-  })
-);
-
-/**
- * Weryfikacja lancucha skrotow. Wywolywana nocnie; wynik na pulpicie
- * jako dyskretny znacznik (sekcja 11).
- */
-router.get(
   '/integralnosc',
-  wymagajPracownika,
+  wymagajAdmina,
   asy((zad, odp) => {
-    const wynik = rejestr.zweryfikujIntegralnosc(db());
-    odp.status(wynik.ok ? 200 : 409).json({
-      ok: wynik.ok,
-      sprawdzono: wynik.sprawdzono,
-      blad: wynik.blad,
-      komunikat: wynik.ok
-        ? `Łańcuch nieprzerwany — zweryfikowano ${wynik.sprawdzono} zdarzeń.`
-        : `Łańcuch zerwany przy zdarzeniu #${wynik.blad.id}.`,
-    });
-  })
-);
-
-/**
- * Funkcje z nowelizacji (Dz.U. 2026 poz. 176, wejscie 18.02.2027) - sekcja 8.
- * Bramkowane data: przed wejsciem w zycie zwracaja 501 z informacja, kiedy
- * i na jakiej podstawie ruszaja - PO tej dacie wykonuja realna prace.
- * PRZEPISY-PSA.md § 13: pozycje ⚠️ (poza wydrukiem KSH) nie moga byc podstawa
- * walidacji BLOKUJACEJ - obie trasy nizej wylacznie GENERUJA DOKUMENT z juz
- * istniejacych, potwierdzonych danych (stan rejestru, data zakonczenia
- * umowy), nie oceniaja tresci niezweryfikowanego przepisu, wiec ograniczenie
- * to ich nie dotyczy.
- */
-function jeszczeNieaktywne(podstawa, opis) {
-  return {
-    blad: 'Funkcja jeszcze nieuruchomiona.',
-    opis,
-    podstawa,
-    uruchomienie: przepisy.NOWELIZACJA.WEJSCIE_W_ZYCIE,
-    dziennik: przepisy.NOWELIZACJA.DZIENNIK,
-    wymaga_weryfikacji_brzmienia: true,
-  };
-}
-
-/** art. 25da ustawy o KRS - sad pozyskuje wykaz akcjonariuszy bezposrednio od podmiotu prowadzacego rejestr. */
-router.post(
-  '/sad/zapytania',
-  wymagajPracownika,
-  asy((zad, odp) => {
-    if (!przepisy.nowelizacjaObowiazuje(czas.dzisIso())) {
-      return odp
-        .status(501)
-        .json(jeszczeNieaktywne(przepisy.PODSTAWY.ZAPYTANIE_SADU, 'Obsługa zapytań sądu rejestrowego o wykaz akcjonariuszy.'));
-    }
-
-    const kto = autor(zad);
-    const spolkaId = Number((zad.body || {}).spolka_id);
-    const spolka = rejestr.wczytajSpolke(db(), spolkaId);
-    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
-
-    const data = (zad.body || {}).data ? String((zad.body || {}).data) : czas.dzisIso();
-    if (!czas.poprawnaData(data)) throw bledneZadanie('Parametr „data” musi mieć format RRRR-MM-DD.');
-
-    const stan = widoki.widokStanu(db(), spolkaId, data, { rola: przepisy.ROLE_ODBIORCY.ORGAN });
-    const trescHtml = dokumentyTresc.wykazAkcjonariuszy({
-      kancelaria: ustawienia.kancelaria(db()),
-      spolka: stan.spolka,
-      data,
-      stan,
-      powod: `zapytanie sądu rejestrowego (${przepisy.PODSTAWY.ZAPYTANIE_SADU})${
-        (zad.body || {}).opis_wniosku ? ` — ${String((zad.body || {}).opis_wniosku).trim()}` : ''
-      }`,
-    });
-
-    db()
-      .prepare(
-        `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, kanal, tresc_html, autor, utworzono)
-         VALUES (?, 'wykaz_akcjonariuszy', 'papier', ?, ?, ?)`
-      )
-      .run(spolkaId, trescHtml, kto, czas.terazIso());
-
-    // Wykaz calego akcjonariatu spolki dla sadu - blok D4, zakres WASKI.
-    dziennikDostepu.zapisz(db(), {
-      kto, typKto: 'pracownik', spolkaId, akcja: dziennikDostepu.AKCJE.RAPORT_SAD,
-      opis: 'wykaz akcjonariuszy — zapytanie sądu rejestrowego',
-    });
-
-    odp.json({ tresc_html: trescHtml });
-  })
-);
-
-/** art. 300(32) § 3 KSH - zawiadomienie sadu rejestrowego o wygasnieciu/rozwiazaniu umowy. */
-router.post(
-  '/sad/zawiadomienie-o-rozwiazaniu',
-  wymagajPracownika,
-  asy((zad, odp) => {
-    if (!przepisy.nowelizacjaObowiazuje(czas.dzisIso())) {
-      return odp.status(501).json(
-        jeszczeNieaktywne(
-          'art. 300(32) § 3 KSH',
-          'Zawiadomienie sądu rejestrowego o wygaśnięciu lub rozwiązaniu umowy o prowadzenie rejestru ' +
-            `(termin ${przepisy.TERMINY.ZAWIADOMIENIE_SADU_DNI} dni).`
-        )
-      );
-    }
-
-    const kto = autor(zad);
-    const spolkaId = Number((zad.body || {}).spolka_id);
-    const spolka = rejestr.wczytajSpolke(db(), spolkaId);
-    if (!spolka) throw nieZnaleziono('Nie odnaleziono spółki.');
-    if (!spolka.data_zakonczenia_umowy) {
-      throw bledneZadanie('Spółka nie ma ustawionej daty zakończenia umowy o prowadzenie rejestru.');
-    }
-
-    const trescHtml = dokumentyTresc.zawiadomienieSaduORozwiazaniu({
-      kancelaria: ustawienia.kancelaria(db()),
-      spolka,
-      dataZakonczenia: spolka.data_zakonczenia_umowy,
-      tryb: (zad.body || {}).tryb || 'rozwiązaniu',
-    });
-
-    db()
-      .prepare(
-        `INSERT INTO psa_wydane_dokumenty (spolka_id, typ, kanal, tresc_html, autor, utworzono)
-         VALUES (?, 'zawiadomienie_sad_rozwiazanie', 'papier', ?, ?, ?)`
-      )
-      .run(spolkaId, trescHtml, kto, czas.terazIso());
-
-    odp.json({ tresc_html: trescHtml });
+    odp.json(rejestr.zweryfikujIntegralnosc(db()));
   })
 );
 

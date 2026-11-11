@@ -33,50 +33,25 @@
 // ─────────────────────────────────────────────────────────────
 
 const TERMINY = {
-  /** PRZEPISY-PSA.md art. 300(34) § 1 🟢 - wpis nie pozniej niz 7 dni od otrzymania zadania. */
+  /**
+   * PRZEPISY-PSA.md art. 300(34) § 1 🟢 - wpis nie pozniej niz 7 dni od otrzymania zadania; po usunieciu
+   * przeszkody termin biegnie od nowa (`server/logika/terminy.js`).
+   */
   WPIS_DNI: 7,
-
-  /**
-   * PRZEPISY-PSA.md art. 300(34) § 1 zd. 2 🟢 - przy przeszkodzie termin
-   * biegnie od nowa, liczony od dnia jej usuniecia (nie: doliczany do reszty
-   * starego terminu - patrz `server/logika/terminy.js`).
-   */
-  WPIS_PO_USUNIECIU_PRZESZKODY_DNI: 7,
-
-  /** PRZEPISY-PSA.md art. 300(32) § 2 🟢 - minimalny okres wypowiedzenia umowy przez podmiot prowadzacy rejestr. */
-  WYPOWIEDZENIE_MIESIACE: 3,
-
-  /**
-   * PRZEPISY-PSA.md art. 300(32) § 3 🔵 - podmiot prowadzacy rejestr
-   * zawiadamia SAD REJESTROWY o wygasnieciu/rozwiazaniu umowy, w terminie
-   * 7 dni od tej daty. Drugi zegar ustawowy modulu, obok terminu wpisu.
-   */
-  ZAWIADOMIENIE_SADU_DNI: 7,
-
-  /**
-   * Przeniesienie rejestru (wytyczne § 7.4, klauzula umowy warunkowej):
-   * wypowiedzenie dotychczasowej umowy w 14 dni od zawarcia (ust. 3), termin
-   * ostateczny warunku 12 miesięcy (ust. 4), ostrzeżenie przed nim.
-   */
-  PRZENIESIENIE_WYPOWIEDZENIE_DNI: 14,
-  PRZENIESIENIE_TERMIN_WARUNKU_MIESIECY: 12,
-  PRZENIESIENIE_OSTRZEZENIE_DNI: 30,
-
-  /**
-   * PRZEPISY-PSA.md art. 300(33) § 3 🔵 - wszelkie zmiany danych z § 1
-   * pkt 1-4 oraz 9-11 zarzad zglasza PODMIOTOWI PROWADZACEMU REJESTR (do nas,
-   * nie do sadu rejestrowego - poprawka erraty nr 4) w terminie 7 dni od
-   * zdarzenia. Nasza rola: przypomnienie, nie egzekucja.
-   */
-  ZGLOSZENIE_ZMIANY_PRZEZ_ZARZAD_DNI: 7,
-
-  /**
-   * PRZEPISY-PSA.md art. 300(9) § 1 🟢 - wklady wnoszone w calosci w ciagu
-   * trzech lat od wpisu spolki do KRS. Wylacznie przypomnienie (decyzja nr 8,
-   * sekcja 15 CLAUDE-PSA.md) - termin sam w sobie nie blokuje wpisow.
-   */
-  WNIESIENIE_WKLADOW_LATA: 3,
 };
+
+/**
+ * PRZEPISY-PSA.md art. 300(32) § 3 🔵 (od 18.02.2027) - podmiot prowadzacy rejestr zawiadamia sad rejestrowy
+ * (system teleinformatyczny KRS) o wygasnieciu albo rozwiazaniu umowy w terminie 7 dni od tej daty. Data
+ * rozwiazania = data zamkniecia rejestru. Zwraca termin (RRRR-MM-DD) albo null, gdy obowiazek nie dotyczy.
+ */
+const ZAWIADOMIENIE_SADU = { OD: '2027-02-18', DNI: 7 };
+function terminZawiadomieniaSadu(dzienZamkniecia) {
+  if (!dzienZamkniecia || dzienZamkniecia < ZAWIADOMIENIE_SADU.OD) return null;
+  const d = new Date(`${dzienZamkniecia}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + ZAWIADOMIENIE_SADU.DNI);
+  return d.toISOString().slice(0, 10);
+}
 
 /** Progi ostrzegania o zblizajacym sie terminie (sekcja 9 - pulpit). */
 const PROGI_TERMINU = {
@@ -119,19 +94,11 @@ const CEL_WEWNETRZNY = {
 const STAWKI_GROSZE = {
   /** prowadzenie rejestru: 1200 zl za kazdy rozpoczety rok. */
   PROWADZENIE_ROCZNIE: 120000,
+  /** prowadzenie rejestru płatne co miesiąc (U-30): 100 zl za miesiąc. */
+  PROWADZENIE_MIESIECZNIE: 10000,
   /** wpis w rejestrze: 100 zl. */
   WPIS: 10000,
   /** informacja z rejestru: 50 zl. */
-  INFORMACJA: 5000,
-};
-// Potwierdzone przez Łukasza 26.09.2026 (SESJA-PSA-STRONA.md wersja 5, pkt 7 i D-073) —
-// stawki poniżej NIE są już "do weryfikacji", są docelowe.
-const STAWKI_DO_WERYFIKACJI = false;
-
-/** Stawki maksymalne z rozporzadzenia - do porownania w UI konfiguracji. */
-const STAWKI_MAKSYMALNE_GROSZE = {
-  PROWADZENIE_ROCZNIE: 120000,
-  WPIS: 10000,
   INFORMACJA: 5000,
 };
 
@@ -154,53 +121,9 @@ function obliczBrutto(nettoGrosze, vatProcent = STAWKA_VAT_PROCENT) {
   return Math.round((Number(nettoGrosze) * (100 + Number(vatProcent))) / 100);
 }
 
-/** Typ opłaty -> klucz w STAWKI_MAKSYMALNE_GROSZE. */
-const TYP_OPLATY_KLUCZ_MAKSYMALNEJ = {
-  prowadzenie: 'PROWADZENIE_ROCZNIE',
-  wpis: 'WPIS',
-  informacja: 'INFORMACJA',
-};
-
-/**
- * Waliduje kwote oplaty w groszach (Z-101..Z-104) - JEDNO miejsce, wspolne
- * dla automatu (ktory zawsze bierze stawke wprost stad, wiec zawsze
- * przechodzi) i recznego wpisu pracownika (jedyna droga, ktora faktycznie
- * moze dostac zly numer): liczba calkowita (regula domenowa nr 5 - zadnych
- * floatow), dodatnia, nie wyzsza niz stawka maksymalna danego typu
- * z rozporzadzenia.
- */
-function walidujKwoteGrosze(typ, kwotaGrosze) {
-  const liczba = Number(kwotaGrosze);
-  if (!Number.isFinite(liczba) || !Number.isInteger(liczba)) {
-    return { ok: false, powod: 'Kwota musi być liczbą całkowitą groszy, bez ułamków.' };
-  }
-  if (liczba <= 0) {
-    return { ok: false, powod: 'Kwota musi być dodatnia.' };
-  }
-  const klucz = TYP_OPLATY_KLUCZ_MAKSYMALNEJ[typ];
-  const maksimum = klucz ? STAWKI_MAKSYMALNE_GROSZE[klucz] : null;
-  if (maksimum != null && liczba > maksimum) {
-    return {
-      ok: false,
-      powod: `Kwota nie może przekraczać stawki maksymalnej dla tego typu opłaty (${(maksimum / 100).toFixed(2)} zł netto).`,
-    };
-  }
-  return { ok: true, powod: null };
-}
-
-/** Waluta domyslna rejestru. */
-const WALUTA_DOMYSLNA = 'PLN';
-
 // ─────────────────────────────────────────────────────────────
 // ZAKRES PODMIOTOWY
 // ─────────────────────────────────────────────────────────────
-
-/**
- * PRZEPISY-PSA.md art. 300(31) § 1 pkt 2 🟢 - notariusz prowadzi rejestr
- * WYLACZNIE dla prostych spolek akcyjnych (regula domenowa nr 11).
- * Walidacja przy dodawaniu spolki.
- */
-const FORMA_PRAWNA_WYMAGANA = 'PROSTA SPÓŁKA AKCYJNA';
 
 /** Warianty zapisu formy prawnej spotykane w KRS i we wpisach recznych. */
 const FORMA_PRAWNA_WARIANTY = [
@@ -236,78 +159,14 @@ const FORMY_PRAWNE_ZABRONIONE = [
  * dodatkowymi juz istniejacymi w systemie. Jedyna zmiana wprowadzona przez
  * nowelizacje to ZAKAZ udostepniania ponizszych pol pozostalym akcjonariuszom.
  */
-const POLA_WRAZLIWE = [
-  'pesel',
-  'data_urodzenia',
-  'kod_pocztowy',
-  'miejscowosc',
-  'ulica',
-  'nr_domu',
-  'nr_lokalu',
-];
+const POLA_WRAZLIWE = ['pesel', 'data_urodzenia', 'adres'];
 
-/** Pola kontaktowe - nie sa "danymi rejestru" w rozumieniu art. 300(33), nie pokazujemy ich obcym. */
-const POLA_KONTAKTOWE = ['email', 'telefon', 'adres_doreczen', 'adres_edoreczen'];
+const POLA_KONTAKTOWE = ['email'];
 
-/**
- * Tozsamosc i tresc rejestru dostepna KAZDEJ roli, ktora w ogole ma prawo
- * widziec osobe (wlacznie z zamaskowanym akcjonariuszem-peer) - nigdy
- * PESEL/adres/kontakt (POLA_WRAZLIWE/POLA_KONTAKTOWE, osobno dopuszczane
- * per rola nizej) i nigdy dane kancelaryjne (POLA_KANCELARYJNE).
- */
-const POLA_TOZSAMOSCI = [
-  'id',
-  'typ',
-  'nazwisko',
-  'imie',
-  'nazwa',
-  'nip',
-  'regon',
-  'numer_w_rejestrze',
-  'nazwa_rejestru',
-  'kraj',
-  'plec',
-  'rodzaj_adresu_rejestrowego',
-  'bez_pesel',
-];
+const POLA_TOZSAMOSCI = ['id', 'typ', 'nazwa', 'numer_rejestru', 'rodzaj_adresu'];
 
-/**
- * D-092 (przegląd R4 #9): stan zgody na e-mail to dane kartoteki — nie dla innych akcjonariuszy.
- * Spółka i organ dostają go (spółka potrzebuje go, żeby w informacji pokazać adres e-mail).
- */
-const POLA_OSWIADCZEN = ['zgoda_email', 'zgoda_email_status'];
+const POLA_OSWIADCZEN = ['zgoda_email'];
 
-/**
- * Dane AML/PEP i ocena ryzyka kancelarii - naprawa Z-150. NIGDY nie wychodza
- * poza kancelarie, niezaleznie od roli odbiorcy: to nie jest tresc rejestru
- * w rozumieniu art. 300(33) KSH (sekcja 10 CLAUDE-PSA.md - "czego NIE
- * umieszczac na wydrukach"), tylko wewnetrzna dokumentacja obowiazku AML
- * notariusza. `wspolwlasnosc`/`udzial_*` opisuja strukture wlascicielska
- * SAMEGO podmiotu (kto jest wlascicielem tej osoby prawnej) - to ten sam
- * rodzaj informacji co beneficjent rzeczywisty, nie tresc rejestru akcji.
- */
-const POLA_KANCELARYJNE = [
-  'aml_status',
-  'aml_data',
-  'aml_notatka',
-  'aml_data_przegladu',
-  'beneficjent_rzeczywisty_id',
-  'beneficjenci_json',
-  'pep',
-  'pep_opis',
-  'pep_oswiadczenie',
-  'pep_oswiadczenie_data',
-  'uwagi',
-  'wspolwlasnosc',
-  'wspolwlasciciele',
-  'udzial_licznik',
-  'udzial_mianownik',
-];
-
-/**
- * Role odbiorcy informacji z rejestru. Decyduja o zakresie maskowania.
- * PRZEPISY-PSA.md art. 300(35) § 1, § 1(1), § 4.
- */
 const ROLE_ODBIORCY = {
   /** Kancelaria prowadzaca rejestr - pelny wglad z definicji. */
   KANCELARIA: 'kancelaria',
@@ -320,14 +179,6 @@ const ROLE_ODBIORCY = {
   /** Sad, prokuratura, komornik, administracyjny organ egzekucyjny (art. 300(35) § 4 🔵) - pelny wglad. */
   ORGAN: 'organ',
 };
-
-/** Role z pelnym dostepem do danych wrazliwych. */
-const ROLE_PELNY_DOSTEP = [
-  ROLE_ODBIORCY.KANCELARIA,
-  ROLE_ODBIORCY.SPOLKA,
-  ROLE_ODBIORCY.WLASCICIEL_DANYCH,
-  ROLE_ODBIORCY.ORGAN,
-];
 
 /**
  * Biala lista pol widocznych per rola (naprawa Z-150). Poprzednia wersja
@@ -350,426 +201,9 @@ const BIALE_LISTY = {
   [ROLE_ODBIORCY.WLASCICIEL_DANYCH]: null,
   [ROLE_ODBIORCY.SPOLKA]: [...POLA_TOZSAMOSCI, ...POLA_OSWIADCZEN, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
   [ROLE_ODBIORCY.ORGAN]: [...POLA_TOZSAMOSCI, ...POLA_OSWIADCZEN, ...POLA_WRAZLIWE, ...POLA_KONTAKTOWE],
-  [ROLE_ODBIORCY.AKCJONARIUSZ]: POLA_TOZSAMOSCI,
+  // D-182: e-mail innych akcjonariuszy jawny (przy zgodzie — `maskowanie.js`); art. 300³⁵ § 1¹ go nie wymienia.
+  [ROLE_ODBIORCY.AKCJONARIUSZ]: [...POLA_TOZSAMOSCI, ...POLA_KONTAKTOWE],
 };
-
-/** Katalog organow z art. 300(35) § 4 KSH - do wyboru na wydruku informacji. */
-const ORGANY_UPRAWNIONE = [
-  'sąd',
-  'prokurator',
-  'komornik sądowy',
-  'administracyjny organ egzekucyjny',
-];
-
-// ─────────────────────────────────────────────────────────────
-// AML
-// ─────────────────────────────────────────────────────────────
-
-/**
- * PRZEPISY-PSA.md § 9 ⚠️ (Prawo o notariacie rozdz. 8a + ustawa AML) - poza
- * wydrukiem KSH, wymaga weryfikacji przez Lukasza. Blokada AML byla juz
- * zbudowana i zaakceptowana w sprincie 2, PRZED powstaniem PRZEPISY-PSA.md -
- * sprint 5 jej nie rusza (nie jest to NOWA reguła oparta na niezweryfikowanym
- * zrodle, tylko juz istniejace, swiadome dzialanie modulu). Nowych blokad
- * opartych na pozycjach ⚠️ w tym sprincie NIE dodajemy.
- *
- * Notariusz prowadzacy rejestr akcjonariuszy jest instytucja obowiazana.
- * Brak mozliwosci zastosowania srodkow bezpieczenstwa finansowego = przeszkoda
- * wpisu, przy nieusunieciu - odmowa wpisu.
- */
-const AML_STATUSY = {
-  BRAK: 'brak',
-  WYKONANE: 'wykonane',
-  NIEMOZLIWE: 'niemozliwe',
-};
-
-/** Status AML wymagany, by wpis dotyczacy osoby mogl dojsc do skutku. */
-const AML_STATUS_WYMAGANY = AML_STATUSY.WYKONANE;
-
-/**
- * Blok C sesji 8 (przeglad okresowy, beneficjent rzeczywisty, oswiadczenie
- * PEP) jest SWIADOMA NADWYZKA wobec tego, co PRZEPISY-PSA.md § 9 opisuje -
- * caly ten paragraf jest oznaczony ⚠️ (niezweryfikowany), a jego tresc to
- * wylacznie dwa zdania o instytucji obowiazanej i o stawkach. Szczegoly
- * (termin przegladu 12 miesiecy, rozgraniczenie osoba fizyczna/prawna przy
- * beneficjencie, forma oswiadczenia PEP) pochodza z decyzji roboczych
- * (SESJA-PSA-8-PROTOTYP.md § 3 decyzja D4a, § 6 blok C), NIE z brzmienia
- * ustawy AML zweryfikowanego w PRZEPISY-PSA.md. Za rok ktos moze pomyslec,
- * ze to ustalona tresc przepisu - nie jest. Zgodnie z zasada sprintu 5
- * ("Nowych blokad opartych na pozycjach ⚠️ NIE dodajemy") zaden z tych
- * elementow NIE tworzy nowej blokady wpisu - sa to wylacznie pola danych
- * i sygnaly informacyjne w kartotece.
- */
-const TERMIN_PRZEGLADU_AML_MIESIECY = 12;
-
-// ─────────────────────────────────────────────────────────────
-// SLOWNIKI STANOW (stan wewnetrzny modulu - CLAUDE-PSA.md sekcje 5 i 7,
-// nie sa oddzielnymi jednostkami redakcyjnymi ustawy)
-// ─────────────────────────────────────────────────────────────
-
-const STATUSY_SPOLKI = {
-  AKTYWNA: 'aktywna',
-  W_LIKWIDACJI: 'w_likwidacji',
-  ZAWIESZONA: 'zawieszona',
-  WYKRESLONA: 'wykreslona',
-};
-
-/** Statusy spolki blokujace jakikolwiek nowy wpis do rejestru. */
-const STATUSY_SPOLKI_BLOKUJACE_WPIS = [STATUSY_SPOLKI.WYKRESLONA];
-
-/**
- * D-31: odbiorcy przekazania rejestru - notariusz, izba notarialna albo
- * podmiot uprawniony do prowadzenia rachunkow papierow wartosciowych
- * (art. 300(31) § 1 pkt 1 KSH).
- */
-const ODBIORCY_PRZEKAZANIA = {
-  notariusz: 'notariusz',
-  izba_notarialna: 'izba notarialna',
-  podmiot_rachunki: 'podmiot uprawniony do prowadzenia rachunków papierów wartościowych',
-};
-
-/**
- * Czy do rejestru spolki wolno dokonac wpisu. `null` = wolno; tekst = powod
- * odmowy. Jedno miejsce dla wszystkich tras zapisu (walidacja wpisu, zapis
- * zdarzenia, zakladanie spraw w kancelarii i w portalu, zmiana danych).
- */
-function blokadaWpisu(spolka) {
-  if (!spolka) return 'Nie odnaleziono spółki.';
-  if (STATUSY_SPOLKI_BLOKUJACE_WPIS.includes(spolka.status)) {
-    return `Spółka ma status „${spolka.status}” — do rejestru wykreślonej spółki nie dokonuje się wpisów.`;
-  }
-  if (spolka.przekazanie_data) {
-    return (
-      `Prowadzenie rejestru przekazano z dniem ${spolka.przekazanie_data} ` +
-      `(${spolka.przekazanie_odbiorca_nazwa || 'inny podmiot'}) — rejestr jest tylko do odczytu.`
-    );
-  }
-  return null;
-}
-
-const STATUSY_EMISJI = {
-  AKTYWNA: 'aktywna',
-  W_UMARZANIU: 'w_umarzaniu',
-  UMORZONA: 'umorzona',
-  WYKRESLONA: 'wykreslona',
-};
-
-const STANY_SPRAWY = {
-  NOWA: 'nowa',
-  WERYFIKACJA: 'weryfikacja',
-  WSTRZYMANA: 'wstrzymana',
-  WPISANA: 'wpisana',
-  ODMOWA: 'odmowa',
-  ANULOWANA: 'anulowana',
-};
-
-const ZRODLA_SPRAWY = {
-  PORTAL: 'portal',
-  EMAIL: 'email',
-  PAPIER: 'papier',
-  Z_URZEDU: 'z_urzedu',
-};
-
-/**
- * W jakim charakterze zadajacy wystepuje o wpis.
- *
- * Art. 300(34) § 1 KSH: wpisu dokonuje sie "na zadanie spolki lub innej osoby
- * majacej INTERES PRAWNY". Ocena interesu prawnego nalezy do podmiotu
- * prowadzacego rejestr i musi zostawic slad - stad slownik zamiast wolnego
- * pola. Katalog NIE jest zamkniety (ustawa mowi "innej osoby majacej interes
- * prawny"), dlatego pozycja INNA zostaje - ale wymaga uzasadnienia.
- */
-const ROLE_ZADAJACEGO = {
-  AKCJONARIUSZ: 'akcjonariusz',
-  ZBYWCA: 'zbywca',
-  NABYWCA: 'nabywca',
-  ZASTAWNIK: 'zastawnik',
-  UZYTKOWNIK: 'uzytkownik',
-  /** Osoby i organy uprawnione do zaskarzenia uchwal walnego zgromadzenia. */
-  UPRAWNIONY_DO_ZASKARZENIA: 'uprawniony_do_zaskarzenia',
-  SPOLKA: 'spolka',
-  /** Poza katalogiem - wymaga wykazania interesu prawnego w polu opisowym. */
-  INNA: 'inna',
-};
-
-/** Rola, przy ktorej opis interesu prawnego jest OBOWIAZKOWY. */
-const ROLA_ZADAJACEGO_WYMAGA_UZASADNIENIA = ROLE_ZADAJACEGO.INNA;
-
-/** Etykiety do interfejsu i na zawiadomienia - jezykiem czynnosci, nie kodem. */
-const OPISY_ROL_ZADAJACEGO = {
-  [ROLE_ZADAJACEGO.AKCJONARIUSZ]: 'akcjonariusz',
-  [ROLE_ZADAJACEGO.ZBYWCA]: 'zbywca akcji',
-  [ROLE_ZADAJACEGO.NABYWCA]: 'nabywca akcji',
-  [ROLE_ZADAJACEGO.ZASTAWNIK]: 'zastawnik',
-  [ROLE_ZADAJACEGO.UZYTKOWNIK]: 'użytkownik akcji',
-  [ROLE_ZADAJACEGO.UPRAWNIONY_DO_ZASKARZENIA]:
-    'osoba albo organ uprawniony do zaskarżenia uchwały walnego zgromadzenia',
-  [ROLE_ZADAJACEGO.SPOLKA]: 'spółka',
-  [ROLE_ZADAJACEGO.INNA]: 'inna osoba mająca interes prawny',
-};
-
-/**
- * Rodzaj dokumentu bedacego podstawa zadania wpisu (art. 300(34) § 4 KSH -
- * obowiazek przedlozenia dokumentow uzasadniajacych wpis). Ten sam katalog,
- * co przy zalacznikach do sprawy (`psa_dokumenty.typ_dokumentu`) - to jedno
- * pojecie, nie dwa niezaleznie utrzymywane.
- */
-const RODZAJE_DOKUMENTU = {
-  // Podstawa PIERWSZEJ emisji: akcje obejmowane przy zawiazaniu spolki
-  // powstaja z samej umowy spolki (art. 300(3) i art. 300(9) KSH), a nie
-  // z pozniejszej uchwaly o emisji - bez tej pozycji notariusz musialby
-  // wybrac "uchwala" i opisac prawde w polu tekstowym.
-  UMOWA_SPOLKI: 'umowa_spolki',
-  UMOWA_ZBYCIA: 'umowa_zbycia',
-  UCHWALA: 'uchwala',
-  ZGODA: 'zgoda',
-  POSTANOWIENIE: 'postanowienie',
-  PELNOMOCNICTWO: 'pelnomocnictwo',
-  INNY: 'inny',
-};
-
-const OPISY_RODZAJOW_DOKUMENTU = {
-  [RODZAJE_DOKUMENTU.UMOWA_SPOLKI]: 'umowa spółki',
-  [RODZAJE_DOKUMENTU.UMOWA_ZBYCIA]: 'umowa zbycia akcji',
-  [RODZAJE_DOKUMENTU.UCHWALA]: 'uchwała',
-  [RODZAJE_DOKUMENTU.ZGODA]: 'zgoda',
-  [RODZAJE_DOKUMENTU.POSTANOWIENIE]: 'postanowienie sądu',
-  [RODZAJE_DOKUMENTU.PELNOMOCNICTWO]: 'pełnomocnictwo',
-  [RODZAJE_DOKUMENTU.INNY]: 'inny dokument',
-};
-
-/**
- * Przyczyna niedokonania wpisu jako katalog zamkniety (blok B5 sesji 8).
- * Art. 300(34) § 7 zd. 2 KSH wymaga PODANIA PRZYCZYN, ale nie narzuca ich
- * treści - katalog jest wiec domenowy, ugruntowany w § 4 i § 5 tego samego
- * artykulu (co konkretnie moze pojsc nie tak z dokumentami uzasadniajacymi
- * wpis) i w obowiazkach AML. Pozycja INNA zostaje na wypadek przyczyny spoza
- * katalogu - wymaga wtedy opisu w polu `powod_odmowy`.
- */
-const PRZYCZYNY_ODMOWY_WPISU = {
-  BRAK_DOKUMENTOW: 'brak_dokumentow',
-  DOKUMENTY_NIE_POTWIERDZAJA: 'dokumenty_nie_potwierdzaja',
-  WATPLIWOSCI_CO_DO_TRESCI: 'watpliwosci_co_do_tresci',
-  NIEZGODNOSC_Z_REJESTREM: 'niezgodnosc_z_rejestrem',
-  PRZESZKODA_NIEUSUNIETA: 'przeszkoda_nieusunieta',
-  BRAK_AML: 'brak_aml',
-  INNA: 'inna',
-};
-
-const OPISY_PRZYCZYN_ODMOWY_WPISU = {
-  [PRZYCZYNY_ODMOWY_WPISU.BRAK_DOKUMENTOW]:
-    'nie przedłożono dokumentów uzasadniających dokonanie wpisu',
-  [PRZYCZYNY_ODMOWY_WPISU.DOKUMENTY_NIE_POTWIERDZAJA]:
-    'przedłożone dokumenty nie potwierdzają zdarzenia będącego podstawą żądanego wpisu',
-  [PRZYCZYNY_ODMOWY_WPISU.WATPLIWOSCI_CO_DO_TRESCI]:
-    'treść lub forma przedłożonych dokumentów budzi uzasadnione wątpliwości',
-  [PRZYCZYNY_ODMOWY_WPISU.NIEZGODNOSC_Z_REJESTREM]:
-    'żądanie jest niezgodne z dotychczasową treścią rejestru',
-  [PRZYCZYNY_ODMOWY_WPISU.PRZESZKODA_NIEUSUNIETA]:
-    'nie usunięto przeszkody wskazanej w wezwaniu w wyznaczonym terminie',
-  [PRZYCZYNY_ODMOWY_WPISU.BRAK_AML]:
-    'nie można zastosować wobec osoby środków bezpieczeństwa finansowego (AML)',
-  [PRZYCZYNY_ODMOWY_WPISU.INNA]: 'inna przyczyna — patrz opis',
-};
-
-/** Przy tej przyczynie opis w `powod_odmowy` jest OBOWIĄZKOWY. */
-const PRZYCZYNA_ODMOWY_WYMAGA_OPISU = PRZYCZYNY_ODMOWY_WPISU.INNA;
-
-/**
- * Organ zarzadzajacy spolki - K.s.h. art. 300(63) i nast. dopuszczaja w P.S.A.
- * albo klasyczny zarzad, albo (struktura monistyczna) rade dyrektorow. Wzory
- * pism zwracaja sie do wlasciwego organu wprost z nazwy (blok A3 sesji 8).
- */
-const ORGANY_SPOLKI = {
-  ZARZAD: 'zarzad',
-  RADA_DYREKTOROW: 'rada_dyrektorow',
-};
-
-/** `spolka_organ` / `spolka_organ_czlonkowie` na potrzeby wzorow pism. */
-const OPISY_ORGANOW = {
-  [ORGANY_SPOLKI.ZARZAD]: { organ: 'Zarząd', czlonkowie: 'członków zarządu' },
-  [ORGANY_SPOLKI.RADA_DYREKTOROW]: { organ: 'Rada Dyrektorów', czlonkowie: 'członków rady dyrektorów' },
-};
-
-/** Kategorie, w ktorych moze znalezc sie kazdy numer akcji (materializacja - podstawa niezmiennika bilansu). */
-const KATEGORIE_AKCJI = {
-  /** Wyemitowana, jeszcze nieobjeta przez zadnego akcjonariusza. */
-  NIEOBJETA: 'nieobjeta',
-  /** Przypisana akcjonariuszowi (moze byc podzielona ulamkowo miedzy wspoluprawnionych). */
-  AKCJONARIUSZ: 'akcjonariusz',
-  /** Umorzona - trwale poza obrotem, nadal w bilansie serii. */
-  UMORZONA: 'umorzona',
-  /**
-   * Uniewazniona ORZECZENIEM SADU za niewykonanie zobowiazania do wniesienia
-   * wkladow (art. 300(51) KSH). Skutek dla bilansu ten sam co umorzenie -
-   * trwale poza obrotem - ale to ODREBNA instytucja i nie wolno jej zlewac
-   * z umorzeniem: umorzenie jest czynnoscia SPOLKI (uchwala, stanowi zmiane
-   * umowy spolki, wiaze sie ze splata - art. 300(44)-(45)), uniewaznienie
-   * jest orzeczeniem SADU, bez splaty i bez zmiany umowy spolki. Rozroznienie
-   * musi byc widoczne w rejestrze i na wydruku dla sadu.
-   */
-  UNIEWAZNIONA: 'uniewazniona',
-};
-
-/** PRZEPISY-PSA.md art. 300(33) § 1 pkt 4 🟢 - rodzaj danej akcji. */
-/**
- * Art. 300(33) § 1 pkt 3 KSH - adres wpisywany do rejestru. Ustawa daje
- * ALTERNATYWE, nie sume: adres zamieszkania albo siedziby, albo INNY adres
- * do doreczen, albo adres do doreczen elektronicznych. Ktory z nich jest tym
- * z ustawy, wskazuje sie swiadomie - stad slownik, nie domysl z pustych pol.
- */
-const RODZAJE_ADRESU_REJESTROWEGO = {
-  ZAMIESZKANIA: 'zamieszkania',
-  DORECZEN: 'doreczen',
-  EDORECZEN: 'edoreczen',
-};
-
-const OPISY_RODZAJOW_ADRESU_REJESTROWEGO = {
-  [RODZAJE_ADRESU_REJESTROWEGO.ZAMIESZKANIA]: 'adres zamieszkania albo siedziby',
-  [RODZAJE_ADRESU_REJESTROWEGO.DORECZEN]: 'inny adres do doręczeń',
-  [RODZAJE_ADRESU_REJESTROWEGO.EDORECZEN]: 'adres do doręczeń elektronicznych',
-};
-
-/**
- * Art. 300(33) § 1 pkt 4 KSH - adres poczty elektronicznej wchodzi do
- * rejestru WYLACZNIE, jezeli akcjonariusz wyrazil zgode na komunikacje
- * elektroniczna. Zgoda jest oswiadczeniem SAMEGO akcjonariusza - zarzad nie
- * moze jej zlozyc za niego. Dlatego trzy stany, nie checkbox: spolka
- * deklaruje ja we wniosku, a rejestr uznaje dopiero po otrzymaniu
- * podpisanego oswiadczenia.
- */
-const STATUSY_ZGODY_EMAIL = {
-  BRAK: 'brak',
-  ZADEKLAROWANA: 'zadeklarowana',
-  POTWIERDZONA: 'potwierdzona',
-};
-
-const OPISY_STATUSOW_ZGODY_EMAIL = {
-  [STATUSY_ZGODY_EMAIL.BRAK]: 'brak zgody — adres e-mail nie wchodzi do rejestru',
-  [STATUSY_ZGODY_EMAIL.ZADEKLAROWANA]: 'zadeklarowana przez spółkę — czeka na oświadczenie akcjonariusza',
-  [STATUSY_ZGODY_EMAIL.POTWIERDZONA]: 'potwierdzona oświadczeniem akcjonariusza',
-};
-
-/**
- * Art. 300(33) § 1 pkt 5 KSH - wspolwlasnosc akcji. Przy wspolwlasnosci
- * w czesciach ULAMKOWYCH rejestr niesie dodatkowo wielkosc udzialu
- * akcjonariusza; przy lacznej (np. malzenska) udzialow sie nie wyodrebnia.
- */
-const RODZAJE_WSPOLWLASNOSCI = {
-  BRAK: 'brak',
-  LACZNA: 'laczna',
-  ULAMKOWA: 'ulamkowa',
-};
-
-const OPISY_RODZAJOW_WSPOLWLASNOSCI = {
-  [RODZAJE_WSPOLWLASNOSCI.BRAK]: 'akcje nie są przedmiotem współwłasności',
-  [RODZAJE_WSPOLWLASNOSCI.LACZNA]: 'współwłasność łączna',
-  [RODZAJE_WSPOLWLASNOSCI.ULAMKOWA]: 'współwłasność w częściach ułamkowych',
-};
-
-/**
- * Eksponowane stanowisko polityczne — art. 2 ust. 2 pkt 11 ustawy z dnia
- * 1 marca 2018 r. o przeciwdziałaniu praniu pieniędzy oraz finansowaniu
- * terroryzmu. Notariusz prowadzący rejestr akcjonariuszy jest instytucją
- * obowiązaną (art. 2 ust. 1 pkt 12) i wobec PEP stosuje WZMOŻONE środki
- * bezpieczeństwa finansowego (art. 46).
- *
- * Ustawa zrównuje trzy sytuacje co do obowiązków, ale rozróżnia je co do
- * podstawy — członek rodziny (art. 2 ust. 2 pkt 3) i bliski współpracownik
- * (art. 2 ust. 2 pkt 12) to osobne przesłanki, nie warianty tej samej.
- */
-const STATUSY_PEP = {
-  // Naprawa Z-151/P-010: wartosc DOMYSLNA - nikt jeszcze nie ustalil. Osoba
-  // niesprawdzona nie moze wygladac identycznie jak osoba SWIADOMIE uznana
-  // za nie-PEP ('nie') - to byloby twierdzenie bez podstawy.
-  NIEUSTALONO: 'nieustalono',
-  NIE: 'nie',
-  TAK: 'tak',
-  RODZINA: 'rodzina',
-  WSPOLPRACOWNIK: 'wspolpracownik',
-};
-
-const OPISY_STATUSOW_PEP = {
-  [STATUSY_PEP.NIEUSTALONO]: 'status nieustalony',
-  [STATUSY_PEP.NIE]: 'nie zajmuje eksponowanego stanowiska politycznego',
-  [STATUSY_PEP.TAK]: 'zajmuje eksponowane stanowisko polityczne',
-  [STATUSY_PEP.RODZINA]: 'jest członkiem rodziny osoby zajmującej eksponowane stanowisko polityczne',
-  [STATUSY_PEP.WSPOLPRACOWNIK]: 'jest bliskim współpracownikiem osoby zajmującej eksponowane stanowisko polityczne',
-};
-
-/** Czy status wymaga wzmożonych środków bezpieczeństwa finansowego (art. 46 ustawy AML). */
-function pepWymagaWzmozonych(status) {
-  return Boolean(status) && status !== STATUSY_PEP.NIE;
-}
-
-const RODZAJE_AKCJI = ['zwykla', 'uprzywilejowana', 'zalozycielska', 'niema'];
-
-/** PRZEPISY-PSA.md art. 300(33) § 1 pkt 9 🟢 - wzmianka o pokryciu. NULL (nieustalone) jest dozwolonym stanem poza tym katalogiem. */
-const STANY_POKRYCIA = ['tak', 'nie', 'czesciowo'];
-
-/**
- * PRZEPISY-PSA.md art. 300(32) § 1(2) 🔵 - kto zawarl umowe o prowadzenie
- * rejestru w imieniu podmiotu prowadzacego rejestr.
- */
-const UMOWE_ZAWARL = ['notariusz', 'zastepca', 'osoba_upowazniona'];
-
-// ─────────────────────────────────────────────────────────────
-// WPIS KONSTYTUTYWNY / DEKLARATORYJNY
-// ─────────────────────────────────────────────────────────────
-
-/** PRZEPISY-PSA.md art. 300(37) § 2 🟢 - dwa rodzaje skutku wpisu (regula domenowa 13). */
-const CHARAKTER_WPISU = {
-  /** Wpis SAM przenosi prawo (zasada, § 1). */
-  KONSTYTUTYWNY: 'konstytutywny',
-  /** Prawo przeszlo poza rejestrem, wpis tylko ujawnia stan (wyjatki z § 2). */
-  DEKLARATORYJNY: 'deklaratoryjny',
-};
-
-/**
- * Tytuly prawne `przeniesienie`, przy ktorych prawo przechodzi Z MOCY PRAWA
- * (poza rejestrem) - art. 300(37) § 2 KSH: dziedziczenie, zapis windykacyjny,
- * wniesienie akcji jako wklad niepieniezny, polaczenie/podzial/przeksztalcenie
- * spolki. Dopasowanie po `tytul_prawny` wpisanym w kreatorze (tekst wolny,
- * regula domenowa 4 nie ogranicza go do slownika) - stad prosty katalog
- * rozpoznawanych fraz, nie sztywny enum.
- */
-const TYTULY_DEKLARATORYJNE_PRZENIESIENIA = [
-  'dziedziczenie',
-  'spadek',
-  'zapis windykacyjny',
-  'aport',
-  'wklad niepieniężny',
-  'wklad niepieniezny',
-  'połączenie',
-  'polaczenie',
-  'podział spółki',
-  'podzial spolki',
-  'przekształcenie',
-  'przeksztalcenie',
-];
-
-/**
- * Ustala charakter wpisu dla zdarzenia typu `typZdarzenia` (art. 300(37) § 2
- * KSH, regula domenowa 13). `objecie` jest deklaratoryjne z WYJATKIEM
- * warunkowej emisji (art. 300(118) § 1 KSH - `objecie_warunkowe`, sprint 7),
- * gdzie wpis jest konstytutywny mimo objecia.
- */
-function charakterWpisu(typZdarzenia, tytulPrawny) {
-  if (typZdarzenia === 'objecie') return CHARAKTER_WPISU.DEKLARATORYJNY;
-  if (typZdarzenia === 'objecie_warunkowe') return CHARAKTER_WPISU.KONSTYTUTYWNY;
-  // Uniewaznienie (art. 300(51) KSH) wywoluje ORZECZENIE SADU - akcje przestaja
-  // istniec z chwila jego uprawomocnienia, a nie z chwila wpisu. Art. 300(37)
-  // § 1 dotyczy nabycia akcji i ustanowienia ograniczonego prawa rzeczowego,
-  // wiec tutaj nie ma zastosowania: wpis wylacznie ujawnia stan juz zaszly.
-  if (typZdarzenia === 'uniewaznienie') return CHARAKTER_WPISU.DEKLARATORYJNY;
-  if (typZdarzenia === 'przeniesienie') {
-    const tekst = String(tytulPrawny || '').trim().toLowerCase();
-    if (TYTULY_DEKLARATORYJNE_PRZENIESIENIA.some((fraza) => tekst.includes(fraza))) {
-      return CHARAKTER_WPISU.DEKLARATORYJNY;
-    }
-  }
-  return CHARAKTER_WPISU.KONSTYTUTYWNY;
-}
 
 // ─────────────────────────────────────────────────────────────
 // PODSTAWY PRAWNE - teksty na wydruki i do uzasadnien
@@ -828,36 +262,6 @@ const PODSTAWY = {
 };
 
 /**
- * Data wejscia w zycie nowelizacji Dz.U. 2026 poz. 176 oraz koniec okresu
- * przejsciowego na zgloszenie podmiotu prowadzacego rejestr do KRS.
- */
-const NOWELIZACJA = {
-  DZIENNIK: 'Dz.U. 2026 poz. 176',
-  WEJSCIE_W_ZYCIE: '2027-02-18',
-  KONIEC_OKRESU_PRZEJSCIOWEGO: '2027-05-18',
-};
-
-/** Czy na dany dzien obowiazuje juz nowelizacja. */
-function nowelizacjaObowiazuje(dataIso) {
-  const dzien = String(dataIso || '').slice(0, 10);
-  return dzien >= NOWELIZACJA.WEJSCIE_W_ZYCIE;
-}
-
-/** Zwraca stawke w groszach dla typu oplaty. */
-function stawkaGrosze(typ) {
-  switch (typ) {
-    case 'prowadzenie':
-      return STAWKI_GROSZE.PROWADZENIE_ROCZNIE;
-    case 'wpis':
-      return STAWKI_GROSZE.WPIS;
-    case 'informacja':
-      return STAWKI_GROSZE.INFORMACJA;
-    default:
-      throw new Error(`Nieznany typ opłaty: ${typ}`);
-  }
-}
-
-/**
  * Czy podana forma prawna kwalifikuje spolke do prowadzenia rejestru przez
  * notariusza. Zwraca { dozwolona, powod }.
  */
@@ -895,65 +299,17 @@ function ocenFormePrawna(formaPrawna) {
 }
 
 module.exports = {
+  terminZawiadomieniaSadu,
   TERMINY,
   PROGI_TERMINU,
   CEL_WEWNETRZNY,
   STAWKI_GROSZE,
-  STAWKI_MAKSYMALNE_GROSZE,
-  STAWKI_DO_WERYFIKACJI,
   STAWKA_VAT_PROCENT,
   obliczBrutto,
-  walidujKwoteGrosze,
-  WALUTA_DOMYSLNA,
-  FORMA_PRAWNA_WYMAGANA,
-  FORMA_PRAWNA_WARIANTY,
-  FORMY_PRAWNE_ZABRONIONE,
   POLA_WRAZLIWE,
   POLA_KONTAKTOWE,
   POLA_TOZSAMOSCI,
-  POLA_KANCELARYJNE,
   ROLE_ODBIORCY,
-  ROLE_PELNY_DOSTEP,
   BIALE_LISTY,
-  ORGANY_UPRAWNIONE,
-  AML_STATUSY,
-  AML_STATUS_WYMAGANY,
-  TERMIN_PRZEGLADU_AML_MIESIECY,
-  STATUSY_SPOLKI,
-  STATUSY_SPOLKI_BLOKUJACE_WPIS,
-  ODBIORCY_PRZEKAZANIA,
-  blokadaWpisu,
-  STATUSY_EMISJI,
-  STANY_SPRAWY,
-  ZRODLA_SPRAWY,
-  ROLE_ZADAJACEGO,
-  ROLA_ZADAJACEGO_WYMAGA_UZASADNIENIA,
-  OPISY_ROL_ZADAJACEGO,
-  RODZAJE_DOKUMENTU,
-  OPISY_RODZAJOW_DOKUMENTU,
-  PRZYCZYNY_ODMOWY_WPISU,
-  OPISY_PRZYCZYN_ODMOWY_WPISU,
-  PRZYCZYNA_ODMOWY_WYMAGA_OPISU,
-  ORGANY_SPOLKI,
-  OPISY_ORGANOW,
-  KATEGORIE_AKCJI,
-  RODZAJE_AKCJI,
-  RODZAJE_ADRESU_REJESTROWEGO,
-  OPISY_RODZAJOW_ADRESU_REJESTROWEGO,
-  STATUSY_ZGODY_EMAIL,
-  OPISY_STATUSOW_ZGODY_EMAIL,
-  RODZAJE_WSPOLWLASNOSCI,
-  OPISY_RODZAJOW_WSPOLWLASNOSCI,
-  STATUSY_PEP,
-  OPISY_STATUSOW_PEP,
-  pepWymagaWzmozonych,
-  STANY_POKRYCIA,
-  UMOWE_ZAWARL,
-  CHARAKTER_WPISU,
-  charakterWpisu,
-  PODSTAWY,
-  NOWELIZACJA,
-  nowelizacjaObowiazuje,
-  stawkaGrosze,
   ocenFormePrawna,
 };

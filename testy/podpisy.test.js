@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Formy podpisu (D-075, D-076) i podstawowy test pliku po wgraniu (D-086):
+ * Podstawowy test pliku po wgraniu (D-086):
  * system sprawdza tylko, czy plik JEST podpisany — resztę sprawdza pracownik.
  */
 
@@ -10,37 +10,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const formy = require('../server/logika/formy-podpisu');
 const walidacja = require('../server/logika/walidacja-podpisu');
 
 const ORYGINAL = Buffer.from('%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n');
 const SLOWNIK_PODPISU = '\n9 0 obj << /Type /Sig /SubFilter /ETSI.CAdES.detached /ByteRange [0 1 2 3] /Contents <00> >> endobj\n%%EOF\n';
 const PODPISANY = Buffer.concat([ORYGINAL, Buffer.from(SLOWNIK_PODPISU)]);
 const odcisk = { sha256: require('node:crypto').createHash('sha256').update(ORYGINAL).digest('hex'), dlugosc: ORYGINAL.length };
-
-test('W2.1/W2.2: formy z tabeli § 2 — skan nigdy, zgoda na wpis bez zwykłego oryginału', () => {
-  for (const typ of Object.values(formy.DOKUMENTY)) {
-    assert.equal(formy.ocenForme(typ, 'skan').dopuszczalna, false, typ);
-    assert.equal(formy.ocenForme(typ, 'zaawansowany').dopuszczalna, false, typ);
-  }
-  const zgoda = formy.DOKUMENTY.ZGODA_NA_WPIS;
-  for (const f of ['qes', 'pz', 'po', 'oryginal_poswiadczony', 'w_kancelarii']) assert.equal(formy.ocenForme(zgoda, f).dopuszczalna, true, f);
-  assert.equal(formy.ocenForme(zgoda, 'oryginal').dopuszczalna, false, 'zwykły oryginał pocztą = brak zgody');
-  assert.match(formy.ocenForme(zgoda, 'oryginal').przyczyna, /art\. 300\(34\) § 3 zd\. 2/);
-  assert.equal(formy.ocenForme(formy.DOKUMENTY.UMOWA_ZBYCIA, 'oryginal').dopuszczalna, true);
-  assert.equal(formy.ocenForme(formy.DOKUMENTY.UMOWA_REJESTRU, 'pz').dopuszczalna, true, 'zarząd: PZ');
-  assert.equal(formy.ocenForme(formy.DOKUMENTY.UMOWA_REJESTRU, 'pz', { notariusz: true }).dopuszczalna, false, 'notariusz: tylko QES');
-});
-
-test('D-087: pięć sposobów z art. 300(34) § 3 zd. 2 KSH (od 18.02.2027) — równorzędne przy każdym dokumencie', () => {
-  assert.deepEqual([...formy.FORMY_USTAWOWE].sort(), ['oryginal_poswiadczony', 'po', 'pz', 'qes', 'w_kancelarii']);
-  for (const typ of Object.values(formy.DOKUMENTY)) {
-    for (const f of formy.FORMY_USTAWOWE) assert.equal(formy.ocenForme(typ, f).dopuszczalna, true, `${typ}: ${f}`);
-    assert.ok(formy.formyPapierowe(typ).includes('oryginal_poswiadczony'), typ);
-  }
-  assert.equal(formy.ocenForme(formy.DOKUMENTY.ZGODA_NA_WPIS, 'oryginal').dopuszczalna, false, 'zgoda: zwykły oryginał nadal nie');
-  assert.equal(formy.ocenForme(formy.DOKUMENTY.UMOWA_REJESTRU, 'oryginal_poswiadczony', { notariusz: true }).dopuszczalna, false, 'notariusz: tylko QES');
-});
 
 test('W2.4: skan (JPG/PNG), PDF bez podpisu, zwykły XML i inny plik — odrzucone z komunikatem dla laika', async () => {
   const pliki = [

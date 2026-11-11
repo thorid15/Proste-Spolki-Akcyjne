@@ -33,7 +33,7 @@ try {
 
 const { db } = require('../server/baza');
 const migracje = require('../server/migracje');
-const { nowyToken } = require('../server/logika/zaproszenia');
+const { nowyLinkAktywacji } = require('../server/wnioski');
 
 migracje.uruchom(db());
 const adresKancelarii = new URL('/', konfiguracja.URL_PORTALU).toString();
@@ -51,16 +51,9 @@ if (pracownik) {
 }
 if (konto) {
   if (konto.aktywne) {
-    console.log(`Konto portalu (${konto.rola}) jest aktywne — logowanie hasłem: ${konfiguracja.URL_PORTALU}`);
+    console.log(`Konto portalu jest aktywne — logowanie hasłem: ${konfiguracja.URL_PORTALU}`);
     console.log(`Hasło kont testowych: ${trybTestowy.HASLO_TESTOWE} (albo lista kont na ekranie logowania).`);
   } else {
-    let token = konto.token_aktywacji;
-    if (!token || !konto.token_wygasa || new Date(konto.token_wygasa) < new Date()) {
-      const nowy = nowyToken();
-      token = nowy.token;
-      db().prepare('UPDATE psa_konta SET token_aktywacji = ?, token_wygasa = ? WHERE id = ?')
-        .run(nowy.token, nowy.tokenWygasa, konto.id);
-    }
-    console.log(`${konfiguracja.URL_PORTALU}#/aktywuj/${token}`);
+    console.log(nowyLinkAktywacji(db(), konto.id));
   }
 }

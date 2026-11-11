@@ -46,6 +46,7 @@ async function wyslij(wiadomosc) {
       czas: czas.terazIso(),
       czas_rzeczywisty: new Date().toISOString(),
       html: wiadomosc.html || '',
+      tekst: wiadomosc.text || '',
       zalaczniki: (wiadomosc.attachments || []).map((z) => z.filename),
     }, null, 2)
   );

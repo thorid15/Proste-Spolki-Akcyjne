@@ -250,6 +250,9 @@ function useTrasa() {
       if (zmianaEkranu && document.startViewTransition && !ruchOgraniczony()) {
         const przejscie = document.startViewTransition(zastosuj);
         przejscie.updateCallbackDone.then(poZmianie, poZmianie);
+        // Kolejna zmiana adresu pomija bieżące przejście („Transition was skipped”) — to nie błąd.
+        przejscie.ready.catch(() => {});
+        przejscie.finished.catch(() => {});
       } else {
         zastosuj();
         poZmianie();

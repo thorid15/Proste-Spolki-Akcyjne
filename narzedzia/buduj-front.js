@@ -39,14 +39,11 @@ const WYJSCIE = path.join(KATALOG, 'dist');
 /** Kolejność ma znaczenie: późniejszy plik korzysta z nazw wcześniejszych. */
 const PACZKI = {
   'kancelaria.js': [
-    'rdzen.js', 'formaty.js', 'nazwy-plikow.js', 'kontakt.js', 'ui-rejestr.js', 'kraje.js', 'pola.js', 'prawne.js', 'pesel.js', 'formularz-osoby.js', 'tryb-testowy.js',
-    'podglad.js', 'pulpit.js', 'osoby.js', 'zgloszenia.js', 'wnioski.js', 'zawiadomienia.js', 'spolki.js',
-    'dokumenty-na-zadanie.js', 'listy.js', 'przeniesienia.js', 'kokpit.js', 'kreator.js', 'wpis-zbycia-logika.js', 'wpis-zbycia.js', 'sprawy.js', 'kreator-wpisu.js', 'wydruk.js', 'konfiguracja.js',
-    'szablony.js', 'auth.js', 'uzytkownicy.js', 'oplaty.js', 'migracja.js', 'app.js',
+    'rdzen.js', 'formaty.js', 'ui-rejestr.js', 'prawne.js', 'tryb-testowy.js', 'elementy.js', 'wniosek-formularz.js',
+    'pulpit.js', 'sprawy.js', 'spolki.js', 'osoby.js', 'wnioski.js', 'korespondencja.js', 'oplaty.js', 'ustawienia.js', 'auth.js', 'app.js',
   ],
   'portal.js': [
-    'rdzen.js', 'formaty.js', 'nazwy-plikow.js', 'kontakt.js', 'ui-rejestr.js', 'kraje.js', 'pola.js', 'prawne.js', 'pesel.js', 'formularz-osoby.js', 'tryb-testowy.js',
-    'wniosek.js', 'portal-start.js', 'portal.js',
+    'rdzen.js', 'formaty.js', 'ui-rejestr.js', 'prawne.js', 'tryb-testowy.js', 'elementy.js', 'wniosek-formularz.js', 'portal.js',
   ],
 };
 

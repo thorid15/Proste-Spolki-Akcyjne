@@ -15,10 +15,9 @@ const { db } = require('./server/baza');
 const migracje = require('./server/migracje');
 const { posrednikBledow } = require('./server/pomocnicze/odpowiedzi');
 const autoryzacja = require('./server/pomocnicze/autoryzacja');
-const auth = require('./server/trasy/auth');
-const przypomnienia = require('./server/logika/przypomnienia');
-const { uruchomHarmonogramPrzypomnien, uruchomRetencjeDziennika } = require('./server/logika/harmonogram');
-const trybTestowy = require('./server/tryb-testowy');
+const { uruchomProcesDzienny } = require('./server/logika/harmonogram');
+// Tryb testowy: moduły `server/tryb-testowy/` wczytują się wyłącznie przy PSA_TRYB_TESTOWY=1 (§ 7 pkt 9).
+const trybTestowy = konfiguracja.TRYB_TESTOWY ? require('./server/tryb-testowy') : null;
 
 const aplikacja = express();
 
@@ -43,10 +42,12 @@ aplikacja.use(express.json({ limit: '1mb' }));
  * `unsafe-inline` dla skryptow — przegladarka wykonuje wylacznie pliki
  * z tego serwera.
  */
+// Style: React ustawia je przez CSSOM (CSP tego nie blokuje), więc poza trybem testowym bez 'unsafe-inline';
+// strony i pasek trybu testowego mają style w znacznikach.
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
+  konfiguracja.TRYB_TESTOWY ? "style-src 'self' 'unsafe-inline'" : "style-src 'self'",
   "img-src 'self' data:",
   // Kroje pisma leza w `publiczne/fonty` — zaden cudzy serwer nie jest
   // potrzebny i zaden adres IP klienta nigdzie nie wycieka.
@@ -72,19 +73,39 @@ aplikacja.use((zad, odp, dalej) => {
   dalej();
 });
 
+/**
+ * § 7 pkt 6: żądanie zmieniające stan z nagłówkiem `Origin` innej strony — 403 (CSRF). Wyjątek: ITN tpay
+ * (serwer operatora). Bez nagłówka (klient spoza przeglądarki) — dalej: taki klient nie ma ciasteczek
+ * ofiary, a przeglądarki wysyłają `Origin` przy każdym POST z innej strony. Własny adres: nagłówek Host
+ * albo host z URL_PORTALU (za reverse proxy).
+ */
+const HOST_PORTALU = new URL(konfiguracja.URL_PORTALU).host;
+function sprawdzOrigin(zad, odp, dalej) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(zad.method) || zad.path === '/api/psa/platnosci/tpay/itn') return dalej();
+  const origin = zad.get('origin');
+  if (!origin) return dalej();
+  let host = null;
+  try { host = new URL(origin).host; } catch { host = null; }
+  if (host && (host === zad.get('host') || host === HOST_PORTALU)) return dalej();
+  return odp.status(403).json({ blad: 'Żądanie z innej strony zostało odrzucone.' });
+}
+aplikacja.use(sprawdzOrigin);
+
 aplikacja.use(autoryzacja.wczytajSesje);
 
 // ── Tryb testowy (D-074) — straznik PRZED pierwszym dotknieciem bazy ──────
 // Przy NODE_ENV=production albo na bazie bez oznaczenia testowego proces
 // odmawia startu (T6). Poza trybem testowym nic sie tu nie dzieje.
-try {
-  trybTestowy.sprawdzStart();
-} catch (e) {
-  if (e instanceof trybTestowy.BladTrybuTestowego && require.main === module) {
-    console.error(`[psa] ODMOWA STARTU — ${e.message}`);
-    process.exit(1);
+if (trybTestowy) {
+  try {
+    trybTestowy.sprawdzStart();
+  } catch (e) {
+    if (e instanceof trybTestowy.BladTrybuTestowego && require.main === module) {
+      console.error(`[psa] ODMOWA STARTU — ${e.message}`);
+      process.exit(1);
+    }
+    throw e;
   }
-  throw e;
 }
 
 // ── Migracje przy starcie - idempotentne ─────────────────────────────────
@@ -96,52 +117,42 @@ if (zastosowane.length > 0) {
 // razem z tokenem, ktorego dotyczyly, sa juz nieszkodliwym balastem.
 autoryzacja.wyczyscWygasleUniewaznienia();
 
-if (konfiguracja.TRYB_TESTOWY) trybTestowy.wczytajStan(db());
-
-// ── API ──────────────────────────────────────────────────────────────────
-// `/api/wspolne` i `/api/psa/auth` (logowanie) musza byc dostepne bez sesji.
-// `/api/psa/portal` ma wlasna sesje (konto), niezalezna od sesji pracownika.
-// Reszta wymaga zalogowanego pracownika kancelarii (odstepstwo nr 2, sekcja 2).
-aplikacja.use('/api/wspolne', require('./server/trasy/wspolne'));
-aplikacja.use('/api/psa/auth', auth);
-// Powiadomienie od operatora platnosci puka tu SERWEREM, nie przegladarka —
-// nie ma i nie moze miec sesji. Sprawdza sie je suma kontrolna liczona
-// sekretem wspolnym z operatorem (`server/platnosci.js`), wiec musi stac
-// PRZED bramkami sesji.
-aplikacja.use('/api/psa/platnosci', require('./server/trasy/platnosci'));
+if (trybTestowy) trybTestowy.wczytajStan(db());
 
 // Trasy trybu testowego istnieja WYLACZNIE w trybie testowym — inaczej 404
 // (jawnie: bez tego `/test/...` trafialoby w strone aplikacji z kodem 200).
-if (konfiguracja.TRYB_TESTOWY) {
+if (trybTestowy) {
   aplikacja.use('/test', require('./server/tryb-testowy/trasy'));
 } else {
   aplikacja.use('/test', (zad, odp) => odp.status(404).type('text/plain').send('Nie odnaleziono.'));
 }
-if (konfiguracja.PORTAL_WLACZONY) {
-  aplikacja.use('/api/psa/portal', require('./server/trasy/portal'));
-} else {
-  aplikacja.use('/api/psa/portal', (zad, odp) => {
-    odp.status(503).json({ blad: 'Portal klienta jest obecnie wyłączony.' });
-  });
+
+/** Portal można wyłączyć flagą PORTAL_WLACZONY — wtedy cała ścieżka odpowiada 503. */
+function bramkaPortalu(zad, odp, dalej) {
+  if (konfiguracja.PORTAL_WLACZONY) return dalej();
+  return odp.status(503).json({ blad: 'Portal klienta jest wyłączony.' });
 }
-aplikacja.use('/api/psa/spolki', autoryzacja.wymagajPracownika, require('./server/trasy/spolki'));
-aplikacja.use('/api/psa/osoby', autoryzacja.wymagajPracownika, require('./server/trasy/osoby'));
-aplikacja.use('/api/psa/sprawy', autoryzacja.wymagajPracownika, require('./server/trasy/sprawy'));
-aplikacja.use('/api/psa/zdarzenia', autoryzacja.wymagajPracownika, require('./server/trasy/zdarzenia'));
-aplikacja.use('/api/psa/oplaty', autoryzacja.wymagajPracownika, require('./server/trasy/oplaty'));
-aplikacja.use('/api/psa/szablony', autoryzacja.wymagajPracownika, require('./server/trasy/szablony'));
-aplikacja.use('/api/psa/zgloszenia', autoryzacja.wymagajPracownika, require('./server/trasy/zgloszenia'));
-aplikacja.use(
-  '/api/psa/zgloszenia-nieprawidlowosci',
-  autoryzacja.wymagajPracownika,
-  require('./server/trasy/zgloszenia-nieprawidlowosci')
-);
-aplikacja.use('/api/psa/wnioski', autoryzacja.wymagajPracownika, require('./server/trasy/wnioski'));
-aplikacja.use('/api/psa/zawiadomienia', autoryzacja.wymagajPracownika, require('./server/trasy/zawiadomienia'));
-aplikacja.use('/api/psa/listy', autoryzacja.wymagajPracownika, require('./server/trasy/listy'));
-aplikacja.use('/api/psa/informacje', autoryzacja.wymagajPracownika, require('./server/trasy/informacje'));
-aplikacja.use('/api/psa/przeniesienia', autoryzacja.wymagajPracownika, require('./server/trasy/przeniesienia'));
-aplikacja.use('/api/psa', require('./server/trasy/pozostale'));
+
+/**
+ * Routery API: [prefiks, plik w `server/trasy/`, bramka]. Jedna lista dla montowania, testu listy
+ * dozwolonych tras (`testy/trasy-dozwolone.txt`, § 7 pkt 1) i `npm run dokumentacja`. Kolejność ma
+ * znaczenie: `/api/psa` (pozostałe) na końcu.
+ */
+const ROUTERY_API = [
+  ['/api/wspolne', 'wspolne', null],
+  ['/api/psa/auth', 'auth', null],
+  ['/api/psa/portal', 'portal', bramkaPortalu],
+  ['/api/psa/platnosci', 'platnosci', null],
+  ['/api/psa/spolki', 'spolki', autoryzacja.wymagajPracownika],
+  ['/api/psa/osoby', 'osoby', autoryzacja.wymagajPracownika],
+  ['/api/psa/sprawy', 'sprawy', autoryzacja.wymagajPracownika],
+  ['/api/psa/pliki', 'pliki', autoryzacja.wymagajPracownika],
+  ['/api/psa/korespondencja', 'korespondencja', autoryzacja.wymagajPracownika],
+  ['/api/psa/oplaty', 'oplaty', autoryzacja.wymagajPracownika],
+  ['/api/psa/wnioski', 'wnioski', autoryzacja.wymagajPracownika],
+  ['/api/psa', 'pozostale', null],
+].map(([prefiks, plik, bramka]) => ({ prefiks, plik, bramka, router: require(`./server/trasy/${plik}`) }));
+for (const r of ROUTERY_API) aplikacja.use(r.prefiks, ...(r.bramka ? [r.bramka] : []), r.router);
 
 // ── Statyki ──────────────────────────────────────────────────────────────
 // Moduł ma wlasna tozsamosc wizualna w /style/rejestr.css (sesja 6, faza 1) -
@@ -195,8 +206,8 @@ aplikacja.use(posrednikBledow);
 
 // ─────────────────────────────────────────────────────────────────────────
 if (require.main === module) {
-  auth.zapewnijAdmina(db(), konfiguracja.ADMIN_EMAIL).finally(() => {
-    trybTestowy.ustawAtrapeTpay(konfiguracja.PORT);
+  require('./server/trasy/auth').zapewnijAdmina(db(), konfiguracja.ADMIN_EMAIL).finally(() => {
+    if (trybTestowy) trybTestowy.ustawAtrapeTpay(konfiguracja.PORT);
     aplikacja.listen(konfiguracja.PORT, () => {
       if (konfiguracja.TRYB_TESTOWY) {
         console.log('[psa] ══ TRYB TESTOWY — e-maile nie są wysyłane (skrzynka: /test/skrzynka, panel: /test) ══');
@@ -205,12 +216,9 @@ if (require.main === module) {
       console.log(`[psa] baza: ${konfiguracja.WSPOLNA_BAZA}`);
       console.log(`[psa] portal klienta: ${konfiguracja.PORTAL_WLACZONY ? 'włączony' : 'wyłączony (PORTAL_WLACZONY=false)'}`);
     });
-    // Naprawa Z-357: przypomnienia o konczacym sie roku prowadzenia rejestru
-    // dzialaly wylacznie po recznym kliknieciu w zakladce „Oplaty" - realny
-    // wyzwalacz, nie tylko przycisk (patrz komentarz w harmonogram.js).
-    uruchomHarmonogramPrzypomnien(db(), { wyslij: przypomnienia.wyslijPrzypomnienia });
-    uruchomRetencjeDziennika(db());
+    uruchomProcesDzienny(db());
   });
 }
 
 module.exports = aplikacja;
+module.exports.ROUTERY_API = ROUTERY_API;

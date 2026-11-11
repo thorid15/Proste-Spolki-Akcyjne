@@ -1,83 +1,92 @@
 'use strict';
 
 /**
- * Bezpieczne typowanie plikow wgrywanych przez klientow.
+ * Pliki przychodzące — jedna funkcja przyjęcia (§ 7 pkt 3) i bezpieczne pobieranie.
  *
- * Powod: `multer` podaje `plik.mimetype` PRZEPISANY Z NAGLOWKA ZADANIA, czyli
- * z tego, co przyslala przegladarka klienta. Jesli ten typ zapiszemy do bazy
- * i pozniej oddamy w `Content-Type`, klient decyduje, jak jego plik zostanie
- * potraktowany po drugiej stronie. Plik nazwany „skan-umowy.pdf", wyslany
- * jako `text/html`, wracal do pracownika jako strona HTML wyswietlana
- * w ramce — ze skryptem dzialajacym w sesji kancelarii.
- *
- * Dlatego typ ustala SERWER, na podstawie rozszerzenia z bialej listy, a tresc
- * musi sie zgadzac z sygnatura pliku. Co nie jest rozpoznane, idzie jako
- * `application/octet-stream` do pobrania — nigdy do wyswietlenia.
+ * Biała lista: PDF, JPG, PNG i formaty podpisu (XAdES — XML, CAdES — P7S/P7M), sprawdzana po
+ * rozszerzeniu i sygnaturze treści; limit 10 MB; losowa nazwa na dysku w katalogu poza
+ * `publiczne/`. Wgrany „skan” z treścią HTML nie przejdzie jako PDF, a pobranie zawsze idzie
+ * jako załącznik z `nosniff`.
  */
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const multer = require('multer');
 
-/** Rozszerzenie → typ, ktory wolno oddac przegladarce. */
+const konfiguracja = require('../konfiguracja');
+const danePliki = require('../dane/pliki');
+const { BladWalidacji } = require('../logika/walidacje');
+
+const LIMIT_BAJTOW = 10 * 1024 * 1024;
+
 const TYPY = {
   '.pdf': 'application/pdf',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
-  '.doc': 'application/msword',
-  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xml': 'application/xml',
+  '.p7s': 'application/pkcs7-signature',
+  '.p7m': 'application/pkcs7-mime',
 };
 
-/** Typy, ktore wolno pokazac W RAMCE. Reszta zawsze jako zalacznik. */
-const DO_PODGLADU = new Set(['application/pdf', 'image/jpeg', 'image/png']);
-
-/** Pierwsze bajty, po ktorych poznaje sie format. `null` = nie sprawdzamy. */
-const SYGNATURY = {
-  'application/pdf': [Buffer.from('%PDF-')],
-  'image/jpeg': [Buffer.from([0xff, 0xd8, 0xff])],
-  'image/png': [Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
-  // .docx to ZIP, .doc to strumien OLE2 — obie sygnatury dzieli wiele
-  // formatow, wiec sprawdzamy tylko, ze to nie jest tekst/HTML.
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': [Buffer.from([0x50, 0x4b, 0x03, 0x04])],
-  'application/msword': [Buffer.from([0xd0, 0xcf, 0x11, 0xe0])],
-};
-
-/** Typ wynikajacy z nazwy pliku — nigdy z tego, co podal klient. */
-function typZNazwy(nazwaPliku) {
-  return TYPY[path.extname(String(nazwaPliku || '')).toLowerCase()] || 'application/octet-stream';
-}
-
-/** Czy tresc pliku odpowiada typowi? Bez sygnatury w tabeli — przepuszczamy. */
-function trescPasuje(sciezkaNaDysku, typ) {
-  const wzorce = SYGNATURY[typ];
-  if (!wzorce) return true;
-  let uchwyt;
-  try {
-    uchwyt = fs.openSync(sciezkaNaDysku, 'r');
-    const bufor = Buffer.alloc(8);
-    const ile = fs.readSync(uchwyt, bufor, 0, 8, 0);
-    return wzorce.some((w) => bufor.slice(0, Math.min(ile, w.length)).equals(w));
-  } catch {
-    return false;
-  } finally {
-    if (uchwyt !== undefined) fs.closeSync(uchwyt);
+/** Czy początek treści odpowiada typowi. XML — znacznik `<?xml` (po ewentualnym BOM). */
+function trescPasuje(bufor, typ) {
+  const poczatek = (b) => bufor.subarray(0, b.length).equals(b);
+  switch (typ) {
+    case 'application/pdf':
+      return poczatek(Buffer.from('%PDF-'));
+    case 'image/jpeg':
+      return poczatek(Buffer.from([0xff, 0xd8, 0xff]));
+    case 'image/png':
+      return poczatek(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    case 'application/xml':
+      return /^(﻿)?<\?xml/.test(bufor.subarray(0, 64).toString('utf8'));
+    default:
+      return bufor.length > 0 && bufor[0] === 0x30; // DER SEQUENCE (CMS)
   }
 }
 
-/**
- * Ustawia naglowki odpowiedzi dla pliku z dysku.
- * `wRamce` jest PROSBA, nie rozkazem: format, ktorego nie ma na liscie
- * `DO_PODGLADU`, i tak pojdzie jako zalacznik.
- */
-function naglowkiPliku(odp, { nazwaPliku, wRamce = false }) {
-  const typ = typZNazwy(nazwaPliku);
-  const inline = wRamce && DO_PODGLADU.has(typ);
-  odp.setHeader('Content-Type', typ);
-  odp.setHeader('X-Content-Type-Options', 'nosniff');
-  odp.setHeader(
-    'Content-Disposition',
-    `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(nazwaPliku || 'dokument')}`
-  );
+/** Multer: jeden plik w polu `plik`, w pamięci (zapis na dysk robi `przyjmij`). */
+const odbierz = multer({ storage: multer.memoryStorage(), limits: { fileSize: LIMIT_BAJTOW, files: 1 } }).single('plik');
+
+/** Nazwa pliku od przeglądarki (multer czyta ją jako latin1) — bez ścieżki i znaków sterujących. */
+function nazwaPliku(surowa) {
+  const nazwa = Buffer.from(String(surowa || 'plik'), 'latin1').toString('utf8');
+  // eslint-disable-next-line no-control-regex
+  return path.basename(nazwa).replace(/[\u0000-\u001f\\/]/g, '_').slice(0, 200) || 'plik';
 }
 
-module.exports = { TYPY, DO_PODGLADU, typZNazwy, trescPasuje, naglowkiPliku };
+/**
+ * Przyjmuje plik i zapisuje go w `psa_pliki`. `wlasciciel` = { spolka_id, osoba_id, sprawa_id,
+ * wniosek_id }; `kto` zapisuje się sam. Zwraca id pliku.
+ */
+function przyjmij(db, plik, wlasciciel, kto) {
+  if (!plik || !plik.buffer) throw new BladWalidacji([{ pole: 'plik', komunikat: 'Wybierz plik.' }]);
+  const nazwa = nazwaPliku(plik.originalname);
+  const rozszerzenie = path.extname(nazwa).toLowerCase();
+  const typ = TYPY[rozszerzenie];
+  if (!typ || !trescPasuje(plik.buffer, typ)) throw new BladWalidacji([{ pole: 'plik', komunikat: 'Wgraj plik PDF.' }]);
+  const sciezka = `${crypto.randomUUID()}${rozszerzenie}`;
+  fs.mkdirSync(konfiguracja.KATALOG_DOKUMENTOW, { recursive: true });
+  fs.writeFileSync(path.join(konfiguracja.KATALOG_DOKUMENTOW, sciezka), plik.buffer, { flag: 'wx' });
+  return danePliki.dodaj(db, {
+    ...wlasciciel,
+    nazwa,
+    sciezka,
+    typ,
+    sha256: crypto.createHash('sha256').update(plik.buffer).digest('hex'),
+    wgral: kto,
+  });
+}
+
+/** Wysyła plik jako załącznik. */
+function wyslij(odp, plik) {
+  const pelna = path.join(konfiguracja.KATALOG_DOKUMENTOW, path.basename(plik.sciezka));
+  odp.setHeader('Content-Type', plik.typ);
+  odp.setHeader('X-Content-Type-Options', 'nosniff');
+  odp.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(plik.nazwa)}`);
+  odp.sendFile(pelna);
+}
+
+module.exports = { TYPY, odbierz, przyjmij, wyslij };

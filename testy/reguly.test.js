@@ -12,62 +12,55 @@ const assert = require('node:assert/strict');
 const przepisy = require('../server/logika/przepisy');
 const maskowanie = require('../server/logika/maskowanie');
 const lancuch = require('../server/logika/lancuch');
-const widoki = require('../server/widoki');
-const { bazaTestowa, dodajSpolke, dodajOsobe, wpis } = require('./pomoc');
+const daneOsoby = require('../server/dane/osoby');
+const { bazaTestowa, dodajSpolke, dodajOsobe, otworz } = require('./pomoc');
 
 const OSOBA = {
   id: 7,
   typ: 'fizyczna',
-  nazwisko: 'Kowalski',
-  imie: 'Jan',
+  nazwa: 'Jan Kowalski',
   pesel: '44051401359',
   data_urodzenia: '1944-05-14',
-  kod_pocztowy: '30-002',
-  miejscowosc: 'Kraków',
-  ulica: 'Długa',
-  nr_domu: '5',
+  adres: 'ul. Długa 5, 30-002 Kraków',
+  rodzaj_adresu: 'glowny',
   email: 'jan@example.pl',
-  telefon: '600100200',
-  aml_status: 'wykonane',
-  aml_notatka: 'weryfikacja na podstawie dowodu osobistego',
+  zgoda_email: 1,
+  aml_data: '2026-01-01',
   uwagi: 'notatka wewnętrzna',
-  pep: 'tak',
+  pep: 1,
   pep_opis: 'radny gminy',
-  beneficjent_rzeczywisty_id: 42,
 };
 
-test('REGUŁA 9: inny akcjonariusz nie widzi PESEL, daty urodzenia ani adresu', () => {
+test('REGUŁA 9: inny akcjonariusz nie widzi PESEL, daty urodzenia ani adresu zamieszkania; e-mail przy zgodzie — jawny (D-182)', () => {
   const wynik = maskowanie.zamaskujOsobe(OSOBA, przepisy.ROLE_ODBIORCY.AKCJONARIUSZ, 99);
-
   assert.equal(wynik.zamaskowane, true);
-  for (const pole of ['pesel', 'data_urodzenia', 'kod_pocztowy', 'miejscowosc', 'ulica', 'nr_domu']) {
+  for (const pole of ['pesel', 'data_urodzenia', 'adres']) {
     assert.equal(wynik[pole], maskowanie.ZASLONA, `pole ${pole} musi być zasłonięte`);
   }
-  // Dane kontaktowe innych akcjonariuszy też nie wychodzą (sekcja 10).
-  assert.equal(wynik.email, maskowanie.ZASLONA);
-  assert.equal(wynik.telefon, maskowanie.ZASLONA);
-  // Notatki AML i uwagi wewnętrzne nie opuszczają kancelarii w żadnym wariancie.
-  assert.equal(wynik.aml_notatka, undefined);
-  assert.equal(wynik.aml_status, undefined);
-  assert.equal(wynik.uwagi, undefined);
-  // Naprawa Z-150 (dociągnięcie audytu): status PEP i beneficjent rzeczywisty
-  // to też dane kancelaryjne, nie treść rejestru — poprzednia wersja usuwała
-  // tylko 4 z ~14 pól wrażliwych, PEP/beneficjent wyciekały nawet do peera.
-  assert.equal(wynik.pep, undefined);
-  assert.equal(wynik.pep_opis, undefined);
-  assert.equal(wynik.beneficjent_rzeczywisty_id, undefined);
-  // Nazwisko pozostaje - rejestr jest jawny dla akcjonariuszy co do składu.
-  assert.equal(wynik.nazwisko, 'Kowalski');
+  assert.equal(wynik.email, OSOBA.email);
+  assert.equal(wynik.zgoda_email, undefined, 'stan zgody innych osób nie wychodzi');
+  assert.equal(maskowanie.zamaskujOsobe({ ...OSOBA, zgoda_email: 0 }, przepisy.ROLE_ODBIORCY.AKCJONARIUSZ, 99).email, maskowanie.ZASLONA);
+  // AML, PEP i uwagi to dane kancelarii, nie treść rejestru — nie wychodzą w żadnym wariancie.
+  for (const pole of ['aml_data', 'uwagi', 'pep', 'pep_opis']) assert.equal(wynik[pole], undefined, pole);
+  assert.equal(wynik.nazwa, 'Jan Kowalski');
+});
+
+test('poz. 23: siedziba osoby prawnej i adres do doręczeń nie są adresem zamieszkania — widoczne dla akcjonariusza', () => {
+  const rola = przepisy.ROLE_ODBIORCY.AKCJONARIUSZ;
+  assert.equal(maskowanie.zamaskujOsobe({ ...OSOBA, rodzaj_adresu: 'doreczen' }, rola, 99).adres, OSOBA.adres);
+  const prawna = { id: 8, typ: 'prawna', nazwa: 'Gamma sp. z o.o.', numer_rejestru: '0000123456', adres: 'ul. Morska 3, Gdynia', rodzaj_adresu: 'glowny' };
+  assert.equal(maskowanie.zamaskujOsobe(prawna, rola, 99).adres, prawna.adres);
+  assert.deepEqual(maskowanie.czesciOpisu(prawna, rola, 99), { nazwa: 'Gamma sp. z o.o.', id: 'nr w rejestrze 0000123456', adres: 'ul. Morska 3, Gdynia', email: null });
+  assert.deepEqual(maskowanie.czesciOpisu(OSOBA, rola, 99), { nazwa: 'Jan Kowalski', id: null, adres: null, email: 'jan@example.pl' });
+  assert.equal(maskowanie.czesciOpisu({ ...OSOBA, zgoda_email: 0 }, rola, 99).email, null, 'e-mail bez zgody nie jest daną rejestru');
 });
 
 test('Z-150: rola „spółka”/„organ” ma pełny wgląd do treści rejestru (PESEL), ale AML/PEP nie wychodzi poza kancelarię', () => {
   for (const rola of [przepisy.ROLE_ODBIORCY.SPOLKA, przepisy.ROLE_ODBIORCY.ORGAN]) {
     const wynik = maskowanie.zamaskujOsobe(OSOBA, rola);
     assert.equal(wynik.pesel, OSOBA.pesel, `rola ${rola} musi widzieć PESEL (treść rejestru)`);
-    assert.equal(wynik.aml_status, undefined, `rola ${rola} nie może widzieć aml_status`);
-    assert.equal(wynik.aml_notatka, undefined, `rola ${rola} nie może widzieć aml_notatka`);
+    assert.equal(wynik.aml_data, undefined, `rola ${rola} nie może widzieć aml_data`);
     assert.equal(wynik.pep, undefined, `rola ${rola} nie może widzieć pep`);
-    assert.equal(wynik.beneficjent_rzeczywisty_id, undefined, `rola ${rola} nie może widzieć beneficjenta rzeczywistego`);
     assert.equal(wynik.uwagi, undefined, `rola ${rola} nie może widzieć uwagi`);
   }
 });
@@ -100,46 +93,6 @@ test('REGUŁA 9: spółka, organ, kancelaria i sama osoba widzą pełne dane', (
   );
 });
 
-test('REGUŁA 9: maskowanie działa w widoku rejestru, nie tylko w funkcji', () => {
-  const db = bazaTestowa();
-  const spolka = dodajSpolke(db);
-  const a = dodajOsobe(db, { nazwisko: 'Kowalski', imie: 'Jan', pesel: '44051401359' });
-  const b = dodajOsobe(db, { nazwisko: 'Nowak', imie: 'Anna', pesel: '02070803628' });
-
-  const emisja = wpis(db, spolka, 'emisja', '2026-01-10', { seria: 'A', ilosc: 100 });
-  wpis(db, spolka, 'objecie', '2026-01-10', {
-    emisja_zdarzenie_id: emisja.zdarzenie.id,
-    pozycje: [{ osoba_id: a, ilosc: 50 }, { osoba_id: b, ilosc: 50 }],
-  });
-
-  const dlaB = widoki.widokStanu(db, spolka, '2026-01-10', {
-    rola: przepisy.ROLE_ODBIORCY.AKCJONARIUSZ,
-    odbiorcaOsobaId: b,
-  });
-  const wpisA = dlaB.akcjonariusze.find((p) => p.osoba_id === a);
-  const wpisB = dlaB.akcjonariusze.find((p) => p.osoba_id === b);
-
-  assert.equal(wpisA.osoba.pesel, maskowanie.ZASLONA, 'cudzy PESEL zasłonięty');
-  assert.equal(wpisB.osoba.pesel, '02070803628', 'własny PESEL widoczny');
-
-  const dlaKancelarii = widoki.widokStanu(db, spolka, '2026-01-10');
-  assert.equal(
-    dlaKancelarii.akcjonariusze.find((p) => p.osoba_id === a).osoba.pesel,
-    '44051401359'
-  );
-});
-
-test('REGUŁA 9: pole „uwagi” spółki nie wychodzi poza kancelarię', () => {
-  const db = bazaTestowa();
-  const spolka = dodajSpolke(db, { uwagi: 'klient zalega z opłatą' });
-
-  assert.equal(widoki.widokStanu(db, spolka, '2026-01-10').spolka.uwagi, 'klient zalega z opłatą');
-  const dlaSpolki = widoki.widokStanu(db, spolka, '2026-01-10', {
-    rola: przepisy.ROLE_ODBIORCY.SPOLKA,
-  });
-  assert.equal('uwagi' in dlaSpolki.spolka, false);
-});
-
 test('REGUŁA 11: rejestru nie prowadzimy dla S.A. ani S.K.A.', () => {
   assert.equal(przepisy.ocenFormePrawna('PROSTA SPÓŁKA AKCYJNA').dozwolona, true);
   assert.equal(przepisy.ocenFormePrawna('prosta spółka akcyjna').dozwolona, true);
@@ -156,24 +109,14 @@ test('REGUŁA 11: rejestru nie prowadzimy dla S.A. ani S.K.A.', () => {
 
 test('REGUŁA 10: jedna osoba z kartoteki jest akcjonariuszem w wielu spółkach', () => {
   const db = bazaTestowa();
-  const inwestor = dodajOsobe(db, { typ: 'prawna', nazwa: 'Fundusz sp. z o.o.', nazwisko: null });
-
+  const inwestor = dodajOsobe(db, { typ: 'prawna', nazwa: 'Fundusz sp. z o.o.', data_urodzenia: null, numer_rejestru: '0000123123' });
   for (const nazwa of ['Alfa P.S.A.', 'Beta P.S.A.']) {
-    const spolka = dodajSpolke(db, { nazwa, krs: null });
-    const emisja = wpis(db, spolka, 'emisja', '2026-01-10', { seria: 'A', ilosc: 100 });
-    wpis(db, spolka, 'objecie', '2026-01-10', {
-      emisja_zdarzenie_id: emisja.zdarzenie.id,
-      pozycje: [{ osoba_id: inwestor, ilosc: 100 }],
+    otworz(db, dodajSpolke(db, { nazwa }), {
+      serie: [{ seria: 'A', numery: '1-100', liczba: 100, data_wpisu_krs: '2026-01-10' }],
+      akcjonariusze: [{ osoba_id: inwestor, akcje: [{ seria: 'A', numery: '1-100', liczba: 100 }] }],
     });
   }
-
-  const spolki = db
-    .prepare(
-      `SELECT COUNT(DISTINCT spolka_id) AS ile FROM psa_stan_akcji
-        WHERE osoba_id = ? AND data_do IS NULL`
-    )
-    .get(inwestor).ile;
-  assert.equal(spolki, 2);
+  assert.deepEqual(daneOsoby.powiazania(db, inwestor).akcje.map((x) => x.nazwa), ['Alfa P.S.A.', 'Beta P.S.A.']);
   assert.equal(db.prepare('SELECT COUNT(*) AS ile FROM psa_osoby').get().ile, 1);
 });
 
@@ -212,7 +155,7 @@ test('skrót zmienia się przy każdej zmianie pola zdarzenia', () => {
   for (const [pole, wartosc] of Object.entries({
     id: 2,
     spolka_id: 2,
-    typ: 'objecie',
+    typ: 'przeniesienie',
     data_wpisu: '2026-01-10T11:00:01Z',
     autor: 'Ktoś inny',
     dane_json: '{"ilosc":101}',

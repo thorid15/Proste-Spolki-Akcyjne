@@ -10,9 +10,6 @@
  * przeszkodzie - 7 dni od jej usuniecia" (nie: kontynuacja z zaliczeniem
  * czesci terminu, ktora uplynela przed wstrzymaniem).
  *
- * `dni_wstrzymania` w `psa_sprawy` jest wylacznie SKUMULOWANA STATYSTYKA do
- * audytu i wydrukow - nie wplywa na wyliczenie `termin_do`.
- *
  * Modul jest CZYSTY - operuje wylacznie na datach (RRRR-MM-DD), bez dostepu
  * do bazy i bez efektow ubocznych.
  */
@@ -108,33 +105,4 @@ function policzTermin(sprawa, dzisiaj) {
   };
 }
 
-/**
- * Przejście `weryfikacja → wstrzymana`. Zwraca poprawki do zapisania.
- * Termin od tej chwili jest zamrożony (`policzTermin` zwróci `zamrozony: true`).
- */
-function wstrzymaj(sprawa, dzisiaj) {
-  if (sprawa.stan === 'wstrzymana') {
-    throw new BladTerminu('Sprawa jest już wstrzymana.');
-  }
-  return { stan: 'wstrzymana', wstrzymana_od: sprawdzDate(dzisiaj, 'dzisiaj') };
-}
-
-/**
- * Przejście `wstrzymana → weryfikacja`. Dolicza czas wstrzymania do
- * statystyki `dni_wstrzymania` i ustawia nowy, pełny bieg terminu od dziś.
- */
-function wznow(sprawa, dzisiaj) {
-  if (sprawa.stan !== 'wstrzymana') {
-    throw new BladTerminu('Sprawa nie jest wstrzymana — nie ma czego wznawiać.');
-  }
-  const dzis = sprawdzDate(dzisiaj, 'dzisiaj');
-  const dniTegoWstrzymania = Math.max(dniMiedzy(sprawa.wstrzymana_od, dzis), 0);
-  return {
-    stan: 'weryfikacja',
-    wstrzymana_od: null,
-    wznowiona_od: dzis,
-    dni_wstrzymania: Number(sprawa.dni_wstrzymania || 0) + dniTegoWstrzymania,
-  };
-}
-
-module.exports = { BladTerminu, dodajDni, dniMiedzy, policzTermin, wstrzymaj, wznow };
+module.exports = { BladTerminu, dodajDni, dniMiedzy, policzTermin };

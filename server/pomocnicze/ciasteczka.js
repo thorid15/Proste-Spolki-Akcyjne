@@ -44,10 +44,4 @@ function usun(odp, nazwa, opcje = {}) {
   odp.append('Set-Cookie', czesci.join('; '));
 }
 
-/** Middleware - wypelnia `zad.ciasteczka`. */
-function posrednik(zad, odp, dalej) {
-  zad.ciasteczka = parsuj(zad.headers.cookie);
-  dalej();
-}
-
-module.exports = { parsuj, ustaw, usun, posrednik };
+module.exports = { parsuj, ustaw, usun };

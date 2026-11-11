@@ -1,32 +1,29 @@
 'use strict';
 
 /**
- * Odbudowa stanu akcjonariatu ze zdarzen.
+ * Odtworzenie stanu rejestru ze zdarzeń — moduł czysty (bez bazy).
  *
- * Regula domenowa nr 2: stan akcjonariatu jest POCHODNA zdarzen.
- * `psa_stan_akcji` i `psa_obciazenia` to wylacznie materializacja dla
- * szybkosci - musza dac sie odbudowac w calosci ze zdarzen.
+ * Stan akcjonariatu jest pochodną wpisów; `psa_emisje`, `psa_stan_akcji` i `psa_atrybuty` są
+ * wyłącznie ich materializacją i odtwarzają się w całości przy każdym zapisie.
  *
- * Model: kazdy numer akcji w serii nalezy w danej chwili do DOKLADNIE JEDNEGO
- * otwartego przedzialu, o jednej z trzech kategorii:
- *   - `nieobjeta`     - wyemitowana, jeszcze nieobjeta,
- *   - `akcjonariusz`  - przypisana konkretnej osobie,
- *   - `umorzona`      - umorzona.
+ * Model: każdy numer akcji serii należy w danej chwili do otwartych przedziałów jednej z dwóch
+ * kategorii — `akcjonariusz` (osoba, ewentualnie ułamek jednego numeru — art. 300(43) KSH) albo
+ * `umorzona`. Bilans (art. 300(31) § 2 KSH): przedziały serii pokrywają ją szczelnie, a ułamki
+ * każdego numeru sumują się do jedności. Obciążenia i adnotacje to `atrybuty` — przedziały numerów
+ * z rodzajem i treścią, z tą samą osią czasu (`data_od` / `data_do`).
  *
- * Dzieki temu regula domenowa nr 3 ("bilans akcji musi sie zgadzac zawsze")
- * jest sprawdzalna jednym warunkiem: otwarte przedzialy serii pokrywaja
- * zakres emisji szczelnie i bez nakladania.
- *
- * Modul jest CZYSTY - nie dotyka bazy. Wejscie: tablica zdarzen. Wyjscie:
- * struktura w pamieci. Materializacje do SQLite robi `server/baza-stan.js`.
+ * Moduł liczy też regułę powiadomień (R2, `ktoTraci`) i checklistę wpisu (R5) — obie wynikają
+ * z porównania stanu i z atrybutów akcji, nie z typu wpisu.
  */
 
 const n = require('./numery');
 const u = require('./ulamki');
-const przepisy = require('./przepisy');
 const czas = require('../pomocnicze/czas');
 
-const K = przepisy.KATEGORIE_AKCJI;
+const K = { AKCJONARIUSZ: 'akcjonariusz', UMORZONA: 'umorzona' };
+
+/** Obciążenia, z których przysługuje prawo konkretnej osobie (zastawnik, użytkownik). */
+const OBCIAZENIA_Z_UPRAWNIONYM = ['zastaw', 'uzytkowanie'];
 
 class BladStanu extends Error {
   constructor(komunikat) {
@@ -36,15 +33,10 @@ class BladStanu extends Error {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Porzadek stosowania zdarzen
+// Pomocnicze
 // ─────────────────────────────────────────────────────────────
 
-/**
- * D-R01: zdarzenia stosujemy w kolejnosci (data_wpisu, id). Chwila wpisu
- * jest jedyna osia czasu rejestru (art. 300(37) § 1 i art. 300(38) § 1 KSH);
- * `id` rozstrzyga wpisy z ta sama sekunda. Walidacja nie dopuszcza wpisu
- * wczesniejszego niz ostatni wpis spolki, wiec porzadek jest spojny.
- */
+/** D-R01: kolejność wpisów — chwila wpisu, potem id. */
 function porownajZdarzenia(a, b) {
   const da = String(a.data_wpisu || '');
   const db = String(b.data_wpisu || '');
@@ -57,1114 +49,644 @@ function dane(zdarzenie) {
   try {
     return JSON.parse(zdarzenie.dane_json || '{}');
   } catch {
-    throw new BladStanu(
-      `Zdarzenie #${zdarzenie.id} ma uszkodzoną treść (dane_json nie jest poprawnym JSON-em).`
-    );
+    throw new BladStanu(`Wpis #${zdarzenie.id} ma uszkodzoną treść (dane_json).`);
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// Operacje na przedzialach
-// ─────────────────────────────────────────────────────────────
 
 function pustyStan() {
   return {
+    otwarty: false,
+    data_otwarcia: null,
+    data_zamkniecia: null,
+    powod_zamkniecia: null,
     emisje: [],
-    przedzialy: [], // otwarte i zamkniete razem; zamkniete maja data_do != null
-    obciazenia: [],
-    uprawnienia: [],
-    ograniczenia: [],
-    /** Zdarzenia niewplywajace na akcje - do osi czasu w kokpicie. */
-    pozostale: [],
+    przedzialy: [],
+    atrybuty: [],
+    wpisy: [],
   };
 }
 
-function otwarte(stan) {
-  return stan.przedzialy.filter((p) => p.data_do === null);
+const otwarte = (lista) => lista.filter((p) => p.data_do === null);
+const zakres = (w) => ({ nr_od: w.nr_od, nr_do: w.nr_do });
+const caly = (p) => p.czesc_licznik === p.czesc_mianownik;
+const czescWiersza = (p) => ({ licznik: p.czesc_licznik, mianownik: p.czesc_mianownik });
+
+function emisja(stan, seria) {
+  const e = stan.emisje.find((x) => x.seria === seria);
+  if (!e) throw new BladStanu(`Seria „${seria}” nie istnieje w rejestrze tej spółki.`);
+  return e;
 }
 
-function znajdzEmisje(stan, klucz) {
-  return stan.emisje.find((e) => e.klucz === klucz) || null;
+function akcjonariusze(stan, seria) {
+  return otwarte(stan.przedzialy).filter((p) => p.seria === seria && p.kategoria === K.AKCJONARIUSZ);
 }
 
-/**
- * Ustala emisje, ktorej dotyczy zdarzenie. Preferujemy stabilny identyfikator
- * zdarzenia emisji; `seria` sluzy jako czytelny fallback i kontrola snapshotu.
- */
-function emisjaZeZdarzenia(stan, d, zdarzenie) {
-  const klucz = d.emisja_zdarzenie_id != null ? Number(d.emisja_zdarzenie_id) : null;
-  if (klucz != null) {
-    const e = znajdzEmisje(stan, klucz);
-    if (!e) {
-      throw new BladStanu(
-        `Zdarzenie #${zdarzenie.id} wskazuje na nieistniejącą emisję (zdarzenie #${klucz}).`
-      );
-    }
-    return e;
+function wierszeOsoby(stan, seria, osobaId) {
+  return akcjonariusze(stan, seria).filter((p) => p.osoba_id === Number(osobaId));
+}
+
+/** Numery serii, które istnieją (nie są umorzone). */
+function istniejace(stan, seria) {
+  return n.normalizuj(akcjonariusze(stan, seria).map(zakres));
+}
+
+function wymagajIstniejacych(stan, seria, zakresy) {
+  emisja(stan, seria);
+  const brak = n.roznica(zakresy, istniejace(stan, seria));
+  if (brak.length > 0) {
+    throw new BladStanu(`Akcje serii ${seria} nr ${n.opisz(brak)} nie istnieją w rejestrze (umorzone albo poza serią).`);
   }
-  if (d.seria) {
-    const trafienia = stan.emisje.filter((e) => e.seria === d.seria);
-    if (trafienia.length === 1) return trafienia[0];
-    if (trafienia.length === 0) {
-      throw new BladStanu(
-        `Zdarzenie #${zdarzenie.id} wskazuje na nieistniejącą serię „${d.seria}”.`
-      );
-    }
-    throw new BladStanu(
-      `Zdarzenie #${zdarzenie.id} wskazuje serię „${d.seria}”, która występuje w wielu emisjach.`
-    );
-  }
-  throw new BladStanu(`Zdarzenie #${zdarzenie.id} nie wskazuje emisji.`);
 }
 
-/** Otwarte przedzialy danej emisji, kategorii i (opcjonalnie) osoby. */
-function przedzialyPuli(stan, emisjaKlucz, kategoria, osobaId) {
-  return otwarte(stan).filter(
-    (p) =>
-      p.emisja_klucz === emisjaKlucz &&
-      p.kategoria === kategoria &&
-      (kategoria === K.AKCJONARIUSZ ? Number(p.osoba_id) === Number(osobaId) : true)
-  );
-}
-
-/**
- * Zakresy dostepne w danej puli (suma otwartych przedzialow) - DO ZWYKLYCH
- * operacji calo-akcyjnych (objecie/przeniesienie/umorzenie/obciazenie/zajecie).
- *
- * Wyklucza wiersze ulamkowe (czesc != 1/1): wspoluprawniony do 1/3 akcji nie
- * moze rozporzadzac nia tak, jakby mial cala - do tego sluzy WYLACZNIE
- * `przeniesienie_ulamka` (regula domenowa 4a, scope-narrowing decyzja
- * architektoniczna sprintu 5 - patrz README).
- */
-function pula(stan, emisjaKlucz, kategoria, osobaId) {
-  return n.normalizuj(
-    przedzialyPuli(stan, emisjaKlucz, kategoria, osobaId)
-      .filter((p) => (p.czesc_licznik ?? 1) === (p.czesc_mianownik ?? 1))
-      .map((p) => ({
-        nr_od: p.nr_od,
-        nr_do: p.nr_do,
-      }))
-  );
-}
-
-/** Suma ulamkow, jakie dana osoba posiada na WSKAZANYM (pojedynczym) numerze akcji. */
-function ulamekOsobyNaNumerze(stan, emisjaKlucz, osobaId, nr) {
-  const wiersze = otwarte(stan).filter(
-    (p) =>
-      p.emisja_klucz === emisjaKlucz &&
-      p.kategoria === K.AKCJONARIUSZ &&
-      Number(p.osoba_id) === Number(osobaId) &&
-      p.nr_od <= nr &&
-      nr <= p.nr_do
-  );
+/** Suma ułamków osoby na jednym numerze (cały numer = 1). */
+function ulamekNaNumerze(stan, seria, osobaId, nr) {
   let suma = u.ZERO;
-  for (const w of wiersze) {
-    suma = u.suma(suma, { licznik: w.czesc_licznik ?? 1, mianownik: w.czesc_mianownik ?? 1 });
+  for (const p of wierszeOsoby(stan, seria, osobaId)) {
+    if (p.nr_od <= nr && nr <= p.nr_do) suma = u.suma(suma, czescWiersza(p));
   }
   return suma;
 }
 
-function otworz(
-  stan,
-  { emisjaKlucz, kategoria, osobaId, zakresy, data, zdarzenieId, tytul, czesc, przedstawiciel, pokryta }
-) {
-  const cz = czesc ? u.waliduj(czesc) : u.JEDEN;
-  const znormalizowane = n.normalizuj(zakresy);
-  if (!u.jestJeden(cz) && (znormalizowane.length !== 1 || znormalizowane[0].nr_od !== znormalizowane[0].nr_do)) {
-    throw new BladStanu(
-      `Ułamek akcji ${u.opisz(cz)} musi obejmować dokładnie jeden numer akcji (regula domenowa 4a).`
-    );
+/**
+ * Zamyka część wierszy przecinającą się z `zakresy` (data_do = chwila wpisu), resztę zostawia
+ * otwartą z pierwotną datą — rejestr pokazuje, od kiedy ktoś ma konkretny blok akcji.
+ * Zwraca zamknięte fragmenty (np. do ponownego otwarcia ze zmienionym atrybutem).
+ */
+function wytnij(lista, wiersze, zakresy, z) {
+  const zamkniete = [];
+  for (const w of wiersze) {
+    const czesc = n.przeciecie([zakres(w)], zakresy);
+    if (czesc.length === 0) continue;
+    lista.splice(lista.indexOf(w), 1);
+    for (const c of czesc) {
+      const zam = { ...w, ...c, data_do: z.data_wpisu, zdarzenie_do_id: Number(z.id) };
+      lista.push(zam);
+      zamkniete.push(zam);
+    }
+    for (const r of n.roznica([zakres(w)], zakresy)) lista.push({ ...w, ...r });
   }
-  for (const z of znormalizowane) {
+  return zamkniete;
+}
+
+function dodajPrzedzial(stan, { seria, kategoria, osobaId = null, zakresy, czesc = null, podstawa = null }, z) {
+  const e = emisja(stan, seria);
+  const cz = czesc ? u.waliduj(czesc) : u.JEDEN;
+  const norm = n.normalizuj(zakresy);
+  const poza = n.roznica(norm, [zakres(e)]);
+  if (poza.length > 0) throw new BladStanu(`Numery ${n.opisz(poza)} wykraczają poza serię ${seria} (${n.opisz([zakres(e)])}).`);
+  if (!u.jestJeden(cz) && (norm.length !== 1 || norm[0].nr_od !== norm[0].nr_do)) {
+    throw new BladStanu(`Ułamek ${u.opisz(cz)} akcji dotyczy dokładnie jednego numeru akcji.`);
+  }
+  for (const r of norm) {
     stan.przedzialy.push({
-      emisja_klucz: emisjaKlucz,
+      seria,
       kategoria,
       osoba_id: kategoria === K.AKCJONARIUSZ ? Number(osobaId) : null,
-      nr_od: z.nr_od,
-      nr_do: z.nr_do,
-      data_od: data,
-      zdarzenie_od_id: zdarzenieId,
-      data_do: null,
-      zdarzenie_do_id: null,
-      tytul_nabycia: tytul || null,
+      ...r,
       czesc_licznik: cz.licznik,
       czesc_mianownik: cz.mianownik,
-      przedstawiciel_osoba_id: przedstawiciel == null ? null : Number(przedstawiciel),
-      pokryta: pokryta || null,
+      podstawa,
+      zdarzenie_od_id: Number(z.id),
+      data_od: z.data_wpisu,
+      zdarzenie_do_id: null,
+      data_do: null,
     });
   }
 }
 
-/**
- * Zdejmuje `zakresy` z puli (kategoria + osoba) i zamyka odpowiadajace im
- * fragmenty przedzialow. Czesci nieobjete operacja pozostaja otwarte
- * z ZACHOWANIEM pierwotnej daty nabycia - rejestr ma pokazywac, od kiedy
- * akcjonariusz posiada konkretny blok akcji.
- */
-function zdejmij(stan, { emisjaKlucz, kategoria, osobaId, zakresy, data, zdarzenieId }) {
-  const doZdjecia = n.normalizuj(zakresy);
-  const dotkniete = przedzialyPuli(stan, emisjaKlucz, kategoria, osobaId);
-  const dostepne = n.normalizuj(dotkniete.map((p) => ({ nr_od: p.nr_od, nr_do: p.nr_do })));
-  const brakujace = n.roznica(doZdjecia, dostepne);
-  if (brakujace.length > 0) {
-    throw new BladStanu(
-      `Brak pokrycia dla zakresu ${n.opisz(brakujace)} — akcje nie znajdują się w oczekiwanej puli.`
-    );
-  }
+function dodajEmisje(stan, s) {
+  if (stan.emisje.some((e) => e.seria === s.seria)) throw new BladStanu(`Seria „${s.seria}” już istnieje w tej spółce.`);
+  stan.emisje.push({ seria: s.seria, nr_od: Number(s.nr_od), nr_do: Number(s.nr_do), data_wpisu_krs: s.data_wpisu_krs });
+}
 
-  const noweOtwarte = [];
-  for (const p of dotkniete) {
-    const czesc = n.przeciecie([{ nr_od: p.nr_od, nr_do: p.nr_do }], doZdjecia);
-    if (czesc.length === 0) continue;
-    const reszta = n.roznica([{ nr_od: p.nr_od, nr_do: p.nr_do }], doZdjecia);
-
-    // Przedzial zastepujemy jego rozbiciem: fragmenty zamkniete + fragmenty,
-    // ktore zostaja przy dotychczasowym posiadaczu.
-    stan.przedzialy.splice(stan.przedzialy.indexOf(p), 1);
-    for (const c of czesc) {
-      stan.przedzialy.push({
-        ...p,
-        nr_od: c.nr_od,
-        nr_do: c.nr_do,
-        data_do: data,
-        zdarzenie_do_id: zdarzenieId,
+function dodajAtrybut(stan, z, pozycja, a) {
+  for (const p of a.akcje) {
+    wymagajIstniejacych(stan, p.seria, p.zakresy);
+    for (const r of n.normalizuj(p.zakresy)) {
+      stan.atrybuty.push({
+        zdarzenie_id: Number(z.id),
+        pozycja,
+        rodzaj: a.rodzaj,
+        seria: p.seria,
+        ...r,
+        osoba_id: a.osoba_id == null ? null : Number(a.osoba_id),
+        tresc: a.tresc || null,
+        prawo_glosu: a.prawo_glosu ? 1 : 0,
+        zdarzenie_od_id: Number(z.id),
+        data_od: z.data_wpisu,
+        zdarzenie_do_id: null,
+        data_do: null,
       });
     }
-    for (const r of reszta) {
-      noweOtwarte.push({ ...p, nr_od: r.nr_od, nr_do: r.nr_do });
-    }
   }
-  stan.przedzialy.push(...noweOtwarte);
 }
 
-/**
- * Grupuje `zakresy` wedlug BIEZACEGO stanu pokrycia posiadacza — pokrycie
- * (art. 300(33) § 1 pkt 9 KSH) jest atrybutem SAMEJ AKCJI, nie osoby, wiec
- * przy zwyklym przeniesieniu (calych akcji) musi przejsc na nabywce
- * niezmienione, tak jak juz dziala `przeniesienie_ulamka`. Rozny odcinek
- * `zakresy` moze miec rozna wzmianke o pokryciu (np. czesc akcji objeta
- * gotowka, czesc aportem w innym terminie) - stad grupowanie, nie jedna
- * wspolna wartosc.
- */
-function pokrytaWedlugStanu(stan, emisjaKlucz, osobaId, zakresy) {
-  const przedzialy = przedzialyPuli(stan, emisjaKlucz, K.AKCJONARIUSZ, osobaId).filter(
-    (p) => (p.czesc_licznik ?? 1) === (p.czesc_mianownik ?? 1)
+function wierszeAtrybutu(stan, ref) {
+  return otwarte(stan.atrybuty).filter(
+    (a) => a.zdarzenie_id === Number(ref.zdarzenie_id) && a.pozycja === Number(ref.pozycja || 0)
   );
-  const grupy = new Map();
-  for (const p of przedzialy) {
-    const wspolne = n.przeciecie([{ nr_od: p.nr_od, nr_do: p.nr_do }], zakresy);
-    if (wspolne.length === 0) continue;
-    const klucz = p.pokryta ?? '';
-    if (!grupy.has(klucz)) grupy.set(klucz, { pokryta: p.pokryta ?? null, zakresy: [] });
-    grupy.get(klucz).zakresy.push(...wspolne);
-  }
-  return [...grupy.values()].map((g) => ({ pokryta: g.pokryta, zakresy: n.normalizuj(g.zakresy) }));
 }
 
-/**
- * Przeniesienie akcji miedzy pulami - jedyna droga zmiany kategorii/wlasciciela.
- *
- * Naprawa Z-054: gdy wywolujacy NIE narzuca wprost `pokryta` (jak przy
- * zwyklym `przeniesienie` — `objecie` zawsze ustala ja na nowo z tresci
- * zdarzenia, wiec nie wchodzi tu), a zbywca traci akcje z wlasnej puli
- * akcjonariusza, wzmianke o pokryciu bierzemy z BIEZACEGO stanu tych akcji,
- * zamiast zerowac ja do `null`. Bez tego kazde zwykle przeniesienie kasowalo
- * `pokryta`, wiec blokada zbycia niepokrytych akcji (art. 300(40) § 1 KSH,
- * `walidacje.js: sprawdzPokrycie`) dzialala tylko przy PIERWSZYM zbyciu -
- * kolejne widzialy juz `null` ("nieustalone"), ktore regula celowo przepuszcza.
- */
-function przenies(stan, opcje) {
-  const grupyPokrycia =
-    opcje.pokryta === undefined && opcje.zKategorii === K.AKCJONARIUSZ
-      ? pokrytaWedlugStanu(stan, opcje.emisjaKlucz, opcje.zOsoby, opcje.zakresy)
-      : null;
-
-  zdejmij(stan, {
-    emisjaKlucz: opcje.emisjaKlucz,
-    kategoria: opcje.zKategorii,
-    osobaId: opcje.zOsoby,
-    zakresy: opcje.zakresy,
-    data: opcje.data,
-    zdarzenieId: opcje.zdarzenieId,
-  });
-
-  if (!grupyPokrycia) {
-    otworz(stan, {
-      emisjaKlucz: opcje.emisjaKlucz,
-      kategoria: opcje.doKategorii,
-      osobaId: opcje.doOsoby,
-      zakresy: opcje.zakresy,
-      data: opcje.data,
-      zdarzenieId: opcje.zdarzenieId,
-      tytul: opcje.tytul,
-      pokryta: opcje.pokryta,
-    });
-    return;
+/** Wykreślenie albo zmiana atrybutu na wskazanych akcjach (`zmiana` = nowe pola; null = wykreślenie). */
+function zmienAtrybut(stan, z, op, zmiana) {
+  const wiersze = wierszeAtrybutu(stan, op.atrybut);
+  if (wiersze.length === 0) {
+    throw new BladStanu(`Wskazany atrybut (wpis #${op.atrybut.zdarzenie_id}) nie istnieje albo został już wykreślony.`);
   }
-
-  for (const grupa of grupyPokrycia) {
-    otworz(stan, {
-      emisjaKlucz: opcje.emisjaKlucz,
-      kategoria: opcje.doKategorii,
-      osobaId: opcje.doOsoby,
-      zakresy: grupa.zakresy,
-      data: opcje.data,
-      zdarzenieId: opcje.zdarzenieId,
-      tytul: opcje.tytul,
-      pokryta: grupa.pokryta,
-    });
+  if (wiersze[0].rodzaj !== op.rodzaj) {
+    throw new BladStanu(`Wskazany atrybut jest rodzaju „${wiersze[0].rodzaj}”, a nie „${op.rodzaj}”.`);
   }
-}
-
-/**
- * Scala przylegle otwarte przedzialy o identycznym pochodzeniu
- * (ta sama emisja, kategoria, osoba, data i zdarzenie nabycia).
- * Nie scalamy blokow nabytych w roznych momentach - data nabycia to
- * informacja rejestrowa, nie ozdoba.
- */
-function scal(stan) {
-  const klucz = (p) =>
-    [p.emisja_klucz, p.kategoria, p.osoba_id, p.data_od, p.zdarzenie_od_id, p.tytul_nabycia].join('|');
-  const otwartePrzedzialy = stan.przedzialy.filter((p) => p.data_do === null);
-  const zamkniete = stan.przedzialy.filter((p) => p.data_do !== null);
-  const grupy = new Map();
-  for (const p of otwartePrzedzialy) {
-    const k = klucz(p);
-    if (!grupy.has(k)) grupy.set(k, []);
-    grupy.get(k).push(p);
-  }
-  const wynik = [];
-  for (const grupa of grupy.values()) {
-    const scalone = n.normalizuj(grupa.map((p) => ({ nr_od: p.nr_od, nr_do: p.nr_do })));
-    for (const z of scalone) {
-      wynik.push({ ...grupa[0], nr_od: z.nr_od, nr_do: z.nr_do });
+  for (const p of op.akcje) {
+    const wSerii = wiersze.filter((w) => w.seria === p.seria);
+    const brak = n.roznica(p.zakresy, wSerii.map(zakres));
+    if (brak.length > 0) {
+      throw new BladStanu(`Atrybut nie obejmuje akcji serii ${p.seria} nr ${n.opisz(brak)}.`);
+    }
+    for (const c of wytnij(stan.atrybuty, wSerii, p.zakresy, z)) {
+      if (!zmiana) continue;
+      stan.atrybuty.push({
+        ...c,
+        ...zmiana,
+        zdarzenie_od_id: Number(z.id),
+        data_od: z.data_wpisu,
+        zdarzenie_do_id: null,
+        data_do: null,
+      });
     }
   }
-  stan.przedzialy = [...zamkniete, ...wynik];
+}
+
+function wymagajOtwartego(stan) {
+  if (!stan.otwarty) throw new BladStanu('Rejestr tej spółki nie jest otwarty — wpis jest niemożliwy.');
+}
+
+/** Przeniesienie ułamka jednego numeru (art. 300(43) KSH). */
+function przeniesUlamek(stan, z, seria, nr, zbywcaId, nabywcaId, czesc) {
+  const zbywcaMa = ulamekNaNumerze(stan, seria, zbywcaId, nr);
+  if (!u.mniejszyRowny(czesc, zbywcaMa)) {
+    throw new BladStanu(
+      `Zbywca ma ${u.opisz(zbywcaMa)} akcji serii ${seria} nr ${nr} — nie może zbyć ${u.opisz(czesc)} (rozporządzenie ponad stan posiadania).`
+    );
+  }
+  const naNumerze = (osoba) => wierszeOsoby(stan, seria, osoba).filter((p) => p.nr_od <= nr && nr <= p.nr_do);
+  wytnij(stan.przedzialy, naNumerze(zbywcaId), [{ nr_od: nr, nr_do: nr }], z);
+  const zostaje = u.roznica(zbywcaMa, czesc);
+  if (!u.jestZero(zostaje)) {
+    dodajPrzedzial(stan, { seria, kategoria: K.AKCJONARIUSZ, osobaId: zbywcaId, zakresy: [{ nr_od: nr, nr_do: nr }], czesc: zostaje }, z);
+  }
+  const nabywcaMial = ulamekNaNumerze(stan, seria, nabywcaId, nr);
+  wytnij(stan.przedzialy, naNumerze(nabywcaId), [{ nr_od: nr, nr_do: nr }], z);
+  dodajPrzedzial(
+    stan,
+    { seria, kategoria: K.AKCJONARIUSZ, osobaId: nabywcaId, zakresy: [{ nr_od: nr, nr_do: nr }], czesc: u.suma(nabywcaMial, czesc) },
+    z
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
-// Handlery typow zdarzen
+// Handlery 8 typów
 // ─────────────────────────────────────────────────────────────
 
 const HANDLERY = {
-  emisja(stan, zdarzenie, d) {
-    if (stan.emisje.some((e) => e.seria === d.seria)) {
-      throw new BladStanu(
-        `Seria „${d.seria}” już istnieje w tej spółce (zdarzenie #${zdarzenie.id}).`
-      );
-    }
-    const zakres = n.zakresEmisji({ nr_pierwszy: d.nr_pierwszy, ilosc: d.ilosc });
-    stan.emisje.push({
-      klucz: Number(zdarzenie.id),
-      zdarzenie_id: Number(zdarzenie.id),
-      tytul: d.tytul || null,
-      podstawa_prawna: d.podstawa_prawna || null,
-      seria: d.seria,
-      nr_pierwszy: Number(d.nr_pierwszy),
-      ilosc: Number(d.ilosc),
-      cena_emisyjna_grosze: d.cena_emisyjna_grosze == null ? null : Number(d.cena_emisyjna_grosze),
-      waluta: d.waluta || przepisy.WALUTA_DOMYSLNA,
-      data_emisji: d.data_emisji || czas.dzienLokalny(zdarzenie.data_wpisu),
-      status: przepisy.STATUSY_EMISJI.AKTYWNA,
-      opis: d.opis || null,
-      uwagi: d.uwagi || null,
-      // art. 300(30) § 2 KSH: NULL dopoki emisja nie ma wpisu do KRS - blokuje
-      // `objecie` (regula domenowa 12, walidacje.js).
-      data_wpisu_krs: d.data_wpisu_krs || null,
-      // art. 300(33) § 1 pkt 4 KSH.
-      rodzaj_akcji: d.rodzaj_akcji || 'zwykla',
-      // art. 300(33) § 1 pkt 11 KSH.
-      obowiazki_wobec_spolki: d.obowiazki_wobec_spolki || null,
-    });
-    otworz(stan, {
-      emisjaKlucz: Number(zdarzenie.id),
-      kategoria: K.NIEOBJETA,
-      osobaId: null,
-      zakresy: zakres,
-      data: zdarzenie.data_wpisu,
-      zdarzenieId: Number(zdarzenie.id),
-    });
-  },
-
-  objecie(stan, zdarzenie, d) {
-    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
-    for (const poz of d.pozycje || []) {
-      przenies(stan, {
-        emisjaKlucz: emisja.klucz,
-        zKategorii: K.NIEOBJETA,
-        zOsoby: null,
-        doKategorii: K.AKCJONARIUSZ,
-        doOsoby: Number(poz.osoba_id),
-        zakresy: poz.zakresy,
-        data: zdarzenie.data_wpisu,
-        zdarzenieId: Number(zdarzenie.id),
-        tytul: 'objęcie akcji',
-        // art. 300(33) § 1 pkt 9 KSH - wzmianka o pokryciu; NULL (nieustalone)
-        // dopoki nie dojdzie osobne zdarzenie `pokrycie_akcji` na podstawie
-        // uchwaly zarzadu (art. 300(9) § 2 KSH).
-        pokryta: poz.pokryta || null,
-      });
-    }
-  },
-
-  przeniesienie(stan, zdarzenie, d) {
-    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
-    for (const poz of d.pozycje || []) {
-      przenies(stan, {
-        emisjaKlucz: emisja.klucz,
-        zKategorii: K.AKCJONARIUSZ,
-        zOsoby: Number(d.zbywca_osoba_id),
-        doKategorii: K.AKCJONARIUSZ,
-        doOsoby: Number(poz.nabywca_osoba_id),
-        zakresy: poz.zakresy,
-        data: zdarzenie.data_wpisu,
-        zdarzenieId: Number(zdarzenie.id),
-        tytul: d.tytul_prawny || 'przeniesienie akcji',
-      });
-    }
-  },
-
-  umorzenie(stan, zdarzenie, d) {
-    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
-    for (const poz of d.pozycje || []) {
-      const zKategorii = poz.osoba_id == null ? K.NIEOBJETA : K.AKCJONARIUSZ;
-      przenies(stan, {
-        emisjaKlucz: emisja.klucz,
-        zKategorii,
-        zOsoby: poz.osoba_id == null ? null : Number(poz.osoba_id),
-        doKategorii: K.UMORZONA,
-        doOsoby: null,
-        zakresy: poz.zakresy,
-        data: zdarzenie.data_wpisu,
-        zdarzenieId: Number(zdarzenie.id),
-        tytul: 'umorzenie',
-      });
-    }
-    const wszystkieUmorzone =
-      n.ilosc(pula(stan, emisja.klucz, K.UMORZONA, null)) === emisja.ilosc;
-    if (wszystkieUmorzone) emisja.status = przepisy.STATUSY_EMISJI.UMORZONA;
-  },
-
-  /**
-   * Uniewaznienie akcji ORZECZENIEM SADU (art. 300(51) KSH) - za niewykonanie
-   * albo nienalezyte wykonanie zobowiazania do wniesienia wkladow.
-   *
-   * Mechanika przejscia jest ta sama co przy umorzeniu (akcje trwale
-   * wychodza z obrotu, zostajac w bilansie serii), ale kategoria docelowa
-   * jest ODREBNA. Nie wolno tego zlewac z umorzeniem: umorzenie jest
-   * czynnoscia SPOLKI (uchwala, zmiana umowy spolki, splata - art. 300(44)
-   * i 300(45)), uniewaznienie jest orzeczeniem SADU, bez splaty i bez zmiany
-   * umowy spolki. Rejestr i wydruk dla sadu musza je rozroznic.
-   */
-  uniewaznienie(stan, zdarzenie, d) {
-    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
-    for (const poz of d.pozycje || []) {
-      const zKategorii = poz.osoba_id == null ? K.NIEOBJETA : K.AKCJONARIUSZ;
-      przenies(stan, {
-        emisjaKlucz: emisja.klucz,
-        zKategorii,
-        zOsoby: poz.osoba_id == null ? null : Number(poz.osoba_id),
-        doKategorii: K.UNIEWAZNIONA,
-        doOsoby: null,
-        zakresy: poz.zakresy,
-        data: zdarzenie.data_wpisu,
-        zdarzenieId: Number(zdarzenie.id),
-        tytul: 'unieważnienie orzeczeniem sądu',
-      });
-    }
-  },
-
-  /**
-   * Przeniesienie ulamkowej czesci OZNACZONEJ akcji (art. 300(43) KSH).
-   * JEDYNA droga tworzenia i przenoszenia ulamkow (regula domenowa 4a) - nie
-   * przechodzi przez `przenies`/`pula`, bo te licza w calych numerach.
-   *
-   * Zamyka CALA dotychczasowa pozycje zbywcy na numerze `nr` (jakikolwiek by
-   * nie byl jej ulamek - czesc szerszego zakresu 1/1 albo juz istniejacy
-   * wiersz ulamkowy), po czym otwiera z powrotem to, co zbywcy zostaje.
-   * Nabywca dostaje sume swojego dotychczasowego ulamka na tym numerze
-   * (0, gdy jeszcze nic nie mial) i ulamka nabywanego.
-   */
-  przeniesienie_ulamka(stan, zdarzenie, d) {
-    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
-    const nr = Number(d.nr);
-    const zbywcaId = Number(d.zbywca_osoba_id);
-    const nabywcaId = Number(d.nabywca_osoba_id);
-    const czesc = u.waliduj({ licznik: d.czesc_licznik, mianownik: d.czesc_mianownik });
-
-    const zbywcaMa = ulamekOsobyNaNumerze(stan, emisja.klucz, zbywcaId, nr);
-    if (!u.mniejszyRowny(czesc, zbywcaMa)) {
-      throw new BladStanu(
-        `Zbywca posiada ${u.opisz(zbywcaMa)} akcji nr ${nr} serii ${emisja.seria} — ` +
-          `nie może zbyć ${u.opisz(czesc)} (zdarzenie #${zdarzenie.id}).`
-      );
-    }
-    // Pokrycie (art. 300(33) § 1 pkt 9 KSH) jest atrybutem SAMEJ AKCJI (wklad
-    // juz wniesiony do spolki), nie osoby - przechodzi wraz z ulamkiem
-    // niezmienione, zarowno na czesc, ktora zostaje u zbywcy, jak i na czesc
-    // nabywana.
-    const pokrytaObecnie =
-      (otwarte(stan).find(
-        (p) => p.emisja_klucz === emisja.klucz && p.kategoria === K.AKCJONARIUSZ && Number(p.osoba_id) === zbywcaId && p.nr_od <= nr && nr <= p.nr_do
-      ) || {}).pokryta ?? null;
-
-    zdejmij(stan, {
-      emisjaKlucz: emisja.klucz,
-      kategoria: K.AKCJONARIUSZ,
-      osobaId: zbywcaId,
-      zakresy: [{ nr_od: nr, nr_do: nr }],
-      data: zdarzenie.data_wpisu,
-      zdarzenieId: Number(zdarzenie.id),
-    });
-    const zostajeZbywcy = u.roznica(zbywcaMa, czesc);
-    if (!u.jestZero(zostajeZbywcy)) {
-      otworz(stan, {
-        emisjaKlucz: emisja.klucz,
-        kategoria: K.AKCJONARIUSZ,
-        osobaId: zbywcaId,
-        zakresy: [{ nr_od: nr, nr_do: nr }],
-        data: zdarzenie.data_wpisu,
-        zdarzenieId: Number(zdarzenie.id),
-        tytul: 'pozostała część po przeniesieniu ułamka',
-        czesc: zostajeZbywcy,
-        pokryta: pokrytaObecnie,
-      });
-    }
-
-    const nabywcaMialJuz = ulamekOsobyNaNumerze(stan, emisja.klucz, nabywcaId, nr);
-    if (!u.jestZero(nabywcaMialJuz)) {
-      zdejmij(stan, {
-        emisjaKlucz: emisja.klucz,
-        kategoria: K.AKCJONARIUSZ,
-        osobaId: nabywcaId,
-        zakresy: [{ nr_od: nr, nr_do: nr }],
-        data: zdarzenie.data_wpisu,
-        zdarzenieId: Number(zdarzenie.id),
-      });
-    }
-    otworz(stan, {
-      emisjaKlucz: emisja.klucz,
-      kategoria: K.AKCJONARIUSZ,
-      osobaId: nabywcaId,
-      zakresy: [{ nr_od: nr, nr_do: nr }],
-      data: zdarzenie.data_wpisu,
-      zdarzenieId: Number(zdarzenie.id),
-      tytul: d.tytul_prawny || 'przeniesienie ułamkowej części akcji',
-      czesc: u.suma(nabywcaMialJuz, czesc),
-      pokryta: pokrytaObecnie,
-    });
-  },
-
-  /** Wskazanie/zmiana wspolnego przedstawiciela wspoluprawnionych (art. 300(38) § 3 KSH). */
-  przedstawiciel(stan, zdarzenie, d) {
-    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
-    const nr = Number(d.nr);
-    const przedstawicielId = d.przedstawiciel_osoba_id == null ? null : Number(d.przedstawiciel_osoba_id);
-    const wiersze = otwarte(stan).filter(
-      (p) => p.emisja_klucz === emisja.klucz && p.kategoria === K.AKCJONARIUSZ && p.nr_od <= nr && nr <= p.nr_do
-    );
-    if (wiersze.length === 0) {
-      throw new BladStanu(
-        `Zdarzenie #${zdarzenie.id}: akcja nr ${nr} serii ${emisja.seria} nie ma obecnie żadnego uprawnionego.`
-      );
-    }
-    for (const w of wiersze) w.przedstawiciel_osoba_id = przedstawicielId;
-  },
-
-  /**
-   * Wzmianka o pokryciu (art. 300(33) § 1 pkt 9 KSH) - podstawa: uchwala
-   * zarzadu z art. 300(9) § 2 KSH. Zaliczana rownomiernie na wszystkie akcje
-   * akcjonariusza W TEJ EMISJI (art. 300(9) § 3 KSH) - stad zakres zdarzenia
-   * to (emisja, osoba), nie pojedynczy numer.
-   */
-  pokrycie_akcji(stan, zdarzenie, d) {
-    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
-    const osobaId = Number(d.osoba_id);
-    const wiersze = otwarte(stan).filter(
-      (p) => p.emisja_klucz === emisja.klucz && p.kategoria === K.AKCJONARIUSZ && Number(p.osoba_id) === osobaId
-    );
-    if (wiersze.length === 0) {
-      throw new BladStanu(
-        `Zdarzenie #${zdarzenie.id}: wskazany akcjonariusz nie posiada akcji emisji ${emisja.seria}.`
-      );
-    }
-    for (const w of wiersze) w.pokryta = d.pokryta;
-  },
-
-  // Ponizsze typy nie maja jeszcze kreatora (sprint 2), ale ich odtwarzanie
-  // jest potrzebne juz teraz: walidacje blokujace pytaja o obciazenia
-  // i ograniczenia, a kokpit ma dla nich sekcje.
-
-  obciazenie(stan, zdarzenie, d) {
-    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
-    stan.obciazenia.push({
-      klucz: Number(zdarzenie.id),
-      typ: d.typ_obciazenia || 'zastaw',
-      emisja_klucz: emisja.klucz,
-      seria: emisja.seria,
-      zakresy: n.normalizuj(d.zakresy),
-      osoba_id: d.osoba_id == null ? null : Number(d.osoba_id),
-      akcjonariusz_osoba_id: d.akcjonariusz_osoba_id == null ? null : Number(d.akcjonariusz_osoba_id),
-      prawo_glosu: d.prawo_glosu ? 1 : 0,
-      blokuje_rozporzadzanie: d.blokuje_rozporzadzanie ? 1 : 0,
-      opis: d.opis || null,
-      zdarzenie_ustanowienia_id: Number(zdarzenie.id),
-      data_od: zdarzenie.data_wpisu,
-      zdarzenie_wykreslenia_id: null,
-      data_do: null,
-    });
-  },
-
-  zajecie(stan, zdarzenie, d) {
-    const emisja = emisjaZeZdarzenia(stan, d, zdarzenie);
-    stan.obciazenia.push({
-      klucz: Number(zdarzenie.id),
-      typ: 'zajecie',
-      emisja_klucz: emisja.klucz,
-      seria: emisja.seria,
-      zakresy: n.normalizuj(d.zakresy),
-      osoba_id: d.osoba_id == null ? null : Number(d.osoba_id),
-      akcjonariusz_osoba_id: d.akcjonariusz_osoba_id == null ? null : Number(d.akcjonariusz_osoba_id),
-      prawo_glosu: 0,
-      // Zajecie z natury blokuje rozporzadzanie akcja.
-      blokuje_rozporzadzanie: 1,
-      opis: d.opis || null,
-      zdarzenie_ustanowienia_id: Number(zdarzenie.id),
-      data_od: zdarzenie.data_wpisu,
-      zdarzenie_wykreslenia_id: null,
-      data_do: null,
-    });
-  },
-
-  wykreslenie_obciazenia(stan, zdarzenie, d) {
-    zamknijObciazenie(stan, zdarzenie, d);
-  },
-
-  wykreslenie_zajecia(stan, zdarzenie, d) {
-    zamknijObciazenie(stan, zdarzenie, d);
-  },
-
-  /**
-   * Wpis o prawie glosu zastawnika/uzytkownika (art. 300(33) § 1 pkt 7 KSH).
-   * Zmienia atrybut ISTNIEJACEGO obciazenia - nie tworzy nowego rekordu.
-   *
-   * UPROSZCZENIE: `prawo_glosu` jest atrybutem BIEZACYM obciazenia, bez
-   * wlasnej osi czasu (w odroznieniu od `data_od`/`data_do` calego
-   * obciazenia). "Stan na dzien" z suwaka w kokpicie wiernie odtwarza SKLAD
-   * akcjonariatu i to, KTORE akcje sa obciazone - nie odtwarza historycznej
-   * wartosci samego prawa glosu sprzed jego zmiany. Uzasadnienie: to atrybut
-   * pomocniczy przy obciazeniu, nie fakt liczbowy wymagajacy odtwarzania
-   * wstecz jak stan posiadania akcji (regula domenowa nr 3).
-   */
-  prawo_glosu_zastawnika(stan, zdarzenie, d) {
-    const klucz = Number(d.obciazenie_zdarzenie_id);
-    const cel = stan.obciazenia.find((o) => o.klucz === klucz && o.data_do === null);
-    if (!cel) {
-      throw new BladStanu(
-        `Zdarzenie #${zdarzenie.id} dotyczy obciążenia, którego nie ma w rejestrze (zdarzenie #${klucz}).`
-      );
-    }
-    cel.prawo_glosu = d.prawo_glosu ? 1 : 0;
-  },
-
-  uprawnienie(stan, zdarzenie, d) {
-    if (d.wykresla_zdarzenie_id != null) {
-      const cel = stan.uprawnienia.find((u) => u.klucz === Number(d.wykresla_zdarzenie_id));
-      if (cel) {
-        cel.status = 'wykreslone';
-        cel.data_wykreslenia = zdarzenie.data_wpisu;
+  otwarcie(stan, z, d) {
+    if (stan.otwarty || stan.emisje.length > 0) throw new BladStanu('Rejestr tej spółki został już otwarty.');
+    stan.otwarty = true;
+    stan.data_otwarcia = czas.dzienLokalny(z.data_wpisu);
+    for (const s of d.serie) dodajEmisje(stan, s);
+    for (const a of d.akcjonariusze) {
+      for (const p of a.akcje) {
+        dodajPrzedzial(stan, { seria: p.seria, kategoria: K.AKCJONARIUSZ, osobaId: a.osoba_id, zakresy: p.zakresy, czesc: p.czesc }, z);
       }
-      return;
     }
-    stan.uprawnienia.push({
-      klucz: Number(zdarzenie.id),
-      rodzaj: d.rodzaj || 'uprawnienie',
-      zakres: d.zakres || 'spolka',
-      emisja_klucz: d.emisja_zdarzenie_id == null ? null : Number(d.emisja_zdarzenie_id),
-      osoba_id: d.osoba_id == null ? null : Number(d.osoba_id),
-      tytul: d.tytul || null,
-      tresc: d.tresc || null,
-      data_ustanowienia: zdarzenie.data_wpisu,
-      zdarzenie_id: Number(zdarzenie.id),
-      status: 'aktywne',
-      data_wykreslenia: null,
-    });
+    for (const m of d.umorzone || []) {
+      dodajPrzedzial(stan, { seria: m.seria, kategoria: K.UMORZONA, zakresy: m.zakresy, podstawa: m.podstawa }, z);
+    }
+    (d.atrybuty || []).forEach((a, i) => dodajAtrybut(stan, z, i, a));
   },
 
-  ograniczenie(stan, zdarzenie, d) {
-    if (d.wykresla_zdarzenie_id != null) {
-      const cel = stan.ograniczenia.find((o) => o.klucz === Number(d.wykresla_zdarzenie_id));
-      if (cel) {
-        cel.status = 'wykreslone';
-        cel.data_wykreslenia = zdarzenie.data_wpisu;
-      }
-      return;
+  emisja(stan, z, d) {
+    wymagajOtwartego(stan);
+    dodajEmisje(stan, d);
+    for (const o of d.obejmujacy) {
+      dodajPrzedzial(stan, { seria: d.seria, kategoria: K.AKCJONARIUSZ, osobaId: o.osoba_id, zakresy: o.zakresy }, z);
     }
-    stan.ograniczenia.push({
-      klucz: Number(zdarzenie.id),
-      zakres: d.zakres || 'wszystkie',
-      emisja_klucz: d.emisja_zdarzenie_id == null ? null : Number(d.emisja_zdarzenie_id),
-      zakresy: d.zakresy ? n.normalizuj(d.zakresy) : [],
-      wymaga_zgody_spolki: d.wymaga_zgody_spolki ? 1 : 0,
-      zgoda_termin_wskazania_dni: d.zgoda_termin_wskazania_dni ?? null,
-      zgoda_cena_opis: d.zgoda_cena_opis ?? null,
-      zgoda_termin_zaplaty_dni: d.zgoda_termin_zaplaty_dni ?? null,
-      tresc_postanowienia: d.tresc_postanowienia || null,
-      prawo_pierwszenstwa: d.prawo_pierwszenstwa ? 1 : 0,
-      opis: d.opis || null,
-      zdarzenie_id: Number(zdarzenie.id),
-      status: 'aktywne',
-      data_wykreslenia: null,
-    });
+    if (d.pokryte === false) {
+      dodajAtrybut(stan, z, 0, { rodzaj: 'niepokryte', akcje: [{ seria: d.seria, zakresy: [{ nr_od: d.nr_od, nr_do: d.nr_do }] }] });
+    }
+  },
+
+  przeniesienie(stan, z, d) {
+    wymagajOtwartego(stan);
+    const zbywca = Number(d.zbywca_osoba_id);
+    for (const nab of d.nabywcy) {
+      if (Number(nab.osoba_id) === zbywca) throw new BladStanu('Nabywca nie może być jednocześnie zbywcą.');
+      for (const p of nab.akcje) {
+        emisja(stan, p.seria);
+        if (p.czesc && !u.jestJeden(u.waliduj(p.czesc))) {
+          przeniesUlamek(stan, z, p.seria, p.zakresy[0].nr_od, zbywca, Number(nab.osoba_id), u.waliduj(p.czesc));
+          continue;
+        }
+        const cale = wierszeOsoby(stan, p.seria, zbywca).filter(caly);
+        const brak = n.roznica(p.zakresy, cale.map(zakres));
+        if (brak.length > 0) {
+          throw new BladStanu(
+            `Zbywca nie ma w całości akcji serii ${p.seria} nr ${n.opisz(brak)} — rozporządzenie ponad stan posiadania.`
+          );
+        }
+        wytnij(stan.przedzialy, cale, p.zakresy, z);
+        dodajPrzedzial(stan, { seria: p.seria, kategoria: K.AKCJONARIUSZ, osobaId: nab.osoba_id, zakresy: p.zakresy }, z);
+      }
+    }
+  },
+
+  umorzenie(stan, z, d) {
+    wymagajOtwartego(stan);
+    for (const p of d.akcje) {
+      wymagajIstniejacych(stan, p.seria, p.zakresy);
+      wytnij(stan.przedzialy, akcjonariusze(stan, p.seria), p.zakresy, z);
+      dodajPrzedzial(stan, { seria: p.seria, kategoria: K.UMORZONA, zakresy: p.zakresy, podstawa: d.podstawa }, z);
+      // Akcja przestaje istnieć — razem z obciążeniami i adnotacjami na niej.
+      wytnij(stan.atrybuty, otwarte(stan.atrybuty).filter((a) => a.seria === p.seria), p.zakresy, z);
+    }
+  },
+
+  obciazenie(stan, z, d) {
+    wymagajOtwartego(stan);
+    if (d.operacja === 'ustanowienie') {
+      dodajAtrybut(stan, z, 0, d);
+    } else if (d.operacja === 'zmiana_prawa_glosu') {
+      zmienAtrybut(stan, z, d, { prawo_glosu: d.prawo_glosu ? 1 : 0 });
+    } else {
+      zmienAtrybut(stan, z, d, null);
+    }
+  },
+
+  adnotacja(stan, z, d) {
+    wymagajOtwartego(stan);
+    if (d.operacja === 'dodanie') dodajAtrybut(stan, z, 0, d);
+    else zmienAtrybut(stan, z, d, null);
+  },
+
+  zamkniecie(stan, z, d) {
+    wymagajOtwartego(stan);
+    stan.otwarty = false;
+    stan.data_zamkniecia = czas.dzienLokalny(z.data_wpisu);
+    stan.powod_zamkniecia = d.powod;
   },
 };
 
-function zamknijObciazenie(stan, zdarzenie, d) {
-  const klucz = Number(d.obciazenie_zdarzenie_id);
-  const cel = stan.obciazenia.find((o) => o.klucz === klucz && o.data_do === null);
-  if (!cel) {
-    throw new BladStanu(
-      `Zdarzenie #${zdarzenie.id} wykreśla obciążenie, którego nie ma w rejestrze (zdarzenie #${klucz}).`
-    );
+/** Scala przyległe otwarte wiersze o identycznym pochodzeniu (ułamków nie scala). */
+function scal(lista, kluczFn) {
+  const zamkniete = lista.filter((p) => p.data_do !== null);
+  const grupy = new Map();
+  const pojedyncze = [];
+  for (const p of otwarte(lista)) {
+    const k = kluczFn(p);
+    if (k === null) {
+      pojedyncze.push(p);
+      continue;
+    }
+    if (!grupy.has(k)) grupy.set(k, []);
+    grupy.get(k).push(p);
   }
-  cel.data_do = zdarzenie.data_wpisu;
-  cel.zdarzenie_wykreslenia_id = Number(zdarzenie.id);
+  const wynik = [...zamkniete, ...pojedyncze];
+  for (const grupa of grupy.values()) {
+    for (const r of n.normalizuj(grupa.map(zakres))) wynik.push({ ...grupa[0], ...r });
+  }
+  return wynik;
 }
 
 /**
- * Typy, ktore nie zmieniaja struktur rejestru - trafiaja na os czasu.
- * `zmiana_danych_akcjonariusza` zmienia rekord `psa_osoby` (efekt uboczny
- * poza materializacja stanu akcji, patrz `rejestr.js`), ale samego stanu
- * akcji nie dotyka - stad tez trafia na os czasu bez skutku strukturalnego.
- */
-const TYPY_BEZ_SKUTKU = new Set([
-  'zmiana_danych_akcjonariusza',
-  'zmiana_danych_spolki',
-  'przekazanie_rejestru',
-  'przejecie',
-  'zobowiazanie',
-  'zdarzenie_inne',
-]);
-
-// ─────────────────────────────────────────────────────────────
-// Wejscie glowne
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Odtwarza pelny stan rejestru z listy zdarzen jednej spolki.
- *
- * Zdarzenia `sprostowanie` z tresc±a `zamiast` PODMIENIAJA tresc zdarzenia
- * prostowanego DOKLADNIE W JEGO POZYCJI chronologicznej - nie wstawiamy ich
- * osobno pod ich wlasnym ID. Dwa powody:
- *   1. klucz struktury, ktora tworzy zdarzenie (np. HANDLERY.emisja:
- *      `klucz: Number(zdarzenie.id)`), musi zostac STABILNY - pozniejsze
- *      zdarzenia (np. `objecie`) odwoluja sie do niego przez ID PIERWOTNEGO
- *      zdarzenia, nie sprostowania;
- *   2. zdarzenia miedzy oryginalem a sprostowaniem musza "widziec" juz skorygowana
- *      strukture, inaczej korekta przychodzi za pozno w kolejnosci przetwarzania.
- * Sprostowanie BEZ `zamiast` jest pelnym wycofaniem zdarzenia pierwotnego
- * (nie ma czym go zastapic). Nic nie jest kasowane - wszystkie zdarzenia
- * zostaja w lancuchu, samo sprostowanie trafia na os czasu.
+ * Odtwarza stan spółki z jej wpisów. Sprostowanie zastępuje treść wpisu dokładnie w jego miejscu
+ * w chronologii albo go wycofuje; przy kilku sprostowaniach jednego wpisu decyduje ostatnie.
  */
 function odtworzStan(zdarzenia) {
   const stan = pustyStan();
   const lista = [...(zdarzenia || [])].sort(porownajZdarzenia);
 
-  const podmiany = new Map(); // ID prostowanego zdarzenia -> { typ, tresc }
-  const wycofane = new Set(); // ID prostowanego zdarzenia bez tresci zastepczej
+  const sprostowania = new Map();
   for (const z of lista) {
-    if (z.typ !== 'sprostowanie' || z.zdarzenie_prostowane_id == null) continue;
-    const d = dane(z);
-    if (d.zamiast && d.zamiast.typ) {
-      podmiany.set(Number(z.zdarzenie_prostowane_id), { typ: d.zamiast.typ, tresc: d.zamiast });
-    } else {
-      wycofane.add(Number(z.zdarzenie_prostowane_id));
-    }
+    if (z.typ === 'sprostowanie') sprostowania.set(Number(z.zdarzenie_prostowane_id), { ...dane(z), sprostowanie_id: Number(z.id) });
   }
 
-  for (const zdarzenie of lista) {
-    const id = Number(zdarzenie.id);
-
-    if (zdarzenie.typ === 'sprostowanie') {
-      // Skutek (jesli jest) zostal juz zastosowany w miejscu zdarzenia
-      // prostowanego, powyzej - samo sprostowanie idzie tylko na os czasu.
-      stan.pozostale.push(zdarzenie);
+  for (const z of lista) {
+    const wpis = { id: Number(z.id), typ: z.typ, data_wpisu: z.data_wpisu, sprawa_id: z.sprawa_id ?? null };
+    if (z.typ === 'sprostowanie') {
+      stan.wpisy.push({ ...wpis, zdarzenie_prostowane_id: Number(z.zdarzenie_prostowane_id), tryb: dane(z).tryb });
       continue;
     }
-
-    if (wycofane.has(id)) {
-      stan.pozostale.push({ ...zdarzenie, pominiete: true, powod: 'wycofane sprostowaniem' });
+    const s = sprostowania.get(Number(z.id));
+    if (s && s.tryb === 'wycofaj') {
+      stan.wpisy.push({ ...wpis, wycofany: s.sprostowanie_id });
       continue;
     }
-
-    const podmiana = podmiany.get(id);
-    const typ = podmiana ? podmiana.typ : zdarzenie.typ;
-    const tresc = podmiana ? podmiana.tresc : dane(zdarzenie);
-
-    if (TYPY_BEZ_SKUTKU.has(typ)) {
-      stan.pozostale.push(zdarzenie);
-      continue;
-    }
-
-    const handler = HANDLERY[typ];
-    if (!handler) {
-      throw new BladStanu(`Nieznany typ zdarzenia „${typ}” (zdarzenie #${zdarzenie.id}).`);
-    }
-    handler(stan, zdarzenie, tresc);
+    const handler = HANDLERY[z.typ];
+    if (!handler) throw new BladStanu(`Nieznany typ wpisu „${z.typ}” (wpis #${z.id}).`);
+    handler(stan, z, s ? s.zamiast : dane(z));
+    stan.wpisy.push({ ...wpis, sprostowany: s ? s.sprostowanie_id : null });
   }
 
-  scal(stan);
+  stan.przedzialy = scal(stan.przedzialy, (p) =>
+    caly(p) ? [p.seria, p.kategoria, p.osoba_id, p.zdarzenie_od_id, p.podstawa].join('|') : null
+  );
+  stan.atrybuty = scal(stan.atrybuty, (a) =>
+    [a.zdarzenie_id, a.pozycja, a.seria, a.rodzaj, a.osoba_id, a.tresc, a.prawo_glosu, a.zdarzenie_od_id].join('|')
+  );
   return stan;
 }
 
-/**
- * Sprawdza regule domenowa nr 3: otwarte przedzialy kazdej serii pokrywaja
- * zakres emisji szczelnie i bez nakladania. Zwraca liste bledow (pusta = OK).
- */
+// ─────────────────────────────────────────────────────────────
+// Bilans (art. 300(31) § 2 KSH)
+// ─────────────────────────────────────────────────────────────
+
 function sprawdzBilans(stan) {
   const bledy = [];
-  for (const emisja of stan.emisje) {
-    const zakresEmisji = n.zakresEmisji(emisja);
-    const przedzialy = otwarte(stan).filter((p) => p.emisja_klucz === emisja.klucz);
-    const jako = (kat) =>
-      n.normalizuj(
-        przedzialy.filter((p) => p.kategoria === kat).map((p) => ({ nr_od: p.nr_od, nr_do: p.nr_do }))
-      );
+  for (const e of stan.emisje) {
+    const wiersze = otwarte(stan.przedzialy).filter((p) => p.seria === e.seria);
+    const akc = wiersze.filter((p) => p.kategoria === K.AKCJONARIUSZ);
+    const umorzone = n.normalizuj(wiersze.filter((p) => p.kategoria === K.UMORZONA).map(zakres));
+    const przypisane = n.normalizuj(akc.map(zakres));
 
-    const nieobjete = jako(K.NIEOBJETA);
-    const przypisane = jako(K.AKCJONARIUSZ);
-    const umorzone = jako(K.UMORZONA);
-    const uniewaznione = jako(K.UNIEWAZNIONA);
+    const oba = n.przeciecie(przypisane, umorzone);
+    if (oba.length > 0) bledy.push(`Seria ${e.seria}: akcje ${n.opisz(oba)} są jednocześnie przypisane i umorzone.`);
 
-    // Nakladanie sie kategorii - kazda para musi byc rozlaczna.
-    const pary = [
-      ['nieobjęte', nieobjete, 'przypisane akcjonariuszom', przypisane],
-      ['nieobjęte', nieobjete, 'umorzone', umorzone],
-      ['nieobjęte', nieobjete, 'unieważnione', uniewaznione],
-      ['przypisane akcjonariuszom', przypisane, 'umorzone', umorzone],
-      ['przypisane akcjonariuszom', przypisane, 'unieważnione', uniewaznione],
-      ['umorzone', umorzone, 'unieważnione', uniewaznione],
-    ];
-    for (const [nazwaA, a, nazwaB, b] of pary) {
-      const wspolne = n.przeciecie(a, b);
-      if (wspolne.length > 0) {
-        bledy.push(
-          `Seria ${emisja.seria}: akcje ${n.opisz(wspolne)} są jednocześnie ${nazwaA} i ${nazwaB}.`
-        );
-      }
-    }
-
-    // Nakladanie sie akcjonariuszy miedzy soba - DOZWOLONE wylacznie jako
-    // wspoluprawnienie do JEDNEGO numeru akcji, gdy ulamki wszystkich
-    // wspoluprawnionych sumuja sie dokladnie do 1 (regula domenowa 3 + 4a,
-    // art. 300(31) § 2 KSH). Zakres nakladania sie szerszy niz jeden numer
-    // jest zawsze bledem - poprawny wiersz ulamkowy obejmuje dokladnie jeden
-    // numer (CHECK w schemacie), wiec taki przypadek nie moze byc
-    // wspolwlasnoscia.
-    const wgOsoby = new Map();
-    for (const p of przedzialy.filter((p) => p.kategoria === K.AKCJONARIUSZ)) {
-      if (!wgOsoby.has(p.osoba_id)) wgOsoby.set(p.osoba_id, []);
-      wgOsoby.get(p.osoba_id).push({ nr_od: p.nr_od, nr_do: p.nr_do });
-    }
-    const osoby = [...wgOsoby.entries()];
-    const numeryDoSprawdzeniaUlamkow = new Set();
-    for (let i = 0; i < osoby.length; i += 1) {
-      for (let j = i + 1; j < osoby.length; j += 1) {
-        const wspolne = n.przeciecie(osoby[i][1], osoby[j][1]);
-        for (const w of wspolne) {
+    // Nakładanie wierszy akcjonariuszy dopuszczalne wyłącznie na pojedynczym numerze (ułamki).
+    const doSprawdzenia = new Set(akc.filter((p) => !caly(p)).map((p) => p.nr_od));
+    for (let i = 0; i < akc.length; i += 1) {
+      for (let j = i + 1; j < akc.length; j += 1) {
+        for (const w of n.przeciecie([zakres(akc[i])], [zakres(akc[j])])) {
           if (w.nr_od !== w.nr_do) {
-            bledy.push(
-              `Seria ${emisja.seria}: akcje ${n.opisz([w])} są przypisane jednocześnie dwóm akcjonariuszom ` +
-                `(osoby #${osoby[i][0]} i #${osoby[j][0]}) poza ramami dopuszczalnej współwłasności ` +
-                `(obejmuje więcej niż jeden numer akcji).`
-            );
+            bledy.push(`Seria ${e.seria}: akcje ${n.opisz([w])} są przypisane więcej niż jednemu akcjonariuszowi.`);
           } else {
-            numeryDoSprawdzeniaUlamkow.add(w.nr_od);
+            doSprawdzenia.add(w.nr_od);
           }
         }
       }
     }
-    for (const nr of numeryDoSprawdzeniaUlamkow) {
-      const wlasciciele = przedzialy.filter(
-        (p) => p.kategoria === K.AKCJONARIUSZ && p.nr_od <= nr && nr <= p.nr_do
-      );
-      let sumaUlamkow = u.ZERO;
-      for (const w of wlasciciele) {
-        sumaUlamkow = u.suma(sumaUlamkow, { licznik: w.czesc_licznik ?? 1, mianownik: w.czesc_mianownik ?? 1 });
-      }
-      if (!u.rowne(sumaUlamkow, u.JEDEN)) {
-        bledy.push(
-          `Seria ${emisja.seria}: suma ułamków współuprawnionych do akcji nr ${nr} wynosi ${u.opisz(sumaUlamkow)}, ` +
-            `a powinna wynosić dokładnie 1 (art. 300(31) § 2 KSH).`
-        );
+    for (const nr of doSprawdzenia) {
+      let suma = u.ZERO;
+      for (const p of akc) if (p.nr_od <= nr && nr <= p.nr_do) suma = u.suma(suma, czescWiersza(p));
+      if (!u.rowne(suma, u.JEDEN)) {
+        bledy.push(`Seria ${e.seria}: ułamki akcji nr ${nr} sumują się do ${u.opisz(suma)}, a powinny do całości.`);
       }
     }
 
-    // Szczelnosc pokrycia.
-    const razem = n.suma(n.suma(n.suma(nieobjete, przypisane), umorzone), uniewaznione);
-    const brakujace = n.roznica(zakresEmisji, razem);
-    if (brakujace.length > 0) {
-      bledy.push(
-        `Seria ${emisja.seria}: akcje ${n.opisz(brakujace)} wypadły z rejestru — ` +
-          `nie są ani nieobjęte, ani przypisane, ani umorzone, ani unieważnione.`
-      );
-    }
-    const nadmiarowe = n.roznica(razem, zakresEmisji);
-    if (nadmiarowe.length > 0) {
-      bledy.push(
-        `Seria ${emisja.seria}: akcje ${n.opisz(nadmiarowe)} są w rejestrze, ` +
-          `mimo że wykraczają poza zakres emisji ${n.opisz(zakresEmisji)}.`
-      );
-    }
-
-    // Kontrola liczbowa - art. 300(31) § 2 KSH.
-    const suma =
-      n.ilosc(nieobjete) + n.ilosc(przypisane) + n.ilosc(umorzone) + n.ilosc(uniewaznione);
-    if (suma !== emisja.ilosc) {
-      bledy.push(
-        `Seria ${emisja.seria}: suma akcji w rejestrze (${suma}) nie odpowiada liczbie wyemitowanych (${emisja.ilosc}).`
-      );
-    }
+    const razem = n.suma(przypisane, umorzone);
+    const brak = n.roznica([zakres(e)], razem);
+    if (brak.length > 0) bledy.push(`Seria ${e.seria}: akcje ${n.opisz(brak)} nie mają akcjonariusza.`);
+    const nadmiar = n.roznica(razem, [zakres(e)]);
+    if (nadmiar.length > 0) bledy.push(`Seria ${e.seria}: numery ${n.opisz(nadmiar)} wykraczają poza serię.`);
   }
   return bledy;
 }
 
 // ─────────────────────────────────────────────────────────────
-// Widoki stanu
+// R2 — kogo powiadomić przed wpisem (art. 300(34) § 3 KSH)
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Granica czasu filtra (D-R01): `RRRR-MM-DD` = koniec tego dnia (23:59:59
- * czasu kancelarii), chwila = ta chwila; wynik w UTC, porownywalny tekstowo
- * z `data_od`/`data_do` (znaczniki `data_wpisu`).
- */
-function granica(data) {
-  const t = String(data);
-  return czas.poprawnaData(t) ? czas.koniecDniaUtc(t) : czas.chwilaUtc(t);
+function mapaZakresow(wiersze) {
+  const m = new Map();
+  for (const w of wiersze) {
+    if (!m.has(w.seria)) m.set(w.seria, []);
+    m.get(w.seria).push(zakres(w));
+  }
+  for (const [k, v] of m) m.set(k, n.normalizuj(v));
+  return m;
 }
 
-/**
- * Przedzialy obowiazujace na dzien albo chwile `data`. `null` - bez filtra:
- * to, co jest otwarte w `stan`. Widoki (`widoki.widokStanu`) odtwarzaja stan
- * WYLACZNIE ze zdarzen wpisanych do zadanej chwili i wolaja z `null`, zeby
- * informacja na dzien D nie zalezala od tego, kiedy ja sporzadzono.
- */
-function przedzialyNaDzien(stan, data) {
-  if (data === null || data === undefined) return otwarte(stan);
-  const g = granica(data);
-  return stan.przedzialy.filter((p) => p.data_od <= g && (p.data_do === null || p.data_do > g));
+function roznicaMap(a, b) {
+  const wynik = new Map();
+  for (const [seria, zakresy] of a) {
+    const r = n.roznica(zakresy, b.get(seria) || []);
+    if (r.length > 0) wynik.set(seria, r);
+  }
+  return wynik;
 }
 
-/** Obciazenia obowiazujace na dzien albo chwile `data` (`null` = bez filtra). */
-function obciazeniaNaDzien(stan, data) {
-  if (data === null || data === undefined) return stan.obciazenia.filter((o) => o.data_do === null);
-  const g = granica(data);
-  return stan.obciazenia.filter((o) => o.data_od <= g && (o.data_do === null || o.data_do > g));
+function polaczMapy(a, b) {
+  const wynik = new Map(a);
+  for (const [seria, zakresy] of b) wynik.set(seria, n.suma(wynik.get(seria) || [], zakresy));
+  return wynik;
 }
 
-/**
- * Akcjonariat na dany dzien: pozycje pogrupowane po (osoba, emisja),
- * z zakresami numerow, iloscia i znacznikami obciazen.
- *
- * `procent` liczymy od ogolnej liczby akcji PRZYPISANYCH akcjonariuszom
- * (bez nieobjetych i umorzonych) - w P.S.A. akcje nie maja wartosci
- * nominalnej, wiec udzial wyraza sie liczba akcji, nie kapitalem.
- */
-function akcjonariatNaDzien(stan, data) {
-  const przedzialy = przedzialyNaDzien(stan, data).filter((p) => p.kategoria === K.AKCJONARIUSZ);
-  const obciazenia = obciazeniaNaDzien(stan, data);
-  const emisjeWgKlucza = new Map(stan.emisje.map((e) => [e.klucz, e]));
+function posiadacze(stan, mapa) {
+  const osoby = new Set();
+  for (const [seria, zakresy] of mapa) {
+    for (const p of akcjonariusze(stan, seria)) if (n.nakladaja([zakres(p)], zakresy)) osoby.add(p.osoba_id);
+  }
+  return osoby;
+}
 
-  const grupy = new Map();
-  for (const p of przedzialy) {
-    const klucz = `${p.osoba_id}|${p.emisja_klucz}`;
-    if (!grupy.has(klucz)) {
-      grupy.set(klucz, {
-        osoba_id: p.osoba_id,
-        emisja_klucz: p.emisja_klucz,
-        seria: emisjeWgKlucza.get(p.emisja_klucz)?.seria || null,
-        zakresy: [],
-        // Wiersze ulamkowe (czesc != 1/1) - surowe dane per numer, zeby
-        // warstwa prezentacji (sprint 6) mogla policzyc dokladny udzial bez
-        // odgadywania z samych zakresow. Domenowo wystarczy, ze sa QUERYOWALNE
-        // (regula domenowa 4a: "procent zaokraglany WYLACZNIE przy wyswietlaniu").
-        czesci_ulamkowe: [],
-        data_najstarszego_nabycia: p.data_od,
-        // Zdarzenie, ktore wpisalo NAJSTARSZY przedzial tej pozycji - do
-        // pokazania dokladnego momentu wpisu (D-050/B12, `psa_zdarzenia.data_wpisu`
-        // ma precyzje co do sekundy, `data_od` jest tylko DATA prawna).
-        zdarzenie_najstarszego_nabycia_id: p.zdarzenie_od_id,
-        // art. 300(33) § 1 pkt 9 KSH - wzmianka o pokryciu. Pozycja skleja
-        // kilka przedzialow, a te moga byc pokryte roznie, wiec zbieramy
-        // WSZYSTKIE napotkane wartosci i skladamy z nich jedna nizej.
-        pokrycia: new Set(),
-        wpisy: new Map(),
-      });
-    }
-    const g = grupy.get(klucz);
-    g.pokrycia.add(p.pokryta || null);
-    g.zakresy.push({ nr_od: p.nr_od, nr_do: p.nr_do });
-    // D-R03: dzien wpisu kazdego zakresu (strefa kancelarii) - zakresy
-    // scalamy tylko w obrebie tego samego dnia wpisu.
-    const dzien = czas.dzienLokalny(p.data_od);
-    if (!g.wpisy.has(dzien)) g.wpisy.set(dzien, []);
-    g.wpisy.get(dzien).push({ nr_od: p.nr_od, nr_do: p.nr_do });
-    if ((p.czesc_licznik ?? 1) !== (p.czesc_mianownik ?? 1)) {
-      g.czesci_ulamkowe.push({
-        nr: p.nr_od,
-        czesc_licznik: p.czesc_licznik,
-        czesc_mianownik: p.czesc_mianownik,
-        przedstawiciel_osoba_id: p.przedstawiciel_osoba_id ?? null,
-      });
-    }
-    if (p.data_od < g.data_najstarszego_nabycia) {
-      g.data_najstarszego_nabycia = p.data_od;
-      g.zdarzenie_najstarszego_nabycia_id = p.zdarzenie_od_id;
+function traciAkcje(przed, po, osobaId) {
+  const serie = new Set(otwarte(przed.przedzialy).filter((p) => p.osoba_id === osobaId).map((p) => p.seria));
+  for (const seria of serie) {
+    const wPrzed = wierszeOsoby(przed, seria, osobaId);
+    const wPo = wierszeOsoby(po, seria, osobaId);
+    const calePo = wPo.filter(caly).map(zakres);
+    if (n.roznica(wPrzed.filter(caly).map(zakres), calePo).length > 0) return true;
+    for (const p of wPrzed.filter((x) => !caly(x))) {
+      const ma = n.zawiera(calePo, [zakres(p)]) ? u.JEDEN : ulamekNaNumerze(po, seria, osobaId, p.nr_od);
+      if (u.mniejszy(ma, czescWiersza(p))) return true;
     }
   }
+  return false;
+}
 
-  // Naprawa Z-057: liczba akcji OGOLEM to liczba FIZYCZNYCH numerow w rekach
-  // jakiegokolwiek akcjonariusza - numer podzielony ulamkowo miedzy kilku
-  // wspoluprawnionych to WCIAZ JEDEN numer, nie jeden na kazdego z nich.
-  // Suma per-pozycja (dawny sposob) liczyla go tyle razy, ilu bylo
-  // wspoluprawnionych.
-  const razemZakresy = n.normalizuj(przedzialy.map((p) => ({ nr_od: p.nr_od, nr_do: p.nr_do })));
-  const razem = n.ilosc(razemZakresy);
+/**
+ * Osoby, które trzeba powiadomić przed wpisem: każdy, komu ubywa akcji albo części akcji;
+ * akcjonariusz, którego akcje zostają obciążone (zastaw, użytkowanie) albo z których prawo głosu
+ * przechodzi na uprawnionego z obciążenia; uprawniony z obciążenia wykreślanego albo tracący prawo
+ * głosu; akcjonariusz, któremu wykreśla się adnotację „uprawnienie”. Zajęcie i jego wykreślenie —
+ * bez powiadomień (art. 300(34) § 2–3 KSH). Wpis otwarcia stanu nikogo nie powiadamia.
+ */
+function ktoTraci(przed, po) {
+  if (!przed.otwarty && przed.emisje.length === 0) return [];
+  const wynik = new Set();
 
-  const pozycje = [...grupy.values()].map(({ pokrycia, wpisy, ...g }) => {
-    const zakresy = n.normalizuj(g.zakresy);
-    const grupyWpisu = [...wpisy.entries()]
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([dzien, z]) => ({ dzien_wpisu: dzien, zakresy: n.normalizuj(z) }));
-    // Jedna wartosc dla calej pozycji tylko wtedy, gdy wszystkie przedzialy
-    // sa zgodne. `null` znaczy NIEUSTALONE, a nie „niepokryte": brak uchwaly
-    // zarzadu z art. 300(9) § 2 KSH to nie to samo, co stwierdzenie, ze
-    // wkladu nie wniesiono. Dlatego mieszanka Z niewiadoma zostaje
-    // niewiadoma - „czesciowo" wolno powiedziec dopiero wtedy, gdy o KAZDEJ
-    // akcji cos wiadomo i wiadomosci sie roznia.
-    const zbior = [...pokrycia];
-    let pokryta = null;
-    if (zbior.length === 1) [pokryta] = zbior;
-    else if (!zbior.includes(null)) pokryta = 'czesciowo';
-    const moje = obciazenia
-      .filter((o) => o.emisja_klucz === g.emisja_klucz && n.nakladaja(o.zakresy, zakresy))
-      .map((o) => ({
-        typ: o.typ,
-        zakresy: n.przeciecie(o.zakresy, zakresy),
-        prawo_glosu: o.prawo_glosu,
-        blokuje_rozporzadzanie: o.blokuje_rozporzadzanie,
-        osoba_id: o.osoba_id,
-        opis: o.opis,
-      }));
+  for (const osoba of new Set(otwarte(przed.przedzialy).filter((p) => p.kategoria === K.AKCJONARIUSZ).map((p) => p.osoba_id))) {
+    if (traciAkcje(przed, po, osoba)) wynik.add(osoba);
+  }
 
-    // Naprawa Z-057: udzial WYMIERNY tej pozycji - cale numery licza sie
-    // jako 1/1 kazdy, numery ulamkowe DOKLADNIE tak, jak ulamek wskazuje
-    // (nie jako "1 numer", co dawniej zawyzalo i liczbe akcji, i procent
-    // udzialu kazdego wspoluprawnionego z osobna).
-    const calychNumerow = n.ilosc(zakresy) - g.czesci_ulamkowe.length;
-    let udzial = { licznik: calychNumerow, mianownik: 1 };
-    for (const fr of g.czesci_ulamkowe) {
-      udzial = u.suma(udzial, { licznik: fr.czesc_licznik, mianownik: fr.czesc_mianownik });
+  const tozsamosci = (rodzaje) => {
+    const t = new Map();
+    for (const a of [...otwarte(przed.atrybuty), ...otwarte(po.atrybuty)]) {
+      if (rodzaje.includes(a.rodzaj)) t.set(`${a.zdarzenie_id}.${a.pozycja}`, a);
     }
-    const udzialFloat = udzial.licznik / udzial.mianownik;
+    return t;
+  };
+  const zakresyAtrybutu = (stan, a, tylkoGlos) =>
+    mapaZakresow(
+      otwarte(stan.atrybuty).filter(
+        (x) => x.zdarzenie_id === a.zdarzenie_id && x.pozycja === a.pozycja && (!tylkoGlos || x.prawo_glosu === 1)
+      )
+    );
 
-    // Glosy (art. 300(23) § 1 w zw. z art. 300(38) § 3 KSH): akcja dzielona
-    // ulamkowo daje JEDEN glos, oddawany przez wspolnego przedstawiciela -
-    // tu wpada wylacznie, jesli TA pozycja jest tym przedstawicielem dla
-    // danego numeru (inny wspoluprawniony na tym samym numerze go nie
-    // dostaje - inaczej jeden podzielony numer dawalby kilka glosow).
-    // Brak wskazania przedstawiciela NIE odbiera glosu numerowi - oznacza
-    // wylacznie pozycje jako wymagajaca jego wskazania, zeby glos mial kto
-    // oddac (`wymaga_przedstawiciela` nizej).
-    const glosy =
-      calychNumerow +
-      g.czesci_ulamkowe.filter(
-        (fr) => fr.przedstawiciel_osoba_id != null && Number(fr.przedstawiciel_osoba_id) === Number(g.osoba_id)
-      ).length;
-    const wymagaPrzedstawiciela = g.czesci_ulamkowe.some((fr) => fr.przedstawiciel_osoba_id == null);
+  for (const a of tozsamosci(OBCIAZENIA_Z_UPRAWNIONYM).values()) {
+    const bP = zakresyAtrybutu(przed, a, false);
+    const aP = zakresyAtrybutu(po, a, false);
+    const bG = zakresyAtrybutu(przed, a, true);
+    const aG = zakresyAtrybutu(po, a, true);
+    for (const o of posiadacze(po, polaczMapy(roznicaMap(aP, bP), roznicaMap(aG, bG)))) wynik.add(o);
+    const utracone = polaczMapy(roznicaMap(bP, aP), roznicaMap(bG, aG));
+    if (utracone.size > 0 && a.osoba_id != null) wynik.add(a.osoba_id);
+  }
 
+  for (const a of tozsamosci(['uprawnienie']).values()) {
+    for (const o of posiadacze(przed, roznicaMap(zakresyAtrybutu(przed, a, false), zakresyAtrybutu(po, a, false)))) wynik.add(o);
+  }
+
+  return [...wynik].sort((x, y) => x - y);
+}
+
+// ─────────────────────────────────────────────────────────────
+// R5 — checklista wpisu
+// ─────────────────────────────────────────────────────────────
+
+const POZYCJE_CHECKLISTY = {
+  zadajacy: { etykieta: 'Żądający jest uprawniony', podstawa: 'art. 300³⁴ § 1 KSH' },
+  dokumenty: { etykieta: 'Dokumenty zbadane co do treści i formy', podstawa: 'art. 300³⁴ § 4–5 KSH' },
+  identyfikacja: { etykieta: 'Identyfikacja osób i AML — wykonano albo nie dotyczy', podstawa: 'praktyka kancelarii (U-06)' },
+  ograniczenie: { etykieta: 'Ograniczenie uwzględnione', podstawa: 'art. 300³⁴ § 6, art. 300³⁹ KSH' },
+  zgoda_spolki: { etykieta: 'Zgoda spółki na zbycie', podstawa: 'art. 300⁴⁰ § 1 KSH' },
+  zajecie: { etykieta: 'Zbycie dopuszczalne mimo zajęcia', podstawa: 'art. 300³⁴ § 2 KSH' },
+  prawo_glosu: { etykieta: 'Umowa spółki nie wyłącza prawa głosu', podstawa: 'art. 300²³ § 2 KSH' },
+};
+
+function rodzajeNaAkcjach(stan, akcje) {
+  const rodzaje = new Set();
+  for (const p of akcje || []) {
+    for (const a of otwarte(stan.atrybuty)) {
+      if (a.seria === p.seria && n.nakladaja([zakres(a)], p.zakresy)) rodzaje.add(a.rodzaj);
+    }
+  }
+  return rodzaje;
+}
+
+/**
+ * Pozycje checklisty: trzy stałe + wynikające z atrybutów akcji objętych operacją. Zbycie
+ * (przeniesienie) sprawdza ograniczenia, pokrycie i zajęcie; ustanowienie obciążenia —
+ * ograniczenia; przyznanie prawa głosu uprawnionemu z obciążenia — umowę spółki.
+ */
+function checklista(operacje, stanPrzed) {
+  const klucze = new Set(['zadajacy', 'dokumenty', 'identyfikacja']);
+  for (const opWe of operacje || []) {
+    const op = opWe.typ === 'sprostowanie' ? opWe.zamiast : opWe;
+    if (!op) continue;
+    if (op.typ === 'przeniesienie') {
+      const r = rodzajeNaAkcjach(stanPrzed, op.nabywcy.flatMap((x) => x.akcje));
+      if (r.has('ograniczenie')) klucze.add('ograniczenie');
+      if (r.has('niepokryte')) klucze.add('zgoda_spolki');
+      if (r.has('zajecie')) klucze.add('zajecie');
+    }
+    if (op.typ === 'obciazenie' && op.operacja === 'ustanowienie' && op.rodzaj !== 'zajecie') {
+      if (rodzajeNaAkcjach(stanPrzed, op.akcje).has('ograniczenie')) klucze.add('ograniczenie');
+    }
+    if (op.typ === 'obciazenie' && op.prawo_glosu && op.operacja !== 'wykreslenie') klucze.add('prawo_glosu');
+  }
+  return Object.keys(POZYCJE_CHECKLISTY)
+    .filter((k) => klucze.has(k))
+    .map((k) => ({ klucz: k, ...POZYCJE_CHECKLISTY[k] }));
+}
+
+// ─────────────────────────────────────────────────────────────
+// Widoki „stan na dzień” (U-22: dokładność do dnia)
+// ─────────────────────────────────────────────────────────────
+
+/** Wiersze obowiązujące na koniec dnia `dzien` (RRRR-MM-DD); null = stan bieżący. */
+function naDzien(lista, dzien) {
+  if (!dzien) return otwarte(lista);
+  const g = czas.koniecDniaUtc(dzien);
+  return lista.filter((p) => p.data_od <= g && (p.data_do === null || p.data_do > g));
+}
+
+/**
+ * Widok rejestru na dzień: serie (z numerami umorzonymi), akcjonariusze (pozycje według serii
+ * i dnia wpisu, ułamki osobno, pokrycie), obciążenia i adnotacje. Wywołujący odtwarza `stan`
+ * wyłącznie z wpisów dokonanych do końca tego dnia — widok nie zależy od chwili sporządzenia.
+ */
+function widok(stan, dzien = null) {
+  const przedzialy = naDzien(stan.przedzialy, dzien);
+  const atrybuty = naDzien(stan.atrybuty, dzien);
+  const niepokryte = mapaZakresow(atrybuty.filter((a) => a.rodzaj === 'niepokryte'));
+
+  const serie = stan.emisje.map((e) => ({
+    seria: e.seria,
+    zakresy: [zakres(e)],
+    liczba: e.nr_do - e.nr_od + 1,
+    data_wpisu_krs: e.data_wpisu_krs,
+    umorzone: n.normalizuj(przedzialy.filter((p) => p.seria === e.seria && p.kategoria === K.UMORZONA).map(zakres)),
+    uprzywilejowane: n.normalizuj(atrybuty.filter((a) => a.seria === e.seria && a.rodzaj === 'uprawnienie').map(zakres)),
+  }));
+
+  const grupy = new Map();
+  for (const p of przedzialy.filter((x) => x.kategoria === K.AKCJONARIUSZ)) {
+    const dzienWpisu = czas.dzienLokalny(p.data_od);
+    const k = caly(p) ? `${p.osoba_id}|${p.seria}|${dzienWpisu}` : `${p.osoba_id}|${p.seria}|${dzienWpisu}|${p.nr_od}`;
+    if (!grupy.has(k)) {
+      grupy.set(k, {
+        osoba_id: p.osoba_id,
+        seria: p.seria,
+        zakresy: [],
+        czesc: caly(p) ? null : czescWiersza(p),
+        data_wpisu: dzienWpisu,
+      });
+    }
+    grupy.get(k).zakresy.push(zakres(p));
+  }
+  const pozycje = [...grupy.values()].map((g) => {
+    const zakresy = n.normalizuj(g.zakresy);
     return {
       ...g,
       zakresy,
-      ilosc: udzialFloat,
-      // Ulamek dokladny (regula domenowa 4a - zadnych floatow do porownan
-      // ani przechowywania), do formatowania „X 1/3" zamiast lossy decimala.
-      udzial_ulamek: udzial,
-      glosy,
-      grupy_wpisu: grupyWpisu,
-      wymaga_przedstawiciela: wymagaPrzedstawiciela,
-      wspolwlasnosc: g.czesci_ulamkowe.length > 0,
-      pokryta,
-      obciazenia: moje,
+      liczba: n.ilosc(zakresy),
+      pokryte: !n.nakladaja(zakresy, niepokryte.get(g.seria) || []),
     };
   });
-
-  for (const p of pozycje) {
-    p.procent = razem === 0 ? 0 : (p.ilosc / razem) * 100;
-  }
-
-  // D-R06: wiersze tej samej osoby obok siebie (wiersz „Lacznie” zamyka
-  // osobe z kilkoma seriami) - osoby wg lacznej liczby akcji, w obrebie
-  // osoby wg serii.
-  const razemOsoby = new Map();
-  for (const p of pozycje) razemOsoby.set(p.osoba_id, (razemOsoby.get(p.osoba_id) || 0) + p.ilosc);
   pozycje.sort(
-    (a, b) =>
-      razemOsoby.get(b.osoba_id) - razemOsoby.get(a.osoba_id) ||
-      Number(a.osoba_id) - Number(b.osoba_id) ||
-      String(a.seria).localeCompare(String(b.seria), 'pl')
+    (a, b) => a.osoba_id - b.osoba_id || a.seria.localeCompare(b.seria, 'pl') || (a.zakresy[0].nr_od - b.zakresy[0].nr_od)
   );
-  return { pozycje, razem_akcji: razem };
-}
 
-/** Podsumowanie serii na dany dzien - do kontroli z art. 300(31) § 2 KSH. */
-function bilansNaDzien(stan, data) {
-  const przedzialy = przedzialyNaDzien(stan, data);
-  return stan.emisje.map((e) => {
-    const jako = (kat) =>
-      n.normalizuj(
-        przedzialy
-          .filter((p) => p.emisja_klucz === e.klucz && p.kategoria === kat)
-          .map((p) => ({ nr_od: p.nr_od, nr_do: p.nr_do }))
-      );
-    const nieobjete = jako(K.NIEOBJETA);
-    const przypisane = jako(K.AKCJONARIUSZ);
-    const umorzone = jako(K.UMORZONA);
-    const uniewaznione = jako(K.UNIEWAZNIONA);
-    return {
-      emisja_klucz: e.klucz,
-      seria: e.seria,
-      wyemitowane: e.ilosc,
-      nieobjete: n.ilosc(nieobjete),
-      nieobjete_zakresy: nieobjete,
-      przypisane: n.ilosc(przypisane),
-      umorzone: n.ilosc(umorzone),
-      umorzone_zakresy: umorzone,
-      uniewaznione: n.ilosc(uniewaznione),
-      uniewaznione_zakresy: uniewaznione,
-      // Akcje emisji, ktore NADAL ISTNIEJA. Kodeks nie zna pojecia „akcje
-      // w obrocie" — to reszta bilansowa: wyemitowane minus te, ktore byt
-      // prawny utracily. Umorzone i uniewaznione odejmuje sie tak samo,
-      // bo roznica miedzy nimi jest w PODSTAWIE (uchwala spolki wobec
-      // orzeczenia sadu), a nie w skutku dla liczby akcji.
-      w_obrocie: e.ilosc - n.ilosc(umorzone) - n.ilosc(uniewaznione),
-    };
-  });
+  const atrybutyWidok = [];
+  const grupyAtr = new Map();
+  for (const a of atrybuty) {
+    const k = [a.zdarzenie_id, a.pozycja, a.prawo_glosu, a.seria].join('|');
+    if (!grupyAtr.has(k)) {
+      const w = {
+        zdarzenie_id: a.zdarzenie_id,
+        pozycja: a.pozycja,
+        rodzaj: a.rodzaj,
+        seria: a.seria,
+        zakresy: [],
+        osoba_id: a.osoba_id,
+        tresc: a.tresc,
+        prawo_glosu: a.prawo_glosu === 1,
+        data_wpisu: czas.dzienLokalny(a.data_od),
+      };
+      grupyAtr.set(k, w);
+      atrybutyWidok.push(w);
+    }
+    grupyAtr.get(k).zakresy.push(zakres(a));
+  }
+  for (const a of atrybutyWidok) a.zakresy = n.normalizuj(a.zakresy);
+
+  return {
+    otwarty: stan.otwarty,
+    data_otwarcia: stan.data_otwarcia,
+    data_zamkniecia: stan.data_zamkniecia,
+    powod_zamkniecia: stan.powod_zamkniecia,
+    serie,
+    akcjonariusze: pozycje,
+    atrybuty: atrybutyWidok,
+  };
 }
 
 module.exports = {
   BladStanu,
+  K,
   odtworzStan,
   sprawdzBilans,
-  przedzialyNaDzien,
-  obciazeniaNaDzien,
-  akcjonariatNaDzien,
-  bilansNaDzien,
-  pula,
-  ulamekOsobyNaNumerze,
+  ktoTraci,
+  checklista,
+  widok,
   otwarte,
-  znajdzEmisje,
-  porownajZdarzenia,
-  KATEGORIE: K,
 };

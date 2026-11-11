@@ -1,818 +1,196 @@
 'use strict';
 
 /**
- * Serwis rejestru: zapis zdarzen i materializacja stanu.
+ * Rejestr: odczyt stanu, symulacja sprawy (stan przed i po) i wpis.
  *
- * Podzial odpowiedzialnosci:
- *   `logika/*`  - czysta domena, bez bazy (testowalna w izolacji),
- *   `rejestr.js`- transakcje, lancuch skrotow, materializacja,
- *   `trasy/*`   - HTTP.
- *
- * Regula domenowa nr 2: materializacje (`psa_emisje`, `psa_stan_akcji`,
- * `psa_obciazenia`, `psa_uprawnienia`, `psa_ograniczenia`) sa ODTWARZALNE
- * ze zdarzen w calosci. Kazdy zapis konczy sie pelnym przeliczeniem spolki -
- * nie ma osobnej sciezki "przyrostowej", ktora moglaby sie rozjechac
- * z odbudowa.
+ * R1 — jedna droga zapisu: do `psa_zdarzenia` dopisuje wyłącznie `wpisz`, wołana przez
+ * `sprawy.zmienStan(…, 'wpisana')` w jego transakcji. Kolejność: walidacje → wpisy wszystkich
+ * operacji sprawy → pełne odtworzenie stanu i materializacje → opłata (wybór U-02) → pisma
+ * „powiadomienie o wpisie” w stanie `do_wyslania`. Status sprawy ustawia `zmienStan`.
  */
 
+const czas = require('./pomocnicze/czas');
 const lancuch = require('./logika/lancuch');
 const stanLogika = require('./logika/stan');
 const walidacje = require('./logika/walidacje');
-const kreator = require('./logika/kreator');
-const typyZdarzen = require('./logika/typy-zdarzen');
+const typy = require('./logika/typy-zdarzen');
+const pisma = require('./logika/pisma');
 const przepisy = require('./logika/przepisy');
-const oplaty = require('./oplaty');
-const czas = require('./pomocnicze/czas');
+const daneRejestr = require('./dane/rejestr');
+const daneSpolki = require('./dane/spolki');
+const daneOsoby = require('./dane/osoby');
+const daneOplaty = require('./dane/oplaty');
 
-class BladWalidacji extends Error {
-  constructor(bledy, ostrzezenia = []) {
-    super(bledy.join(' '));
-    this.name = 'BladWalidacji';
-    this.bledy = bledy;
-    this.ostrzezenia = ostrzezenia;
-  }
+const { BladWalidacji } = walidacje;
+const BLEDY_STANU = ['BladStanu', 'BladUlamka', 'BladZakresu'];
+
+/** Stan spółki — bieżący albo na koniec dnia `dzien` (tylko wpisy dokonane do końca tego dnia). */
+function stanSpolki(db, spolkaId, dzien = null) {
+  const zdarzenia = dzien
+    ? daneRejestr.zdarzeniaDo(db, spolkaId, czas.koniecDniaUtc(dzien))
+    : daneRejestr.zdarzeniaSpolki(db, spolkaId);
+  return stanLogika.odtworzStan(zdarzenia);
 }
 
-// ─────────────────────────────────────────────────────────────
-// Odczyt
-// ─────────────────────────────────────────────────────────────
-
-function wczytajSpolke(db, spolkaId) {
-  return zReprezentantem(db, db.prepare('SELECT * FROM psa_spolki WHERE id = ?').get(spolkaId) || null);
+/** Operacja → zapis wpisu: typ, treść (bez typu) i wpis prostowany. Bez danych osobowych (R10). */
+function trescWpisu(op) {
+  const { typ, ...dane } = op;
+  if (typ !== 'sprostowanie') return { typ, dane, zdarzenieProstowaneId: null };
+  const { zdarzenie_id: prostowany, ...reszta } = dane;
+  return { typ, dane: reszta, zdarzenieProstowaneId: prostowany };
 }
 
 /**
- * D-101: reprezentant spółki z kartoteki — dane osobowe z `psa_osoby` (jedno źródło, AML raz); funkcja,
- * sposób reprezentacji, imiona rodziców i dokument przy podpisie — ze spółki. Bez osoby — dawne kolumny.
+ * Symuluje sprawę bez zapisu: treść wpisów, stan przed i po oraz błędy (przy polach i blokady R6:
+ * rejestr zamknięty, data emisji w KRS, PESEL, rozporządzenie ponad stan posiadania, bilans).
  */
-function zReprezentantem(db, spolka) {
-  if (!spolka || !spolka.reprezentant_osoba_id) return spolka;
-  const o = db.prepare('SELECT * FROM psa_osoby WHERE id = ?').get(spolka.reprezentant_osoba_id);
-  if (!o) return spolka;
-  return {
-    ...spolka,
-    reprezentant_imie_nazwisko: [o.imie, o.nazwisko].filter(Boolean).join(' ') || spolka.reprezentant_imie_nazwisko,
-    reprezentant_pesel: o.pesel || null,
-    reprezentant_plec: o.plec || spolka.reprezentant_plec,
-    reprezentant_kraj: o.kraj, reprezentant_kraj_kod: o.kraj_kod,
-    reprezentant_kod_pocztowy: o.kod_pocztowy, reprezentant_miejscowosc: o.miejscowosc,
-    reprezentant_ulica: o.ulica, reprezentant_nr_domu: o.nr_domu, reprezentant_nr_lokalu: o.nr_lokalu,
-    reprezentant_email: o.email || spolka.reprezentant_email,
-    reprezentant_aml_status: o.aml_status,
+function symuluj(db, sprawa, chwila = czas.terazUtc()) {
+  const zdarzenia = daneRejestr.zdarzeniaSpolki(db, sprawa.spolka_id);
+  const przed = stanLogika.odtworzStan(zdarzenia);
+  const spolka = daneSpolki.wczytaj(db, sprawa.spolka_id);
+  const zdarzenie = (id) => {
+    const z = daneRejestr.zdarzenie(db, id);
+    return z && z.spolka_id === spolka.id ? z : null;
   };
-}
-
-function wczytajZdarzenia(db, spolkaId) {
-  const wiersze = db
-    .prepare(
-      `SELECT * FROM psa_zdarzenia
-       WHERE spolka_id = ?
-       ORDER BY data_wpisu ASC, id ASC`
-    )
-    .all(spolkaId);
-  return wiersze.map((z) => ({ ...z, dane: JSON.parse(z.dane_json) }));
-}
-
-function wczytajOsoby(db, idki) {
-  const mapa = new Map();
-  const unikalne = [...new Set((idki || []).map(Number).filter(Number.isInteger))];
-  if (unikalne.length === 0) return mapa;
-  const znaki = unikalne.map(() => '?').join(',');
-  for (const o of db.prepare(`SELECT * FROM psa_osoby WHERE id IN (${znaki})`).all(...unikalne)) {
-    mapa.set(o.id, o);
+  const bledy = [];
+  const ostatni = zdarzenia[zdarzenia.length - 1];
+  if (ostatni && ostatni.data_wpisu > chwila) {
+    bledy.push({ komunikat: 'Zegar systemu wskazuje chwilę wcześniejszą niż ostatni wpis spółki — wpis wstrzymany (D-R01).' });
+    return { przed, po: null, operacje: null, bledy };
   }
-  return mapa;
-}
-
-/** Wszystkie osoby wystepujace w rejestrze spolki - do widokow i wydrukow. */
-function wczytajOsobySpolki(db, spolkaId) {
-  const idki = db
-    .prepare(
-      `SELECT DISTINCT osoba_id FROM psa_stan_akcji WHERE spolka_id = ? AND osoba_id IS NOT NULL
-       UNION
-       SELECT DISTINCT osoba_id FROM psa_obciazenia WHERE spolka_id = ? AND osoba_id IS NOT NULL
-       UNION
-       SELECT DISTINCT akcjonariusz_osoba_id FROM psa_obciazenia
-         WHERE spolka_id = ? AND akcjonariusz_osoba_id IS NOT NULL`
-    )
-    .all(spolkaId, spolkaId, spolkaId)
-    .map((r) => r.osoba_id);
-  return wczytajOsoby(db, idki);
-}
-
-// ─────────────────────────────────────────────────────────────
-// Zapis zdarzenia (lancuch skrotow)
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Dopisuje zdarzenie do lancucha. MUSI byc wywolane wewnatrz transakcji
- * IMMEDIATE - `id` wyliczamy jako MAX(id)+1, wiec rownolegly zapis musi byc
- * wykluczony. `hash` liczymy PRZED wstawieniem, bo rekordu zdarzenia nie
- * wolno pozniej aktualizowac (wyzwalacz append-only i tak by na to nie
- * pozwolil).
- *
- * D-R01: `data_wpisu` nadaje system (UTC, co do sekundy) - nie ma jej w
- * zadnym wejsciu API. `zdarzenie.chwila` to wewnetrzny parametr: zegar
- * wstrzykiwany w testach albo historyczna data rejestracji z KRN przy
- * migracji (wtedy `dane.migracja_krn` - objete skrotem - to oznacza).
- */
-function zapiszZdarzenie(db, zdarzenie) {
-  // D-31: ostatnia zapora - nic nie trafia do rejestru wykreslonej spolki
-  // ani rejestru przekazanego innemu podmiotowi.
-  const blokada = przepisy.blokadaWpisu(wczytajSpolke(db, zdarzenie.spolka_id));
-  if (blokada) throw new BladWalidacji([blokada]);
-
-  const poprzednie = db
-    .prepare('SELECT id, hash FROM psa_zdarzenia ORDER BY id DESC LIMIT 1')
-    .get();
-
-  const id = poprzednie ? Number(poprzednie.id) + 1 : 1;
-  const hashPoprzedni = poprzednie ? poprzednie.hash : lancuch.HASH_POCZATKOWY;
-
-  const rekord = {
-    id,
-    spolka_id: Number(zdarzenie.spolka_id),
-    typ: String(zdarzenie.typ),
-    data_wpisu: zdarzenie.chwila ? czas.chwilaUtc(zdarzenie.chwila) : czas.terazUtc(),
-    autor: lancuch.oczysc(zdarzenie.autor),
-    sprawa_id: zdarzenie.sprawa_id ?? null,
-    // D-Z: osoba dzialajaca (notariusz / zastepca) - kopia w tresci
-    // zdarzenia, objeta skrotem; wylacznie do audytu.
-    dane_json: lancuch.kanonicznyJson(
-      zdarzenie.dzialajacy ? { ...(zdarzenie.dane ?? {}), dzialajacy: zdarzenie.dzialajacy } : zdarzenie.dane ?? {}
-    ),
-    zdarzenie_prostowane_id: zdarzenie.zdarzenie_prostowane_id ?? null,
-    uzasadnienie: zdarzenie.uzasadnienie ?? null,
-    hash_poprzedni: hashPoprzedni,
-  };
-  rekord.hash = lancuch.skrot(rekord);
-
-  db.prepare(
-    `INSERT INTO psa_zdarzenia
-       (id, spolka_id, typ, data_wpisu, autor, sprawa_id, dane_json,
-        zdarzenie_prostowane_id, uzasadnienie, hash_poprzedni, hash)
-     VALUES
-       (@id, @spolka_id, @typ, @data_wpisu, @autor, @sprawa_id, @dane_json,
-        @zdarzenie_prostowane_id, @uzasadnienie, @hash_poprzedni, @hash)`
-  ).run(rekord);
-
-  return rekord;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Materializacja
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Odtwarza stan spolki ze zdarzen i przepisuje materializacje.
- * MUSI byc wywolane wewnatrz transakcji.
- *
- * @returns {{ niezgodnosci: string[] }} bledy bilansu, jesli w bazie sa juz
- *          dane niespojne (odbudowa ich nie ukrywa - raportuje).
- */
-function zmaterializuj(db, spolkaId) {
-  const zdarzenia = wczytajZdarzenia(db, spolkaId);
-  const stan = stanLogika.odtworzStan(zdarzenia);
-  const niezgodnosci = stanLogika.sprawdzBilans(stan);
-
-  // 1. Emisje - klucz stabilny: zdarzenie_id. Zachowujemy `psa_emisje.id`,
-  //    bo odwoluja sie do niego pozostale materializacje.
-  const istniejace = new Map(
-    db
-      .prepare('SELECT id, zdarzenie_id FROM psa_emisje WHERE spolka_id = ?')
-      .all(spolkaId)
-      .map((e) => [Number(e.zdarzenie_id), Number(e.id)])
-  );
-
-  // Materializacje zalezne kasujemy najpierw - wskazuja na psa_emisje.
-  db.prepare('DELETE FROM psa_stan_akcji WHERE spolka_id = ?').run(spolkaId);
-  db.prepare('DELETE FROM psa_obciazenia WHERE spolka_id = ?').run(spolkaId);
-  db.prepare('DELETE FROM psa_uprawnienia WHERE spolka_id = ?').run(spolkaId);
-  db.prepare('DELETE FROM psa_ograniczenia WHERE spolka_id = ?').run(spolkaId);
-
-  const idEmisji = new Map(); // klucz zdarzenia -> psa_emisje.id
-  const aktualne = new Set();
-
-  for (const e of stan.emisje) {
-    const wartosci = {
-      spolka_id: spolkaId,
-      zdarzenie_id: e.zdarzenie_id,
-      tytul: e.tytul,
-      podstawa_prawna: e.podstawa_prawna,
-      seria: e.seria,
-      nr_pierwszy: e.nr_pierwszy,
-      ilosc: e.ilosc,
-      cena_emisyjna_grosze: e.cena_emisyjna_grosze,
-      waluta: e.waluta,
-      data_emisji: e.data_emisji,
-      status: e.status,
-      opis: e.opis,
-      uwagi: e.uwagi,
-      data_wpisu_krs: e.data_wpisu_krs,
-      rodzaj_akcji: e.rodzaj_akcji,
-      obowiazki_wobec_spolki: e.obowiazki_wobec_spolki,
-    };
-    const istniejacyId = istniejace.get(Number(e.zdarzenie_id));
-    if (istniejacyId) {
-      db.prepare(
-        `UPDATE psa_emisje SET
-           tytul=@tytul, podstawa_prawna=@podstawa_prawna, seria=@seria,
-           nr_pierwszy=@nr_pierwszy, ilosc=@ilosc, cena_emisyjna_grosze=@cena_emisyjna_grosze,
-           waluta=@waluta, data_emisji=@data_emisji, status=@status, opis=@opis, uwagi=@uwagi,
-           data_wpisu_krs=@data_wpisu_krs, rodzaj_akcji=@rodzaj_akcji,
-           obowiazki_wobec_spolki=@obowiazki_wobec_spolki
-         WHERE id=@id`
-      ).run({ ...wartosci, id: istniejacyId });
-      idEmisji.set(e.klucz, istniejacyId);
-      aktualne.add(istniejacyId);
-    } else {
-      const wynik = db
-        .prepare(
-          `INSERT INTO psa_emisje
-             (spolka_id, zdarzenie_id, tytul, podstawa_prawna, seria, nr_pierwszy, ilosc,
-              cena_emisyjna_grosze, waluta, data_emisji, status, opis, uwagi,
-              data_wpisu_krs, rodzaj_akcji, obowiazki_wobec_spolki)
-           VALUES
-             (@spolka_id, @zdarzenie_id, @tytul, @podstawa_prawna, @seria, @nr_pierwszy, @ilosc,
-              @cena_emisyjna_grosze, @waluta, @data_emisji, @status, @opis, @uwagi,
-              @data_wpisu_krs, @rodzaj_akcji, @obowiazki_wobec_spolki)`
-        )
-        .run(wartosci);
-      idEmisji.set(e.klucz, Number(wynik.lastInsertRowid));
-      aktualne.add(Number(wynik.lastInsertRowid));
-    }
+  let operacje = null;
+  try {
+    operacje = walidacje.przygotuj(sprawa.operacje, { osoba: (id) => daneOsoby.wczytaj(db, id), zdarzenie, stan: przed });
+  } catch (e) {
+    if (e.name !== 'BladWalidacji') throw e;
+    bledy.push(...e.bledy);
   }
+  bledy.unshift(...walidacje.sprawdzSklad(sprawa.operacje, operacje, sprawa.zadajacy));
+  if (bledy.length > 0) return { przed, po: null, operacje: null, bledy };
 
-  // Emisje, ktorych juz nie ma w lancuchu (np. po sprostowaniu) - usuwamy.
-  for (const [, id] of istniejace) {
-    if (!aktualne.has(id)) db.prepare('DELETE FROM psa_emisje WHERE id = ?').run(id);
+  for (const k of walidacje.sprawdzBlokady(operacje, { stan: przed, spolka, dzisiaj: czas.dzisIso(), zdarzenie })) {
+    bledy.push({ komunikat: k });
   }
+  if (bledy.length > 0) return { przed, po: null, operacje, bledy };
 
-  // 2. Stan akcji.
-  const wstawStan = db.prepare(
-    `INSERT INTO psa_stan_akcji
-       (spolka_id, emisja_id, kategoria, osoba_id, nr_od, nr_do, ilosc, tytul_nabycia,
-        zdarzenie_od_id, data_od, zdarzenie_do_id, data_do,
-        czesc_licznik, czesc_mianownik, przedstawiciel_osoba_id, pokryta)
-     VALUES
-       (@spolka_id, @emisja_id, @kategoria, @osoba_id, @nr_od, @nr_do, @ilosc, @tytul_nabycia,
-        @zdarzenie_od_id, @data_od, @zdarzenie_do_id, @data_do,
-        @czesc_licznik, @czesc_mianownik, @przedstawiciel_osoba_id, @pokryta)`
-  );
-  for (const p of stan.przedzialy) {
-    wstawStan.run({
-      spolka_id: spolkaId,
-      emisja_id: idEmisji.get(p.emisja_klucz),
-      kategoria: p.kategoria,
-      osoba_id: p.osoba_id,
-      nr_od: p.nr_od,
-      nr_do: p.nr_do,
-      ilosc: p.nr_do - p.nr_od + 1,
-      tytul_nabycia: p.tytul_nabycia,
-      zdarzenie_od_id: p.zdarzenie_od_id,
-      data_od: p.data_od,
-      zdarzenie_do_id: p.zdarzenie_do_id,
-      data_do: p.data_do,
-      czesc_licznik: p.czesc_licznik ?? 1,
-      czesc_mianownik: p.czesc_mianownik ?? 1,
-      przedstawiciel_osoba_id: p.przedstawiciel_osoba_id ?? null,
-      pokryta: p.pokryta ?? null,
-    });
-  }
-
-  // 3. Obciazenia - w bazie trzymamy je rozbite na ciagle zakresy.
-  const wstawObciazenie = db.prepare(
-    `INSERT INTO psa_obciazenia
-       (spolka_id, typ, emisja_id, nr_od, nr_do, osoba_id, akcjonariusz_osoba_id, prawo_glosu,
-        blokuje_rozporzadzanie, opis, zdarzenie_ustanowienia_id, data_od,
-        zdarzenie_wykreslenia_id, data_do)
-     VALUES
-       (@spolka_id, @typ, @emisja_id, @nr_od, @nr_do, @osoba_id, @akcjonariusz_osoba_id, @prawo_glosu,
-        @blokuje_rozporzadzanie, @opis, @zdarzenie_ustanowienia_id, @data_od,
-        @zdarzenie_wykreslenia_id, @data_do)`
-  );
-  for (const o of stan.obciazenia) {
-    for (const z of o.zakresy) {
-      wstawObciazenie.run({
-        spolka_id: spolkaId,
-        typ: o.typ,
-        emisja_id: idEmisji.get(o.emisja_klucz),
-        nr_od: z.nr_od,
-        nr_do: z.nr_do,
-        osoba_id: o.osoba_id,
-        akcjonariusz_osoba_id: o.akcjonariusz_osoba_id,
-        prawo_glosu: o.prawo_glosu,
-        blokuje_rozporzadzanie: o.blokuje_rozporzadzanie,
-        opis: o.opis,
-        zdarzenie_ustanowienia_id: o.zdarzenie_ustanowienia_id,
-        data_od: o.data_od,
-        zdarzenie_wykreslenia_id: o.zdarzenie_wykreslenia_id,
-        data_do: o.data_do,
-      });
-    }
-  }
-
-  // 4. Uprawnienia i ograniczenia.
-  const wstawUprawnienie = db.prepare(
-    `INSERT INTO psa_uprawnienia
-       (spolka_id, rodzaj, zakres, emisja_id, osoba_id, tytul, tresc, data_ustanowienia,
-        zdarzenie_id, status, data_wykreslenia)
-     VALUES
-       (@spolka_id, @rodzaj, @zakres, @emisja_id, @osoba_id, @tytul, @tresc, @data_ustanowienia,
-        @zdarzenie_id, @status, @data_wykreslenia)`
-  );
-  for (const u of stan.uprawnienia) {
-    wstawUprawnienie.run({
-      spolka_id: spolkaId,
-      rodzaj: u.rodzaj,
-      zakres: u.zakres,
-      emisja_id: u.emisja_klucz == null ? null : idEmisji.get(u.emisja_klucz) ?? null,
-      osoba_id: u.osoba_id,
-      tytul: u.tytul,
-      tresc: u.tresc,
-      data_ustanowienia: u.data_ustanowienia,
-      zdarzenie_id: u.zdarzenie_id,
-      status: u.status,
-      data_wykreslenia: u.data_wykreslenia,
-    });
-  }
-
-  const wstawOgraniczenie = db.prepare(
-    `INSERT INTO psa_ograniczenia
-       (spolka_id, zakres, emisja_id, nr_od, nr_do, wymaga_zgody_spolki,
-        zgoda_termin_wskazania_dni, zgoda_cena_opis, zgoda_termin_zaplaty_dni,
-        tresc_postanowienia, prawo_pierwszenstwa, opis, zdarzenie_id, status, data_wykreslenia)
-     VALUES
-       (@spolka_id, @zakres, @emisja_id, @nr_od, @nr_do, @wymaga_zgody_spolki,
-        @zgoda_termin_wskazania_dni, @zgoda_cena_opis, @zgoda_termin_zaplaty_dni,
-        @tresc_postanowienia, @prawo_pierwszenstwa, @opis, @zdarzenie_id, @status, @data_wykreslenia)`
-  );
-  for (const o of stan.ograniczenia) {
-    const zakresy = o.zakresy && o.zakresy.length > 0 ? o.zakresy : [{ nr_od: null, nr_do: null }];
-    for (const z of zakresy) {
-      wstawOgraniczenie.run({
-        spolka_id: spolkaId,
-        zakres: o.zakres,
-        emisja_id: o.emisja_klucz == null ? null : idEmisji.get(o.emisja_klucz) ?? null,
-        nr_od: z.nr_od,
-        nr_do: z.nr_do,
-        wymaga_zgody_spolki: o.wymaga_zgody_spolki,
-        zgoda_termin_wskazania_dni: o.zgoda_termin_wskazania_dni ?? null,
-        zgoda_cena_opis: o.zgoda_cena_opis ?? null,
-        zgoda_termin_zaplaty_dni: o.zgoda_termin_zaplaty_dni ?? null,
-        tresc_postanowienia: o.tresc_postanowienia ?? null,
-        prawo_pierwszenstwa: o.prawo_pierwszenstwa,
-        opis: o.opis,
-        zdarzenie_id: o.zdarzenie_id,
-        status: o.status,
-        data_wykreslenia: o.data_wykreslenia,
-      });
-    }
-  }
-
-  return { niezgodnosci, stan };
-}
-
-// ─────────────────────────────────────────────────────────────
-// Kreator: podglad i wpis
-// ─────────────────────────────────────────────────────────────
-
-/**
- * D-R01 - chwila, z ktora zostanie dokonany wpis (UTC). Zawsze „teraz”;
- * `teraz` to wylacznie zegar wstrzykiwany w testach (trasy HTTP go nie
- * przekazuja), `migracjaKrn.data_rejestracji` - historyczna data rejestracji
- * w rejestrze KRN przy przejeciu rejestru (jedyny wyjatek, D-R08 pkt 5).
- */
-function chwilaWpisu({ teraz, migracjaKrn } = {}) {
-  if (migracjaKrn) {
-    const zrodlo = migracjaKrn.data_rejestracji;
-    if (!czas.poprawnaDataAlboChwila(zrodlo)) {
-      throw new BladWalidacji([
-        'Migracja z KRN wymaga daty (i godziny) rejestracji wpisu w KRN w formacie RRRR-MM-DD albo RRRR-MM-DDTGG:MM.',
-      ]);
-    }
-    return czas.chwilaUtc(zrodlo);
-  }
-  return teraz ? czas.chwilaUtc(teraz) : czas.terazUtc();
-}
-
-/**
- * D-R01: chwili wpisu nie da sie podac z zewnatrz ani antydatowac. Kazda
- * trasa zapisu przepuszcza cialo zadania przez te funkcje - pole z data
- * wpisu (albo dawna data zdarzenia) konczy sie odmowa, a nie cichym
- * zignorowaniem, zeby klient nie mial zludzenia, ze data zostala przyjeta.
- */
-const POLA_DATY_ZAKAZANE = ['data_wpisu', 'chwila', 'teraz', 'data_zdarzenia'];
-function odrzucRecznaDate(cialo) {
-  const podane = POLA_DATY_ZAKAZANE.filter((k) => cialo && Object.prototype.hasOwnProperty.call(cialo, k));
-  if (podane.length > 0) {
-    throw new BladWalidacji([
-      'Datę i godzinę wpisu nadaje system w chwili zatwierdzenia wpisu — nie można jej podać ani zmienić ' +
-        `(pole: ${podane.join(', ')}).`,
-    ]);
-  }
-}
-
-/**
- * Wpis migracyjny (historyczna data z KRN) wolno dopisac wylacznie do
- * rejestru, ktory zawiera same wpisy migracyjne - po pierwszym zwyklym
- * wpisie historii nie da sie juz „dosypac” (PRZEJECIE-REJESTRU.md, krok 9).
- */
-function sprawdzMigracjeKrn(db, spolkaId) {
-  const zwykle = wczytajZdarzenia(db, spolkaId).filter((z) => !(z.dane && z.dane.migracja_krn));
-  if (zwykle.length > 0) {
-    throw new BladWalidacji([
-      'Stan otwarcia z KRN można wprowadzić wyłącznie do rejestru, w którym nie dokonano jeszcze zwykłego wpisu.',
-    ]);
-  }
-}
-
-/**
- * Buduje tresc zdarzenia i sprawdza je wobec stanu rejestru - BEZ zapisu.
- * Zasila krok 4 kreatora (tabela przed/po, ostrzezenia, lista dokumentow).
- */
-function przygotujPodglad(db, { spolkaId, typ, wejscie, teraz, migracja_krn: migracjaKrn }) {
-  const spolka = wczytajSpolke(db, spolkaId);
-  const chwila = chwilaWpisu({ teraz, migracjaKrn });
-  if (!spolka) throw new BladWalidacji(['Nie odnaleziono spółki.']);
-
-  const zdarzenia = wczytajZdarzenia(db, spolkaId);
-  const stanPrzed = stanLogika.odtworzStan(zdarzenia);
-  // Zdarzenia odwolujace sie do istniejacego obciazenia (wykreslenie_*,
-  // prawo_glosu_zastawnika) niosa w wejsciu tylko `obciazenie_zdarzenie_id` -
-  // strony trzeba dociagnac ze stanu, inaczej `sprawdzOsoby` nie znajdzie ich
-  // w kartotece mimo ze sa poprawne (patrz kreator.dodatkoweOsobyZReferencji).
-  const osoby = wczytajOsoby(db, [
-    ...kreator.osobyWWejsciu(wejscie || {}),
-    ...kreator.dodatkoweOsobyZReferencji(stanPrzed, typ, wejscie || {}),
-  ]);
-
-  const przygotowane = kreator.przygotuj(stanPrzed, { typ, dane: wejscie }, { osoby, spolka });
-  const dane = migracjaKrn ? { ...przygotowane, migracja_krn: migracjaKrn } : przygotowane;
-
-  const wynik = walidacje.sprawdz({
-    zdarzenia,
-    propozycja: { typ, chwila, dane },
-    spolka,
-    osoby,
-  });
-
-  // D-107: zmiana danych akcjonariusza wpisuje się łącznie w rejestrach wszystkich spółek, w których osoba ma akcje.
-  if (typ === 'zmiana_danych_akcjonariusza' && dane && dane.osoba_id && wynik.dopuszczalne) {
-    const inne = inneSpolkiAkcjonariusza(db, dane.osoba_id, spolkaId);
-    if (inne.length) wynik.ostrzezenia = [...wynik.ostrzezenia, `Zmiana danych wpisze się łącznie także w rejestrach: ${inne.map((x) => x.nazwa).join(', ')}.`];
-  }
-
-  return { spolka, dane, osoby, zdarzenia, chwila, ...wynik };
-}
-
-/** D-107: spółki (poza wskazaną), w których osoba ma dziś akcje. */
-function inneSpolkiAkcjonariusza(db, osobaId, spolkaId) {
-  return db.prepare(
-    `SELECT DISTINCT s.id, s.nazwa FROM psa_stan_akcji sa JOIN psa_spolki s ON s.id = sa.spolka_id
-      WHERE sa.osoba_id = ? AND sa.data_do IS NULL AND sa.kategoria = 'akcjonariusz' AND s.id <> ?
-      ORDER BY s.nazwa COLLATE NOCASE`
-  ).all(osobaId, spolkaId);
-}
-
-/**
- * Rdzen wpisu: zdarzenie + pelne przeliczenie materializacji + (dla
- * `zmiana_danych_akcjonariusza`) zastosowanie zmiany do `psa_osoby`.
- *
- * ZAKLADA, ze jest wywolywana wewnatrz juz otwartej transakcji - wolno ja
- * zagniezdzac (np. `dokonajWpisuSprawy` otwiera JEDNA transakcje obejmujaca
- * ten wpis oraz aktualizacje stanu sprawy).
- */
-function _wykonajWpis(db, zlecenie) {
-  if (zlecenie.migracja_krn) sprawdzMigracjeKrn(db, zlecenie.spolkaId);
-  const podglad = przygotujPodglad(db, zlecenie);
-  if (!podglad.dopuszczalne) {
-    throw new BladWalidacji(podglad.bledy, podglad.ostrzezenia);
-  }
-
-  const zdarzenie = zapiszZdarzenie(db, {
-    spolka_id: zlecenie.spolkaId,
-    typ: zlecenie.typ,
-    chwila: podglad.chwila,
-    autor: zlecenie.autor,
-    dzialajacy: zlecenie.dzialajacy ?? null,
-    sprawa_id: zlecenie.sprawa_id ?? null,
-    dane: podglad.dane,
-    zdarzenie_prostowane_id: zlecenie.zdarzenie_prostowane_id ?? null,
-    uzasadnienie: zlecenie.uzasadnienie ?? null,
-  });
-
-  // D-107: zmiana danych akcjonariusza — ten sam wpis (przed → po) łącznie w rejestrach pozostałych spółek,
-  // w których osoba ma akcje; w tej samej transakcji i PRZED zmianą kartoteki (porównanie „przed” jest wspólne).
-  const laczne = [];
-  if (zlecenie.typ === 'zmiana_danych_akcjonariusza' && podglad.dane.po) {
-    for (const inna of inneSpolkiAkcjonariusza(db, podglad.dane.osoba_id, zlecenie.spolkaId)) {
-      const opis = `Wpis łączny ze zmianą danych w rejestrze spółki ${podglad.spolka.nazwa}${zlecenie.sprawa_id ? ` (sprawa #${zlecenie.sprawa_id})` : ''}.`;
-      const p2 = przygotujPodglad(db, { spolkaId: inna.id, typ: zlecenie.typ, wejscie: { ...zlecenie.wejscie, podstawa_opis: opis }, teraz: zlecenie.teraz });
-      if (!p2.dopuszczalne) throw new BladWalidacji(p2.bledy.map((b) => `${inna.nazwa}: ${b}`), p2.ostrzezenia);
-      zapiszZdarzenie(db, {
-        spolka_id: inna.id, typ: zlecenie.typ, chwila: p2.chwila, autor: zlecenie.autor,
-        dzialajacy: zlecenie.dzialajacy ?? null, sprawa_id: null, dane: p2.dane,
-      });
-      const { niezgodnosci: n2 } = zmaterializuj(db, inna.id);
-      if (n2.length > 0) throw new BladWalidacji(n2.map((k) => `${inna.nazwa} — bilans akcji: ${k}`));
-      db.prepare('UPDATE psa_spolki SET zaktualizowano = ? WHERE id = ?').run(czas.terazIso(), inna.id);
-      laczne.push(inna.nazwa);
-    }
-  }
-
-  // Zmiana danych akcjonariusza aktualizuje ZRODLO PRAWDY tych danych -
-  // kartoteke `psa_osoby` - jako efekt uboczny zapisu zdarzenia. Sama
-  // materializacja stanu akcji tego typu nie dotyczy (TYPY_BEZ_SKUTKU).
-  if (zlecenie.typ === 'zmiana_danych_akcjonariusza' && podglad.dane.po) {
-    const pola = Object.keys(podglad.dane.po);
-    db.prepare(
-      `UPDATE psa_osoby SET ${pola.map((k) => `${k} = @${k}`).join(', ')}, zaktualizowano = @zaktualizowano
-       WHERE id = @id`
-    ).run({ ...podglad.dane.po, zaktualizowano: czas.terazIso(), id: podglad.dane.osoba_id });
-  }
-
-  const { niezgodnosci } = zmaterializuj(db, zlecenie.spolkaId);
-  if (niezgodnosci.length > 0) {
-    // Nie powinno wystapic - walidacja sprawdza bilans przed zapisem.
-    // Jesli jednak wystapi, transakcja sie cofa i rejestr zostaje spojny.
-    throw new BladWalidacji(niezgodnosci.map((k) => `Bilans akcji: ${k}`));
-  }
-
-  db.prepare('UPDATE psa_spolki SET zaktualizowano = ? WHERE id = ?').run(
-    czas.terazIso(),
-    zlecenie.spolkaId
-  );
-
-  return {
-    zdarzenie,
-    ostrzezenia: laczne.length
-      ? [...podglad.ostrzezenia.filter((o) => !o.startsWith('Zmiana danych wpisze się łącznie')), `Wpis dokonano łącznie także w rejestrach: ${laczne.join(', ')}.`]
-      : podglad.ostrzezenia,
-    typ: typyZdarzen.typ(zlecenie.typ),
-  };
-}
-
-/**
- * Dokonuje wpisu: zdarzenie + pelne przeliczenie materializacji.
- * Cala operacja w jednej transakcji IMMEDIATE - albo rejestr zmienia sie
- * w calosci, albo wcale.
- */
-function dokonajWpisu(db, zlecenie) {
-  const transakcja = db.transaction(() => _wykonajWpis(db, zlecenie));
-  return transakcja.immediate();
-}
-
-/**
- * Podstawia w `wartosc` odwolania do zdarzen z TEJ SAMEJ partii otwarcia
- * rejestru (patrz `otworzRejestr`). Kreator nie zna ID emisji, dopoki nie
- * zostanie zapisana - zamiast liczby wysyla znacznik
- * `{ __odwolanie_do_partii: 'emisja-A' }`, ktory tu zamieniamy na prawdziwe
- * `zdarzenie.id` przydzielone przez baze chwile wczesniej, W TEJ SAMEJ
- * transakcji. Przechodzi rekurencyjnie tablice i obiekty - odwolanie moze
- * siedziec na dowolnej glebokosci (np. `dane.emisja_zdarzenie_id`).
- */
-function podstawKluczePartii(wartosc, idPartii) {
-  if (wartosc == null || typeof wartosc !== 'object') return wartosc;
-  if (Array.isArray(wartosc)) return wartosc.map((v) => podstawKluczePartii(v, idPartii));
-  if (typeof wartosc.__odwolanie_do_partii === 'string') {
-    const id = idPartii.get(wartosc.__odwolanie_do_partii);
-    if (id == null) {
-      throw new BladWalidacji([
-        `Zdarzenie odwołuje się do „${wartosc.__odwolanie_do_partii}” z tej samej partii otwarcia ` +
-          'rejestru, ale taki klucz tymczasowy nie występuje we wcześniejszych zdarzeniach.',
-      ]);
-    }
-    return id;
-  }
-  const wynik = {};
-  for (const [klucz, v] of Object.entries(wartosc)) wynik[klucz] = podstawKluczePartii(v, idPartii);
-  return wynik;
-}
-
-/**
- * Otwiera rejestr spolki: zapisuje KOMPLET zdarzen zalozycielskich (emisja,
- * objecie, opcjonalnie ograniczenie z umowy spolki) w JEDNEJ transakcji -
- * sesja 6, faza 3. Bez tego rejestr moglby utknac w polowicznym stanie
- * (np. emisja zapisana, objecie odrzucone przez bilans) - "otwarcie
- * rejestru" ma byc niepodzielne, tak jak pojedynczy wpis w `dokonajWpisu`.
- *
- * `_wykonajWpis` jest bezpieczna do zagniezdzania w juz otwartej transakcji
- * (patrz jej wlasny komentarz) - ten sam wzorzec, ktorym `dokonajWpisuSprawy`
- * laczy jeden wpis z dodatkowymi skutkami ubocznymi w jednej transakcji.
- *
- * Kazdy element `zdarzenia` moze niesc opcjonalny `klucz_tymczasowy` (np.
- * `"emisja-A"`) - kolejne zdarzenia w TEJ SAMEJ partii odwoluja sie do jego
- * prawdziwego ID przez `{ __odwolanie_do_partii: 'emisja-A' }` gdziekolwiek
- * w `dane` (patrz `podstawKluczePartii`).
- */
-function otworzRejestr(db, spolkaId, { zdarzenia, autor, teraz, dzialajacy, przejecie = null }) {
-  const transakcja = db.transaction(() => {
-    const idPartii = new Map();
-    const zapisane = [];
-    // W7.7 — rejestr przejęty: zdarzenie „PRZEJĘCIE” otwiera łańcuch SHA-256
-    // (stan na dzień przejęcia + skróty dokumentów źródłowych).
-    if (przejecie) {
-      if (wczytajZdarzenia(db, spolkaId).length > 0) {
-        throw new BladWalidacji(['Zdarzenie „PRZEJĘCIE” musi otwierać łańcuch — rejestr tej spółki ma już wpisy.']);
-      }
-      zapisane.push({ zdarzenie: zapiszZdarzenie(db, { spolka_id: spolkaId, typ: 'przejecie', autor, dzialajacy, dane: przejecie }) });
-    }
-    for (const z of zdarzenia) {
-      const wynik = _wykonajWpis(db, {
-        spolkaId,
-        typ: z.typ,
-        wejscie: podstawKluczePartii(z.dane, idPartii),
-        teraz,
-        autor,
-        dzialajacy,
-      });
-      if (z.klucz_tymczasowy) idPartii.set(z.klucz_tymczasowy, wynik.zdarzenie.id);
-      zapisane.push(wynik);
-    }
-    return zapisane;
-  });
-  return transakcja.immediate();
-}
-
-/**
- * Dokonuje wpisu w ramach WORKFLOW SPRAWY: sprawa musi byc w stanie
- * `weryfikacja`; po wpisie przechodzi do `wpisana` ze wskazaniem zdarzenia.
- * Typ zdarzenia jest ustalony przez sprawe (nie da sie go zmienic w locie).
- *
- * Generowanie i wysylka zawiadomien o wpisie NASTEPUJE POZA ta transakcja
- * (patrz `server/zawiadomienia.js`) - to operacja sieciowa (e-mail), ktora
- * nie moze trzymac otwartej transakcji SQLite i ktorej niepowodzenie nie
- * jest powodem do cofniecia juz dokonanego, wazneg wpisu (art. 300(34) § 7
- * KSH nakazuje powiadomienie jako obowiazek NASTEPCZY wobec wpisu).
- */
-function dokonajWpisuSprawy(db, { sprawaId, wejscie, autor, teraz, dzialajacy }) {
-  const transakcja = db.transaction(() => {
-    const sprawa = db.prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
-    if (!sprawa) throw new BladWalidacji(['Nie odnaleziono sprawy.']);
-    if (sprawa.stan !== 'weryfikacja') {
-      throw new BladWalidacji([
-        `Wpisu można dokonać wyłącznie ze stanu „weryfikacja” (sprawa jest w stanie „${sprawa.stan}”).`,
-      ]);
-    }
-
-    const wynik = _wykonajWpis(db, {
-      spolkaId: sprawa.spolka_id,
-      typ: sprawa.typ_zdarzenia,
-      wejscie,
-      autor,
-      teraz,
-      dzialajacy,
-      sprawa_id: sprawaId,
-    });
-
-    // art. 300(37) § 2 KSH - regula domenowa 13. Ustalamy raz, w chwili
-    // wpisu, zeby pozniejsza zmiana katalogu tytulow deklaratoryjnych nie
-    // przepisywala historii juz zalatwionych spraw.
-    const daneZdarzenia = JSON.parse(wynik.zdarzenie.dane_json || '{}');
-    const charakterWpisu = przepisy.charakterWpisu(sprawa.typ_zdarzenia, daneZdarzenia.tytul_prawny);
-
-    db.prepare(
-      `UPDATE psa_sprawy SET stan = 'wpisana', zdarzenie_id = @zid, charakter_wpisu = @charakter, zaktualizowano = @teraz WHERE id = @id`
-    ).run({ zid: wynik.zdarzenie.id, charakter: charakterWpisu, teraz: czas.terazIso(), id: sprawaId });
-
-    // Oplata za wpis (sekcja 1 i 8) - wylacznie dla typow odplatnych
-    // (zajecie/wykreslenie zajecia sa wolne od oplat z mocy art. 300(34) § 2
-    // KSH - `typ.odplatne` juz to koduje w katalogu). Sciezka bezposrednia
-    // `dokonajWpisu` (migracja "stan otwarcia") celowo NIE przechodzi tedy -
-    // wpisywanie historycznego stanu nie jest biezaca czynnoscia odplatna.
-    //
-    // Sprawa zgloszona przez portal MA JUZ naliczona oplate — powstala razem
-    // z zadaniem i to jej zaplata uruchomila sprawe. Drugie naliczenie
-    // kazaloby klientowi zaplacic dwa razy za ten sam wpis.
-    const juzNaliczona = db
-      .prepare(
-        `SELECT id FROM psa_oplaty
-          WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana' LIMIT 1`
-      )
-      .get(sprawaId);
-
-    let naliczonaOplata = null;
-    if (wynik.typ.odplatne && !juzNaliczona) {
-      naliczonaOplata = oplaty.naliczOplateWpisu(db, {
-        spolkaId: sprawa.spolka_id,
-        sprawaId,
-        typZdarzenia: wynik.typ.nazwa,
-        autor,
-      });
-    } else if (juzNaliczona) {
-      naliczonaOplata = oplaty.wczytaj(db, juzNaliczona.id);
-    }
-
+  const pierwszeId = daneRejestr.ostatnieId(db) + 1;
+  const symulowane = operacje.map((op, i) => {
+    const t = trescWpisu(op);
     return {
-      sprawa: { ...sprawa, stan: 'wpisana', zdarzenie_id: wynik.zdarzenie.id, charakter_wpisu: charakterWpisu },
-      wynik,
-      oplata: naliczonaOplata,
+      id: pierwszeId + i,
+      spolka_id: spolka.id,
+      typ: t.typ,
+      data_wpisu: chwila,
+      sprawa_id: sprawa.id,
+      dane: t.dane,
+      zdarzenie_prostowane_id: t.zdarzenieProstowaneId,
     };
   });
+  let po = null;
+  try {
+    po = stanLogika.odtworzStan([...zdarzenia, ...symulowane]);
+    for (const k of stanLogika.sprawdzBilans(po)) bledy.push({ komunikat: k });
+  } catch (e) {
+    if (!BLEDY_STANU.includes(e.name)) throw e;
+    bledy.push({ komunikat: e.message });
+  }
+  return { przed, po: bledy.length ? null : po, operacje, bledy };
+}
 
-  return transakcja.immediate();
+/** R2: osoby do powiadomienia — wyliczone z porównania stanu i dopisane przez pracownika. */
+function doPowiadomienia(sprawa, sym) {
+  const wyliczone = sym.po ? stanLogika.ktoTraci(sym.przed, sym.po) : [];
+  const dopisane = (sprawa.dopisane || []).map(Number).filter((id) => !wyliczone.includes(id));
+  return { wyliczone, dopisane, wszystkie: [...wyliczone, ...dopisane] };
+}
+
+const maZgode = (sprawa, osobaId) => (sprawa.zgody || []).some((z) => z.osoba_id === Number(osobaId));
+
+/** Warunki wpisu ponad symulację: checklista (R5), wybór opłaty (U-02), powiadomienia (R2). */
+function wymaganiaWpisu(db, sprawa, sym) {
+  const bledy = [];
+  const brak = stanLogika.checklista(sym.operacje, sym.przed).filter((p) => !(sprawa.checklista || {})[p.klucz]);
+  if (brak.length > 0) bledy.push({ pole: 'checklista', komunikat: `Odhacz checklistę: ${brak.map((p) => p.etykieta).join('; ')}.` });
+
+  const odplatna = sym.operacje.some((op) => typy.odplatna(op));
+  if (odplatna && !['tak', 'nie'].includes(sprawa.oplata)) {
+    bledy.push({ pole: 'oplata', komunikat: 'Wybierz: opłata 100 zł netto albo bez opłaty.' });
+  }
+  if (!odplatna && sprawa.oplata === 'tak') bledy.push({ pole: 'oplata', komunikat: 'Ta sprawa nie podlega opłacie.' });
+
+  for (const id of doPowiadomienia(sprawa, sym).wszystkie) {
+    if (maZgode(sprawa, id) || pisma.powiadomienieWyslane(db, sprawa.id, id)) continue;
+    const o = daneOsoby.wczytaj(db, id);
+    bledy.push({ pole: 'osoby', komunikat: `Brak wysłanego powiadomienia o zamierzonym wpisie albo zgody na wpis: ${o ? o.nazwa : `osoba #${id}`}.` });
+  }
+  return bledy;
+}
+
+/** Adresat pism sprawy (powiadomienie o wpisie, o odmowie, wezwanie) — żądający. */
+function adresatZadajacy(sprawa) {
+  if (sprawa.zadajacy === 'osoba') return { adresat: 'osoba', adresat_osoba_id: sprawa.zadajacy_osoba_id };
+  if (sprawa.zadajacy === 'spolka') return { adresat: 'spolka' };
+  if (sprawa.zadajacy === 'organ') return { adresat: 'organ', adresat_opis: sprawa.zadajacy_opis };
+  return null;
 }
 
 /**
- * Sprostowanie wczesniejszego zdarzenia (regula domenowa nr 1 - jedyna droga
- * korekty). `zamiast` (opcjonalne) niesie skorygowana tresc - patrz
- * `kreator.przygotujSprostowanie`.
+ * Wpis sprawy (R1). Wołana wyłącznie przez `sprawy.zmienStan` w jego transakcji — sama nie zmienia
+ * stanu sprawy. Zwraca zapisane wpisy.
  */
-function dokonajSprostowania(db, { zdarzeniePierwotneId, uzasadnienie, zamiast, autor, teraz, dzialajacy }) {
-  const transakcja = db.transaction(() => {
-    const pierwotne = db.prepare('SELECT * FROM psa_zdarzenia WHERE id = ?').get(zdarzeniePierwotneId);
-    if (!pierwotne) throw new BladWalidacji(['Nie odnaleziono zdarzenia do sprostowania.']);
-    if (pierwotne.typ === 'sprostowanie') {
-      throw new BladWalidacji(['Nie prostuje się zdarzenia będącego sprostowaniem — wskaż zdarzenie źródłowe.']);
-    }
-    const jużSprostowane = db
-      .prepare('SELECT id FROM psa_zdarzenia WHERE zdarzenie_prostowane_id = ?')
-      .get(zdarzeniePierwotneId);
-    if (jużSprostowane) {
-      throw new BladWalidacji([`To zdarzenie zostało już sprostowane zdarzeniem #${jużSprostowane.id}.`]);
-    }
-    if (!uzasadnienie || !String(uzasadnienie).trim()) {
-      throw new BladWalidacji(['Sprostowanie wymaga uzasadnienia wskazującego, na czym polegała pomyłka.']);
-    }
+function wpisz(db, sprawa, kto) {
+  const chwila = czas.terazUtc();
+  const sym = symuluj(db, sprawa, chwila);
+  const bledy = [...sym.bledy];
+  if (bledy.length === 0) bledy.push(...wymaganiaWpisu(db, sprawa, sym));
+  if (bledy.length > 0) throw new BladWalidacji(bledy);
 
-    const spolkaId = pierwotne.spolka_id;
-    const spolka = wczytajSpolke(db, spolkaId);
-    const zdarzenia = wczytajZdarzenia(db, spolkaId);
-    const chwila = chwilaWpisu({ teraz });
-
-    const osoby = wczytajOsoby(
-      db,
-      zamiast ? kreator.osobyWWejsciu(zamiast.dane || {}) : []
-    );
-
-    const { dane } = kreator.przygotujSprostowanie(
-      { zdarzenia, zdarzeniePierwotneId, uzasadnienie, zamiast },
-      { osoby }
-    );
-
-    const propozycja = {
-      typ: 'sprostowanie',
+  const zapisane = sym.operacje.map((op) => {
+    const t = trescWpisu(op);
+    return daneRejestr.dopiszZdarzenie(db, {
+      spolkaId: sprawa.spolka_id,
+      typ: t.typ,
       chwila,
-      dane,
-      zdarzenie_prostowane_id: zdarzeniePierwotneId,
-    };
-    const wynikWalidacji = walidacje.sprawdz({ zdarzenia, propozycja, spolka, osoby });
-    if (!wynikWalidacji.dopuszczalne) {
-      throw new BladWalidacji(wynikWalidacji.bledy, wynikWalidacji.ostrzezenia);
-    }
-
-    const zdarzenie = zapiszZdarzenie(db, {
-      spolka_id: spolkaId,
-      typ: 'sprostowanie',
-      chwila,
-      autor,
-      dzialajacy: dzialajacy ?? null,
-      dane,
-      zdarzenie_prostowane_id: zdarzeniePierwotneId,
-      uzasadnienie,
+      autor: kto,
+      sprawaId: sprawa.id,
+      dane: t.dane,
+      zdarzenieProstowaneId: t.zdarzenieProstowaneId,
+      uzasadnienie: t.typ === 'sprostowanie' ? sprawa.podstawa || null : null,
     });
-
-    const { niezgodnosci } = zmaterializuj(db, spolkaId);
-    if (niezgodnosci.length > 0) {
-      throw new BladWalidacji(niezgodnosci.map((k) => `Bilans akcji: ${k}`));
-    }
-    db.prepare('UPDATE psa_spolki SET zaktualizowano = ? WHERE id = ?').run(czas.terazIso(), spolkaId);
-
-    return { zdarzenie, ostrzezenia: wynikWalidacji.ostrzezenia };
   });
 
-  return transakcja.immediate();
+  const po = stanSpolki(db, sprawa.spolka_id);
+  const bilans = stanLogika.sprawdzBilans(po);
+  if (bilans.length > 0) throw new BladWalidacji(bilans);
+  daneRejestr.zapiszMaterializacje(db, sprawa.spolka_id, po);
+
+  if (sprawa.oplata === 'tak') {
+    daneOplaty.dodaj(db, {
+      spolka_id: sprawa.spolka_id,
+      typ: 'wpis',
+      platnik: sprawa.zadajacy === 'osoba' ? 'osoba' : 'spolka',
+      platnik_osoba_id: sprawa.zadajacy === 'osoba' ? sprawa.zadajacy_osoba_id : null,
+      sprawa_id: sprawa.id,
+      kwota_netto_grosze: przepisy.STAWKI_GROSZE.WPIS,
+      stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
+      autor: kto,
+    });
+  }
+
+  // Niewysłane powiadomienia o zamierzonym wpisie nie są już potrzebne.
+  pisma.usunNiewyslane(db, { sprawaId: sprawa.id, typ: 'powiadomienie_zamierzony' });
+  // art. 300(34) § 7 KSH: o dokonanym wpisie — żądający i spółka.
+  const dane = { stanPo: po, operacje: sym.operacje, chwila };
+  const wspolne = { spolka_id: sprawa.spolka_id, sprawa_id: sprawa.id, dane, autor: kto };
+  pisma.utworz(db, 'powiadomienie_wpis', { ...wspolne, adresat: 'spolka' });
+  const zadajacy = adresatZadajacy(sprawa);
+  if (zadajacy && zadajacy.adresat !== 'spolka') pisma.utworz(db, 'powiadomienie_wpis', { ...wspolne, ...zadajacy });
+  return zapisane;
 }
 
-/** Pelna odbudowa materializacji ze zdarzen (endpoint `/przelicz`). */
-function przelicz(db, spolkaId) {
-  const transakcja = db.transaction(() => zmaterializuj(db, spolkaId));
-  const { niezgodnosci } = transakcja.immediate();
-  return { niezgodnosci };
-}
-
-/** Weryfikacja calego lancucha skrotow (endpoint `/integralnosc`). */
+/** U-20: kontrola integralności całego łańcucha — na żądanie. */
 function zweryfikujIntegralnosc(db) {
-  const zdarzenia = db.prepare('SELECT * FROM psa_zdarzenia ORDER BY id ASC').all();
-  return lancuch.zweryfikuj(zdarzenia);
+  return lancuch.zweryfikuj(daneRejestr.wszystkieZdarzenia(db));
 }
 
-module.exports = {
-  zReprezentantem,
-  odrzucRecznaDate,
-  BladWalidacji,
-  wczytajSpolke,
-  wczytajZdarzenia,
-  wczytajOsoby,
-  wczytajOsobySpolki,
-  zapiszZdarzenie,
-  zmaterializuj,
-  przygotujPodglad,
-  dokonajWpisu,
-  otworzRejestr,
-  dokonajWpisuSprawy,
-  dokonajSprostowania,
-  przelicz,
-  zweryfikujIntegralnosc,
-};
+module.exports = { stanSpolki, symuluj, doPowiadomienia, maZgode, wymaganiaWpisu, adresatZadajacy, wpisz, zweryfikujIntegralnosc };

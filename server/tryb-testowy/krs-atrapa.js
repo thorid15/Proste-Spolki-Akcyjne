@@ -2,7 +2,7 @@
 
 /**
  * Atrapa Otwartego API KRS (T3) — wylacznie dla numerow z danych testowych.
- * Kazdy inny numer idzie do prawdziwego API (`server/trasy/krs.js`).
+ * Kazdy inny numer idzie do prawdziwego API (`server/krs.js`).
  *
  * Odpowiedz ma ksztalt surowego odpisu (`OdpisAktualny`), wiec przechodzi
  * przez ten sam mapper (`zmapuj`) co odpowiedz prawdziwa. Dane fikcyjne.
@@ -62,6 +62,23 @@ const ODPISY = {
     ulica: 'UL. TESTOWA', nrDomu: '3', kod: '80-003', miasto: 'SOPOT', rejestracja: '01.06.2026',
     kapital: '100,00', akcje: 100, seria: 'A', zarzad: [['GAMMOWSKI', 'GRZEGORZ']],
   }),
+  // Spółka spoza rejestru i bez wniosku — do scenariuszy zgłoszenia od zera.
+  '0000990004': odpis({
+    krs: '0000990004', nazwa: 'DELTA NOWA PROSTA SPÓŁKA AKCYJNA', regon: '000000003', nip: '0000000003',
+    ulica: 'UL. NOWA', nrDomu: '4', kod: '80-004', miasto: 'GDYNIA', rejestracja: '10.02.2026',
+    kapital: '100,00', akcje: 100, seria: 'A', zarzad: [['DELTOWSKA', 'DOROTA']],
+  }),
+  // test:seed — wniosek roboczy (formularz w portalu) i wniosek z przejęciem rejestru.
+  '0000990005': odpis({
+    krs: '0000990005', nazwa: 'EPSILON FORMULARZOWA PROSTA SPÓŁKA AKCYJNA', regon: '000000004', nip: '0000000004',
+    ulica: 'UL. FORMULARZOWA', nrDomu: '5', kod: '80-005', miasto: 'GDAŃSK', rejestracja: '05.05.2026',
+    kapital: '100,00', akcje: 100, seria: 'A', zarzad: [['EPSILONOWSKA', 'EWA']],
+  }),
+  '0000990006': odpis({
+    krs: '0000990006', nazwa: 'THETA PRZEJMOWANA PROSTA SPÓŁKA AKCYJNA', regon: '000000005', nip: '0000000005',
+    ulica: 'UL. PRZEJMOWANA', nrDomu: '6', kod: '81-006', miasto: 'GDYNIA', rejestracja: '20.08.2025',
+    kapital: '1000,00', akcje: 1000, seria: 'A', zarzad: [['THETOWSKI', 'TOMASZ']],
+  }),
 };
 
 /** Odpowiedz w ksztalcie `fetch` (Response) albo `null` — numer spoza atrapy. */
@@ -71,4 +88,4 @@ function odpowiedz(numerKrs) {
   return { status: 200, ok: true, json: async () => JSON.parse(JSON.stringify(tresc)) };
 }
 
-module.exports = { odpowiedz, NUMERY: Object.keys(ODPISY) };
+module.exports = { odpowiedz };

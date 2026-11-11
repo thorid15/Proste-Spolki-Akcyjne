@@ -143,19 +143,10 @@ function wymagajAdmina(zad, odp, dalej) {
   dalej();
 }
 
-/** Wymaga zalogowanego, aktywnego konta portalowego. */
-function wymagajKonta(zad, odp, dalej) {
-  if (!zad.konto) return dalej(nieAutoryzowany('Ta operacja wymaga zalogowania do portalu.'));
-  dalej();
-}
-
 module.exports = {
-  CIASTKO_PRACOWNIK,
-  CIASTKO_PORTAL,
   wczytajSesje,
   wymagajPracownika,
   wymagajAdmina,
-  wymagajKonta,
   zalogujPracownika,
   wylogujPracownika,
   zalogujKonto,

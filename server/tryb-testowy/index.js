@@ -12,7 +12,7 @@
  *     odmawia startu (`sprawdzStart`), ZANIM uruchomi migracje;
  *   - poza trybem testowym trasy `/test/*` nie sa rejestrowane (404),
  *     a atrapy (skrzynka, KRS, tpay, walidator) niedostepne;
- *   - kazde logowanie w trybie testowym trafia do `psa_dziennik_logowan`.
+ *   - kazde logowanie w trybie testowym trafia do `psa_dziennik`.
  *
  * Logowanie testowe NIE ma wlasnego endpointu ani tokenu: lista kont na
  * ekranie logowania wola zwykle `POST /login` znanym haslem kont testowych,
@@ -35,9 +35,11 @@ const HASLO_TESTOWE = 'Test-Haslo-2026';
 const KONTA_TESTOWE = [
   { aplikacja: 'kancelaria', email: 'notariusz@example.com', opis: 'Notariusz (administrator)' },
   { aplikacja: 'kancelaria', email: 'pracownik@example.com', opis: 'Pracownik kancelarii' },
-  { aplikacja: 'portal', email: 'zarzad@example.com', opis: 'Zarząd spółki (Alfa Testowa P.S.A.)' },
-  { aplikacja: 'portal', email: 'anna.zgoda@example.com', opis: 'Akcjonariusz ze zgodą e-mail (Anna Testowa)' },
+  { aplikacja: 'portal', email: 'alfa.zarzad@example.com', opis: 'Zarząd Alfy — działa za spółkę' },
+  { aplikacja: 'portal', email: 'anna.zgoda@example.com', opis: 'Anna Testowa — akcjonariuszka Alfy (zgoda na e-mail)' },
   { aplikacja: 'portal', email: 'gamma.zarzad@example.com', opis: 'Wnioskodawca — dokumenty do podpisu (Gamma Zgłoszeniowa)' },
+  { aplikacja: 'portal', email: 'epsilon.zarzad@example.com', opis: 'Wnioskodawca — formularz wniosku w toku (Epsilon)' },
+  { aplikacja: 'portal', email: 'theta.zarzad@example.com', opis: 'Wnioskodawca — przejęcie rejestru od innej firmy (Theta)' },
 ];
 
 /** Wyniki atrapy podstawowego testu podpisu (T5, D-086). */
@@ -158,15 +160,12 @@ function zapiszLogowanie(db, { typKonta, kontoId, email, droga }) {
   if (!konfiguracja.TRYB_TESTOWY) return;
   const dozwolone = ['lista_kont', 'link_testowy', 'formularz', 'link_aktywacyjny'];
   db.prepare(
-    `INSERT INTO psa_dziennik_logowan (chwila, chwila_rzeczywista, typ_konta, konto_id, email, droga, tryb_testowy)
-     VALUES (?, ?, ?, ?, ?, ?, 1)`
+    `INSERT INTO psa_dziennik (chwila, kto, typ_kto, akcja, opis) VALUES (?, ?, ?, 'logowanie', ?)`
   ).run(
     czas.terazIso(),
-    new Date().toISOString(),
-    typKonta,
-    kontoId,
     String(email),
-    dozwolone.includes(droga) ? droga : 'formularz'
+    typKonta === 'pracownik' ? 'pracownik' : 'portal',
+    `konto #${kontoId}; droga: ${dozwolone.includes(droga) ? droga : 'formularz'}; chwila rzeczywista ${new Date().toISOString()}; tryb testowy`
   );
 }
 

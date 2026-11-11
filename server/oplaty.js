@@ -1,345 +1,132 @@
 'use strict';
 
 /**
- * Rozliczenia (sekcja 1, 5, 8 specyfikacji): prowadzenie rejestru rocznie,
- * wpis, informacja z rejestru — wg taksy z `logika/przepisy.js`.
- *
- * Podzial jak w `rejestr.js`/`zawiadomienia.js`: to jest SERWIS (dostep do
- * bazy), stawki i reguly prawne mieszkaja wylacznie w `logika/przepisy.js`.
- *
- * Integracja z modulem Kasa: zgodnie z decyzja nr 5 z sekcji 15 - osobno na
- * start, scalenie po ustabilizowaniu modulu. `psa_oplaty` jest wiec dzis
- * jedynym zrodlem prawdy o naleznosciach tego modulu.
+ * Opłaty (U-02, U-30, § 3.3): do zapłaty → opłacona albo anulowana (z powodem). Numer faktury to
+ * pole, nie stan. Kwoty netto w groszach; brutto wylicza `przepisy.obliczBrutto` — nie zapisuje się.
  */
 
-const przepisy = require('./logika/przepisy');
-const ustawienia = require('./logika/ustawienia');
-const terminy = require('./logika/terminy');
 const czas = require('./pomocnicze/czas');
+const przepisy = require('./logika/przepisy');
+const terminy = require('./logika/terminy');
+const daneOplaty = require('./dane/oplaty');
+const daneSpolki = require('./dane/spolki');
+const { BladWalidacji } = require('./logika/walidacje');
 
-/**
- * Opłata za wpis (art. 300(31) i nast. KSH, § 15b rozporządzenia). Stawka
- * jest PŁASKA niezależnie od typu zdarzenia — `typ.odplatne` (katalog w
- * `logika/typy-zdarzen.js`) decyduje TYLKO o tym, czy naliczyć, nie o kwocie.
- * Zajęcie i wykreślenie zajęcia (`odplatne: false`) nigdy tu nie trafiają —
- * wolne od opłat z mocy art. 300(34) § 2 KSH.
- */
-/** Spółka przekazywana do `stawkaGrosze` (D-085: stawki stałe do zmiany przez notariusza). */
-function spolkaDoStawki(db, spolkaId) {
-  return spolkaId ? db.prepare('SELECT id, data_umowy, data_skutecznosci_umowy FROM psa_spolki WHERE id = ?').get(spolkaId) : null;
-}
+const PRZEJSCIA = {
+  do_zaplaty: ['oplacona', 'anulowana'],
+  oplacona: [],
+  anulowana: [],
+};
 
-function naliczOplateWpisu(db, { spolkaId, sprawaId, typZdarzenia, autor }) {
-  const teraz = czas.terazIso();
-  const wynik = db
-    .prepare(
-      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, stawka_vat_procent, status, data_naliczenia, notatka, autor, utworzono)
-       VALUES (@spolka_id, @sprawa_id, 'wpis', NULL, @kwota_grosze, @stawka_vat_procent, 'naliczona', @data_naliczenia, @notatka, @autor, @utworzono)`
-    )
-    .run({
-      spolka_id: spolkaId,
-      sprawa_id: sprawaId,
-      kwota_grosze: ustawienia.stawkaGrosze(db, 'wpis', { spolka: spolkaDoStawki(db, spolkaId) }),
-      stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
-      data_naliczenia: czas.dzisIso(),
-      notatka: `Wpis: ${typZdarzenia}`,
-      autor,
-      utworzono: teraz,
-    });
-  return wczytaj(db, wynik.lastInsertRowid);
-}
+const RODZAJ = { prowadzenie: 'Prowadzenie rejestru', wpis: 'Wpis', informacja: 'Informacja z rejestru' };
+const STAN = { do_zaplaty: 'do zapłaty', oplacona: 'opłacona', anulowana: 'anulowana' };
+const FILTRY = ['do_zaplaty', 'oplacone', 'wszystkie'];
 
-/**
- * Opłata za informację z rejestru (art. 300(35) KSH). Wywoływana zarówno
- * z portalu (klient sam pobiera informację), jak i z kancelarii (żądanie
- * papierowe/mailowe obsłużone przez pracownika).
- */
-function naliczOplateInformacji(db, { spolkaId, odbiorcaOsobaId, zamawiajacyOsobaId, autor, notatka }) {
-  const wynik = db
-    .prepare(
-      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, stawka_vat_procent, status, data_naliczenia, notatka, autor, zamawiajacy_osoba_id, utworzono)
-       VALUES (@spolka_id, NULL, 'informacja', NULL, @kwota_grosze, @stawka_vat_procent, 'naliczona', @data_naliczenia, @notatka, @autor, @zamawiajacy_osoba_id, @utworzono)`
-    )
-    .run({
-      spolka_id: spolkaId,
-      // NULL = naleznosc spolki. Wypelnione = prywatna naleznosc
-      // akcjonariusza, ktorej spolka nie widzi w swoich rozliczeniach.
-      zamawiajacy_osoba_id: zamawiajacyOsobaId ?? null,
-      kwota_grosze: ustawienia.stawkaGrosze(db, 'informacja', { spolka: spolkaDoStawki(db, spolkaId) }),
-      stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
-      data_naliczenia: czas.dzisIso(),
-      notatka: notatka || (odbiorcaOsobaId ? `Informacja z rejestru — odbiorca #${odbiorcaOsobaId}` : 'Informacja z rejestru'),
-      autor,
-      utworzono: czas.terazIso(),
-    });
-  return wczytaj(db, wynik.lastInsertRowid);
-}
-
-/** Reczny wpis oplaty — np. informacja wydana na miejscu, korekta, notatka ksiegowa. */
-function dodajOplateReczna(db, { spolkaId, sprawaId, typ, kwotaGrosze, okres, notatka, autor }) {
-  const kwota = kwotaGrosze != null && kwotaGrosze !== '' ? Number(kwotaGrosze) : ustawienia.stawkaGrosze(db, typ, { spolka: spolkaDoStawki(db, spolkaId) });
-  // Jedna walidacja, wspolna dla automatu (zawsze przechodzi - bierze
-  // stawke wprost z przepisy.js) i tego recznego wpisu (Z-101..Z-104).
-  const walidacja = przepisy.walidujKwoteGrosze(typ, kwota);
-  if (!walidacja.ok) throw new Error(walidacja.powod);
-
-  const wynik = db
-    .prepare(
-      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, stawka_vat_procent, status, data_naliczenia, notatka, autor, utworzono)
-       VALUES (@spolka_id, @sprawa_id, @typ, @okres, @kwota_grosze, @stawka_vat_procent, 'naliczona', @data_naliczenia, @notatka, @autor, @utworzono)`
-    )
-    .run({
-      spolka_id: spolkaId,
-      sprawa_id: sprawaId ?? null,
-      typ,
-      okres: okres || null,
-      kwota_grosze: kwota,
-      stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
-      data_naliczenia: czas.dzisIso(),
-      notatka: notatka || null,
-      autor,
-      utworzono: czas.terazIso(),
-    });
-  return wczytaj(db, wynik.lastInsertRowid);
-}
-
-function zmienStatus(db, { id, status }) {
-  db.prepare('UPDATE psa_oplaty SET status = ?, zaktualizowano = ? WHERE id = ?').run(
-    status,
-    czas.terazIso(),
-    id
-  );
-  return wczytaj(db, id);
-}
-
-function wczytaj(db, id) {
-  return db.prepare('SELECT * FROM psa_oplaty WHERE id = ?').get(id) || null;
-}
-
-/* ─────────────────────────────────────────────────────
-   ROK PROWADZENIA REJESTRU — liczony OD OTWARCIA, nie od 1 stycznia
-   ───────────────────────────────────────────────────── */
-
-/**
- * Rok prowadzenia rejestru biegnie od dnia, w ktorym rejestr tej spolki
- * faktycznie ruszyl — nie od Nowego Roku. § 15b pkt 1 rozporzadzenia mowi
- * "za kazdy rozpoczety rok", nie "za kazdy rok kalendarzowy", a klient,
- * ktory podpisal umowe w listopadzie, nie ma powodu placic pelnej stawki
- * za dwa miesiace.
- *
- * Zwraca `{ od, do, etykieta }` dla n-tego roku liczonego od `poczatek`.
- */
-function okresProwadzenia(poczatek, numer = 1) {
-  const [rok, miesiac, dzien] = String(poczatek).slice(0, 10).split('-').map(Number);
-  const od = new Date(Date.UTC(rok + (numer - 1), miesiac - 1, dzien));
-  // Ostatni dzien okresu to dzien przed rocznica — rok liczy sie "do", nie
-  // "wlacznie z" dniem, w ktorym zaczyna sie nastepny.
-  const doDnia = new Date(Date.UTC(rok + numer, miesiac - 1, dzien));
-  doDnia.setUTCDate(doDnia.getUTCDate() - 1);
-  const iso = (d) => d.toISOString().slice(0, 10);
+function wiersz(o) {
   return {
-    od: iso(od),
-    do: iso(doDnia),
-    etykieta: od.getUTCFullYear() === doDnia.getUTCFullYear()
-      ? String(od.getUTCFullYear())
-      : `${od.getUTCFullYear()}/${doDnia.getUTCFullYear()}`,
+    ...o,
+    rodzaj: RODZAJ[o.typ],
+    kwota_brutto_grosze: przepisy.obliczBrutto(o.kwota_netto_grosze, o.stawka_vat_procent),
   };
 }
 
-/**
- * Nalicza oplate za JEDEN okres prowadzenia. IDEMPOTENTNE po `okres_od`:
- * powtorne wywolanie za ten sam okres nic nie wstawia.
- */
-function naliczOkresProwadzenia(db, { spolkaId, okres, autor }) {
-  const istniejaca = db
-    .prepare(
-      `SELECT * FROM psa_oplaty
-        WHERE spolka_id = ? AND typ = 'prowadzenie' AND okres_od = ? AND status != 'anulowana'
-        LIMIT 1`
-    )
-    .get(spolkaId, okres.od);
-  if (istniejaca) return { utworzono: false, oplata: istniejaca };
-
-  const wynik = db
-    .prepare(
-      `INSERT INTO psa_oplaty
-         (spolka_id, sprawa_id, typ, okres, okres_od, okres_do, kwota_grosze, stawka_vat_procent, status,
-          data_naliczenia, notatka, autor, utworzono)
-       VALUES (@spolka_id, NULL, 'prowadzenie', @okres, @okres_od, @okres_do, @kwota_grosze, @stawka_vat_procent,
-               'naliczona', @data_naliczenia, NULL, @autor, @utworzono)`
-    )
-    .run({
-      spolka_id: spolkaId,
-      okres: okres.etykieta,
-      okres_od: okres.od,
-      okres_do: okres.do,
-      kwota_grosze: ustawienia.stawkaGrosze(db, 'prowadzenie', { spolka: spolkaDoStawki(db, spolkaId) }),
-      stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
-      data_naliczenia: czas.dzisIso(),
-      autor,
-      utworzono: czas.terazIso(),
-    });
-  return { utworzono: true, oplata: wczytaj(db, wynik.lastInsertRowid) };
+function lista(db, { filtr = 'do_zaplaty', spolkaId = null } = {}) {
+  if (!FILTRY.includes(filtr)) throw new BladWalidacji([{ pole: 'filtr', komunikat: 'Nieznany filtr opłat.' }]);
+  return daneOplaty.lista(db, { spolkaId, stan: { do_zaplaty: 'do_zaplaty', oplacone: 'oplacona', wszystkie: null }[filtr] }).map(wiersz);
 }
 
-/** Pierwszy rok prowadzenia — naliczany w chwili otwarcia rejestru. */
-function naliczPierwszyRok(db, { spolkaId, dataOtwarcia, autor }) {
-  return naliczOkresProwadzenia(db, {
-    spolkaId,
-    okres: okresProwadzenia(dataOtwarcia, 1),
-    autor,
-  });
+function wczytaj(db, id) {
+  const o = daneOplaty.wczytaj(db, id);
+  if (!o) throw new BladWalidacji(['Nie odnaleziono opłaty.']);
+  return o;
 }
 
-/**
- * Oplata za PIERWSZY wpis zalozycielski, naliczana w chwili otwarcia
- * rejestru — odrebna od `naliczOplateWpisu` (ktora idzie przez workflow
- * sprawy, `sprawa_id` zawsze wypelnione). Otwarcie rejestru nie przechodzi
- * przez sprawe, wiec idempotencje daje `sprawa_id IS NULL`: ta kombinacja
- * (typ='wpis', sprawa_id NULL) moze wystapic dla danej spolki tylko raz —
- * dokladnie tu.
- */
-function naliczOplateWpisuOtwarcia(db, { spolkaId, autor }) {
-  const istniejaca = db
-    .prepare(
-      `SELECT * FROM psa_oplaty
-        WHERE spolka_id = ? AND typ = 'wpis' AND sprawa_id IS NULL AND status != 'anulowana'
-        LIMIT 1`
-    )
-    .get(spolkaId);
-  if (istniejaca) return { utworzono: false, oplata: istniejaca };
+function zmienStan(db, id, na, pola = {}) {
+  const o = wczytaj(db, id);
+  if (!PRZEJSCIA[o.stan].includes(na)) throw new BladWalidacji([`Opłata w stanie „${o.stan}” nie może przejść do stanu „${na}”.`]);
+  daneOplaty.ustawStan(db, id, na, pola);
+  return wiersz(daneOplaty.wczytaj(db, id));
+}
 
-  const wynik = db
-    .prepare(
-      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, okres, kwota_grosze, stawka_vat_procent, status, data_naliczenia, notatka, autor, utworzono)
-       VALUES (@spolka_id, NULL, 'wpis', NULL, @kwota_grosze, @stawka_vat_procent, 'naliczona', @data_naliczenia, @notatka, @autor, @utworzono)`
-    )
-    .run({
-      spolka_id: spolkaId,
-      kwota_grosze: ustawienia.stawkaGrosze(db, 'wpis', { spolka: spolkaDoStawki(db, spolkaId) }),
-      stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
-      data_naliczenia: czas.dzisIso(),
-      notatka: 'Pierwszy wpis (otwarcie rejestru)',
-      autor,
-      utworzono: czas.terazIso(),
-    });
-  return { utworzono: true, oplata: wczytaj(db, wynik.lastInsertRowid) };
+/** „Opłacona” — dzisiejsza data. */
+function oplacona(db, id) {
+  return zmienStan(db, id, 'oplacona', { oplacono: czas.dzisIso() });
+}
+
+function anuluj(db, id, powod) {
+  const p = String(powod || '').trim();
+  if (p.length < 3) throw new BladWalidacji([{ pole: 'powod', komunikat: 'Podaj powód anulowania.' }]);
+  return zmienStan(db, id, 'anulowana', { powod_anulowania: p });
+}
+
+function ustawFakture(db, id, numer) {
+  wczytaj(db, id);
+  daneOplaty.ustawFakture(db, id, String(numer || '').trim() || null);
+  return wiersz(daneOplaty.wczytaj(db, id));
+}
+
+const kwota = (grosze) => (grosze / 100).toFixed(2).replace('.', ',');
+/** Pole CSV; tekst zaczynający się od =, +, -, @ dostaje apostrof — Excel nie uruchomi go jako formuły. */
+function pole(v) {
+  const s = v == null ? '' : String(v);
+  const t = typeof v === 'string' && /^[=+\-@]/.test(s) ? `'${s}` : s;
+  return /[";\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+}
+
+/** Eksport CSV (Excel w polskich ustawieniach: średnik, przecinek dziesiętny). */
+function csv(wiersze) {
+  const naglowek = ['Data', 'Spółka', 'Płatnik', 'Rodzaj', 'Okres', 'Netto', 'Brutto', 'Stan', 'Numer faktury', 'Opłacono'];
+  const linie = wiersze.map((o) =>
+    [czas.dzienLokalny(o.utworzono), o.spolka_nazwa, o.platnik_nazwa, o.rodzaj, o.okres, kwota(o.kwota_netto_grosze), kwota(o.kwota_brutto_grosze), STAN[o.stan], o.numer_faktury, o.oplacono]
+      .map(pole)
+      .join(';')
+  );
+  return `${[naglowek.join(';'), ...linie].join('\r\n')}\r\n`;
+}
+
+/** Początek k-tego okresu od dnia otwarcia: co `miesiecy` miesięcy, ten sam dzień (31 → ostatni dzień miesiąca). */
+function poczatekOkresu(otwarcie, k, miesiecy) {
+  const [rok, mies, dzien] = otwarcie.split('-').map(Number);
+  const t = mies - 1 + k * miesiecy;
+  const r = rok + Math.floor(t / 12);
+  const m = (t % 12) + 1;
+  const ostatni = new Date(Date.UTC(r, m, 0)).getUTCDate();
+  return `${r}-${String(m).padStart(2, '0')}-${String(Math.min(dzien, ostatni)).padStart(2, '0')}`;
 }
 
 /**
- * Otwarcie rejestru — naprawa Z-108/P-007: OBIE sciezki (kreator wewnetrzny
- * `POST /spolki/:id/otworz-rejestr` i przyjecie wniosku z portalu
- * `POST /wnioski/:id/przyjmij`) maja naliczac IDENTYCZNIE: prowadzenie za
- * pierwszy rok + pierwszy wpis, netto, w jednym zadaniu, biegiem roku od
- * dnia otwarcia. Jedna funkcja, jedna transakcja, idempotentna w obie strony
- * (bezpieczna do wywolania ponownie, np. po przerwanym zadaniu).
+ * U-30: opłaty za prowadzenie rejestru — rocznie (w rocznicę otwarcia) albo co miesiąc (w dniu
+ * otwarcia); każda rata osobno, okres „RRRR-MM-DD..RRRR-MM-DD”. Nadrabia dni bez uruchomienia,
+ * zaczyna od końca ostatniego naliczonego okresu (zmiana sposobu płatności niczego nie dubluje),
+ * po zamknięciu rejestru nie nalicza. Zwraca liczbę nowych opłat.
  */
-function naliczOtwarcieRejestru(db, { spolkaId, dataOtwarcia, autor }) {
-  const transakcja = db.transaction(() => ({
-    prowadzenie: naliczPierwszyRok(db, { spolkaId, dataOtwarcia, autor }),
-    wpis: naliczOplateWpisuOtwarcia(db, { spolkaId, autor }),
-  }));
-  return transakcja.immediate();
-}
-
-/**
- * Spolki, ktorym oplacony okres prowadzenia konczy sie w ciagu `dni`, a za
- * nastepny nie ma jeszcze naliczonej oplaty. Zrodlo przypomnien — i u
- * pracownika, i w portalu klienta, i w mailu.
- */
-function okresyDoOdnowienia(db, { dni = 30, dzis = czas.dzisIso() } = {}) {
-  const granica = terminy.dodajDni(dzis, dni);
-  const wiersze = db
-    .prepare(
-      `SELECT o.*, s.nazwa AS spolka_nazwa, s.data_otwarcia_rejestru
-         FROM psa_oplaty o
-         JOIN psa_spolki s ON s.id = o.spolka_id
-        WHERE o.typ = 'prowadzenie'
-          AND o.status != 'anulowana'
-          AND o.okres_do IS NOT NULL
-          AND o.okres_do <= ?
-          AND s.status != 'wykreslona'
-          AND NOT EXISTS (
-            SELECT 1 FROM psa_oplaty n
-             WHERE n.spolka_id = o.spolka_id AND n.typ = 'prowadzenie'
-               AND n.status != 'anulowana' AND n.okres_od > o.okres_od
-          )
-        ORDER BY o.okres_do`
-    )
-    .all(granica);
-  return wiersze.map((w) => ({
-    ...w,
-    dni_do_konca: terminy.dniMiedzy(dzis, w.okres_do),
-    // Nastepny okres liczymy od POCZATKU biezacego, nie od jego konca —
-    // inaczej nowy rok zaczynalby sie w dniu, w ktorym stary jeszcze trwa.
-    nastepny: okresProwadzenia(w.okres_od, 2),
-  }));
-}
-
-/**
- * Nalicza nastepny okres kazdej spolce, ktorej biezacy wlasnie sie konczy.
- * Zastepuje wsadowe "naliczenie roczne" po kalendarzu: kazda spolka ma
- * wlasna rocznice, wiec i wlasny termin.
- */
-function naliczOdnowienia(db, { dni = 0, autor, dzis = czas.dzisIso() } = {}) {
-  const transakcja = db.transaction(() => {
-    const naliczone = [];
-    const pominiete = [];
-    for (const w of okresyDoOdnowienia(db, { dni, dzis })) {
-      const { utworzono, oplata } = naliczOkresProwadzenia(db, {
-        spolkaId: w.spolka_id,
-        okres: w.nastepny,
-        autor,
-      });
-      (utworzono ? naliczone : pominiete).push(oplata);
+function naliczProwadzenie(db, { dzis = czas.dzisIso(), autor = 'proces dzienny' } = {}) {
+  return db.transaction(() => {
+    let nowe = 0;
+    for (const s of daneSpolki.zRejestrem(db)) {
+      const otwarcie = czas.dzienLokalny(s.data_otwarcia);
+      const zamkniecie = s.data_zamkniecia ? czas.dzienLokalny(s.data_zamkniecia) : null;
+      const ostatni = daneOplaty.ostatniOkresProwadzenia(db, s.id);
+      const od = ostatni ? terminy.dodajDni(ostatni.split('..')[1], 1) : otwarcie;
+      const miesiecy = s.platnosc === 'miesieczna' ? 1 : 12;
+      for (let k = 0; ; k += 1) {
+        const start = poczatekOkresu(otwarcie, k, miesiecy);
+        if (start > dzis || (zamkniecie && start >= zamkniecie)) break;
+        if (start < od) continue;
+        daneOplaty.dodaj(db, {
+          spolka_id: s.id,
+          typ: 'prowadzenie',
+          platnik: 'spolka',
+          okres: `${start}..${terminy.dodajDni(poczatekOkresu(otwarcie, k + 1, miesiecy), -1)}`,
+          kwota_netto_grosze: miesiecy === 1 ? przepisy.STAWKI_GROSZE.PROWADZENIE_MIESIECZNIE : przepisy.STAWKI_GROSZE.PROWADZENIE_ROCZNIE,
+          stawka_vat_procent: przepisy.STAWKA_VAT_PROCENT,
+          autor,
+        });
+        nowe += 1;
+      }
     }
-    return { naliczone, pominiete };
-  });
-  return transakcja.immediate();
+    return nowe;
+  })();
 }
 
-/** CSV — bez zaleznosci, wlasny escaping (przecinek/cudzyslow/nowa linia). */
-function pole(wartosc) {
-  const tekst = wartosc === null || wartosc === undefined ? '' : String(wartosc);
-  if (/[",\n]/.test(tekst)) return `"${tekst.replace(/"/g, '""')}"`;
-  return tekst;
-}
-
-function eksportujCsv(wiersze) {
-  const naglowek = ['id', 'spolka', 'typ', 'okres', 'kwota_zl', 'status', 'data_naliczenia', 'notatka', 'autor'];
-  const linie = [naglowek.join(',')];
-  for (const w of wiersze) {
-    linie.push(
-      [
-        w.id,
-        w.spolka_nazwa,
-        w.typ,
-        w.okres || '',
-        (w.kwota_grosze / 100).toFixed(2),
-        w.status,
-        w.data_naliczenia,
-        w.notatka || '',
-        w.autor,
-      ]
-        .map(pole)
-        .join(',')
-    );
-  }
-  return linie.join('\r\n');
-}
-
-module.exports = {
-  okresProwadzenia,
-  naliczOkresProwadzenia,
-  naliczPierwszyRok,
-  naliczOplateWpisuOtwarcia,
-  naliczOtwarcieRejestru,
-  okresyDoOdnowienia,
-  naliczOdnowienia,
-  naliczOplateWpisu,
-  naliczOplateInformacji,
-  dodajOplateReczna,
-  zmienStatus,
-  wczytaj,
-  eksportujCsv,
-};
+module.exports = { PRZEJSCIA, FILTRY, lista, oplacona, anuluj, ustawFakture, csv, kwota, poczatekOkresu, naliczProwadzenie };

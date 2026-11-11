@@ -299,6 +299,12 @@ body {
   color: var(--karta);
   border-bottom: 1px solid var(--rejestr-2);
 }
+/* Menu portalu (§ 6): Start · Konto · Wyloguj — pod paskiem marki. */
+.menu-portalu { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--od-8) var(--od-16); padding: var(--od-8) var(--od-16); border-bottom: 1px solid var(--linia); background: var(--karta); }
+.menu-portalu a[aria-current="page"] { font-weight: 600; text-decoration: none; }
+.wiersz-portalu { padding: var(--od-8) 0; border-bottom: 1px solid var(--linia); }
+.wiersz-portalu:last-child { border-bottom: 0; }
+.pisma-portalu { margin: var(--od-4) 0 0 var(--od-16); }
 .marka-pasek-nazwa {
   font-family: var(--font-display);
   font-size: var(--st-20);
@@ -891,32 +897,18 @@ select {
   padding-right: var(--od-40);
 }
 
-/* Pole daty segmentowe DD.MM.RRRR */
-.pole-daty { display: flex; align-items: center; gap: var(--od-8); flex-wrap: wrap; }
-/* R4 P5: ramka pola daty obejmuje tylko datę DD.MM.RRRR (jeden wzorzec dla wszystkich pól dat),
-   przycisk kalendarza tuż obok — pole nie rozciąga się na całą kolumnę. */
-.pole-daty > .data-segmenty { flex: 0 0 auto; justify-content: flex-start; }
-.data-segmenty {
-  display: inline-flex; align-items: center;
-  padding: var(--od-8) var(--od-12);
-  background: var(--karta);
-  border: 1px solid var(--linia);
-  border-radius: var(--r-sm);
-  font-family: var(--font-ui); font-size: var(--st-15); font-variant-numeric: tabular-nums;
+/* Pole daty DD.MM.RRRR (§ 5): jedno pole z zapasem na pełny format, ikona kalendarza w polu. */
+.pole-daty { position: relative; display: inline-block; width: 11.5rem; max-width: 100%; }
+.pole-daty .pole-daty-wejscie { width: 100%; padding-right: 40px; font-variant-numeric: tabular-nums; }
+.pole-daty .pole-daty-wejscie.bledne { border-color: var(--sygnal); }
+.pole-daty-ikona {
+  position: absolute; top: 0; right: 0; height: 100%; width: 40px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: none; color: var(--atrament-2); cursor: pointer; border-radius: 0 var(--r-sm) var(--r-sm) 0;
 }
-.data-segmenty:focus-within { border-color: var(--rejestr); box-shadow: 0 0 0 3px rgba(31, 77, 61, 0.10); }
-.data-segmenty.bledne { border-color: var(--sygnal); }
-.data-segmenty.wylaczone { background: var(--papier); }
-.data-segment:disabled { color: var(--atrament-3); cursor: not-allowed; }
-.data-segment { border: none; background: none; font: inherit; color: var(--atrament); text-align: center; padding: 0; outline: none; }
-.data-segment::-webkit-outer-spin-button, .data-segment::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.data-segment[data-szer="2"] { width: 2.2ch; }
-.data-segment[data-szer="4"] { width: 4.2ch; }
-.data-segment:focus { background: var(--rejestr-tlo); border-radius: 2px; }
-.data-segment::placeholder { color: var(--atrament-3); }
-.data-rozdzielacz { color: var(--atrament-3); padding: 0 1px; }
+.pole-daty-ikona:hover, .pole-daty-ikona:focus-visible { color: var(--rejestr); }
+.pole-daty .pole-blad { white-space: normal; }
 
-.kalendarz-kotwica { position: relative; display: inline-flex; }
 .kalendarz-popover {
   position: absolute; top: calc(100% + var(--od-4)); left: 0; z-index: 60;
   background: var(--karta);
@@ -2611,9 +2603,9 @@ h1.topbar-tytul, h1.brama-tytul { margin: 0; font-weight: inherit; }
 
 /* ── R4 STOP 1 — WCAG 2.5.5: cel dotyku ≥ 44 px na telefonie ── */
 @media (max-width: 600px) {
-  .btn, select, .data-segmenty, .kalendarz-kotwica .btn,
-  input:not([type="checkbox"]):not([type="radio"]):not(.data-segment) { min-height: 44px; }
-  .kalendarz-kotwica .btn { min-width: 44px; }
+  .btn, select,
+  input:not([type="checkbox"]):not([type="radio"]) { min-height: 44px; }
+  .pole-daty-ikona { width: 44px; }
   .okruszki button { min-height: 44px; }
   .zakladka { min-width: 44px; min-height: 44px; }
 }
@@ -2624,3 +2616,71 @@ h1.topbar-tytul, h1.brama-tytul { margin: 0; font-weight: inherit; }
 .klikalna:hover { background: var(--paper); }
 .lacze-wiersza { color: inherit; text-decoration: none; }
 .lacze-wiersza:hover, .lacze-wiersza:focus-visible { text-decoration: underline; }
+
+/* ── Faza 3: ekrany kancelarii (§ 5) ───────────────────── */
+.przycisk-glowny { display: inline-flex; flex-direction: column; align-items: flex-end; gap: var(--od-4); }
+.przycisk-glowny-powod { max-width: 34ch; font-size: var(--st-13); color: var(--atrament-2); text-align: right; }
+.wiecej { position: relative; display: inline-block; }
+.wiecej-menu {
+  position: absolute; right: 0; top: calc(100% + var(--od-4)); z-index: 40; min-width: 220px;
+  background: var(--karta); border: 1px solid var(--linia); border-radius: var(--r); box-shadow: var(--cien-l);
+  display: flex; flex-direction: column; padding: var(--od-4);
+}
+.wiecej-menu button { text-align: left; background: none; border: none; padding: var(--od-8) var(--od-12); border-radius: var(--r-sm); font: inherit; cursor: pointer; color: var(--atrament); }
+.wiecej-menu button:hover, .wiecej-menu button:focus-visible { background: var(--rejestr-tlo); }
+.wiecej-menu .akcja-niszczaca { color: var(--sygnal); }
+.filtr { margin-bottom: var(--od-12); flex-wrap: wrap; }
+.zmiana { border-top: 1px solid var(--linia); padding-top: var(--od-12); margin-top: var(--od-12); }
+.zmiana:first-of-type { border-top: none; margin-top: 0; }
+.element-listy, .podsekcja { border-left: 2px solid var(--linia); padding-left: var(--od-12); margin: var(--od-8) 0; }
+.wiersz-akcji { display: flex; flex-wrap: wrap; gap: var(--od-8) var(--od-12); align-items: flex-start; }
+.wiersz-akcji .pole { flex: 1 1 9rem; min-width: 0; }
+.wiersz-akcji .pole:has(input.krotkie) { flex: 0 1 6rem; }
+.dodaj-zmiane { flex-wrap: wrap; margin-top: var(--od-12); }
+.krok-tresci { border: none; padding: 0; margin: 0; min-width: 0; }
+.kafle-osob { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--od-12); }
+.kafel-osoby { border: 1px solid var(--linia); border-radius: var(--r); padding: var(--od-12); display: flex; flex-direction: column; gap: var(--od-8); }
+.kafel-osoby .rzad { flex-wrap: wrap; }
+.kafel-osoby-stan { font-size: var(--st-13); color: var(--atrament-2); }
+.wybor-osoby { position: relative; display: flex; flex-direction: column; gap: var(--od-4); align-items: flex-start; }
+.wybor-osoby input { width: 100%; }
+.wybor-osoby-lista {
+  position: absolute; top: 2.75rem; left: 0; right: 0; z-index: 30; list-style: none; margin: 0; padding: var(--od-4);
+  background: var(--karta); border: 1px solid var(--linia); border-radius: var(--r-sm); box-shadow: var(--cien-l);
+}
+.wybor-osoby-lista li { padding: var(--od-8); cursor: pointer; border-radius: var(--r-sm); }
+.wybor-osoby-lista li:hover { background: var(--rejestr-tlo); }
+.wybrana-osoba { display: flex; flex-wrap: wrap; gap: var(--od-8); align-items: center; }
+.nowa-osoba { border: 1px dashed var(--linia); border-radius: var(--r); padding: var(--od-12); }
+.dodaj-plik { display: flex; flex-wrap: wrap; gap: var(--od-8); align-items: center; padding: var(--od-8); border: 1px dashed transparent; border-radius: var(--r-sm); }
+.dodaj-plik-nad { border-color: var(--rejestr); background: var(--rejestr-tlo); }
+.podglad-pdf { width: 100%; height: 60vh; border: 1px solid var(--linia); border-radius: var(--r-sm); margin: var(--od-12) 0; }
+.tresc-emaila pre { white-space: pre-wrap; font-family: inherit; background: var(--papier); padding: var(--od-8); border-radius: var(--r-sm); }
+.pilne { color: var(--sygnal); font-weight: 600; }
+.do-zrobienia { list-style: none; margin: 0; padding: 0; }
+.do-zrobienia-poz { display: flex; gap: var(--od-8); align-items: baseline; padding: var(--od-8) 0; border-bottom: 1px solid var(--linia); color: inherit; text-decoration: none; }
+.do-zrobienia-poz.pilne strong { color: var(--sygnal); }
+.do-zrobienia-poz:hover strong { text-decoration: underline; }
+.stan-na-dzien { margin: var(--od-12) 0; }
+.ekran-sprawy > .karta, .ekran-kokpitu > .karta, .ekran-osoby > .karta { margin-bottom: var(--od-16); }
+.naglowek-strony-akcje .rzad { flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 600px) {
+  .naglowek-strony-akcje .rzad { justify-content: flex-start; }
+  .przycisk-glowny { align-items: flex-start; }
+  .przycisk-glowny-powod { text-align: left; }
+  .wiecej-menu { left: 0; right: auto; }
+}
+
+/* ── Faza 4: wniosek i portal ── */
+.powloka-portal .marka-pasek { display: flex; justify-content: space-between; align-items: center; gap: var(--od-8); flex-wrap: wrap; }
+.powloka-portal .marka-pasek .btn { color: #fff; border-color: rgba(255, 255, 255, 0.5); }
+.konta-testowe .btn { white-space: normal; overflow-wrap: anywhere; }
+.dokumenty-wniosku { list-style: none; margin: 0; padding: 0; }
+.dokument-wniosku { padding: var(--od-12) 0; border-bottom: 1px solid var(--linia); display: flex; flex-direction: column; gap: var(--od-8); }
+.dokument-wniosku .rzad { flex-wrap: wrap; }
+.instrukcja-podpisu { background: var(--karta); border: 1px solid var(--linia); border-radius: var(--r); padding: var(--od-12); margin-bottom: var(--od-16); }
+.instrukcja-podpisu summary { cursor: pointer; font-weight: 600; }
+input.rozni-sie { border-color: var(--mosiadz, #8A6531); background: #fbf6ee; }
+.ekran-wniosku > .karta, .formularz-wniosku > .karta { margin-bottom: var(--od-16); }
+/* Formularz tylko do odczytu (fieldset disabled): bez przycisków edycji i kalendarza; zostaje wybrana opcja. */
+fieldset:disabled .btn:not([aria-pressed="true"]), fieldset:disabled .pole-daty-ikona { display: none; }

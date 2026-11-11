@@ -83,7 +83,7 @@ test('logowanie: bledne haslo zwraca 401, poprawne ustawia sesje', async () => {
 });
 
 test('trasy kancelaryjne wymagaja sesji pracownika', async () => {
-  const bez = await fetch(`${baza}/api/psa/pulpit`);
+  const bez = await fetch(`${baza}/api/psa/sprawy`);
   assert.equal(bez.status, 401);
 
   const login = await fetch(`${baza}/api/psa/auth/login`, {
@@ -93,25 +93,8 @@ test('trasy kancelaryjne wymagaja sesji pracownika', async () => {
   });
   const ciastko = ciasteczkoZOdpowiedzi(login);
 
-  const z = await fetch(`${baza}/api/psa/pulpit`, { headers: { Cookie: ciastko } });
+  const z = await fetch(`${baza}/api/psa/sprawy`, { headers: { Cookie: ciastko } });
   assert.equal(z.status, 200);
-});
-
-test('Z-001: GET /api/psa/meta wymaga sesji pracownika, tak jak reszta pozostale.js', async () => {
-  const bez = await fetch(`${baza}/api/psa/meta`);
-  assert.equal(bez.status, 401);
-
-  const login = await fetch(`${baza}/api/psa/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: process.env.ADMIN_EMAIL, haslo: hasloAdmina }),
-  });
-  const ciastko = ciasteczkoZOdpowiedzi(login);
-
-  const z = await fetch(`${baza}/api/psa/meta`, { headers: { Cookie: ciastko } });
-  assert.equal(z.status, 200);
-  const dane = await z.json();
-  assert.ok(dane.typy_zdarzen, 'katalog nadal wraca po zalogowaniu');
 });
 
 test('rate limiting: blokuje logowanie po 5 nieudanych probach', async () => {
@@ -162,7 +145,7 @@ test('admin: tworzy pracownika, ktory moze sie zalogowac; pracownik nie widzi li
   assert.equal(lista.status, 403);
 
   // Ale pracownik MOZE dokonywac wpisow - dostep do rdzenia kancelarii.
-  const pulpit = await fetch(`${baza}/api/psa/pulpit`, { headers: { Cookie: ciastkoPracownika } });
+  const pulpit = await fetch(`${baza}/api/psa/sprawy`, { headers: { Cookie: ciastkoPracownika } });
   assert.equal(pulpit.status, 200);
 });
 

@@ -5,7 +5,7 @@
  * poprawek). Potwierdzone na żywej odpowiedzi API (KRS 0001114217,
  * rejestr=P, 17.08.2026): odpis dla rejestru przedsiębiorców NIE zawiera
  * żadnego pola z oznaczeniem sądu rejestrowego — patrz komentarz w
- * `server/trasy/krs.js`. Fallback jest więc potrzebny zawsze, nie tylko
+ * `server/krs.js`. Fallback jest więc potrzebny zawsze, nie tylko
  * wyjątkowo.
  *
  * Tabela leży w pliku danych (`server/dane/sady-rejestrowe.json`), nie w

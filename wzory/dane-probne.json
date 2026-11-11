@@ -1,0 +1,102 @@
+{
+  "wspolne": {
+    "notariusz": "Anna Przykładowa",
+    "kancelaria_adres": "ul. Próbna 1, 80-001 Gdańsk",
+    "kancelaria_miasto": "Gdańsk",
+    "kancelaria_nip": "5840000000",
+    "kancelaria_regon": "000000000",
+    "kancelaria_email": "rejestr@kancelaria.example",
+    "kancelaria_telefon": "58 000 00 00",
+    "podpisujacy": "Anna Przykładowa",
+    "podpisujacy_funkcja": "notariusz",
+    "spolka_firma": "Przykład prosta spółka akcyjna",
+    "spolka_siedziba": "Gdańsk",
+    "spolka_adres": "ul. Testowa 2, 80-002 Gdańsk",
+    "spolka_sad": "Sąd Rejonowy Gdańsk-Północ w Gdańsku, VII Wydział Gospodarczy Krajowego Rejestru Sądowego",
+    "spolka_krs": "0000000001",
+    "spolka_data_rejestracji": "10.01.2026",
+    "adresat_nazwa": "Jan Próbny",
+    "adresat_adres": "ul. Długa 5, 30-002 Kraków",
+    "sprawa_znak": "12",
+    "data_wplywu": "02.11.2026",
+    "zadajacy": "Jan Próbny",
+    "podstawa": "umowa sprzedaży akcji",
+    "podstawa_data": "30.10.2026",
+    "zmiany": [{ "opis": "Przeniesienie 100 akcji serii A o numerach 1–100 z Jan Próbny na Ewa Przykład." }],
+    "pozycje": [
+      { "akcjonariusz": "Ewa Przykład", "seria": "A", "numery": "1–100", "liczba": "100", "obciazenia": "" },
+      { "akcjonariusz": "Piotr Testowy", "seria": "A", "numery": "101–200", "liczba": "100", "obciazenia": "zastaw (prawo głosu)" }
+    ]
+  },
+  "powiadomienie-zamierzony": { "termin": "09.11.2026" },
+  "powiadomienie-wpis": {
+    "adresat_spolka": true,
+    "adresat_nazwa": "Przykład prosta spółka akcyjna",
+    "adresat_adres": "ul. Testowa 2, 80-002 Gdańsk",
+    "wpis_data": "08.11.2026",
+    "wpis_godzina": "10:15",
+    "lista_akcjonariuszy": [
+      { "lp": "1", "nazwa": "Ewa Przykład", "seria": "A", "liczba": "100", "wzmianka": "" },
+      { "lp": "2", "nazwa": "Piotr Testowy", "seria": "A", "liczba": "100", "wzmianka": "zastaw" }
+    ],
+    "akcje_razem": "200"
+  },
+  "powiadomienie-odmowa": {
+    "przyczyna": "Umowa sprzedaży akcji nie została zawarta w formie dokumentowej.",
+    "data_wniosku": "01.11.2026"
+  },
+  "wezwanie": { "tresc": "Proszę o przedłożenie umowy sprzedaży akcji podpisanej przez zbywcę i nabywcę." },
+  "umowa": {
+    "umowa_data": "08.11.2026",
+    "spolka_nip": "5840000001",
+    "spolka_email": "zarzad@przyklad.example",
+    "reprezentant": "Maria Zarządna",
+    "reprezentant_pesel": "44051401359",
+    "reprezentant_adres": "ul. Krótka 3, 80-003 Gdańsk",
+    "reprezentant_funkcja": "członek zarządu",
+    "reprezentant_reprezentacja": "jednoosobowo",
+    "pep": false,
+    "pep_opis": "",
+    "przejecie": false,
+    "dotychczasowy_podmiot": "",
+    "data_przejecia": "",
+    "platnosc_miesieczna": false,
+    "taksa_roczna": "1 200",
+    "taksa_roczna_slownie": "tysiąc dwieście złotych",
+    "taksa_wpis": "100",
+    "taksa_wpis_slownie": "sto złotych",
+    "taksa_informacja": "50",
+    "taksa_informacja_slownie": "pięćdziesiąt złotych",
+    "taksa_miesieczna": "100",
+    "taksa_miesieczna_slownie": "sto złotych"
+  },
+  "uchwala": {
+    "uchwala_data": "08.11.2026",
+    "akcjonariusze": [
+      { "nazwa": "Ewa Przykład" },
+      { "nazwa": "Piotr Testowy" }
+    ]
+  },
+  "zgoda-email": {
+    "akcjonariusz": "Ewa Przykład",
+    "akcjonariusz_adres": "ul. Morska 7, 81-001 Gdynia",
+    "akcjonariusz_email": "ewa@przyklad.example"
+  },
+  "informacja": {
+    "numer": "INF/2026/0001",
+    "stan_na": "07.11.2026",
+    "serie": [
+      { "seria": "A", "numery": "1–200", "liczba": "200", "rodzaj": "zwykłe", "data_emisji": "10.01.2026" },
+      { "seria": "B", "numery": "1–50", "liczba": "50", "rodzaj": "uprzywilejowane: dwa głosy na akcję", "data_emisji": "01.03.2026" }
+    ],
+    "umorzone": [],
+    "akcjonariusze": [
+      { "nazwa": "Ewa Przykład", "dane": "PESEL 44051401359 · ul. Morska 7, 81-001 Gdynia · ewa@przyklad.example", "seria": "A", "numery": "1–100", "liczba": "100", "data_wpisu": "15.01.2026", "pokryte": "tak" },
+      { "nazwa": "Piotr Testowy", "dane": "ur. 01.02.1975 · ul. Polna 9, 00-001 Warszawa", "seria": "A", "numery": "101–200", "liczba": "100", "data_wpisu": "15.01.2026", "pokryte": "tak" },
+      { "nazwa": "Piotr Testowy", "dane": "ur. 01.02.1975 · ul. Polna 9, 00-001 Warszawa", "seria": "B", "numery": "1–50", "liczba": "50", "data_wpisu": "02.03.2026", "pokryte": "nie" }
+    ],
+    "obciazenia": [
+      { "numery": "A 101–120", "tresc": "zastaw", "uprawniony": "Bank Przykładowy S.A.", "prawo_glosu": "tak", "data_wpisu": "20.03.2026" }
+    ]
+  }
+}

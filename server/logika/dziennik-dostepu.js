@@ -30,55 +30,25 @@ const AKCJE = {
 
 function zapisz(db, { kto, typKto, spolkaId = null, osobaId = null, akcja, opis = null }) {
   db.prepare(
-    `INSERT INTO psa_dziennik_dostepu (chwila, kto, typ_kto, spolka_id, osoba_id, akcja, opis)
+    `INSERT INTO psa_dziennik (chwila, kto, typ_kto, spolka_id, osoba_id, akcja, opis)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(czas.terazIso(), kto, typKto, spolkaId, osobaId, akcja, opis);
 }
 
-const OKNO_DEDUPLIKACJI_MIN = 15;
-
-/**
- * Odczyt rejestru przez konto PORTALOWE (sekcja 2.3 naprawy) - wyjatek od
- * "waskiego zakresu" z naglowka tego modulu: to jedyne miejsce, w ktorym
- * KLIENT (nie kancelaria) moze zobaczyc niezamaskowane dane wrazliwe
- * (PESEL, adres, AML/PEP) innych osob - rola "spolka" widzi je w calosci
- * (art. 300(35) KSH). Pieciu odswiezen ekranu w kilka minut nie moze dac
- * pieciu wpisow, inaczej dziennik traci wartosc dowodowa - std jeden wpis
- * na (spolka, konto, okno 15 minut). Odczyty W PELNI zamaskowane (rola
- * akcjonariusza wzgledem WSPOLakcjonariuszy) nie sa warte odnotowania -
- * nic wrazliwego nie wyszlo.
- */
-function zapiszOdczytRejestruPortalu(db, { kto, spolkaId, liczbaOsob, zamaskowane }) {
-  if (zamaskowane) return;
-  // Ta sama funkcja formatujaca co przy zapisie (`chwila` w tabeli) - inny
-  // format dawalby bezsensowne porownanie stringow ponizej.
-  const graniczna = czas.terazIso(new Date(czas.teraz().getTime() - OKNO_DEDUPLIKACJI_MIN * 60 * 1000));
-  const istniejacy = db
-    .prepare(
-      `SELECT id FROM psa_dziennik_dostepu
-        WHERE typ_kto = 'portal' AND kto = ? AND spolka_id = ? AND akcja = ? AND chwila >= ?
-        LIMIT 1`
-    )
-    .get(kto, spolkaId, AKCJE.ODCZYT_REJESTRU, graniczna);
-  if (istniejacy) return;
-  zapisz(db, {
-    kto,
-    typKto: 'portal',
-    spolkaId,
-    akcja: AKCJE.ODCZYT_REJESTRU,
-    opis: `odczyt stanu rejestru — dane ${liczbaOsob} ${liczbaOsob === 1 ? 'osoby' : 'osób'} niezamaskowane`,
-  });
-}
-
 /**
  * D-122 (P-009): retencja dziennika dostępu — 5 lat od wpisu (jak dokumentacja środków AML, art. 49 ustawy AML;
- * rozliczalność RODO). Starsze wpisy usuwa harmonogram raz na dobę.
+ * rozliczalność RODO). Starsze wpisy usuwa proces dzienny (`server/proces-dzienny.js`).
  */
+/** Czy w dzienniku jest już wpis danej czynności z danym opisem (np. wysłane przypomnienie). */
+function zapisano(db, akcja, opis) {
+  return Boolean(db.prepare('SELECT 1 FROM psa_dziennik WHERE akcja = ? AND opis = ? LIMIT 1').get(akcja, opis));
+}
+
 const RETENCJA_LAT = 5;
 function usunPrzeterminowane(db, { teraz = new Date() } = {}) {
   const granica = new Date(teraz);
   granica.setFullYear(granica.getFullYear() - RETENCJA_LAT);
-  return db.prepare('DELETE FROM psa_dziennik_dostepu WHERE chwila < ?').run(granica.toISOString()).changes;
+  return db.prepare('DELETE FROM psa_dziennik WHERE chwila < ?').run(granica.toISOString()).changes;
 }
 
-module.exports = { zapisz, zapiszOdczytRejestruPortalu, usunPrzeterminowane, RETENCJA_LAT, AKCJE };
+module.exports = { zapisz, zapisano, usunPrzeterminowane, AKCJE };

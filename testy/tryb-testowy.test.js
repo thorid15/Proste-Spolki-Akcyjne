@@ -26,7 +26,6 @@ const baza = require('../server/baza');
 const migracje = require('../server/migracje');
 const tryb = require('../server/tryb-testowy');
 const czas = require('../server/pomocnicze/czas');
-const przepisy = require('../server/logika/przepisy');
 
 // Baza oznaczona PRZED zaladowaniem serwera — inaczej straznik odmowi startu.
 {
@@ -146,10 +145,9 @@ test('T2: logowanie z listy kont używa zwykłego endpointu i tokenu sesji; wpis
   assert.ok(ciastko, 'ta sama sesja ciasteczkowa co przy zwykłym logowaniu');
   const kto = await (await fetch(`${ADRES}/api/psa/auth/whoami`, { headers: { Cookie: ciastko.split(';')[0] } })).json();
   assert.equal(kto.zalogowany, true);
-  const wpis = db().prepare('SELECT * FROM psa_dziennik_logowan ORDER BY id DESC LIMIT 1').get();
-  assert.equal(wpis.email, 'notariusz@example.com');
-  assert.equal(wpis.droga, 'lista_kont');
-  assert.equal(wpis.tryb_testowy, 1);
+  const wpis = db().prepare("SELECT * FROM psa_dziennik WHERE akcja = 'logowanie' ORDER BY id DESC LIMIT 1").get();
+  assert.equal(wpis.kto, 'notariusz@example.com');
+  assert.match(wpis.opis, /droga: lista_kont; .*tryb testowy/);
   // Bez hasła — odmowa jak zawsze: lista kont nie omija uwierzytelnienia.
   const zle = await fetch(`${ADRES}/api/psa/auth/login`, {
     method: 'POST',
@@ -157,54 +155,54 @@ test('T2: logowanie z listy kont używa zwykłego endpointu i tokenu sesji; wpis
     body: JSON.stringify({ email: 'notariusz@example.com', haslo: 'zle-haslo', droga_testowa: 'lista_kont' }),
   });
   assert.equal(zle.status, 401);
-  assert.throws(() => db().prepare('DELETE FROM psa_dziennik_logowan').run(), /append-only/);
+  assert.throws(() => db().prepare('DELETE FROM psa_dziennik').run(), /append-only/);
 });
 
-test('T2: „Zaloguj (tryb testowy)” po zgłoszeniu to ten sam link i token, który poszedł e-mailem', async () => {
-  const odp = await fetch(`${ADRES}/api/psa/portal/zgloszenia`, {
+test('T2: zgłoszenie w trybie testowym — e-mail z linkiem w skrzynce testowej; token z e-maila aktywuje konto', async () => {
+  const odp = await fetch(`${ADRES}/api/psa/portal/zgloszenie`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Origin: ADRES },
     body: JSON.stringify({ email: 'nowy.klient@example.com', krs: '0000990003' }),
   });
-  assert.equal(odp.status, 201);
-  const dane = await odp.json();
-  assert.equal(dane.zaproszenie_wyslane, true);
-  assert.ok(dane.link_testowy, 'link w odpowiedzi trybu testowego');
-  const token = dane.link_testowy.split('#/aktywuj/')[1];
-  const konto = db().prepare('SELECT * FROM psa_konta WHERE email = ?').get('nowy.klient@example.com');
-  assert.equal(konto.token_aktywacji, token, 'ten sam token co w bazie');
+  assert.equal(odp.status, 202);
+  assert.ok(!JSON.stringify(await odp.json()).includes('token'), 'odpowiedź nie ujawnia linku (D-079)');
   const mail = skrzynka.lista().find((w) => w.do === 'nowy.klient@example.com');
-  assert.ok(skrzynka.wiadomosc(mail.id).html.includes(token), 'ten sam token co w e-mailu');
-  // Zwykły endpoint aktywacji przyjmuje token — wygasanie i reguły haseł bez zmian.
-  const akt = await fetch(`${ADRES}/api/psa/portal/aktywacja/${token}`);
+  const token = skrzynka.wiadomosc(mail.id).tekst.match(/token=([0-9a-f]+)/)[1];
+  const konto = db().prepare('SELECT * FROM psa_konta WHERE email = ?').get('nowy.klient@example.com');
+  assert.notEqual(konto.token_aktywacji, token, 'w bazie tylko skrót tokenu');
+  const akt = await fetch(`${ADRES}/api/psa/portal/aktywacja`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: ADRES },
+    body: JSON.stringify({ token, haslo: 'Mocne-Haslo-2026!', regulamin: true }),
+  });
   assert.equal(akt.status, 200);
+  assert.equal(db().prepare('SELECT aktywne FROM psa_konta WHERE id = ?').get(konto.id).aktywne, 1);
 });
 
 test('T3: atrapa KRS odpowiada dla numerów testowych w kształcie API', async () => {
-  const { pobierzZKrs } = require('../server/trasy/krs');
+  const { pobierzZKrs } = require('../server/krs');
   const wynik = await pobierzZKrs('0000990001');
   assert.equal(wynik.znaleziono, true);
   assert.equal(wynik.dane.forma_prawna, 'PROSTA SPÓŁKA AKCYJNA');
 });
 
-test('T4: symulowana data działa na bramkę 2027 i nie cofa się przed ostatnie zdarzenie', () => {
-  assert.equal(przepisy.nowelizacjaObowiazuje(czas.dzisIso()), czas.dzisIso() >= '2027-02-18');
+test('T4: symulowana data działa na czas rejestru i nie cofa się przed ostatnie zdarzenie', () => {
   tryb.ustawDate(db(), '2027-03-01');
   assert.equal(czas.dzisIso(), '2027-03-01');
-  assert.equal(przepisy.nowelizacjaObowiazuje(czas.dzisIso()), true);
   assert.equal(db().prepare('SELECT przesuniecie_ms FROM psa_baza_testowa').get().przesuniecie_ms, czas.przesuniecie());
 
   // Zdarzenie zapisane „w przyszłości” blokuje powrót przed jego chwilę.
-  db().prepare(`INSERT INTO psa_spolki (nazwa, utworzono) VALUES ('Spółka do testu daty', ?)`).run(czas.terazIso());
-  const spolkaId = db().prepare('SELECT MAX(id) AS id FROM psa_spolki').get().id;
-  const rejestr = require('../server/rejestr');
-  const wynik = rejestr.dokonajWpisu(db(), {
-    spolkaId,
-    typ: 'emisja',
-    wejscie: { seria: 'A', nr_pierwszy: 1, ilosc: 10, data_wpisu_krs: '2027-03-01', rodzaj_akcji: 'zwykla' },
-    autor: 'test',
+  const spolkaId = require('../server/dane/spolki').dodaj(db(), {
+    krs: '0000990777', nazwa: 'Spółka do testu daty', siedziba: 'Gdańsk', adres: 'ul. Testowa 1', sad_rejestrowy: 'SR Gdańsk', data_rejestracji: '2027-03-01',
   });
-  const zapisane = db().prepare('SELECT data_wpisu FROM psa_zdarzenia WHERE id = ?').get(wynik.zdarzenie.id);
+  const { dodajOsobe, otworz, ustawKancelarie } = require('./pomoc');
+  ustawKancelarie(db());
+  const osoba = dodajOsobe(db());
+  otworz(db(), spolkaId, {
+    serie: [{ seria: 'A', numery: '1-10', liczba: 10, data_wpisu_krs: '2027-03-01' }],
+    akcjonariusze: [{ osoba_id: osoba, akcje: [{ seria: 'A', numery: '1-10', liczba: 10 }] }],
+  });
+  const zapisane = db().prepare('SELECT data_wpisu FROM psa_zdarzenia ORDER BY id DESC LIMIT 1').get();
   assert.equal(czas.dzienLokalny(zapisane.data_wpisu), '2027-03-01', 'znacznik nowego zdarzenia z symulowanej daty');
   assert.throws(() => tryb.ustawDate(db(), null), /wcześniejszej niż ostatnie zdarzenie/);
   assert.throws(() => tryb.ustawDate(db(), '2027-02-01'), /wcześniejszej/);

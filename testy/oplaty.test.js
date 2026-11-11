@@ -1,139 +1,65 @@
 'use strict';
 
-/**
- * Rozliczenia (sekcja 1, 5, 8, 15 specyfikacji) - testy jednostkowe serwisu
- * `server/oplaty.js` i czystych funkcji `logika/przepisy.js` zwiazanych
- * z nowelizacja/stawkami. Baza w pamieci (`testy/pomoc.js`).
- */
+/** Opłaty (§ 3.3, § 5): do zapłaty → opłacona / anulowana; numer faktury to pole; eksport CSV. */
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { bazaTestowa, dodajSpolke } = require('./pomoc');
+const { bazaTestowa, dodajSpolke, dodajOsobe, wpisz, otworz } = require('./pomoc');
 const oplaty = require('../server/oplaty');
-const przepisy = require('../server/logika/przepisy');
+const czas = require('../server/pomocnicze/czas');
 
-test('stawkaGrosze zwraca kwoty z przepisy.js, rzuca dla nieznanego typu', () => {
-  assert.equal(przepisy.stawkaGrosze('prowadzenie'), przepisy.STAWKI_GROSZE.PROWADZENIE_ROCZNIE);
-  assert.equal(przepisy.stawkaGrosze('wpis'), przepisy.STAWKI_GROSZE.WPIS);
-  assert.equal(przepisy.stawkaGrosze('informacja'), przepisy.STAWKI_GROSZE.INFORMACJA);
-  assert.throws(() => przepisy.stawkaGrosze('cos-innego'), /Nieznany typ opłaty/);
-});
-
-test('nowelizacjaObowiazuje porownuje z data wejscia w zycie (18.02.2027)', () => {
-  assert.equal(przepisy.nowelizacjaObowiazuje('2026-08-05'), false);
-  assert.equal(przepisy.nowelizacjaObowiazuje('2027-02-17'), false);
-  assert.equal(przepisy.nowelizacjaObowiazuje('2027-02-18'), true);
-  assert.equal(przepisy.nowelizacjaObowiazuje('2030-01-01'), true);
-});
-
-test('naliczOplateWpisu wstawia oplate typu wpis ze stawka z przepisow', () => {
+function zOplatami() {
   const db = bazaTestowa();
-  const spolka = dodajSpolke(db);
-  const wpis = oplaty.naliczOplateWpisu(db, { spolkaId: spolka, sprawaId: null, typZdarzenia: 'Przeniesienie akcji', autor: 'Test' });
-  assert.equal(wpis.typ, 'wpis');
-  assert.equal(wpis.kwota_grosze, przepisy.STAWKI_GROSZE.WPIS);
-  assert.equal(wpis.sprawa_id, null);
-  assert.equal(wpis.status, 'naliczona');
-});
+  const s = dodajSpolke(db, { nazwa: 'Alfa; prosta spółka akcyjna' });
+  const a = dodajOsobe(db, { nazwa: 'Anna A' });
+  const b = dodajOsobe(db, { nazwa: 'Bartosz B' });
+  otworz(db, s, { serie: [{ seria: 'A', numery: '1-10', liczba: 10, data_wpisu_krs: '2026-01-10' }], akcjonariusze: [{ osoba_id: a, akcje: [{ seria: 'A', numery: '1-10', liczba: 10 }] }] });
+  db.prepare("DELETE FROM psa_oplaty WHERE typ = 'prowadzenie'").run(); // opłata z otwarcia — test prowadzenia niżej
+  wpisz(db, s, [{ typ: 'przeniesienie', zbywca_osoba_id: a, nabywcy: [{ osoba_id: b, akcje: [{ seria: 'A', numery: '1', liczba: 1 }] }] }], { zadajacy: 'osoba', zadajacy_osoba_id: b, oplata: 'tak' });
+  wpisz(db, s, [{ typ: 'przeniesienie', zbywca_osoba_id: a, nabywcy: [{ osoba_id: b, akcje: [{ seria: 'A', numery: '2', liczba: 1 }] }] }], { oplata: 'tak' });
+  const [wpisOsoby, wpisSpolki] = oplaty.lista(db, { filtr: 'wszystkie' }).sort((x, y) => x.id - y.id);
+  return { db, s, a, b, wpisOsoby, wpisSpolki };
+}
 
-test('naliczOplateInformacji wstawia oplate typu informacja', () => {
-  const db = bazaTestowa();
-  const spolka = dodajSpolke(db);
-  const inf = oplaty.naliczOplateInformacji(db, { spolkaId: spolka, odbiorcaOsobaId: null, autor: 'Test' });
-  assert.equal(inf.typ, 'informacja');
-  assert.equal(inf.kwota_grosze, przepisy.STAWKI_GROSZE.INFORMACJA);
-});
-
-test('naliczOtwarcieRejestru nalicza prowadzenie + wpis w jednym zadaniu, idempotentnie (Z-108/P-007)', () => {
-  const db = bazaTestowa();
-  const spolka = dodajSpolke(db);
-
-  const pierwsze = oplaty.naliczOtwarcieRejestru(db, { spolkaId: spolka, dataOtwarcia: '2026-03-10', autor: 'Test' });
-  assert.equal(pierwsze.prowadzenie.utworzono, true);
-  assert.equal(pierwsze.prowadzenie.oplata.kwota_grosze, przepisy.STAWKI_GROSZE.PROWADZENIE_ROCZNIE);
-  assert.equal(pierwsze.wpis.utworzono, true);
-  assert.equal(pierwsze.wpis.oplata.kwota_grosze, przepisy.STAWKI_GROSZE.WPIS);
-  assert.equal(pierwsze.wpis.oplata.sprawa_id, null);
-
-  // Druga proba (np. po przerwanym zadaniu) nic nie dublauje.
-  const druga = oplaty.naliczOtwarcieRejestru(db, { spolkaId: spolka, dataOtwarcia: '2026-03-10', autor: 'Test' });
-  assert.equal(druga.prowadzenie.utworzono, false);
-  assert.equal(druga.prowadzenie.oplata.id, pierwsze.prowadzenie.oplata.id);
-  assert.equal(druga.wpis.utworzono, false);
-  assert.equal(druga.wpis.oplata.id, pierwsze.wpis.oplata.id);
-
-  const wszystkie = db.prepare('SELECT * FROM psa_oplaty WHERE spolka_id = ?').all(spolka);
-  assert.equal(wszystkie.length, 2, 'dokladnie dwie pozycje - prowadzenie i wpis - bez wzgledu na liczbe wywolan');
-});
-
-test('dodajOplateReczna: domyslna kwota ze stawki, mozliwe nadpisanie', () => {
-  const db = bazaTestowa();
-  const spolka = dodajSpolke(db);
-
-  const domyslna = oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'informacja', autor: 'Test' });
-  assert.equal(domyslna.kwota_grosze, przepisy.STAWKI_GROSZE.INFORMACJA);
-
-  const nadpisana = oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'informacja', kwotaGrosze: 1234, autor: 'Test' });
-  assert.equal(nadpisana.kwota_grosze, 1234);
-});
-
-test('dodajOplateReczna: Z-101..Z-104 - kwota niecalkowita, ujemna albo powyzej stawki maksymalnej odrzucone', () => {
-  const db = bazaTestowa();
-  const spolka = dodajSpolke(db);
-
-  assert.throws(
-    () => oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'informacja', kwotaGrosze: 100.5, autor: 'Test' }),
-    /liczbą całkowitą/
+test('lista: płatnik, rodzaj, kwoty netto i brutto; filtry do zapłaty / opłacone / wszystkie', () => {
+  const { db, wpisOsoby, wpisSpolki } = zOplatami();
+  assert.deepEqual(
+    [wpisOsoby.rodzaj, wpisOsoby.platnik_nazwa, wpisOsoby.kwota_netto_grosze, wpisOsoby.kwota_brutto_grosze, wpisOsoby.stan],
+    ['Wpis', 'Bartosz B', 10000, 12300, 'do_zaplaty']
   );
-  assert.throws(
-    () => oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'informacja', kwotaGrosze: -500, autor: 'Test' }),
-    /dodatnia/
-  );
-  assert.throws(
-    () => oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'wpis', kwotaGrosze: 100000000, autor: 'Test' }),
-    /stawki maksymalnej/
-  );
-  assert.throws(
-    () => oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'wpis', kwotaGrosze: 'abc', autor: 'Test' }),
-    /liczbą całkowitą/
-  );
+  assert.equal(wpisSpolki.platnik_nazwa, 'Alfa; prosta spółka akcyjna');
+  oplaty.oplacona(db, wpisSpolki.id);
+  assert.deepEqual(oplaty.lista(db, { filtr: 'do_zaplaty' }).map((o) => o.id), [wpisOsoby.id]);
+  assert.deepEqual(oplaty.lista(db, { filtr: 'oplacone' }).map((o) => [o.id, o.oplacono]), [[wpisSpolki.id, czas.dzisIso()]]);
+  assert.equal(oplaty.lista(db, { filtr: 'wszystkie' }).length, 2);
 });
 
-test('obliczBrutto: 23% VAT, zaokraglenie matematyczne do pelnego grosza', () => {
-  assert.equal(przepisy.obliczBrutto(10000), 12300);
-  assert.equal(przepisy.obliczBrutto(5000), 6150);
-  // 33 * 1.23 = 40.59 -> zaokraglenie matematyczne w dol do 41 (40.59 -> 41).
-  assert.equal(przepisy.obliczBrutto(33), 41);
-  assert.equal(przepisy.obliczBrutto(10000, 8), 10800);
+test('przejścia: opłaconej ani anulowanej nie zmienia się; anulowanie wymaga powodu', () => {
+  const { db, wpisOsoby, wpisSpolki } = zOplatami();
+  assert.throws(() => oplaty.anuluj(db, wpisOsoby.id, ' '), (e) => e.name === 'BladWalidacji' && e.bledy.some((b) => b.pole === 'powod'));
+  assert.equal(oplaty.anuluj(db, wpisOsoby.id, 'Opłata naliczona omyłkowo').stan, 'anulowana');
+  assert.throws(() => oplaty.oplacona(db, wpisOsoby.id), /„anulowana”/);
+  oplaty.oplacona(db, wpisSpolki.id);
+  assert.throws(() => oplaty.anuluj(db, wpisSpolki.id, 'Za późno'), /„oplacona”/);
 });
 
-test('zmienStatus aktualizuje status i znacznik czasu', () => {
-  const db = bazaTestowa();
-  const spolka = dodajSpolke(db);
-  const wpis = oplaty.dodajOplateReczna(db, { spolkaId: spolka, typ: 'wpis', autor: 'Test' });
-  assert.equal(wpis.zaktualizowano, null);
-
-  const po = oplaty.zmienStatus(db, { id: wpis.id, status: 'oplacona' });
-  assert.equal(po.status, 'oplacona');
-  assert.notEqual(po.zaktualizowano, null);
+test('numer faktury to pole — nie zmienia stanu', () => {
+  const { db, wpisOsoby } = zOplatami();
+  const o = oplaty.ustawFakture(db, wpisOsoby.id, 'FV 12/11/2026');
+  assert.deepEqual([o.numer_faktury, o.stan], ['FV 12/11/2026', 'do_zaplaty']);
 });
 
-test('eksportujCsv - naglowek, escaping przecinka i cudzyslowu, kwota w zlotych', () => {
-  const csv = oplaty.eksportujCsv([
-    {
-      id: 1,
-      spolka_nazwa: 'Firma „X, Y" P.S.A.',
-      typ: 'wpis',
-      okres: null,
-      kwota_grosze: 10050,
-      status: 'naliczona',
-      data_naliczenia: '2026-01-01',
-      notatka: null,
-      autor: 'Jan Kowalski',
-    },
-  ]);
-  const linie = csv.split('\r\n');
-  assert.equal(linie[0], 'id,spolka,typ,okres,kwota_zl,status,data_naliczenia,notatka,autor');
-  assert.match(linie[1], /^1,"Firma „X, Y"" P\.S\.A\.",wpis,,100\.50,naliczona,2026-01-01,,Jan Kowalski$/);
+test('CSV: nagłówek, średnik jako separator, kwoty z przecinkiem, pola ze średnikiem w cudzysłowie', () => {
+  const { db } = zOplatami();
+  const linie = oplaty.csv(oplaty.lista(db, { filtr: 'wszystkie' })).trim().split('\r\n');
+  assert.equal(linie[0], 'Data;Spółka;Płatnik;Rodzaj;Okres;Netto;Brutto;Stan;Numer faktury;Opłacono');
+  assert.equal(linie.length, 3);
+  assert.ok(linie[1].includes(';"Alfa; prosta spółka akcyjna";') && linie[1].includes(';100,00;123,00;do zapłaty;'), linie[1]);
+});
+
+test('CSV: komórka zaczynająca się od =, +, -, @ nie staje się formułą w Excelu', () => {
+  const linia = oplaty.csv([{ utworzono: '2026-11-08', spolka_nazwa: '=HYPERLINK("http://x")', platnik_nazwa: '+48 1', rodzaj: 'Wpis', okres: null, kwota_netto_grosze: 100, kwota_brutto_grosze: 123, stan: 'do_zaplaty', numer_faktury: '@x', oplacono: null }]).split('\r\n')[1];
+  assert.ok(linia.includes(`;"'=HYPERLINK(""http://x"")";'+48 1;`), linia);
+  assert.ok(linia.includes(";'@x;"), linia);
 });

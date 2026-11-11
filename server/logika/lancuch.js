@@ -118,4 +118,4 @@ function zweryfikuj(zdarzenia) {
   return { ok: true, sprawdzono, blad: null };
 }
 
-module.exports = { HASH_POCZATKOWY, kanonicznyJson, oczysc, skrot, zweryfikuj, SEP };
+module.exports = { HASH_POCZATKOWY, kanonicznyJson, oczysc, skrot, zweryfikuj };

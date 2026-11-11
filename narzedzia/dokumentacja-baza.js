@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Generuje `testy-audyt/schemat-bazy.txt` z REALNEGO schematu bazy (migracje
+ * Generuje `docs/schemat-bazy.txt` z REALNEGO schematu bazy (migracje
  * uruchomione na bazie w pamięci), nie z lektury `migracje.js`.
  *
  * Część `npm run dokumentacja` (README, sekcja "Dokumentacja") — uruchamiana
@@ -39,6 +39,6 @@ for (const tabela of tabele) {
 }
 db.close();
 
-const cel = path.join(__dirname, '..', 'testy-audyt', 'schemat-bazy.txt');
+const cel = path.join(__dirname, '..', 'docs', 'schemat-bazy.txt');
 fs.writeFileSync(cel, linie.join('\n') + '\n');
 console.log(`[dokumentacja] zapisano ${cel} (${tabele.length} tabel)`);

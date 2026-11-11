@@ -10,6 +10,9 @@
 > nie ma jeszcze odpowiedzi Łukasza pod blokiem „Pytanie" w pliku źródłowym. Wszystkie 15 trafia więc
 > do sekcji „Decyzje otwarte", nie do rejestru decyzji — nic tu nie jest zgadywane. Gdy Łukasz
 > odpowie, kolejna sesja dokumentacyjna przenosi je stąd jako nowe wpisy `D-0xx`.
+>
+> Ścieżki w starszych wpisach: `testy-audyt/`, `frontend-audyt/`, `RAPORT-STANU-PSA.md`, `CLAUDE-PSA-UPROSZCZENIE.md`,
+> `CLAUDE-PSA.md` i pliki `SESJA-*.md` są od Faz 0 i 6 uproszczenia w `docs/archiwum/`.
 
 ---
 
@@ -1666,6 +1669,173 @@
   równowartość 15 000 EUR — dziś procedurę AML włącza się ręcznie przełącznikiem przy spółce (etap 3.1). Wymaga ustalenia,
   z czego liczyć wartość (kapitał akcyjny, cena emisyjna, cena z umowy zbycia).
 
+### D-125–D-154 — Uproszczenie modułu: decyzje U-01…U-30 (Łukasz, 7.11.2026)
+
+- Obszar: cały moduł. Źródło i pełna treść: `CLAUDE-PSA-UPROSZCZENIE.md` § 2 (tam, gdzie `CLAUDE-PSA.md` albo `SESJA-*.md` mówią co innego, obowiązuje ta specyfikacja). Poniżej streszczenie; „zastępuje” — ostatnia kolumna § 2.
+- Decyzje:
+  1. **D-125 (U-01)** Jeden nowy schemat bazowy zamiast 71 migracji, bez zgodności wstecz (w bazie nie ma prawdziwych wpisów); do końca Fazy 6 schemat wolno edytować. Zastępuje migracje 1–71.
+  2. **D-126 (U-02)** Automatycznie naliczają się tylko opłata za prowadzenie rejestru i informacja zamawiana w portalu; przy operacji odpłatnej pracownik wybiera „Opłata 100 zł netto” albo „Bez opłaty” (bez wartości domyślnej, najwyżej jedna opłata na sprawę); informacja wydawana przez pracownika — 50 zł albo bez (organ — bez). Zastępuje podstan `oczekuje_na_oplate` i automatyczną opłatę za wpis.
+  3. **D-127 (U-03)** Dokumenty do podpisu przy zawarciu umowy, każdy osobno: umowa o prowadzenie rejestru (spółka, potem notariusz — QES; PEP reprezentanta w treści, RODO jako załącznik), uchwała akcjonariuszy o wyborze podmiotu (pomijana przy własnej uchwale klienta albo wyborze w umowie spółki), zgoda na korespondencję e-mail dla każdego akcjonariusza bez konta; plus umowa spółki wgrywana bez podpisu. Zastępuje komplet dokumentów wniosku.
+  4. **D-128 (U-04)** Wzory pism w Markdown (`wzory/*.md`), wynik zawsze PDF (pdfkit), wygląd zdefiniowany raz; `npm run wzory` — podgląd każdego wzoru; treść wzorów Word przeniesiona 1:1. Zastępuje `docx.js`, `zip.js`, `wzory-dysk.js`, `dokumenty-tresc.js`, `bloki-dokumentu.js`, `psa_szablony`.
+  5. **D-129 (U-05)** Stawki jako stałe w `przepisy.js`, bez edycji i wersji w aplikacji. Zastępuje D-085, `psa_stawki_wersje`.
+  6. **D-130 (U-06)** AML bez blokady systemowej: stała pozycja checklisty odhaczana przez pracownika; praktyka kancelarii bez zmian; dokumenty AML to zwykłe pliki osoby, data weryfikacji w kartotece. Zastępuje D-010, D-117, `aml_status`, `psa_osoby_skany_aml`, `stosuje_procedure_aml`.
+  7. **D-131 (U-07)** Przejęcie rejestru: zaznaczenie „przejęcie” we wniosku + dotychczasowy podmiot i data przejęcia; umowa bez warunku; „Otwórz rejestr” od dnia przejęcia (wpis `otwarcie` ze stanem z dokumentów poprzednika); bez osobnego procesu, statusów, protokołu, okresu wypowiedzenia i opłaty za przejęcie. Zastępuje D-084, `psa_przeniesienia*`, umowę pod warunkiem.
+  8. **D-132 (U-08)** Zgłoszenie i wniosek to jedna encja (formularz publiczny od razu zakłada wniosek); pozycja menu „Zgłoszenia” znika.
+  9. **D-133 (U-09)** Pisma powstają automatycznie, wysyła je pracownik jednym kliknięciem po podglądzie; ekran „Korespondencja” to jedno miejsce dla wszystkiego, co wychodzi z rejestru; niewysłane i błędy — w „Do zrobienia”. Zastępuje kolejkę „Zawiadomienia” i ekran listów do wysyłki.
+  10. **D-134 (U-10)** Pisma e-mailem z PDF w załączniku do adresatów ze zgodą na korespondencję e-mail (spółka — z umowy); bez zgody — list; treść e-maila krótka, bez danych osobowych; pismo widać też w portalu.
+  11. **D-135 (U-11)** Zgoda na korespondencję e-mail i żądanie powiadomień to jedna zgoda (przełącznik w karcie osoby); włączenie przez pracownika wymaga pliku podpisanej zgody, wyłączenie — daty; historia w `psa_historia_danych`. Zastępuje zgodę w 3 miejscach, `psa_oswiadczenia`.
+  12. **D-136 (U-12)** Aplikacja nie liczy głosów (to nie jest dana rejestru). Zastępuje głosy w `kontekst-pisma.js`.
+  13. **D-137 (U-13)** Usunięte: zgłoszenie nieprawidłowości, dokumenty na żądanie (uchwała przechodzi do dokumentów wniosku), podgląd systemu, edycja szablonów, współwłasność w kartotece, ręczne wystawianie pism.
+  14. **D-138 (U-14)** Zamiast statusu spółki — stan rejestru: otwarty / zamknięty (z powodem); opłata za prowadzenie przysługuje, dopóki rejestr jest otwarty. Zastępuje `w_likwidacji`, `zawieszona`, odstępstwo 22.
+  15. **D-139 (U-15)** Tekst zamiast słowników: podstawa wpisu, przyczyna odmowy; żądający: spółka, osoba z kartoteki, organ (tylko przy zajęciu) albo brak. Zastępuje kody odmowy ×7, role ×8, rodzaje dokumentu ×7.
+  16. **D-140 (U-16)** Usunięte pola bez skutku: `charakter_wpisu`, `dni_wstrzymania`, źródło sprawy, REGON, telefon, „ostatnia zmiana” w kartotece. Zastępuje D-027.
+  17. **D-141 (U-17)** Rodzaj akcji wyliczany (uprzywilejowana, gdy ma adnotację „uprawnienie”); pokrycie przy emisji — obowiązkowe pytanie tak/nie, „nie” = adnotacja „niepokryte”. Zastępuje D-112, D-114, pokrycie ×4.
+  18. **D-142 (U-18)** Nieprawidłowy PESEL (suma kontrolna albo data) blokuje zapis. Zastępuje ostrzeżenie bez blokady.
+  19. **D-143 (U-19)** Wniosek odrzucony albo porzucony (90 dni bez zmian): dane klienta usuwane automatycznie; zostają KRS, daty i stan. Zastępuje bezterminowe przechowywanie.
+  20. **D-144 (U-20)** Kontrola integralności łańcucha — na żądanie, przycisk w Ustawieniach, bez harmonogramu.
+  21. **D-145 (U-21)** Emisja tylko z datą wpisu do KRS i od razu z obejmującymi — jeden wpis; warunkowa emisja (art. 300¹¹⁷–300¹¹⁸) nadal poza zakresem. Zastępuje odstępstwa 3–4 w README.
+  22. **D-146 (U-22)** „Stan na” — tylko dzień. Zastępuje dokładność do minuty (sprint 6, poz. 2.3).
+  23. **D-147 (U-23)** Jedno konto na osobę (logowanie e-mailem), zakres z danych przez `zakresKonta(konto)`: osoba działająca za spółkę widzi wszystko o spółce, akcjonariusz — swoje sprawy, pisma i opłaty oraz informację bez danych z art. 300³⁵ § 1¹ KSH; zakres akcjonariusza wymaga zgody na e-mail i wygasa po zbyciu wszystkich akcji (D-039). Zastępuje role `akcjonariusz`, `wnioskodawca`, `spolka` i konto spółki.
+  24. **D-148 (U-24)** Informacja zamawiana w portalu — stan na koniec wybranego dnia: domyślnie i najpóźniej wczorajszego, najwcześniej dnia otwarcia; pierwszą można zamówić dzień po otwarciu. Dotyczy wyłącznie portalu — pracownik wydaje informację w każdej chwili, według stanu na dowolny dzień.
+  25. **D-149 (U-25)** Zmiana danych osoby albo spółki nie jest wpisem: edycja w miejscu + wiersze historii w `psa_historia_danych` (append-only); bez sprawy, terminu, opłaty, powiadomień i zdarzeń w łańcuchu. Zastępuje typy `zmiana_danych_akcjonariusza`, `zmiana_danych_spolki`.
+  26. **D-150 (U-26)** Numery akcji zawsze wpisuje pracownik (seria, numery, liczba) w każdej operacji; bez doboru automatycznego i skrótów; liczba niezgodna z numerami — błąd przy polu. Zastępuje dobór automatyczny (`logika/kreator.js`, `wpis-zbycia-logika.js`).
+  27. **D-151 (U-27)** Informacja z rejestru zawiera tylko dane z art. 300³³ § 1 KSH, PESEL albo datę urodzenia (D-076), numer informacji i „stan na” (układ — spec § 4); bez wynagrodzenia, podstawy prawnej, odbiorcy, ceny emisyjnej (znika z modelu i formularzy), NIP, REGON, udziału procentowego i dat umowy i otwarcia rejestru.
+  28. **D-152 (U-28)** List: „Nadano” jednym kliknięciem zapisuje dzisiejszą datę — bez numeru nadania i skanu potwierdzenia.
+  29. **D-153 (U-29)** Nazwy pism jak w art. 300³⁴ § 9 KSH: powiadomienie o zamierzonym wpisie / o wpisie / o odmowie; „zawiadomienie” tylko wobec sądu (art. 300³² § 3); przychodzące to „pliki”, wychodzące — „pisma”.
+  30. **D-154 (U-30)** Opłata za prowadzenie rejestru do wyboru we wniosku: raz w roku (1 200 zł netto, domyślnie) albo co miesiąc (100 zł netto); wybór wchodzi do umowy, zmienia go tylko kancelaria; po zamknięciu rejestru nowe opłaty nie powstają. Zastępuje tylko opłatę roczną.
+
+### D-155–D-166 — Faza 1 uproszczenia: rozstrzygnięcia wykonawcze (7.11.2026; raport `raporty/FAZA-1.md`)
+
+- Obszar: rdzeń rejestru (schemat, wpisy, sprawy). Decyzje podjęte przy wykonaniu specyfikacji — do akceptacji Łukasza razem z raportem.
+- Decyzje:
+  1. **D-155** Nazwa migracji bazowej niesie skrót treści SQL: każda zmiana schematu do końca Fazy 6 zakłada bazę od nowa (pod zabezpieczeniem U-01). Po Fazie 6 schemat zamrożony, zmiany jako kolejne migracje.
+  2. **D-156** `psa_osoby_dzialajace` służyła do zapisu osoby działającej przy wpisie (notariusz albo zastępca notarialny — imię, nazwisko, funkcja w treści każdego wpisu, domyślna dla pracownika, słownik w trasach `auth`). Zastąpiona polem tekstowym `dziala_przez` w sprawie (poza treścią wpisu — R10); słownik, kolumna `psa_uzytkownicy.osoba_dzialajaca_id` i trasy usunięte.
+  3. **D-157** R2 a art. 300³⁴ § 3 KSH (🟢, § 0 pkt 6): przyznanie uprawnionemu z obciążenia prawa głosu zmienia uprawnienia akcjonariusza — akcjonariusz jest na liście osób do powiadomienia.
+  4. **D-158** R5: pozycje checklisty z atrybutów tylko przy operacjach, których dotyczą — ograniczenie: zbycie i ustanowienie obciążenia; niepokryte i zajęcie: zbycie (art. 300⁴⁰ § 1 dotyczy zbycia); prawo głosu: wpis, który je przyznaje.
+  5. **D-159** Sprostowanie: przy kilku sprostowaniach jednego wpisu obowiązuje ostatnie; zastępuje treść wyłącznie tym samym typem; otwarcia się nie wycofuje (tylko zastępuje treść); w zamkniętym rejestrze wolno sprostować tylko zamknięcie.
+  6. **D-160** Obciążenie i adnotacja to atrybut identyfikowany wpisem, który go ustanowił, i pozycją w tym wpisie; zmiana i wykreślenie wskazują atrybut i numery akcji (U-26); umorzenie akcji kończy atrybuty na tych numerach.
+  7. **D-161** Data otwarcia rejestru = dzień wpisu `otwarcie`; nazwa dotychczasowego podmiotu nie trafia do treści wpisu (R10) — zostaje we wniosku.
+  8. **D-162** Opłata za wpis (U-02) obciąża żądającego: osobę z kartoteki albo spółkę; sprawa bez operacji odpłatnej nie przyjmuje wyboru „opłata”.
+  9. **D-163** Odmowa wpisu usuwa niewysłane powiadomienia o zamierzonym wpisie i wezwania (przestały być potrzebne); odnotowane zgody na wpis po „Zmień treść” zostają.
+  10. **D-164** `terminy.js` — liczenie terminu bez zmian; funkcje `wstrzymaj`/`wznow` usunięte (stan zmienia wyłącznie `sprawy.zmienStan`), `dni_wstrzymania` usunięte (U-16).
+  11. **D-165** D-R01: wpis z chwilą wcześniejszą niż ostatni wpis spółki jest wstrzymany (kontrola zegara w symulacji sprawy).
+  12. **D-166** Do czasu przebudowy odłączone (trasy niemontowane, testy pominięte z numerem fazy): eksport ZIP i przypomnienia (Faza 2), import KRS i wnioski (Faza 4), portal i tpay (Faza 5).
+
+### D-167 — Odpowiedzi do raportu Fazy 1 (Łukasz, 7.11.2026)
+
+- Decyzje:
+  1. Uzupełnienie D-156: nie zapisuje się, czy wpisu dokonał notariusz, czy zastępca — pole `dziala_przez` w sprawie usunięte (bez zastępstwa).
+  2. D-157 potwierdzona.
+  3. `zip.js` na razie zostaje (eksport ZIP rejestru, § 3.6) — odstępstwo od listy usunięć U-04.
+  4. D-163 (zgoda na wpis po „Zmień treść”) — pytanie otwarte.
+
+### D-168 — Zgoda na wpis jest ogólna (Łukasz, 7.11.2026)
+
+- Obszar: sprawy / zgoda na wpis (art. 300³⁴ § 3 KSH; rozstrzyga pytanie z D-167 pkt 4)
+- Decyzja: zgoda na wpis wyraża zgodę na wpis zgodnie z dokumentem podstawy (np. umową spółki albo umową sprzedaży), bez szczegółów
+  wpisu — zostaje ważna po „Zmień treść” (w przeciwieństwie do wysłanych powiadomień, które tracą ważność — R2). Odnotowanie zgody: osoba,
+  „dopuszczalna forma”, data, opcjonalnie plik (D-088). Potwierdza zachowanie z D-163; bez zmian w kodzie.
+
+### D-169–D-180 — Faza 2 uproszczenia: rozstrzygnięcia wykonawcze (8.11.2026; raport `raporty/FAZA-2.md`)
+
+- Obszar: pisma, Korespondencja, informacja z rejestru, opłaty, proces dzienny. Decyzje podjęte przy wykonaniu specyfikacji — do akceptacji Łukasza razem z raportem.
+- Decyzje:
+  1. **D-169** Wzory w Markdown: treść Word 1:1 poza elementami usuniętymi decyzjami — REGON spółki (U-16), głosy w uchwale (U-12), nazwy pism (U-29), charakter wpisu (U-16); w pismach kancelarii podstawa prawna jednym wierszem pod tytułem, pouczenia bez odesłań w nawiasach (§ 4); NIP spółki tylko w umowie; po firmie nie dopisuje się „prosta spółka akcyjna” (firma ją zawiera).
+  2. **D-170** Umowa, uchwała i zgoda zachowują odesłania do przepisów (to akty stron). W umowie: „§ 15” → „§ 13” (adresy są w § 13); bez imion rodziców i dowodu reprezentanta (formularz z § 6 ich nie zbiera); dodane oświadczenie PEP (U-03), akapity o przejęciu (U-07) i płatności miesięcznej (U-30). Lista akcjonariuszy do KRS — jeden blok podpisów członków zarządu albo rady dyrektorów (imion nie przechowujemy). Zgoda e-mail: „pkt 4” → „pkt 5” i zdanie o przesyłaniu powiadomień (U-11).
+  3. **D-171** Pismo dostaje przy czynności numer (PSA/RRRR/NNNN; informacja — INF/RRRR/NNNN) i migawkę treści; PDF powstaje przy pierwszym podglądzie, pobraniu albo wysyłce i od tej chwili jest ten sam (SHA-256 w `psa_pisma`).
+  4. **D-172** Brak ulicy, kodu albo miejscowości kancelarii w Ustawieniach blokuje utworzenie pisma (a więc i wpis) komunikatem „Uzupełnij dane kancelarii w Ustawieniach”.
+  5. **D-173** Informacja z rejestru ma nagłówek kancelarii (bez daty) — wspólny wygląd pism; w treści tylko części z § 4.
+  6. **D-174** Wersja informacji dla akcjonariusza ukrywa u pozostałych PESEL, datę urodzenia, adres zamieszkania i e-mail; siedziba osoby prawnej i adres do doręczeń są widoczne (§ 3.5 poz. 23). Maskowanie białą listą na nowym modelu osoby.
+  7. **D-175** W tabeli „Akcje” liczba = liczba akcji wyemitowanych w serii; numery umorzone — osobny wiersz pod tabelą, tylko gdy są.
+  8. **D-176** Korespondencja: „Wyślij ponownie” tylko ze stanu „blad”; filtr „do wysłania” = e-maile i listy (bez kanału „portal” — Faza 5); podgląd PDF „inline”; niewysłane pismo usuwa się razem z plikiem PDF.
+  9. **D-177** Opłaty: CSV dla Excela (średnik, przecinek dziesiętny, BOM).
+  10. **D-178** Opłata za prowadzenie: okres „RRRR-MM-DD..RRRR-MM-DD”; proces dzienny nalicza od końca ostatniego okresu (nadrabia przerwy, zmiana rocznej na miesięczną nie dubluje); pierwsza opłata w dniu otwarcia; anulowany okres nie powstaje ponownie.
+  11. **D-179** Przypomnienie o kolejnym roku: e-mail do spółki 30 dni przed rocznicą, raz (ślad w dzienniku), tylko przy płatności rocznej i adresie e-mail spółki.
+  12. **D-180** Retencja U-19: wniosek odrzucony — od razu, roboczy albo złożony — po 90 dniach bez zmian; znikają dane klienta, checklista, notatka, dotychczasowy podmiot, pliki, niewysłane pisma i konto założone tylko dla wniosku; wysłane pisma zostają jako dowód.
+
+### D-181–D-185 — Odpowiedzi do raportu Fazy 2 (Łukasz, 11.11.2026)
+
+- Obszar: wygląd informacji z rejestru, umowa o prowadzenie rejestru, maskowanie.
+- Decyzje:
+  1. **D-181** Pisma są proste (wspólny wygląd „pismo” — bez zmian), ale **informacja z rejestru**, którą pobierają klient i pracownik, ma wygląd sprzed Fazy 2: znak „Notariat Rzeczypospolitej Polskiej” i dane kancelarii w nagłówku, zielona linia, tytuł krojem EB Garamond, treść krojem Inter, metryka (spółka z KRS · stan na · numer informacji) na zielonkawym tle, sekcje numerowane I., II., …, tabele bez siatki z etykietami kapitalikami, akcjonariusz — nazwa pogrubiona, dane szarym drobniejszym krojem pod nią; stopka: numer i „strona X z N”. Zastępuje D-173 i zdanie § 4 „jedna czcionka” (bez kroju o stałej szerokości — cyfry tabelaryczne Inter w kolumnach liczb). Treść bez zmian (U-27): firma i KRS stoją w metryce, więc sekcja „Spółka” podaje siedzibę, adres, sąd i datę rejestracji. Wygląd zdefiniowany raz, w `logika/wzory.js` (wariant „informacja”); kroje w `wzory/czcionki/` (OFL). Spółka do 10 akcjonariuszy i 3 serii nadal na jednej stronie (test).
+  2. **D-182** E-mail pozostałych akcjonariuszy jest jawny w informacji dla akcjonariusza (art. 300³⁵ § 1¹ KSH go nie wymienia) — tylko przy zgodzie na korespondencję e-mail, bo wtedy jest daną rejestru. Zastępuje D-174 w części dotyczącej e-maila; PESEL, data urodzenia i adres zamieszkania nadal ukryte. Stanu zgody innych osób akcjonariusz nie dostaje.
+  3. **D-183** Umowa § 6 i informacja RODO pkt 3a: rejestr prowadzi się w aplikacji, za pomocą której notariusz prowadzi rejestry w swojej kancelarii — w postaci elektronicznej, w sposób zapewniający bezpieczeństwo i integralność danych (art. 300³¹ § 3 i 4 KSH); odbiorcy danych — podmioty przetwarzające w imieniu kancelarii, w szczególności dostawcy usług informatycznych tej aplikacji. Bez odwołań do systemu Krajowej Rady Notarialnej.
+  4. **D-184** Umowa § 11 ust. 3: zamiast „warunkiem … jest uiszczenie Taksy” — „Taksa jest należna za każdą z czynności, o których mowa w ust. 1.” Umowa nie uzależnia wpisu od opłaty (R4).
+  5. **D-185** Akapity umowy o przejęciu rejestru (U-07) i płatności miesięcznej (U-30) oraz oświadczenie PEP reprezentanta (U-03) — akceptacja treści odłożona; do tego czasu zostają w brzmieniu z Fazy 2 (D-170). Pozycja w „Decyzjach otwartych”.
+
+### D-186–D-192 — Faza 3 uproszczenia: ekrany kancelarii (11.11.2026; raport `raporty/FAZA-3.md`)
+
+- Obszar: interfejs kancelarii (§ 5). Decyzje podjęte przy wykonaniu specyfikacji — do akceptacji Łukasza razem z raportem.
+- Decyzje:
+  1. **D-186** Pulpit: `GET /api/psa/pulpit` — sprawy w toku po terminie albo z terminem do 2 dni, sprawy wstrzymane z nowym plikiem, pisma z błędem wysyłki (na górze) i do wysłania; wiersz prowadzi do sprawy albo do Korespondencji z otwartym podglądem pisma. Wnioski, podpisy i przejęcia dochodzą w Fazie 4.
+  2. **D-187** Pole daty: jedno pole tekstowe DD.MM.RRRR (szerokość z zapasem na pełny format), kropki wstawiają się same, wklejenie w dowolnym separatorze, ikona kalendarza w polu. Zastępuje pole segmentowe (DD | MM | RRRR) — wspólne z portalem.
+  3. **D-188** Ekran sprawy: treść zapisuje się sama 0,6 s po zmianie, „Dalej” zapisuje przed przejściem; przycisk główny wyszarzony z krótkim powodem (pełna lista „Przed wpisem” pod treścią); „Wstrzymaj” (treść wezwania) i „Wznów” (data usunięcia przeszkody) — formularz w miejscu, „Odmów” — okno z przyczyną (czynność nieodwracalna), „Wycofaj” i „Dokonaj wpisu” — potwierdzenie; zaznaczenie checklisty widać od razu, zapis w tle. Po wpisie przycisk „Wyślij pisma” wysyła e-maile; listy — „Drukuj” i „Nadano” w wierszu; gdy wszystko wysłane, przycisku głównego nie ma.
+  4. **D-189** Kokpit: „Zmień” (zastaw, użytkowanie — prawo głosu) i „Wykreśl” zakładają sprawę z operacją wypełnioną danymi wiersza (wykreślenie zajęcia — żądający organ); „Sprostuj” — sprawa bez żądającego z treścią wpisu do poprawienia albo wycofania; „Zamknij rejestr” — sprawa z wpisem zamknięcia (checklista i „Dokonaj wpisu”, nie jednym kliknięciem); „Informacja z rejestru” — formularz w kokpicie (odbiorca, dzień, opłata), wynik: PDF i pismo w Korespondencji.
+  5. **D-190** Karta osoby: „Dokument zgody do podpisu” — `POST /api/psa/osoby/:id/dokument-zgody` (spółka do wyboru, gdy osoba ma akcje w kilku; wymaga adresu e-mail); pismo trafia do Korespondencji, kanał według R9. Włączenie zgody — wybór pliku z plików karty osoby.
+  6. **D-191** Usunięte poza listą fazy: `kokpit.js`, `wydruk.js`, `uzytkownicy.js`, `wpis-zbycia.js` (zastąpione nowymi ekranami), niepodłączone ekrany `wnioski.js`, `zgloszenia.js`, `przeniesienia.js` (trasy odłączone od Fazy 1; Faza 4 buduje ekran wniosku od nowa) i nieużywane komponenty `ui-rejestr.js` (m.in. `WyborZKartoteki`, `PaletaPolecen`, `Kafel`, `StatusAml`). Do Faz 4–5: pozycja menu „Wnioski” i „Nowa spółka”, osoby zawierające umowy w Ustawieniach, „Działają za spółkę”, „Zaproś do portalu”.
+  7. **D-192** e2e: scenariusze kancelarii przy 1440 i 390 px; `portal.spec.js` — `test.skip` „Faza 5”; `uklad-ekrany.spec.js` (regresje R4 usuniętych ekranów) usunięty; małpa — ekrany kancelarii, rozpoznaje okno wyboru pliku i pomija bieżącą pozycję menu. `test:seed`: poprawny NIP kancelarii (5840000016) — poprzedni nie przechodził walidacji Ustawień.
+  8. **D-193** (Łukasz, 11.11.2026) Faza 3 zaakceptowana. „Sprostuj” zakłada sprawę bez żądającego (sprostowanie z inicjatywy kancelarii); pracownik może zmienić żądającego — zostaje.
+
+### D-194–D-203 — Faza 4 uproszczenia: nowa spółka — wniosek → dokumenty → otwarcie (11.11.2026; raport `raporty/FAZA-4.md`)
+
+- Obszar: formularz publiczny, wniosek (portal i kancelaria), dokumenty z U-03, przyjęcie, otwarcie rejestru. Decyzje podjęte przy wykonaniu specyfikacji — do akceptacji Łukasza razem z raportem.
+- Decyzje:
+  1. **D-194** Dane wniosku — jeden schemat (`logika/wniosek.js`) dla portalu i kancelarii: spółka (wstępnie z KRS), osoba podpisująca umowę za spółkę (z pytaniem o PEP), akcjonariusze (e-mail każdego obowiązkowy), płatność (U-30), uchwała. Konto wnioskodawcy należy do osoby podpisującej umowę; „to ja” przy akcjonariuszu = ta sama osoba, jej zgoda na e-mail zaznacza się w formularzu (bez dokumentu). Nowe kolumny `psa_wnioski`: `krs_json` (odpis przy założeniu — różnice podświetlone w kancelarii) i `umowe_zawarl` (U-01).
+  2. **D-195** Formularz publiczny: zawsze ta sama odpowiedź (D-079); adres z kontem dostaje przypomnienie o logowaniu bez nowego wniosku; link aktywacyjny ważny 7 dni, w bazie tylko skrót tokenu; limit prób. Spółka już w rejestrze — wniosek powstaje, pracownik widzi ostrzeżenie i go odrzuca.
+  3. **D-196** Dokumenty z U-03 powstają przy „Złóż” (roboczy → złożony): umowa, uchwała (gdy mają ją podpisać akcjonariusze), zgoda dla każdego akcjonariusza poza „to ja”; kanał „portal” (nie trafiają do Korespondencji). Wybór uchwały (do podpisu / własna / wybór w umowie spółki) można zmienić po złożeniu. Ponowne złożenie po zwrocie tworzy dokumenty od nowa, a dotychczasowe podpisy tracą ważność (odrzucone z powodem).
+  4. **D-197** Test podpisu (D-086): plik klienta bez podpisu albo różny od pobranego dokumentu jest odrzucany od razu z komunikatem i się nie zapisuje; plik wgrany przez pracownika (np. skan oryginału z poczty) trafia do sprawdzenia. „Odrzuć plik” wymaga powodu, który widzi klient. Umowa spółki i własna uchwała — bez testu podpisu.
+  5. **D-198** Podpis notariusza: pracownik wgrywa umowę z podpisem notariusza po potwierdzeniu podpisu spółki i wybiera osobę zawierającą umowę z nowego pola Ustawień „Osoby zawierające umowy” (domyślnie notariusz) — trafia do danych spółki (`umowe_zawarl`).
+  6. **D-199** „Przyjmij” wymaga: umowy spółki, potwierdzonego podpisu spółki, umowy z podpisem notariusza, uchwały (podpisy potwierdzone, własna wgrana albo wybór w umowie spółki) i checklisty (reprezentacja według KRS, uchwała, zgody — z listą brakujących; przy przejęciu: rozwiązanie umowy i data, rejestr i dokumenty poprzednika). Spółka o istniejącym KRS — blokada. Przy powtórzonym PESEL albo numerze KRS osoby wybór „istniejąca / nowa” jest obowiązkowy. Zgody na e-mail — do historii (z plikiem albo z portalu); osoba podpisująca — osobą działającą za spółkę; konto — jej osobą (gdy ma już konto, konto z wniosku znika); pliki i pisma wniosku — do akt spółki.
+  7. **D-200** „Otwórz rejestr” zakłada sprawę z wpisem `otwarcie` (R1) z akcjonariuszami z wniosku i serią A z datą wpisu spółki do KRS — numery wpisuje pracownik na ekranie sprawy (U-26), dalej checklista i „Dokonaj wpisu”. Zgodność stanu otwarcia z dokumentami poprzednika sprawdza pozycja checklisty sprawy „Dokumenty zbadane”. Przy przejęciu przycisk wyszarzony „Dostępne od DD.MM.RRRR”. Pierwsza opłata za prowadzenie powstaje przy wpisie otwarcia.
+  8. **D-201** Odrzucenie wniosku: przyczyna obowiązkowa; powiadomienie o odmowie zawarcia umowy — listem, w Korespondencji (art. 108a PrNot). Zwrot do uzupełnienia: notatka widoczna w portalu, e-mail bez danych osobowych.
+  9. **D-202** Uchwała: blok podpisów akcjonariuszy bez liczby akcji (U-12; wniosek nie zbiera liczby akcji).
+  10. **D-203** Usunięte: podsystemy przeniesień i zgłoszeń, stary portal (nowy `trasy/portal.js` — zgłoszenie, aktywacja, logowanie, wniosek), `pakiet-wniosku`, `dokumenty-wniosku`, `zaproszenia`, `formy-podpisu` (sposoby podpisu — instrukcja w portalu, sprawdza pracownik), stare ekrany portalu i wniosku, `kraje`, `pesel`, `kontakt`, `nazwy-plikow`, nieużywane funkcje `formaty.js` i komponenty `ui-rejestr.js`; moduł KRS w `server/krs.js`. Testy pominięte „Faza 4” zastąpione nowymi. Konta testowe portalu dla zarządu Alfy i akcjonariuszy — Faza 5; atrapa KRS: Delta (0000990004) do scenariuszy od zera.
+
+### D-204–D-214 — Faza 5 uproszczenia: portal klienta (11.11.2026; raport `raporty/FAZA-5.md`)
+
+- Obszar: portal klienta (§ 6), konto i zakres (U-23), płatności tpay, „Działają za spółkę”, „Zaproś do portalu”. Decyzje podjęte przy wykonaniu specyfikacji — do akceptacji Łukasza razem z raportem.
+- Decyzje:
+  1. **D-204** (Łukasz, 11.11.2026) Faza 4 zaakceptowana. Konto wnioskodawcy należy do osoby podpisującej umowę za spółkę, a po przyjęciu wniosku jest ona osobą działającą za spółkę. Uchwała: na końcu zdanie „W głosowaniu oddano głosy ze 100% akcji Spółki.” i miejsce na podpisy wszystkich akcjonariuszy (bez liczby akcji — D-202).
+  2. **D-205** Zakres konta liczy jedna funkcja `zakresKonta()` (`server/portal.js`) przy każdym żądaniu portalu: osoba działająca za spółkę (`psa_reprezentanci`) — pełny zakres spółki; akcjonariusz — gdy ma dziś akcje i zgodę na korespondencję e-mail; obie role — suma; konto z wnioskiem — tylko wniosek, do jego przyjęcia. Cudza spółka, sprawa, pismo, opłata albo dokument wniosku — 404 (dokument wniosku dotąd 422).
+  3. **D-206** Odebranie dostępu (pytanie Łukasza: sprzedaż akcji, odwołanie z zarządu) — bez osobnej blokady konta. Zbycie wszystkich akcji i wycofanie zgody zamykają zakres akcjonariusza same (dane rejestru i karty osoby). Odwołanie z zarządu albo koniec pełnomocnictwa — pracownik klika „Usuń” w „Działają za spółkę” w kokpicie. Skutek przy następnym kliknięciu w portalu, bez wylogowania; wiersz w historii spółki (kto, kiedy). Konto bez zakresu loguje się, ale widzi tylko „Brak dostępu do spółki” i Konto.
+  4. **D-207** „Zgłoś zmianę”: opis (obowiązkowy, do 2000 znaków) i pliki → sprawa w toku, krok 1, opis w polu podstawy; żądający — spółka, gdy osoba działa za spółkę, w przeciwnym razie ta osoba; termin od dnia zgłoszenia, bez opłaty z góry (U-02). Dwuklik — ta sama sprawa (klucz idempotencji). Pulpit: „nowe zgłoszenie z portalu” do czasu „Dalej”. Pliki można dodać do sprawy w toku i wstrzymanej.
+  5. **D-208** Informacja z rejestru w portalu: zamówienie tworzy pismo i opłatę (`wydajInformacje`, U-24) i od razu prowadzi do tpay; po ITN opłata „opłacona”, pismo „wysłane” kanałem portal — do pobrania. Niezapłacone zamówienie na ten sam dzień wraca zamiast nowego długu. Osoba w obu rolach dostaje informację pełną (płaci spółka).
+  6. **D-209** Widoczność: sprawy — wszystkie sprawy spółki (działający za spółkę) albo własne (akcjonariusz); pisma — tylko wysłane i ważne, do spółki u działających za nią, do osoby na jej koncie (R9); opłaty do zapłaty — spółki albo własne, kwota brutto na przycisku.
+  7. **D-210** Płatności (`server/platnosci.js`) na modelu opłat z Fazy 2: `do_zaplaty` → `oplacona` przez tabelę przejść, bez skutku dla sprawy (U-02); weryfikacja ITN bez zmian; trasa ITN zamontowana (`/api/psa/platnosci/tpay/itn`). Testy płatności odblokowane i przepisane.
+  8. **D-211** „Zaproś do portalu” (karta osoby): osoba działająca za spółkę albo akcjonariusz ze zgodą, z adresem e-mail; zakłada konto albo wysyła nowy link (ten sam przycisk zastępuje „nie pamiętam hasła”); po ustawieniu hasła inne sesje konta wygasają. E-mail wychodzi od razu po kliknięciu, bez danych osobowych; ślad w historii osoby. **Odstępstwo od U-09:** zaproszenie nie jest pismem w Korespondencji — wymagałoby 9. typu pisma, a jego treść (bez linku) niczego nie dokumentuje.
+  9. **D-212** Konto w portalu: e-mail tylko do odczytu (zmianę adresu robi kancelaria w karcie osoby, potem „Wyślij nowy link”), zmiana hasła wymaga obecnego i wylogowuje inne urządzenia, zgoda na e-mail — przełącznik u osoby z akcjami. Po przyjęciu wniosku menu Start · Konto, bez ekranów wniosku.
+  10. **D-213** Usunięte: trasa zgłoszeń nieprawidłowości (U-13), test starego portalu i manifestu tras (`blok-d-http`), testy płatności dotyczące podstanu sprawy i okresu prowadzenia (okresy pokrywa `proces-dzienny.test.js`). Zero testów pominiętych „Faza 5”.
+  11. **D-214** `test:seed`: konta portalu — zarząd Alfy (`alfa.zarzad@example.com`, działa za spółkę) i Anna Testowa (akcjonariuszka ze zgodą). e2e: dwa scenariusze portalu i krok „Start zamiast wniosku po przyjęciu”; małpa — cztery nowe ekrany portalu. Pominięte przejście widoku przy szybkiej zmianie adresu nie jest już błędem JS.
+
+### D-215–D-220 — Faza 6 uproszczenia: porządki, bezpieczeństwo, dokumentacja (11.11.2026; raport `raporty/FAZA-6.md`)
+
+- Obszar: martwy kod, § 7 specyfikacji uproszczenia, dokumentacja. Decyzje podjęte przy wykonaniu specyfikacji — do akceptacji Łukasza razem z raportem.
+- Decyzje:
+  1. **D-215** (Łukasz, 11.11.2026) Faza 5 zaakceptowana. Umowa: § 12 ust. 3 — Spółka niezwłocznie zawiadamia notariusza o odwołaniu lub wygaśnięciu umocowania osoby działającej za Spółkę, także korzystającej z portalu klienta (dalsze ustępy przenumerowane). Osoba z kontem nie zgłasza drugiej spółki formularzem publicznym — drugą spółkę zakłada kancelaria („Nowa spółka”).
+  2. **D-216** Usunięte bez zastępstwa: nieużywane funkcje i stałe (`widziWrazliweDaneInnych`, `nowelizacjaObowiazuje`, `stawkaGrosze`, `naProcent`, `opiszLiczbeAkcji`, `wymagajKonta`, `posrednik`, `brakUprawnien`, terminy przeniesień i inne stałe bez czytelnika), eksporty bez wywołujących, awaryjne odpytanie tpay, REGON z odpisu KRS (`logika/regon.js`; U-16), `narzedzia/scenariusz-e2e*.js` (zastępuje je e2e), `testy/pominiete.js`. Czytnik ZIP przeniesiony do `testy/zip-czytaj.js` — aplikacja tylko zapisuje archiwa.
+  3. **D-217** Konfiguracja: dane kancelarii wyłącznie w Ustawieniach (`psa_ustawienia`) — bez `KANCELARIA_*`, `NOTARIUSZ_*`, `PODPISUJACY_*`, `NAZWA_IZBY`, `POKAZ_ZNAK_IZBY`, `PODGLAD_SYSTEMU`, `POCZTA_TRANSPORT`, `PODPIS_*`, `TPAY_URL_POWROTU`. Poczta: tryb testowy — skrzynka; poza nim wyłącznie SMTP z TLS (`requireTLS`). `nodemailer` 10.0.10 → 10.5.0 i `npm audit fix` (zależności Expressu) — 0 podatności.
+  4. **D-218** Bezpieczeństwo (§ 7): lista tras `testy/trasy-dozwolone.txt` porównywana z introspekcją (`narzedzia/trasy.js`, routery z jednej listy `ROUTERY_API` w `serwer.js`); `Origin` innej strony przy żądaniu zmieniającym stan — 403 (wyjątek ITN; brak nagłówka przepuszczany); CSP bez `unsafe-inline` poza trybem testowym; `Referrer-Policy: same-origin` (odstępstwo od `no-referrer` — inaczej `Origin: null` przy własnych POST); moduły trybu testowego wczytywane tylko przy fladze; `PORTAL_WLACZONY=false` — portal 503; limit 10 zamówień informacji na konto w 15 minut.
+  5. **D-219** Dokumentacja: `README.md` i `ARCHITEKTURA-PSA.md` od nowa (stan faktyczny, reguły domenowe); `PRZEPISY-PSA.md` — tylko kolumna „Element” mapy w § 11; `npm run dokumentacja` → `docs/endpointy-api.md`, `docs/schemat-bazy.txt`. Do `docs/archiwum/`: `CLAUDE-PSA-UPROSZCZENIE.md`, `RAPORT-STANU-PSA.md`, `testy-audyt/`, `frontend-audyt/`.
+  6. **D-220** Portal, „Zgłoś zmianę”: „Wyślij” wyszarzony z powodem, dopóki opis ma mniej niż 5 znaków (zamiast odpowiedzi 422 z serwera).
+
+### D-221–D-224 — Po Fazie 6: zawiadomienie sądu, zmiana hasła, instrukcja wdrożenia (11.11.2026)
+
+- Decyzje:
+  1. **D-221** (Łukasz, 11.11.2026) Faza 6 zaakceptowana — uproszczenie zakończone. Tak dla przypomnienia o zawiadomieniu sądu rejestrowego po zamknięciu rejestru i dla instrukcji wdrożenia.
+  2. **D-222** Zawiadomienie sądu (art. 300³² § 3 🔵): termin 7 dni od daty zamknięcia rejestru (= data wygaśnięcia albo rozwiązania umowy), tylko dla zamknięć od 18.02.2027. Pozycja na Pulpicie i komunikat w kokpicie do kliknięcia „Zawiadomiono sąd” — data trafia do historii spółki (bez zmiany schematu). Samo zawiadomienie — w systemie KRS, poza aplikacją.
+  3. **D-223** „Zmień hasło” w menu konta pracownika (trasa istniała, brakowało ekranu — administrator zostawał z hasłem tymczasowym). Zmiana kończy wszystkie sesje konta, także bieżącą — ekran prosi o ponowne logowanie.
+  4. **D-224** Instrukcja wdrożenia `docs/WDROZENIE.md`: Ubuntu 24.04 i Node.js 22, zapora (SSH tylko z biura), szyfrowany wolumen LUKS na bazę i pliki (ręczne odblokowanie po restarcie), usługa systemd z ograniczeniami, nginx z Let's Encrypt (aplikacja kancelarii tylko z IP biura; portal i powiadomienia tpay publiczne), poczta Microsoft 365 (z uwagą o wycofywaniu logowania hasłem do SMTP), tpay, codzienne kopie szyfrowane poza serwerem z kwartalną próbą odtworzenia, aktualizacje, lista kontrolna i sytuacje awaryjne.
+
+### D-225–D-229 — Przywrócenie funkcji portalu i wniosku na nowej bazie (Łukasz, 11.11.2026)
+
+- Obszar: portal klienta, wniosek o prowadzenie rejestru (portal i kancelaria). Łukasz ocenił portal i obsługę wniosku po uproszczeniu jako regres. Decyzja: zostaje nowa baza (droga B) i zmiany w korespondencji, pismach, kartotece i sposobie wpisu; wracają wybrane funkcje sprzed uproszczenia (`claude/Main`, commit `af81559`).
+- Decyzje:
+  1. **D-225** (Łukasz) Nie wracają: skany AML w portalu, zgłoszenie błędu we wpisie (U-06, U-13 bez zmian), kolejka „Zgłoszenia”, dokumenty na żądanie. Przejęcie rejestru zostaje w nowej postaci (U-07) — do testów: wniosek Theta w `test:seed`.
+  2. **D-226** Portal: Sprawy, Płatności i Informacja jako osobne zakładki (jak przed uproszczeniem), Pomoc — miejsce na treść kancelarii i kontakt; menu: Start · Sprawy · Płatności · Informacja · Pomoc · Konto. Zastępuje zasadę „najwyżej trzy ekrany” z § 6 specyfikacji uproszczenia. Powrót z tpay — do zakładki Informacja albo Płatności. Bez nowych tras (dane z `GET /api/psa/portal/start`, dodane opłacone).
+  3. **D-227** Formularz wniosku w portalu — kreator jak przed uproszczeniem: Spółka (z opłatą i przejęciem) → Reprezentant → Akcjonariusze → Podsumowanie, z klikalnym paskiem kroków, „Wstecz/Dalej”, listą braków z odnośnikiem do kroku i „Złóż wniosek”; po złożeniu — dokumenty do podpisu (U-03).
+  4. **D-228** Wniosek w kancelarii (także „Nowa spółka”) w 4 krokach: Dane spółki (różnice wobec KRS, reprezentacja według KRS, przejęcie) → Akcjonariusze (osoby już w kartotece: istniejąca albo nowa) → Dokumenty → Decyzja (przed przyjęciem, checklista, notatka); przycisk główny w nagłówku na każdym kroku. Ekran otwiera się na kroku właściwym dla stanu wniosku.
+  5. **D-229** `test:seed`: konta `epsilon.zarzad@example.com` (wniosek w toku — formularz) i `theta.zarzad@example.com` (wniosek z przejęciem, złożony, dzień przejęcia = dzień seeda); atrapa KRS 0000990005–0000990006.
+
 ---
 
 ## Decyzje otwarte
@@ -1673,6 +1843,11 @@
 > Nic poniżej nie jest rozstrzygnięte — nie zgaduj odpowiedzi. Gdy Łukasz odpowie (w
 > `testy-audyt/PYTANIA-DO-LUKASZA.md` albo bezpośrednio), kolejna sesja dokumentacyjna przenosi
 > odpowiedź tutaj jako nowy wpis `D-0xx` w sekcji „Decyzje”.
+
+### Z raportu Fazy 2 uproszczenia (D-185)
+
+- **Treść akapitów umowy** — przejęcie rejestru (§ 3 pkt 1, § 4 ust. 3), płatność miesięczna (§ 11 ust. 6)
+  i oświadczenie PEP reprezentanta (§ 3 pkt 5): Łukasz zaakceptuje je później.
 
 ### Z `testy-audyt/PYTANIA-DO-LUKASZA.md` — P-001–P-017 (odpowiedzi 7.11.2026: D-112–D-123)
 

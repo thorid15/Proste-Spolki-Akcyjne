@@ -135,7 +135,7 @@ router.get('/skrzynka/:id', (zad, odp) => {
       ${w.zalaczniki.length ? `<div><strong>Załączniki:</strong> ${w.zalaczniki.map(esc).join(', ')} — w pliku <a href="/test/skrzynka/${esc(w.id)}.eml">.eml</a></div>`
       : `<div><a href="/test/skrzynka/${esc(w.id)}.eml">Pobierz .eml</a></div>`}
     </div>
-    <div class="tresc-wiadomosci">${w.html}</div>`));
+    <div class="tresc-wiadomosci">${w.html || `<pre>${esc(w.tekst || '')}</pre>`}</div>`));
 });
 
 // ─────────────────────────────────────────────────────────────
