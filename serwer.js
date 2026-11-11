@@ -119,6 +119,7 @@ aplikacja.use('/api/psa/korespondencja', autoryzacja.wymagajPracownika, require(
 aplikacja.use('/api/psa/oplaty', autoryzacja.wymagajPracownika, require('./server/trasy/oplaty'));
 aplikacja.use('/api/psa/wnioski', autoryzacja.wymagajPracownika, require('./server/trasy/wnioski'));
 aplikacja.use('/api/psa/portal', require('./server/trasy/portal'));
+aplikacja.use('/api/psa/platnosci', require('./server/trasy/platnosci'));
 aplikacja.use('/api/psa', require('./server/trasy/pozostale'));
 
 // ── Statyki ──────────────────────────────────────────────────────────────

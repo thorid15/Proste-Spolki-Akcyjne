@@ -299,6 +299,12 @@ body {
   color: var(--karta);
   border-bottom: 1px solid var(--rejestr-2);
 }
+/* Menu portalu (§ 6): Start · Konto · Wyloguj — pod paskiem marki. */
+.menu-portalu { display: flex; justify-content: center; align-items: center; gap: var(--od-16); padding: var(--od-8) var(--od-16); border-bottom: 1px solid var(--linia); background: var(--karta); }
+.menu-portalu a[aria-current="page"] { font-weight: 600; text-decoration: none; }
+.wiersz-portalu { padding: var(--od-8) 0; border-bottom: 1px solid var(--linia); }
+.wiersz-portalu:last-child { border-bottom: 0; }
+.pisma-portalu { margin: var(--od-4) 0 0 var(--od-16); }
 .marka-pasek-nazwa {
   font-family: var(--font-display);
   font-size: var(--st-20);

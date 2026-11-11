@@ -102,6 +102,28 @@ function ZgodaEmail({ osoba, pliki, spolki, poZmianie }) {
   );
 }
 
+/** Konto w portalu (U-23): stan i zakres; „Zaproś do portalu” — także nowy link do hasła dla istniejącego konta. */
+function KontoWPortalu({ osoba, konto, poZmianie }) {
+  const [wyslano, ustawWyslano] = useState(false);
+  const c = useCzynnosc();
+  const zapros = () => c.wykonaj(async () => { await API.post(`/api/psa/osoby/${osoba.id}/zaproszenie`, {}); ustawWyslano(true); poZmianie(); });
+  const zakres = (s) => [s.pelny && 'działa za spółkę', s.akcjonariusz && 'akcjonariusz'].filter(Boolean).join(', ');
+  return (
+    <Karta tytul="Konto w portalu" akcje={<button type="button" className="btn btn-maly" disabled={c.trwa} onClick={zapros}>{konto ? 'Wyślij nowy link' : 'Zaproś do portalu'}</button>}>
+      {!konto ? <p className="male drugorzedny">Brak konta.</p> : (
+        <>
+          <p>{konto.email} — {konto.aktywne ? `konto aktywne${konto.ostatnie_logowanie ? `, ostatnie logowanie ${fmt.data(konto.ostatnie_logowanie)}` : ''}` : 'czeka na ustawienie hasła'}.</p>
+          {konto.spolki.length ? (
+            <ul>{konto.spolki.map((s) => <li key={s.id}><a href={`#/spolki/${s.id}`}>{s.nazwa}</a> — {zakres(s)}</li>)}</ul>
+          ) : <p className="male drugorzedny">Brak dostępu do spółek (nie działa za spółkę, nie ma akcji albo zgody na e-mail).</p>}
+        </>
+      )}
+      {wyslano && <Komunikat odmiana="rejestr" tresc={`Wysłano link na ${osoba.email}.`} />}
+      <Bledy blad={c.blad} />
+    </Karta>
+  );
+}
+
 function EkranOsoby({ osobaId }) {
   const { dane, blad, odswiez } = useDane(`/api/psa/osoby/${osobaId}`);
   const [edycja, ustawEdycje] = useState(null);
@@ -179,9 +201,7 @@ function EkranOsoby({ osobaId }) {
           </ul>
         )}
       </Karta>
-      <Karta tytul="Konto w portalu">
-        <p>{dane.konto ? (dane.konto.aktywne ? 'Konto aktywne.' : 'Konto nieaktywne.') : 'Brak konta.'}</p>
-      </Karta>
+      <KontoWPortalu osoba={o} konto={dane.konto} poZmianie={odswiez} />
       <Sekcja tytul="Historia zmian" licznik={dane.historia.length}>
         <HistoriaZmian historia={dane.historia} />
       </Sekcja>

@@ -10,7 +10,7 @@
  * nie wywolasz na zadanie.
  */
 
-const test = require('./pominiete')('Faza 5 — portal klienta i płatności przebudowywane');
+const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const http = require('node:http');
@@ -92,9 +92,7 @@ function uruchomAtrape() {
 
 let db;
 let platnosci;
-let oplatyModul;
 let tpay;
-let czas;
 let spolkaId;
 
 test.before(async () => {
@@ -104,28 +102,22 @@ test.before(async () => {
   ({ db } = require('../server/baza'));
   require('../server/migracje').uruchom(db());
   platnosci = require('../server/platnosci');
-  oplatyModul = require('../server/oplaty');
   tpay = require('../server/logika/tpay');
-  czas = require('../server/pomocnicze/czas');
-
-  const wynik = db()
-    .prepare(`INSERT INTO psa_spolki (nazwa, status, utworzono) VALUES (?, 'aktywna', ?)`)
-    .run('Platnosci Testowa P.S.A.', new Date().toISOString());
-  spolkaId = Number(wynik.lastInsertRowid);
+  spolkaId = require('./pomoc').dodajSpolke(db(), { nazwa: 'Platnosci Testowa P.S.A.' });
 });
 
 test.after(() => {
   if (atrapa) atrapa.close();
 });
 
-function dodajOplate({ kwotaGrosze = 5000, typ = 'informacja', sprawaId = null } = {}) {
-  const wynik = db()
-    .prepare(
-      `INSERT INTO psa_oplaty (spolka_id, sprawa_id, typ, kwota_grosze, status, data_naliczenia, autor, utworzono)
-       VALUES (?, ?, ?, ?, 'naliczona', ?, 'test', ?)`
-    )
-    .run(spolkaId, sprawaId, typ, kwotaGrosze, '2026-09-16', new Date().toISOString());
-  return db().prepare('SELECT * FROM psa_oplaty WHERE id = ?').get(wynik.lastInsertRowid);
+let okres = 0;
+function dodajOplate({ kwotaGrosze = 5000, typ = 'informacja' } = {}) {
+  okres += 1;
+  const oplataId = require('../server/dane/oplaty').dodaj(db(), {
+    spolka_id: spolkaId, typ, platnik: 'spolka', okres: typ === 'prowadzenie' ? `okres-${okres}` : null,
+    kwota_netto_grosze: kwotaGrosze, stawka_vat_procent: 23, autor: 'test',
+  });
+  return db().prepare('SELECT * FROM psa_oplaty WHERE id = ?').get(oplataId);
 }
 
 /** Powiadomienie z POPRAWNA suma kontrolna — tak, jak liczy je operator. */
@@ -163,7 +155,7 @@ test('link do zaplaty powstaje raz — dopoki kwota sie nie zmienila', async () 
 
   // Kwota sie zmienila — poprzedni link prowadzilby do zaplaty kwoty,
   // ktorej nikt juz nie jest winien.
-  db().prepare('UPDATE psa_oplaty SET kwota_grosze = ? WHERE id = ?').run(20000, oplata.id);
+  db().prepare('UPDATE psa_oplaty SET kwota_netto_grosze = ? WHERE id = ?').run(20000, oplata.id);
   const trzeci = await platnosci.przygotujZaplate(db(), {
     oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
   });
@@ -178,7 +170,6 @@ test('link do zaplaty powstaje raz — dopoki kwota sie nie zmienila', async () 
 
 test('Z-VAT: klient placi BRUTTO, oplata w bazie zostaje netto (sekcja 2.1)', async () => {
   const oplata = dodajOplate({ kwotaGrosze: 10000 });
-  assert.equal(oplata.stawka_vat_procent, 23, 'DEFAULT z migracji wypelnia stawke tez przy wstawieniu ominiajacym serwis');
 
   const { platnosc } = await platnosci.przygotujZaplate(db(), {
     oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
@@ -188,8 +179,8 @@ test('Z-VAT: klient placi BRUTTO, oplata w bazie zostaje netto (sekcja 2.1)', as
 
   const wynik = platnosci.przyjmijPowiadomienie(db(), powiadomienie(platnosc));
   assert.equal(wynik.zaksiegowano, true);
-  // psa_oplaty.kwota_grosze NIGDY nie zmienia sie na brutto - zostaje netto.
-  assert.equal(db().prepare('SELECT kwota_grosze FROM psa_oplaty WHERE id = ?').get(oplata.id).kwota_grosze, 10000);
+  // psa_oplaty.kwota_netto_grosze NIGDY nie zmienia sie na brutto - zostaje netto.
+  assert.equal(db().prepare('SELECT kwota_netto_grosze FROM psa_oplaty WHERE id = ?').get(oplata.id).kwota_netto_grosze, 10000);
 });
 
 test('awaria operatora nie zostawia wiszacej proby bez linku', async () => {
@@ -222,7 +213,7 @@ test('sfalszowany podpis nie ksieguje niczego', async () => {
   const wynik = platnosci.przyjmijPowiadomienie(db(), podrobione);
   assert.equal(wynik.ok, false);
   assert.match(wynik.powod, /[Ss]uma kontrolna/);
-  assert.equal(db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status, 'naliczona');
+  assert.equal(db().prepare('SELECT stan FROM psa_oplaty WHERE id = ?').get(oplata.id).stan, 'do_zaplaty');
 });
 
 test('zaplacono mniej, niz nalezy — oplata zostaje otwarta', async () => {
@@ -235,7 +226,7 @@ test('zaplacono mniej, niz nalezy — oplata zostaje otwarta', async () => {
   const wynik = platnosci.przyjmijPowiadomienie(db(), powiadomienie(platnosc, { kwota: '50.00' }));
   assert.equal(wynik.ok, false);
   assert.match(wynik.powod, /50\.00 zł zamiast 123\.00 zł/);
-  assert.equal(db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status, 'naliczona');
+  assert.equal(db().prepare('SELECT stan FROM psa_oplaty WHERE id = ?').get(oplata.id).stan, 'do_zaplaty');
 });
 
 test('powiadomienie z piaskownicy nie ksieguje platnosci produkcyjnej', async () => {
@@ -248,7 +239,7 @@ test('powiadomienie z piaskownicy nie ksieguje platnosci produkcyjnej', async ()
   const wynik = platnosci.przyjmijPowiadomienie(db(), powiadomienie(platnosc, { test_mode: '1' }));
   assert.equal(wynik.ok, false);
   assert.match(wynik.powod, /[Tt]ryb powiadomienia/);
-  assert.equal(db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status, 'naliczona');
+  assert.equal(db().prepare('SELECT stan FROM psa_oplaty WHERE id = ?').get(oplata.id).stan, 'do_zaplaty');
 });
 
 test('nieznany status transakcji nigdy nie znaczy „oplacona”', async () => {
@@ -259,7 +250,7 @@ test('nieznany status transakcji nigdy nie znaczy „oplacona”', async () => {
 
   const wynik = platnosci.przyjmijPowiadomienie(db(), powiadomienie(platnosc, { status: 'COS_NOWEGO' }));
   assert.equal(wynik.zaksiegowano, false);
-  assert.equal(db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status, 'naliczona');
+  assert.equal(db().prepare('SELECT stan FROM psa_oplaty WHERE id = ?').get(oplata.id).stan, 'do_zaplaty');
 });
 
 test('to samo powiadomienie dwa razy ksieguje raz', async () => {
@@ -276,38 +267,8 @@ test('to samo powiadomienie dwa razy ksieguje raz', async () => {
   assert.equal(drugie.zaksiegowano, false, 'idempotencja po stanie proby');
 
   const po = db().prepare('SELECT * FROM psa_oplaty WHERE id = ?').get(oplata.id);
-  assert.equal(po.status, 'oplacona');
-  assert.ok(po.oplacona_kiedy, 'data zaplaty zapisana');
-});
-
-test('zaplata uruchamia zadanie wpisu zlozone przez portal', async () => {
-  const teraz = new Date().toISOString();
-  const sprawa = db()
-    .prepare(
-      `INSERT INTO psa_sprawy (spolka_id, typ_zdarzenia, zrodlo, data_wplywu, stan, autor, utworzono,
-                               oczekuje_na_oplate, termin_do)
-       VALUES (?, 'przeniesienie', 'portal', '2026-01-01', 'nowa', 'test', ?, 1, '2026-01-08')`
-    )
-    .run(spolkaId, teraz);
-  const sprawaId = Number(sprawa.lastInsertRowid);
-  const oplata = dodajOplate({ typ: 'wpis', sprawaId, kwotaGrosze: 20000 });
-
-  const { platnosc } = await platnosci.przygotujZaplate(db(), {
-    oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
-  });
-  const wynik = platnosci.przyjmijPowiadomienie(db(), powiadomienie(platnosc));
-  assert.equal(wynik.zaksiegowano, true);
-
-  const po = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(sprawaId);
-  assert.equal(po.oczekuje_na_oplate, 0, 'sprawa wchodzi do kolejki kancelarii');
-  // Art. 300(34) § 1 KSH: tydzien liczy sie od OTRZYMANIA zadania, a zadanie
-  // zlozone przez portal dochodzi do skutku z chwila zaplaty. Porownanie
-  // MUSI isc przez ten sam, strefowo swiadomy `czas.dzisIso()`, ktorego
-  // uzywa aplikacja - `.env` ustawia TZ=Europe/Warsaw, wiec surowe UTC
-  // (`new Date().toISOString()`) rozjezdza sie z aplikacja kilka godzin
-  // dziennie, wokol polnocy czasu polskiego.
-  assert.equal(po.data_wplywu, czas.dzisIso(), 'dzien zaplaty jest dniem wplywu zadania');
-  assert.notEqual(po.termin_do, '2026-01-08', 'termin przeliczony od nowa');
+  assert.equal(po.stan, 'oplacona');
+  assert.ok(po.oplacono, 'data zaplaty zapisana');
 });
 
 test('awaryjne odpytanie ksieguje tak samo jak powiadomienie', async () => {
@@ -323,42 +284,8 @@ test('awaryjne odpytanie ksieguje tak samo jak powiadomienie', async () => {
   zachowanieAtrapy = { blad: null, status: 'correct' };
   const zaplacone = await platnosci.sprawdzUOperatora(db(), platnosc.id);
   assert.equal(zaplacone.zaksiegowano, true);
-  assert.equal(db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status, 'oplacona');
+  assert.equal(db().prepare('SELECT stan FROM psa_oplaty WHERE id = ?').get(oplata.id).stan, 'oplacona');
   zachowanieAtrapy = { blad: null, status: 'pending' };
-});
-
-test('okres prowadzenia biegnie od otwarcia rejestru, nie od Nowego Roku', () => {
-  assert.deepEqual(oplatyModul.okresProwadzenia('2026-11-20', 1), {
-    od: '2026-11-20', do: '2027-11-19', etykieta: '2026/2027',
-  });
-  assert.deepEqual(oplatyModul.okresProwadzenia('2026-11-20', 2), {
-    od: '2027-11-20', do: '2028-11-19', etykieta: '2027/2028',
-  });
-
-  const pierwszy = oplatyModul.naliczPierwszyRok(db(), {
-    spolkaId, dataOtwarcia: '2026-11-20', autor: 'test',
-  });
-  assert.equal(pierwszy.utworzono, true);
-  assert.equal(pierwszy.oplata.okres_od, '2026-11-20');
-  assert.equal(pierwszy.oplata.okres_do, '2027-11-19');
-
-  // Idempotentne: drugi raz za ten sam okres nic nie wstawia.
-  assert.equal(
-    oplatyModul.naliczPierwszyRok(db(), { spolkaId, dataOtwarcia: '2026-11-20', autor: 'test' }).utworzono,
-    false
-  );
-
-  // Przypomnienie: okres konczy sie 2027-11-19, wiec 30 dni wczesniej juz widac.
-  const doOdnowienia = oplatyModul.okresyDoOdnowienia(db(), { dni: 30, dzis: '2027-11-01' });
-  const nasza = doOdnowienia.find((w) => w.spolka_id === spolkaId);
-  assert.ok(nasza, 'spolka jest na liscie do odnowienia');
-  assert.equal(nasza.nastepny.od, '2027-11-20');
-  assert.equal(
-    oplatyModul.okresyDoOdnowienia(db(), { dni: 30, dzis: '2027-01-01' })
-      .some((w) => w.spolka_id === spolkaId),
-    false,
-    'rok wczesniej nie ma jeszcze czego przypominac'
-  );
 });
 
 test('token operatora odnawia sie po odrzuceniu — jedno ponowienie, nie petla', async () => {
@@ -406,7 +333,7 @@ test('ITN: odpowiada czystym TRUE i nie wycieka szczegolow', async () => {
   assert.equal(stOk, 200);
   assert.equal(trescOk, 'TRUE');
   assert.equal(
-    db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status,
+    db().prepare('SELECT stan FROM psa_oplaty WHERE id = ?').get(oplata.id).stan,
     'oplacona',
     'poprawne powiadomienie ksieguje zaplate'
   );
@@ -464,7 +391,7 @@ test('powiadomienie ze statusem PAID ksieguje tak samo jak TRUE', async () => {
   });
   const wynik = platnosci.przyjmijPowiadomienie(db(), powiadomienie(platnosc, { status: 'PAID' }));
   assert.equal(wynik.zaksiegowano, true);
-  assert.equal(db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status, 'oplacona');
+  assert.equal(db().prepare('SELECT stan FROM psa_oplaty WHERE id = ?').get(oplata.id).stan, 'oplacona');
 });
 
 /**
@@ -483,7 +410,7 @@ test('niedoplata widoczna w tr_paid nie ksieguje, mimo poprawnego tr_amount', as
   const wynik = platnosci.przyjmijPowiadomienie(db(), itn);
   assert.equal(wynik.ok, false);
   assert.match(wynik.powod, /30\.00 zł zamiast 123\.00 zł/);
-  assert.equal(db().prepare('SELECT status FROM psa_oplaty WHERE id = ?').get(oplata.id).status, 'naliczona');
+  assert.equal(db().prepare('SELECT stan FROM psa_oplaty WHERE id = ?').get(oplata.id).stan, 'do_zaplaty');
 });
 
 test('powiadomienie o cudzej transakcji nie ksieguje naszej', async () => {
@@ -512,7 +439,7 @@ test('zmiana kwoty uniewaznia stara transakcje TAKZE u operatora', async () => {
     oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
   });
 
-  db().prepare('UPDATE psa_oplaty SET kwota_grosze = ? WHERE id = ?').run(9500, oplata.id);
+  db().prepare('UPDATE psa_oplaty SET kwota_netto_grosze = ? WHERE id = ?').run(9500, oplata.id);
   await platnosci.przygotujZaplate(db(), {
     oplataId: oplata.id, urlPowiadomienia: 'https://x/itn', urlPowrotu: 'https://x/powrot',
   });

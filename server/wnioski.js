@@ -107,7 +107,7 @@ function nowyLinkAktywacji(db, kontoId) {
   return linkAktywacji(token);
 }
 
-/** Aktywacja konta: hasło i regulamin (link z e-maila). Zwraca konto. */
+/** Aktywacja konta albo nowe hasło (link z e-maila): hasło i regulamin; inne sesje konta wygasają. Zwraca konto. */
 async function aktywuj(db, { token, haslo, regulamin }) {
   const konto = token ? db.prepare('SELECT * FROM psa_konta WHERE token_aktywacji = ?').get(skrot(String(token))) : null;
   if (!konto || !konto.token_wygasa || konto.token_wygasa < czas.terazIso()) {
@@ -116,7 +116,7 @@ async function aktywuj(db, { token, haslo, regulamin }) {
   const ocena = hasla.ocenSile(String(haslo || ''));
   if (!ocena.ok) throw new BladWalidacji([{ pole: 'haslo', komunikat: ocena.powod }]);
   if (regulamin !== true) throw new BladWalidacji([{ pole: 'regulamin', komunikat: 'Zaakceptuj regulamin portalu.' }]);
-  db.prepare('UPDATE psa_konta SET hash_hasla = ?, aktywne = 1, token_aktywacji = NULL, token_wygasa = NULL, regulamin_zaakceptowano = ? WHERE id = ?')
+  db.prepare('UPDATE psa_konta SET hash_hasla = ?, aktywne = 1, token_aktywacji = NULL, token_wygasa = NULL, regulamin_zaakceptowano = ?, tokeny_wersja = tokeny_wersja + 1 WHERE id = ?')
     .run(await hasla.hashuj(String(haslo)), czas.terazIso(), konto.id);
   return db.prepare('SELECT * FROM psa_konta WHERE id = ?').get(konto.id);
 }
@@ -195,7 +195,7 @@ function zloz(db, id, kto) {
 /** Pismo wniosku do pobrania (dokument do podpisu) — tylko dokumenty tego wniosku. */
 function pismoWniosku(db, id, pismoId) {
   const p = danePisma.wniosku(db, id).find((x) => x.id === Number(pismoId));
-  if (!p) throw new BladWalidacji(['Nie odnaleziono dokumentu.']);
+  if (!p) throw require('./pomocnicze/odpowiedzi').nieZnaleziono('Nie odnaleziono dokumentu.');
   return p;
 }
 

@@ -18,7 +18,7 @@ const { CZESCI } = require('./pomocnicze/krok');
 const ui = require('./pomocnicze/ui');
 
 const K = 'notariusz@example.com';
-// Ekrany kancelarii (§ 5) i portalu z Fazy 4 (zgłoszenie, logowanie, wniosek). Reszta portalu — Faza 5.
+// Ekrany kancelarii (§ 5) i portalu (§ 6): zgłoszenie, logowanie, wniosek, Start obu ról, Zgłoś zmianę, Konto.
 const EKRANY = [
   { nazwa: 'k-pulpit', konto: K, app: 'kancelaria', adres: '/#/', nawigacja: true },
   { nazwa: 'k-sprawy', konto: K, app: 'kancelaria', adres: '/#/sprawy' },
@@ -36,6 +36,10 @@ const EKRANY = [
   { nazwa: 'p-logowanie', konto: null, app: 'portal', adres: '/portal.html#/' },
   { nazwa: 'p-zglos', konto: null, app: 'portal', adres: '/portal.html#/zglos' },
   { nazwa: 'p-wniosek-dokumenty', konto: 'gamma.zarzad@example.com', app: 'portal', adres: '/portal.html#/', nawigacja: true },
+  { nazwa: 'p-start-zarzad', konto: 'alfa.zarzad@example.com', app: 'portal', adres: '/portal.html#/', nawigacja: true },
+  { nazwa: 'p-start-akcjonariusz', konto: 'anna.zgoda@example.com', app: 'portal', adres: '/portal.html#/' },
+  { nazwa: 'p-zmiana', konto: 'alfa.zarzad@example.com', app: 'portal', adres: '/portal.html#/zmiana?spolka=1' },
+  { nazwa: 'p-konto', konto: 'anna.zgoda@example.com', app: 'portal', adres: '/portal.html#/konto' },
 ];
 
 /** Kandydaci do kliknięcia — widoczne, aktywne; poza ekranem startowym tylko z obszaru treści (`#tresc`). */

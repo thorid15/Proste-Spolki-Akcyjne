@@ -1,9 +1,10 @@
 'use strict';
 
 /**
- * Portal klienta — Faza 4: zgłoszenie spółki (formularz publiczny, U-08), aktywacja konta, logowanie
- * i wniosek (dane → dokumenty). Konto przed przyjęciem wniosku widzi wyłącznie swój wniosek (§ 7 pkt 2).
- * Start, zgłaszanie zmian, informacja z rejestru i płatności — Faza 5.
+ * Portal klienta (§ 6): zgłoszenie spółki (formularz publiczny, U-08), aktywacja konta, logowanie,
+ * wniosek (dane → dokumenty) — do jego przyjęcia; potem Start, Zgłoś zmianę, informacja z rejestru,
+ * płatności i Konto. Każda trasa po zalogowaniu przechodzi przez `portal.zakresKonta()` (U-23) —
+ * cudza spółka, sprawa, pismo albo opłata to 404.
  */
 
 const express = require('express');
@@ -11,6 +12,7 @@ const express = require('express');
 const { db } = require('../baza');
 const czas = require('../pomocnicze/czas');
 const wnioski = require('../wnioski');
+const portal = require('../portal');
 const pisma = require('../logika/pisma');
 const hasla = require('../logika/hasla');
 const limiter = require('../logika/limiter');
@@ -57,13 +59,18 @@ router.post('/logout', (zad, odp) => {
   odp.json({ ok: true });
 });
 
-router.get('/ja', (zad, odp) => odp.json({ zalogowany: Boolean(zad.konto), email: zad.konto ? zad.konto.email : null, wniosek: zad.konto ? zad.konto.wniosek_id : null }));
+router.get('/ja', asy((zad, odp) => odp.json(zad.konto ? { zalogowany: true, ...portal.ja(db(), zad.konto) } : { zalogowany: false })));
 
-/** Wniosek konta — jedyny, jaki to konto widzi. */
-function wniosekKonta(zad) {
+function konto(zad) {
   if (!zad.konto) throw nieAutoryzowany('Zaloguj się do portalu.');
-  if (!zad.konto.wniosek_id) throw nieZnaleziono('Nie ma wniosku powiązanego z tym kontem.');
-  return zad.konto.wniosek_id;
+  return zad.konto;
+}
+
+/** Wniosek konta — jedyny, jaki to konto widzi, i tylko do jego przyjęcia. */
+function wniosekKonta(zad) {
+  const id = portal.zakresKonta(db(), konto(zad)).wniosek;
+  if (!id) throw nieZnaleziono('Nie ma wniosku powiązanego z tym kontem.');
+  return id;
 }
 
 router.get('/wniosek', asy((zad, odp) => odp.json(wnioski.widokPortalu(db(), wniosekKonta(zad)))));
@@ -96,6 +103,44 @@ router.get('/wniosek/dokumenty/:pismo', asy(async (zad, odp) => {
   const pdf = await pisma.pdf(db(), p.id);
   odp.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${p.numer.replace(/\//g, '-')}.pdf"`, 'X-Content-Type-Options': 'nosniff' });
   odp.send(pdf);
+}));
+
+/** Start: wybrana spółka (`?spolka=`, domyślnie pierwsza z zakresu). */
+router.get('/start', asy((zad, odp) => odp.json(portal.start(db(), konto(zad), zad.query.spolka ? Number(zad.query.spolka) : null))));
+
+/** „Zgłoś zmianę”: opis → sprawa; pliki dochodzą osobno (`/sprawy/:id/pliki`). */
+router.post('/sprawy', asy((zad, odp) => {
+  const b = zad.body || {};
+  odp.status(201).json({ id: portal.zglosZmiane(db(), konto(zad), { spolka_id: b.spolka_id, opis: b.opis, klucz: b.klucz }) });
+}));
+
+router.post(
+  '/sprawy/:id/pliki',
+  (zad, odp, dalej) => pliki.odbierz(zad, odp, dalejPoUploadzie(dalej)),
+  asy((zad, odp) => odp.status(201).json({ id: portal.dodajPlik(db(), konto(zad), Number(zad.params.id), zad.file) }))
+);
+
+router.get('/pisma/:id', asy(async (zad, odp) => {
+  const p = portal.pismoKonta(db(), konto(zad), Number(zad.params.id));
+  const pdf = await pisma.pdf(db(), p.id);
+  odp.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${p.numer.replace(/\//g, '-')}.pdf"`, 'X-Content-Type-Options': 'nosniff' });
+  odp.send(pdf);
+}));
+
+/** „Zamów informację” — zwraca opłatę, którą front od razu przekazuje do „Zapłać”. */
+router.post('/informacja', asy((zad, odp) => {
+  const b = zad.body || {};
+  odp.status(201).json({ oplata_id: portal.zamowInformacje(db(), konto(zad), { spolka_id: b.spolka_id, dzien: b.dzien || null }) });
+}));
+
+router.post('/oplaty/:id/zaplac', asy(async (zad, odp) => odp.json({ link: await portal.zaplac(db(), konto(zad), Number(zad.params.id)) })));
+
+/** „Konto” → „Zapisz”: hasło (z obecnym) i zgoda na korespondencję e-mail. Nowe hasło wylogowuje inne urządzenia. */
+router.put('/konto', asy(async (zad, odp) => {
+  const k = konto(zad);
+  const w = await portal.zmienKonto(db(), k, zad.body || {});
+  if (w.hasloZmienione) autoryzacja.zalogujKonto(zad, odp, k.id);
+  odp.json(portal.ja(db(), db().prepare('SELECT * FROM psa_konta WHERE id = ?').get(k.id)));
 }));
 
 module.exports = router;

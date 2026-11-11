@@ -17,6 +17,7 @@ const danePliki = require('../dane/pliki');
 const historia = require('../dane/historia');
 const daneSpolki = require('../dane/spolki');
 const pisma = require('../logika/pisma');
+const portal = require('../portal');
 const pliki = require('../pomocnicze/pliki');
 const { asy, autor, nieZnaleziono, dalejPoUploadzie } = require('../pomocnicze/odpowiedzi');
 
@@ -56,6 +57,7 @@ router.get(
     odp.json({
       osoba,
       ...daneOsoby.powiazania(db(), osoba.id),
+      konto: portal.kontoOsoby(db(), osoba.id),
       pliki: danePliki.lista(db(), { osobaId: osoba.id }),
       historia: historia.lista(db(), { osobaId: osoba.id }),
     });
@@ -125,6 +127,16 @@ router.post(
   asy((zad, odp) => {
     const osoba = wymagajOsoby(zad);
     odp.status(201).json({ id: pliki.przyjmij(db(), zad.file, { osoba_id: osoba.id }, autor(zad)) });
+  })
+);
+
+/** „Zaproś do portalu”: konto z adresem z karty osoby albo nowy link do ustawienia hasła (U-23). */
+router.post(
+  '/:id/zaproszenie',
+  asy(async (zad, odp) => {
+    const osoba = wymagajOsoby(zad);
+    await portal.zapros(db(), osoba.id, autor(zad));
+    odp.json({ konto: portal.kontoOsoby(db(), osoba.id) });
   })
 );
 

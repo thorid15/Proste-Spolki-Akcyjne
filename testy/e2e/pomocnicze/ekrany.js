@@ -10,7 +10,7 @@ async function zaloguj(page, email, aplikacja) {
   if (!odp.ok()) throw new Error(`logowanie ${email}: ${odp.status()} ${await odp.text()}`);
 }
 
-/** Ekrany kancelarii (§ 5) i wniosek w portalu (Faza 4). `czekaj` — selektor, po którym ekran jest gotowy. */
+/** Ekrany kancelarii (§ 5) i portalu (wniosek — Faza 4; Start, Zgłoś zmianę, Konto — Faza 5). `czekaj` — selektor, po którym ekran jest gotowy. */
 const K = 'notariusz@example.com';
 const EKRANY = [
   { nazwa: 'kancelaria-pulpit', konto: K, aplikacja: 'kancelaria', adres: '/#/', czekaj: 'text=Do zrobienia' },
@@ -21,6 +21,10 @@ const EKRANY = [
   { nazwa: 'kancelaria-oplaty', konto: K, aplikacja: 'kancelaria', adres: '/#/oplaty', czekaj: '.karta' },
   { nazwa: 'kancelaria-wniosek', konto: K, aplikacja: 'kancelaria', adres: '/#/wnioski/1', czekaj: 'text=Dokumenty' },
   { nazwa: 'portal-wniosek', konto: 'gamma.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/', czekaj: 'text=krok 2 z 2' },
+  { nazwa: 'portal-start-zarzad', konto: 'alfa.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/', czekaj: 'text=Zgłoś zmianę' },
+  { nazwa: 'portal-start-akcjonariusz', konto: 'anna.zgoda@example.com', aplikacja: 'portal', adres: '/portal.html#/', czekaj: 'text=Do zrobienia' },
+  { nazwa: 'portal-zmiana', konto: 'alfa.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/zmiana?spolka=1', czekaj: 'text=Co się zmieniło?' },
+  { nazwa: 'portal-konto', konto: 'anna.zgoda@example.com', aplikacja: 'portal', adres: '/portal.html#/konto', czekaj: 'text=Zgoda na korespondencję e-mail' },
 ];
 
 module.exports = { zaloguj, EKRANY, HASLO };

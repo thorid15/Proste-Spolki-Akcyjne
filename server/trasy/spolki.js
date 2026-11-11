@@ -22,6 +22,8 @@ const danePliki = require('../dane/pliki');
 const danePisma = require('../dane/pisma');
 const daneOplaty = require('../dane/oplaty');
 const historia = require('../dane/historia');
+const daneKonta = require('../dane/konta');
+const portal = require('../portal');
 const { asy, autor, nieZnaleziono } = require('../pomocnicze/odpowiedzi');
 
 const router = express.Router();
@@ -60,6 +62,7 @@ router.get(
       pisma: danePisma.lista(db(), { spolkaId: spolka.id }),
       oplaty: daneOplaty.lista(db(), { spolkaId: spolka.id }),
       historia: historia.lista(db(), { spolkaId: spolka.id }),
+      reprezentanci: daneKonta.reprezentanci(db(), spolka.id),
     });
   })
 );
@@ -81,6 +84,24 @@ router.put(
   })
 );
 
+/** „Działają za spółkę” (U-23): dodanie i usunięcie zmienia od razu zakres konta osoby w portalu. */
+router.post(
+  '/:id/reprezentanci',
+  asy((zad, odp) => {
+    const spolka = wymagajSpolki(zad);
+    portal.dodajReprezentanta(db(), spolka.id, (zad.body || {}).osoba_id, autor(zad));
+    odp.status(201).json(daneKonta.reprezentanci(db(), spolka.id));
+  })
+);
+
+router.delete(
+  '/:id/reprezentanci/:osobaId',
+  asy((zad, odp) => {
+    const spolka = wymagajSpolki(zad);
+    portal.usunReprezentanta(db(), spolka.id, Number(zad.params.osobaId), autor(zad));
+    odp.json(daneKonta.reprezentanci(db(), spolka.id));
+  })
+);
 
 /** „Informacja z rejestru” w kokpicie (§ 4, U-24): pracownik — dowolny dzień od otwarcia, także dziś. */
 router.post(

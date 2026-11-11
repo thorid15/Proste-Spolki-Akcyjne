@@ -18,6 +18,8 @@ Uchwała wchodzi w życie z dniem jej podjęcia.
 
 Niżej podpisani akcjonariusze wyrażają zgodę na podjęcie niniejszej uchwały poza walnym zgromadzeniem, w trybie pisemnym. Złożenie podpisu pod niniejszą uchwałą jest równoznaczne z wyrażeniem tej zgody.
 
+W głosowaniu oddano głosy ze 100% akcji Spółki.
+
 Akcjonariusze:
 {{#lista akcjonariusze}}
 

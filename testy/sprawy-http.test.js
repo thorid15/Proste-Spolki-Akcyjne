@@ -94,7 +94,7 @@ test('trasy kancelarii wymagają sesji pracownika; ustawienia i integralność �
   const ustawienia = await zadanie('GET', '/api/psa/ustawienia');
   assert.ok(ustawienia.dane.kancelaria.some((p) => p.klucz === 'nazwa'));
   assert.equal(ustawienia.dane.stawki, undefined, 'U-05: bez edycji stawek');
-  assert.equal((await zadanie('GET', '/api/psa/portal/start')).status, 404, 'portal odłączony do Fazy 5');
+  assert.equal((await zadanie('GET', '/api/psa/portal/start')).status, 401, 'portal — tylko z sesją konta');
 });
 
 let anna;

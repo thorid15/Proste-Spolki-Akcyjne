@@ -242,6 +242,7 @@ function EkranKokpitu({ spolkaId }) {
         />
       </Karta>
       <DaneSpolki spolka={spolka} poZapisie={odswiez} />
+      <DzialajaZaSpolke spolkaId={spolka.id} osoby={dane.reprezentanci} poZmianie={odswiez} />
 
       <Sekcja tytul="Historia wpisów" licznik={dane.wpisy.length}>
         <table className="tabela">
@@ -285,6 +286,34 @@ function EkranKokpitu({ spolkaId }) {
   );
 }
 
+/** „Działają za spółkę” (U-23): dodanie daje dostęp do spółki w portalu, usunięcie od razu go zamyka. */
+function DzialajaZaSpolke({ spolkaId, osoby, poZmianie }) {
+  const [dodaj, ustawDodaj] = useState(false);
+  const c = useCzynnosc();
+  const zmien = (fn) => c.wykonaj(async () => { await fn(); ustawDodaj(false); poZmianie(); });
+  const adres = `/api/psa/spolki/${spolkaId}/reprezentanci`;
+  return (
+    <Karta tytul="Działają za spółkę" akcje={!dodaj && <button type="button" className="btn btn-maly" onClick={() => ustawDodaj(true)}>Dodaj</button>}>
+      {!osoby.length && <p className="male drugorzedny">Nikt nie działa za spółkę w portalu.</p>}
+      {osoby.map((o) => (
+        <div key={o.id} className="rzad-rozdzielony">
+          <span><a href={`#/osoby/${o.id}`}>{o.nazwa}</a> <span className="male drugorzedny">{o.konto_aktywne === 1 ? 'konto w portalu' : o.konto_aktywne === 0 ? 'zaproszona' : 'bez konta'}</span></span>
+          <button type="button" className="btn btn-maly btn-cichy" disabled={c.trwa} onClick={() => zmien(() => API.delete(`${adres}/${o.id}`))}>Usuń</button>
+        </div>
+      ))}
+      {dodaj && (
+        <Pole etykieta="Osoba z kartoteki albo nowa">
+          <WyborOsoby wartosc={null} wyklucz={osoby.map((o) => o.id)} przyZmianie={(id) => id && zmien(() => API.post(adres, { osoba_id: id }))} />
+        </Pole>
+      )}
+      <Bledy blad={c.blad} />
+      <p className="male drugorzedny">Usunięcie (np. po odwołaniu z zarządu) od razu zamyka tej osobie dostęp do spółki w portalu.</p>
+    </Karta>
+  );
+}
+
+const NAZWY_POL_HISTORII = { dzialaja_za_spolke: 'działają za spółkę', zaproszenie_do_portalu: 'zaproszenie do portalu', zgoda_email: 'zgoda na e-mail' };
+
 function HistoriaZmian({ historia }) {
   if (!historia.length) return <p className="male drugorzedny">Brak zmian.</p>;
   return (
@@ -292,7 +321,7 @@ function HistoriaZmian({ historia }) {
       <thead><tr><th>Kiedy</th><th>Pole</th><th>Było</th><th>Jest</th><th>Kto</th></tr></thead>
       <tbody>
         {historia.map((h) => (
-          <tr key={h.id}><td>{fmt.data(h.kiedy)}</td><td>{h.pole}</td><td>{h.stara ?? '—'}</td><td>{h.nowa ?? '—'}</td><td>{h.kto}</td></tr>
+          <tr key={h.id}><td>{fmt.data(h.kiedy)}</td><td>{NAZWY_POL_HISTORII[h.pole] || h.pole}</td><td>{h.stara ?? '—'}</td><td>{h.nowa ?? '—'}</td><td>{h.kto}</td></tr>
         ))}
       </tbody>
     </table>

@@ -10,7 +10,8 @@
  *     akcjonariuszka ze zgodą na korespondencję e-mail;
  *   - sprawa zbycia akcji bez zgody zbywcy na e-mail — po kroku 1, powiadomienie listem czeka
  *     na „Nadano” (scenariusz e2e Fazy 3);
- *   - Beta Testowa P.S.A. — spółka bez otwartego rejestru.
+ *   - Beta Testowa P.S.A. — spółka bez otwartego rejestru;
+ *   - konta portalu: zarząd Alfy (działa za spółkę) i Anna (akcjonariuszka ze zgodą); wniosek Gammy.
  * Spółki zakłada warstwa danych (wnioski wracają w Fazie 4). Adresy `@example.com`, PESEL
  * fikcyjne z poprawną sumą kontrolną. Plik bazy, który istnieje i NIE jest oznaczony jako
  * testowy, nie zostanie nadpisany. Kolejne fazy dopisują tu scenariusze.
@@ -180,6 +181,13 @@ async function main() {
   await zapytaj('POST', `/api/psa/spolki/${alfa}/informacja`, { odbiorca: 'osoba', osoba_id: anna.id, oplata: 'tak' });
   const doSpolki = (await zapytaj('GET', '/api/psa/korespondencja?filtr=do_wyslania')).find((p) => p.spolka_id === alfa && p.typ === 'powiadomienie_wpis');
   await zapytaj('POST', `/api/psa/korespondencja/${doSpolki.id}/wyslij`);
+
+  // Faza 5: konta portalu (U-23) — zarząd Alfy (działa za spółkę) i Anna (akcjonariuszka ze zgodą na e-mail).
+  const zarzad = await osoba({ typ: 'fizyczna', nazwa: 'Zenon Zarządca', pesel: pesel('700707', '3456'), adres: 'ul. Zarządowa 7, 80-007 Gdańsk', email: 'alfa.zarzad@example.com' });
+  await zapytaj('POST', `/api/psa/spolki/${alfa}/reprezentanci`, { osoba_id: zarzad.id });
+  const konto = db().prepare('INSERT INTO psa_konta (email, osoba_id, hash_hasla, aktywne, regulamin_zaakceptowano, utworzono) VALUES (?, ?, ?, 1, ?, ?)');
+  konto.run('alfa.zarzad@example.com', zarzad.id, hash, teraz, teraz);
+  konto.run('anna.zgoda@example.com', anna.id, hash, teraz, teraz);
 
   // Faza 4: wniosek Gammy złożony w portalu — dokumenty do podpisu, konto wnioskodawcy aktywne.
   const wnioski = require('../server/wnioski');

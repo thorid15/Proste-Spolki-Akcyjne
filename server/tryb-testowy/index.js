@@ -35,7 +35,8 @@ const HASLO_TESTOWE = 'Test-Haslo-2026';
 const KONTA_TESTOWE = [
   { aplikacja: 'kancelaria', email: 'notariusz@example.com', opis: 'Notariusz (administrator)' },
   { aplikacja: 'kancelaria', email: 'pracownik@example.com', opis: 'Pracownik kancelarii' },
-  // Konta osób działających za spółkę i akcjonariuszy (U-23) — Faza 5.
+  { aplikacja: 'portal', email: 'alfa.zarzad@example.com', opis: 'Zarząd Alfy — działa za spółkę' },
+  { aplikacja: 'portal', email: 'anna.zgoda@example.com', opis: 'Anna Testowa — akcjonariuszka Alfy (zgoda na e-mail)' },
   { aplikacja: 'portal', email: 'gamma.zarzad@example.com', opis: 'Wnioskodawca — dokumenty do podpisu (Gamma Zgłoszeniowa)' },
 ];
 

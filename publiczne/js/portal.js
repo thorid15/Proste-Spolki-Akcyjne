@@ -1,6 +1,6 @@
-/* portal.js — portal klienta, Faza 4: zgłoszenie spółki (publiczne), aktywacja konta (link z e-maila),
-   logowanie i wniosek: Nowa spółka 1/2 Dane → 2/2 Dokumenty. Start, zgłaszanie zmian i informacja
-   z rejestru — Faza 5. Bez odwołań do przepisów; statusy prostymi słowami (§ 6). */
+/* portal.js — portal klienta (§ 6): zgłoszenie spółki (publiczne), aktywacja konta (link z e-maila),
+   logowanie, wniosek (Nowa spółka 1/2 Dane → 2/2 Dokumenty) do jego przyjęcia; potem Start, Zgłoś
+   zmianę i Konto (U-23: zakres z danych). Bez odwołań do przepisów; statusy prostymi słowami. */
 
 function usePortal() {
   const [stan, ustawStan] = useState({ ladowanie: true, zalogowany: false });
@@ -195,11 +195,237 @@ function EkranWniosku() {
   return <Karta tytul="Wniosek zakończony"><p>Kancelaria nie zawarła umowy — wyjaśnienie wyślemy listem.</p></Karta>;
 }
 
+const STANY_PORTALU = { w_toku: 'W toku', wstrzymana: 'Wymaga uzupełnienia', wpisana: 'Wpisane', odmowa: 'Odmowa', wycofana: 'Wycofane' };
+const RODZAJE_OPLAT = { prowadzenie: 'Prowadzenie rejestru', wpis: 'Wpis w rejestrze', informacja: 'Informacja z rejestru' };
+const PLIKI_PORTALU = '.pdf,.jpg,.jpeg,.png,.xml,.p7s,.p7m';
+
+/** „Zapłać [kwota]” — link tpay i przejście do płatności. */
+async function zaplac(oplataId) {
+  const { link } = await API.post(`/api/psa/portal/oplaty/${oplataId}/zaplac`, {});
+  window.location.href = link;
+}
+
+/** Informacja z rejestru: dzień (domyślnie i najpóźniej wczoraj — U-24), płatna z góry. */
+function ZamowienieInformacji({ s }) {
+  const inf = s.informacja;
+  const [dzien, ustawDzien] = useState(inf.najpozniej);
+  const c = useCzynnosc();
+  const { pola } = bledyApi(c.blad);
+  const dostepna = inf.dostepna_od && inf.dostepna_od <= fmt.dzisIso();
+  const zamow = () => c.wykonaj(async () => {
+    const { oplata_id: id } = await API.post('/api/psa/portal/informacja', { spolka_id: s.spolka.id, dzien });
+    await zaplac(id);
+  });
+  return (
+    <Karta tytul="Informacja z rejestru">
+      <p className="male drugorzedny">{s.rola.pelny ? 'Pełna informacja o akcjonariuszach spółki — płaci spółka.' : 'Informacja o akcjach spółki, bez danych osobowych pozostałych akcjonariuszy.'}</p>
+      {dostepna && (
+        <Pole etykieta="Stan na koniec dnia" blad={pola.dzien}>
+          <PoleDaty wartosc={dzien} przyZmianie={ustawDzien} min={inf.najwczesniej} max={inf.najpozniej} />
+        </Pole>
+      )}
+      <PrzyciskGlowny
+        etykieta={`Zapłać ${fmt.zlote(inf.kwota_brutto_grosze)}`}
+        przyKlik={zamow}
+        powod={dostepna ? null : inf.dostepna_od ? `Dostępna od ${fmt.data(inf.dostepna_od)}` : 'Dostępna po otwarciu rejestru'}
+        trwa={c.trwa}
+      />
+      {c.blad && !pola.dzien && <Bledy blad={c.blad} />}
+    </Karta>
+  );
+}
+
+function PismaDoPobrania({ pisma }) {
+  if (!pisma.length) return null;
+  return (
+    <ul className="pisma-portalu">
+      {pisma.map((p) => <li key={p.id}><a href={`/api/psa/portal/pisma/${p.id}`} download>{p.nazwa}</a> <span className="male drugorzedny">{p.numer}{p.data ? ` · ${fmt.data(p.data)}` : ''}</span></li>)}
+    </ul>
+  );
+}
+
+/** Start: firma i KRS, „Do zrobienia” (zapłać, uzupełnij), sprawy z pismami, wydane informacje. */
+function EkranStartu({ spolki }) {
+  const { zapytanie } = useTrasa();
+  const wybrana = zapytanie.get('spolka');
+  const platnosc = zapytanie.get('platnosc');
+  const { dane: s, blad, odswiez } = useDane(`/api/psa/portal/start${wybrana ? `?spolka=${wybrana}` : ''}`);
+  const [informacja, ustawInformacje] = useState(false);
+  const [proby, ustawProby] = useState(0);
+  const c = useCzynnosc();
+  const czeka = Boolean(platnosc && s && s.oplaty && s.oplaty.some((o) => String(o.id) === platnosc));
+  useEffect(() => {
+    if (!czeka || proby >= 10) return undefined;
+    const t = setTimeout(() => { ustawProby((x) => x + 1); odswiez(); }, 3000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [czeka, proby]);
+  if (blad) return <Bledy blad={blad} />;
+  if (!s) return <Spinner />;
+  if (!s.spolka) {
+    return (
+      <Karta tytul="Brak dostępu do spółki">
+        <p>To konto nie ma teraz dostępu do żadnej spółki. Jeśli to pomyłka, napisz do kancelarii.</p>
+        <p className="male drugorzedny">Akcjonariusz widzi spółkę, gdy ma akcje i zgodę na korespondencję e-mail (Konto).</p>
+      </Karta>
+    );
+  }
+  const sp = s.spolka;
+  const doUzupelnienia = s.sprawy.filter((x) => x.stan === 'wstrzymana');
+  return (
+    <>
+      {spolki.length > 1 && (
+        <Pole etykieta="Spółka">
+          <select value={sp.id} onChange={(e) => idz(`/?spolka=${e.target.value}`)}>
+            {spolki.map((x) => <option key={x.id} value={x.id}>{x.nazwa}</option>)}
+          </select>
+        </Pole>
+      )}
+      <NaglowekStrony
+        tytul={sp.nazwa}
+        kontekst={`KRS ${sp.krs}`}
+        akcje={(
+          <span className="rzad">
+            <button type="button" className="btn" onClick={() => ustawInformacje((x) => !x)}>Zamów informację z rejestru</button>
+            <PrzyciskGlowny etykieta="Zgłoś zmianę" przyKlik={() => idz(`/zmiana?spolka=${sp.id}`)} powod={sp.otwarty ? null : sp.zamkniety ? 'Rejestr zamknięty' : 'Rejestr nie jest jeszcze otwarty'} />
+          </span>
+        )}
+      />
+      {platnosc && (czeka
+        ? <Komunikat odmiana="info" tresc="Dziękujemy. Czekamy na potwierdzenie płatności — strona odświeży się sama." />
+        : <Komunikat odmiana="rejestr" tresc="Płatność przyjęta." />)}
+      {informacja && <ZamowienieInformacji s={s} />}
+      {(s.oplaty.length > 0 || doUzupelnienia.length > 0) && (
+        <Karta tytul="Do zrobienia">
+          {s.oplaty.map((o) => (
+            <div key={o.id} className="rzad-rozdzielony wiersz-portalu">
+              <span>{RODZAJE_OPLAT[o.rodzaj]}{o.okres ? ` · ${o.okres.split('..').map(fmt.data).join('–')}` : ''}</span>
+              <button type="button" className="btn btn-glowny btn-maly" disabled={c.trwa} onClick={() => c.wykonaj(() => zaplac(o.id))}>Zapłać {fmt.zlote(o.kwota_brutto_grosze)}</button>
+            </div>
+          ))}
+          {doUzupelnienia.map((x) => (
+            <div key={x.id} className="rzad-rozdzielony wiersz-portalu">
+              <span>Sprawa nr {x.id} — dołącz brakujące dokumenty</span>
+              <DodajPlik adres={`/api/psa/portal/sprawy/${x.id}/pliki`} przyDodaniu={odswiez} etykieta="Dodaj pliki" />
+            </div>
+          ))}
+          <Bledy blad={c.blad} />
+        </Karta>
+      )}
+      <Karta tytul="Sprawy">
+        {!s.sprawy.length ? <p className="male drugorzedny">Brak spraw.</p> : s.sprawy.map((x) => (
+          <div key={x.id} className="wiersz-portalu">
+            <div className="rzad-rozdzielony">
+              <strong>Sprawa nr {x.id} · {fmt.data(x.data_wplywu)}</strong>
+              <Pigulka odmiana={ODMIANY_STANU_SPRAWY[x.stan]}>{STANY_PORTALU[x.stan]}</Pigulka>
+            </div>
+            {x.opis && <p className="male">{x.opis}</p>}
+            <PismaDoPobrania pisma={x.pisma} />
+          </div>
+        ))}
+      </Karta>
+      {s.informacje.length > 0 && (
+        <Karta tytul="Informacje z rejestru">
+          <PismaDoPobrania pisma={s.informacje.map((p) => ({ ...p, nazwa: `Stan na ${p.stan_na}` }))} />
+        </Karta>
+      )}
+    </>
+  );
+}
+
+/** „Zgłoś zmianę”: opis i pliki — bez wyboru rodzaju zmiany. */
+function EkranZmiany() {
+  const { zapytanie } = useTrasa();
+  const spolka = Number(zapytanie.get('spolka'));
+  const [opis, ustawOpis] = useState('');
+  const [pliki, ustawPliki] = useState([]);
+  const [klucz] = useState(() => `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const [wynik, ustawWynik] = useState(null);
+  const c = useCzynnosc();
+  const { pola } = bledyApi(c.blad);
+  const wyslij = (z) => {
+    z.preventDefault();
+    c.wykonaj(async () => {
+      const { id } = await API.post('/api/psa/portal/sprawy', { spolka_id: spolka, opis, klucz });
+      for (const plik of pliki) await wgrajPlik(`/api/psa/portal/sprawy/${id}/pliki`, plik);
+      ustawWynik(id);
+    });
+  };
+  if (wynik) {
+    return (
+      <Karta tytul="Zgłoszenie wysłane">
+        <p>Przyjęliśmy zgłoszenie — sprawa nr {wynik}. Jej stan i pisma zobaczysz na Starcie.</p>
+        <a className="btn" href={`#/?spolka=${spolka}`}>Start</a>
+      </Karta>
+    );
+  }
+  return (
+    <Karta tytul="Zgłoś zmianę">
+      <form onSubmit={wyslij} noValidate>
+        <Pole etykieta="Co się zmieniło?" blad={pola.opis} podpowiedz="Np. sprzedaż akcji, ustanowienie zastawu, zmiana adresu. Dołącz dokument, np. umowę sprzedaży akcji.">
+          <textarea rows={5} maxLength={2000} value={opis} onChange={(e) => ustawOpis(e.target.value)} />
+        </Pole>
+        <Pole etykieta="Pliki" opcjonalne podpowiedz="PDF, zdjęcie albo plik podpisu, do 10 MB każdy.">
+          <input type="file" multiple accept={PLIKI_PORTALU} onChange={(e) => ustawPliki([...e.target.files])} />
+        </Pole>
+        {c.blad && !pola.opis && <Bledy blad={c.blad} />}
+        <div className="rzad">
+          <button type="submit" className="btn btn-glowny" disabled={c.trwa}>Wyślij</button>
+          <a href={`#/?spolka=${spolka}`}>Anuluj</a>
+        </div>
+      </form>
+    </Karta>
+  );
+}
+
+/** Konto: e-mail, hasło, zgoda na korespondencję e-mail (akcjonariusz), regulamin i polityka prywatności. */
+function EkranKonta({ sesja }) {
+  const [haslo, ustawHaslo] = useState({ obecne: '', nowe: '' });
+  const [zgoda, ustawZgode] = useState(sesja.zgoda_email);
+  const [zapisano, ustawZapisano] = useState(false);
+  const c = useCzynnosc();
+  const { pola } = bledyApi(c.blad);
+  const zapisz = (z) => {
+    z.preventDefault();
+    c.wykonaj(async () => {
+      await API.put('/api/psa/portal/konto', { haslo_obecne: haslo.obecne, haslo_nowe: haslo.nowe || undefined, zgoda_email: sesja.akcjonariusz ? zgoda : undefined });
+      ustawHaslo({ obecne: '', nowe: '' });
+      ustawZapisano(true);
+      sesja.odswiez();
+    });
+  };
+  return (
+    <Karta tytul="Konto">
+      <form onSubmit={zapisz} noValidate>
+        <ListaDanych pary={[['E-mail', sesja.email]]} />
+        <Pole etykieta="Obecne hasło" blad={pola.haslo_obecne} opcjonalne><PoleHaslo wartosc={haslo.obecne} przyZmianie={(v) => ustawHaslo({ ...haslo, obecne: v })} autoComplete="current-password" /></Pole>
+        <Pole etykieta="Nowe hasło" blad={pola.haslo_nowe} opcjonalne podpowiedz="Co najmniej 12 znaków. Zmiana wyloguje inne urządzenia."><PoleHaslo wartosc={haslo.nowe} przyZmianie={(v) => ustawHaslo({ ...haslo, nowe: v })} autoComplete="new-password" /></Pole>
+        {sesja.akcjonariusz && (
+          <Przelacznik
+            wlaczony={zgoda}
+            przyZmianie={ustawZgode}
+            etykieta="Zgoda na korespondencję e-mail"
+            opis="Pisma z rejestru dostaniesz e-mailem i zobaczysz w portalu. Bez zgody wysyłamy je listem, a portal nie pokazuje spółek, w których jesteś tylko akcjonariuszem."
+          />
+        )}
+        {zapisano && !c.blad && <Komunikat odmiana="rejestr" tresc="Zapisano." />}
+        {c.blad && !pola.haslo_obecne && !pola.haslo_nowe && <Bledy blad={c.blad} />}
+        <div className="rzad">
+          <button type="submit" className="btn btn-glowny" disabled={c.trwa}>Zapisz</button>
+          <a href="#/regulamin">Regulamin</a>
+          <a href="#/polityka-prywatnosci">Polityka prywatności</a>
+        </div>
+      </form>
+    </Karta>
+  );
+}
+
 function Portal() {
   const { segmenty, zapytanie } = useTrasa();
   const sesja = usePortal();
   const { dane: k } = useDane('/api/wspolne/kancelaria');
   const kancelaria = (k && k.kancelaria) || {};
+  const poWniosku = sesja.zalogowany && !sesja.wniosek;
 
   function ekran() {
     const prawny = ekranPrawny(segmenty);
@@ -207,8 +433,10 @@ function Portal() {
     if (segmenty[0] === 'zglos') return <EkranZgloszenia />;
     if (segmenty[0] === 'aktywacja') return <EkranAktywacji token={zapytanie.get('token')} przyAktywacji={() => { sesja.odswiez(); idz('/'); }} />;
     if (!sesja.zalogowany) return <EkranLogowaniaPortalu przyZalogowaniu={() => sesja.odswiez()} />;
-    if (!sesja.wniosek) return <Karta tytul="Portal"><p>Dostęp do rejestru spółki pojawi się po otwarciu rejestru.</p></Karta>;
-    return <EkranWniosku />;
+    if (sesja.wniosek) return <EkranWniosku />;
+    if (segmenty[0] === 'konto') return <EkranKonta sesja={sesja} />;
+    if (segmenty[0] === 'zmiana') return <EkranZmiany />;
+    return <EkranStartu spolki={sesja.spolki} />;
   }
 
   if (sesja.ladowanie) return <Spinner />;
@@ -216,10 +444,14 @@ function Portal() {
     <div className="powloka-portal">
       <div className="marka-pasek bez-druku" role="banner">
         <div className="marka-pasek-nazwa">{kancelaria.nazwa || 'Kancelaria Notarialna'} — rejestr akcjonariuszy</div>
-        {sesja.zalogowany && (
-          <button type="button" className="btn btn-maly btn-cichy" onClick={() => API.post('/api/psa/portal/logout').then(() => { sesja.odswiez(); idz('/'); })}>Wyloguj</button>
-        )}
       </div>
+      {sesja.zalogowany && (
+        <nav className="menu-portalu bez-druku" aria-label="Menu portalu">
+          {poWniosku && <a href="#/" aria-current={segmenty[0] !== 'konto' ? 'page' : undefined}>Start</a>}
+          {poWniosku && <a href="#/konto" aria-current={segmenty[0] === 'konto' ? 'page' : undefined}>Konto</a>}
+          <button type="button" className="btn btn-maly btn-cichy" onClick={() => API.post('/api/psa/portal/logout').then(() => { sesja.odswiez(); idz('/'); })}>Wyloguj</button>
+        </nav>
+      )}
       <main className="tresc tresc-waska" id="tresc" tabIndex={-1}>{ekran()}</main>
       <StopkaKancelarii kancelaria={kancelaria} />
     </div>

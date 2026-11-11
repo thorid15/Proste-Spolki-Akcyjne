@@ -122,7 +122,7 @@ test('zgłoszenie → aktywacja → dane → złożenie: dokumenty z U-03; izola
   const d = await zadanie('GET', '/api/psa/portal/wniosek', undefined, { kto: 'delta' });
   assert.notEqual(d.dane.wniosek.id, gamma, 'konto widzi tylko swój wniosek');
   assert.equal((await zadanie('GET', `/api/psa/wnioski/${gamma}`, undefined, { kto: 'delta' })).status, 401, 'trasy kancelarii — tylko pracownik');
-  assert.equal((await zadanie('GET', '/api/psa/portal/wniosek/dokumenty/1', undefined, { kto: 'delta' })).status, 422, 'cudzy dokument');
+  assert.equal((await zadanie('GET', '/api/psa/portal/wniosek/dokumenty/1', undefined, { kto: 'delta' })).status, 404, 'cudzy dokument (§ 7 pkt 2)');
 });
 
 test('podpisy: plik bez podpisu odrzucony od razu (D-086), podpisany — do sprawdzenia; uchwała „w umowie spółki”', async () => {

@@ -109,8 +109,7 @@ function powiazania(db, id) {
         WHERE sp.zadajacy_osoba_id = ? ORDER BY sp.id DESC`
     )
     .all(Number(id));
-  const konto = db.prepare('SELECT aktywne FROM psa_konta WHERE osoba_id = ?').get(Number(id)) || null;
-  return { akcje, sprawy, konto };
+  return { akcje, sprawy };
 }
 
 module.exports = { wczytaj, lista, takieSame, dodaj, zmien, ustawZgodeEmail, powiazania };

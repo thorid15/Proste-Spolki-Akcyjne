@@ -311,6 +311,7 @@ function lista(db, filtr) {
     zadajacy: s.zadajacy,
     zadajacy_nazwa: s.zadajacy_nazwa || s.zadajacy_opis,
     data_wplywu: s.data_wplywu,
+    z_portalu: String(s.autor).startsWith('konto:'),
     krok: sprawyLogika.krok(s),
     termin: sprawyLogika.otwarta(s) ? terminy.policzTermin(s, dzis) : null,
   }));

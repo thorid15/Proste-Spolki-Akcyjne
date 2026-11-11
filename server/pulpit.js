@@ -2,7 +2,7 @@
 
 /**
  * Pulpit (§ 5): jedna lista „Do zrobienia” według pilności — sprawy po terminie albo z terminem
- * do 2 dni, nowe pliki w sprawach wstrzymanych, pisma do wysłania i błędy wysyłki, wnioski złożone
+ * do 2 dni, nowe zgłoszenia z portalu (krok 1), nowe pliki w sprawach wstrzymanych, pisma do wysłania i błędy wysyłki, wnioski złożone
  * i podpisy do sprawdzenia, przejęcia, w których nadszedł dzień przejęcia. Wiersz wskazuje ekran,
  * który go załatwia.
  */
@@ -28,6 +28,8 @@ function doZrobienia(db) {
         opis: t.po_terminie ? `po terminie (${dataPl(t.termin_do)})` : `termin ${dataPl(t.termin_do)}`,
         sciezka: `/sprawy/${s.id}`,
       });
+    } else if (s.stan === 'w_toku' && s.z_portalu && s.krok === 1) {
+      pozycje.push({ rodzaj: 'sprawa', pilnosc: 1, tytul: `Sprawa nr ${s.id} — ${s.spolka}`, opis: `nowe zgłoszenie z portalu (${dataPl(s.data_wplywu)})`, sciezka: `/sprawy/${s.id}` });
     } else if (s.stan === 'wstrzymana') {
       const nowy = danePliki.ostatniDzienPlikuSprawy(db, s.id, (t && t.wstrzymana_od) || dzis);
       if (nowy) {

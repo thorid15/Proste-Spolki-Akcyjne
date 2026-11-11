@@ -1,575 +1,328 @@
 'use strict';
 
 /**
- * Testy integracyjne portalu klienta przez HTTP (sekcja 8 i 9 specyfikacji):
- * logowanie, "moje spolki/akcje", podglad rejestru z maskowaniem, zlozenie
- * zadania, upload dokumentow do wlasnej sprawy, informacja z rejestru.
+ * Faza 5 — portal klienta (§ 6, § 7 pkt 2, U-23): zakres konta z danych, izolacja każdej trasy portalu
+ * (tabela), Start dla trzech ról, „Zgłoś zmianę”, informacja z rejestru z płatnością (atrapa tpay + ITN),
+ * odebranie dostępu (usunięcie z „Działają za spółkę”, wycofanie zgody, zbycie wszystkich akcji),
+ * „Zaproś do portalu”, Konto.
  */
 
-const test = require('./pominiete')('Faza 5 — portal klienta i płatności przebudowywane');
+const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const http = require('node:http');
 const path = require('node:path');
 const fs = require('node:fs');
 
 const PLIK_BAZY = path.join(__dirname, '..', 'dane', '.test-portal-http.db');
-fs.rmSync(PLIK_BAZY, { force: true });
-fs.rmSync(`${PLIK_BAZY}-wal`, { force: true });
-fs.rmSync(`${PLIK_BAZY}-shm`, { force: true });
+for (const p of [PLIK_BAZY, `${PLIK_BAZY}-wal`, `${PLIK_BAZY}-shm`]) fs.rmSync(p, { force: true });
 process.env.WSPOLNA_BAZA = PLIK_BAZY;
 process.env.KATALOG_DOKUMENTOW = path.join(__dirname, '..', 'dane', '.test-portal-dokumenty');
-process.env.PORTAL_WLACZONY = 'true';
+fs.rmSync(process.env.KATALOG_DOKUMENTOW, { recursive: true, force: true });
+const SEKRET_ITN = 'sekret-itn-portalu';
+Object.assign(process.env, { TPAY_CLIENT_ID: 'klient', TPAY_CLIENT_SECRET: 'sekret', TPAY_NOTIFICATION_SECRET: SEKRET_ITN, TPAY_TRYB_TESTOWY: 'false' });
 
-const app = require('../serwer');
-const { db } = require('../server/baza');
-const rejestr = require('../server/rejestr');
-const hasla = require('../server/logika/hasla');
-const czas = require('../server/pomocnicze/czas');
-
+const HASLO = 'Mocne-Haslo-2026!';
+const wyslane = [];
+const ciastka = {};
+let ADRES;
 let serwer;
-let baza;
+let atrapa;
+let db;
+let czas;
+const id = {};
 
-function ciasteczkoZOdpowiedzi(odp) {
-  const surowe = typeof odp.headers.getSetCookie === 'function' ? odp.headers.getSetCookie() : [odp.headers.get('set-cookie')];
-  return surowe.filter(Boolean).map((c) => c.split(';')[0]).join('; ');
-}
-
-function dodajOsobe(nadpisania = {}) {
-  const dane = {
-    typ: 'fizyczna', nazwisko: 'Kowalski', imie: 'Jan', pesel: '80010112345',
-    data_urodzenia: '1980-01-01', aml_status: 'wykonane', utworzono: czas.terazIso(),
-    ...nadpisania,
-  };
-  const wynik = db()
-    .prepare(
-      `INSERT INTO psa_osoby (typ, nazwisko, imie, pesel, data_urodzenia, aml_status, utworzono)
-       VALUES (@typ, @nazwisko, @imie, @pesel, @data_urodzenia, @aml_status, @utworzono)`
-    )
-    .run(dane);
-  return Number(wynik.lastInsertRowid);
-}
-
-function dodajSpolke(nadpisania = {}) {
-  const dane = {
-    krs: null, nazwa: 'Portal Testowa P.S.A.', forma_prawna: 'PROSTA SPÓŁKA AKCYJNA',
-    status: 'aktywna', utworzono: czas.terazIso(), ...nadpisania,
-  };
-  const wynik = db()
-    .prepare(`INSERT INTO psa_spolki (krs, nazwa, forma_prawna, status, utworzono) VALUES (@krs, @nazwa, @forma_prawna, @status, @utworzono)`)
-    .run(dane);
-  return Number(wynik.lastInsertRowid);
-}
-
-async function dodajKonto({ email, haslo, rola, spolkaId = null, osobaId = null }) {
-  const hash = await hasla.hashuj(haslo);
-  const wynik = db()
-    .prepare(
-      `INSERT INTO psa_konta (email, hash_hasla, rola, spolka_id, osoba_id, aktywne, utworzono)
-       VALUES (?, ?, ?, ?, ?, 1, ?)`
-    )
-    .run(email, hash, rola, spolkaId, osobaId, czas.terazIso());
-  // QW3 / D-083: portal tylko dla akcjonariusza ze zgodą na komunikację e-mail.
-  if (rola === 'akcjonariusz' && osobaId) db().prepare("UPDATE psa_osoby SET zgoda_email_status = 'potwierdzona' WHERE id = ?").run(osobaId);
-  return Number(wynik.lastInsertRowid);
-}
-
-async function zalogujPortal(email, haslo) {
-  const odp = await fetch(`${baza}/api/psa/portal/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, haslo }),
+/** Atrapa API tpay: token i zakładanie transakcji. */
+function uruchomAtrape() {
+  let n = 0;
+  atrapa = http.createServer((zad, odp) => {
+    zad.resume();
+    zad.on('end', () => {
+      odp.writeHead(200, { 'Content-Type': 'application/json' });
+      if (zad.url === '/oauth/auth') return odp.end(JSON.stringify({ access_token: 't', expires_in: 7200 }));
+      n += 1;
+      return odp.end(JSON.stringify({ transactionId: `TR-${n}`, transactionPaymentUrl: `https://atrapa.example/${n}` }));
+    });
   });
-  assert.equal(odp.status, 200, `logowanie portalowe ${email} nie powiodło się`);
-  return ciasteczkoZOdpowiedzi(odp);
+  return new Promise((r) => atrapa.listen(0, '127.0.0.1', () => { process.env.TPAY_API_URL = `http://127.0.0.1:${atrapa.address().port}`; r(); }));
 }
 
-let spolkaId;
-let kowalskiId;
-let nowakId;
-let ciastkoSpolka;
-let ciastkoAkcjonariusz;
-let ciastkoInnyAkcjonariusz;
+async function zadanie(metoda, sciezka, cialo, { kto, plik = null } = {}) {
+  const naglowki = { Cookie: ciastka[kto] || '', Origin: ADRES };
+  let body;
+  if (plik) {
+    body = new FormData();
+    body.append('plik', new Blob([plik]), 'umowa.pdf');
+  } else if (cialo !== undefined) {
+    naglowki['Content-Type'] = 'application/json';
+    body = JSON.stringify(cialo);
+  }
+  const odp = await fetch(`${ADRES}${sciezka}`, { method: metoda, headers: naglowki, body });
+  const set = odp.headers.getSetCookie();
+  if (set.length) ciastka[kto] = set.map((c) => c.split(';')[0]).join('; ');
+  const typ = odp.headers.get('content-type') || '';
+  return { status: odp.status, dane: typ.includes('json') ? await odp.json() : Buffer.from(await odp.arrayBuffer()) };
+}
+
+const portalu = (metoda, sciezka, cialo, kto, opcje = {}) => zadanie(metoda, `/api/psa/portal${sciezka}`, cialo, { kto, ...opcje });
+const zaloguj = async (kto) => assert.equal((await portalu('POST', '/login', { email: `${kto}@example.com`, haslo: HASLO }, kto)).status, 200, kto);
 
 test.before(async () => {
+  await uruchomAtrape();
+  const app = require('../serwer');
+  ({ db } = require('../server/baza'));
+  czas = require('../server/pomocnicze/czas');
+  const poczta = require('../server/poczta');
+  poczta.wyslij = async (w) => { wyslane.push(w); return { wyslano: true, idWiadomosci: 'test' }; };
+  const { ustawKancelarie, dodajSpolke, dodajOsobe, otworz } = require('./pomoc');
+  const hasla = require('../server/logika/hasla');
+  const daneOsoby = require('../server/dane/osoby');
+  const daneKonta = require('../server/dane/konta');
+  const daneOplaty = require('../server/dane/oplaty');
+  const informacje = require('../server/informacje');
+  const pisma = require('../server/logika/pisma');
+  const sprawy = require('../server/sprawy');
+  ustawKancelarie(db());
+
   serwer = app.listen(0);
-  baza = `http://localhost:${serwer.address().port}`;
+  ADRES = `http://localhost:${serwer.address().port}`;
+  const hash = await hasla.hashuj(HASLO);
+  db().prepare("INSERT INTO psa_uzytkownicy (imie, email, hash_hasla, rola, utworzono) VALUES ('Admin', 'admin@example.com', ?, 'admin', ?)").run(hash, czas.terazIso());
+  assert.equal((await zadanie('POST', '/api/psa/auth/login', { email: 'admin@example.com', haslo: HASLO }, { kto: 'admin' })).status, 200);
 
-  spolkaId = dodajSpolke();
-  kowalskiId = dodajOsobe({ nazwisko: 'Kowalski', imie: 'Jan', pesel: '80010112345' });
-  nowakId = dodajOsobe({ nazwisko: 'Nowak', imie: 'Anna', pesel: '85050512345', typ: 'fizyczna' });
+  id.A = dodajSpolke(db(), { nazwa: 'Alfa P.S.A.' });
+  id.B = dodajSpolke(db(), { nazwa: 'Beta P.S.A.' });
+  const osoba = (kto, zgoda) => {
+    const o = dodajOsobe(db(), { nazwa: kto, email: `${kto}@example.com` });
+    if (zgoda) daneOsoby.ustawZgodeEmail(db(), o, { zgoda: true }, 'test');
+    return o;
+  };
+  // rafal — działa za A; anna — akcjonariuszka A ze zgodą; jan — akcjonariusz A bez zgody;
+  // zofia — działa za A i ma akcje A; bogdan — działa za B; piotr — akcjonariusz B ze zgodą.
+  for (const [kto, zgoda] of [['rafal', 0], ['anna', 1], ['jan', 0], ['zofia', 1], ['bogdan', 0], ['piotr', 1], ['celina', 0]]) id[kto] = osoba(kto, zgoda);
+  const seria = { seria: 'A', numery: '1-100', liczba: 100, data_wpisu_krs: '2026-01-10' };
+  const akcje = (numery, liczba) => [{ seria: 'A', numery, liczba }];
+  otworz(db(), id.A, { serie: [seria], akcjonariusze: [{ osoba_id: id.anna, akcje: akcje('1-50', 50) }, { osoba_id: id.jan, akcje: akcje('51-80', 30) }, { osoba_id: id.zofia, akcje: akcje('81-100', 20) }] });
+  otworz(db(), id.B, { serie: [seria], akcjonariusze: [{ osoba_id: id.piotr, akcje: akcje('1-100', 100) }] });
+  for (const [s, o] of [[id.A, id.rafal], [id.A, id.zofia], [id.B, id.bogdan], [id.A, id.celina]]) daneKonta.dodajReprezentanta(db(), s, o);
 
-  const emisja = rejestr.dokonajWpisu(db(), {
-    spolkaId, typ: 'emisja',
-    wejscie: { seria: 'A', ilosc: 100, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
-  });
-  rejestr.dokonajWpisu(db(), {
-    spolkaId, typ: 'objecie',
-    wejscie: { emisja_zdarzenie_id: emisja.zdarzenie.id, pozycje: [{ osoba_id: kowalskiId, ilosc: 60 }, { osoba_id: nowakId, ilosc: 40 }] },
-    autor: 'Test',
-  });
+  for (const kto of ['rafal', 'anna', 'jan', 'zofia', 'bogdan', 'piotr']) {
+    const k = daneKonta.dodaj(db(), { email: `${kto}@example.com`, osoba_id: id[kto] });
+    db().prepare('UPDATE psa_konta SET hash_hasla = ?, aktywne = 1 WHERE id = ?').run(hash, k);
+  }
+  const wnioski = require('../server/wnioski');
+  id.wniosek = await wnioski.zglos(db(), { krs: '0000777123', email: 'wies@example.com' }, { poczta });
+  db().prepare('UPDATE psa_konta SET hash_hasla = ?, aktywne = 1 WHERE wniosek_id = ?').run(hash, id.wniosek);
 
-  await dodajKonto({ email: 'spolka@example.pl', haslo: 'HasloSpolki123', rola: 'spolka', spolkaId });
-  await dodajKonto({ email: 'kowalski@example.pl', haslo: 'HasloJana12345', rola: 'akcjonariusz', osobaId: kowalskiId });
-  await dodajKonto({ email: 'nowak@example.pl', haslo: 'HasloAnny123456', rola: 'akcjonariusz', osobaId: nowakId });
+  // Pisma wysłane, opłaty i sprawy obu spółek.
+  const wyslij = (w) => { pisma.zmienStan(db(), w.pismoId, 'wyslane'); return w.pismoId; };
+  id.pismoA_spolka = wyslij(informacje.wydajInformacje(db(), { spolkaId: id.A, odbiorca: { rodzaj: 'spolka' }, oplata: 'nie', kto: 'test' }));
+  id.pismoA_anna = wyslij(informacje.wydajInformacje(db(), { spolkaId: id.A, odbiorca: { rodzaj: 'osoba', osobaId: id.anna }, oplata: 'tak', kto: 'test' }));
+  id.pismoB = wyslij(informacje.wydajInformacje(db(), { spolkaId: id.B, odbiorca: { rodzaj: 'spolka' }, oplata: 'nie', kto: 'test' }));
+  id.oplataA_anna = db().prepare('SELECT id FROM psa_oplaty WHERE pismo_id = ?').get(id.pismoA_anna).id;
+  const prowadzenie = (spolka) => daneOplaty.dodaj(db(), { spolka_id: spolka, typ: 'prowadzenie', platnik: 'spolka', okres: '2026-01-10..2027-01-09', kwota_netto_grosze: 120000, stawka_vat_procent: 23, autor: 'test' });
+  id.oplataA_spolka = prowadzenie(id.A);
+  id.oplataB = prowadzenie(id.B);
+  const sprawa = (spolka, zadajacy, osobaId) => sprawy.zaloz(db(), { spolka_id: spolka, zadajacy, zadajacy_osoba_id: osobaId, podstawa: 'test', operacje: [] }, 'test').id;
+  id.sprawaA_anna = sprawa(id.A, 'osoba', id.anna);
+  id.sprawaA_spolka = sprawa(id.A, 'spolka');
+  id.sprawaB = sprawa(id.B, 'spolka');
 
-  ciastkoSpolka = await zalogujPortal('spolka@example.pl', 'HasloSpolki123');
-  ciastkoAkcjonariusz = await zalogujPortal('kowalski@example.pl', 'HasloJana12345');
-  ciastkoInnyAkcjonariusz = await zalogujPortal('nowak@example.pl', 'HasloAnny123456');
+  // Informacja w portalu — najpóźniej za wczoraj, a rejestry otwarto dziś.
+  czas.ustawPrzesuniecie(2 * 864e5);
+  for (const kto of ['rafal', 'anna', 'jan', 'zofia', 'bogdan', 'piotr', 'wies']) await zaloguj(kto);
 });
 
 test.after(() => {
+  czas.ustawPrzesuniecie(0);
   serwer.close();
-  fs.rmSync(PLIK_BAZY, { force: true });
-  fs.rmSync(`${PLIK_BAZY}-wal`, { force: true });
-  fs.rmSync(`${PLIK_BAZY}-shm`, { force: true });
+  atrapa.close();
+  for (const p of [PLIK_BAZY, `${PLIK_BAZY}-wal`, `${PLIK_BAZY}-shm`]) fs.rmSync(p, { force: true });
   fs.rmSync(process.env.KATALOG_DOKUMENTOW, { recursive: true, force: true });
 });
 
-test('logowanie portalowe: bledne haslo -> 401, trasy portalu wymagaja sesji konta', async () => {
-  const zle = await fetch(`${baza}/api/psa/portal/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'kowalski@example.pl', haslo: 'zle-haslo' }),
-  });
-  assert.equal(zle.status, 401);
+const PDF = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n');
 
-  const bezSesji = await fetch(`${baza}/api/psa/portal/moje`);
-  assert.equal(bezSesji.status, 401);
-});
+/** Każda trasa portalu z zasobem — dla każdego konta: dostęp albo 404 (bez ujawniania istnienia). */
+const ZASOBY = {
+  startA: (k) => portalu('GET', `/start?spolka=${id.A}`, undefined, k),
+  startB: (k) => portalu('GET', `/start?spolka=${id.B}`, undefined, k),
+  zglosA: (k) => portalu('POST', '/sprawy', { spolka_id: id.A, opis: 'Sprzedaż akcji' }, k),
+  zglosB: (k) => portalu('POST', '/sprawy', { spolka_id: id.B, opis: 'Sprzedaż akcji' }, k),
+  plikA_anna: (k) => portalu('POST', `/sprawy/${id.sprawaA_anna}/pliki`, undefined, k, { plik: PDF }),
+  plikA_spolka: (k) => portalu('POST', `/sprawy/${id.sprawaA_spolka}/pliki`, undefined, k, { plik: PDF }),
+  plikB: (k) => portalu('POST', `/sprawy/${id.sprawaB}/pliki`, undefined, k, { plik: PDF }),
+  pismoA_spolka: (k) => portalu('GET', `/pisma/${id.pismoA_spolka}`, undefined, k),
+  pismoA_anna: (k) => portalu('GET', `/pisma/${id.pismoA_anna}`, undefined, k),
+  pismoB: (k) => portalu('GET', `/pisma/${id.pismoB}`, undefined, k),
+  infoA: (k) => portalu('POST', '/informacja', { spolka_id: id.A }, k),
+  infoB: (k) => portalu('POST', '/informacja', { spolka_id: id.B }, k),
+  oplataA_spolka: (k) => portalu('POST', `/oplaty/${id.oplataA_spolka}/zaplac`, {}, k),
+  oplataA_anna: (k) => portalu('POST', `/oplaty/${id.oplataA_anna}/zaplac`, {}, k),
+  oplataB: (k) => portalu('POST', `/oplaty/${id.oplataB}/zaplac`, {}, k),
+  wniosek: (k) => portalu('GET', '/wniosek', undefined, k),
+  wniosekDokument: (k) => portalu('GET', '/wniosek/dokumenty/1', undefined, k),
+};
+const PELNY_A = ['startA', 'zglosA', 'plikA_anna', 'plikA_spolka', 'pismoA_spolka', 'infoA', 'oplataA_spolka'];
+const DOSTEP = {
+  rafal: PELNY_A,
+  anna: ['startA', 'zglosA', 'plikA_anna', 'pismoA_anna', 'infoA', 'oplataA_anna'],
+  jan: [],
+  zofia: PELNY_A,
+  bogdan: ['startB', 'zglosB', 'plikB', 'pismoB', 'infoB', 'oplataB'],
+  wies: ['wniosek'],
+};
 
-test('sesja portalowa jest niezalezna od sesji pracownika (inne ciasteczko)', () => {
-  assert.match(ciastkoSpolka, /^psa_sesja_portal=/);
-});
-
-test('moje: konto spolki widzi swoja spolke', async () => {
-  const odp = await fetch(`${baza}/api/psa/portal/moje`, { headers: { Cookie: ciastkoSpolka } });
-  assert.equal(odp.status, 200);
-  const dane = await odp.json();
-  assert.equal(dane.rola, 'spolka');
-  assert.equal(dane.spolki.length, 1);
-  assert.equal(dane.spolki[0].id, spolkaId);
-});
-
-test('moje: konto akcjonariusza widzi wlasny pakiet akcji, bez cudzych danych', async () => {
-  const odp = await fetch(`${baza}/api/psa/portal/moje`, { headers: { Cookie: ciastkoAkcjonariusz } });
-  assert.equal(odp.status, 200);
-  const dane = await odp.json();
-  assert.equal(dane.rola, 'akcjonariusz');
-  assert.equal(dane.spolki.length, 1);
-  assert.equal(dane.spolki[0].razem_akcji, 60);
-});
-
-test('D-077: zakładka „Rejestr” — API zwraca wyłącznie dane spółki, bez akcjonariatu (akcjonariusz i spółka)', async () => {
-  for (const ciastko of [ciastkoAkcjonariusz, ciastkoSpolka]) {
-    const odp = await fetch(`${baza}/api/psa/portal/rejestr/${spolkaId}`, { headers: { Cookie: ciastko } });
-    assert.equal(odp.status, 200);
-    const tekst = await odp.text();
-    const dane = JSON.parse(tekst);
-    assert.equal(dane.spolka.id, spolkaId);
-    assert.equal(dane.akcjonariusze, undefined, 'akcjonariat nie wychodzi z tej trasy');
-    assert.doesNotMatch(tekst, /80010112345|85050512345/, 'żadnego PESEL w odpowiedzi');
+test('§ 7 pkt 2: izolacja każdej trasy portalu — dostęp wyłącznie z zakresu konta, poza nim 404', async () => {
+  for (const [kto, dozwolone] of Object.entries(DOSTEP)) {
+    for (const [zasob, wywolaj] of Object.entries(ZASOBY)) {
+      const { status, dane } = await wywolaj(kto);
+      if (dozwolone.includes(zasob)) assert.ok(status < 300, `${kto} → ${zasob}: ${status} ${JSON.stringify(dane)}`);
+      else assert.equal(status, 404, `${kto} → ${zasob}: ${status} ${JSON.stringify(dane)}`);
+    }
   }
+  for (const wywolaj of Object.values(ZASOBY)) assert.equal((await wywolaj('nikt')).status, 401, 'bez logowania');
 });
 
-test('rejestr: dostep do cudzej spolki jest odrzucany (404, nie wyciek istnienia)', async () => {
-  const innaSpolkaId = dodajSpolke({ nazwa: 'Inna P.S.A., bez powiazania', krs: '0009998887' });
-  const odp = await fetch(`${baza}/api/psa/portal/rejestr/${innaSpolkaId}`, { headers: { Cookie: ciastkoAkcjonariusz } });
-  assert.equal(odp.status, 404);
+test('U-23: Start — osoba działająca za spółkę widzi wszystko o spółce, akcjonariusz swoje; obie role — suma', async () => {
+  const start = async (kto) => (await portalu('GET', `/start?spolka=${id.A}`, undefined, kto)).dane;
+  const rafal = await start('rafal');
+  const anna = await start('anna');
+  const zofia = await start('zofia');
+  assert.deepEqual(rafal.rola, { pelny: true, akcjonariusz: false });
+  assert.deepEqual(anna.rola, { pelny: false, akcjonariusz: true });
+  assert.deepEqual(zofia.rola, { pelny: true, akcjonariusz: true });
+  assert.ok(rafal.sprawy.some((s) => s.id === id.sprawaA_anna) && rafal.sprawy.some((s) => s.id === id.sprawaA_spolka));
+  assert.ok(anna.sprawy.every((s) => s.id !== id.sprawaA_spolka) && anna.sprawy.some((s) => s.id === id.sprawaA_anna));
+  assert.ok(anna.oplaty.some((o) => o.id === id.oplataA_anna) && !anna.oplaty.some((o) => o.id === id.oplataA_spolka));
+  assert.ok(rafal.oplaty.some((o) => o.id === id.oplataA_spolka) && !rafal.oplaty.some((o) => o.id === id.oplataA_anna));
+  assert.deepEqual(anna.informacje.map((p) => p.id), [id.pismoA_anna]);
+  assert.deepEqual(rafal.informacje.map((p) => p.id), [id.pismoA_spolka]);
+  assert.ok(anna.oplaty.every((o) => o.kwota_brutto_grosze === 6150), 'kwota brutto na przycisku');
+  assert.equal(JSON.stringify(rafal).includes('jan@example.com'), false, 'bez akcjonariatu na Starcie');
+  const jan = await portalu('GET', '/start', undefined, 'jan');
+  assert.equal(jan.dane.spolka, null, 'akcjonariusz bez zgody na e-mail nie ma zakresu (D-083)');
+  const ja = await portalu('GET', '/ja', undefined, 'zofia');
+  assert.deepEqual(ja.dane.spolki.map((s) => [s.nazwa, s.pelny, s.akcjonariusz]), [['Alfa P.S.A.', true, true]]);
 });
 
-test('zadania: zlozenie zgloszenia typu dostepnego portalowi', async () => {
-  const odp = await fetch(`${baza}/api/psa/portal/zadania`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
-    body: JSON.stringify({ spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', opis: 'Sprzedaję część akcji sąsiadowi.' }),
-  });
-  assert.equal(odp.status, 201);
-  const dane = await odp.json();
-  assert.equal(dane.sprawa.stan, 'nowa');
-  assert.equal(dane.sprawa.zrodlo, 'portal');
+test('„Zgłoś zmianę”: sprawa w toku (żądający spółka albo osoba), plik do sprawy, dwuklik nie zakłada drugiej, Pulpit', async () => {
+  const z1 = await portalu('POST', '/sprawy', { spolka_id: id.A, opis: 'Anna sprzedała 10 akcji.', klucz: 'k1' }, 'anna');
+  const z2 = await portalu('POST', '/sprawy', { spolka_id: id.A, opis: 'Anna sprzedała 10 akcji.', klucz: 'k1' }, 'anna');
+  assert.equal(z1.status, 201);
+  assert.equal(z2.dane.id, z1.dane.id, 'ten sam klucz — ta sama sprawa');
+  const s = db().prepare('SELECT * FROM psa_sprawy WHERE id = ?').get(z1.dane.id);
+  assert.deepEqual([s.stan, s.zadajacy, s.zadajacy_osoba_id, s.podstawa], ['w_toku', 'osoba', id.anna, 'Anna sprzedała 10 akcji.']);
+  const r = await portalu('POST', '/sprawy', { spolka_id: id.A, opis: 'Zmiana adresu spółki' }, 'zofia');
+  assert.equal(db().prepare('SELECT zadajacy FROM psa_sprawy WHERE id = ?').get(r.dane.id).zadajacy, 'spolka');
+  assert.equal((await portalu('POST', '/sprawy', { spolka_id: id.A, opis: '' }, 'anna')).status, 422);
+  assert.equal((await portalu('POST', `/sprawy/${z1.dane.id}/pliki`, undefined, 'anna', { plik: PDF })).status, 201);
+  assert.equal((await portalu('POST', `/sprawy/${z1.dane.id}/pliki`, undefined, 'anna', { plik: Buffer.from('<html>') })).status, 422, 'tylko PDF i formaty podpisu');
+  const pulpit = (await zadanie('GET', '/api/psa/pulpit', undefined, { kto: 'admin' })).dane;
+  assert.ok(JSON.stringify(pulpit).includes(`Sprawa nr ${z1.dane.id}`), 'nowe zgłoszenie z portalu na Pulpicie');
 });
 
-test('zadania: typ z_urzedu jest odrzucany na poziomie portalu', async () => {
-  const odp = await fetch(`${baza}/api/psa/portal/zadania`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
-    body: JSON.stringify({ spolka_id: spolkaId, typ_zdarzenia: 'zajecie', opis: 'proba' }),
-  });
-  assert.equal(odp.status, 400);
+test('U-24: informacja — wybór dnia (najpóźniej wczoraj), zapłata przez tpay, pobranie po ITN, wersja według roli', async () => {
+  const dzis = czas.dzisIso();
+  const zle = await portalu('POST', '/informacja', { spolka_id: id.A, dzien: dzis }, 'anna');
+  assert.equal(zle.status, 422, 'dzisiejszy stan — tylko w kancelarii');
+  const z = await portalu('POST', '/informacja', { spolka_id: id.A }, 'anna');
+  assert.equal((await portalu('POST', '/informacja', { spolka_id: id.A }, 'anna')).dane.oplata_id, z.dane.oplata_id, 'dwuklik — jeden dług');
+  const oplata = db().prepare('SELECT * FROM psa_oplaty WHERE id = ?').get(z.dane.oplata_id);
+  const pismo = db().prepare('SELECT * FROM psa_pisma WHERE id = ?').get(oplata.pismo_id);
+  assert.deepEqual([oplata.platnik, oplata.platnik_osoba_id, pismo.adresat, pismo.adresat_osoba_id, pismo.kanal], ['osoba', id.anna, 'osoba', id.anna, 'portal']);
+  assert.equal((await portalu('GET', `/pisma/${pismo.id}`, undefined, 'anna')).status, 404, 'przed zapłatą nie do pobrania');
+
+  const link = await portalu('POST', `/oplaty/${oplata.id}/zaplac`, {}, 'anna');
+  assert.match(link.dane.link, /^https:\/\/atrapa\.example\//);
+  const p = db().prepare("SELECT * FROM psa_platnosci WHERE oplata_id = ? AND status = 'oczekuje'").get(oplata.id);
+  assert.equal(p.kwota_grosze, 6150);
+  const itn = { id: '1', tr_id: p.tpay_id, tr_amount: '61.50', tr_crc: p.crc, tr_status: 'TRUE', tr_error: 'none', test_mode: '0' };
+  itn.md5sum = crypto.createHash('md5').update(`${itn.id}${itn.tr_id}${itn.tr_amount}${itn.tr_crc}${SEKRET_ITN}`).digest('hex');
+  const odp = await fetch(`${ADRES}/api/psa/platnosci/tpay/itn`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(itn) });
+  assert.equal(await odp.text(), 'TRUE');
+
+  const start = (await portalu('GET', `/start?spolka=${id.A}`, undefined, 'anna')).dane;
+  assert.ok(start.informacje.some((i) => i.id === pismo.id) && !start.oplaty.some((o) => o.id === oplata.id));
+  const pdf = await portalu('GET', `/pisma/${pismo.id}`, undefined, 'anna');
+  assert.equal(pdf.dane.subarray(0, 5).toString(), '%PDF-');
+  assert.equal((await portalu('GET', `/pisma/${pismo.id}`, undefined, 'rafal')).status, 404, 'informacja akcjonariuszki — nie dla spółki');
+  const kontoAnny = `konto:${db().prepare('SELECT id FROM psa_konta WHERE osoba_id = ?').get(id.anna).id}`;
+  assert.ok(db().prepare("SELECT 1 FROM psa_dziennik WHERE akcja = 'informacja_z_rejestru' AND typ_kto = 'portal' AND kto = ?").get(kontoAnny), 'ślad w dzienniku');
+
+  const pelna = await portalu('POST', '/informacja', { spolka_id: id.A }, 'zofia');
+  const pz = db().prepare('SELECT p.adresat, o.platnik FROM psa_oplaty o JOIN psa_pisma p ON p.id = o.pismo_id WHERE o.id = ?').get(pelna.dane.oplata_id);
+  assert.deepEqual(pz, { adresat: 'spolka', platnik: 'spolka' }, 'osoba w obu rolach — informacja pełna na koszt spółki');
 });
 
-test('zadania: konto spolki widzi zgloszenia o swojej spolce, obcy akcjonariusz — nie', async () => {
-  const dlaJana = await (await fetch(`${baza}/api/psa/portal/zadania`, { headers: { Cookie: ciastkoAkcjonariusz } })).json();
-  assert.equal(dlaJana.sprawy.length, 1, 'Jan widzi wlasne zgloszenie');
+test('Odebranie dostępu: usunięcie z „Działają za spółkę”, wycofanie zgody, zbycie wszystkich akcji — od razu, bez wylogowania', async () => {
+  const usun = await zadanie('DELETE', `/api/psa/spolki/${id.A}/reprezentanci/${id.rafal}`, undefined, { kto: 'admin' });
+  assert.equal(usun.status, 200);
+  assert.equal((await portalu('GET', `/start?spolka=${id.A}`, undefined, 'rafal')).status, 404);
+  const kokpit = (await zadanie('GET', `/api/psa/spolki/${id.A}`, undefined, { kto: 'admin' })).dane;
+  assert.ok(kokpit.historia.some((h) => h.pole === 'dzialaja_za_spolke' && h.nowa === 'rafal — usunięto'));
+  assert.ok(!kokpit.reprezentanci.some((r) => r.id === id.rafal));
+  const dodaj = await zadanie('POST', `/api/psa/spolki/${id.A}/reprezentanci`, { osoba_id: id.rafal }, { kto: 'admin' });
+  assert.equal(dodaj.status, 201);
+  assert.equal((await portalu('GET', `/start?spolka=${id.A}`, undefined, 'rafal')).status, 200, 'przywrócony');
 
-  // Spolka widzi KAZDE zgloszenie portalowe dotyczace jej wlasnego rejestru
-  // (nie tylko zlozone przez samo konto spolki) - to zamierzone: pracownicy
-  // spolki maja przegladac napływajace zadania dotyczace ich rejestru.
-  const dlaSpolki = await (await fetch(`${baza}/api/psa/portal/zadania`, { headers: { Cookie: ciastkoSpolka } })).json();
-  assert.equal(dlaSpolki.sprawy.length, 1, 'zgłoszenie Jana o TEJ spółce jest widoczne dla konta spółki');
+  assert.equal((await portalu('PUT', '/konto', { zgoda_email: false }, 'anna')).status, 200);
+  assert.equal((await portalu('GET', `/start?spolka=${id.A}`, undefined, 'anna')).status, 404, 'wycofana zgoda (D-083)');
+  const ja = (await portalu('GET', '/ja', undefined, 'anna')).dane;
+  assert.deepEqual([ja.spolki.length, ja.akcjonariusz, ja.zgoda_email], [0, true, false], 'Konto nadal pokazuje przełącznik zgody');
+  assert.equal((await portalu('PUT', '/konto', { zgoda_email: true }, 'anna')).dane.spolki.length, 1, 'zgoda złożona w portalu przywraca dostęp');
 
-  // Ale inny akcjonariusz tej samej spolki (Anna) nie widzi zgloszenia Jana -
-  // to NIE jest jej sprawa.
-  const dlaAnny = await (await fetch(`${baza}/api/psa/portal/zadania`, { headers: { Cookie: ciastkoInnyAkcjonariusz } })).json();
-  assert.equal(dlaAnny.sprawy.length, 0, 'zgłoszenie Jana nie jest widoczne dla innego akcjonariusza');
+  const { wpisz } = require('./pomoc');
+  wpisz(db(), id.B, [{ typ: 'przeniesienie', zbywca_osoba_id: id.piotr, nabywcy: [{ osoba_id: id.bogdan, akcje: [{ seria: 'A', numery: '1-100', liczba: 100 }] }] }]);
+  assert.equal((await portalu('GET', `/start?spolka=${id.B}`, undefined, 'piotr')).status, 404, 'zbycie wszystkich akcji (D-039)');
 });
 
-/**
- * Wpisu dokonuje sie na podstawie DOKUMENTU (art. 300(34) § 4 KSH), nie opisu
- * zadajacego — wiec zgloszenie z sama umowa w zalaczniku musi przejsc.
- * Wczesniej opis byl obowiazkowy i klient musial pisac wypracowanie obok
- * dokumentu, ktory i tak rozstrzyga.
- */
-test('zadania: zgloszenie bez opisu przechodzi — podstawa jest dokument', async () => {
-  const odp = await fetch(`${baza}/api/psa/portal/zadania`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
-    body: JSON.stringify({ spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', opis: '' }),
-  });
-  assert.equal(odp.status, 201);
-  const { sprawa } = await odp.json();
-  assert.equal(sprawa.stan, 'nowa');
+test('„Zaproś do portalu”: tylko osoba działająca za spółkę albo akcjonariusz ze zgodą; link do hasła, e-mail bez danych', async () => {
+  const zapros = (o) => zadanie('POST', `/api/psa/osoby/${o}/zaproszenie`, {}, { kto: 'admin' });
+  assert.equal((await zapros(id.jan)).status, 422, 'akcjonariusz bez zgody');
+  const r = await zapros(id.celina);
+  assert.equal(r.status, 200, JSON.stringify(r.dane));
+  assert.equal(r.dane.konto.aktywne, false);
+  const mail = wyslane.at(-1);
+  assert.equal(mail.do, 'celina@example.com');
+  assert.ok(!mail.tekst.includes('celina') && !mail.tekst.includes('Alfa'), 'e-mail bez danych osobowych');
+  const token = mail.tekst.match(/token=([0-9a-f]+)/)[1];
+  const a = await portalu('POST', '/aktywacja', { token, haslo: HASLO, regulamin: true }, 'celina');
+  assert.equal(a.status, 200);
+  assert.equal((await portalu('GET', `/start?spolka=${id.A}`, undefined, 'celina')).dane.spolka.nazwa, 'Alfa P.S.A.');
+  const karta = (await zadanie('GET', `/api/psa/osoby/${id.celina}`, undefined, { kto: 'admin' })).dane;
+  assert.deepEqual([karta.konto.aktywne, karta.konto.spolki.length], [true, 1]);
+  assert.ok(karta.historia.some((h) => h.pole === 'zaproszenie_do_portalu'));
 
-  // Zadajacy musi byc opisany nawet bez wpisanego opisu — inaczej sprawa
-  // trafia do kolejki bez informacji, od kogo przyszla.
-  const wiersz = db().prepare('SELECT zadajacy_opis, notatka FROM psa_sprawy WHERE id = ?').get(sprawa.id);
-  assert.ok(wiersz.zadajacy_opis, 'zadajacy jest opisany mimo pustego opisu');
-  assert.equal(wiersz.notatka, null, 'pusty opis nie zostaje pustym napisem w notatce');
+  // Ponowne zaproszenie = nowe hasło; dotychczasowe sesje wygasają.
+  await zapros(id.celina);
+  const token2 = wyslane.at(-1).tekst.match(/token=([0-9a-f]+)/)[1];
+  await portalu('POST', '/aktywacja', { token: token2, haslo: `${HASLO}x`, regulamin: true }, 'celina-2');
+  assert.equal((await portalu('GET', '/start', undefined, 'celina')).status, 401, 'stara sesja unieważniona');
+
+  db().prepare('UPDATE psa_osoby SET email = ? WHERE id = ?').run('wies@example.com', id.bogdan);
+  assert.equal((await zapros(id.bogdan)).status, 422, 'adres zajęty przez konto innego wniosku');
 });
 
-/**
- * Naprawa Z-351/Z-353: portal.js/zadania nalicza OPLATE razem ze sprawa -
- * podwojne zadanie bez ochrony obciazyloby klienta dwa razy za ten sam wpis.
- * Klucz idempotencyjny generuje klient i wysyla go ponownie przy ponowieniu
- * tej samej proby (dwa kliknieca, ponowienie po zerwanym polaczeniu).
- * Wlasna spolka/konto - test nie ma wplywac na liczniki spraw uzywane
- * przez sasiednie testy tego pliku.
- */
-test('POST /api/psa/portal/zadania: ten sam klucz_idempotencji nie zaklada drugiej sprawy ani drugiej oplaty', async () => {
-  const spolkaIdempId = dodajSpolke({ nazwa: `Portal Idempotencja ${czas.terazIso()}` });
-  const osobaIdempId = dodajOsobe({ nazwisko: 'Idempotentny', imie: 'Karol', pesel: '90010112360' });
-  const emisjaIdemp = rejestr.dokonajWpisu(db(), {
-    spolkaId: spolkaIdempId, typ: 'emisja',
-    wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
-  });
-  rejestr.dokonajWpisu(db(), {
-    spolkaId: spolkaIdempId, typ: 'objecie',
-    wejscie: { emisja_zdarzenie_id: emisjaIdemp.zdarzenie.id, pozycje: [{ osoba_id: osobaIdempId, ilosc: 10 }] }, autor: 'Test',
-  });
-  await dodajKonto({ email: 'idempotentny@example.pl', haslo: 'HasloKarola123', rola: 'akcjonariusz', osobaId: osobaIdempId });
-  const ciastkoIdemp = await zalogujPortal('idempotentny@example.pl', 'HasloKarola123');
+test('Konto: zmiana hasła wymaga obecnego i wylogowuje inne urządzenia; konto wniosku po przyjęciu traci ekrany wniosku', async () => {
+  await zaloguj('zofia');
+  ciastka['zofia-2'] = ciastka.zofia;
+  assert.equal((await portalu('PUT', '/konto', { haslo_obecne: 'zle', haslo_nowe: 'Nowe-Mocne-Haslo-2026' }, 'zofia')).status, 422);
+  assert.equal((await portalu('PUT', '/konto', { haslo_obecne: HASLO, haslo_nowe: 'Nowe-Mocne-Haslo-2026' }, 'zofia')).status, 200);
+  assert.equal((await portalu('GET', '/start', undefined, 'zofia')).status, 200, 'bieżąca sesja zostaje');
+  assert.equal((await portalu('GET', '/start', undefined, 'zofia-2')).status, 401, 'inne urządzenie wylogowane');
 
-  const klucz = `test-portal-idempotencja-${Date.now()}`;
-  const cialo = JSON.stringify({ spolka_id: spolkaIdempId, typ_zdarzenia: 'przeniesienie', opis: 'proba', klucz_idempotencji: klucz });
-
-  const odp1 = await fetch(`${baza}/api/psa/portal/zadania`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastkoIdemp }, body: cialo,
-  });
-  assert.equal(odp1.status, 201);
-  const pierwsza = await odp1.json();
-
-  const odp2 = await fetch(`${baza}/api/psa/portal/zadania`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastkoIdemp }, body: cialo,
-  });
-  assert.equal(odp2.status, 200, 'ponowienie z tym samym kluczem nie zaklada drugiej sprawy');
-  const druga = await odp2.json();
-  assert.equal(druga.sprawa.id, pierwsza.sprawa.id);
-  assert.equal(druga.oplata_id, pierwsza.oplata_id, 'ta sama, JUZ naliczona oplata - nie druga');
-
-  const liczbaSpraw = db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy WHERE klucz_idempotencji = ?').get(klucz).n;
-  assert.equal(liczbaSpraw, 1);
-  const liczbaOplat = db()
-    .prepare(`SELECT COUNT(*) AS n FROM psa_oplaty WHERE sprawa_id = ? AND typ = 'wpis' AND status != 'anulowana'`)
-    .get(pierwsza.sprawa.id).n;
-  assert.equal(liczbaOplat, 1, 'dokladnie jedna oplata za wpis, nie dwie');
+  db().prepare("UPDATE psa_wnioski SET stan = 'przyjety' WHERE id = ?").run(id.wniosek);
+  assert.equal((await portalu('GET', '/wniosek', undefined, 'wies')).status, 404);
+  assert.equal((await portalu('GET', '/ja', undefined, 'wies')).dane.wniosek, null);
 });
 
-test('dokumenty: upload do wlasnej sprawy dziala, do cudzej jest odrzucany', async () => {
-  const zadanie = await (
-    await fetch(`${baza}/api/psa/portal/zadania`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
-      body: JSON.stringify({ spolka_id: spolkaId, typ_zdarzenia: 'przeniesienie', opis: 'Dokument dowodowy w załączeniu.' }),
-    })
-  ).json();
-  const sprawaId = zadanie.sprawa.id;
-
-  const formularz = new FormData();
-  formularz.append('typ_dokumentu', 'umowa_zbycia');
-  formularz.append('pliki', new Blob(['%PDF-1.4\ntresc testowa'], { type: 'application/pdf' }), 'umowa.pdf');
-
-  const wlasny = await fetch(`${baza}/api/psa/portal/zadania/${sprawaId}/dokumenty`, {
-    method: 'POST', headers: { Cookie: ciastkoAkcjonariusz }, body: formularz,
-  });
-  assert.equal(wlasny.status, 201);
-
-  // Anna (inny akcjonariusz tej samej spolki, bez zwiazku z ta konkretna
-  // sprawa) nie moze dolaczac dokumentow do cudzego zgloszenia.
-  const formularz2 = new FormData();
-  formularz2.append('typ_dokumentu', 'inny');
-  formularz2.append('pliki', new Blob(['%PDF-1.4\nx'], { type: 'application/pdf' }), 'x.pdf');
-  const cudzy = await fetch(`${baza}/api/psa/portal/zadania/${sprawaId}/dokumenty`, {
-    method: 'POST', headers: { Cookie: ciastkoInnyAkcjonariusz }, body: formularz2,
-  });
-  assert.equal(cudzy.status, 404);
-});
-
-test('informacja z rejestru: odplatna — bez zaplaty nie wychodzi', async () => {
-  const zamow = await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
-    body: JSON.stringify({ spolka_id: spolkaId }),
-  });
-  assert.equal(zamow.status, 200);
-  const zamowienie = await zamow.json();
-  assert.ok(Number.isInteger(zamowienie.oplata_id));
-  assert.equal(zamowienie.oplacona, false);
-
-  const przedZaplata = await fetch(`${baza}/api/psa/portal/informacja/${zamowienie.oplata_id}/wydaj`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz }, body: '{}',
-  });
-  assert.equal(przedZaplata.status, 400, 'nieoplacona informacja nie wychodzi');
-  assert.equal(
-    db().prepare(`SELECT COUNT(*) c FROM psa_wydane_dokumenty WHERE typ = 'informacja_z_rejestru'`).get().c,
-    0,
-    'dokument w ogole nie powstaje'
-  );
-});
-
-test('informacja z rejestru: wydanie zapisuje slad, dokument ma wlasny adres', async () => {
-  const zamow = await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
-    body: JSON.stringify({ spolka_id: spolkaId }),
-  });
-  const { oplata_id: oplataId } = await zamow.json();
-  db().prepare("UPDATE psa_oplaty SET status = 'oplacona' WHERE id = ?").run(oplataId);
-
-  const odp = await fetch(`${baza}/api/psa/portal/informacja/${oplataId}/wydaj`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: ciastkoAkcjonariusz },
-    body: '{}',
-  });
-  assert.equal(odp.status, 200);
-  const dane = await odp.json();
-  assert.ok(Number.isInteger(dane.dokument_id), 'wydanie zwraca identyfikator dokumentu');
-
-  const slad = db()
-    .prepare(`SELECT * FROM psa_wydane_dokumenty WHERE spolka_id = ? AND typ = 'informacja_z_rejestru'`)
-    .all(spolkaId);
-  assert.equal(slad.length, 1);
-  assert.equal(slad[0].kanal, 'portal');
-  assert.equal(slad[0].id, dane.dokument_id);
-
-  // Dokument otwiera sie pod adresem, a nie z odpowiedzi POST — dzieki temu
-  // da sie go otworzyc ponownie i wydrukowac z sensowna nazwa pliku.
-  const pobrany = await fetch(`${baza}/api/psa/portal/informacja/${dane.dokument_id}`, {
-    headers: { Cookie: ciastkoAkcjonariusz },
-  });
-  assert.equal(pobrany.status, 200);
-  assert.match(pobrany.headers.get('content-type') || '', /text\/html/);
-  const html = await pobrany.text();
-  assert.match(html, /Informacja z rejestru akcjonariuszy/);
-  assert.match(html, /Portal Testowa P\.S\.A\./);
-  // Pelna tresc ustawowa, nie sama tabela akcjonariuszy (art. 300(33) § 1).
-  assert.match(html, /podmiot prowadzący rejestr akcjonariuszy/, 'kto wydał — w główce');
-  assert.match(html, /Emisje i serie akcji/);
-
-  // Ponowne otwarcie jest BEZPLATNE: platna jest czynnosc wydania.
-  const przedOplaty = db()
-    .prepare(`SELECT COUNT(*) c FROM psa_wydane_dokumenty WHERE spolka_id = ? AND typ = 'informacja_z_rejestru'`)
-    .get(spolkaId).c;
-  await fetch(`${baza}/api/psa/portal/informacja/${dane.dokument_id}`, {
-    headers: { Cookie: ciastkoAkcjonariusz },
-  });
-  assert.equal(
-    db()
-      .prepare(`SELECT COUNT(*) c FROM psa_wydane_dokumenty WHERE spolka_id = ? AND typ = 'informacja_z_rejestru'`)
-      .get(spolkaId).c,
-    przedOplaty,
-    'ponowne otwarcie nie wydaje dokumentu drugi raz'
-  );
-});
-
-test('portal wylaczony flaga: PORTAL_WLACZONY=false zwraca 503 dla wszystkich tras portalu', async () => {
-  const PLIK_BAZY2 = path.join(__dirname, '..', 'dane', '.test-portal-wylaczony.db');
-  fs.rmSync(PLIK_BAZY2, { force: true });
-  const skrypt = `
-    process.env.WSPOLNA_BAZA = ${JSON.stringify(PLIK_BAZY2)};
-    process.env.KATALOG_DOKUMENTOW = ${JSON.stringify(path.join(__dirname, '..', 'dane', '.test-portal-wylaczony-dok'))};
-    process.env.PORTAL_WLACZONY = 'false';
-    const app = require(${JSON.stringify(path.join(__dirname, '..', 'serwer.js'))});
-    const serwer = app.listen(0, () => {
-      fetch(\`http://localhost:\${serwer.address().port}/api/psa/portal/whoami\`)
-        .then((r) => { console.log(r.status); serwer.close(); process.exit(0); });
-    });
-  `;
-  const { execFileSync } = require('node:child_process');
-  const wynik = execFileSync(process.execPath, ['-e', skrypt], { encoding: 'utf8' });
-  const ostatniaLinia = wynik.trim().split('\n').pop();
-  assert.equal(ostatniaLinia, '503');
-  fs.rmSync(PLIK_BAZY2, { force: true });
-  fs.rmSync(`${PLIK_BAZY2}-wal`, { force: true });
-  fs.rmSync(`${PLIK_BAZY2}-shm`, { force: true });
-});
-
-/**
- * Informacja wydana SPOLCE niesie pelne dane wszystkich akcjonariuszy (art.
- * 300(35) § 1 KSH); wydana akcjonariuszowi — te same dane w jego, wezszym
- * zakresie (§ 1(1)). Bramka „czy masz dostep do tej spolki" przepuszczala
- * akcjonariusza do dokumentu spolki, czyli do adresow pozostalych
- * akcjonariuszy, ktore w jego wlasnej informacji sa zaslonione.
- */
-test('akcjonariusz nie otworzy informacji wydanej SPOLCE', async () => {
-  async function wydaj(ciastko) {
-    const zam = await (await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastko },
-      body: JSON.stringify({ spolka_id: spolkaId }),
-    })).json();
-    db().prepare("UPDATE psa_oplaty SET status = 'oplacona' WHERE id = ?").run(zam.oplata_id);
-    return (await (await fetch(`${baza}/api/psa/portal/informacja/${zam.oplata_id}/wydaj`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastko }, body: '{}',
-    })).json()).dokument_id;
-  }
-
-  const dokumentSpolki = await wydaj(ciastkoSpolka);
-  const dokumentKowalskiego = await wydaj(ciastkoAkcjonariusz);
-
-  const cudzy = await fetch(`${baza}/api/psa/portal/informacja/${dokumentSpolki}`, {
-    headers: { Cookie: ciastkoAkcjonariusz },
-  });
-  assert.equal(cudzy.status, 404, 'dokument spółki jest dla akcjonariusza nieistniejący');
-
-  // Cudzy dokument AKCJONARIUSZA tez nie — nawet w tej samej spolce.
-  const cudzyAkcjonariusza = await fetch(`${baza}/api/psa/portal/informacja/${dokumentKowalskiego}`, {
-    headers: { Cookie: ciastkoInnyAkcjonariusz },
-  });
-  assert.equal(cudzyAkcjonariusza.status, 404);
-
-  // Wlasny otwiera sie normalnie, a spolka otwiera swoj.
-  assert.equal(
-    (await fetch(`${baza}/api/psa/portal/informacja/${dokumentKowalskiego}`, { headers: { Cookie: ciastkoAkcjonariusz } })).status,
-    200
-  );
-  assert.equal(
-    (await fetch(`${baza}/api/psa/portal/informacja/${dokumentSpolki}`, { headers: { Cookie: ciastkoSpolka } })).status,
-    200
-  );
-});
-
-/**
- * Naprawa P-012: dotad jedyna droga do skanu dokumentu tozsamosci byla
- * `POST /api/psa/osoby/:id/aml-skany`, za `wymagajPracownika` - dokument i
- * tak krazyl mailem, zanim pracownik go tam wgral. Ten test sprawdza nowy,
- * portalowy kanal: WYLACZNIE wlasny skan, ten sam rezim co kartoteka.
- */
-test('AML: akcjonariusz wgrywa WLASNY skan dokumentu, trafia do wspolnej kartoteki z pracownikiem', async () => {
-  const spolkaAmlId = dodajSpolke({ nazwa: `Portal AML ${czas.terazIso()}` });
-  db().prepare('UPDATE psa_spolki SET stosuje_procedure_aml = 1 WHERE id = ?').run(spolkaAmlId);
-  const osobaAmlId = dodajOsobe({ nazwisko: 'Skanowy', imie: 'Piotr', pesel: '90010112345' });
-  const emisjaAml = rejestr.dokonajWpisu(db(), {
-    spolkaId: spolkaAmlId, typ: 'emisja',
-    wejscie: { seria: 'A', ilosc: 10, data_wpisu_krs: '2026-01-10' }, autor: 'Test',
-  });
-  rejestr.dokonajWpisu(db(), {
-    spolkaId: spolkaAmlId, typ: 'objecie',
-    wejscie: { emisja_zdarzenie_id: emisjaAml.zdarzenie.id, pozycje: [{ osoba_id: osobaAmlId, ilosc: 10 }] }, autor: 'Test',
-  });
-  await dodajKonto({ email: 'skanowy@example.pl', haslo: 'HasloPiotra123', rola: 'akcjonariusz', osobaId: osobaAmlId });
-  const ciastkoSkanowy = await zalogujPortal('skanowy@example.pl', 'HasloPiotra123');
-
-  // Rola "spolka" nie ma wlasnej osoby - nie ma czyjego skanu wgrac.
-  const odmowaRoli = await fetch(`${baza}/api/psa/portal/aml-skany`, { headers: { Cookie: ciastkoSpolka } });
-  assert.equal(odmowaRoli.status, 403);
-
-  // Zla koncowka pliku jest odrzucona (ten sam rezim co kartoteka pracownika).
-  const zlaKoncowka = new FormData();
-  zlaKoncowka.append('plik', new Blob(['x'], { type: 'text/plain' }), 'notatka.txt');
-  const odpZlaKoncowka = await fetch(`${baza}/api/psa/portal/aml-skany/${spolkaAmlId}`, {
-    method: 'POST', headers: { Cookie: ciastkoSkanowy }, body: zlaKoncowka,
-  });
-  assert.equal(odpZlaKoncowka.status, 400);
-
-  // Spolka bez wlaczonej procedury AML - odmowa, tak jak w kartotece pracownika.
-  const formularzBezAml = new FormData();
-  formularzBezAml.append('plik', new Blob(['%PDF-1.4\nx'], { type: 'application/pdf' }), 'dowod.pdf');
-  const odpBezAml = await fetch(`${baza}/api/psa/portal/aml-skany/${spolkaId}`, {
-    method: 'POST', headers: { Cookie: ciastkoAkcjonariusz }, body: formularzBezAml,
-  });
-  assert.equal(odpBezAml.status, 400, 'spolkaId nalezy do Kowalskiego, ale nie ma wlaczonej procedury AML');
-
-  // Spolka, w ktorej ten akcjonariusz NIE ma akcji - D3, 404.
-  const formularzCudza = new FormData();
-  formularzCudza.append('plik', new Blob(['%PDF-1.4\nx'], { type: 'application/pdf' }), 'dowod.pdf');
-  const odpCudza = await fetch(`${baza}/api/psa/portal/aml-skany/${spolkaAmlId}`, {
-    method: 'POST', headers: { Cookie: ciastkoAkcjonariusz }, body: formularzCudza,
-  });
-  assert.equal(odpCudza.status, 404, 'Kowalski nie ma akcji w tej spolce');
-
-  // Wgranie wlasnego skanu, we wlasciwym kontekscie - sukces.
-  const formularz = new FormData();
-  formularz.append('typ_dokumentu', 'dowod_osobisty');
-  formularz.append('plik', new Blob(['%PDF-1.4\ntresc skanu'], { type: 'application/pdf' }), 'dowod-piotra.pdf');
-  const odpUpload = await fetch(`${baza}/api/psa/portal/aml-skany/${spolkaAmlId}`, {
-    method: 'POST', headers: { Cookie: ciastkoSkanowy }, body: formularz,
-  });
-  assert.equal(odpUpload.status, 201);
-  const dane = await odpUpload.json();
-  assert.equal(dane.skan.typ_dokumentu, 'dowod_osobisty');
-
-  const lista = await (await fetch(`${baza}/api/psa/portal/aml-skany`, { headers: { Cookie: ciastkoSkanowy } })).json();
-  assert.equal(lista.skany.length, 1);
-  assert.equal(lista.skany[0].id, dane.skan.id);
-
-  // Ten sam wiersz jest widoczny po stronie kartoteki pracownika - jedna
-  // wspolna lista, nie dwie osobne.
-  const wiersz = db().prepare('SELECT * FROM psa_osoby_skany_aml WHERE id = ?').get(dane.skan.id);
-  assert.equal(wiersz.osoba_id, osobaAmlId);
-  assert.equal(wiersz.spolka_id, spolkaAmlId);
-  assert.match(wiersz.wgral, /skanowy@example\.pl/);
-  assert.ok(wiersz.hash, 'ten sam rezim hasha co upload pracownika');
-});
-
-test('dwuklik w „Zamow informacje" nie tworzy dwoch dlugow', async () => {
-  const przed = db().prepare(`SELECT COUNT(*) c FROM psa_oplaty WHERE typ = 'informacja'`).get().c;
-
-  async function zamow() {
-    const odp = await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastkoInnyAkcjonariusz },
-      body: JSON.stringify({ spolka_id: spolkaId }),
-    });
-    return (await odp.json()).oplata_id;
-  }
-
-  const pierwsze = await zamow();
-  const drugie = await zamow();
-  assert.equal(drugie, pierwsze, 'to samo nierozliczone zamówienie, nie drugie');
-  assert.equal(
-    db().prepare(`SELECT COUNT(*) c FROM psa_oplaty WHERE typ = 'informacja'`).get().c,
-    przed + 1,
-    'jedna należność na jedną chęć obejrzenia rejestru'
-  );
-});
-
-test('W5.4/W5.5: informacja z rejestru (API) — akcjonariusz bez PESEL innych, spółka pełna; numer, wynagrodzenie, VAT, podstawa', async () => {
-  async function wydaj(ciastko) {
-    const zamow = await fetch(`${baza}/api/psa/portal/informacja/zamow`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastko }, body: JSON.stringify({ spolka_id: spolkaId }),
-    });
-    const { oplata_id: oplataId } = await zamow.json();
-    db().prepare("UPDATE psa_oplaty SET status = 'oplacona' WHERE id = ?").run(oplataId);
-    const odp = await fetch(`${baza}/api/psa/portal/informacja/${oplataId}/wydaj`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastko }, body: '{}',
-    });
-    const { dokument_id: id } = await odp.json();
-    return (await fetch(`${baza}/api/psa/portal/informacja/${id}`, { headers: { Cookie: ciastko } })).text();
-  }
-  const dlaAkcjonariusza = await wydaj(ciastkoAkcjonariusz);
-  assert.match(dlaAkcjonariusza, /80010112345/, 'własny PESEL widoczny');
-  assert.doesNotMatch(dlaAkcjonariusza, /85050512345/, 'PESEL innego akcjonariusza ukryty');
-  const dlaSpolki = await wydaj(ciastkoSpolka);
-  assert.match(dlaSpolki, /85050512345/, 'spółka dostaje wersję pełną');
-  for (const html of [dlaAkcjonariusza, dlaSpolki]) {
-    assert.match(html, /Numer informacji: <strong>INF\/\d{4}\/\d{4}<\/strong>/);
-    assert.match(html, /netto \+ 23% VAT/);
-    assert.match(html, /§ 15b ust\. 3 rozporządzenia.*art\. 300\(35\) § 3 KSH.*art\. 89 § 2/);
-  }
+test('§ 6: portal ma najwyżej 20 tras — lista zmienia się świadomie', () => {
+  const router = require('../server/trasy/portal');
+  const trasy = router.stack.filter((w) => w.route).map((w) => `${Object.keys(w.route.methods)[0].toUpperCase()} ${w.route.path}`);
+  assert.deepEqual(trasy, [
+    'POST /zgloszenie', 'POST /aktywacja', 'POST /login', 'POST /logout', 'GET /ja',
+    'GET /wniosek', 'PUT /wniosek', 'POST /wniosek/zloz', 'POST /wniosek/pliki', 'GET /wniosek/dokumenty/:pismo',
+    'GET /start', 'POST /sprawy', 'POST /sprawy/:id/pliki', 'GET /pisma/:id', 'POST /informacja', 'POST /oplaty/:id/zaplac', 'PUT /konto',
+  ]);
 });

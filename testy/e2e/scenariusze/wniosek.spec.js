@@ -3,7 +3,8 @@
 /**
  * Faza 4 — nowa spółka, każdy scenariusz przy 1440 i 390 px. Dane: `test:seed` + atrapa KRS (0000990004 — Delta).
  * 1) portal: zgłoszenie → link z e-maila → hasło → dane → dokumenty (umowa spółki w PDF, podpisy) →
- *    kancelaria: podpisy, podpis notariusza, checklista, „Przyjmij” → „Otwórz rejestr” → wpis otwarcia;
+ *    kancelaria: podpisy, podpis notariusza, checklista, „Przyjmij” → „Otwórz rejestr” → wpis otwarcia →
+ *    portal: Start zamiast ekranów wniosku (Faza 5);
  * 2) wniosek założony przez pracownika z przejęciem — „Otwórz rejestr” dopiero od dnia przejęcia.
  */
 
@@ -127,6 +128,14 @@ test('portal: zgłoszenie → dokumenty → podpisy; kancelaria: przyjęcie → 
     await page.getByRole('link', { name: /DELTA/ }).first().click();
     await ui.gotowe(page, 'rejestr otwarty');
     await page.getByRole('link', { name: 'Cezary Wspólnik' }).first().waitFor();
+  });
+  await krok(page, 'Portal po przyjęciu — Start zamiast ekranów wniosku', async () => {
+    await page.context().clearCookies();
+    expect((await page.request.post('/api/psa/portal/login', { data: { email: 'beta.zarzad@example.com', haslo: 'Mocne-Haslo-2026!' } })).ok()).toBeTruthy();
+    await page.goto('/portal.html#/');
+    await ui.gotowe(page, 'KRS 0000990004');
+    await expect(page.getByText('krok 2 z 2')).toHaveCount(0);
+    await expect(page.getByRole('navigation', { name: 'Menu portalu' }).getByRole('link')).toHaveText(['Start', 'Konto']);
   });
   await zakoncz(page);
 });
