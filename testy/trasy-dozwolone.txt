@@ -31,6 +31,7 @@ GET /api/psa/spolki/:id pracownik
 PUT /api/psa/spolki/:id pracownik
 POST /api/psa/spolki/:id/reprezentanci pracownik
 DELETE /api/psa/spolki/:id/reprezentanci/:osobaId pracownik
+POST /api/psa/spolki/:id/zawiadomienie-sadu pracownik
 POST /api/psa/spolki/:id/informacja pracownik
 GET /api/psa/spolki/:id/eksport pracownik
 GET /api/psa/osoby pracownik

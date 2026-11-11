@@ -447,7 +447,7 @@ rejestru akcjonariuszy zgodnie z przepisami ustawy**.
 | 300³² § 1²  🔵 | pole „kto zawarł umowę” — wybór z osób zawierających umowy (Ustawienia) przy podpisie notariusza |
 | 300³² § 1³  🔵 | — (brak osobnego pisma; dokumenty przy zawarciu umowy — U-03) |
 | 300³² § 2 | przejęcie: zaznaczenie we wniosku i wpis `otwarcie` od dnia przejęcia (U-07); przekazanie: wpis `zamkniecie` z powodem |
-| 300³² § 3  🔵 | — (zawiadomienie sądu po zamknięciu rejestru — czynność kancelarii poza aplikacją) |
+| 300³² § 3  🔵 | przypomnienie na Pulpicie i w kokpicie: termin 7 dni od zamknięcia rejestru (od 18.02.2027); „Zawiadomiono sąd” — w historii spółki; samo zawiadomienie — system KRS |
 | 300³³ § 1 pkt 4 | rodzaj akcji wyliczany z adnotacji „uprawnienie” (U-17) |
 | 300³³ § 1 pkt 9 | przy emisji obowiązkowe „pokryte: tak/nie”; „nie” = adnotacja „niepokryte” (U-17) |
 | 300³³ § 1 pkt 11, § 2 | adnotacje „obowiązek” i „inna” na akcjach |

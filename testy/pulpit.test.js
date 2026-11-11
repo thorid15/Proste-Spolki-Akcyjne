@@ -38,3 +38,19 @@ test('Do zrobienia: pilne sprawy przed pismami, sprawa z dalekim terminem pomini
   assert.equal(lista[0].rodzaj, 'pismo');
   assert.match(lista[0].opis, /błąd wysyłki/);
 });
+
+test('Zawiadomienie sądu po zamknięciu rejestru (art. 300³² § 3): od 18.02.2027, termin 7 dni, znika po odnotowaniu', () => {
+  const db = bazaTestowa();
+  const daneSpolki = require('../server/dane/spolki');
+  const historia = require('../server/dane/historia');
+  const przed = dodajSpolke(db);
+  const po = dodajSpolke(db);
+  daneSpolki.ustawStanRejestru(db, przed, { data_otwarcia: '2026-03-01', data_zamkniecia: '2027-02-17', powod_zamkniecia: 'rozwiazanie_umowy' });
+  daneSpolki.ustawStanRejestru(db, po, { data_otwarcia: '2026-03-01', data_zamkniecia: '2027-03-01', powod_zamkniecia: 'przekazanie' });
+  const zawiadomienia = () => pulpit.doZrobienia(db).filter((p) => p.rodzaj === 'zawiadomienie_sadu');
+  assert.deepEqual(zawiadomienia().map((p) => p.sciezka), [`/spolki/${po}`], 'zamknięcie przed 18.02.2027 — bez obowiązku');
+  assert.match(zawiadomienia()[0].opis, /termin 08\.03\.2027/);
+  historia.dopiszZmiany(db, { spolkaId: po, przed: {}, po: { zawiadomienie_sadu: '2027-03-02' }, pola: ['zawiadomienie_sadu'], kto: 'Test' });
+  assert.deepEqual(zawiadomienia(), []);
+  assert.deepEqual(daneSpolki.zawiadomienieSadu(db, daneSpolki.wczytaj(db, po)), { termin: '2027-03-08', zawiadomiono: '2027-03-02' });
+});

@@ -40,6 +40,19 @@ const TERMINY = {
   WPIS_DNI: 7,
 };
 
+/**
+ * PRZEPISY-PSA.md art. 300(32) § 3 🔵 (od 18.02.2027) - podmiot prowadzacy rejestr zawiadamia sad rejestrowy
+ * (system teleinformatyczny KRS) o wygasnieciu albo rozwiazaniu umowy w terminie 7 dni od tej daty. Data
+ * rozwiazania = data zamkniecia rejestru. Zwraca termin (RRRR-MM-DD) albo null, gdy obowiazek nie dotyczy.
+ */
+const ZAWIADOMIENIE_SADU = { OD: '2027-02-18', DNI: 7 };
+function terminZawiadomieniaSadu(dzienZamkniecia) {
+  if (!dzienZamkniecia || dzienZamkniecia < ZAWIADOMIENIE_SADU.OD) return null;
+  const d = new Date(`${dzienZamkniecia}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + ZAWIADOMIENIE_SADU.DNI);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Progi ostrzegania o zblizajacym sie terminie (sekcja 9 - pulpit). */
 const PROGI_TERMINU = {
   /** <= tyle dni do konca terminu USTAWOWEGO = sprawa pilna. */
@@ -286,6 +299,7 @@ function ocenFormePrawna(formaPrawna) {
 }
 
 module.exports = {
+  terminZawiadomieniaSadu,
   TERMINY,
   PROGI_TERMINU,
   CEL_WEWNETRZNY,

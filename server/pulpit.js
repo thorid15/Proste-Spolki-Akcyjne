@@ -3,7 +3,8 @@
 /**
  * Pulpit (§ 5): jedna lista „Do zrobienia” według pilności — sprawy po terminie albo z terminem
  * do 2 dni, nowe zgłoszenia z portalu (krok 1), nowe pliki w sprawach wstrzymanych, pisma do wysłania i błędy wysyłki, wnioski złożone
- * i podpisy do sprawdzenia, przejęcia, w których nadszedł dzień przejęcia. Wiersz wskazuje ekran,
+ * i podpisy do sprawdzenia, przejęcia, w których nadszedł dzień przejęcia, zawiadomienie sądu rejestrowego
+ * po zamknięciu rejestru (art. 300³² § 3). Wiersz wskazuje ekran,
  * który go załatwia.
  */
 
@@ -11,6 +12,8 @@ const czas = require('./pomocnicze/czas');
 const sprawy = require('./sprawy');
 const korespondencja = require('./korespondencja');
 const danePliki = require('./dane/pliki');
+const daneSpolki = require('./dane/spolki');
+const terminy = require('./logika/terminy');
 const { dataPl } = require('./logika/pisma');
 
 const PROG_DNI = 2;
@@ -61,6 +64,17 @@ function doZrobienia(db) {
       ? `złożony${w.podpisy ? ` — podpisy do sprawdzenia: ${w.podpisy}` : ''}`
       : w.przejecie && w.data_przejecia && w.data_przejecia > dzis ? null : w.przejecie ? 'dzień przejęcia — otwórz rejestr' : 'przyjęty — otwórz rejestr';
     if (opis) pozycje.push({ rodzaj: 'wniosek', pilnosc: 1, tytul: `Wniosek KRS ${w.krs}`, opis, sciezka: `/wnioski/${w.id}` });
+  }
+  for (const sp of db.prepare('SELECT * FROM psa_spolki WHERE data_zamkniecia IS NOT NULL').all()) {
+    const z = daneSpolki.zawiadomienieSadu(db, sp);
+    if (!z || z.zawiadomiono) continue;
+    pozycje.push({
+      rodzaj: 'zawiadomienie_sadu',
+      pilnosc: terminy.dniMiedzy(dzis, z.termin),
+      tytul: sp.nazwa,
+      opis: `zawiadom sąd rejestrowy (system KRS) o rozwiązaniu umowy — termin ${dataPl(z.termin)}`,
+      sciezka: `/spolki/${sp.id}`,
+    });
   }
   return pozycje.sort((a, b) => a.pilnosc - b.pilnosc);
 }

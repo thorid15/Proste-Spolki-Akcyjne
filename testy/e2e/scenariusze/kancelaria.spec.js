@@ -169,3 +169,23 @@ test('pola dat: pełny format DD.MM.RRRR widoczny bez ucięcia', async ({ page }
   });
   await zakoncz(page);
 });
+
+test('konto pracownika: „Zmień hasło” w menu konta — potem logowanie nowym hasłem', async ({ page }, testInfo) => {
+  rozpocznij(page, testInfo, { scenariusz: 'zmiana-hasla', proces: 'Zmiana hasła pracownika', szerokosc: szer(testInfo), persona: 'pracownik' });
+  await zaloguj(page, 'pracownik@example.com', 'kancelaria');
+  await krok(page, 'Menu konta → Zmień hasło', async () => {
+    await page.goto('/#/');
+    await page.getByRole('button', { name: /Konto/ }).click();
+    await page.getByRole('button', { name: 'Zmień hasło' }).click();
+    await ui.gotowe(page, 'Obecne hasło');
+  });
+  await krok(page, 'Nowe hasło → ponowne logowanie', async () => {
+    await page.locator('.pole-haslo input').nth(0).fill('Test-Haslo-2026');
+    await page.locator('.pole-haslo input').nth(1).fill('Nowe-Haslo-Pracownika-2026');
+    await ui.przycisk(page, 'Zapisz');
+    await ui.gotowe(page, 'Hasło zmienione');
+    await ui.przycisk(page, 'Zaloguj się');
+    await page.locator('.pole-haslo input').first().waitFor();
+  });
+  await zakoncz(page);
+});

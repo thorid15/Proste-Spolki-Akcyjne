@@ -196,6 +196,12 @@ function EkranKokpitu({ spolkaId }) {
         )}
       />
       <Bledy blad={c.blad} />
+      {dane.zawiadomienie_sadu && !dane.zawiadomienie_sadu.zawiadomiono && (
+        <div className="komunikat komunikat-uwaga rzad-rozdzielony">
+          <span>Zawiadom sąd rejestrowy (system KRS) o rozwiązaniu umowy — termin {fmt.data(dane.zawiadomienie_sadu.termin)}.</span>
+          <button type="button" className="btn btn-maly" disabled={c.trwa} onClick={() => c.wykonaj(async () => { await API.post(`/api/psa/spolki/${spolka.id}/zawiadomienie-sadu`, {}); odswiez(); })}>Zawiadomiono sąd</button>
+        </div>
+      )}
       {zamkniecie && (
         <Modal
           tytul="Zamknięcie rejestru"
@@ -312,7 +318,7 @@ function DzialajaZaSpolke({ spolkaId, osoby, poZmianie }) {
   );
 }
 
-const NAZWY_POL_HISTORII = { dzialaja_za_spolke: 'działają za spółkę', zaproszenie_do_portalu: 'zaproszenie do portalu', zgoda_email: 'zgoda na e-mail' };
+const NAZWY_POL_HISTORII = { zawiadomienie_sadu: 'zawiadomienie sądu rejestrowego', dzialaja_za_spolke: 'działają za spółkę', zaproszenie_do_portalu: 'zaproszenie do portalu', zgoda_email: 'zgoda na e-mail' };
 
 function HistoriaZmian({ historia }) {
   if (!historia.length) return <p className="male drugorzedny">Brak zmian.</p>;

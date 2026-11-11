@@ -10,6 +10,7 @@ akcyjnych (art. 300³⁰ i nast. KSH) i portal klienta dla spółek i akcjonariu
 |---|---|
 | `README.md` | uruchomienie, tryb testowy, testy, wzory pism (ten plik) |
 | `ARCHITEKTURA-PSA.md` | budowa aplikacji, model danych, reguły domenowe, bezpieczeństwo |
+| `docs/WDROZENIE.md` | instrukcja wdrożenia na serwer kancelarii, kopie zapasowe, aktualizacje |
 | `DECYZJE.md` | rozstrzygnięcia notariusza i decyzje projektowe (D-001…, U-01…U-30) |
 | `PRZEPISY-PSA.md` | przepisy (KSH, Prawo o notariacie, taksa) i mapa przepis → element systemu |
 | `raporty/FAZA-*.md` | raporty z faz uproszczenia (listopad 2026) |
@@ -34,7 +35,7 @@ npm start                    # buduje front i startuje serwer: http://localhost:
 - **Front:** źródła w `publiczne/js/` (JSX), paczki w `publiczne/dist/` są w repozytorium.
   Po zmianie w `publiczne/js/` uruchom `npm run buduj`, bo test `front-js` pilnuje zgodności.
   `npm run dev` buduje na bieżąco.
-- **Produkcja:** reverse proxy z HTTPS (nagłówek `Host` przekazany bez zmian), `NODE_ENV=production`, dostęp
+- **Produkcja** (szczegóły: `docs/WDROZENIE.md`): reverse proxy z HTTPS (nagłówek `Host` przekazany bez zmian), `NODE_ENV=production`, dostęp
   do aplikacji kancelarii tylko z adresów kancelarii (zapora). Dysk serwera i kopie zapasowe bazy oraz katalogu
   `KATALOG_DOKUMENTOW` — szyfrowane (baza zawiera dane osobowe jawnie; hasła — bcrypt, tokeny — skróty).
 - **Proces dzienny** startuje z serwerem: opłaty za prowadzenie rejestru, przypomnienia, retencja danych.

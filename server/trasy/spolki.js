@@ -63,6 +63,7 @@ router.get(
       oplaty: daneOplaty.lista(db(), { spolkaId: spolka.id }),
       historia: historia.lista(db(), { spolkaId: spolka.id }),
       reprezentanci: daneKonta.reprezentanci(db(), spolka.id),
+      zawiadomienie_sadu: daneSpolki.zawiadomienieSadu(db(), spolka),
     });
   })
 );
@@ -100,6 +101,20 @@ router.delete(
     const spolka = wymagajSpolki(zad);
     portal.usunReprezentanta(db(), spolka.id, Number(zad.params.osobaId), autor(zad));
     odp.json(daneKonta.reprezentanci(db(), spolka.id));
+  })
+);
+
+/** „Zawiadomiono sąd” — odnotowanie zawiadomienia sądu rejestrowego po zamknięciu rejestru (art. 300³² § 3). */
+router.post(
+  '/:id/zawiadomienie-sadu',
+  asy((zad, odp) => {
+    const spolka = wymagajSpolki(zad);
+    const z = daneSpolki.zawiadomienieSadu(db(), spolka);
+    if (!z) throw new walidacje.BladWalidacji(['Zawiadomienie sądu nie dotyczy tej spółki.']);
+    const data = (zad.body || {}).data || czas.dzisIso();
+    if (!czas.poprawnaData(data) || data > czas.dzisIso()) throw new walidacje.BladWalidacji([{ pole: 'data', komunikat: 'Podaj datę zawiadomienia.' }]);
+    historia.dopiszZmiany(db(), { spolkaId: spolka.id, przed: {}, po: { zawiadomienie_sadu: data }, pola: ['zawiadomienie_sadu'], kto: autor(zad) });
+    odp.status(201).json(daneSpolki.zawiadomienieSadu(db(), spolka));
   })
 );
 

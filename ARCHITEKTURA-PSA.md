@@ -99,7 +99,7 @@ bazowej (U-01); po nich — nowa migracja.
 | `obciazenie` | ustanowienie, zmiana prawa głosu, wykreślenie | zastaw, użytkowanie, zajęcie (z urzędu) |
 | `adnotacja` | dodanie, wykreślenie | uprawnienie, ograniczenie, obowiązek, niepokryte, inna |
 | `sprostowanie` | zastąpienie albo wycofanie wpisu | żądający może być „brak” (z inicjatywy kancelarii) |
-| `zamkniecie` | koniec prowadzenia rejestru | przekazanie, wykreślenie spółki, rozwiązanie umowy |
+| `zamkniecie` | koniec prowadzenia rejestru | przekazanie, wykreślenie spółki, rozwiązanie umowy; od 18.02.2027 Pulpit przypomina o zawiadomieniu sądu w 7 dni (art. 300³² § 3) do „Zawiadomiono sąd” w kokpicie |
 
 Rodzaj akcji jest wyliczany: uprzywilejowana, gdy ma adnotację „uprawnienie”, inaczej zwykła (U-17).
 

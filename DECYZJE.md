@@ -1818,6 +1818,14 @@
   5. **D-219** Dokumentacja: `README.md` i `ARCHITEKTURA-PSA.md` od nowa (stan faktyczny, reguły domenowe); `PRZEPISY-PSA.md` — tylko kolumna „Element” mapy w § 11; `npm run dokumentacja` → `docs/endpointy-api.md`, `docs/schemat-bazy.txt`. Do `docs/archiwum/`: `CLAUDE-PSA-UPROSZCZENIE.md`, `RAPORT-STANU-PSA.md`, `testy-audyt/`, `frontend-audyt/`.
   6. **D-220** Portal, „Zgłoś zmianę”: „Wyślij” wyszarzony z powodem, dopóki opis ma mniej niż 5 znaków (zamiast odpowiedzi 422 z serwera).
 
+### D-221–D-224 — Po Fazie 6: zawiadomienie sądu, zmiana hasła, instrukcja wdrożenia (11.11.2026)
+
+- Decyzje:
+  1. **D-221** (Łukasz, 11.11.2026) Faza 6 zaakceptowana — uproszczenie zakończone. Tak dla przypomnienia o zawiadomieniu sądu rejestrowego po zamknięciu rejestru i dla instrukcji wdrożenia.
+  2. **D-222** Zawiadomienie sądu (art. 300³² § 3 🔵): termin 7 dni od daty zamknięcia rejestru (= data wygaśnięcia albo rozwiązania umowy), tylko dla zamknięć od 18.02.2027. Pozycja na Pulpicie i komunikat w kokpicie do kliknięcia „Zawiadomiono sąd” — data trafia do historii spółki (bez zmiany schematu). Samo zawiadomienie — w systemie KRS, poza aplikacją.
+  3. **D-223** „Zmień hasło” w menu konta pracownika (trasa istniała, brakowało ekranu — administrator zostawał z hasłem tymczasowym). Zmiana kończy wszystkie sesje konta, także bieżącą — ekran prosi o ponowne logowanie.
+  4. **D-224** Instrukcja wdrożenia `docs/WDROZENIE.md`: Ubuntu 24.04 i Node.js 22, zapora (SSH tylko z biura), szyfrowany wolumen LUKS na bazę i pliki (ręczne odblokowanie po restarcie), usługa systemd z ograniczeniami, nginx z Let's Encrypt (aplikacja kancelarii tylko z IP biura; portal i powiadomienia tpay publiczne), poczta Microsoft 365 (z uwagą o wycofywaniu logowania hasłem do SMTP), tpay, codzienne kopie szyfrowane poza serwerem z kwartalną próbą odtworzenia, aktualizacje, lista kontrolna i sytuacje awaryjne.
+
 ---
 
 ## Decyzje otwarte

@@ -15,7 +15,7 @@ const MENU = [
 ];
 
 const TYTULY = {
-  '': 'Pulpit', sprawy: 'Sprawy', spolki: 'Spółki', osoby: 'Osoby', wnioski: 'Wnioski', korespondencja: 'Korespondencja', oplaty: 'Opłaty', ustawienia: 'Ustawienia',
+  '': 'Pulpit', sprawy: 'Sprawy', spolki: 'Spółki', osoby: 'Osoby', wnioski: 'Wnioski', korespondencja: 'Korespondencja', oplaty: 'Opłaty', ustawienia: 'Ustawienia', haslo: 'Zmień hasło',
 };
 
 const aktywna = (poz, sciezka) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
@@ -78,10 +78,41 @@ function Konto({ uzytkownik, przyWylogowaniu }) {
               <Ikona nazwa="stawki" rozmiar={16} /> Ustawienia
             </button>
           )}
+          <button type="button" onClick={() => { ustawOtwarte(false); idz('/haslo'); }}><Ikona nazwa="uzytkownicy" rozmiar={16} /> Zmień hasło</button>
           <button type="button" onClick={wyloguj}><Ikona nazwa="wyloguj" rozmiar={16} /> Wyloguj</button>
         </div>
       )}
     </div>
+  );
+}
+
+/** Zmiana własnego hasła pracownika (obecne + nowe); serwer kończy wszystkie sesje konta — także tę. */
+function EkranHasla() {
+  const [haslo, ustawHaslo] = useState({ obecne: '', nowe: '' });
+  const [zapisano, ustawZapisano] = useState(false);
+  const c = useCzynnosc();
+  const zapisz = (z) => {
+    z.preventDefault();
+    c.wykonaj(async () => {
+      await API.post('/api/psa/auth/zmiana-hasla', { haslo_obecne: haslo.obecne, haslo_nowe: haslo.nowe });
+      ustawHaslo({ obecne: '', nowe: '' });
+      ustawZapisano(true);
+    });
+  };
+  return (
+    <Karta tytul="Zmień hasło">
+      <form onSubmit={zapisz} noValidate>
+        <Pole etykieta="Obecne hasło"><PoleHaslo wartosc={haslo.obecne} przyZmianie={(v) => ustawHaslo({ ...haslo, obecne: v })} autoComplete="current-password" /></Pole>
+        <Pole etykieta="Nowe hasło" podpowiedz="Co najmniej 12 znaków."><PoleHaslo wartosc={haslo.nowe} przyZmianie={(v) => ustawHaslo({ ...haslo, nowe: v })} autoComplete="new-password" /></Pole>
+        <Bledy blad={c.blad} />
+        {zapisano ? (
+          <>
+            <Komunikat odmiana="rejestr" tresc="Hasło zmienione. Zaloguj się nowym hasłem." />
+            <button type="button" className="btn btn-glowny" onClick={() => window.location.reload()}>Zaloguj się</button>
+          </>
+        ) : <button type="submit" className="btn btn-glowny" disabled={c.trwa || !haslo.obecne || !haslo.nowe}>Zapisz</button>}
+      </form>
+    </Karta>
   );
 }
 
@@ -111,6 +142,7 @@ function Aplikacja() {
       case 'wnioski': return drugi ? <EkranWnioskuKancelarii wniosekId={id} /> : <EkranWnioskow />;
       case 'korespondencja': return <EkranKorespondencji />;
       case 'oplaty': return <EkranOplat />;
+      case 'haslo': return <EkranHasla />;
       case 'ustawienia': return sesja.uzytkownik.rola === 'admin' ? <EkranUstawien uzytkownik={sesja.uzytkownik} /> : <NieZnaleziono />;
       default: return <NieZnaleziono />;
     }

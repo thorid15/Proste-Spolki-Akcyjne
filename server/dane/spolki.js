@@ -4,6 +4,7 @@
 
 const czas = require('../pomocnicze/czas');
 const historia = require('./historia');
+const przepisy = require('../logika/przepisy');
 
 /** Pola edytowalne w „Edytuj” (KRS jest kluczem i nie zmienia się). */
 const POLA_EDYCJI = ['nazwa', 'siedziba', 'adres', 'sad_rejestrowy', 'data_rejestracji', 'nip', 'email', 'umowe_zawarl', 'platnosc'];
@@ -55,6 +56,17 @@ function zmien(db, id, po, kto) {
 }
 
 /** Materializacja stanu rejestru (U-14) z wpisów `otwarcie` i `zamkniecie`. */
+/**
+ * Zawiadomienie sądu rejestrowego po zamknięciu rejestru (art. 300³² § 3): termin i data odnotowania
+ * („Zawiadomiono sąd” — wiersz historii spółki). `null`, gdy obowiązek nie dotyczy.
+ */
+function zawiadomienieSadu(db, s) {
+  const termin = przepisy.terminZawiadomieniaSadu(czas.dzienLokalny(s.data_zamkniecia));
+  if (!termin) return null;
+  const w = db.prepare("SELECT nowa FROM psa_historia_danych WHERE spolka_id = ? AND pole = 'zawiadomienie_sadu' ORDER BY id DESC LIMIT 1").get(Number(s.id));
+  return { termin, zawiadomiono: w ? w.nowa : null };
+}
+
 function ustawStanRejestru(db, id, { data_otwarcia, data_zamkniecia, powod_zamkniecia }) {
   db.prepare('UPDATE psa_spolki SET data_otwarcia = ?, data_zamkniecia = ?, powod_zamkniecia = ? WHERE id = ?').run(
     data_otwarcia,
@@ -69,4 +81,4 @@ function zRejestrem(db) {
   return db.prepare('SELECT * FROM psa_spolki WHERE data_otwarcia IS NOT NULL ORDER BY id').all();
 }
 
-module.exports = { POLA_EDYCJI, wczytaj, lista, dodaj, zmien, ustawStanRejestru, zRejestrem };
+module.exports = { POLA_EDYCJI, zawiadomienieSadu, wczytaj, lista, dodaj, zmien, ustawStanRejestru, zRejestrem };
