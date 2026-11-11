@@ -16,11 +16,16 @@ function PoleTekstu({ etykieta, wartosc, przyZmianie, blad, opcjonalne, podpowie
 
 const NOWY_AKCJONARIUSZ = () => ({ typ: 'fizyczna', nazwa: '', pesel: '', data_urodzenia: '', numer_rejestru: '', adres: '', rodzaj_adresu: 'glowny', email: '', to_ja: false, zgoda_email: false });
 
+/** Sekcje formularza — kreatory pokazują je krok po kroku (portal: 4 kroki, kancelaria: 2 pierwsze z 4). */
+const SEKCJE_WNIOSKU = ['spolka', 'platnosc', 'przejecie', 'reprezentant', 'akcjonariusze'];
+
 /**
  * `dane`, `ustawDane` — dane wniosku; `przejecie` — { dotyczy, dotychczasowy_podmiot, data_przejecia, ustaw };
- * `kwoty` — brutto opłat za prowadzenie (grosze); `krs` — wartości z KRS różne od wpisanych (kancelaria).
+ * `kwoty` — brutto opłat za prowadzenie (grosze); `krs` — wartości z KRS różne od wpisanych (kancelaria);
+ * `sekcje` — które części pokazać (domyślnie wszystkie).
  */
-function FormularzWniosku({ dane, ustawDane, pola = {}, przejecie, kwoty, krs = {} }) {
+function FormularzWniosku({ dane, ustawDane, pola = {}, przejecie, kwoty, krs = {}, sekcje = SEKCJE_WNIOSKU }) {
+  const jest = (k) => sekcje.includes(k);
   const s = dane.spolka;
   const r = dane.reprezentant;
   const zs = (k) => (v) => ustawDane({ ...dane, spolka: { ...s, [k]: v } });
@@ -30,7 +35,7 @@ function FormularzWniosku({ dane, ustawDane, pola = {}, przejecie, kwoty, krs = 
   const zl = (g) => fmt.zlote(g).replace(',00', '');
   return (
     <div className="formularz-wniosku">
-      <Karta tytul="Spółka">
+      {jest('spolka') && <Karta tytul="Spółka">
         <div className="siatka-2">
           <PoleTekstu etykieta="Firma" wartosc={s.nazwa} przyZmianie={zs('nazwa')} blad={pola['spolka.nazwa']} krs={krs.nazwa} />
           <PoleTekstu etykieta="Siedziba (miejscowość)" wartosc={s.siedziba} przyZmianie={zs('siedziba')} blad={pola['spolka.siedziba']} krs={krs.siedziba} />
@@ -42,9 +47,9 @@ function FormularzWniosku({ dane, ustawDane, pola = {}, przejecie, kwoty, krs = 
           <PoleTekstu etykieta="NIP" opcjonalne wartosc={s.nip} przyZmianie={zs('nip')} blad={pola['spolka.nip']} krs={krs.nip} />
           <PoleTekstu etykieta="E-mail spółki" opcjonalne typ="email" podpowiedz="Na ten adres wyślemy pisma do spółki." wartosc={s.email} przyZmianie={zs('email')} blad={pola['spolka.email']} krs={krs.email} />
         </div>
-      </Karta>
+      </Karta>}
 
-      <Karta tytul="Kto podpisuje umowę za spółkę">
+      {jest('reprezentant') && <Karta tytul="Kto podpisuje umowę za spółkę">
         <div className="siatka-2">
           <PoleTekstu etykieta="Imię i nazwisko" wartosc={r.nazwa} przyZmianie={zr('nazwa')} blad={pola['reprezentant.nazwa']} />
           <PoleTekstu etykieta="Funkcja" opcjonalne podpowiedz="np. członek zarządu" wartosc={r.funkcja} przyZmianie={zr('funkcja')} />
@@ -62,9 +67,9 @@ function FormularzWniosku({ dane, ustawDane, pola = {}, przejecie, kwoty, krs = 
           opis="Np. poseł, minister, sędzia, prezes spółki państwowej — także członek rodziny albo bliski współpracownik takiej osoby."
           dzieci={<PoleTekstu etykieta="Jakie stanowisko" wartosc={r.pep_opis} przyZmianie={zr('pep_opis')} blad={pola['reprezentant.pep_opis']} />}
         />
-      </Karta>
+      </Karta>}
 
-      <Karta tytul="Akcjonariusze">
+      {jest('akcjonariusze') && <Karta tytul="Akcjonariusze">
         {pola.akcjonariusze && <p className="pole-blad">{pola.akcjonariusze}</p>}
         {akcj.map((a, i) => (
           <div className="element-listy" key={a.klucz || i}>
@@ -85,17 +90,17 @@ function FormularzWniosku({ dane, ustawDane, pola = {}, przejecie, kwoty, krs = 
           </div>
         ))}
         <button type="button" className="btn btn-maly" onClick={() => ustawAkcj([...akcj, NOWY_AKCJONARIUSZ()])}>+ Dodaj akcjonariusza</button>
-      </Karta>
+      </Karta>}
 
-      <Karta tytul="Opłata za prowadzenie rejestru">
+      {jest('platnosc') && <Karta tytul="Opłata za prowadzenie rejestru">
         <div className="rzad" role="group" aria-label="Opłata za prowadzenie rejestru">
           {[['roczna', `Raz w roku (${zl(kwoty.roczna)})`], ['miesieczna', `Co miesiąc (${zl(kwoty.miesieczna)})`]].map(([v, n]) => (
             <button key={v} type="button" className={`btn ${dane.platnosc === v ? 'btn-glowny' : ''}`} aria-pressed={dane.platnosc === v} onClick={() => ustawDane({ ...dane, platnosc: v })}>{n}</button>
           ))}
         </div>
-      </Karta>
+      </Karta>}
 
-      {przejecie && przejecie.dotyczy && (
+      {jest('przejecie') && przejecie && przejecie.dotyczy && (
         <Karta tytul="Przeniesienie rejestru od innej firmy">
           <div className="siatka-2">
             <PoleTekstu etykieta="Kto dotąd prowadził rejestr" wartosc={przejecie.dotychczasowy_podmiot} przyZmianie={(v) => przejecie.ustaw({ dotychczasowy_podmiot: v })} blad={pola.dotychczasowy_podmiot} />
@@ -143,4 +148,41 @@ const STANY_DOKUMENTU = {
 };
 const ODMIANY_DOKUMENTU = { do_sprawdzenia: 'mosiadz', potwierdzony: 'rejestr', odrzucony: 'sygnal' };
 
-Object.assign(window, { FormularzWniosku, useZapisWniosku, bledyPod, STANY_DOKUMENTU, ODMIANY_DOKUMENTU });
+/** Krok kreatora portalu, do którego należy błąd o ścieżce pola (0 Spółka, 1 Reprezentant, 2 Akcjonariusze). */
+function krokBledu(pole) {
+  const p = String(pole || '');
+  if (p.startsWith('reprezentant')) return 1;
+  if (p.startsWith('akcjonariusze')) return 2;
+  return 0;
+}
+
+/** Podsumowanie danych wniosku — tylko do odczytu (portal: ostatni krok przed złożeniem). */
+function PodsumowanieWniosku({ dane, kwoty, przejecie }) {
+  const s = dane.spolka;
+  const r = dane.reprezentant;
+  const akcj = dane.akcjonariusze || [];
+  const id = (o) => (o.typ === 'prawna' ? o.numer_rejestru && `KRS ${o.numer_rejestru}` : o.pesel ? `PESEL ${o.pesel}` : o.data_urodzenia && `ur. ${fmt.data(o.data_urodzenia)}`);
+  return (
+    <>
+      <Karta tytul="Spółka">
+        <ListaDanych pary={[
+          ['Firma', s.nazwa], ['Siedziba', s.siedziba], ['Adres', s.adres], ['Sąd rejestrowy', s.sad_rejestrowy],
+          ['Data wpisu do KRS', s.data_rejestracji ? fmt.data(s.data_rejestracji) : ''], ['NIP', s.nip], ['E-mail spółki', s.email],
+          ['Opłata za prowadzenie', dane.platnosc === 'miesieczna' ? `co miesiąc (${fmt.zlote(kwoty.miesieczna)})` : `raz w roku (${fmt.zlote(kwoty.roczna)})`],
+          przejecie && przejecie.dotyczy && ['Przeniesienie rejestru', `${przejecie.dotychczasowy_podmiot || '—'}${przejecie.data_przejecia ? `, od ${fmt.data(przejecie.data_przejecia)}` : ''}`],
+        ].filter(Boolean)}
+        />
+      </Karta>
+      <Karta tytul="Kto podpisuje umowę za spółkę">
+        <ListaDanych pary={[['Imię i nazwisko', r.nazwa], ['Funkcja', r.funkcja], ['Identyfikator', id({ ...r, typ: 'fizyczna' })], ['Adres', r.adres], ['E-mail', r.email], ['Wysokie stanowisko publiczne', r.pep ? `tak — ${r.pep_opis || ''}` : 'nie']]} />
+      </Karta>
+      <Karta tytul={`Akcjonariusze (${akcj.length})`}>
+        {!akcj.length ? <p className="male drugorzedny">Nie dodano akcjonariuszy.</p> : (
+          <ul>{akcj.map((a, i) => <li key={a.klucz || i}><strong>{a.nazwa || '—'}</strong> <span className="male drugorzedny">{[id(a), a.adres, a.email, a.to_ja && 'to ja'].filter(Boolean).join(' · ')}</span></li>)}</ul>
+        )}
+      </Karta>
+    </>
+  );
+}
+
+Object.assign(window, { SEKCJE_WNIOSKU, krokBledu, PodsumowanieWniosku, FormularzWniosku, useZapisWniosku, bledyPod, STANY_DOKUMENTU, ODMIANY_DOKUMENTU });

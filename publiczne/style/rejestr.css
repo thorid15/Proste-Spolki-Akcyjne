@@ -300,7 +300,7 @@ body {
   border-bottom: 1px solid var(--rejestr-2);
 }
 /* Menu portalu (§ 6): Start · Konto · Wyloguj — pod paskiem marki. */
-.menu-portalu { display: flex; justify-content: center; align-items: center; gap: var(--od-16); padding: var(--od-8) var(--od-16); border-bottom: 1px solid var(--linia); background: var(--karta); }
+.menu-portalu { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--od-8) var(--od-16); padding: var(--od-8) var(--od-16); border-bottom: 1px solid var(--linia); background: var(--karta); }
 .menu-portalu a[aria-current="page"] { font-weight: 600; text-decoration: none; }
 .wiersz-portalu { padding: var(--od-8) 0; border-bottom: 1px solid var(--linia); }
 .wiersz-portalu:last-child { border-bottom: 0; }

@@ -40,6 +40,12 @@ const EKRANY = [
   { nazwa: 'p-start-akcjonariusz', konto: 'anna.zgoda@example.com', app: 'portal', adres: '/portal.html#/' },
   { nazwa: 'p-zmiana', konto: 'alfa.zarzad@example.com', app: 'portal', adres: '/portal.html#/zmiana?spolka=1' },
   { nazwa: 'p-konto', konto: 'anna.zgoda@example.com', app: 'portal', adres: '/portal.html#/konto' },
+  { nazwa: 'p-sprawy', konto: 'alfa.zarzad@example.com', app: 'portal', adres: '/portal.html#/sprawy' },
+  { nazwa: 'p-platnosci', konto: 'anna.zgoda@example.com', app: 'portal', adres: '/portal.html#/platnosci' },
+  { nazwa: 'p-informacja', konto: 'alfa.zarzad@example.com', app: 'portal', adres: '/portal.html#/informacja' },
+  { nazwa: 'p-pomoc', konto: 'alfa.zarzad@example.com', app: 'portal', adres: '/portal.html#/pomoc' },
+  { nazwa: 'p-wniosek-formularz', konto: 'epsilon.zarzad@example.com', app: 'portal', adres: '/portal.html#/' },
+  { nazwa: 'k-wniosek-przejecie', konto: K, app: 'kancelaria', adres: '/#/wnioski/3' },
 ];
 
 /** Kandydaci do kliknięcia — widoczne, aktywne; poza ekranem startowym tylko z obszaru treści (`#tresc`). */

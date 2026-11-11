@@ -21,11 +21,10 @@ test('portal: osoba działająca za spółkę — zgłoszenie zmiany, informacja
   // Informacja w portalu — najpóźniej za wczoraj; rejestr Alfy otwarto dziś (seed), więc data rejestru +2 dni.
   await page.request.post('/test/data', { form: { data: zaDni(2) } });
   await zaloguj(page, 'alfa.zarzad@example.com', 'portal');
-  await krok(page, 'Start — firma, menu Start · Konto, bez wniosku', async () => {
+  await krok(page, 'Start — firma, zakładki Start · Sprawy · Płatności · Informacja · Pomoc · Konto', async () => {
     await page.goto('/portal.html#/');
     await ui.gotowe(page, 'Alfa Testowa P.S.A.');
-    await expect(page.getByRole('navigation', { name: 'Menu portalu' }).getByRole('link')).toHaveText(['Start', 'Konto']);
-    await expect(page.getByText('krok 1 z 2')).toHaveCount(0);
+    await expect(page.getByRole('navigation', { name: 'Menu portalu' }).getByRole('link')).toHaveText(['Start', 'Sprawy', 'Płatności', 'Informacja', 'Pomoc', 'Konto']);
   });
   await krok(page, 'Zgłoś zmianę — opis i plik', async () => {
     await ui.przycisk(page, 'Zgłoś zmianę');
@@ -33,12 +32,12 @@ test('portal: osoba działająca za spółkę — zgłoszenie zmiany, informacja
     await ui.pole(page, 'Pliki').locator('input[type="file"]').setInputFiles(PDF);
     await ui.przycisk(page, 'Wyślij');
     await ui.gotowe(page, 'Zgłoszenie wysłane');
-    await page.getByRole('link', { name: 'Start' }).last().click();
+    await page.locator('.karta').getByRole('link', { name: 'Sprawy' }).click();
     await page.getByText('Akcjonariusz sprzedał 50 akcji').waitFor();
     await expect(page.locator('.wiersz-portalu').filter({ hasText: 'Akcjonariusz sprzedał' }).getByText('W toku')).toBeVisible();
   });
-  await krok(page, 'Informacja z rejestru — dzień (domyślnie wczoraj), „Zapłać 61,50 zł”', async () => {
-    await ui.przycisk(page, 'Zamów informację z rejestru');
+  await krok(page, 'Zakładka Informacja — dzień (domyślnie wczoraj), „Zapłać 61,50 zł”', async () => {
+    await page.getByRole('navigation', { name: 'Menu portalu' }).getByRole('link', { name: 'Informacja' }).click();
     await expect(ui.pole(page, 'Stan na koniec dnia').locator('.pole-daty-wejscie')).toHaveValue(zaDni(1).split('-').reverse().join('.'));
     await page.getByRole('button', { name: /Zapłać 61,50/ }).click();
     await page.getByText('Atrapa kasy tpay').waitFor({ timeout: 15000 });
@@ -46,7 +45,7 @@ test('portal: osoba działająca za spółkę — zgłoszenie zmiany, informacja
   await krok(page, 'Kasa — zapłata, powrót do portalu, informacja do pobrania', async () => {
     await page.getByRole('button', { name: 'Zapłać (wyślij ITN)' }).click();
     await ui.gotowe(page, 'Płatność przyjęta');
-    await expect(page.locator('.karta').filter({ hasText: 'Informacje z rejestru' }).getByRole('link', { name: /Stan na/ })).toBeVisible();
+    await expect(page.locator('.karta').filter({ hasText: 'Wydane informacje' }).getByRole('link', { name: /Stan na/ })).toBeVisible();
   });
   await krok(page, 'Kancelaria — nowe zgłoszenie z portalu na Pulpicie', async () => {
     await page.context().clearCookies();
@@ -60,12 +59,15 @@ test('portal: osoba działająca za spółkę — zgłoszenie zmiany, informacja
 test('portal: akcjonariuszka — tylko swoje; Konto; obie role po „Dodaj” w kokpicie, z powrotem po „Usuń”', async ({ page }, testInfo) => {
   rozpocznij(page, testInfo, { scenariusz: 'portal-akcjonariusz', proces: 'Portal: zakres konta (U-23)', szerokosc: szer(testInfo), persona: 'akcjonariuszka → notariusz' });
   await zaloguj(page, 'anna.zgoda@example.com', 'portal');
-  await krok(page, 'Start akcjonariuszki — opłata z kwotą, bez spraw spółki', async () => {
+  await krok(page, 'Akcjonariuszka — Start, Płatności (kwota na przycisku), Sprawy bez spraw spółki, Pomoc', async () => {
     await page.goto('/portal.html#/');
-    await ui.gotowe(page, 'Do zrobienia');
+    await ui.gotowe(page, 'Do zapłaty: 1');
+    await page.getByRole('link', { name: 'Do zapłaty: 1' }).click();
     await expect(page.getByRole('button', { name: /Zapłać 61,50/ })).toBeVisible();
-    await expect(page.locator('.karta').filter({ hasText: 'Sprawy' }).getByText('Brak spraw.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Zamów informację z rejestru' })).toBeVisible();
+    await page.getByRole('navigation', { name: 'Menu portalu' }).getByRole('link', { name: 'Sprawy' }).click();
+    await expect(page.getByText('Brak spraw.')).toBeVisible();
+    await page.getByRole('navigation', { name: 'Menu portalu' }).getByRole('link', { name: 'Pomoc' }).click();
+    await ui.gotowe(page, 'Kontakt z kancelarią');
   });
   await krok(page, 'Konto — zgoda na korespondencję e-mail', async () => {
     await page.getByRole('link', { name: 'Konto' }).click();
@@ -81,17 +83,17 @@ test('portal: akcjonariuszka — tylko swoje; Konto; obie role po „Dodaj” w 
     await expect(karta.getByRole('link', { name: 'Anna Testowa' })).toBeVisible();
   });
   await krok(page, 'Portal — obie role: sprawy spółki widoczne', async () => {
-    await page.goto('/portal.html#/');
+    await page.goto('/portal.html#/sprawy');
     await ui.gotowe(page, 'Alfa Testowa P.S.A.');
-    await expect(page.locator('.karta').filter({ hasText: 'Sprawy' }).getByText(/Sprawa nr \d+/).first()).toBeVisible();
+    await expect(page.getByText(/Sprawa nr \d+/).first()).toBeVisible();
   });
   await krok(page, 'Kancelaria — Usuń; portal — znów tylko akcjonariuszka', async () => {
     await page.goto('/#/spolki/1');
     const wiersz = page.locator('.karta').filter({ has: page.getByText('Działają za spółkę', { exact: true }) }).locator('.rzad-rozdzielony').filter({ hasText: 'Anna Testowa' });
     await wiersz.getByRole('button', { name: 'Usuń' }).click();
     await expect(wiersz).toHaveCount(0);
-    await page.goto('/portal.html#/');
-    await ui.gotowe(page, 'Do zrobienia');
+    await page.goto('/portal.html#/sprawy');
+    await ui.gotowe(page, 'Alfa Testowa P.S.A.');
     await expect(page.getByText('Brak spraw.')).toBeVisible();
   });
   await zakoncz(page);

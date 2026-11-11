@@ -85,33 +85,68 @@ function EkranAktywacji({ token, przyAktywacji }) {
   );
 }
 
-/** Nowa spółka 1/2: dane (autozapis), „Dalej” składa wniosek i tworzy dokumenty do podpisu. */
-function KrokDanych({ p, ustawP }) {
+const KROKI_WNIOSKU = ['Spółka', 'Reprezentant', 'Akcjonariusze', 'Podsumowanie'];
+const SEKCJE_KROKU = [['spolka', 'platnosc', 'przejecie'], ['reprezentant'], ['akcjonariusze']];
+
+/**
+ * Nowa spółka — kreator jak przed uproszczeniem: Spółka → Reprezentant → Akcjonariusze → Podsumowanie
+ * (autozapis, pasek kroków klikalny, „Złóż wniosek” na końcu); po złożeniu — dokumenty do podpisu.
+ */
+function KreatorWniosku({ p, ustawP }) {
   const w = p.wniosek;
+  const [krok, ustawKrok] = useState(0);
+  const [najdalej, ustawNajdalej] = useState(0);
   const [wartosci, ustawWartosci] = useState(() => ({ dane: w.dane, dotychczasowy_podmiot: w.dotychczasowy_podmiot || '', data_przejecia: w.data_przejecia || '' }));
   const zapis = useZapisWniosku('/api/psa/portal/wniosek', wartosci, ustawP);
   const c = useCzynnosc();
   const pola = { ...bledyApi({ bledy: p.bledy }).pola, ...bledyApi(c.blad).pola };
-  const dalej = () => c.wykonaj(async () => {
+  const przejecie = { dotyczy: w.przejecie, dotychczasowy_podmiot: wartosci.dotychczasowy_podmiot, data_przejecia: wartosci.data_przejecia, ustaw: (z) => ustawWartosci({ ...wartosci, ...z }) };
+  const ostatni = KROKI_WNIOSKU.length - 1;
+  const idzDo = (k) => { ustawKrok(k); ustawNajdalej((m) => Math.max(m, k)); window.scrollTo(0, 0); };
+  const dalej = () => c.wykonaj(async () => { if (await zapis.teraz()) idzDo(krok + 1); });
+  const zloz = () => c.wykonaj(async () => {
     if (!(await zapis.teraz())) return;
     ustawP(await API.post('/api/psa/portal/wniosek/zloz', {}));
     window.scrollTo(0, 0);
   });
+  const bledyKrokow = (p.bledy || []).map((b) => ({ ...b, krok: krokBledu(b.pole) }));
   return (
     <>
-      <NaglowekStrony tytul="Nowa spółka — krok 1 z 2: dane" kontekst={`KRS ${w.krs}`} akcje={<StanZapisu stan={zapis} />} />
-      {w.notatka && <Komunikat odmiana="uwaga" tytul="Prosimy o uzupełnienie" tresc={w.notatka} />}
-      <FormularzWniosku
-        dane={wartosci.dane}
-        ustawDane={(d) => ustawWartosci({ ...wartosci, dane: d })}
-        pola={pola}
-        kwoty={p.kwoty}
-        przejecie={{ dotyczy: w.przejecie, dotychczasowy_podmiot: wartosci.dotychczasowy_podmiot, data_przejecia: wartosci.data_przejecia, ustaw: (z) => ustawWartosci({ ...wartosci, ...z }) }}
-      />
-      {c.blad && !Object.keys(bledyApi(c.blad).pola).length && <Bledy blad={c.blad} />}
-      {c.blad && Object.keys(bledyApi(c.blad).pola).length > 0 && <Komunikat odmiana="blad" tresc="Uzupełnij pola zaznaczone na czerwono." />}
+      <NaglowekStrony tytul="Nowa spółka" kontekst={`KRS ${w.krs}`} akcje={<StanZapisu stan={zapis} />} />
+      {w.notatka && <Komunikat odmiana="uwaga" tytul="Kancelaria prosi o uzupełnienie wniosku" tresc={w.notatka} />}
+      <Kroki kroki={KROKI_WNIOSKU} biezacy={krok} przyWyborze={idzDo} osiagniety={najdalej} />
+      {krok < ostatni ? (
+        <FormularzWniosku
+          dane={wartosci.dane}
+          ustawDane={(d) => ustawWartosci({ ...wartosci, dane: d })}
+          pola={pola}
+          kwoty={p.kwoty}
+          przejecie={przejecie}
+          sekcje={SEKCJE_KROKU[krok]}
+        />
+      ) : (
+        <>
+          <PodsumowanieWniosku dane={wartosci.dane} kwoty={p.kwoty} przejecie={przejecie} />
+          {bledyKrokow.length > 0 && (
+            <Karta tytul="Dane niepełne — wymagane uzupełnienie">
+              <ul>
+                {bledyKrokow.map((b, i) => (
+                  <li key={i}>{b.komunikat} <button type="button" className="jak-odnosnik" onClick={() => idzDo(b.krok)}>Popraw (krok „{KROKI_WNIOSKU[b.krok]}”)</button></li>
+                ))}
+              </ul>
+            </Karta>
+          )}
+          <Karta tytul="Co dalej po złożeniu wniosku">
+            <p>Przygotujemy dokumenty do podpisu: umowę o prowadzenie rejestru, uchwałę akcjonariuszy i zgody na korespondencję e-mail. Pobierzesz je tutaj, podpiszesz i wgrasz z powrotem.</p>
+          </Karta>
+        </>
+      )}
+      {c.blad && <Bledy blad={c.blad} />}
       <div className="rzad">
-        <button type="button" className="btn btn-glowny" onClick={dalej} disabled={c.trwa}>Dalej</button>
+        {krok > 0 && <button type="button" className="btn" onClick={() => idzDo(krok - 1)}>Wstecz</button>}
+        {krok < ostatni
+          ? <button type="button" className="btn btn-glowny" onClick={dalej} disabled={c.trwa}>Dalej</button>
+          : <PrzyciskGlowny etykieta="Złóż wniosek" przyKlik={zloz} powod={bledyKrokow.length ? 'Uzupełnij dane wymienione wyżej.' : null} trwa={c.trwa} />}
       </div>
     </>
   );
@@ -155,7 +190,7 @@ function KrokDokumentow({ p, ustawP }) {
   const c = useCzynnosc();
   return (
     <>
-      <NaglowekStrony tytul="Nowa spółka — krok 2 z 2: dokumenty" kontekst={`${p.wniosek.dane.spolka.nazwa} · KRS ${p.wniosek.krs}`} />
+      <NaglowekStrony tytul="Nowa spółka — dokumenty do podpisu" kontekst={`${p.wniosek.dane.spolka.nazwa} · KRS ${p.wniosek.krs}`} />
       <details className="instrukcja-podpisu">
         <summary>Jak podpisać dokument?</summary>
         <ul>
@@ -189,7 +224,7 @@ function EkranWniosku() {
   if (blad) return <Bledy blad={blad} />;
   if (!p) return <Spinner />;
   const s = p.wniosek.stan;
-  if (s === 'roboczy') return <KrokDanych p={p} ustawP={ustawP} />;
+  if (s === 'roboczy') return <KreatorWniosku p={p} ustawP={ustawP} />;
   if (s === 'zlozony') return <KrokDokumentow p={p} ustawP={ustawP} />;
   if (s === 'przyjety') return <Karta tytul="Wniosek przyjęty"><p>Dziękujemy. Kancelaria otworzy rejestr akcjonariuszy spółki — dostęp do rejestru pojawi się w portalu.</p></Karta>;
   return <Karta tytul="Wniosek zakończony"><p>Kancelaria nie zawarła umowy — wyjaśnienie wyślemy listem.</p></Karta>;
@@ -198,6 +233,9 @@ function EkranWniosku() {
 const STANY_PORTALU = { w_toku: 'W toku', wstrzymana: 'Wymaga uzupełnienia', wpisana: 'Wpisane', odmowa: 'Odmowa', wycofana: 'Wycofane' };
 const RODZAJE_OPLAT = { prowadzenie: 'Prowadzenie rejestru', wpis: 'Wpis w rejestrze', informacja: 'Informacja z rejestru' };
 const PLIKI_PORTALU = '.pdf,.jpg,.jpeg,.png,.xml,.p7s,.p7m';
+/** Zakładki portalu po przyjęciu wniosku; przed — wniosek, Konto i Pomoc. */
+const MENU_PORTALU = [['', 'Start'], ['sprawy', 'Sprawy'], ['platnosci', 'Płatności'], ['informacja', 'Informacja'], ['pomoc', 'Pomoc'], ['konto', 'Konto']];
+const MENU_WNIOSKU = [['', 'Wniosek'], ['pomoc', 'Pomoc'], ['konto', 'Konto']];
 
 /** „Zapłać [kwota]” — link tpay i przejście do płatności. */
 async function zaplac(oplataId) {
@@ -244,91 +282,186 @@ function PismaDoPobrania({ pisma }) {
   );
 }
 
-/** Start: firma i KRS, „Do zrobienia” (zapłać, uzupełnij), sprawy z pismami, wydane informacje. */
-function EkranStartu({ spolki }) {
+/** Dane wybranej spółki (`?spolka=`) — wspólne dla zakładek Start, Sprawy, Płatności, Informacja. */
+function useSpolkaPortalu() {
   const { zapytanie } = useTrasa();
   const wybrana = zapytanie.get('spolka');
+  return { ...useDane(`/api/psa/portal/start${wybrana ? `?spolka=${wybrana}` : ''}`), zapytanie };
+}
+
+/** Nagłówek zakładki: wybór spółki (gdy konto obejmuje kilka), firma i KRS. */
+function NaglowekSpolki({ s, spolki, zakladka, tytul, akcje }) {
+  return (
+    <>
+      {spolki.length > 1 && (
+        <Pole etykieta="Spółka">
+          <select value={s.spolka.id} onChange={(e) => idz(`/${zakladka}?spolka=${e.target.value}`)}>
+            {spolki.map((x) => <option key={x.id} value={x.id}>{x.nazwa}</option>)}
+          </select>
+        </Pole>
+      )}
+      <NaglowekStrony tytul={tytul} kontekst={`${s.spolka.nazwa} · KRS ${s.spolka.krs}`} akcje={akcje} />
+    </>
+  );
+}
+
+function BrakSpolki() {
+  return (
+    <Karta tytul="Brak dostępu do spółki">
+      <p>To konto nie ma teraz dostępu do żadnej spółki. Jeśli to pomyłka, napisz do kancelarii.</p>
+      <p className="male drugorzedny">Akcjonariusz widzi spółkę, gdy ma akcje i zgodę na korespondencję e-mail (Konto).</p>
+    </Karta>
+  );
+}
+
+/** Zakładka spółki: wczytanie, brak dostępu, nagłówek — treść podaje `dzieci(s, odswiez)`. */
+function ZakladkaSpolki({ spolki, zakladka, tytul, akcje, children }) {
+  const { dane: s, blad, odswiez } = useSpolkaPortalu();
+  if (blad) return <Bledy blad={blad} />;
+  if (!s) return <Spinner />;
+  if (!s.spolka) return <BrakSpolki />;
+  const q = `?spolka=${s.spolka.id}`;
+  return (
+    <>
+      <NaglowekSpolki s={s} spolki={spolki} zakladka={zakladka} tytul={tytul} akcje={akcje && akcje(s, q)} />
+      {children(s, odswiez, q)}
+    </>
+  );
+}
+
+const zgloszZmiane = (s, q) => <PrzyciskGlowny etykieta="Zgłoś zmianę" przyKlik={() => idz(`/zmiana${q}`)} powod={s.spolka.otwarty ? null : s.spolka.zamkniety ? 'Rejestr zamknięty' : 'Rejestr nie jest jeszcze otwarty'} />;
+
+/** Start: spółka i „Do zrobienia” — odnośniki do zakładek. */
+function EkranStartu({ spolki }) {
+  return (
+    <ZakladkaSpolki spolki={spolki} zakladka="" tytul="Start" akcje={zgloszZmiane}>
+      {(s, odswiez, q) => {
+        const doUzupelnienia = s.sprawy.filter((x) => x.stan === 'wstrzymana');
+        return (
+          <>
+            <Karta tytul="Spółka">
+              <ListaDanych pary={[['Firma', s.spolka.nazwa], ['KRS', s.spolka.krs], ['Siedziba i adres', `${s.spolka.siedziba}, ${s.spolka.adres}`], ['Rejestr', s.spolka.zamkniety ? 'zamknięty' : s.spolka.otwarty ? 'prowadzony przez kancelarię' : 'w przygotowaniu']]} />
+            </Karta>
+            <Karta tytul="Do zrobienia">
+              {!s.oplaty.length && !doUzupelnienia.length && <p className="male drugorzedny">Nic nie czeka na Ciebie.</p>}
+              {s.oplaty.length > 0 && <p><a href={`#/platnosci${q}`}>Do zapłaty: {s.oplaty.length}</a></p>}
+              {doUzupelnienia.length > 0 && <p><a href={`#/sprawy${q}`}>Sprawy wymagające uzupełnienia: {doUzupelnienia.length}</a></p>}
+            </Karta>
+          </>
+        );
+      }}
+    </ZakladkaSpolki>
+  );
+}
+
+/** Sprawy: stan prostymi słowami, pisma do pobrania, „Dodaj pliki” przy „Wymaga uzupełnienia”. */
+function EkranSprawPortalu({ spolki }) {
+  return (
+    <ZakladkaSpolki spolki={spolki} zakladka="sprawy" tytul="Sprawy" akcje={zgloszZmiane}>
+      {(s, odswiez) => (
+        <Karta tytul="Sprawy">
+          {!s.sprawy.length ? <p className="male drugorzedny">Brak spraw.</p> : s.sprawy.map((x) => (
+            <div key={x.id} className="wiersz-portalu">
+              <div className="rzad-rozdzielony">
+                <strong>Sprawa nr {x.id} · {fmt.data(x.data_wplywu)}</strong>
+                <Pigulka odmiana={ODMIANY_STANU_SPRAWY[x.stan]}>{STANY_PORTALU[x.stan]}</Pigulka>
+              </div>
+              {x.opis && <p className="male">{x.opis}</p>}
+              <PismaDoPobrania pisma={x.pisma} />
+              {x.stan === 'wstrzymana' && <DodajPlik adres={`/api/psa/portal/sprawy/${x.id}/pliki`} przyDodaniu={odswiez} etykieta="Dodaj pliki" />}
+            </div>
+          ))}
+        </Karta>
+      )}
+    </ZakladkaSpolki>
+  );
+}
+
+/** Płatności: do zapłaty („Zapłać [kwota]”) i opłacone. */
+function EkranPlatnosciPortalu({ spolki }) {
+  const { zapytanie } = useTrasa();
   const platnosc = zapytanie.get('platnosc');
-  const { dane: s, blad, odswiez } = useDane(`/api/psa/portal/start${wybrana ? `?spolka=${wybrana}` : ''}`);
-  const [informacja, ustawInformacje] = useState(false);
-  const [proby, ustawProby] = useState(0);
   const c = useCzynnosc();
-  const czeka = Boolean(platnosc && s && s.oplaty && s.oplaty.some((o) => String(o.id) === platnosc));
+  return (
+    <ZakladkaSpolki spolki={spolki} zakladka="platnosci" tytul="Płatności">
+      {(s, odswiez) => (
+        <>
+          <PotwierdzeniePlatnosci platnosc={platnosc} czeka={Boolean(platnosc && s.oplaty.some((o) => String(o.id) === platnosc))} odswiez={odswiez} />
+          <Karta tytul="Do zapłaty">
+            {!s.oplaty.length && <p className="male drugorzedny">Brak opłat do zapłaty.</p>}
+            {s.oplaty.map((o) => (
+              <div key={o.id} className="rzad-rozdzielony wiersz-portalu">
+                <span>{RODZAJE_OPLAT[o.rodzaj]}{o.okres ? ` · ${o.okres.split('..').map(fmt.data).join('–')}` : ''}</span>
+                <button type="button" className="btn btn-glowny btn-maly" disabled={c.trwa} onClick={() => c.wykonaj(() => zaplac(o.id))}>Zapłać {fmt.zlote(o.kwota_brutto_grosze)}</button>
+              </div>
+            ))}
+            <Bledy blad={c.blad} />
+          </Karta>
+          {s.oplacone.length > 0 && (
+            <Karta tytul="Opłacone">
+              {s.oplacone.map((o) => (
+                <div key={o.id} className="rzad-rozdzielony wiersz-portalu">
+                  <span>{RODZAJE_OPLAT[o.rodzaj]}{o.okres ? ` · ${o.okres.split('..').map(fmt.data).join('–')}` : ''}</span>
+                  <span className="male drugorzedny">{fmt.zlote(o.kwota_brutto_grosze)} · {fmt.data(o.oplacono)}</span>
+                </div>
+              ))}
+            </Karta>
+          )}
+        </>
+      )}
+    </ZakladkaSpolki>
+  );
+}
+
+/** Po powrocie z tpay: odświeżanie, aż potwierdzenie (ITN) dojdzie. */
+function PotwierdzeniePlatnosci({ platnosc, czeka, odswiez }) {
+  const [proby, ustawProby] = useState(0);
   useEffect(() => {
     if (!czeka || proby >= 10) return undefined;
     const t = setTimeout(() => { ustawProby((x) => x + 1); odswiez(); }, 3000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [czeka, proby]);
-  if (blad) return <Bledy blad={blad} />;
-  if (!s) return <Spinner />;
-  if (!s.spolka) {
-    return (
-      <Karta tytul="Brak dostępu do spółki">
-        <p>To konto nie ma teraz dostępu do żadnej spółki. Jeśli to pomyłka, napisz do kancelarii.</p>
-        <p className="male drugorzedny">Akcjonariusz widzi spółkę, gdy ma akcje i zgodę na korespondencję e-mail (Konto).</p>
-      </Karta>
-    );
-  }
-  const sp = s.spolka;
-  const doUzupelnienia = s.sprawy.filter((x) => x.stan === 'wstrzymana');
+  if (!platnosc) return null;
+  return czeka
+    ? <Komunikat odmiana="info" tresc="Dziękujemy. Czekamy na potwierdzenie płatności — strona odświeży się sama." />
+    : <Komunikat odmiana="rejestr" tresc="Płatność przyjęta." />;
+}
+
+/** Informacja z rejestru: zamówienie (dzień, „Zapłać”) i wydane informacje do pobrania. */
+function EkranInformacjiPortalu({ spolki }) {
+  const { zapytanie } = useTrasa();
+  const platnosc = zapytanie.get('platnosc');
+  return (
+    <ZakladkaSpolki spolki={spolki} zakladka="informacja" tytul="Informacja z rejestru">
+      {(s, odswiez) => (
+        <>
+          <PotwierdzeniePlatnosci platnosc={platnosc} czeka={Boolean(platnosc && s.oplaty.some((o) => String(o.id) === platnosc))} odswiez={odswiez} />
+          <ZamowienieInformacji s={s} />
+          <Karta tytul="Wydane informacje">
+            {!s.informacje.length ? <p className="male drugorzedny">Brak wydanych informacji.</p>
+              : <PismaDoPobrania pisma={s.informacje.map((x) => ({ ...x, nazwa: `Stan na ${x.stan_na}` }))} />}
+          </Karta>
+        </>
+      )}
+    </ZakladkaSpolki>
+  );
+}
+
+/** Pomoc — miejsce na treść przygotowaną przez kancelarię; kontakt z kancelarią. */
+function EkranPomocy() {
+  const { dane } = useDane('/api/wspolne/kancelaria');
+  const k = (dane && dane.kancelaria) || {};
   return (
     <>
-      {spolki.length > 1 && (
-        <Pole etykieta="Spółka">
-          <select value={sp.id} onChange={(e) => idz(`/?spolka=${e.target.value}`)}>
-            {spolki.map((x) => <option key={x.id} value={x.id}>{x.nazwa}</option>)}
-          </select>
-        </Pole>
-      )}
-      <NaglowekStrony
-        tytul={sp.nazwa}
-        kontekst={`KRS ${sp.krs}`}
-        akcje={(
-          <span className="rzad">
-            <button type="button" className="btn" onClick={() => ustawInformacje((x) => !x)}>Zamów informację z rejestru</button>
-            <PrzyciskGlowny etykieta="Zgłoś zmianę" przyKlik={() => idz(`/zmiana?spolka=${sp.id}`)} powod={sp.otwarty ? null : sp.zamkniety ? 'Rejestr zamknięty' : 'Rejestr nie jest jeszcze otwarty'} />
-          </span>
-        )}
-      />
-      {platnosc && (czeka
-        ? <Komunikat odmiana="info" tresc="Dziękujemy. Czekamy na potwierdzenie płatności — strona odświeży się sama." />
-        : <Komunikat odmiana="rejestr" tresc="Płatność przyjęta." />)}
-      {informacja && <ZamowienieInformacji s={s} />}
-      {(s.oplaty.length > 0 || doUzupelnienia.length > 0) && (
-        <Karta tytul="Do zrobienia">
-          {s.oplaty.map((o) => (
-            <div key={o.id} className="rzad-rozdzielony wiersz-portalu">
-              <span>{RODZAJE_OPLAT[o.rodzaj]}{o.okres ? ` · ${o.okres.split('..').map(fmt.data).join('–')}` : ''}</span>
-              <button type="button" className="btn btn-glowny btn-maly" disabled={c.trwa} onClick={() => c.wykonaj(() => zaplac(o.id))}>Zapłać {fmt.zlote(o.kwota_brutto_grosze)}</button>
-            </div>
-          ))}
-          {doUzupelnienia.map((x) => (
-            <div key={x.id} className="rzad-rozdzielony wiersz-portalu">
-              <span>Sprawa nr {x.id} — dołącz brakujące dokumenty</span>
-              <DodajPlik adres={`/api/psa/portal/sprawy/${x.id}/pliki`} przyDodaniu={odswiez} etykieta="Dodaj pliki" />
-            </div>
-          ))}
-          <Bledy blad={c.blad} />
-        </Karta>
-      )}
-      <Karta tytul="Sprawy">
-        {!s.sprawy.length ? <p className="male drugorzedny">Brak spraw.</p> : s.sprawy.map((x) => (
-          <div key={x.id} className="wiersz-portalu">
-            <div className="rzad-rozdzielony">
-              <strong>Sprawa nr {x.id} · {fmt.data(x.data_wplywu)}</strong>
-              <Pigulka odmiana={ODMIANY_STANU_SPRAWY[x.stan]}>{STANY_PORTALU[x.stan]}</Pigulka>
-            </div>
-            {x.opis && <p className="male">{x.opis}</p>}
-            <PismaDoPobrania pisma={x.pisma} />
-          </div>
-        ))}
+      <NaglowekStrony tytul="Pomoc" />
+      <Karta tytul="Jak korzystać z portalu">
+        <p className="male drugorzedny">Tu pojawi się pomoc — treść przygotowuje kancelaria.</p>
       </Karta>
-      {s.informacje.length > 0 && (
-        <Karta tytul="Informacje z rejestru">
-          <PismaDoPobrania pisma={s.informacje.map((p) => ({ ...p, nazwa: `Stan na ${p.stan_na}` }))} />
-        </Karta>
-      )}
+      <Karta tytul="Kontakt z kancelarią">
+        <ListaDanych pary={[['Kancelaria', k.nazwa], k.telefon && ['Telefon', k.telefon], k.email && ['E-mail', k.email], k.adres && ['Adres', k.adres]]} />
+        {k.www && <p><a href={k.www} target="_blank" rel="noopener">Strona kancelarii</a></p>}
+      </Karta>
     </>
   );
 }
@@ -355,8 +488,8 @@ function EkranZmiany() {
   if (wynik) {
     return (
       <Karta tytul="Zgłoszenie wysłane">
-        <p>Przyjęliśmy zgłoszenie — sprawa nr {wynik}. Jej stan i pisma zobaczysz na Starcie.</p>
-        <a className="btn" href={`#/?spolka=${spolka}`}>Start</a>
+        <p>Przyjęliśmy zgłoszenie — sprawa nr {wynik}. Jej stan i pisma zobaczysz w zakładce Sprawy.</p>
+        <a className="btn" href={`#/sprawy?spolka=${spolka}`}>Sprawy</a>
       </Karta>
     );
   }
@@ -372,7 +505,7 @@ function EkranZmiany() {
         {c.blad && !pola.opis && <Bledy blad={c.blad} />}
         <div className="rzad">
           <PrzyciskGlowny etykieta="Wyślij" przyKlik={() => wyslij()} powod={opis.trim().length < 5 ? 'Opisz, co się zmieniło.' : null} trwa={c.trwa} />
-          <a href={`#/?spolka=${spolka}`}>Anuluj</a>
+          <a href={`#/sprawy?spolka=${spolka}`}>Anuluj</a>
         </div>
       </form>
     </Karta>
@@ -434,9 +567,13 @@ function Portal() {
     if (segmenty[0] === 'zglos') return <EkranZgloszenia />;
     if (segmenty[0] === 'aktywacja') return <EkranAktywacji token={zapytanie.get('token')} przyAktywacji={() => { sesja.odswiez(); idz('/'); }} />;
     if (!sesja.zalogowany) return <EkranLogowaniaPortalu przyZalogowaniu={() => sesja.odswiez()} />;
-    if (sesja.wniosek) return <EkranWniosku />;
+    if (segmenty[0] === 'pomoc') return <EkranPomocy />;
     if (segmenty[0] === 'konto') return <EkranKonta sesja={sesja} />;
+    if (sesja.wniosek) return <EkranWniosku />;
     if (segmenty[0] === 'zmiana') return <EkranZmiany />;
+    if (segmenty[0] === 'sprawy') return <EkranSprawPortalu spolki={sesja.spolki} />;
+    if (segmenty[0] === 'platnosci') return <EkranPlatnosciPortalu spolki={sesja.spolki} />;
+    if (segmenty[0] === 'informacja') return <EkranInformacjiPortalu spolki={sesja.spolki} />;
     return <EkranStartu spolki={sesja.spolki} />;
   }
 
@@ -448,8 +585,9 @@ function Portal() {
       </div>
       {sesja.zalogowany && (
         <nav className="menu-portalu bez-druku" aria-label="Menu portalu">
-          {poWniosku && <a href="#/" aria-current={segmenty[0] !== 'konto' ? 'page' : undefined}>Start</a>}
-          {poWniosku && <a href="#/konto" aria-current={segmenty[0] === 'konto' ? 'page' : undefined}>Konto</a>}
+          {(poWniosku ? MENU_PORTALU : MENU_WNIOSKU).map(([sciezka, nazwa]) => (
+            <a key={sciezka} href={`#/${sciezka}${poWniosku && zapytanie.get('spolka') && !['konto', 'pomoc'].includes(sciezka) ? `?spolka=${zapytanie.get('spolka')}` : ''}`} aria-current={(segmenty[0] || '') === sciezka ? 'page' : undefined}>{nazwa}</a>
+          ))}
           <button type="button" className="btn btn-maly btn-cichy" onClick={() => API.post('/api/psa/portal/logout').then(() => { sesja.odswiez(); idz('/'); })}>Wyloguj</button>
         </nav>
       )}

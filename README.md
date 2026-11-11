@@ -55,14 +55,16 @@ Konta (hasło `Test-Haslo-2026`):
 | `alfa.zarzad@example.com` | portal, działa za Alfa Testowa P.S.A. |
 | `anna.zgoda@example.com` | portal, akcjonariuszka Alfy ze zgodą na e-mail |
 | `gamma.zarzad@example.com` | portal, wnioskodawca z dokumentami do podpisu |
+| `epsilon.zarzad@example.com` | portal, wniosek w toku — formularz (Spółka → Reprezentant → Akcjonariusze → Podsumowanie) |
+| `theta.zarzad@example.com` | portal, wniosek złożony z przejęciem rejestru od innej firmy (dzień przejęcia: dzień seeda) |
 
 Dane w seedzie:
 - Alfa: otwarty rejestr, dwie serie, ułamek akcji, zastaw z prawem głosu;
 - zbycie akcji czekające na „Nadano” powiadomienia listem;
 - informacja z rejestru do zapłaty;
 - Beta: rejestr nieotwarty;
-- wniosek Gammy;
-- atrapa KRS odpowiada dla numerów `0000990001`–`0000990004`.
+- wnioski: Gamma (dokumenty do podpisu), Epsilon (formularz w toku), Theta (przejęcie rejestru, złożony);
+- atrapa KRS odpowiada dla numerów `0000990001`–`0000990006`.
 
 Narzędzia trybu testowego:
 - **Skrzynka testowa** `/test/skrzynka`: każdy e-mail jako `.eml`, nic nie wychodzi z serwera.

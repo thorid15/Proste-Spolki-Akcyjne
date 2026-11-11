@@ -11,7 +11,8 @@
  *   - sprawa zbycia akcji bez zgody zbywcy na e-mail — po kroku 1, powiadomienie listem czeka
  *     na „Nadano” (scenariusz e2e Fazy 3);
  *   - Beta Testowa P.S.A. — spółka bez otwartego rejestru;
- *   - konta portalu: zarząd Alfy (działa za spółkę) i Anna (akcjonariuszka ze zgodą); wniosek Gammy.
+ *   - konta portalu: zarząd Alfy (działa za spółkę) i Anna (akcjonariuszka ze zgodą);
+ *   - wnioski: Gamma (dokumenty do podpisu), Epsilon (formularz w toku), Theta (przejęcie rejestru, złożony).
  * Spółki zakłada warstwa danych (wnioski wracają w Fazie 4). Adresy `@example.com`, PESEL
  * fikcyjne z poprawną sumą kontrolną. Plik bazy, który istnieje i NIE jest oznaczony jako
  * testowy, nie zostanie nadpisany. Kolejne fazy dopisują tu scenariusze.
@@ -207,6 +208,30 @@ async function main() {
     },
   });
   wnioski.zloz(db(), gamma, 'test:seed');
+
+  // Wniosek roboczy Epsilon — formularz w portalu (dane z KRS, reszta do uzupełnienia przez klienta).
+  const aktywnyWniosek = (id) => db().prepare('UPDATE psa_konta SET hash_hasla = ?, aktywne = 1, token_aktywacji = NULL, token_wygasa = NULL, regulamin_zaakceptowano = ? WHERE wniosek_id = ?').run(hash, teraz, id);
+  aktywnyWniosek(await wnioski.zglos(db(), { krs: '0000990005', email: 'epsilon.zarzad@example.com' }));
+
+  // Wniosek Theta — przejęcie rejestru od innej firmy, złożony; dzień przejęcia: dziś.
+  const theta = await wnioski.zglos(db(), { krs: '0000990006', email: 'theta.zarzad@example.com', przejecie: true });
+  aktywnyWniosek(theta);
+  const wt = wnioski.wczytaj(db(), theta);
+  wnioski.zmien(db(), theta, {
+    dotychczasowy_podmiot: 'Dom Maklerski Przykładowy S.A.',
+    data_przejecia: czas.dzisIso(),
+    dane: {
+      ...wt.dane,
+      spolka: { ...wt.dane.spolka, sad_rejestrowy: wt.dane.spolka.sad_rejestrowy || 'Sąd Rejonowy Gdańsk-Północ w Gdańsku, VIII Wydział Gospodarczy KRS', data_rejestracji: wt.dane.spolka.data_rejestracji || '2025-08-20' },
+      reprezentant: { nazwa: 'Tomasz Thetowski', pesel: pesel('680312', '4567'), adres: 'ul. Przejmowana 6, 81-006 Gdynia', email: 'theta.zarzad@example.com', funkcja: 'prezes zarządu', pep: false },
+      akcjonariusze: [
+        { klucz: 't1', typ: 'fizyczna', nazwa: 'Tomasz Thetowski', pesel: pesel('680312', '4567'), adres: 'ul. Przejmowana 6, 81-006 Gdynia', email: 'theta.zarzad@example.com', to_ja: true, zgoda_email: true },
+        { klucz: 't2', typ: 'prawna', nazwa: 'Inwestor Testowy sp. z o.o.', numer_rejestru: '0000990088', adres: 'ul. Inwestorska 8, 00-008 Warszawa', email: 'inwestor@example.com' },
+      ],
+      platnosc: 'miesieczna',
+    },
+  });
+  wnioski.zloz(db(), theta, 'test:seed');
 
   serwer.close();
   console.log(`\n[test:seed] Gotowe: ${PLIK}`);

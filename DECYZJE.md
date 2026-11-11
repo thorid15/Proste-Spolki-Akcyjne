@@ -1826,6 +1826,16 @@
   3. **D-223** „Zmień hasło” w menu konta pracownika (trasa istniała, brakowało ekranu — administrator zostawał z hasłem tymczasowym). Zmiana kończy wszystkie sesje konta, także bieżącą — ekran prosi o ponowne logowanie.
   4. **D-224** Instrukcja wdrożenia `docs/WDROZENIE.md`: Ubuntu 24.04 i Node.js 22, zapora (SSH tylko z biura), szyfrowany wolumen LUKS na bazę i pliki (ręczne odblokowanie po restarcie), usługa systemd z ograniczeniami, nginx z Let's Encrypt (aplikacja kancelarii tylko z IP biura; portal i powiadomienia tpay publiczne), poczta Microsoft 365 (z uwagą o wycofywaniu logowania hasłem do SMTP), tpay, codzienne kopie szyfrowane poza serwerem z kwartalną próbą odtworzenia, aktualizacje, lista kontrolna i sytuacje awaryjne.
 
+### D-225–D-229 — Przywrócenie funkcji portalu i wniosku na nowej bazie (Łukasz, 11.11.2026)
+
+- Obszar: portal klienta, wniosek o prowadzenie rejestru (portal i kancelaria). Łukasz ocenił portal i obsługę wniosku po uproszczeniu jako regres. Decyzja: zostaje nowa baza (droga B) i zmiany w korespondencji, pismach, kartotece i sposobie wpisu; wracają wybrane funkcje sprzed uproszczenia (`claude/Main`, commit `af81559`).
+- Decyzje:
+  1. **D-225** (Łukasz) Nie wracają: skany AML w portalu, zgłoszenie błędu we wpisie (U-06, U-13 bez zmian), kolejka „Zgłoszenia”, dokumenty na żądanie. Przejęcie rejestru zostaje w nowej postaci (U-07) — do testów: wniosek Theta w `test:seed`.
+  2. **D-226** Portal: Sprawy, Płatności i Informacja jako osobne zakładki (jak przed uproszczeniem), Pomoc — miejsce na treść kancelarii i kontakt; menu: Start · Sprawy · Płatności · Informacja · Pomoc · Konto. Zastępuje zasadę „najwyżej trzy ekrany” z § 6 specyfikacji uproszczenia. Powrót z tpay — do zakładki Informacja albo Płatności. Bez nowych tras (dane z `GET /api/psa/portal/start`, dodane opłacone).
+  3. **D-227** Formularz wniosku w portalu — kreator jak przed uproszczeniem: Spółka (z opłatą i przejęciem) → Reprezentant → Akcjonariusze → Podsumowanie, z klikalnym paskiem kroków, „Wstecz/Dalej”, listą braków z odnośnikiem do kroku i „Złóż wniosek”; po złożeniu — dokumenty do podpisu (U-03).
+  4. **D-228** Wniosek w kancelarii (także „Nowa spółka”) w 4 krokach: Dane spółki (różnice wobec KRS, reprezentacja według KRS, przejęcie) → Akcjonariusze (osoby już w kartotece: istniejąca albo nowa) → Dokumenty → Decyzja (przed przyjęciem, checklista, notatka); przycisk główny w nagłówku na każdym kroku. Ekran otwiera się na kroku właściwym dla stanu wniosku.
+  5. **D-229** `test:seed`: konta `epsilon.zarzad@example.com` (wniosek w toku — formularz) i `theta.zarzad@example.com` (wniosek z przejęciem, złożony, dzień przejęcia = dzień seeda); atrapa KRS 0000990005–0000990006.
+
 ---
 
 ## Decyzje otwarte

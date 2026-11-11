@@ -110,6 +110,8 @@ function DokumentKancelarii({ id, d, osobyUmow, ustawP, edycja }) {
   );
 }
 
+const KROKI_WNIOSKU_KANCELARII = ['Dane spółki', 'Akcjonariusze', 'Dokumenty', 'Decyzja'];
+
 function EkranWnioskuKancelarii({ wniosekId }) {
   const { dane, blad } = useDane(`/api/psa/wnioski/${wniosekId}`);
   const [p, ustawP] = useState(null);
@@ -126,6 +128,9 @@ function Wniosek({ p, ustawP }) {
   const [wartosci, ustawWartosci] = useState(() => ({ dane: w.dane, dotychczasowy_podmiot: w.dotychczasowy_podmiot || '', data_przejecia: w.data_przejecia || '' }));
   const [dodatkowe, ustawDodatkowe] = useState(() => ({ notatka: w.notatka || '', dotychczasowy_podmiot: w.dotychczasowy_podmiot || '', data_przejecia: w.data_przejecia || '' }));
   const [wybory, ustawWybory] = useState({});
+  // Kroki jak przed uproszczeniem: Dane spółki → Akcjonariusze → Dokumenty → Decyzja; start według stanu wniosku.
+  const [krok, ustawKrok] = useState(() => (roboczy ? 0 : w.stan === 'zlozony' ? 2 : 3));
+  const idzDo = (k) => { ustawKrok(k); window.scrollTo(0, 0); };
   const [zwrot, ustawZwrot] = useState(null);
   const [odmowa, ustawOdmowe] = useState(null);
   const zapis = useZapisWniosku(`/api/psa/wnioski/${id}`, roboczy ? { ...wartosci, notatka: dodatkowe.notatka } : dodatkowe, ustawP);
@@ -184,6 +189,7 @@ function Wniosek({ p, ustawP }) {
       {!p.krs.dopuszczalna && <Komunikat odmiana="uwaga" tresc="Według KRS podmiot nie jest prostą spółką akcyjną." />}
       {p.krs.roznice.length > 0 && <Komunikat tresc="Pola różniące się od KRS mają pod spodem wartość z KRS." />}
 
+      <Kroki kroki={KROKI_WNIOSKU_KANCELARII} biezacy={krok} przyWyborze={idzDo} osiagniety={KROKI_WNIOSKU_KANCELARII.length - 1} />
       {zwrot !== null && (
         <Karta tytul="Zwróć do uzupełnienia">
           <Pole etykieta="Co klient ma uzupełnić" blad={pola.notatka}><textarea rows={3} value={zwrot} onChange={(e) => ustawZwrot(e.target.value)} /></Pole>
@@ -209,7 +215,32 @@ function Wniosek({ p, ustawP }) {
         </Modal>
       )}
 
-      {w.stan === 'zlozony' && p.przeszkody.length > 0 && <Komunikat odmiana="uwaga" tytul="Przed przyjęciem" lista={p.przeszkody} />}
+      {krok === 0 && (
+        <>
+      <fieldset className="krok-tresci" disabled={!roboczy}>
+        <FormularzWniosku
+          dane={wartosci.dane}
+          ustawDane={(d) => ustawWartosci({ ...wartosci, dane: d })}
+          pola={pola}
+          kwoty={p.kwoty}
+          krs={krs}
+          sekcje={['spolka', 'platnosc', 'przejecie', 'reprezentant']}
+          przejecie={roboczy ? { dotyczy: w.przejecie, dotychczasowy_podmiot: wartosci.dotychczasowy_podmiot, data_przejecia: wartosci.data_przejecia, ustaw: (z) => ustawWartosci({ ...wartosci, ...z }) } : null}
+        />
+      </fieldset>
+      {w.przejecie && !roboczy && w.stan !== 'odrzucony' && (
+        <Karta tytul="Przejęcie rejestru">
+          <div className="siatka-2">
+            <Pole etykieta="Dotychczasowy podmiot" blad={pola.dotychczasowy_podmiot}><input type="text" value={dodatkowe.dotychczasowy_podmiot} onChange={(e) => ustawDodatkowe({ ...dodatkowe, dotychczasowy_podmiot: e.target.value })} /></Pole>
+            <Pole etykieta="Data przejęcia" opcjonalne blad={pola.data_przejecia}><PoleDaty wartosc={dodatkowe.data_przejecia} przyZmianie={(v) => ustawDodatkowe({ ...dodatkowe, data_przejecia: v })} /></Pole>
+          </div>
+        </Karta>
+      )}
+      {p.krs.reprezentacja && <Karta tytul="Reprezentacja według KRS"><p>{p.krs.reprezentacja}</p></Karta>}
+        </>
+      )}
+      {krok === 1 && (
+        <>
       {p.osoby.some((o) => o.pasujace.length) && (
         <Karta tytul="Osoby już w kartotece">
           {p.osoby.filter((o) => o.pasujace.length).map((o) => (
@@ -224,14 +255,33 @@ function Wniosek({ p, ustawP }) {
           ))}
         </Karta>
       )}
-
-      {w.stan !== 'roboczy' && (
+      <fieldset className="krok-tresci" disabled={!roboczy}>
+        <FormularzWniosku
+          dane={wartosci.dane}
+          ustawDane={(d) => ustawWartosci({ ...wartosci, dane: d })}
+          pola={pola}
+          kwoty={p.kwoty}
+          krs={krs}
+          sekcje={['akcjonariusze']}
+          przejecie={roboczy ? { dotyczy: w.przejecie, dotychczasowy_podmiot: wartosci.dotychczasowy_podmiot, data_przejecia: wartosci.data_przejecia, ustaw: (z) => ustawWartosci({ ...wartosci, ...z }) } : null}
+        />
+      </fieldset>
+        </>
+      )}
+      {krok === 2 && (roboczy
+        ? <Karta tytul="Dokumenty"><p className="male drugorzedny">Dokumenty do podpisu powstaną po złożeniu wniosku.</p></Karta>
+        : (
+          <>
         <Karta tytul="Dokumenty">
           <ul className="dokumenty-wniosku">
             {p.dokumenty.map((d) => <DokumentKancelarii key={d.klucz} id={id} d={d} osobyUmow={p.osoby_zawierajace_umowy} ustawP={ustawP} edycja={w.stan === 'zlozony'} />)}
           </ul>
         </Karta>
-      )}
+          </>
+        ))}
+      {krok === 3 && (
+        <>
+      {w.stan === 'zlozony' && p.przeszkody.length > 0 && <Komunikat odmiana="uwaga" tytul="Przed przyjęciem" lista={p.przeszkody} />}
       {['zlozony', 'przyjety'].includes(w.stan) && (
         <Karta tytul="Checklista">
           <div className="checklista">
@@ -244,26 +294,6 @@ function Wniosek({ p, ustawP }) {
           </div>
         </Karta>
       )}
-      {w.przejecie && !roboczy && w.stan !== 'odrzucony' && (
-        <Karta tytul="Przejęcie rejestru">
-          <div className="siatka-2">
-            <Pole etykieta="Dotychczasowy podmiot" blad={pola.dotychczasowy_podmiot}><input type="text" value={dodatkowe.dotychczasowy_podmiot} onChange={(e) => ustawDodatkowe({ ...dodatkowe, dotychczasowy_podmiot: e.target.value })} /></Pole>
-            <Pole etykieta="Data przejęcia" opcjonalne blad={pola.data_przejecia}><PoleDaty wartosc={dodatkowe.data_przejecia} przyZmianie={(v) => ustawDodatkowe({ ...dodatkowe, data_przejecia: v })} /></Pole>
-          </div>
-        </Karta>
-      )}
-
-      <fieldset className="krok-tresci" disabled={!roboczy}>
-        <FormularzWniosku
-          dane={wartosci.dane}
-          ustawDane={(d) => ustawWartosci({ ...wartosci, dane: d })}
-          pola={pola}
-          kwoty={p.kwoty}
-          krs={krs}
-          przejecie={roboczy ? { dotyczy: w.przejecie, dotychczasowy_podmiot: wartosci.dotychczasowy_podmiot, data_przejecia: wartosci.data_przejecia, ustaw: (z) => ustawWartosci({ ...wartosci, ...z }) } : null}
-        />
-      </fieldset>
-      {p.krs.reprezentacja && <Karta tytul="Reprezentacja według KRS"><p>{p.krs.reprezentacja}</p></Karta>}
       <Karta tytul="Notatka">
         <Pole etykieta="Notatka (widzi ją klient przy zwrocie do uzupełnienia)" opcjonalne>
           <textarea rows={2} value={dodatkowe.notatka} onChange={(e) => ustawDodatkowe({ ...dodatkowe, notatka: e.target.value })} disabled={!['roboczy', 'zlozony'].includes(w.stan)} />
@@ -272,6 +302,12 @@ function Wniosek({ p, ustawP }) {
       {p.pisma.some((x) => x.typ === 'powiadomienie_odmowa') && (
         <Karta tytul="Pisma"><p>Powiadomienie o odmowie zawarcia umowy — w <a href="#/korespondencja?filtr=listy">Korespondencji</a>.</p></Karta>
       )}
+        </>
+      )}
+      <div className="rzad">
+        {krok > 0 && <button type="button" className="btn" onClick={() => idzDo(krok - 1)}>Wstecz</button>}
+        {krok < KROKI_WNIOSKU_KANCELARII.length - 1 && <button type="button" className="btn" onClick={() => idzDo(krok + 1)}>Dalej</button>}
+      </div>
     </div>
   );
 }

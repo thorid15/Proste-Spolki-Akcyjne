@@ -38,6 +38,8 @@ const KONTA_TESTOWE = [
   { aplikacja: 'portal', email: 'alfa.zarzad@example.com', opis: 'Zarząd Alfy — działa za spółkę' },
   { aplikacja: 'portal', email: 'anna.zgoda@example.com', opis: 'Anna Testowa — akcjonariuszka Alfy (zgoda na e-mail)' },
   { aplikacja: 'portal', email: 'gamma.zarzad@example.com', opis: 'Wnioskodawca — dokumenty do podpisu (Gamma Zgłoszeniowa)' },
+  { aplikacja: 'portal', email: 'epsilon.zarzad@example.com', opis: 'Wnioskodawca — formularz wniosku w toku (Epsilon)' },
+  { aplikacja: 'portal', email: 'theta.zarzad@example.com', opis: 'Wnioskodawca — przejęcie rejestru od innej firmy (Theta)' },
 ];
 
 /** Wyniki atrapy podstawowego testu podpisu (T5, D-086). */

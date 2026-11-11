@@ -69,7 +69,7 @@ const widziOplate = (z, osobaId, o) => o.spolka_id === z.id && ((z.pelny && o.pl
 
 const opisPisma = (p) => ({ id: p.id, nazwa: pisma.TYPY[p.typ], numer: p.numer, data: czas.dzienLokalny(p.wyslano) });
 
-/** Start: dane spółki, sprawy z pismami, opłaty do zapłaty, wydane informacje, dostępność informacji (U-24). */
+/** Dane spółki dla zakładek portalu: sprawy z pismami, opłaty do zapłaty i opłacone, wydane informacje, dostępność informacji (U-24). */
 function start(db, konto, spolkaId) {
   const zakres = zakresKonta(db, konto);
   const z = spolkaId ? spolkaZakresu(zakres, spolkaId) : zakres.spolki[0];
@@ -81,16 +81,16 @@ function start(db, konto, spolkaId) {
     .lista(db, { spolkaId: z.id })
     .filter((sp) => widziSprawe(z, os, sp))
     .map((sp) => ({ id: sp.id, stan: sp.stan, data_wplywu: sp.data_wplywu, opis: sp.podstawa, pisma: widoczne.filter((p) => p.sprawa_id === sp.id).map(opisPisma) }));
-  const oplaty = daneOplaty
-    .lista(db, { spolkaId: z.id, stan: 'do_zaplaty' })
-    .filter((o) => widziOplate(z, os, o))
-    .map((o) => ({ id: o.id, rodzaj: o.typ, okres: o.okres, kwota_brutto_grosze: przepisy.obliczBrutto(o.kwota_netto_grosze, o.stawka_vat_procent) }));
+  const oplata = (o) => ({ id: o.id, rodzaj: o.typ, okres: o.okres, oplacono: o.oplacono, kwota_brutto_grosze: przepisy.obliczBrutto(o.kwota_netto_grosze, o.stawka_vat_procent) });
+  const oplaty = daneOplaty.lista(db, { spolkaId: z.id, stan: 'do_zaplaty' }).filter((o) => widziOplate(z, os, o)).map(oplata);
+  const oplacone = daneOplaty.lista(db, { spolkaId: z.id, stan: 'oplacona' }).filter((o) => widziOplate(z, os, o)).slice(0, 20).map(oplata);
   const otwarcie = czas.dzienLokalny(s.data_otwarcia);
   return {
     spolka: { id: s.id, nazwa: s.nazwa, krs: s.krs, siedziba: s.siedziba, adres: s.adres, otwarty: Boolean(otwarcie) && !s.data_zamkniecia, zamkniety: Boolean(s.data_zamkniecia) },
     rola: { pelny: z.pelny, akcjonariusz: z.akcjonariusz },
     sprawy: sprawyKonta,
     oplaty,
+    oplacone,
     informacje: widoczne.filter((p) => p.typ === 'informacja').map((p) => ({ ...opisPisma(p), stan_na: p.kontekst.stan_na })),
     informacja: {
       dostepna_od: otwarcie ? terminy.dodajDni(otwarcie, 1) : null,
@@ -175,7 +175,7 @@ async function zaplac(db, konto, oplataId) {
     const { platnosc } = await platnosci.przygotujZaplate(db, {
       oplataId: o.id,
       urlPowiadomienia: new URL('/api/psa/platnosci/tpay/itn', konfiguracja.URL_PORTALU).toString(),
-      urlPowrotu: `${konfiguracja.URL_PORTALU}#/?spolka=${o.spolka_id}&platnosc=${o.id}`,
+      urlPowrotu: `${konfiguracja.URL_PORTALU}#/${o.typ === 'informacja' ? 'informacja' : 'platnosci'}?spolka=${o.spolka_id}&platnosc=${o.id}`,
     });
     return platnosc.link;
   } catch (e) {

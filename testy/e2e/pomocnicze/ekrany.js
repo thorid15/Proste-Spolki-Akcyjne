@@ -20,11 +20,17 @@ const EKRANY = [
   { nazwa: 'kancelaria-korespondencja', konto: K, aplikacja: 'kancelaria', adres: '/#/korespondencja', czekaj: '.karta' },
   { nazwa: 'kancelaria-oplaty', konto: K, aplikacja: 'kancelaria', adres: '/#/oplaty', czekaj: '.karta' },
   { nazwa: 'kancelaria-wniosek', konto: K, aplikacja: 'kancelaria', adres: '/#/wnioski/1', czekaj: 'text=Dokumenty' },
-  { nazwa: 'portal-wniosek', konto: 'gamma.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/', czekaj: 'text=krok 2 z 2' },
+  { nazwa: 'portal-wniosek', konto: 'gamma.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/', czekaj: 'text=dokumenty do podpisu' },
   { nazwa: 'portal-start-zarzad', konto: 'alfa.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/', czekaj: 'text=Zgłoś zmianę' },
   { nazwa: 'portal-start-akcjonariusz', konto: 'anna.zgoda@example.com', aplikacja: 'portal', adres: '/portal.html#/', czekaj: 'text=Do zrobienia' },
   { nazwa: 'portal-zmiana', konto: 'alfa.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/zmiana?spolka=1', czekaj: 'text=Co się zmieniło?' },
   { nazwa: 'portal-konto', konto: 'anna.zgoda@example.com', aplikacja: 'portal', adres: '/portal.html#/konto', czekaj: 'text=Zgoda na korespondencję e-mail' },
+  { nazwa: 'portal-sprawy', konto: 'alfa.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/sprawy', czekaj: 'text=Sprawy' },
+  { nazwa: 'portal-platnosci', konto: 'anna.zgoda@example.com', aplikacja: 'portal', adres: '/portal.html#/platnosci', czekaj: 'text=Do zapłaty' },
+  { nazwa: 'portal-informacja', konto: 'alfa.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/informacja', czekaj: 'text=Wydane informacje' },
+  { nazwa: 'portal-pomoc', konto: 'alfa.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/pomoc', czekaj: 'text=Kontakt z kancelarią' },
+  { nazwa: 'portal-wniosek-formularz', konto: 'epsilon.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/', czekaj: 'text=Podsumowanie' },
+  { nazwa: 'kancelaria-wniosek-przejecie', konto: K, aplikacja: 'kancelaria', adres: '/#/wnioski/3', czekaj: 'text=Decyzja' },
 ];
 
 module.exports = { zaloguj, EKRANY, HASLO };

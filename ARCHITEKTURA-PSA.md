@@ -164,7 +164,9 @@ Rodzaj akcji jest wyliczany: uprzywilejowana, gdy ma adnotację „uprawnienie�
 
 1. **Formularz publiczny (U-08):** KRS, e-mail i „przenoszę rejestr”. Zakłada wniosek i konto z linkiem
    aktywacyjnym (7 dni, w bazie tylko skrót tokenu). Odpowiedź jest zawsze ta sama (D-079).
-2. **Wniosek** — jeden schemat danych (`logika/wniosek.js`) dla portalu i kancelarii („Nowa spółka”).
+2. **Wniosek** — jeden schemat danych (`logika/wniosek.js`) dla portalu i kancelarii („Nowa spółka”). Portal: kreator
+   Spółka → Reprezentant → Akcjonariusze → Podsumowanie („Złóż wniosek”). Kancelaria: kroki Dane spółki (z wartościami
+   z KRS) → Akcjonariusze (osoby już w kartotece) → Dokumenty → Decyzja (checklista, notatka) — D-227, D-228.
    „Złóż” tworzy dokumenty (U-03):
    - umowę — w niej § 12 ust. 3: obowiązek zawiadamiania o odwołaniu osoby działającej za spółkę;
    - uchwałę — „100% akcji”, podpisy wszystkich akcjonariuszy;
@@ -194,8 +196,9 @@ przy **każdym** żądaniu:
   - odwołanie z zarządu lub koniec pełnomocnictwa — „Usuń” w kokpicie („Działają za spółkę”), ze śladem w historii spółki.
 - **„Zaproś do portalu”** (karta osoby) zakłada konto albo wysyła nowy link do hasła. Ustawienie hasła unieważnia
   inne sesje konta.
-- **Ekrany portalu:** Start (wybór spółki, „Do zrobienia”, sprawy z pismami, informacje), Zgłoś zmianę (opis i pliki
-  → sprawa w toku), Konto (hasło, zgoda). Bez słownictwa prawniczego.
+- **Zakładki portalu** (D-226): Start (spółka, „Do zrobienia”), Sprawy (stan, pisma, „Dodaj pliki”, „Zgłoś zmianę” —
+  opis i pliki → sprawa w toku), Płatności (do zapłaty i opłacone), Informacja (zamówienie i wydane), Pomoc, Konto
+  (hasło, zgoda). Przed przyjęciem wniosku: Wniosek, Pomoc, Konto. Bez słownictwa prawniczego.
 
 ## 11. Opłaty, płatności, proces dzienny
 

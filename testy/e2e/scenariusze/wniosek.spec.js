@@ -24,15 +24,21 @@ async function wgraj(wiersz) {
   await wiersz.page().waitForLoadState('networkidle');
 }
 
-/** Formularz wniosku: reprezentant i dwóch akcjonariuszy (pierwszy — „to ja”). */
-async function wypelnijDane(page, email) {
-  const karta = (t) => page.locator('.karta').filter({ has: page.getByText(t, { exact: true }) });
-  const r = karta('Kto podpisuje umowę za spółkę');
+const karta = (page, t) => page.locator('.karta').filter({ has: page.getByText(t, { exact: true }) });
+const krokWniosku = (page, nazwa) => page.locator('.kroki').getByRole('button', { name: new RegExp(nazwa) }).click();
+
+/** Formularz wniosku: osoba podpisująca umowę. */
+async function wypelnijReprezentanta(page, email) {
+  const r = karta(page, 'Kto podpisuje umowę za spółkę');
   await ui.wpisz(r, 'Imię i nazwisko', 'Barbara Zarządna');
   await ui.wpisz(r, 'PESEL', '44051401359');
   await ui.wpisz(r, 'Adres', 'ul. Zarządowa 1, 80-001 Gdańsk');
   if (email) await ui.wpisz(r, 'E-mail', email);
-  const a = karta('Akcjonariusze');
+}
+
+/** Formularz wniosku: dwóch akcjonariuszy (pierwszy — „to ja”). */
+async function wypelnijAkcjonariuszy(page, email) {
+  const a = karta(page, 'Akcjonariusze');
   await a.getByRole('button', { name: '+ Dodaj akcjonariusza' }).click();
   await a.getByRole('button', { name: '+ Dodaj akcjonariusza' }).click();
   const pierwszy = a.locator('.element-listy').nth(0);
@@ -65,14 +71,19 @@ test('portal: zgłoszenie → dokumenty → podpisy; kancelaria: przyjęcie → 
     await page.locator('.pole-haslo input').fill('Mocne-Haslo-2026!');
     await page.getByRole('checkbox').check();
     await ui.przycisk(page, 'Zapisz');
-    await ui.gotowe(page, 'krok 1 z 2');
+    await ui.gotowe(page, 'Nowa spółka');
   });
-  await krok(page, 'Nowa spółka 1/2 — dane', async () => {
+  await krok(page, 'Nowa spółka — Spółka → Reprezentant → Akcjonariusze → Podsumowanie', async () => {
     await expect(ui.pole(page, 'Firma').locator('input')).toHaveValue(/DELTA/);
-    await wypelnijDane(page, null);
-    await page.getByText('Zapisano', { exact: true }).first().waitFor({ timeout: 10000 });
     await ui.przycisk(page, 'Dalej');
-    await ui.gotowe(page, 'krok 2 z 2');
+    await wypelnijReprezentanta(page, null);
+    await ui.przycisk(page, 'Dalej');
+    await wypelnijAkcjonariuszy(page, null);
+    await ui.przycisk(page, 'Dalej');
+    await ui.gotowe(page, 'Co dalej po złożeniu wniosku');
+    await expect(karta(page, 'Akcjonariusze (2)').getByText('Cezary Wspólnik')).toBeVisible();
+    await ui.przycisk(page, 'Złóż wniosek');
+    await ui.gotowe(page, 'dokumenty do podpisu');
   });
   await krok(page, 'Nowa spółka 2/2 — umowa spółki, podpisane dokumenty, uchwała w umowie', async () => {
     await wgraj(dokument(page, 'Umowa spółki'));
@@ -88,7 +99,14 @@ test('portal: zgłoszenie → dokumenty → podpisy; kancelaria: przyjęcie → 
     await zaloguj(page, 'notariusz@example.com', 'kancelaria');
     await page.goto('/#/');
     await page.getByRole('link', { name: /Wniosek KRS 0000990004/ }).click();
-    await ui.gotowe(page, 'Przed przyjęciem');
+    await ui.gotowe(page, 'Pobierz dokument');
+  });
+  await krok(page, 'Kroki wniosku: dane z KRS, akcjonariusze', async () => {
+    await krokWniosku(page, 'Dane spółki');
+    await ui.gotowe(page, 'Kto podpisuje umowę za spółkę');
+    await krokWniosku(page, 'Akcjonariusze');
+    await expect(karta(page, 'Akcjonariusze').locator('.element-listy')).toHaveCount(2);
+    await krokWniosku(page, 'Dokumenty');
   });
   await krok(page, 'Podpisy, podpis notariusza, checklista', async () => {
     for (const nazwa of ['Umowa o prowadzenie', 'Cezary Wspólnik']) {
@@ -97,6 +115,7 @@ test('portal: zgłoszenie → dokumenty → podpisy; kancelaria: przyjęcie → 
     }
     await dokument(page, 'Umowa o prowadzenie').locator('.podsekcja input[type="file"]').setInputFiles(PDF);
     await dokument(page, 'Umowa o prowadzenie').getByText('Umowa z podpisem notariusza').waitFor();
+    await krokWniosku(page, 'Decyzja');
     const lista = page.locator('.karta').filter({ has: page.getByText('Checklista', { exact: true }) }).locator('input[type="checkbox"]');
     for (let i = 0; i < await lista.count(); i += 1) {
       await lista.nth(i).check();
@@ -134,8 +153,8 @@ test('portal: zgłoszenie → dokumenty → podpisy; kancelaria: przyjęcie → 
     expect((await page.request.post('/api/psa/portal/login', { data: { email: 'beta.zarzad@example.com', haslo: 'Mocne-Haslo-2026!' } })).ok()).toBeTruthy();
     await page.goto('/portal.html#/');
     await ui.gotowe(page, 'KRS 0000990004');
-    await expect(page.getByText('krok 2 z 2')).toHaveCount(0);
-    await expect(page.getByRole('navigation', { name: 'Menu portalu' }).getByRole('link')).toHaveText(['Start', 'Konto']);
+    await expect(page.getByText('dokumenty do podpisu')).toHaveCount(0);
+    await expect(page.getByRole('navigation', { name: 'Menu portalu' }).getByRole('link')).toHaveText(['Start', 'Sprawy', 'Płatności', 'Informacja', 'Pomoc', 'Konto']);
   });
   await zakoncz(page);
 });
@@ -151,14 +170,16 @@ test('kancelaria: nowa spółka z przejęciem — „Otwórz rejestr” dopiero 
     await ui.przycisk(page, 'Załóż wniosek');
     await ui.gotowe(page, 'Przeniesienie rejestru od innej firmy');
   });
-  await krok(page, 'Dane wniosku i przejęcie', async () => {
-    await wypelnijDane(page, 'rep@example.com');
+  await krok(page, 'Krok „Dane spółki” (z przejęciem) → krok „Akcjonariusze”', async () => {
+    await wypelnijReprezentanta(page, 'rep@example.com');
     await ui.wpisz(page, 'Kto dotąd prowadził rejestr', 'Dom Maklerski Testowy S.A.');
     await ui.wpiszDate(page, 'Od kiedy mamy prowadzić rejestr', jutro());
+    await ui.przycisk(page, 'Dalej');
+    await wypelnijAkcjonariuszy(page, 'rep@example.com');
     await page.getByText('Zapisano', { exact: true }).first().waitFor({ timeout: 10000 });
     await expect(page.getByRole('button', { name: 'Złóż — przygotuj dokumenty' })).toBeEnabled({ timeout: 10000 });
     await ui.przycisk(page, 'Złóż — przygotuj dokumenty');
-    await ui.gotowe(page, 'Przed przyjęciem');
+    await ui.gotowe(page, 'Pobierz dokument');
   });
   await krok(page, 'Dokumenty z poczty, podpisy, notariusz, checklista', async () => {
     await wgraj(dokument(page, 'Umowa spółki'));
@@ -169,6 +190,7 @@ test('kancelaria: nowa spółka z przejęciem — „Otwórz rejestr” dopiero 
     }
     await dokument(page, 'Umowa o prowadzenie').locator('.podsekcja input[type="file"]').setInputFiles(PDF);
     await dokument(page, 'Umowa o prowadzenie').getByText('Umowa z podpisem notariusza').waitFor();
+    await krokWniosku(page, 'Decyzja');
     const lista = page.locator('.karta').filter({ has: page.getByText('Checklista', { exact: true }) }).locator('input[type="checkbox"]');
     for (let i = 0; i < await lista.count(); i += 1) {
       await lista.nth(i).check();
@@ -183,6 +205,7 @@ test('kancelaria: nowa spółka z przejęciem — „Otwórz rejestr” dopiero 
   await krok(page, 'Otwórz rejestr — dopiero od dnia przejęcia', async () => {
     await expect(page.getByRole('button', { name: 'Otwórz rejestr' })).toBeDisabled();
     await page.getByText(/Dostępne od/).first().waitFor();
+    await krokWniosku(page, 'Dane spółki');
     await ui.wpiszDate(page, 'Data przejęcia', dzis());
     await page.getByText('Zapisano', { exact: true }).first().waitFor({ timeout: 10000 });
     await expect(page.getByRole('button', { name: 'Otwórz rejestr' })).toBeEnabled({ timeout: 10000 });

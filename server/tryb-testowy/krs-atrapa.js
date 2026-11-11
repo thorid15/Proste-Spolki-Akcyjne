@@ -68,6 +68,17 @@ const ODPISY = {
     ulica: 'UL. NOWA', nrDomu: '4', kod: '80-004', miasto: 'GDYNIA', rejestracja: '10.02.2026',
     kapital: '100,00', akcje: 100, seria: 'A', zarzad: [['DELTOWSKA', 'DOROTA']],
   }),
+  // test:seed — wniosek roboczy (formularz w portalu) i wniosek z przejęciem rejestru.
+  '0000990005': odpis({
+    krs: '0000990005', nazwa: 'EPSILON FORMULARZOWA PROSTA SPÓŁKA AKCYJNA', regon: '000000004', nip: '0000000004',
+    ulica: 'UL. FORMULARZOWA', nrDomu: '5', kod: '80-005', miasto: 'GDAŃSK', rejestracja: '05.05.2026',
+    kapital: '100,00', akcje: 100, seria: 'A', zarzad: [['EPSILONOWSKA', 'EWA']],
+  }),
+  '0000990006': odpis({
+    krs: '0000990006', nazwa: 'THETA PRZEJMOWANA PROSTA SPÓŁKA AKCYJNA', regon: '000000005', nip: '0000000005',
+    ulica: 'UL. PRZEJMOWANA', nrDomu: '6', kod: '81-006', miasto: 'GDYNIA', rejestracja: '20.08.2025',
+    kapital: '1000,00', akcje: 1000, seria: 'A', zarzad: [['THETOWSKI', 'TOMASZ']],
+  }),
 };
 
 /** Odpowiedz w ksztalcie `fetch` (Response) albo `null` — numer spoza atrapy. */
