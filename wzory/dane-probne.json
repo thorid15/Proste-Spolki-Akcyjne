@@ -73,8 +73,8 @@
   "uchwala": {
     "uchwala_data": "08.11.2026",
     "akcjonariusze": [
-      { "nazwa": "Ewa Przykład", "liczba_akcji": "100" },
-      { "nazwa": "Piotr Testowy", "liczba_akcji": "100" }
+      { "nazwa": "Ewa Przykład" },
+      { "nazwa": "Piotr Testowy" }
     ]
   },
   "zgoda-email": {

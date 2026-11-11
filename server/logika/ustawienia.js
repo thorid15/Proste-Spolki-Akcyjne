@@ -45,6 +45,8 @@ const POLA_KANCELARII = [
   { klucz: 'email', etykieta: 'E-mail kancelarii', format: 'email',
     podpowiedz: 'Adres podawany w umowach i pismach.' },
   { klucz: 'www', etykieta: 'Strona kancelarii', format: 'url' },
+  { klucz: 'osoby_zawierajace_umowy', etykieta: 'Osoby zawierające umowy', wielowierszowe: true,
+    podpowiedz: 'Imię i nazwisko z funkcją, jedna osoba w wierszu — wybór przy podpisie notariusza na umowie.' },
 ];
 
 const KLUCZE_KANCELARII = new Set(POLA_KANCELARII.map((p) => p.klucz));
@@ -165,6 +167,14 @@ function zapisz(db, zmiany, autor) {
   return zmienione;
 }
 
+/** Osoby zawierające umowy o prowadzenie rejestru (art. 300(32) § 1(2) KSH) — lista z Ustawień, domyślnie notariusz. */
+function osobyZawierajaceUmowy(db) {
+  const lista = String(zBazy(db).osoby_zawierajace_umowy || '').split('\n').map((x) => x.trim()).filter(Boolean);
+  if (lista.length) return lista;
+  const k = kancelaria(db);
+  return k.notariusz_mianownik ? [`${k.notariusz_mianownik} — notariusz`] : [];
+}
+
 module.exports = {
-  POLA_KANCELARII, kancelaria, doEkranu, bledy, zapisz, nipPoprawny,
+  POLA_KANCELARII, kancelaria, doEkranu, bledy, zapisz, nipPoprawny, osobyZawierajaceUmowy,
 };

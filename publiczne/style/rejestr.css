@@ -2664,3 +2664,17 @@ h1.topbar-tytul, h1.brama-tytul { margin: 0; font-weight: inherit; }
   .przycisk-glowny-powod { text-align: left; }
   .wiecej-menu { left: 0; right: auto; }
 }
+
+/* ── Faza 4: wniosek i portal ── */
+.powloka-portal .marka-pasek { display: flex; justify-content: space-between; align-items: center; gap: var(--od-8); flex-wrap: wrap; }
+.powloka-portal .marka-pasek .btn { color: #fff; border-color: rgba(255, 255, 255, 0.5); }
+.konta-testowe .btn { white-space: normal; overflow-wrap: anywhere; }
+.dokumenty-wniosku { list-style: none; margin: 0; padding: 0; }
+.dokument-wniosku { padding: var(--od-12) 0; border-bottom: 1px solid var(--linia); display: flex; flex-direction: column; gap: var(--od-8); }
+.dokument-wniosku .rzad { flex-wrap: wrap; }
+.instrukcja-podpisu { background: var(--karta); border: 1px solid var(--linia); border-radius: var(--r); padding: var(--od-12); margin-bottom: var(--od-16); }
+.instrukcja-podpisu summary { cursor: pointer; font-weight: 600; }
+input.rozni-sie { border-color: var(--mosiadz, #8A6531); background: #fbf6ee; }
+.ekran-wniosku > .karta, .formularz-wniosku > .karta { margin-bottom: var(--od-16); }
+/* Formularz tylko do odczytu (fieldset disabled): bez przycisków edycji i kalendarza; zostaje wybrana opcja. */
+fieldset:disabled .btn:not([aria-pressed="true"]), fieldset:disabled .pole-daty-ikona { display: none; }

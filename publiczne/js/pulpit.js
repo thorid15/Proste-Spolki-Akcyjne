@@ -1,7 +1,7 @@
 /* pulpit.js — Pulpit (§ 5): jedna lista „Do zrobienia” według pilności; wiersz otwiera ekran,
    który go załatwia. */
 
-const IKONY_POZYCJI = { sprawa: 'zegar', plik: 'dokument', pismo: 'koperta' };
+const IKONY_POZYCJI = { sprawa: 'zegar', plik: 'dokument', pismo: 'koperta', wniosek: 'dokument' };
 
 function EkranPulpitu() {
   const { dane, blad } = useDane('/api/psa/pulpit');

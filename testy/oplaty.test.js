@@ -15,6 +15,7 @@ function zOplatami() {
   const a = dodajOsobe(db, { nazwa: 'Anna A' });
   const b = dodajOsobe(db, { nazwa: 'Bartosz B' });
   otworz(db, s, { serie: [{ seria: 'A', numery: '1-10', liczba: 10, data_wpisu_krs: '2026-01-10' }], akcjonariusze: [{ osoba_id: a, akcje: [{ seria: 'A', numery: '1-10', liczba: 10 }] }] });
+  db.prepare("DELETE FROM psa_oplaty WHERE typ = 'prowadzenie'").run(); // opłata z otwarcia — test prowadzenia niżej
   wpisz(db, s, [{ typ: 'przeniesienie', zbywca_osoba_id: a, nabywcy: [{ osoba_id: b, akcje: [{ seria: 'A', numery: '1', liczba: 1 }] }] }], { zadajacy: 'osoba', zadajacy_osoba_id: b, oplata: 'tak' });
   wpisz(db, s, [{ typ: 'przeniesienie', zbywca_osoba_id: a, nabywcy: [{ osoba_id: b, akcje: [{ seria: 'A', numery: '2', liczba: 1 }] }] }], { oplata: 'tak' });
   const [wpisOsoby, wpisSpolki] = oplaty.lista(db, { filtr: 'wszystkie' }).sort((x, y) => x.id - y.id);

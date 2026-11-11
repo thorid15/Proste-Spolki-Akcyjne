@@ -566,7 +566,7 @@ test('U-02: odpłatna sprawa wymaga wyboru; „tak” — jedna opłata 100 zł 
   );
   wpisz(db, s, [{ ...op[0], nabywcy: [{ osoba_id: c, akcje: [akcje('2', 1)] }] }], { oplata: 'nie' });
   odrzucone(() => wpisz(db, s, [{ typ: 'adnotacja', operacja: 'dodanie', rodzaj: 'inna', tresc: 'x', akcje: [akcje('3', 1)] }], { oplata: 'tak' }), 'nie podlega opłacie');
-  assert.equal(db.prepare('SELECT COUNT(*) AS ile FROM psa_oplaty').get().ile, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS ile FROM psa_oplaty WHERE typ = 'wpis'").get().ile, 1);
 });
 
 test('R3: zajęcie z urzędu — żądający organ, bez opłaty i bez powiadomień; nie łączy się z innymi zmianami', () => {

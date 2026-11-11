@@ -21,7 +21,7 @@ Niżej podpisani akcjonariusze wyrażają zgodę na podjęcie niniejszej uchwał
 Akcjonariusze:
 {{#lista akcjonariusze}}
 
-[podpis: {{nazwa}} – {{liczba_akcji}} akcji]
+[podpis: {{nazwa}}]
 {{/lista}}
 
 Uchwałę wpisuje się do księgi protokołów spółki.

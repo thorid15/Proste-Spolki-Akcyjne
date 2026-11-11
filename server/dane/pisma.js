@@ -105,4 +105,22 @@ function korespondencja(db, filtr) {
     .map(zWiersza);
 }
 
-module.exports = { wczytaj, lista, dodaj, ustawStan, nastepnyNumer, zapiszPlik, korespondencja, usunNiewyslane, uniewaznijWyslane };
+/** Pisma wniosku (dokumenty do podpisu i powiadomienie o odmowie). */
+function wniosku(db, wniosekId) {
+  return db.prepare('SELECT * FROM psa_pisma WHERE wniosek_id = ? ORDER BY id').all(Number(wniosekId)).map(zWiersza);
+}
+
+/** Dokumenty do podpisu wniosku powstają od nowa przy ponownym złożeniu — stare znikają. */
+function usunDokumentyWniosku(db, wniosekId) {
+  const warunek = "wniosek_id = ? AND typ IN ('umowa','uchwala','zgoda_email')";
+  const pliki = db.prepare(`SELECT plik FROM psa_pisma WHERE ${warunek} AND plik IS NOT NULL`).all(Number(wniosekId)).map((w) => w.plik);
+  db.prepare(`DELETE FROM psa_pisma WHERE ${warunek}`).run(Number(wniosekId));
+  return pliki;
+}
+
+/** Przyjęcie wniosku: pisma wniosku trafiają do akt spółki. */
+function doSpolki(db, wniosekId, spolkaId) {
+  db.prepare('UPDATE psa_pisma SET spolka_id = ? WHERE wniosek_id = ?').run(spolkaId, Number(wniosekId));
+}
+
+module.exports = { wczytaj, lista, dodaj, ustawStan, nastepnyNumer, zapiszPlik, korespondencja, usunNiewyslane, uniewaznijWyslane, wniosku, usunDokumentyWniosku, doSpolki };

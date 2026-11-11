@@ -2,8 +2,9 @@
 
 /**
  * Pulpit (§ 5): jedna lista „Do zrobienia” według pilności — sprawy po terminie albo z terminem
- * do 2 dni, nowe pliki w sprawach wstrzymanych, pisma do wysłania i błędy wysyłki. Wiersz wskazuje
- * ekran, który go załatwia. Wnioski, podpisy i przejęcia dochodzą w Fazie 4.
+ * do 2 dni, nowe pliki w sprawach wstrzymanych, pisma do wysłania i błędy wysyłki, wnioski złożone
+ * i podpisy do sprawdzenia, przejęcia, w których nadszedł dzień przejęcia. Wiersz wskazuje ekran,
+ * który go załatwia.
  */
 
 const czas = require('./pomocnicze/czas');
@@ -44,6 +45,20 @@ function doZrobienia(db) {
         sciezka: `/korespondencja?pismo=${p.id}`,
       });
     }
+  }
+  const wnioski = db
+    .prepare(
+      `SELECT w.id, w.krs, w.stan, w.przejecie, w.data_przejecia, s.data_otwarcia,
+              (SELECT COUNT(*) FROM psa_pliki p WHERE p.wniosek_id = w.id AND p.stan_podpisu = 'do_sprawdzenia') AS podpisy
+         FROM psa_wnioski w LEFT JOIN psa_spolki s ON s.id = w.spolka_id
+        WHERE w.stan = 'zlozony' OR (w.stan = 'przyjety' AND s.data_otwarcia IS NULL)`
+    )
+    .all();
+  for (const w of wnioski) {
+    const opis = w.stan === 'zlozony'
+      ? `złożony${w.podpisy ? ` — podpisy do sprawdzenia: ${w.podpisy}` : ''}`
+      : w.przejecie && w.data_przejecia && w.data_przejecia > dzis ? null : w.przejecie ? 'dzień przejęcia — otwórz rejestr' : 'przyjęty — otwórz rejestr';
+    if (opis) pozycje.push({ rodzaj: 'wniosek', pilnosc: 1, tytul: `Wniosek KRS ${w.krs}`, opis, sciezka: `/wnioski/${w.id}` });
   }
   return pozycje.sort((a, b) => a.pilnosc - b.pilnosc);
 }

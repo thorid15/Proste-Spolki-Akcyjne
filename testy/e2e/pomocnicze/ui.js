@@ -7,8 +7,9 @@
  * bezpośrednim dzieckiem pola — inaczej pole zewnętrzne (np. „Żądający wpisu” z formularzem nowej osoby w środku)
  * pasowałoby do etykiet pól zagnieżdżonych.
  */
-function pole(page, etykieta) {
-  return page.locator('.pole').filter({ has: page.locator(':scope > .pole-etykieta', { hasText: etykieta }) }).first();
+function pole(kontekst, etykieta) {
+  const strona = typeof kontekst.page === 'function' ? kontekst.page() : kontekst;
+  return kontekst.locator('.pole').filter({ has: strona.locator(':scope > .pole-etykieta', { hasText: etykieta }) }).first();
 }
 
 /** Data w `PoleDaty` (jedno pole DD.MM.RRRR). `data` — 'RRRR-MM-DD'. */

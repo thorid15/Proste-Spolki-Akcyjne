@@ -2,7 +2,7 @@
 
 /**
  * Atrapa Otwartego API KRS (T3) — wylacznie dla numerow z danych testowych.
- * Kazdy inny numer idzie do prawdziwego API (`server/trasy/krs.js`).
+ * Kazdy inny numer idzie do prawdziwego API (`server/krs.js`).
  *
  * Odpowiedz ma ksztalt surowego odpisu (`OdpisAktualny`), wiec przechodzi
  * przez ten sam mapper (`zmapuj`) co odpowiedz prawdziwa. Dane fikcyjne.
@@ -61,6 +61,12 @@ const ODPISY = {
     krs: '0000990003', nazwa: 'GAMMA ZGŁOSZENIOWA PROSTA SPÓŁKA AKCYJNA', regon: '000000002', nip: '0000000002',
     ulica: 'UL. TESTOWA', nrDomu: '3', kod: '80-003', miasto: 'SOPOT', rejestracja: '01.06.2026',
     kapital: '100,00', akcje: 100, seria: 'A', zarzad: [['GAMMOWSKI', 'GRZEGORZ']],
+  }),
+  // Spółka spoza rejestru i bez wniosku — do scenariuszy zgłoszenia od zera.
+  '0000990004': odpis({
+    krs: '0000990004', nazwa: 'DELTA NOWA PROSTA SPÓŁKA AKCYJNA', regon: '000000003', nip: '0000000003',
+    ulica: 'UL. NOWA', nrDomu: '4', kod: '80-004', miasto: 'GDYNIA', rejestracja: '10.02.2026',
+    kapital: '100,00', akcje: 100, seria: 'A', zarzad: [['DELTOWSKA', 'DOROTA']],
   }),
 };
 

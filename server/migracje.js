@@ -69,6 +69,8 @@ const SQL_SCHEMAT = `
     dotychczasowy_podmiot  TEXT,
     data_przejecia         TEXT,
     dane_json              TEXT NOT NULL DEFAULT '{}',   -- dane klienta przed weryfikacją (U-19)
+    krs_json               TEXT NOT NULL DEFAULT '{}',   -- odpis z KRS przy założeniu (różnice wobec danych klienta)
+    umowe_zawarl           TEXT,                         -- osoba zawierająca umowę za kancelarię (art. 300(32) § 1(2))
     checklista_json        TEXT NOT NULL DEFAULT '{}',
     notatka                TEXT,
     spolka_id              INTEGER REFERENCES psa_spolki(id),

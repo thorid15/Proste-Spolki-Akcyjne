@@ -18,7 +18,7 @@ const { CZESCI } = require('./pomocnicze/krok');
 const ui = require('./pomocnicze/ui');
 
 const K = 'notariusz@example.com';
-// Ekrany kancelarii (§ 5). Portal — Faza 5 (trasy portalu nie są jeszcze zamontowane).
+// Ekrany kancelarii (§ 5) i portalu z Fazy 4 (zgłoszenie, logowanie, wniosek). Reszta portalu — Faza 5.
 const EKRANY = [
   { nazwa: 'k-pulpit', konto: K, app: 'kancelaria', adres: '/#/', nawigacja: true },
   { nazwa: 'k-sprawy', konto: K, app: 'kancelaria', adres: '/#/sprawy' },
@@ -31,13 +31,18 @@ const EKRANY = [
   { nazwa: 'k-korespondencja', konto: K, app: 'kancelaria', adres: '/#/korespondencja' },
   { nazwa: 'k-oplaty', konto: K, app: 'kancelaria', adres: '/#/oplaty' },
   { nazwa: 'k-ustawienia', konto: K, app: 'kancelaria', adres: '/#/ustawienia' },
+  { nazwa: 'k-wnioski', konto: K, app: 'kancelaria', adres: '/#/wnioski' },
+  { nazwa: 'k-wniosek', konto: K, app: 'kancelaria', adres: '/#/wnioski/1' },
+  { nazwa: 'p-logowanie', konto: null, app: 'portal', adres: '/portal.html#/' },
+  { nazwa: 'p-zglos', konto: null, app: 'portal', adres: '/portal.html#/zglos' },
+  { nazwa: 'p-wniosek-dokumenty', konto: 'gamma.zarzad@example.com', app: 'portal', adres: '/portal.html#/', nawigacja: true },
 ];
 
 /** Kandydaci do kliknięcia — widoczne, aktywne; poza ekranem startowym tylko z obszaru treści (`#tresc`). */
 const WYBIERZ = (zNawigacja) => {
   const widoczny = (el) => { const s = getComputedStyle(el); const r = el.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 1 && r.height > 1; };
   return [...document.querySelectorAll('button, a[href], [role="button"], [role="tab"]')]
-    .filter((e) => widoczny(e) && !e.disabled && !e.closest('#psa-pasek-testowy'))
+    .filter((e) => widoczny(e) && !e.disabled && !e.matches(':disabled') && !e.closest('#psa-pasek-testowy'))
     .filter((e) => !/wyloguj/i.test(e.textContent) && !e.classList.contains('przeskocz-do-tresci') && e.getAttribute('aria-current') !== 'page')
     .filter((e) => zNawigacja || e.closest('#tresc, main') || !document.querySelector('#tresc, main'));
 };

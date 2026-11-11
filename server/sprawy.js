@@ -213,6 +213,8 @@ function zmienStan(db, id, na, we = {}, kto) {
     } else if (na === 'wpisana') {
       if (!sprawa.tresc_zatwierdzona) throw new BladWalidacji(['Najpierw zatwierdź treść sprawy („Dalej”).']);
       rejestr.wpisz(db, sprawa, kto);
+      // Otwarcie rejestru — pierwsza opłata za prowadzenie od razu (nie czeka na proces dzienny).
+      if ((sprawa.operacje || []).some((op) => op.typ === 'otwarcie')) require('./oplaty').naliczProwadzenie(db, { autor: kto });
     }
     daneSprawy.ustawStan(db, id, na, pola);
     return daneSprawy.wczytaj(db, id);

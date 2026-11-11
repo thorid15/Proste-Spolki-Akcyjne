@@ -4,9 +4,12 @@
 
 function EkranSpolek() {
   const [q, ustawQ] = useParametrAdresu('q', '');
+  const [nowa, ustawNowa] = useState(false);
   const { dane, blad } = useDane(`/api/psa/spolki?q=${encodeURIComponent(q)}`);
   return (
-    <Karta>
+    <>
+    {nowa && <NowaSpolka przyAnulowaniu={() => ustawNowa(false)} />}
+    <Karta akcje={!nowa && <button type="button" className="btn btn-glowny" onClick={() => ustawNowa(true)}>Nowa spółka</button>}>
       <Szukajka wartosc={q} przyZmianie={ustawQ} placeholder="Firma albo KRS…" />
       {blad && <Bledy blad={blad} />}
       {!dane && !blad && <Spinner />}
@@ -27,6 +30,7 @@ function EkranSpolek() {
         </table>
       )}
     </Karta>
+    </>
   );
 }
 

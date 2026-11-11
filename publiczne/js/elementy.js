@@ -113,8 +113,9 @@ function PrzyciskGlowny({ etykieta, przyKlik, powod, trwa }) {
 
 /* ── Pliki ─────────────────────────────────────────── */
 
-async function wgrajPlik(adres, plik) {
+async function wgrajPlik(adres, plik, pola = {}) {
   const dane = new FormData();
+  for (const [k, v] of Object.entries(pola)) dane.append(k, v);
   dane.append('plik', plik);
   const odp = await fetch(adres, { method: 'POST', body: dane });
   let wynik = null;
@@ -124,13 +125,13 @@ async function wgrajPlik(adres, plik) {
 }
 
 /** Jedno pole „Dodaj plik” (także przeciągnięciem), bez wyboru rodzaju (§ 5). */
-function DodajPlik({ adres, przyDodaniu, etykieta = 'Dodaj plik' }) {
+function DodajPlik({ adres, przyDodaniu, etykieta = 'Dodaj plik', pola = {} }) {
   const ref = useRef(null);
   const [nad, ustawNad] = useState(false);
   const c = useCzynnosc();
   const wyslij = (pliki) => c.wykonaj(async () => {
     for (const p of pliki) {
-      const w = await wgrajPlik(adres, p);
+      const w = await wgrajPlik(adres, p, pola);
       if (przyDodaniu) przyDodaniu(w);
     }
   });

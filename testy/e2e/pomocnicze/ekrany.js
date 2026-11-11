@@ -10,7 +10,7 @@ async function zaloguj(page, email, aplikacja) {
   if (!odp.ok()) throw new Error(`logowanie ${email}: ${odp.status()} ${await odp.text()}`);
 }
 
-/** Ekrany kancelarii (§ 5); portal — Faza 5. `czekaj` — selektor, po którym ekran jest gotowy. */
+/** Ekrany kancelarii (§ 5) i wniosek w portalu (Faza 4). `czekaj` — selektor, po którym ekran jest gotowy. */
 const K = 'notariusz@example.com';
 const EKRANY = [
   { nazwa: 'kancelaria-pulpit', konto: K, aplikacja: 'kancelaria', adres: '/#/', czekaj: 'text=Do zrobienia' },
@@ -19,6 +19,8 @@ const EKRANY = [
   { nazwa: 'kancelaria-osoba', konto: K, aplikacja: 'kancelaria', adres: '/#/osoby/2', czekaj: '.karta' },
   { nazwa: 'kancelaria-korespondencja', konto: K, aplikacja: 'kancelaria', adres: '/#/korespondencja', czekaj: '.karta' },
   { nazwa: 'kancelaria-oplaty', konto: K, aplikacja: 'kancelaria', adres: '/#/oplaty', czekaj: '.karta' },
+  { nazwa: 'kancelaria-wniosek', konto: K, aplikacja: 'kancelaria', adres: '/#/wnioski/1', czekaj: 'text=Dokumenty' },
+  { nazwa: 'portal-wniosek', konto: 'gamma.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/', czekaj: 'text=krok 2 z 2' },
 ];
 
 module.exports = { zaloguj, EKRANY, HASLO };

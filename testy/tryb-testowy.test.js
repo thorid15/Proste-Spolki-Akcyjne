@@ -159,28 +159,29 @@ test('T2: logowanie z listy kont używa zwykłego endpointu i tokenu sesji; wpis
   assert.throws(() => db().prepare('DELETE FROM psa_dziennik').run(), /append-only/);
 });
 
-test('T2: „Zaloguj (tryb testowy)” po zgłoszeniu to ten sam link i token, który poszedł e-mailem', { skip: 'Faza 4 — formularz publiczny (zgłoszenie = wniosek) przebudowywany' }, async () => {
-  const odp = await fetch(`${ADRES}/api/psa/portal/zgloszenia`, {
+test('T2: zgłoszenie w trybie testowym — e-mail z linkiem w skrzynce testowej; token z e-maila aktywuje konto', async () => {
+  const odp = await fetch(`${ADRES}/api/psa/portal/zgloszenie`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Origin: ADRES },
     body: JSON.stringify({ email: 'nowy.klient@example.com', krs: '0000990003' }),
   });
-  assert.equal(odp.status, 201);
-  const dane = await odp.json();
-  assert.equal(dane.zaproszenie_wyslane, true);
-  assert.ok(dane.link_testowy, 'link w odpowiedzi trybu testowego');
-  const token = dane.link_testowy.split('#/aktywuj/')[1];
-  const konto = db().prepare('SELECT * FROM psa_konta WHERE email = ?').get('nowy.klient@example.com');
-  assert.equal(konto.token_aktywacji, token, 'ten sam token co w bazie');
+  assert.equal(odp.status, 202);
+  assert.ok(!JSON.stringify(await odp.json()).includes('token'), 'odpowiedź nie ujawnia linku (D-079)');
   const mail = skrzynka.lista().find((w) => w.do === 'nowy.klient@example.com');
-  assert.ok(skrzynka.wiadomosc(mail.id).html.includes(token), 'ten sam token co w e-mailu');
-  // Zwykły endpoint aktywacji przyjmuje token — wygasanie i reguły haseł bez zmian.
-  const akt = await fetch(`${ADRES}/api/psa/portal/aktywacja/${token}`);
+  const token = skrzynka.wiadomosc(mail.id).tekst.match(/token=([0-9a-f]+)/)[1];
+  const konto = db().prepare('SELECT * FROM psa_konta WHERE email = ?').get('nowy.klient@example.com');
+  assert.notEqual(konto.token_aktywacji, token, 'w bazie tylko skrót tokenu');
+  const akt = await fetch(`${ADRES}/api/psa/portal/aktywacja`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: ADRES },
+    body: JSON.stringify({ token, haslo: 'Mocne-Haslo-2026!', regulamin: true }),
+  });
   assert.equal(akt.status, 200);
+  assert.equal(db().prepare('SELECT aktywne FROM psa_konta WHERE id = ?').get(konto.id).aktywne, 1);
 });
 
 test('T3: atrapa KRS odpowiada dla numerów testowych w kształcie API', async () => {
-  const { pobierzZKrs } = require('../server/trasy/krs');
+  const { pobierzZKrs } = require('../server/krs');
   const wynik = await pobierzZKrs('0000990001');
   assert.equal(wynik.znaleziono, true);
   assert.equal(wynik.dane.forma_prawna, 'PROSTA SPÓŁKA AKCYJNA');

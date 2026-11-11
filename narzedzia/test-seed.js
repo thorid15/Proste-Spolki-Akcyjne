@@ -181,6 +181,25 @@ async function main() {
   const doSpolki = (await zapytaj('GET', '/api/psa/korespondencja?filtr=do_wyslania')).find((p) => p.spolka_id === alfa && p.typ === 'powiadomienie_wpis');
   await zapytaj('POST', `/api/psa/korespondencja/${doSpolki.id}/wyslij`);
 
+  // Faza 4: wniosek Gammy złożony w portalu — dokumenty do podpisu, konto wnioskodawcy aktywne.
+  const wnioski = require('../server/wnioski');
+  const gamma = await wnioski.zglos(db(), { krs: '0000990003', email: 'gamma.zarzad@example.com' });
+  db().prepare('UPDATE psa_konta SET hash_hasla = ?, aktywne = 1, token_aktywacji = NULL, token_wygasa = NULL, regulamin_zaakceptowano = ? WHERE wniosek_id = ?')
+    .run(hash, teraz, gamma);
+  const wg = wnioski.wczytaj(db(), gamma);
+  wnioski.zmien(db(), gamma, {
+    dane: {
+      ...wg.dane,
+      spolka: { ...wg.dane.spolka, sad_rejestrowy: wg.dane.spolka.sad_rejestrowy || 'Sąd Rejonowy Gdańsk-Północ w Gdańsku, VII Wydział Gospodarczy KRS', data_rejestracji: wg.dane.spolka.data_rejestracji || '2025-06-02' },
+      reprezentant: { nazwa: 'Grażyna Zarządna', pesel: pesel('750101', '2345'), adres: 'ul. Zgłoszeniowa 3, 80-005 Gdańsk', email: 'gamma.zarzad@example.com', funkcja: 'członek zarządu', pep: false },
+      akcjonariusze: [
+        { klucz: 'g1', typ: 'fizyczna', nazwa: 'Grażyna Zarządna', pesel: pesel('750101', '2345'), adres: 'ul. Zgłoszeniowa 3, 80-005 Gdańsk', email: 'gamma.zarzad@example.com', to_ja: true, zgoda_email: true },
+        { klucz: 'g2', typ: 'fizyczna', nazwa: 'Henryk Wspólnik', data_urodzenia: '1970-05-05', adres: 'ul. Wspólna 4, 80-006 Gdańsk', email: 'henryk@example.com' },
+      ],
+    },
+  });
+  wnioski.zloz(db(), gamma, 'test:seed');
+
   serwer.close();
   console.log(`\n[test:seed] Gotowe: ${PLIK}`);
   console.log(`[test:seed] Konta kancelarii (hasło ${trybTestowy.HASLO_TESTOWE}): notariusz@example.com, pracownik@example.com`);

@@ -12,25 +12,10 @@
    FORMATOWANIE UZUPEŁNIAJĄCE
    ═════════════════════════════════════════════════════ */
 
-const MIESIACE_DOPELNIACZ = [
-  'stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca',
-  'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia',
-];
 const MIESIACE_MIANOWNIK = [
   'styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec',
   'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień',
 ];
-
-/** „2026-03-12" → „12 marca 2026". Potwierdzenie, że system zrozumiał wpis. */
-function dataSlownie(iso) {
-  if (!iso || String(iso).length < 10) return '';
-  const [r, m, d] = String(iso).slice(0, 10).split('-');
-  const nrMiesiaca = Number(m) - 1;
-  if (nrMiesiaca < 0 || nrMiesiaca > 11) return '';
-  return `${Number(d)} ${MIESIACE_DOPELNIACZ[nrMiesiaca]} ${r}`;
-}
-
-window.fmt.dataSlownie = dataSlownie;
 
 /* ═════════════════════════════════════════════════════
    IKONY
@@ -138,19 +123,6 @@ function ListaDanych({ pary }) {
   );
 }
 
-/**
- * Kwota opłaty: netto mniejsze, brutto wytłuszczone (R4 drobne poprawki) — jeden wzór
- * w kancelarii i w portalu. Bez netto (np. stara odpowiedź API) — samo brutto.
- */
-function KwotaNettoBrutto({ netto, brutto }) {
-  return (
-    <span className="kwota-nb">
-      {netto != null && <span className="kwota-nb-netto">{fmt.zlote(netto)} netto</span>}
-      <strong className="kwota-nb-brutto">{fmt.zlote(brutto)} brutto</strong>
-    </span>
-  );
-}
-
 function Karta({ tytul, akcje, scisla, tight, dzieci, children }) {
   const tresc = children ?? dzieci;
   if (scisla || tight) {
@@ -218,22 +190,6 @@ function Komunikat({ odmiana = 'info', tytul, tresc, lista }) {
         <ul>{lista.map((p, i) => <li key={i}>{p}</li>)}</ul>
       )}
     </div>
-  );
-}
-
-/** Pusty stan (2.7): zdanie mówiące CO ZROBIĆ plus przycisk. Nigdy „Brak danych". */
-/**
- * Licznik przy pozycji nawigacji (FAZA 1 pkt 9): liczba spraw WYMAGAJĄCYCH
- * DZIAŁANIA tej strony — kancelarii albo klienta. Zero nie rysuje nic. Opis
- * trafia do czytnika ekranu, bo sama liczba przy „Wnioski" nic nie mówi.
- */
-function Licznik({ wartosc, opis }) {
-  if (!wartosc) return null;
-  return (
-    <span className="licznik" title={opis ? `${wartosc} ${opis}` : undefined}>
-      <span aria-hidden="true">{wartosc}</span>
-      <span className="sr-only">{opis ? `${wartosc} ${opis}` : `${wartosc} do zrobienia`}</span>
-    </span>
   );
 }
 
@@ -410,42 +366,6 @@ function NaglowekStrony({ tytul, kontekst, akcje }) {
    KOMPONENTY UKŁADU
    ═════════════════════════════════════════════════════ */
 
-/**
- * Pasek metryki: pary etykieta/wartość w pionie. Wspólny dla kokpitu spółki
- * (kancelaria), profilu osoby (K4) i ekranów „Konto"/„Pomoc" w portalu
- * (Faza 4) — przeniesiony tutaj z `kokpit.js`, bo `kokpit.js` nie wchodzi
- * do paczki portalu (`narzedzia/buduj-front.js`).
- */
-function MetrykaPoz({ etykieta, wartosc, dane, podpowiedz }) {
-  return (
-    <div className="metryka-pion-poz">
-      <div className="metryka-pion-etykieta">{etykieta}</div>
-      <div className={`metryka-pion-wartosc ${dane ? 'dane' : ''}`}>{wartosc || '—'}</div>
-      {podpowiedz && <div className="podstawa-prawna">{podpowiedz}</div>}
-    </div>
-  );
-}
-
-/** Zakładki wewnątrz ekranu szczegółu. */
-function Zakladki({ zakladki, biezaca, przyZmianie }) {
-  return (
-    <div className="zakladki" role="tablist">
-      {zakladki.map((z) => (
-        <button
-          key={z.kod}
-          role="tab"
-          aria-selected={z.kod === biezaca}
-          className={`zakladka ${z.kod === biezaca ? 'aktywna' : ''}`}
-          onClick={() => przyZmianie(z.kod)}
-        >
-          {z.nazwa}
-          {z.licznik !== undefined && z.licznik !== null && <Pigulka>{z.licznik}</Pigulka>}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /** Pole szukania z ikoną w środku — używane w paskach narzędzi list. */
 function Szukajka({ wartosc, przyZmianie, placeholder = 'Szukaj…' }) {
   return (
@@ -519,48 +439,6 @@ function Pole({ etykieta, podpowiedz, blad, ostrzezenie, echo, opcjonalne, id: i
   );
 }
 
-/**
- * Podsumowanie błędów u góry formularza (wzorzec GOV.UK): pojawia się przy
- * próbie przejścia dalej albo zapisu, dostaje fokus, a każdy błąd jest
- * odnośnikiem, który przewija do pola i ustawia w nim kursor.
- *
- * `bledy`: [{ pole: 'id-pola', tresc: 'Wpisz nazwisko' }]
- */
-function PodsumowanieBledow({ bledy, tytul = 'Popraw, zanim przejdziesz dalej' }) {
-  const ref = useRef(null);
-  const sygnatura = (bledy || []).map((b) => b.tresc).join('|');
-  useEffect(() => {
-    if (sygnatura && ref.current) {
-      ref.current.focus({ preventScroll: true });
-      ref.current.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    }
-  }, [sygnatura]);
-  if (!bledy || bledy.length === 0) return null;
-
-  function przejdz(z, idPola) {
-    z.preventDefault();
-    const el = document.getElementById(idPola);
-    if (!el) return;
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    el.focus({ preventScroll: true });
-  }
-
-  return (
-    <div className="podsumowanie-bledow" role="alert" tabIndex={-1} ref={ref}>
-      <h2 className="podsumowanie-bledow-tytul">{tytul}</h2>
-      <ul>
-        {bledy.map((b) => (
-          <li key={`${b.pole}-${b.tresc}`}>
-            {b.pole ? <a href={`#${b.pole}`} onClick={(z) => przejdz(z, b.pole)}>{b.tresc}</a> : b.tresc}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/* ── Kalendarz (popover) ────────────────────────────────
-   Pisany ręcznie — żadnych bibliotek kalendarza (sekcja 4). */
 function Kalendarz({ wartosc, przyWyborze, min, max, przyZamknieciu }) {
   const bazowa = wartosc && wartosc.length === 10 ? wartosc : fmt.dzisIso();
   const [rok, ustawRok] = useState(Number(bazowa.slice(0, 4)));
@@ -696,112 +574,6 @@ function PoleDaty({ wartosc, przyZmianie, min, max, blad, autoFocus, wylaczone =
 PoleDaty.przyjmujeId = true;
 
 /**
- * Pole liczbowe (2.6): do prawej, w monie, separator tysięcy na bieżąco,
- * jednostka jako sufiks WEWNĄTRZ pola.
- *
- * `wartosc`/`przyZmianie` operują na liczbie (albo `null`), nie na tekście
- * z separatorami — separator jest wyłącznie sposobem wyświetlania.
- */
-function PoleLiczbowe({ wartosc, przyZmianie, sufiks, blad, min, max, autoFocus, placeholder, id, 'aria-describedby': opis, 'aria-invalid': niepoprawne }) {
-  const [tekst, ustawTekst] = useState('');
-
-  useEffect(() => {
-    if (wartosc === null || wartosc === undefined || wartosc === '') ustawTekst('');
-    else ustawTekst(Number(wartosc).toLocaleString('pl-PL'));
-  }, [wartosc]);
-
-  function zmien(surowa) {
-    const cyfry = surowa.replace(/\D/g, '');
-    if (cyfry === '') { ustawTekst(''); przyZmianie(null); return; }
-    let n = Number(cyfry);
-    if (min !== undefined && n < min) n = min;
-    if (max !== undefined && n > max) n = max;
-    ustawTekst(n.toLocaleString('pl-PL'));
-    przyZmianie(n);
-  }
-
-  return (
-    <div className={`pole-liczbowe ${blad || niepoprawne ? 'bledne' : ''}`}>
-      <input
-        type="text" inputMode="numeric" value={tekst} autoFocus={autoFocus} placeholder={placeholder}
-        id={id} aria-describedby={opis} aria-invalid={niepoprawne}
-        onChange={(z) => zmien(z.target.value)}
-      />
-      {sufiks && <span className="pole-liczbowe-sufiks" aria-hidden="true">{sufiks}</span>}
-    </div>
-  );
-}
-PoleLiczbowe.przyjmujeId = true;
-
-/**
- * Kwota w złotych; na zewnątrz GROSZE jako liczba całkowita (reguła domenowa
- * nr 5). Wpisuje się normalnie — „10", „10,5", „1 000,00", przecinek albo
- * kropka — bez dopisywania zer w trakcie pisania (to nie kasa fiskalna).
- * Po opuszczeniu pola: „10,00" z sufiksem „zł".
- *
- * Więcej niż 2 cyfry po przecinku NIE są zaokrąglane (D-045, Q6): pole
- * pokazuje komunikat pod sobą, a na zewnątrz zgłasza `null` — błędna
- * wartość nie ma jak trafić do zapisu.
- */
-function PoleKwoty({ grosze, przyZmianie, blad, id, autoFocus, 'aria-describedby': opis, 'aria-invalid': niepoprawne }) {
-  const [tekst, ustawTekst] = useState(() => formatujKwote(grosze, { waluta: false }));
-  const [bladWlasny, ustawBladWlasny] = useState(null);
-  const idWlasne = useId();
-  const idBledu = `${id || idWlasne}-blad-kwoty`;
-  // Wartość, którą pole samo zgłosiło — jej powrót z rodzica nie może
-  // przeformatować tekstu w trakcie pisania.
-  const zgloszone = useRef(grosze);
-
-  useEffect(() => {
-    if (grosze === zgloszone.current) return;
-    zgloszone.current = grosze;
-    ustawTekst(formatujKwote(grosze, { waluta: false }));
-    ustawBladWlasny(null);
-  }, [grosze]);
-
-  function zglos(wartosc) {
-    zgloszone.current = wartosc;
-    przyZmianie(wartosc);
-  }
-
-  function zmien(t) {
-    ustawTekst(t);
-    const wynik = parsujKwote(t);
-    if (wynik.blad) return; // komunikat dopiero po opuszczeniu pola
-    ustawBladWlasny(null);
-    zglos(wynik.grosze);
-  }
-
-  function domknij() {
-    const wynik = parsujKwote(tekst);
-    if (wynik.blad) {
-      ustawBladWlasny(wynik.blad);
-      zglos(null);
-      return;
-    }
-    ustawBladWlasny(null);
-    ustawTekst(formatujKwote(wynik.grosze, { waluta: false }));
-  }
-
-  const pokazBlad = bladWlasny && !blad;
-  return (
-    <>
-      <div className={`pole-liczbowe ${blad || niepoprawne || bladWlasny ? 'bledne' : ''}`}>
-        <input
-          type="text" inputMode="decimal" value={tekst} id={id} autoFocus={autoFocus}
-          aria-describedby={[opis, pokazBlad && idBledu].filter(Boolean).join(' ') || undefined}
-          aria-invalid={niepoprawne || Boolean(bladWlasny) || undefined}
-          onChange={(z) => zmien(z.target.value)} onBlur={domknij}
-        />
-        <span className="pole-liczbowe-sufiks" aria-hidden="true">zł</span>
-      </div>
-      {pokazBlad && <p className="pole-blad" id={idBledu}><span className="sr-only">Błąd: </span>{bladWlasny}</p>}
-    </>
-  );
-}
-PoleKwoty.przyjmujeId = true;
-
-/**
  * Hasło z przełącznikiem widoczności (B1) — jeden komponent dla logowania,
  * aktywacji konta i zmiany hasła. Przełącznik nie chowa się za focusem:
  * osoba wpisująca hasło na telefonie musi widzieć, że nie ma literówki,
@@ -838,7 +610,6 @@ function PoleHaslo({ wartosc, przyZmianie, autoComplete, id, autoFocus, blad, 'a
 PoleHaslo.przyjmujeId = true;
 
 window.Ikona = Ikona;
-window.Zakladki = Zakladki;
 window.Szukajka = Szukajka;
 /* ─────────────────────────────────────────────────────
    AUTOZAPIS FORMULARZA
@@ -848,81 +619,6 @@ window.Szukajka = Szukajka;
    „na ekranie”, a pustego po stronie serwera — a to była przyczyna
    odbijanego składania wniosku.
    ───────────────────────────────────────────────────── */
-
-const OPOZNIENIE_AUTOZAPISU_MS = 800;
-
-/**
- * @param {object} wartosci      aktualny stan formularza
- * @param {Function} zapisz      (wartosci) => Promise — wywołanie API
- * @param {object} [opcje]
- * @param {boolean} [opcje.wlaczony=true]   false wyłącza zapis (formularz do wglądu)
- * @param {Function} [opcje.przyZapisie]    dostaje odpowiedź serwera
- * @returns {{stan: 'spoczynek'|'zapisywanie'|'zapisano'|'blad', blad: string|null}}
- */
-function useAutozapis(wartosci, zapisz, opcje = {}) {
-  const { wlaczony = true, przyZapisie } = opcje;
-  const [stan, ustawStan] = useState({ stan: 'spoczynek', blad: null });
-
-  // Pierwszy przebieg to wartości WCZYTANE z serwera, nie zmiana użytkownika —
-  // zapisywanie ich z powrotem byłoby zapytaniem bez żadnego skutku.
-  const pierwszy = useRef(true);
-  const ostatnie = useRef(JSON.stringify(wartosci));
-  // Zapisy muszą iść po kolei: gdyby wolniejsze wcześniejsze zapytanie
-  // wróciło po nowszym, serwer dostałby starsze dane jako ostatnie.
-  const kolejka = useRef(Promise.resolve());
-  const funkcja = useRef(zapisz);
-  funkcja.current = zapisz;
-  const powiadom = useRef(przyZapisie);
-  powiadom.current = przyZapisie;
-  // Naprawa Z-017: od zmiany pola do wystartowania zapisu (debounce) i przez
-  // caly czas trwania zapytania jest okno, w ktorym zamkniecie karty albo
-  // odswiezenie strony traci ostatnia wartosc bez zadnego ostrzezenia -
-  // dyskretny napis "Zapisywanie..." latwo przeoczyc przy szybkim dzialaniu.
-  const niezapisane = useRef(false);
-
-  const serializacja = JSON.stringify(wartosci);
-
-  // Zamknięcie karty i zmiana ekranu w trakcie zapisu pytają o zgodę.
-  useBlokadaWyjscia(() => wlaczony && niezapisane.current);
-
-  useEffect(() => {
-    if (!wlaczony) return undefined;
-    if (pierwszy.current) {
-      pierwszy.current = false;
-      ostatnie.current = serializacja;
-      return undefined;
-    }
-    if (serializacja === ostatnie.current) return undefined;
-
-    niezapisane.current = true;
-    const czasomierz = setTimeout(() => {
-      const doZapisu = JSON.parse(serializacja);
-      ostatnie.current = serializacja;
-      ustawStan({ stan: 'zapisywanie', blad: null });
-      kolejka.current = kolejka.current
-        .then(() => funkcja.current(doZapisu))
-        .then((odpowiedz) => {
-          niezapisane.current = false;
-          ustawStan({ stan: 'zapisano', blad: null });
-          if (powiadom.current) powiadom.current(odpowiedz);
-        })
-        .catch((e) => {
-          // Zapis się nie udał — następna zmiana ma spróbować ponownie,
-          // więc kasujemy pamięć ostatnio wysłanej wersji. Ostrzeżenie
-          // przed zamknięciem karty ma zostać, dopóki zapis się nie uda.
-          ostatnie.current = null;
-          ustawStan({
-            stan: 'blad',
-            blad: e instanceof BladApi ? e.message : 'Nie udało się zapisać zmian.',
-          });
-        });
-    }, OPOZNIENIE_AUTOZAPISU_MS);
-
-    return () => clearTimeout(czasomierz);
-  }, [serializacja, wlaczony]);
-
-  return stan;
-}
 
 /** Dyskretny wskaźnik autozapisu — jedna linijka tekstu, bez migotania. */
 function StanZapisu({ stan }) {
@@ -948,151 +644,6 @@ function StanZapisu({ stan }) {
    Dane wielu osób zbiera się listą, nie stosem rozwiniętych formularzy —
    widać całość, a szczegóły otwiera się po jednym.
    ───────────────────────────────────────────────── */
-
-/**
- * R4 K5 (D-092): znacznik przy osobie bez zgody na e-mail albo bez adresu — korespondencja idzie listem.
- * Przy zgodzie nic się nie pokazuje (bez pozytywnego znacznika). `zawsze` — np. w kolejce listów.
- */
-function ZnacznikKontaktu({ osoba, zawsze = false }) {
-  if (!zawsze && (!osoba || !wymagaListu(osoba))) return null;
-  return (
-    <span className="znacznik-kontaktu" title={PODPOWIEDZ_ZNACZNIKA}>
-      <Pigulka odmiana="sygnal">{TEKST_ZNACZNIKA}</Pigulka>
-      <span className="sr-only">{PODPOWIEDZ_ZNACZNIKA}</span>
-    </span>
-  );
-}
-
-/**
- * R4 K1: jeden pasek akcji — wyrównany do prawej, drugorzędne po lewej, jeden główny skrajny prawy;
- * na telefonie w pionie, główny na górze. `akcje`: [{ etykieta, przyKlik, glowna?, niebezpieczna?, wylaczona? }].
- */
-/**
- * Jeden pasek akcji dla wszystkich ekranów (A-021): akcje drugorzędne, potem jedna główna. `duze` — nawigacja kroku
- * kreatora (duże przyciski, „Wstecz” z lewej, „Dalej” z prawej; dawny `NawigacjaKreatora`). Akcja wyłączona z `powod`
- * mówi, dlaczego jest wyłączona.
- */
-function PasekAkcji({ akcje, duze = false }) {
-  const idPowodu = useId();
-  const widoczne = (akcje || []).filter(Boolean);
-  if (!widoczne.length) return null;
-  const kolejnosc = [...widoczne.filter((a) => !a.glowna), ...widoczne.filter((a) => a.glowna).slice(0, 1)];
-  const powod = kolejnosc.find((a) => a.wylaczona && a.powod);
-  return (
-    <>
-      {powod && <p className="nawigacja-powod" id={idPowodu}>{powod.powod}</p>}
-      <div className={duze ? 'nawigacja-kreatora bez-druku' : 'pasek-akcji bez-druku'}>
-        {duze && !kolejnosc.some((a) => !a.glowna) && <span />}
-        {kolejnosc.map((a) => (
-          <button
-            key={a.etykieta}
-            type={duze ? 'button' : undefined}
-            className={`btn ${duze ? 'btn-nawigacja' : 'btn-sm'}${a.glowna ? ' btn-glowny' : ''}${a.niebezpieczna ? ' btn-danger' : ''}`}
-            onClick={a.przyKlik}
-            disabled={a.wylaczona}
-            aria-describedby={a.wylaczona && a.powod ? idPowodu : undefined}
-          >
-            {a.etykieta}
-          </button>
-        ))}
-      </div>
-    </>
-  );
-}
-
-
-/** Tytuł kroku kreatora i jedno zdanie o tym, po co ten krok jest. */
-function KrokNaglowek({ tytul, opis }) {
-  return (
-    <header className="krok-naglowek">
-      <h2 className="krok-naglowek-tytul">{tytul}</h2>
-      {opis && <p className="krok-naglowek-opis">{opis}</p>}
-    </header>
-  );
-}
-
-/**
- * Wiersz listy podmiotów — jedna osoba, jeden akcjonariusz, jedna rola.
- * Klika się CAŁY wiersz, nie strzałkę na jego końcu: cel wielkości palca,
- * nie cel wielkości ikony.
- */
-function WierszPodmiotu({ ikona = 'osoby', tytul, opis, znacznik, kontakt = null, przyKliknieciu, wylaczony = false }) {
-  return (
-    <button type="button" className="wiersz-podmiotu" onClick={przyKliknieciu} disabled={wylaczony}>
-      <span className="wiersz-podmiotu-ikona"><Ikona nazwa={ikona} rozmiar={20} /></span>
-      <span className="wiersz-podmiotu-tresc">
-        <span className="wiersz-podmiotu-tytul">
-          {tytul}
-          {znacznik && <span className="wiersz-podmiotu-znacznik">{znacznik}</span>}
-          {/* Znacznik kontaktu („list”, gdy brak zgody na e-mail) — jak w reszcie aplikacji. */}
-          {kontakt && <ZnacznikKontaktu osoba={kontakt} />}
-        </span>
-        {opis && <span className="wiersz-podmiotu-opis">{opis}</span>}
-      </span>
-      <span className="wiersz-podmiotu-strzalka" aria-hidden="true">
-        <Ikona nazwa="strzalkaPrawo" rozmiar={18} />
-      </span>
-    </button>
-  );
-}
-
-/** Dopisanie kolejnej pozycji do listy — szerokość wiersza, nie guzika. */
-function WierszDodania({ etykieta, przyKliknieciu, wylaczony = false }) {
-  return (
-    <button type="button" className="wiersz-dodaj" onClick={przyKliknieciu} disabled={wylaczony}>
-      <Ikona nazwa="plus" rozmiar={18} />
-      {etykieta}
-    </button>
-  );
-}
-
-/**
- * Para przycisków zamykająca krok. Są duże, bo to jedyne rzeczy do
- * kliknięcia na dole ekranu — i bo „dalej” po długim formularzu ma być
- * zaproszeniem, a nie drobnym odnośnikiem do wypatrzenia.
- */
-function NawigacjaKreatora({ wstecz, dalej }) {
-  // A-021: ten sam pasek akcji co w reszcie aplikacji, w trybie dużych przycisków kroku.
-  return (
-    <PasekAkcji
-      duze
-      akcje={[
-        wstecz && { etykieta: wstecz.etykieta, przyKlik: wstecz.przy, wylaczona: wstecz.wylaczony },
-        dalej && { etykieta: dalej.etykieta, przyKlik: dalej.przy, wylaczona: dalej.wylaczony, powod: dalej.powod, glowna: true },
-      ]}
-    />
-  );
-}
-
-/**
- * Zwijana grupa pól — dla danych, których większość osób nie ma. Domyślnie
- * zamknięta, ale otwiera się sama, gdy cokolwiek w środku jest wypełnione:
- * ukryta wartość, o której nikt nie wie, jest gorsza niż dłuższy formularz.
- */
-function ZwijanaSekcja({ tytul, opcjonalna = true, wypelniona = false, children }) {
-  const [otwarta, ustawOtwarta] = useState(wypelniona);
-  useEffect(() => { if (wypelniona) ustawOtwarta(true); }, [wypelniona]);
-
-  return (
-    <div className={`zwijana ${otwarta ? 'zwijana-otwarta' : ''}`}>
-      <button
-        type="button"
-        className="zwijana-naglowek"
-        aria-expanded={otwarta}
-        onClick={() => ustawOtwarta((p) => !p)}
-      >
-        <span className="zwijana-tytul">
-          {tytul}
-          {opcjonalna && <span className="zwijana-opcjonalna"> (opcjonalnie)</span>}
-        </span>
-        <span className="zwijana-strzalka" aria-hidden="true">
-          <Ikona nazwa="strzalkaDol" rozmiar={18} />
-        </span>
-      </button>
-      {otwarta && <div className="zwijana-tresc">{children}</div>}
-    </div>
-  );
-}
 
 /**
  * Przełącznik do oświadczeń „tak/nie". Etykieta i wyjaśnienie są klikalne
@@ -1270,13 +821,6 @@ function StopkaKancelarii({ kancelaria, szerokosc }) {
 
 window.StopkaKancelarii = StopkaKancelarii;
 window.skrocAdresWww = skrocAdresWww;
-window.KrokNaglowek = KrokNaglowek;
-window.ZnacznikKontaktu = ZnacznikKontaktu;
-window.PasekAkcji = PasekAkcji;
-window.WierszPodmiotu = WierszPodmiotu;
-window.WierszDodania = WierszDodania;
-window.NawigacjaKreatora = NawigacjaKreatora;
-window.ZwijanaSekcja = ZwijanaSekcja;
 window.Przelacznik = Przelacznik;
 window.Spinner = Spinner;
 window.Karta = Karta;
@@ -1290,10 +834,6 @@ window.Kroki = Kroki;
 window.NaglowekStrony = NaglowekStrony;
 window.Pole = Pole;
 window.PoleDaty = PoleDaty;
-window.PoleLiczbowe = PoleLiczbowe;
-window.PoleKwoty = PoleKwoty;
 window.PoleHaslo = PoleHaslo;
 window.Kalendarz = Kalendarz;
-window.dataSlownie = dataSlownie;
-window.useAutozapis = useAutozapis;
 window.StanZapisu = StanZapisu;

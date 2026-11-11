@@ -22,12 +22,14 @@ function dodaj(db, p) {
   return Number(
     db
       .prepare(
-        `INSERT INTO psa_pliki (spolka_id, osoba_id, sprawa_id, wniosek_id, nazwa, sciezka, typ, sha256, wgral, wgrano)
-         VALUES (@spolka_id, @osoba_id, @sprawa_id, @wniosek_id, @nazwa, @sciezka, @typ, @sha256, @wgral, @wgrano)`
+        `INSERT INTO psa_pliki (spolka_id, osoba_id, sprawa_id, wniosek_id, nazwa, sciezka, typ, sha256, wgral, wgrano, dokument, stan_podpisu)
+         VALUES (@spolka_id, @osoba_id, @sprawa_id, @wniosek_id, @nazwa, @sciezka, @typ, @sha256, @wgral, @wgrano, @dokument, @stan_podpisu)`
       )
       .run({
         spolka_id: p.spolka_id ?? null,
         osoba_id: p.osoba_id ?? null,
+        dokument: p.dokument ?? null,
+        stan_podpisu: p.stan_podpisu ?? null,
         sprawa_id: p.sprawa_id ?? null,
         wniosek_id: p.wniosek_id ?? null,
         nazwa: p.nazwa,
@@ -48,4 +50,21 @@ function ostatniDzienPlikuSprawy(db, sprawaId, odDnia) {
   return w && w.m ? w.m.slice(0, 10) : null;
 }
 
-module.exports = { wczytaj, lista, dodaj, ostatniDzienPlikuSprawy };
+/** Pliki wniosku (dokumenty z U-03) — od najnowszego. */
+function wniosku(db, wniosekId) {
+  return db
+    .prepare('SELECT id, nazwa, typ, wgral, wgrano, dokument, stan_podpisu, powod_odrzucenia FROM psa_pliki WHERE wniosek_id = ? ORDER BY id DESC')
+    .all(Number(wniosekId));
+}
+
+function ustawStanPodpisu(db, id, stan, powod = null) {
+  db.prepare('UPDATE psa_pliki SET stan_podpisu = ?, powod_odrzucenia = ? WHERE id = ?').run(stan, powod, Number(id));
+}
+
+/** Przyjęcie wniosku: pliki trafiają do akt spółki, zgody — także do karty osoby. */
+function doSpolki(db, wniosekId, spolkaId, osobaPliku = {}) {
+  db.prepare('UPDATE psa_pliki SET spolka_id = ? WHERE wniosek_id = ?').run(spolkaId, Number(wniosekId));
+  for (const [plikId, osobaId] of Object.entries(osobaPliku)) db.prepare('UPDATE psa_pliki SET osoba_id = ? WHERE id = ?').run(osobaId, Number(plikId));
+}
+
+module.exports = { wczytaj, lista, dodaj, ostatniDzienPlikuSprawy, wniosku, ustawStanPodpisu, doSpolki };

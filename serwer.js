@@ -110,14 +110,15 @@ if (konfiguracja.TRYB_TESTOWY) {
 } else {
   aplikacja.use('/test', (zad, odp) => odp.status(404).type('text/plain').send('Nie odnaleziono.'));
 }
-// Uproszczenie modułu: portal i płatności tpay (Faza 5) oraz wnioski (Faza 4) są przebudowywane —
-// do tego czasu ich trasy nie są montowane.
+// Uproszczenie modułu: portal (poza zgłoszeniem spółki i wnioskiem) i płatności tpay — Faza 5.
 aplikacja.use('/api/psa/spolki', autoryzacja.wymagajPracownika, require('./server/trasy/spolki'));
 aplikacja.use('/api/psa/osoby', autoryzacja.wymagajPracownika, require('./server/trasy/osoby'));
 aplikacja.use('/api/psa/sprawy', autoryzacja.wymagajPracownika, require('./server/trasy/sprawy'));
 aplikacja.use('/api/psa/pliki', autoryzacja.wymagajPracownika, require('./server/trasy/pliki'));
 aplikacja.use('/api/psa/korespondencja', autoryzacja.wymagajPracownika, require('./server/trasy/korespondencja'));
 aplikacja.use('/api/psa/oplaty', autoryzacja.wymagajPracownika, require('./server/trasy/oplaty'));
+aplikacja.use('/api/psa/wnioski', autoryzacja.wymagajPracownika, require('./server/trasy/wnioski'));
+aplikacja.use('/api/psa/portal', require('./server/trasy/portal'));
 aplikacja.use('/api/psa', require('./server/trasy/pozostale'));
 
 // ── Statyki ──────────────────────────────────────────────────────────────

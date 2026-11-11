@@ -18,7 +18,9 @@ function DaneKancelarii() {
       <div className="siatka-2">
         {dane.kancelaria.map((p) => (
           <Pole key={p.klucz} etykieta={p.etykieta} podpowiedz={p.podpowiedz} opcjonalne={!p.wymagane} blad={pola[p.klucz]}>
-            <input type="text" value={wartosci[p.klucz]} onChange={(e) => { ustawZapisano(false); ustawWartosci({ ...wartosci, [p.klucz]: e.target.value }); }} />
+            {p.wielowierszowe
+              ? <textarea rows={3} value={wartosci[p.klucz]} onChange={(e) => { ustawZapisano(false); ustawWartosci({ ...wartosci, [p.klucz]: e.target.value }); }} />
+              : <input type="text" value={wartosci[p.klucz]} onChange={(e) => { ustawZapisano(false); ustawWartosci({ ...wartosci, [p.klucz]: e.target.value }); }} />}
           </Pole>
         ))}
       </div>

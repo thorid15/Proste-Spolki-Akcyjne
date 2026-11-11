@@ -1,5 +1,5 @@
 /* app.js — powłoka aplikacji kancelarii i router (§ 5).
-   Menu: Pulpit · Sprawy · Spółki · Osoby · Korespondencja · Opłaty (Wnioski — Faza 4).
+   Menu: Pulpit · Sprawy · Spółki · Osoby · Wnioski · Korespondencja · Opłaty.
    Ustawienia — w menu konta, tylko administrator. */
 
 const KANCELARIA_ZAPASOWA = { nazwa: 'Kancelaria Notarialna', www: '', www_psa: '' };
@@ -9,12 +9,13 @@ const MENU = [
   { sciezka: '/sprawy', nazwa: 'Sprawy', ikona: 'sprawy' },
   { sciezka: '/spolki', nazwa: 'Spółki', ikona: 'spolki' },
   { sciezka: '/osoby', nazwa: 'Osoby', ikona: 'osoby' },
+  { sciezka: '/wnioski', nazwa: 'Wnioski', ikona: 'dokument' },
   { sciezka: '/korespondencja', nazwa: 'Korespondencja', ikona: 'koperta' },
   { sciezka: '/oplaty', nazwa: 'Opłaty', ikona: 'oplaty' },
 ];
 
 const TYTULY = {
-  '': 'Pulpit', sprawy: 'Sprawy', spolki: 'Spółki', osoby: 'Osoby', korespondencja: 'Korespondencja', oplaty: 'Opłaty', ustawienia: 'Ustawienia',
+  '': 'Pulpit', sprawy: 'Sprawy', spolki: 'Spółki', osoby: 'Osoby', wnioski: 'Wnioski', korespondencja: 'Korespondencja', oplaty: 'Opłaty', ustawienia: 'Ustawienia',
 };
 
 const aktywna = (poz, sciezka) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
@@ -107,6 +108,7 @@ function Aplikacja() {
       case 'sprawy': return drugi ? <EkranSprawy sprawaId={id} /> : <EkranSpraw />;
       case 'spolki': return drugi ? <EkranKokpitu spolkaId={id} /> : <EkranSpolek />;
       case 'osoby': return drugi ? <EkranOsoby osobaId={id} /> : <EkranOsob />;
+      case 'wnioski': return drugi ? <EkranWnioskuKancelarii wniosekId={id} /> : <EkranWnioskow />;
       case 'korespondencja': return <EkranKorespondencji />;
       case 'oplaty': return <EkranOplat />;
       case 'ustawienia': return sesja.uzytkownik.rola === 'admin' ? <EkranUstawien uzytkownik={sesja.uzytkownik} /> : <NieZnaleziono />;

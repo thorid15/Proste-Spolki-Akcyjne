@@ -98,7 +98,7 @@ test('Opłaty: lista do zapłaty, „Opłacona”, numer faktury, anulowanie z p
   const s = spolkaZRejestrem();
   const pierwsza = await zadanie('POST', `/api/psa/spolki/${s}/informacja`, { odbiorca: 'spolka', oplata: 'tak' });
   const druga = await zadanie('POST', `/api/psa/spolki/${s}/informacja`, { odbiorca: 'spolka', oplata: 'tak' });
-  const doZaplaty = (await zadanie('GET', '/api/psa/oplaty?filtr=do_zaplaty')).dane.filter((o) => o.spolka_id === s);
+  const doZaplaty = (await zadanie('GET', '/api/psa/oplaty?filtr=do_zaplaty')).dane.filter((o) => o.spolka_id === s && o.typ === 'informacja');
   assert.deepEqual(doZaplaty.map((o) => o.pismo_id).sort(), [pierwsza.dane.pismo_id, druga.dane.pismo_id].sort());
   const [a, b] = doZaplaty;
   const opl = await zadanie('POST', `/api/psa/oplaty/${a.id}/oplacona`);

@@ -8,11 +8,11 @@
  * API nie moze blokowac zalozenia rejestru.
  */
 
-const konfiguracja = require('../konfiguracja');
-const przepisy = require('../logika/przepisy');
-const { parseKrsDate } = require('../logika/daty-krs');
-const { normalizujRegon } = require('../logika/regon');
-const { ustalSadRejestrowy } = require('../logika/sad-rejestrowy');
+const konfiguracja = require('./konfiguracja');
+const przepisy = require('./logika/przepisy');
+const { parseKrsDate } = require('./logika/daty-krs');
+const { normalizujRegon } = require('./logika/regon');
+const { ustalSadRejestrowy } = require('./logika/sad-rejestrowy');
 
 const LIMIT_CZASU_MS = 8000;
 
@@ -166,7 +166,7 @@ async function pobierzZKrs(numerKrs) {
 
   // Tryb testowy (T3): numery z danych testowych odpowiada atrapa, w tym
   // samym ksztalcie co API — reszta numerow idzie do prawdziwego KRS.
-  let odpowiedz = konfiguracja.TRYB_TESTOWY ? require('../tryb-testowy/krs-atrapa').odpowiedz(numerKrs) : null;
+  let odpowiedz = konfiguracja.TRYB_TESTOWY ? require('./tryb-testowy/krs-atrapa').odpowiedz(numerKrs) : null;
   if (!odpowiedz) try {
     odpowiedz = await fetch(url, {
       headers: { Accept: 'application/json' },

@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { zmapuj } = require('../server/trasy/krs');
+const { zmapuj } = require('../server/krs');
 
 // Zywa odpowiedz API KRS dla KRS 0001114217 (rejestr=P), pobrana 17.08.2026 —
 // podstawa weryfikacji mappera przy poprawkach z sekcji 1 (bugfixy importu).
