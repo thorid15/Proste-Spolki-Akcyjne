@@ -187,6 +187,31 @@ test('sprawa krok po kroku: otwarcie jednym kliknięciem, zbycie — Dalej, list
   assert.equal((await zadanie('GET', '/api/psa/sprawy?stan=wpisana')).dane.length, 2);
 });
 
+test('rejestr: wpisy z opisem zdaniem i podstawą; otwarta sprawa w „w toku” z opisem, terminem i brakami', async () => {
+  const s = await zadanie('POST', '/api/psa/sprawy', {
+    spolka_id: spolka,
+    zadajacy: 'spolka',
+    klucz_idempotencji: 'w-toku-1',
+    podstawa: 'Umowa darowizny',
+    operacje: [{ typ: 'przeniesienie', zbywca_osoba_id: jan.id, nabywcy: [{ osoba_id: anna.id, akcje: [{ seria: 'A', numery: '11-20', liczba: 10 }] }] }],
+  });
+  const pusta = await zadanie('POST', '/api/psa/sprawy', { spolka_id: spolka, zadajacy: 'spolka', klucz_idempotencji: 'w-toku-2' });
+  const r = (await zadanie('GET', `/api/psa/spolki/${spolka}`)).dane;
+  assert.match(r.wpisy[0].opis, /^Otwarcie rejestru akcjonariuszy/);
+  assert.match(r.wpisy[1].opis, /^Przeniesienie akcji z Jan Bez na Anna Nowak: seria A nr 1–10 \(10 akcji\)/);
+  assert.equal(r.wpisy[1].podstawa, 'Umowa sprzedaży akcji');
+  assert.deepEqual(r.w_toku.map((w) => w.id).sort(), [s.dane.sprawa.id, pusta.dane.sprawa.id].sort());
+  const w = r.w_toku.find((x) => x.id === s.dane.sprawa.id);
+  assert.match(w.opis, /^Przeniesienie akcji z Jan Bez na Anna Nowak: seria A nr 11–20 \(10 akcji\)/);
+  assert.ok(w.termin && w.termin.termin_do, 'termin 7 dni');
+  assert.ok(w.braki.some((b) => /checklist/i.test(b)), 'braki: checklista');
+  const bezTresci = r.w_toku.find((x) => x.id === pusta.dane.sprawa.id);
+  assert.equal(bezTresci.opis, 'Wpis bez treści');
+  assert.deepEqual(bezTresci.braki, ['Dodaj co najmniej jedną zmianę.']);
+  for (const id of [s.dane.sprawa.id, pusta.dane.sprawa.id]) await zadanie('POST', `/api/psa/sprawy/${id}/stan`, { stan: 'wycofana' });
+  assert.deepEqual((await zadanie('GET', `/api/psa/spolki/${spolka}`)).dane.w_toku, []);
+});
+
 test('spółka: „Edytuj” z błędami przy polach i historią', async () => {
   const zle = await zadanie('PUT', `/api/psa/spolki/${spolka}`, { nazwa: '', email: 'zly', platnosc: 'tygodniowa' });
   assert.equal(zle.status, 422);

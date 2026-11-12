@@ -394,6 +394,7 @@ module.exports = {
   dataPl,
   kanal,
   kontekst,
+  opisOperacji,
   utworz,
   wczytaj,
   tekst,

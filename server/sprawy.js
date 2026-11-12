@@ -301,6 +301,32 @@ function podglad(db, id) {
   return wynik;
 }
 
+/** Skrót otwartej sprawy do rejestru spółki: zmiany zdaniem, termin i to, co zostało do zrobienia przed wpisem. */
+function skrot(db, sprawa) {
+  const sym = rejestr.symuluj(db, sprawa);
+  const robocze = sprawa.operacje || [];
+  let opis = 'Wpis bez treści';
+  if (sym.operacje) opis = sym.operacje.map((op) => pisma.opisOperacji(db, op)).join(' ');
+  else if (robocze.length > 0) opis = `${robocze.map((op) => (typy.TYPY[op && op.typ] || { etykieta: 'Wpis' }).etykieta).join(', ')} — treść do uzupełnienia`;
+  const braki = sym.bledy.length > 0 || !sym.operacje ? sym.bledy : rejestr.wymaganiaWpisu(db, sprawa, sym);
+  return {
+    id: sprawa.id,
+    stan: sprawa.stan,
+    data_wplywu: sprawa.data_wplywu,
+    opis,
+    termin: terminy.policzTermin(sprawa, czas.dzisIso()),
+    braki: braki.map((b) => (typeof b === 'object' ? b.komunikat : b)),
+    krok: sprawyLogika.krok(sprawa),
+  };
+}
+
+/** Otwarte sprawy spółki („W toku” w rejestrze). */
+function wToku(db, spolkaId) {
+  return daneSprawy
+    .lista(db, { spolkaId, stany: ['w_toku', 'wstrzymana'] })
+    .map((s) => skrot(db, daneSprawy.wczytaj(db, s.id)));
+}
+
 function lista(db, filtr) {
   const dzis = czas.dzisIso();
   return daneSprawy.lista(db, filtr).map((s) => ({
@@ -317,4 +343,4 @@ function lista(db, filtr) {
   }));
 }
 
-module.exports = { zaloz, zmien, dalej, zmienTresc, zmienStan, podglad, lista };
+module.exports = { zaloz, zmien, dalej, zmienTresc, zmienStan, podglad, lista, skrot, wToku };

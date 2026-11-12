@@ -20,6 +20,7 @@ const daneRejestr = require('./dane/rejestr');
 const daneSpolki = require('./dane/spolki');
 const daneOsoby = require('./dane/osoby');
 const daneOplaty = require('./dane/oplaty');
+const daneSprawy = require('./dane/sprawy');
 
 const { BladWalidacji } = walidacje;
 const BLEDY_STANU = ['BladStanu', 'BladUlamka', 'BladZakresu'];
@@ -188,9 +189,20 @@ function wpisz(db, sprawa, kto) {
   return zapisane;
 }
 
+/** Wpisy z opisem zdaniem (jak w powiadomieniu o wpisie) i podstawą ze sprawy — historia w rejestrze spółki. */
+function opisaneWpisy(db, spolkaId, wpisy) {
+  const zdarzenia = new Map(daneRejestr.zdarzeniaSpolki(db, spolkaId).map((z) => [Number(z.id), z]));
+  return wpisy.map((w) => {
+    const z = zdarzenia.get(Number(w.id));
+    const op = z ? { typ: z.typ, ...z.dane, ...(z.typ === 'sprostowanie' ? { zdarzenie_id: z.zdarzenie_prostowane_id } : {}) } : null;
+    const sprawa = w.sprawa_id ? daneSprawy.wczytaj(db, w.sprawa_id) : null;
+    return { ...w, opis: op ? pisma.opisOperacji(db, op) : null, podstawa: sprawa ? sprawa.podstawa || null : null };
+  });
+}
+
 /** U-20: kontrola integralności całego łańcucha — na żądanie. */
 function zweryfikujIntegralnosc(db) {
   return lancuch.zweryfikuj(daneRejestr.wszystkieZdarzenia(db));
 }
 
-module.exports = { stanSpolki, symuluj, doPowiadomienia, maZgode, wymaganiaWpisu, adresatZadajacy, wpisz, zweryfikujIntegralnosc };
+module.exports = { stanSpolki, symuluj, doPowiadomienia, maZgode, wymaganiaWpisu, adresatZadajacy, wpisz, opisaneWpisy, zweryfikujIntegralnosc };
