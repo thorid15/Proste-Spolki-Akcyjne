@@ -42,7 +42,8 @@ async function zadanie(metoda, sciezka, cialo, { kto = 'admin', plik = null, pol
   let body;
   if (plik) {
     body = new FormData();
-    for (const [k, v] of Object.entries(pola)) body.append(k, v);
+    const zapytanie = new URLSearchParams(pola).toString();
+    if (zapytanie) sciezka = `${sciezka}?${zapytanie}`;
     body.append('plik', new Blob([plik.tresc]), plik.nazwa);
   } else if (cialo !== undefined) {
     naglowki['Content-Type'] = 'application/json';
@@ -256,4 +257,22 @@ test('odrzucenie: powiadomienie o odmowie zawarcia umowy listem; wniosek pracown
   assert.equal(pdf.dane.subarray(0, 5).toString(), '%PDF-');
   const skan = await zadanie('POST', `/api/psa/wnioski/${id}/pliki`, undefined, { plik: { tresc: PDF_TESTOWY, nazwa: 'skan-z-poczty.pdf' }, pola: { dokument: 'umowa' } });
   assert.equal(skan.status, 201, 'plik pracownika (oryginał z poczty) trafia do sprawdzenia');
+
+  // Audyt W3: limit plików wniosku — kolejny plik ponad limit jest odrzucany, a na dysku nic nie przybywa.
+  const pliki = require('../server/pomocnicze/pliki');
+  const { liczba, megabajty } = pliki.LIMITY;
+  const wBazie = () => db().prepare('SELECT COUNT(*) AS n FROM psa_pliki WHERE wniosek_id = ?').get(id).n;
+  try {
+    pliki.LIMITY.liczba = wBazie();
+    const ponad = await zadanie('POST', `/api/psa/wnioski/${id}/pliki`, undefined, { plik: { tresc: PDF_TESTOWY, nazwa: 'kolejny.pdf' }, pola: { dokument: 'umowa' } });
+    assert.equal(ponad.status, 422);
+    assert.match(JSON.stringify(ponad.dane), /Limit plików został wyczerpany/);
+    assert.equal(wBazie(), pliki.LIMITY.liczba);
+    pliki.LIMITY.liczba = liczba;
+    pliki.LIMITY.megabajty = 0;
+    const zaDuzo = await zadanie('POST', `/api/psa/wnioski/${id}/pliki`, undefined, { plik: { tresc: PDF_TESTOWY, nazwa: 'ciezki.pdf' }, pola: { dokument: 'umowa' } });
+    assert.equal(zaDuzo.status, 422, 'limit łącznego rozmiaru');
+  } finally {
+    Object.assign(pliki.LIMITY, { liczba, megabajty });
+  }
 });

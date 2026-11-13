@@ -72,7 +72,7 @@ function uruchomSerwer(env) {
 }
 
 test('T6: przy NODE_ENV=production tryb testowy odmawia startu z czytelnym komunikatem', () => {
-  const wynik = uruchomSerwer({ PSA_TRYB_TESTOWY: '1', NODE_ENV: 'production', PSA_BAZA_TESTOWA: PLIK_BAZY });
+  const wynik = uruchomSerwer({ PSA_TRYB_TESTOWY: '1', NODE_ENV: 'production', PSA_BAZA_TESTOWA: PLIK_BAZY, SESJA_SEKRET: '0123456789abcdef'.repeat(4) });
   assert.equal(wynik.status, 1);
   assert.match(wynik.stderr, /ODMOWA STARTU.*NODE_ENV=production/);
 });

@@ -18,7 +18,26 @@
 const crypto = require('node:crypto');
 const konfiguracja = require('../konfiguracja');
 
+const SEKRET_Z_PRZYKLADU = 'zmien-mnie-przed-wdrozeniem';
+const MIN_DLUGOSC_SEKRETU = 32;
+
+/**
+ * Kontrola sekretu sesji (audyt K1). Zwraca komunikat błędu albo null. Sekret znany z repozytorium albo krótki
+ * pozwala podrobić dowolną sesję, więc serwer z takim nie startuje; pusty jest dopuszczalny tylko poza produkcją
+ * (sekret tymczasowy — sesje giną przy restarcie).
+ */
+function sprawdzSekret(wartosc, { produkcja = false } = {}) {
+  const sekret = wartosc == null ? '' : String(wartosc);
+  const jak = 'Ustaw SESJA_SEKRET w .env na losowy ciąg, np. wynik polecenia: openssl rand -hex 32.';
+  if (!sekret) return produkcja ? `W produkcji SESJA_SEKRET jest wymagany. ${jak}` : null;
+  if (sekret === SEKRET_Z_PRZYKLADU) return `SESJA_SEKRET ma wartość z .env.przyklad — zna ją każdy, kto widział repozytorium. ${jak}`;
+  if (sekret.length < MIN_DLUGOSC_SEKRETU) return `SESJA_SEKRET jest za krótki — wymagane co najmniej ${MIN_DLUGOSC_SEKRETU} znaki. ${jak}`;
+  return null;
+}
+
 let SEKRET = konfiguracja.SESJA_SEKRET;
+const bladSekretu = sprawdzSekret(SEKRET, { produkcja: String(konfiguracja.NODE_ENV || '').toLowerCase() === 'production' });
+if (bladSekretu) throw new Error(`[psa] ${bladSekretu}`);
 if (!SEKRET) {
   SEKRET = crypto.randomBytes(32).toString('hex');
   console.warn(
@@ -109,4 +128,4 @@ function odczytaj(token) {
 const TTL_PRACOWNIK_MS = 12 * 60 * 60 * 1000; // 12h
 const TTL_PORTAL_MS = 8 * 60 * 60 * 1000; // 8h
 
-module.exports = { wystaw, odczytaj, TTL_PRACOWNIK_MS, TTL_PORTAL_MS };
+module.exports = { wystaw, odczytaj, TTL_PRACOWNIK_MS, TTL_PORTAL_MS, sprawdzSekret };

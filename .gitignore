@@ -34,3 +34,6 @@ testy/e2e/raport/arkusze/
 
 # Podgląd wzorów pism (npm run wzory)
 wzory/podglad/
+
+# Drzewa robocze agentów
+.claude/worktrees/

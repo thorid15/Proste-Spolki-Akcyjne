@@ -100,6 +100,10 @@ function sciezka(nazwa, domyslna) {
 const konfiguracja = {
   KATALOG_GLOWNY,
   PORT: liczba('PORT', 3005),
+  // Audyt W2: nasłuch tylko na pętli zwrotnej (za nginx na tym samym serwerze); inny układ — ustaw HOST.
+  HOST: tekst('HOST', '127.0.0.1'),
+  // Audyt W2: adresy, z których działają trasy pracowników (sieć biura). Pusta lista = bez ograniczenia.
+  KANCELARIA_ADRESY: require('./logika/adresy').wczytajListe(process.env.KANCELARIA_ADRESY),
   WSPOLNA_BAZA: sciezka('WSPOLNA_BAZA', './dane/kancelaria.db'),
   KATALOG_DOKUMENTOW: sciezka('KATALOG_DOKUMENTOW', './dokumenty'),
   ADMIN_EMAIL: tekst('ADMIN_EMAIL', null),

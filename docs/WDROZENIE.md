@@ -79,9 +79,17 @@ KATALOG_DOKUMENTOW=/srv/psa/dane-szyfrowane/dokumenty
 URL_PORTALU=https://rejestr.kancelaria.pl/portal.html
 NODE_ENV=production
 SESJA_SEKRET=<wynik: openssl rand -hex 32>
+KANCELARIA_ADRESY=<sieć biura, np. 192.168.1.0/24 — albo stały adres IP biura>
 ADMIN_EMAIL=<adres notariusza>
 PORTAL_WLACZONY=true
 ```
+
+- **`SESJA_SEKRET`** — bez niego (albo z wartością krótszą niż 32 znaki) serwer nie wystartuje. Kto zna sekret, może
+  podrobić sesję dowolnego pracownika, więc trzymaj go wyłącznie w `.env` i w sejfie haseł.
+- **`KANCELARIA_ADRESY`** — adresy, z których działa aplikacja kancelarii (logowanie pracowników i całe jej API). Aplikacja
+  sprawdza je sama, niezależnie od nginx i zapory: żądanie z innego adresu dostaje odpowiedź 403. Podaj adresy tak, jak
+  widzi je nginx (`$remote_addr`): sieć lokalną biura, gdy serwer stoi w kancelarii, albo publiczny adres IP biura.
+- **`HOST`** — domyślnie `127.0.0.1`: aplikacja przyjmuje połączenia tylko od nginx na tym samym serwerze. Nie zmieniaj.
 
 Nigdy nie ustawiaj na produkcji `PSA_TRYB_TESTOWY` — przy `NODE_ENV=production` serwer odmówi startu.
 
@@ -101,6 +109,8 @@ Group=psa
 WorkingDirectory=/srv/psa/app
 ExecStart=/usr/bin/node serwer.js
 Restart=on-failure
+MemoryMax=1G
+UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -126,6 +136,8 @@ Plik `/etc/nginx/sites-available/psa` (podlinkuj w `sites-enabled`, usuń `defau
 tpay są publiczne; **wszystko inne — w tym aplikacja kancelarii i jej API — tylko z adresów biura**.
 
 ```nginx
+limit_req_zone $binary_remote_addr zone=portal:10m rate=10r/s;   # w kontekście http (np. początek pliku)
+
 server {
   listen 443 ssl http2;
   server_name rejestr.kancelaria.pl;
@@ -141,7 +153,12 @@ server {
   }
 
   # Publiczne: portal klienta, jego zasoby, dane kancelarii do stopki, powiadomienia tpay.
-  location ~ ^/(portal|portal\.html|dist/portal\.js|vendor/|style/|fonty/|obrazy/|robots\.txt|api/psa/portal/|api/wspolne/|api/psa/platnosci/tpay/itn) {
+  location ~ ^/(portal(\.html)?$|dist/portal\.js$|vendor/|style/|fonty/|obrazy/|robots\.txt$|api/wspolne/|api/psa/platnosci/tpay/itn$) {
+    try_files /nieistnieje @aplikacja;
+  }
+  # API portalu — publiczne, z ograniczeniem liczby żądań z jednego adresu.
+  location ^~ /api/psa/portal/ {
+    limit_req zone=portal burst=40 nodelay;
     try_files /nieistnieje @aplikacja;
   }
 

@@ -49,7 +49,7 @@ router.post(
   '/:id/pliki',
   (zad, odp, dalej) => pliki.odbierz(zad, odp, dalejPoUploadzie(dalej)),
   asy(async (zad, odp) => {
-    const b = zad.body || {};
+    const b = zad.query;
     await wnioski.wgraj(db(), zad.params.id, zad.file, b.dokument, { przez: 'kancelaria', kto: autor(zad), umoweZawarl: b.umowe_zawarl });
     odp.status(201).json(wnioski.widok(db(), zad.params.id));
   })

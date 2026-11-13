@@ -7,6 +7,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const hasla = require('../server/logika/hasla');
 const sesja = require('../server/logika/sesja');
@@ -86,6 +88,45 @@ test('sesja: smiec zamiast tokenu nie wywala wyjatku', () => {
   assert.equal(sesja.odczytaj(null), null);
   assert.equal(sesja.odczytaj('brak-kropki'), null);
   assert.equal(sesja.odczytaj('a.b'), null);
+});
+
+// ─────────────────────────────────────────────────────────────
+// K1 (audyt 12.11.2026): sekret sesji
+// ─────────────────────────────────────────────────────────────
+
+test('K1: sprawdzSekret — wartość z .env.przyklad, krótszy niż 32 znaki albo pusty w produkcji to błąd', () => {
+  assert.match(sesja.sprawdzSekret('zmien-mnie-przed-wdrozeniem', { produkcja: false }), /\.env\.przyklad/);
+  assert.match(sesja.sprawdzSekret('zmien-mnie-przed-wdrozeniem', { produkcja: true }), /\.env\.przyklad/);
+  assert.match(sesja.sprawdzSekret('a'.repeat(31), { produkcja: false }), /32 znaki/);
+  assert.match(sesja.sprawdzSekret('', { produkcja: true }), /SESJA_SEKRET/);
+  assert.match(sesja.sprawdzSekret(null, { produkcja: true }), /SESJA_SEKRET/);
+});
+
+test('K1: sprawdzSekret — pusty poza produkcją (sekret tymczasowy) i 64 znaki hex są w porządku', () => {
+  assert.equal(sesja.sprawdzSekret('', { produkcja: false }), null);
+  assert.equal(sesja.sprawdzSekret(null, { produkcja: false }), null);
+  assert.equal(sesja.sprawdzSekret('0123456789abcdef'.repeat(4), { produkcja: false }), null);
+  assert.equal(sesja.sprawdzSekret('0123456789abcdef'.repeat(4), { produkcja: true }), null);
+  assert.equal(sesja.sprawdzSekret('a'.repeat(32), { produkcja: true }), null);
+});
+
+/** Kontrola działa przy wczytaniu modułu — osobny proces, bo tutaj moduł jest już wczytany. */
+function wczytajSesjeZ(env) {
+  return spawnSync(process.execPath, ['-e', "require('./server/logika/sesja')"], {
+    cwd: path.join(__dirname, '..'),
+    env: { ...process.env, NODE_ENV: '', SESJA_SEKRET: '', ...env },
+    encoding: 'utf8',
+  });
+}
+
+test('K1: serwer odmawia startu z sekretem z .env.przyklad, za krótkim albo — w produkcji — pustym', () => {
+  for (const env of [{ SESJA_SEKRET: 'zmien-mnie-przed-wdrozeniem' }, { SESJA_SEKRET: 'krotki-sekret' }, { NODE_ENV: 'production' }]) {
+    const wynik = wczytajSesjeZ(env);
+    assert.notEqual(wynik.status, 0, `proces miał odmówić startu: ${JSON.stringify(env)}`);
+    assert.match(wynik.stderr, /SESJA_SEKRET/);
+  }
+  assert.equal(wczytajSesjeZ({}).status, 0, 'poza produkcją bez sekretu — sekret tymczasowy');
+  assert.equal(wczytajSesjeZ({ NODE_ENV: 'production', SESJA_SEKRET: '0123456789abcdef'.repeat(4) }).status, 0);
 });
 
 test('limiter: blokuje po przekroczeniu limitu prob, wpis udany czysci licznik', () => {

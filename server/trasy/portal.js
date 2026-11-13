@@ -66,6 +66,9 @@ function konto(zad) {
   return zad.konto;
 }
 
+/** Sesja przed przyjęciem pliku (audyt W1): bez konta treść żądania nie jest czytana ani buforowana. */
+const wymagajKonta = (zad, odp, dalej) => { konto(zad); dalej(); };
+
 /** Wniosek konta — jedyny, jaki to konto widzi, i tylko do jego przyjęcia. */
 function wniosekKonta(zad) {
   const id = portal.zakresKonta(db(), konto(zad)).wniosek;
@@ -90,10 +93,11 @@ router.post('/wniosek/zloz', asy((zad, odp) => {
 
 router.post(
   '/wniosek/pliki',
+  wymagajKonta,
   (zad, odp, dalej) => pliki.odbierz(zad, odp, dalejPoUploadzie(dalej)),
   asy(async (zad, odp) => {
     const id = wniosekKonta(zad);
-    await wnioski.wgraj(db(), id, zad.file, (zad.body || {}).dokument, { przez: 'klient', kto: `konto:${zad.konto.id}` });
+    await wnioski.wgraj(db(), id, zad.file, zad.query.dokument, { przez: 'klient', kto: `konto:${zad.konto.id}` });
     odp.status(201).json(wnioski.widokPortalu(db(), id));
   })
 );
@@ -116,6 +120,7 @@ router.post('/sprawy', asy((zad, odp) => {
 
 router.post(
   '/sprawy/:id/pliki',
+  wymagajKonta,
   (zad, odp, dalej) => pliki.odbierz(zad, odp, dalejPoUploadzie(dalej)),
   asy((zad, odp) => odp.status(201).json({ id: portal.dodajPlik(db(), konto(zad), Number(zad.params.id), zad.file) }))
 );

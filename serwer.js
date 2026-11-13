@@ -15,6 +15,7 @@ const { db } = require('./server/baza');
 const migracje = require('./server/migracje');
 const { posrednikBledow } = require('./server/pomocnicze/odpowiedzi');
 const autoryzacja = require('./server/pomocnicze/autoryzacja');
+const adresy = require('./server/logika/adresy');
 const { uruchomProcesDzienny } = require('./server/logika/harmonogram');
 // Tryb testowy: moduły `server/tryb-testowy/` wczytują się wyłącznie przy PSA_TRYB_TESTOWY=1 (§ 7 pkt 9).
 const trybTestowy = konfiguracja.TRYB_TESTOWY ? require('./server/tryb-testowy') : null;
@@ -134,6 +135,18 @@ function bramkaPortalu(zad, odp, dalej) {
 }
 
 /**
+ * Audyt W2: trasy pracowników (wszystko poza portalem, danymi do stopki i powiadomieniami tpay) odpowiadają tylko
+ * adresom z `KANCELARIA_ADRESY`. `zad.ip` pochodzi z nagłówka ustawianego przez nginx (`trust proxy`).
+ */
+const TRASY_PUBLICZNE = ['/api/wspolne', '/api/psa/portal', '/api/psa/platnosci'];
+aplikacja.use('/api', (zad, odp, dalej) => {
+  const sciezka = zad.originalUrl.split('?')[0];
+  if (TRASY_PUBLICZNE.some((p) => sciezka === p || sciezka.startsWith(`${p}/`))) return dalej();
+  if (adresy.nalezy(zad.ip, konfiguracja.KANCELARIA_ADRESY)) return dalej();
+  return odp.status(403).json({ blad: 'Dostęp tylko z sieci kancelarii.' });
+});
+
+/**
  * Routery API: [prefiks, plik w `server/trasy/`, bramka]. Jedna lista dla montowania, testu listy
  * dozwolonych tras (`testy/trasy-dozwolone.txt`, § 7 pkt 1) i `npm run dokumentacja`. Kolejność ma
  * znaczenie: `/api/psa` (pozostałe) na końcu.
@@ -208,7 +221,7 @@ aplikacja.use(posrednikBledow);
 if (require.main === module) {
   require('./server/trasy/auth').zapewnijAdmina(db(), konfiguracja.ADMIN_EMAIL).finally(() => {
     if (trybTestowy) trybTestowy.ustawAtrapeTpay(konfiguracja.PORT);
-    aplikacja.listen(konfiguracja.PORT, () => {
+    aplikacja.listen(konfiguracja.PORT, konfiguracja.HOST, () => {
       if (konfiguracja.TRYB_TESTOWY) {
         console.log('[psa] ══ TRYB TESTOWY — e-maile nie są wysyłane (skrzynka: /test/skrzynka, panel: /test) ══');
       }

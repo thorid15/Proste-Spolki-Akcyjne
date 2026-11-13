@@ -114,10 +114,11 @@ function PrzyciskGlowny({ etykieta, przyKlik, powod, trwa }) {
 /* ── Pliki ─────────────────────────────────────────── */
 
 async function wgrajPlik(adres, plik, pola = {}) {
+  // Formularz niesie wyłącznie plik; parametry idą w adresie (serwer nie przyjmuje pól tekstowych — audyt W1).
   const dane = new FormData();
-  for (const [k, v] of Object.entries(pola)) dane.append(k, v);
   dane.append('plik', plik);
-  const odp = await fetch(adres, { method: 'POST', body: dane });
+  const zapytanie = new URLSearchParams(pola).toString();
+  const odp = await fetch(zapytanie ? `${adres}${adres.includes('?') ? '&' : '?'}${zapytanie}` : adres, { method: 'POST', body: dane });
   let wynik = null;
   try { wynik = await odp.json(); } catch { wynik = null; }
   if (!odp.ok) throw new BladApi((wynik && wynik.blad) || `Błąd ${odp.status}.`, wynik, odp.status);

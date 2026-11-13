@@ -19,6 +19,8 @@ const danePliki = require('../dane/pliki');
 const { BladWalidacji } = require('../logika/walidacje');
 
 const LIMIT_BAJTOW = 10 * 1024 * 1024;
+/** Audyt W3: ile plików i megabajtów łącznie przyjmuje jeden wniosek albo jedna sprawa (pełny dysk zatrzymuje bazę). */
+const LIMITY = { liczba: 30, megabajty: 100 };
 
 const TYPY = {
   '.pdf': 'application/pdf',
@@ -47,8 +49,16 @@ function trescPasuje(bufor, typ) {
   }
 }
 
-/** Multer: jeden plik w polu `plik`, w pamięci (zapis na dysk robi `przyjmij`). */
-const odbierz = multer({ storage: multer.memoryStorage(), limits: { fileSize: LIMIT_BAJTOW, files: 1 } }).single('plik');
+/**
+ * Multer: wyłącznie jeden plik w polu `plik`, w pamięci (zapis na dysk robi `przyjmij`). Pól tekstowych formularz
+ * wgrania nie ma (`fields: 0`) — parametry (np. którego dokumentu dotyczy plik) idą w adresie. Powód (audyt W1):
+ * parser nazw pól zawiesza proces na nazwach w rodzaju `a[4294967294][0]`, także w multer 2.x; przy `fields: 0`
+ * żadna nazwa pola nie jest parsowana, a takie żądanie kończy się od razu błędem 400.
+ */
+const odbierz = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: LIMIT_BAJTOW, files: 1, fields: 0, parts: 1 },
+}).single('plik');
 
 /** Nazwa pliku od przeglądarki (multer czyta ją jako latin1) — bez ścieżki i znaków sterujących. */
 function nazwaPliku(surowa) {
@@ -57,12 +67,30 @@ function nazwaPliku(surowa) {
   return path.basename(nazwa).replace(/[\u0000-\u001f\\/]/g, '_').slice(0, 200) || 'plik';
 }
 
+/** Audyt W3: limit liczby i łącznego rozmiaru plików wniosku albo sprawy. */
+function sprawdzLimit(db, wlasciciel, nowyBajtow) {
+  const dotychczasowe = wlasciciel.wniosek_id ? danePliki.wniosku(db, wlasciciel.wniosek_id)
+    : wlasciciel.sprawa_id ? danePliki.lista(db, { sprawaId: wlasciciel.sprawa_id }) : null;
+  if (!dotychczasowe) return;
+  const bajty = dotychczasowe.reduce((suma, p) => {
+    try {
+      return suma + fs.statSync(path.join(konfiguracja.KATALOG_DOKUMENTOW, path.basename(p.sciezka))).size;
+    } catch {
+      return suma;
+    }
+  }, nowyBajtow);
+  if (dotychczasowe.length >= LIMITY.liczba || bajty > LIMITY.megabajty * 1024 * 1024) {
+    throw new BladWalidacji([{ pole: 'plik', komunikat: 'Limit plików został wyczerpany — skontaktuj się z kancelarią.' }]);
+  }
+}
+
 /**
  * Przyjmuje plik i zapisuje go w `psa_pliki`. `wlasciciel` = { spolka_id, osoba_id, sprawa_id,
  * wniosek_id }; `kto` zapisuje się sam. Zwraca id pliku.
  */
 function przyjmij(db, plik, wlasciciel, kto) {
   if (!plik || !plik.buffer) throw new BladWalidacji([{ pole: 'plik', komunikat: 'Wybierz plik.' }]);
+  sprawdzLimit(db, wlasciciel, plik.buffer.length);
   const nazwa = nazwaPliku(plik.originalname);
   const rozszerzenie = path.extname(nazwa).toLowerCase();
   const typ = TYPY[rozszerzenie];
@@ -89,4 +117,4 @@ function wyslij(odp, plik) {
   odp.sendFile(pelna);
 }
 
-module.exports = { TYPY, odbierz, przyjmij, wyslij };
+module.exports = { TYPY, LIMITY, odbierz, przyjmij, wyslij };

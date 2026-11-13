@@ -9,7 +9,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 process.env.WSPOLNA_BAZA = path.join(os.tmpdir(), `psa-dokumentacja-${process.pid}.db`);
-process.env.SESJA_SEKRET = 'dokumentacja-tymczasowy-sekret';
+process.env.SESJA_SEKRET = 'dokumentacja-tymczasowy-sekret-do-generowania';
 
 const { ROUTERY_API } = require('../serwer');
 const { listaTras } = require('./trasy');
