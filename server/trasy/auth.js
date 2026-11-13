@@ -52,7 +52,7 @@ router.post(
       .prepare('SELECT * FROM psa_uzytkownicy WHERE lower(email) = ?')
       .get(email);
 
-    const pasuje = uzytkownik ? await hasla.zweryfikuj(haslo, uzytkownik.hash_hasla) : false;
+    const pasuje = await hasla.zweryfikuj(haslo, uzytkownik ? uzytkownik.hash_hasla : null);
     if (!uzytkownik || !uzytkownik.aktywny || !pasuje) {
       limiter.zanotujNieudana(zad.ip, email);
       throw nieAutoryzowany('Nieprawidłowy e-mail lub hasło.');

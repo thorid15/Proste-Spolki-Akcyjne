@@ -13,8 +13,14 @@ function hashuj(haslo) {
   return bcrypt.hash(String(haslo), KOSZT);
 }
 
+/** Skrót porównywany przy nieznanym koncie — żeby czas odpowiedzi nie zdradzał, czy konto istnieje (audyt S2). */
+let atrapa = null;
+
 function zweryfikuj(haslo, hash) {
-  if (!hash) return Promise.resolve(false);
+  if (!hash) {
+    atrapa = atrapa || bcrypt.hash('konto-ktorego-nie-ma', KOSZT);
+    return atrapa.then((h) => bcrypt.compare(String(haslo), h)).then(() => false);
+  }
   return bcrypt.compare(String(haslo), hash);
 }
 

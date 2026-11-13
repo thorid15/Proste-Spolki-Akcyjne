@@ -43,7 +43,7 @@ router.post('/login', asy(async (zad, odp) => {
   const haslo = String((zad.body || {}).haslo || '');
   limiter.sprawdz(zad.ip, adres);
   const konto = adres ? db().prepare('SELECT * FROM psa_konta WHERE lower(email) = ?').get(adres) : null;
-  const pasuje = konto && konto.hash_hasla ? await hasla.zweryfikuj(haslo, konto.hash_hasla) : false;
+  const pasuje = await hasla.zweryfikuj(haslo, konto ? konto.hash_hasla : null);
   if (!konto || !konto.aktywne || !pasuje) {
     limiter.zanotujNieudana(zad.ip, adres);
     throw nieAutoryzowany('Nieprawidłowy e-mail lub hasło.');

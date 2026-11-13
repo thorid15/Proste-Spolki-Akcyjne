@@ -70,3 +70,18 @@ test('licznik jednego adresu nie usypia innego', () => {
   // Inny adres pracuje normalnie.
   assert.doesNotThrow(() => limiter.sprawdz('10.0.0.5', 'ofiara@example.pl'));
 });
+
+test('S1: zgadywanie hasla jednego konta z wielu adresow blokuje licznik konta', () => {
+  const email = `rozproszony-${Date.now()}@example.pl`;
+  for (let i = 0; i < 20; i += 1) probujZalogowac(`198.51.100.${i + 1}`, email);
+  assert.throws(() => limiter.sprawdz('198.51.100.200', email), { name: 'BladOgraniczenia' }, '21. proba z nowego adresu');
+  assert.doesNotThrow(() => limiter.sprawdz('198.51.100.200', `inne-${Date.now()}@example.pl`), 'inne konto z tego adresu loguje sie dalej');
+});
+
+test('S2: nieznane konto zuzywa tyle czasu co znane — porownanie na skrocie-atrapie', async () => {
+  const hasla = require('../server/logika/hasla');
+  await hasla.zweryfikuj('rozgrzewka', null);
+  const start = Date.now();
+  assert.equal(await hasla.zweryfikuj('cokolwiek', null), false);
+  assert.ok(Date.now() - start >= 50, `porownanie trwalo ${Date.now() - start} ms`);
+});

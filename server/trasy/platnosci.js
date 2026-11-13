@@ -28,6 +28,7 @@
 const express = require('express');
 
 const { db } = require('../baza');
+const konfiguracja = require('../konfiguracja');
 const platnosci = require('../platnosci');
 const tpay = require('../logika/tpay');
 
@@ -64,6 +65,8 @@ router.post(
     // Warstwa 2 — podpis JWS. Gdy naglowek przyszedl, MUSI sie zgadzac:
     // podrobiony podpis to proba oszustwa, nie usterka lacza.
     const naglowekJws = zad.get('X-JWS-Signature');
+    // D-238 (audyt S5): w produkcji podpis JWS jest obowiązkowy — sama suma kontrolna nie wystarcza do zaksięgowania.
+    if (!naglowekJws && String(konfiguracja.NODE_ENV || '').toLowerCase() === 'production') return zakoncz('odrzucone (brak podpisu JWS)');
     if (naglowekJws) {
       let jws;
       try {

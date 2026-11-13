@@ -324,6 +324,22 @@ test('ITN: odpowiada czystym TRUE i nie wycieka szczegolow', async () => {
   // Trasa stoi PRZED bramka sesji — inaczej operator dostawalby 401.
   assert.notEqual(stOk, 401);
 
+  // D-238 (audyt S5): w produkcji powiadomienie bez podpisu JWS nie księguje — odpowiedź nadal czyste TRUE.
+  const konfiguracja = require('../server/konfiguracja');
+  const srodowisko = konfiguracja.NODE_ENV;
+  const druga = dodajOplate({ kwotaGrosze: 4400 });
+  const { platnosc: p2 } = await platnosci.przygotujZaplate(db(), {
+    oplataId: druga.id, urlPowiadomienia: `${baza}/api/psa/platnosci/tpay/itn`, urlPowrotu: 'https://x',
+  });
+  konfiguracja.NODE_ENV = 'production';
+  try {
+    const [st, tresc] = await itn(powiadomienie(p2));
+    assert.deepEqual([st, tresc], [200, 'TRUE']);
+    assert.equal(db().prepare('SELECT stan FROM psa_oplaty WHERE id = ?').get(druga.id).stan, 'do_zaplaty', 'bez podpisu JWS — bez księgowania');
+  } finally {
+    konfiguracja.NODE_ENV = srodowisko;
+  }
+
   await new Promise((g) => serwer.close(g));
 });
 

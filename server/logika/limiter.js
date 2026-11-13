@@ -30,6 +30,13 @@ const LIMIT = 5;
  */
 const LIMIT_IP = 30;
 
+/**
+ * Trzeci licznik, po SAMYM KONCIE (audyt S1): zgadywanie hasła jednego konta z wielu adresów nie zapełnia
+ * żadnego z dwóch liczników wyżej. Limit wyższy niż na parę adres + konto, żeby właściciel konta, który się
+ * pomylił kilka razy z dwóch urządzeń, nie blokował się sam.
+ */
+const LIMIT_KONTO = 20;
+
 const proby = new Map(); // klucz -> znaczniki czasu nieudanych prob
 
 function klucz(ip, identyfikator) {
@@ -38,6 +45,10 @@ function klucz(ip, identyfikator) {
 
 function kluczIp(ip) {
   return `ip::${ip}`;
+}
+
+function kluczKonta(identyfikator) {
+  return `konto::${String(identyfikator || '').toLowerCase()}`;
 }
 
 function oczysc(znaczniki, teraz) {
@@ -58,6 +69,7 @@ function sprawdz(ip, identyfikator, opcje = {}) {
   // Najpierw licznik adresu — inaczej rozpylanie hasla po wielu kontach
   // nigdy nie zapelnia zadnego licznika z osobna.
   if (opcje.bezLicznikaIp !== true) sprawdzLicznik(kluczIp(ip), LIMIT_IP, opcje);
+  if (identyfikator && opcje.bezLicznikaIp !== true) sprawdzLicznik(kluczKonta(identyfikator), LIMIT_KONTO, opcje);
   sprawdzLicznik(klucz(ip, identyfikator), opcje.limit || LIMIT, opcje);
 }
 
@@ -90,6 +102,7 @@ function zanotuj(k) {
 function zanotujNieudana(ip, identyfikator) {
   zanotuj(klucz(ip, identyfikator));
   zanotuj(kluczIp(ip));
+  if (identyfikator) zanotuj(kluczKonta(identyfikator));
 }
 
 /** Liczy każdą próbę (nie tylko nieudaną) tylko na liczniku identyfikatora — limit czynności, np. zamówień. */
