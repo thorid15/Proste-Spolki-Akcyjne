@@ -1,5 +1,5 @@
 {
-  "wygenerowano": "2026-11-11T21:10:11.696Z",
+  "wygenerowano": "2026-11-14T12:23:47.196Z",
   "scenariusze": [
     {
       "scenariusz": "karta-osoby",
@@ -15,7 +15,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 0,
         "przejscia": 3,
-        "czas_ms": 1717
+        "czas_ms": 1693
       },
       "bledy": {
         "js": [],
@@ -37,7 +37,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 1007,
+          "czas_ms": 1120,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -58,7 +58,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 82,
+          "czas_ms": 35,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -79,7 +79,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 628,
+          "czas_ms": 538,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -105,7 +105,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 0,
         "przejscia": 3,
-        "czas_ms": 1460
+        "czas_ms": 1341
       },
       "bledy": {
         "js": [],
@@ -127,7 +127,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 893,
+          "czas_ms": 807,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -148,7 +148,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 39,
+          "czas_ms": 56,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -169,7 +169,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 528,
+          "czas_ms": 478,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -186,16 +186,16 @@
       "proces": "Wniosek: zgłoszenie → otwarcie",
       "persona": "zarząd spółki → notariusz",
       "szerokosc": 1440,
-      "status": "ukonczony",
+      "status": "przerwany",
       "metryki": {
-        "kroki": 11,
-        "ekrany": 5,
-        "klikniecia": 33,
-        "pola_wypelnione": 18,
-        "zaznaczenia": 8,
+        "kroki": 8,
+        "ekrany": 4,
+        "klikniecia": 26,
+        "pola_wypelnione": 12,
+        "zaznaczenia": 5,
         "pola_widoczne_max": 17,
-        "przejscia": 10,
-        "czas_ms": 7400
+        "przejscia": 8,
+        "czas_ms": 19201
       },
       "bledy": {
         "js": [],
@@ -217,7 +217,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 856,
+          "czas_ms": 779,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -238,7 +238,7 @@
           "pola_widoczne": 7,
           "wybor_widoczne": 0,
           "przejscia": 4,
-          "czas_ms": 1242,
+          "czas_ms": 1119,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -259,7 +259,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 529,
+          "czas_ms": 489,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -280,7 +280,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 238,
+          "czas_ms": 170,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -301,7 +301,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 1075,
+          "czas_ms": 1030,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -322,7 +322,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 136,
+          "czas_ms": 135,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -343,7 +343,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 449,
+          "czas_ms": 373,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -364,78 +364,41 @@
           "pola_widoczne": 17,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 187,
+          "czas_ms": 15106,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
           "uklad": [],
           "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 9,
-          "nazwa": "Sprawa otwarcia — numery akcji, wpis",
-          "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/nowa-spolka/09-sprawa-otwarcia-numery-akcji-wpis-1440.png",
-          "klikniecia": 6,
-          "pola_wypelnione": 6,
-          "zaznaczenia": 3,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 0,
-          "przejscia": 0,
-          "czas_ms": 1607,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 10,
-          "nazwa": "Kokpit — rejestr otwarty",
-          "adres": "/#/spolki/3",
-          "zrzut": "zrzuty/nowa-spolka/10-kokpit-rejestr-otwarty-1440.png",
-          "klikniecia": 1,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 1,
-          "wybor_widoczne": 0,
-          "przejscia": 1,
-          "czas_ms": 164,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 11,
-          "nazwa": "Portal po przyjęciu — Start zamiast ekranów wniosku",
-          "adres": "/portal.html#/",
-          "zrzut": "zrzuty/nowa-spolka/11-portal-po-przyjęciu-start-zamiast-ekranó-1440.png",
-          "klikniecia": 0,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 0,
-          "przejscia": 1,
-          "czas_ms": 917,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
+          "wyjatek": "locator.waitFor: Timeout 15000ms exceeded.",
+          "stan_ekranu": {
+            "komunikaty": [],
+            "nieaktywne": [],
+            "przyciski": [
+              "Więcej",
+              "+ Seria",
+              "Zmień",
+              "+ Kolejne akcje",
+              "Usuń",
+              "Zmień",
+              "+ Kolejne akcje",
+              "Usuń",
+              "+ Akcjonariusz",
+              "+ Obciążenie albo adnotacja",
+              "+ Akcje umorzone",
+              "Dodaj plik",
+              "Dokonaj wpisu"
+            ],
+            "naglowki": [
+              "Otwarcie rejestru",
+              "1. Co się zmienia",
+              "2. Podstawa",
+              "3. Przed wpisem",
+              "4. Stan rejestru przed wpisem"
+            ],
+            "tresc": "Otwarcie rejestru DELTA NOWA PROSTA SPÓŁKA AKCYJNA sprawa nr 3 termin 21.11.2026 Więcej 1. Co się zmienia Źródło założenie spółki przejęcie rejestru Serie Seria Numery Liczba Wpis do KRS + Seria Akcjonariusze Akcjonariusz 1 Barbara Zarządna PESEL 44051401359 · ul. Zarządowa 1, 80-001 Gdańsk Zmień Seria Numery np. 1-100, 150 Liczba Ułamek (opcjonalnie) np. 1/2 + Kolejne akcje Usuń Akcjonariusz 2 Cezary Wspólnik ur. 03.03.1980 · ul. Wspólna 2, 80-002 Gdańsk Zmień Seria Numery np. 1-100, 150 Liczba Ułamek (opcjonalnie) np. 1/2 + Kolejne akcje Usuń + Akcjonariusz Obciążenia i adnotacje + Obciążeni"
+          }
         }
       ]
     },
@@ -444,16 +407,16 @@
       "proces": "Wniosek: zgłoszenie → otwarcie",
       "persona": "zarząd spółki → notariusz",
       "szerokosc": 390,
-      "status": "ukonczony",
+      "status": "przerwany",
       "metryki": {
-        "kroki": 11,
-        "ekrany": 5,
-        "klikniecia": 33,
-        "pola_wypelnione": 18,
-        "zaznaczenia": 8,
+        "kroki": 8,
+        "ekrany": 4,
+        "klikniecia": 26,
+        "pola_wypelnione": 12,
+        "zaznaczenia": 5,
         "pola_widoczne_max": 17,
-        "przejscia": 10,
-        "czas_ms": 7074
+        "przejscia": 8,
+        "czas_ms": 19055
       },
       "bledy": {
         "js": [],
@@ -475,7 +438,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 876,
+          "czas_ms": 720,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -496,7 +459,7 @@
           "pola_widoczne": 7,
           "wybor_widoczne": 0,
           "przejscia": 4,
-          "czas_ms": 1254,
+          "czas_ms": 1063,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -517,7 +480,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 625,
+          "czas_ms": 527,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -538,7 +501,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 158,
+          "czas_ms": 177,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -559,7 +522,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 981,
+          "czas_ms": 968,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -580,7 +543,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 139,
+          "czas_ms": 130,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -601,7 +564,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 435,
+          "czas_ms": 376,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -622,78 +585,41 @@
           "pola_widoczne": 17,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 184,
+          "czas_ms": 15094,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
           "uklad": [],
           "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 9,
-          "nazwa": "Sprawa otwarcia — numery akcji, wpis",
-          "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/nowa-spolka/09-sprawa-otwarcia-numery-akcji-wpis-390.png",
-          "klikniecia": 6,
-          "pola_wypelnione": 6,
-          "zaznaczenia": 3,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 0,
-          "przejscia": 0,
-          "czas_ms": 1423,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 10,
-          "nazwa": "Kokpit — rejestr otwarty",
-          "adres": "/#/spolki/3",
-          "zrzut": "zrzuty/nowa-spolka/10-kokpit-rejestr-otwarty-390.png",
-          "klikniecia": 1,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 1,
-          "wybor_widoczne": 0,
-          "przejscia": 1,
-          "czas_ms": 123,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 11,
-          "nazwa": "Portal po przyjęciu — Start zamiast ekranów wniosku",
-          "adres": "/portal.html#/",
-          "zrzut": "zrzuty/nowa-spolka/11-portal-po-przyjęciu-start-zamiast-ekranó-390.png",
-          "klikniecia": 0,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 0,
-          "przejscia": 1,
-          "czas_ms": 876,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
+          "wyjatek": "locator.waitFor: Timeout 15000ms exceeded.",
+          "stan_ekranu": {
+            "komunikaty": [],
+            "nieaktywne": [],
+            "przyciski": [
+              "Więcej",
+              "+ Seria",
+              "Zmień",
+              "+ Kolejne akcje",
+              "Usuń",
+              "Zmień",
+              "+ Kolejne akcje",
+              "Usuń",
+              "+ Akcjonariusz",
+              "+ Obciążenie albo adnotacja",
+              "+ Akcje umorzone",
+              "Dodaj plik",
+              "Dokonaj wpisu"
+            ],
+            "naglowki": [
+              "Otwarcie rejestru",
+              "1. Co się zmienia",
+              "2. Podstawa",
+              "3. Przed wpisem",
+              "4. Stan rejestru przed wpisem"
+            ],
+            "tresc": "Otwarcie rejestru DELTA NOWA PROSTA SPÓŁKA AKCYJNA sprawa nr 3 termin 21.11.2026 Więcej 1. Co się zmienia Źródło założenie spółki przejęcie rejestru Serie Seria Numery Liczba Wpis do KRS + Seria Akcjonariusze Akcjonariusz 1 Barbara Zarządna PESEL 44051401359 · ul. Zarządowa 1, 80-001 Gdańsk Zmień Seria Numery np. 1-100, 150 Liczba Ułamek (opcjonalnie) np. 1/2 + Kolejne akcje Usuń Akcjonariusz 2 Cezary Wspólnik ur. 03.03.1980 · ul. Wspólna 2, 80-002 Gdańsk Zmień Seria Numery np. 1-100, 150 Liczba Ułamek (opcjonalnie) np. 1/2 + Kolejne akcje Usuń + Akcjonariusz Obciążenia i adnotacje + Obciążeni"
+          }
         }
       ]
     },
@@ -706,12 +632,12 @@
       "metryki": {
         "kroki": 2,
         "ekrany": 2,
-        "klikniecia": 1,
+        "klikniecia": 0,
         "pola_wypelnione": 3,
         "zaznaczenia": 0,
         "pola_widoczne_max": 4,
-        "przejscia": 3,
-        "czas_ms": 1165
+        "przejscia": 4,
+        "czas_ms": 1088
       },
       "bledy": {
         "js": [],
@@ -724,16 +650,16 @@
       "kroki": [
         {
           "nr": 1,
-          "nazwa": "Kokpit — Stan na dzień",
+          "nazwa": "Rejestr — Stan na dzień",
           "adres": "/#/spolki/1?dzien=2026-03-31",
-          "zrzut": "zrzuty/pola-dat/01-kokpit-stan-na-dzień-1440.png",
+          "zrzut": "zrzuty/pola-dat/01-rejestr-stan-na-dzień-1440.png",
           "klikniecia": 0,
           "pola_wypelnione": 1,
           "zaznaczenia": 0,
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 796,
+          "czas_ms": 920,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -745,16 +671,16 @@
         },
         {
           "nr": 2,
-          "nazwa": "Sprawa — Data wpływu żądania (kropki wstawiają się same)",
+          "nazwa": "Wpis — Żądanie wpłynęło (kropki wstawiają się same)",
           "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/pola-dat/02-sprawa-data-wpływu-żądania-kropki-wstawi-1440.png",
-          "klikniecia": 1,
+          "zrzut": "zrzuty/pola-dat/02-wpis-żądanie-wpłynęło-kropki-wstawiają-s-1440.png",
+          "klikniecia": 0,
           "pola_wypelnione": 2,
           "zaznaczenia": 0,
           "pola_widoczne": 4,
           "wybor_widoczne": 0,
-          "przejscia": 1,
-          "czas_ms": 369,
+          "przejscia": 2,
+          "czas_ms": 168,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -775,12 +701,12 @@
       "metryki": {
         "kroki": 2,
         "ekrany": 2,
-        "klikniecia": 1,
+        "klikniecia": 0,
         "pola_wypelnione": 3,
         "zaznaczenia": 0,
         "pola_widoczne_max": 4,
-        "przejscia": 3,
-        "czas_ms": 1053
+        "przejscia": 4,
+        "czas_ms": 995
       },
       "bledy": {
         "js": [],
@@ -793,16 +719,16 @@
       "kroki": [
         {
           "nr": 1,
-          "nazwa": "Kokpit — Stan na dzień",
+          "nazwa": "Rejestr — Stan na dzień",
           "adres": "/#/spolki/1?dzien=2026-03-31",
-          "zrzut": "zrzuty/pola-dat/01-kokpit-stan-na-dzień-390.png",
+          "zrzut": "zrzuty/pola-dat/01-rejestr-stan-na-dzień-390.png",
           "klikniecia": 0,
           "pola_wypelnione": 1,
           "zaznaczenia": 0,
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 789,
+          "czas_ms": 778,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -814,16 +740,16 @@
         },
         {
           "nr": 2,
-          "nazwa": "Sprawa — Data wpływu żądania (kropki wstawiają się same)",
+          "nazwa": "Wpis — Żądanie wpłynęło (kropki wstawiają się same)",
           "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/pola-dat/02-sprawa-data-wpływu-żądania-kropki-wstawi-390.png",
-          "klikniecia": 1,
+          "zrzut": "zrzuty/pola-dat/02-wpis-żądanie-wpłynęło-kropki-wstawiają-s-390.png",
+          "klikniecia": 0,
           "pola_wypelnione": 2,
           "zaznaczenia": 0,
           "pola_widoczne": 4,
           "wybor_widoczne": 0,
-          "przejscia": 1,
-          "czas_ms": 264,
+          "przejscia": 2,
+          "czas_ms": 217,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -840,16 +766,16 @@
       "proces": "Portal: zakres konta (U-23)",
       "persona": "akcjonariuszka → notariusz",
       "szerokosc": 1440,
-      "status": "ukonczony",
+      "status": "przerwany",
       "metryki": {
-        "kroki": 5,
-        "ekrany": 4,
-        "klikniecia": 7,
-        "pola_wypelnione": 1,
+        "kroki": 3,
+        "ekrany": 3,
+        "klikniecia": 4,
+        "pola_wypelnione": 0,
         "zaznaczenia": 0,
         "pola_widoczne_max": 2,
-        "przejscia": 9,
-        "czas_ms": 4315
+        "przejscia": 6,
+        "czas_ms": 17087
       },
       "bledy": {
         "js": [],
@@ -871,7 +797,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 4,
-          "czas_ms": 1726,
+          "czas_ms": 1631,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -892,7 +818,7 @@
           "pola_widoczne": 2,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 151,
+          "czas_ms": 111,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -907,63 +833,41 @@
           "nazwa": "Kancelaria — „Działają za spółkę” → Dodaj Annę",
           "adres": "/#/spolki/1",
           "zrzut": "zrzuty/portal-akcjonariusz/03-kancelaria-działają-za-spółkę-dodaj-annę-1440.png",
-          "klikniecia": 2,
-          "pola_wypelnione": 1,
+          "klikniecia": 0,
+          "pola_wypelnione": 0,
           "zaznaczenia": 0,
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 895,
+          "czas_ms": 15345,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
           "uklad": [],
           "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 4,
-          "nazwa": "Portal — obie role: sprawy spółki widoczne",
-          "adres": "/portal.html#/sprawy",
-          "zrzut": "zrzuty/portal-akcjonariusz/04-portal-obie-role-sprawy-spółki-widoczne-1440.png",
-          "klikniecia": 0,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 0,
-          "przejscia": 1,
-          "czas_ms": 633,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 5,
-          "nazwa": "Kancelaria — Usuń; portal — znów tylko akcjonariuszka",
-          "adres": "/portal.html#/sprawy",
-          "zrzut": "zrzuty/portal-akcjonariusz/05-kancelaria-usuń-portal-znów-tylko-akcjon-1440.png",
-          "klikniecia": 1,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 0,
-          "przejscia": 2,
-          "czas_ms": 910,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
+          "wyjatek": "locator.click: Timeout 15000ms exceeded.",
+          "stan_ekranu": {
+            "komunikaty": [],
+            "nieaktywne": [],
+            "przyciski": [
+              "Informacja z rejestru",
+              "Więcej",
+              "Zmień dane",
+              "Zmień prawo głosu",
+              "Wykreśl",
+              "Sprostuj",
+              "Dostęp klienta do portalu1",
+              "Dokumenty i pisma3",
+              "Opłaty2",
+              "Żądania wpisu2",
+              "Historia zmian danych1"
+            ],
+            "naglowki": [
+              "Alfa Testowa P.S.A."
+            ],
+            "tresc": "Alfa Testowa P.S.A. KRS 0000990001 rejestr otwarty 14.11.2026 1010 akcji · 2 serie 3 akcjonariuszy Stan na dzień Informacja z rejestru Więcej W TOKU · 1 Przeniesienie akcji z Jan Bezzgody na Ewa Ułamkowa: seria A nr 601–650 (50 akcji). Zostało: Odhacz checklistę: Żądający jest uprawniony; Dokumenty zbadane co do treści i formy; Identyfikacja osób i AML — wykonano albo nie dotyczy. Termin wpisu: 21.11.2026. Dokończ I. Spółka Zmień dane Firma Alfa Testowa P.S.A. Siedziba Gdańsk Adres ul. Testowa 1, 80-001 Gdańsk Sąd rejestrowy Sąd Rejonowy Gdańsk-Północ w Gdańsku, VII Wydział Gospodarczy KRS Num"
+          }
         }
       ]
     },
@@ -972,16 +876,16 @@
       "proces": "Portal: zakres konta (U-23)",
       "persona": "akcjonariuszka → notariusz",
       "szerokosc": 390,
-      "status": "ukonczony",
+      "status": "przerwany",
       "metryki": {
-        "kroki": 5,
-        "ekrany": 4,
-        "klikniecia": 7,
-        "pola_wypelnione": 1,
+        "kroki": 3,
+        "ekrany": 3,
+        "klikniecia": 4,
+        "pola_wypelnione": 0,
         "zaznaczenia": 0,
         "pola_widoczne_max": 2,
-        "przejscia": 9,
-        "czas_ms": 3842
+        "przejscia": 6,
+        "czas_ms": 16831
       },
       "bledy": {
         "js": [],
@@ -989,7 +893,7 @@
         "http": [],
         "dialogi_natywne": []
       },
-      "problemy_ukladu": 0,
+      "problemy_ukladu": 2,
       "naruszenia_axe": [],
       "kroki": [
         {
@@ -1003,7 +907,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 4,
-          "czas_ms": 1484,
+          "czas_ms": 1362,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1024,7 +928,7 @@
           "pola_widoczne": 2,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 126,
+          "czas_ms": 80,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1039,63 +943,50 @@
           "nazwa": "Kancelaria — „Działają za spółkę” → Dodaj Annę",
           "adres": "/#/spolki/1",
           "zrzut": "zrzuty/portal-akcjonariusz/03-kancelaria-działają-za-spółkę-dodaj-annę-390.png",
-          "klikniecia": 2,
-          "pola_wypelnione": 1,
+          "klikniecia": 0,
+          "pola_wypelnione": 0,
           "zaznaczenia": 0,
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 861,
+          "czas_ms": 15389,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
-          "uklad": [],
+          "uklad": [
+            {
+              "selektor": "button.btn.btn-maly „Zmień prawo głosu”",
+              "problem": "poza obszarem treści karty (-142–-33 vs 41–349)"
+            },
+            {
+              "selektor": "button.btn.btn-maly „Wykreśl”",
+              "problem": "poza obszarem treści karty (1–47 vs 41–349)"
+            }
+          ],
           "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 4,
-          "nazwa": "Portal — obie role: sprawy spółki widoczne",
-          "adres": "/portal.html#/sprawy",
-          "zrzut": "zrzuty/portal-akcjonariusz/04-portal-obie-role-sprawy-spółki-widoczne-390.png",
-          "klikniecia": 0,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 0,
-          "przejscia": 1,
-          "czas_ms": 606,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 5,
-          "nazwa": "Kancelaria — Usuń; portal — znów tylko akcjonariuszka",
-          "adres": "/portal.html#/sprawy",
-          "zrzut": "zrzuty/portal-akcjonariusz/05-kancelaria-usuń-portal-znów-tylko-akcjon-390.png",
-          "klikniecia": 1,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 0,
-          "przejscia": 2,
-          "czas_ms": 765,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
+          "wyjatek": "locator.click: Timeout 15000ms exceeded.",
+          "stan_ekranu": {
+            "komunikaty": [],
+            "nieaktywne": [],
+            "przyciski": [
+              "Informacja z rejestru",
+              "Więcej",
+              "Zmień dane",
+              "Zmień prawo głosu",
+              "Wykreśl",
+              "Sprostuj",
+              "Dostęp klienta do portalu1",
+              "Dokumenty i pisma3",
+              "Opłaty2",
+              "Żądania wpisu2",
+              "Historia zmian danych1"
+            ],
+            "naglowki": [
+              "Alfa Testowa P.S.A."
+            ],
+            "tresc": "Alfa Testowa P.S.A. KRS 0000990001 rejestr otwarty 14.11.2026 1010 akcji · 2 serie 3 akcjonariuszy Stan na dzień Informacja z rejestru Więcej W TOKU · 1 Przeniesienie akcji z Jan Bezzgody na Ewa Ułamkowa: seria A nr 601–650 (50 akcji). Zostało: Odhacz checklistę: Żądający jest uprawniony; Dokumenty zbadane co do treści i formy; Identyfikacja osób i AML — wykonano albo nie dotyczy. Termin wpisu: 21.11.2026. Dokończ I. Spółka Zmień dane Firma Alfa Testowa P.S.A. Siedziba Gdańsk Adres ul. Testowa 1, 80-001 Gdańsk Sąd rejestrowy Sąd Rejonowy Gdańsk-Północ w Gdańsku, VII Wydział Gospodarczy KRS Num"
+          }
         }
       ]
     },
@@ -1113,7 +1004,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 1,
         "przejscia": 7,
-        "czas_ms": 3502
+        "czas_ms": 3412
       },
       "bledy": {
         "js": [],
@@ -1135,7 +1026,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 764,
+          "czas_ms": 761,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1156,7 +1047,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 588,
+          "czas_ms": 609,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1169,7 +1060,7 @@
         {
           "nr": 3,
           "nazwa": "Zakładka Informacja — dzień (domyślnie wczoraj), „Zapłać 61,50 zł”",
-          "adres": "/test/tpay/kasa/TR-ATRAPA-mwcm1ouj-1",
+          "adres": "/test/tpay/kasa/TR-ATRAPA-mwgdlrab-1",
           "zrzut": "zrzuty/portal-zarzad/03-zakładka-informacja-dzień-domyślnie-wczo-1440.png",
           "klikniecia": 2,
           "pola_wypelnione": 0,
@@ -1177,7 +1068,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 619,
+          "czas_ms": 530,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1198,7 +1089,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 634,
+          "czas_ms": 661,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1219,7 +1110,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 897,
+          "czas_ms": 851,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1245,7 +1136,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 1,
         "przejscia": 7,
-        "czas_ms": 3204
+        "czas_ms": 3255
       },
       "bledy": {
         "js": [],
@@ -1267,7 +1158,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 638,
+          "czas_ms": 644,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1288,7 +1179,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 553,
+          "czas_ms": 541,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1301,7 +1192,7 @@
         {
           "nr": 3,
           "nazwa": "Zakładka Informacja — dzień (domyślnie wczoraj), „Zapłać 61,50 zł”",
-          "adres": "/test/tpay/kasa/TR-ATRAPA-mwcm296q-1",
+          "adres": "/test/tpay/kasa/TR-ATRAPA-mwgdmmkc-1",
           "zrzut": "zrzuty/portal-zarzad/03-zakładka-informacja-dzień-domyślnie-wczo-390.png",
           "klikniecia": 2,
           "pola_wypelnione": 0,
@@ -1309,7 +1200,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 503,
+          "czas_ms": 562,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1330,7 +1221,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 630,
+          "czas_ms": 634,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1351,7 +1242,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 880,
+          "czas_ms": 874,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1368,7 +1259,7 @@
       "proces": "Wniosek pracownika: przejęcie rejestru",
       "persona": "notariusz",
       "szerokosc": 1440,
-      "status": "ukonczony",
+      "status": "przerwany",
       "metryki": {
         "kroki": 5,
         "ekrany": 2,
@@ -1377,7 +1268,7 @@
         "zaznaczenia": 7,
         "pola_widoczne_max": 17,
         "przejscia": 3,
-        "czas_ms": 4164
+        "czas_ms": 18615
       },
       "bledy": {
         "js": [],
@@ -1399,7 +1290,7 @@
           "pola_widoczne": 15,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 1004,
+          "czas_ms": 921,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1420,7 +1311,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 1366,
+          "czas_ms": 1215,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1441,7 +1332,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 5,
           "przejscia": 0,
-          "czas_ms": 707,
+          "czas_ms": 566,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1462,7 +1353,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 40,
+          "czas_ms": 44,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1483,15 +1374,41 @@
           "pola_widoczne": 17,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 1047,
+          "czas_ms": 15869,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
           "uklad": [],
           "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
+          "wyjatek": "locator.waitFor: Timeout 15000ms exceeded.",
+          "stan_ekranu": {
+            "komunikaty": [],
+            "nieaktywne": [],
+            "przyciski": [
+              "Więcej",
+              "+ Seria",
+              "Zmień",
+              "+ Kolejne akcje",
+              "Usuń",
+              "Zmień",
+              "+ Kolejne akcje",
+              "Usuń",
+              "+ Akcjonariusz",
+              "+ Obciążenie albo adnotacja",
+              "+ Akcje umorzone",
+              "Dodaj plik",
+              "Dokonaj wpisu"
+            ],
+            "naglowki": [
+              "Otwarcie rejestru",
+              "1. Co się zmienia",
+              "2. Podstawa",
+              "3. Przed wpisem",
+              "4. Stan rejestru przed wpisem"
+            ],
+            "tresc": "Otwarcie rejestru DELTA NOWA PROSTA SPÓŁKA AKCYJNA sprawa nr 3 termin 21.11.2026 Więcej 1. Co się zmienia Źródło założenie spółki przejęcie rejestru Serie Seria Numery Liczba Wpis do KRS + Seria Akcjonariusze Akcjonariusz 1 Barbara Zarządna PESEL 44051401359 · ul. Zarządowa 1, 80-001 Gdańsk Zmień Seria Numery np. 1-100, 150 Liczba Ułamek (opcjonalnie) np. 1/2 + Kolejne akcje Usuń Akcjonariusz 2 Cezary Wspólnik ur. 03.03.1980 · ul. Wspólna 2, 80-002 Gdańsk Zmień Seria Numery np. 1-100, 150 Liczba Ułamek (opcjonalnie) np. 1/2 + Kolejne akcje Usuń + Akcjonariusz Obciążenia i adnotacje + Obciążeni"
+          }
         }
       ]
     },
@@ -1500,7 +1417,7 @@
       "proces": "Wniosek pracownika: przejęcie rejestru",
       "persona": "notariusz",
       "szerokosc": 390,
-      "status": "ukonczony",
+      "status": "przerwany",
       "metryki": {
         "kroki": 5,
         "ekrany": 2,
@@ -1509,7 +1426,7 @@
         "zaznaczenia": 7,
         "pola_widoczne_max": 17,
         "przejscia": 3,
-        "czas_ms": 3867
+        "czas_ms": 18648
       },
       "bledy": {
         "js": [],
@@ -1531,7 +1448,7 @@
           "pola_widoczne": 15,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 930,
+          "czas_ms": 885,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1552,7 +1469,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 1335,
+          "czas_ms": 1220,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1573,7 +1490,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 5,
           "przejscia": 0,
-          "czas_ms": 564,
+          "czas_ms": 600,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1594,7 +1511,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 66,
+          "czas_ms": 50,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1615,33 +1532,59 @@
           "pola_widoczne": 17,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 972,
+          "czas_ms": 15893,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
           "uklad": [],
           "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
+          "wyjatek": "locator.waitFor: Timeout 15000ms exceeded.",
+          "stan_ekranu": {
+            "komunikaty": [],
+            "nieaktywne": [],
+            "przyciski": [
+              "Więcej",
+              "+ Seria",
+              "Zmień",
+              "+ Kolejne akcje",
+              "Usuń",
+              "Zmień",
+              "+ Kolejne akcje",
+              "Usuń",
+              "+ Akcjonariusz",
+              "+ Obciążenie albo adnotacja",
+              "+ Akcje umorzone",
+              "Dodaj plik",
+              "Dokonaj wpisu"
+            ],
+            "naglowki": [
+              "Otwarcie rejestru",
+              "1. Co się zmienia",
+              "2. Podstawa",
+              "3. Przed wpisem",
+              "4. Stan rejestru przed wpisem"
+            ],
+            "tresc": "Otwarcie rejestru DELTA NOWA PROSTA SPÓŁKA AKCYJNA sprawa nr 3 termin 21.11.2026 Więcej 1. Co się zmienia Źródło założenie spółki przejęcie rejestru Serie Seria Numery Liczba Wpis do KRS + Seria Akcjonariusze Akcjonariusz 1 Barbara Zarządna PESEL 44051401359 · ul. Zarządowa 1, 80-001 Gdańsk Zmień Seria Numery np. 1-100, 150 Liczba Ułamek (opcjonalnie) np. 1/2 + Kolejne akcje Usuń Akcjonariusz 2 Cezary Wspólnik ur. 03.03.1980 · ul. Wspólna 2, 80-002 Gdańsk Zmień Seria Numery np. 1-100, 150 Liczba Ułamek (opcjonalnie) np. 1/2 + Kolejne akcje Usuń + Akcjonariusz Obciążenia i adnotacje + Obciążeni"
+          }
         }
       ]
     },
     {
-      "scenariusz": "zbycie-list",
-      "proces": "Sprawa: zbycie akcji",
+      "scenariusz": "zastaw-email",
+      "proces": "Wpis: zastaw",
       "persona": "notariusz",
       "szerokosc": 1440,
       "status": "ukonczony",
       "metryki": {
-        "kroki": 8,
+        "kroki": 4,
         "ekrany": 2,
-        "klikniecia": 16,
-        "pola_wypelnione": 8,
+        "klikniecia": 11,
+        "pola_wypelnione": 6,
         "zaznaczenia": 3,
-        "pola_widoczne_max": 8,
-        "przejscia": 6,
-        "czas_ms": 4085
+        "pola_widoczne_max": 10,
+        "przejscia": 4,
+        "czas_ms": 3821
       },
       "bledy": {
         "js": [],
@@ -1654,16 +1597,16 @@
       "kroki": [
         {
           "nr": 1,
-          "nazwa": "Kokpit — Nowy wpis",
+          "nazwa": "Rejestr — Nowy wpis przy akcjonariuszce, zastaw",
           "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/01-kokpit-nowy-wpis-1440.png",
-          "klikniecia": 1,
-          "pola_wypelnione": 0,
+          "zrzut": "zrzuty/zastaw-email/01-rejestr-nowy-wpis-przy-akcjonariuszce-za-1440.png",
+          "klikniecia": 3,
+          "pola_wypelnione": 5,
           "zaznaczenia": 0,
-          "pola_widoczne": 4,
-          "wybor_widoczne": 0,
-          "przejscia": 2,
-          "czas_ms": 921,
+          "pola_widoczne": 10,
+          "wybor_widoczne": 4,
+          "przejscia": 3,
+          "czas_ms": 2524,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1675,16 +1618,16 @@
         },
         {
           "nr": 2,
-          "nazwa": "Krok 1 — żądający, zmiana, podstawa",
+          "nazwa": "Przygotuj powiadomienia — e-mail, Wyślij",
           "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/02-krok-1-żądający-zmiana-podstawa-1440.png",
-          "klikniecia": 4,
-          "pola_wypelnione": 7,
+          "zrzut": "zrzuty/zastaw-email/02-przygotuj-powiadomienia-e-mail-wyślij-1440.png",
+          "klikniecia": 2,
+          "pola_wypelnione": 1,
           "zaznaczenia": 0,
-          "pola_widoczne": 8,
-          "wybor_widoczne": 0,
+          "pola_widoczne": 10,
+          "wybor_widoczne": 4,
           "przejscia": 0,
-          "czas_ms": 1330,
+          "czas_ms": 466,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1696,21 +1639,278 @@
         },
         {
           "nr": 3,
-          "nazwa": "Dalej — powiadomienie listem",
+          "nazwa": "Sprawdzone, opłata, wpis",
           "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/03-dalej-powiadomienie-listem-1440.png",
-          "klikniecia": 1,
-          "pola_wypelnione": 1,
-          "zaznaczenia": 0,
+          "zrzut": "zrzuty/zastaw-email/03-sprawdzone-opłata-wpis-1440.png",
+          "klikniecia": 6,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 3,
           "pola_widoczne": 0,
-          "wybor_widoczne": 3,
+          "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 169,
+          "czas_ms": 754,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
           "uklad": [],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 4,
+          "nazwa": "Rejestr — znacznik zastawu przy pakiecie",
+          "adres": "/#/spolki/1",
+          "zrzut": "zrzuty/zastaw-email/04-rejestr-znacznik-zastawu-przy-pakiecie-1440.png",
+          "klikniecia": 0,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 0,
+          "pola_widoczne": 1,
+          "wybor_widoczne": 0,
+          "przejscia": 1,
+          "czas_ms": 77,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        }
+      ]
+    },
+    {
+      "scenariusz": "zastaw-email",
+      "proces": "Wpis: zastaw",
+      "persona": "notariusz",
+      "szerokosc": 390,
+      "status": "ukonczony",
+      "metryki": {
+        "kroki": 4,
+        "ekrany": 2,
+        "klikniecia": 11,
+        "pola_wypelnione": 6,
+        "zaznaczenia": 3,
+        "pola_widoczne_max": 10,
+        "przejscia": 4,
+        "czas_ms": 3366
+      },
+      "bledy": {
+        "js": [],
+        "konsola": [],
+        "http": [],
+        "dialogi_natywne": []
+      },
+      "problemy_ukladu": 4,
+      "naruszenia_axe": [],
+      "kroki": [
+        {
+          "nr": 1,
+          "nazwa": "Rejestr — Nowy wpis przy akcjonariuszce, zastaw",
+          "adres": "/#/sprawy/3",
+          "zrzut": "zrzuty/zastaw-email/01-rejestr-nowy-wpis-przy-akcjonariuszce-za-390.png",
+          "klikniecia": 3,
+          "pola_wypelnione": 5,
+          "zaznaczenia": 0,
+          "pola_widoczne": 10,
+          "wybor_widoczne": 4,
+          "przejscia": 3,
+          "czas_ms": 2267,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 2,
+          "nazwa": "Przygotuj powiadomienia — e-mail, Wyślij",
+          "adres": "/#/sprawy/3",
+          "zrzut": "zrzuty/zastaw-email/02-przygotuj-powiadomienia-e-mail-wyślij-390.png",
+          "klikniecia": 2,
+          "pola_wypelnione": 1,
+          "zaznaczenia": 0,
+          "pola_widoczne": 10,
+          "wybor_widoczne": 4,
+          "przejscia": 0,
+          "czas_ms": 432,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 3,
+          "nazwa": "Sprawdzone, opłata, wpis",
+          "adres": "/#/sprawy/3",
+          "zrzut": "zrzuty/zastaw-email/03-sprawdzone-opłata-wpis-390.png",
+          "klikniecia": 6,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 3,
+          "pola_widoczne": 0,
+          "wybor_widoczne": 0,
+          "przejscia": 0,
+          "czas_ms": 573,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 4,
+          "nazwa": "Rejestr — znacznik zastawu przy pakiecie",
+          "adres": "/#/spolki/1",
+          "zrzut": "zrzuty/zastaw-email/04-rejestr-znacznik-zastawu-przy-pakiecie-390.png",
+          "klikniecia": 0,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 0,
+          "pola_widoczne": 1,
+          "wybor_widoczne": 0,
+          "przejscia": 1,
+          "czas_ms": 94,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [
+            {
+              "selektor": "button.btn.btn-maly „Zmień prawo głosu”",
+              "problem": "poza obszarem treści karty (-142–-33 vs 41–349)"
+            },
+            {
+              "selektor": "button.btn.btn-maly „Wykreśl”",
+              "problem": "poza obszarem treści karty (1–47 vs 41–349)"
+            },
+            {
+              "selektor": "button.btn.btn-maly „Zmień prawo głosu”",
+              "problem": "poza obszarem treści karty (-142–-33 vs 41–349)"
+            },
+            {
+              "selektor": "button.btn.btn-maly „Wykreśl”",
+              "problem": "poza obszarem treści karty (1–47 vs 41–349)"
+            }
+          ],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        }
+      ]
+    },
+    {
+      "scenariusz": "zbycie-list",
+      "proces": "Wpis: zbycie akcji",
+      "persona": "notariusz",
+      "szerokosc": 1440,
+      "status": "ukonczony",
+      "metryki": {
+        "kroki": 8,
+        "ekrany": 4,
+        "klikniecia": 18,
+        "pola_wypelnione": 6,
+        "zaznaczenia": 3,
+        "pola_widoczne_max": 8,
+        "przejscia": 7,
+        "czas_ms": 21362
+      },
+      "bledy": {
+        "js": [],
+        "konsola": [],
+        "http": [],
+        "dialogi_natywne": []
+      },
+      "problemy_ukladu": 6,
+      "naruszenia_axe": [],
+      "kroki": [
+        {
+          "nr": 1,
+          "nazwa": "Rejestr — Nowy wpis przy akcjonariuszu; sam formularz nie zakłada sprawy",
+          "adres": "/#/spolki/1/wpis?osoba=2",
+          "zrzut": "zrzuty/zbycie-list/01-rejestr-nowy-wpis-przy-akcjonariuszu-sam-1440.png",
+          "klikniecia": 3,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 0,
+          "pola_widoczne": 4,
+          "wybor_widoczne": 0,
+          "przejscia": 2,
+          "czas_ms": 2609,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 2,
+          "nazwa": "Dane wpisu i podstawa — zbywca z wiersza rejestru, numery wpisuje pracownik",
+          "adres": "/#/sprawy/3",
+          "zrzut": "zrzuty/zbycie-list/02-dane-wpisu-i-podstawa-zbywca-z-wiersza-r-1440.png",
+          "klikniecia": 3,
+          "pola_wypelnione": 6,
+          "zaznaczenia": 0,
+          "pola_widoczne": 8,
+          "wybor_widoczne": 3,
+          "przejscia": 1,
+          "czas_ms": 1692,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000601–950400 350”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A951–1000 50z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            }
+          ],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 3,
+          "nazwa": "Przygotuj powiadomienia — list do zbywcy",
+          "adres": "/#/sprawy/3",
+          "zrzut": "zrzuty/zbycie-list/03-przygotuj-powiadomienia-list-do-zbywcy-1440.png",
+          "klikniecia": 1,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 0,
+          "pola_widoczne": 8,
+          "wybor_widoczne": 3,
+          "przejscia": 0,
+          "czas_ms": 130,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000601–950400 350”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A951–1000 50z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            }
+          ],
           "axe": [],
           "wyjatek": null,
           "stan_ekranu": null
@@ -1726,7 +1926,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 488,
+          "czas_ms": 485,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1738,37 +1938,46 @@
         },
         {
           "nr": 5,
-          "nazwa": "Sprawdzenie — checklista, opłata",
+          "nazwa": "Przed wpisem — sprawdzone, opłata",
           "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/05-sprawdzenie-checklista-opłata-1440.png",
+          "zrzut": "zrzuty/zbycie-list/05-przed-wpisem-sprawdzone-opłata-1440.png",
           "klikniecia": 4,
           "pola_wypelnione": 0,
           "zaznaczenia": 3,
-          "pola_widoczne": 0,
+          "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 1,
-          "czas_ms": 580,
+          "czas_ms": 627,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
-          "uklad": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000601–950400 350”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A951–1000 50z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            }
+          ],
           "axe": [],
           "wyjatek": null,
           "stan_ekranu": null
         },
         {
           "nr": 6,
-          "nazwa": "Dokonaj wpisu",
+          "nazwa": "Dokonaj wpisu — potwierdzenie z treścią wpisu",
           "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/06-dokonaj-wpisu-1440.png",
+          "zrzut": "zrzuty/zbycie-list/06-dokonaj-wpisu-potwierdzenie-z-treścią-wp-1440.png",
           "klikniecia": 2,
           "pola_wypelnione": 0,
           "zaznaczenia": 0,
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 340,
+          "czas_ms": 371,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1780,184 +1989,10 @@
         },
         {
           "nr": 7,
-          "nazwa": "Wyślij pisma",
+          "nazwa": "Wyślij e-maile",
           "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/07-wyślij-pisma-1440.png",
+          "zrzut": "zrzuty/zbycie-list/07-wyślij-e-maile-1440.png",
           "klikniecia": 1,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 0,
-          "przejscia": 0,
-          "czas_ms": 240,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 8,
-          "nazwa": "Korespondencja — wysłane",
-          "adres": "/#/korespondencja?filtr=wyslane",
-          "zrzut": "zrzuty/zbycie-list/08-korespondencja-wysłane-1440.png",
-          "klikniecia": 0,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 0,
-          "przejscia": 1,
-          "czas_ms": 17,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        }
-      ]
-    },
-    {
-      "scenariusz": "zbycie-list",
-      "proces": "Sprawa: zbycie akcji",
-      "persona": "notariusz",
-      "szerokosc": 390,
-      "status": "ukonczony",
-      "metryki": {
-        "kroki": 8,
-        "ekrany": 2,
-        "klikniecia": 16,
-        "pola_wypelnione": 8,
-        "zaznaczenia": 3,
-        "pola_widoczne_max": 8,
-        "przejscia": 6,
-        "czas_ms": 3901
-      },
-      "bledy": {
-        "js": [],
-        "konsola": [],
-        "http": [],
-        "dialogi_natywne": []
-      },
-      "problemy_ukladu": 0,
-      "naruszenia_axe": [],
-      "kroki": [
-        {
-          "nr": 1,
-          "nazwa": "Kokpit — Nowy wpis",
-          "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/01-kokpit-nowy-wpis-390.png",
-          "klikniecia": 1,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 4,
-          "wybor_widoczne": 0,
-          "przejscia": 2,
-          "czas_ms": 879,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 2,
-          "nazwa": "Krok 1 — żądający, zmiana, podstawa",
-          "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/02-krok-1-żądający-zmiana-podstawa-390.png",
-          "klikniecia": 4,
-          "pola_wypelnione": 7,
-          "zaznaczenia": 0,
-          "pola_widoczne": 8,
-          "wybor_widoczne": 0,
-          "przejscia": 0,
-          "czas_ms": 1172,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 3,
-          "nazwa": "Dalej — powiadomienie listem",
-          "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/03-dalej-powiadomienie-listem-390.png",
-          "klikniecia": 1,
-          "pola_wypelnione": 1,
-          "zaznaczenia": 0,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 3,
-          "przejscia": 0,
-          "czas_ms": 130,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 4,
-          "nazwa": "Korespondencja — Nadano",
-          "adres": "/#/korespondencja?filtr=listy",
-          "zrzut": "zrzuty/zbycie-list/04-korespondencja-nadano-390.png",
-          "klikniecia": 3,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 0,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 0,
-          "przejscia": 2,
-          "czas_ms": 528,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 5,
-          "nazwa": "Sprawdzenie — checklista, opłata",
-          "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/05-sprawdzenie-checklista-opłata-390.png",
-          "klikniecia": 4,
-          "pola_wypelnione": 0,
-          "zaznaczenia": 3,
-          "pola_widoczne": 0,
-          "wybor_widoczne": 3,
-          "przejscia": 1,
-          "czas_ms": 521,
-          "bledy_konsoli": [],
-          "bledy_js": [],
-          "http": [],
-          "dialogi_natywne": [],
-          "uklad": [],
-          "axe": [],
-          "wyjatek": null,
-          "stan_ekranu": null
-        },
-        {
-          "nr": 6,
-          "nazwa": "Dokonaj wpisu",
-          "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/06-dokonaj-wpisu-390.png",
-          "klikniecia": 2,
           "pola_wypelnione": 0,
           "zaznaczenia": 0,
           "pola_widoczne": 0,
@@ -1974,17 +2009,218 @@
           "stan_ekranu": null
         },
         {
-          "nr": 7,
-          "nazwa": "Wyślij pisma",
+          "nr": 8,
+          "nazwa": "Rejestr po wpisie — historia z opisem zdaniem",
+          "adres": "/#/spolki/1",
+          "zrzut": "zrzuty/zbycie-list/08-rejestr-po-wpisie-historia-z-opisem-zdan-1440.png",
+          "klikniecia": 1,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 0,
+          "pola_widoczne": 1,
+          "wybor_widoczne": 0,
+          "przejscia": 1,
+          "czas_ms": 15122,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        }
+      ]
+    },
+    {
+      "scenariusz": "zbycie-list",
+      "proces": "Wpis: zbycie akcji",
+      "persona": "notariusz",
+      "szerokosc": 390,
+      "status": "ukonczony",
+      "metryki": {
+        "kroki": 8,
+        "ekrany": 4,
+        "klikniecia": 18,
+        "pola_wypelnione": 6,
+        "zaznaczenia": 3,
+        "pola_widoczne_max": 8,
+        "przejscia": 7,
+        "czas_ms": 21419
+      },
+      "bledy": {
+        "js": [],
+        "konsola": [],
+        "http": [],
+        "dialogi_natywne": []
+      },
+      "problemy_ukladu": 8,
+      "naruszenia_axe": [],
+      "kroki": [
+        {
+          "nr": 1,
+          "nazwa": "Rejestr — Nowy wpis przy akcjonariuszu; sam formularz nie zakłada sprawy",
+          "adres": "/#/spolki/1/wpis?osoba=2",
+          "zrzut": "zrzuty/zbycie-list/01-rejestr-nowy-wpis-przy-akcjonariuszu-sam-390.png",
+          "klikniecia": 3,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 0,
+          "pola_widoczne": 4,
+          "wybor_widoczne": 0,
+          "przejscia": 2,
+          "czas_ms": 2381,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 2,
+          "nazwa": "Dane wpisu i podstawa — zbywca z wiersza rejestru, numery wpisuje pracownik",
           "adres": "/#/sprawy/3",
-          "zrzut": "zrzuty/zbycie-list/07-wyślij-pisma-390.png",
+          "zrzut": "zrzuty/zbycie-list/02-dane-wpisu-i-podstawa-zbywca-z-wiersza-r-390.png",
+          "klikniecia": 3,
+          "pola_wypelnione": 6,
+          "zaznaczenia": 0,
+          "pola_widoczne": 8,
+          "wybor_widoczne": 3,
+          "przejscia": 1,
+          "czas_ms": 1637,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000601–950400 350”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A951–1000 50z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            }
+          ],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 3,
+          "nazwa": "Przygotuj powiadomienia — list do zbywcy",
+          "adres": "/#/sprawy/3",
+          "zrzut": "zrzuty/zbycie-list/03-przygotuj-powiadomienia-list-do-zbywcy-390.png",
+          "klikniecia": 1,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 0,
+          "pola_widoczne": 8,
+          "wybor_widoczne": 3,
+          "przejscia": 0,
+          "czas_ms": 53,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000601–950400 350”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A951–1000 50z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            }
+          ],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 4,
+          "nazwa": "Korespondencja — Nadano",
+          "adres": "/#/korespondencja?filtr=listy",
+          "zrzut": "zrzuty/zbycie-list/04-korespondencja-nadano-390.png",
+          "klikniecia": 3,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 0,
+          "pola_widoczne": 0,
+          "wybor_widoczne": 0,
+          "przejscia": 2,
+          "czas_ms": 445,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 5,
+          "nazwa": "Przed wpisem — sprawdzone, opłata",
+          "adres": "/#/sprawy/3",
+          "zrzut": "zrzuty/zbycie-list/05-przed-wpisem-sprawdzone-opłata-390.png",
+          "klikniecia": 4,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 3,
+          "pola_widoczne": 8,
+          "wybor_widoczne": 3,
+          "przejscia": 1,
+          "czas_ms": 534,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000601–950400 350”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A951–1000 50z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            }
+          ],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 6,
+          "nazwa": "Dokonaj wpisu — potwierdzenie z treścią wpisu",
+          "adres": "/#/sprawy/3",
+          "zrzut": "zrzuty/zbycie-list/06-dokonaj-wpisu-potwierdzenie-z-treścią-wp-390.png",
+          "klikniecia": 2,
+          "pola_wypelnione": 0,
+          "zaznaczenia": 0,
+          "pola_widoczne": 0,
+          "wybor_widoczne": 0,
+          "przejscia": 0,
+          "czas_ms": 406,
+          "bledy_konsoli": [],
+          "bledy_js": [],
+          "http": [],
+          "dialogi_natywne": [],
+          "uklad": [],
+          "axe": [],
+          "wyjatek": null,
+          "stan_ekranu": null
+        },
+        {
+          "nr": 7,
+          "nazwa": "Wyślij e-maile",
+          "adres": "/#/sprawy/3",
+          "zrzut": "zrzuty/zbycie-list/07-wyślij-e-maile-390.png",
           "klikniecia": 1,
           "pola_wypelnione": 0,
           "zaznaczenia": 0,
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 309,
+          "czas_ms": 835,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1996,21 +2232,30 @@
         },
         {
           "nr": 8,
-          "nazwa": "Korespondencja — wysłane",
-          "adres": "/#/korespondencja?filtr=wyslane",
-          "zrzut": "zrzuty/zbycie-list/08-korespondencja-wysłane-390.png",
-          "klikniecia": 0,
+          "nazwa": "Rejestr po wpisie — historia z opisem zdaniem",
+          "adres": "/#/spolki/1",
+          "zrzut": "zrzuty/zbycie-list/08-rejestr-po-wpisie-historia-z-opisem-zdan-390.png",
+          "klikniecia": 1,
           "pola_wypelnione": 0,
           "zaznaczenia": 0,
-          "pola_widoczne": 0,
+          "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 36,
+          "czas_ms": 15128,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
-          "uklad": [],
+          "uklad": [
+            {
+              "selektor": "button.btn.btn-maly „Zmień prawo głosu”",
+              "problem": "poza obszarem treści karty (-142–-33 vs 41–349)"
+            },
+            {
+              "selektor": "button.btn.btn-maly „Wykreśl”",
+              "problem": "poza obszarem treści karty (1–47 vs 41–349)"
+            }
+          ],
           "axe": [],
           "wyjatek": null,
           "stan_ekranu": null
@@ -2031,7 +2276,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 2,
         "przejscia": 3,
-        "czas_ms": 1941
+        "czas_ms": 1887
       },
       "bledy": {
         "js": [],
@@ -2053,7 +2298,7 @@
           "pola_widoczne": 2,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 905,
+          "czas_ms": 871,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2074,7 +2319,7 @@
           "pola_widoczne": 2,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 1036,
+          "czas_ms": 1016,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2100,7 +2345,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 2,
         "przejscia": 3,
-        "czas_ms": 1895
+        "czas_ms": 1778
       },
       "bledy": {
         "js": [],
@@ -2122,7 +2367,7 @@
           "pola_widoczne": 2,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 886,
+          "czas_ms": 808,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2143,7 +2388,7 @@
           "pola_widoczne": 2,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 1009,
+          "czas_ms": 970,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2157,19 +2402,19 @@
     },
     {
       "scenariusz": "zmiana-tresci",
-      "proces": "Sprawa: Zmień treść (R2)",
+      "proces": "Wpis: Zmień treść (R2)",
       "persona": "notariusz",
       "szerokosc": 1440,
       "status": "ukonczony",
       "metryki": {
         "kroki": 3,
         "ekrany": 1,
-        "klikniecia": 4,
+        "klikniecia": 5,
         "pola_wypelnione": 3,
         "zaznaczenia": 0,
         "pola_widoczne_max": 8,
-        "przejscia": 1,
-        "czas_ms": 1208
+        "przejscia": 2,
+        "czas_ms": 2676
       },
       "bledy": {
         "js": [],
@@ -2177,68 +2422,95 @@
         "http": [],
         "dialogi_natywne": []
       },
-      "problemy_ukladu": 0,
+      "problemy_ukladu": 6,
       "naruszenia_axe": [],
       "kroki": [
         {
           "nr": 1,
-          "nazwa": "Sprawa po kroku 1 — Nadano w kafelku",
+          "nazwa": "Wpis w toku z rejestru — Dokończ, Nadano w kafelku",
           "adres": "/#/sprawy/2",
-          "zrzut": "zrzuty/zmiana-tresci/01-sprawa-po-kroku-1-nadano-w-kafelku-1440.png",
-          "klikniecia": 1,
+          "zrzut": "zrzuty/zmiana-tresci/01-wpis-w-toku-z-rejestru-dokończ-nadano-w--1440.png",
+          "klikniecia": 2,
           "pola_wypelnione": 0,
           "zaznaczenia": 0,
-          "pola_widoczne": 0,
+          "pola_widoczne": 8,
           "wybor_widoczne": 3,
-          "przejscia": 1,
-          "czas_ms": 985,
+          "przejscia": 2,
+          "czas_ms": 1369,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
-          "uklad": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000651–1000400 350”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–650 50z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            }
+          ],
           "axe": [],
           "wyjatek": null,
           "stan_ekranu": null
         },
         {
           "nr": 2,
-          "nazwa": "Więcej — Zmień treść",
+          "nazwa": "Zmień treść — ostrzeżenie o wysłanym powiadomieniu",
           "adres": "/#/sprawy/2",
-          "zrzut": "zrzuty/zmiana-tresci/02-więcej-zmień-treść-1440.png",
+          "zrzut": "zrzuty/zmiana-tresci/02-zmień-treść-ostrzeżenie-o-wysłanym-powia-1440.png",
           "klikniecia": 2,
           "pola_wypelnione": 2,
           "zaznaczenia": 0,
           "pola_widoczne": 8,
-          "wybor_widoczne": 0,
+          "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 127,
+          "czas_ms": 1182,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
-          "uklad": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000641–1000400 360”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–640 40z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            }
+          ],
           "axe": [],
           "wyjatek": null,
           "stan_ekranu": null
         },
         {
           "nr": 3,
-          "nazwa": "Dalej — nowe powiadomienie",
+          "nazwa": "Przygotuj powiadomienia — nowe powiadomienie",
           "adres": "/#/sprawy/2",
-          "zrzut": "zrzuty/zmiana-tresci/03-dalej-nowe-powiadomienie-1440.png",
+          "zrzut": "zrzuty/zmiana-tresci/03-przygotuj-powiadomienia-nowe-powiadomien-1440.png",
           "klikniecia": 1,
           "pola_wypelnione": 1,
           "zaznaczenia": 0,
-          "pola_widoczne": 0,
+          "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 96,
+          "czas_ms": 125,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
-          "uklad": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000641–1000400 360”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–640 40z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (298–1386 vs 310–1374)"
+            }
+          ],
           "axe": [],
           "wyjatek": null,
           "stan_ekranu": null
@@ -2247,19 +2519,19 @@
     },
     {
       "scenariusz": "zmiana-tresci",
-      "proces": "Sprawa: Zmień treść (R2)",
+      "proces": "Wpis: Zmień treść (R2)",
       "persona": "notariusz",
       "szerokosc": 390,
       "status": "ukonczony",
       "metryki": {
         "kroki": 3,
         "ekrany": 1,
-        "klikniecia": 4,
+        "klikniecia": 5,
         "pola_wypelnione": 3,
         "zaznaczenia": 0,
         "pola_widoczne_max": 8,
-        "przejscia": 1,
-        "czas_ms": 1189
+        "przejscia": 2,
+        "czas_ms": 2440
       },
       "bledy": {
         "js": [],
@@ -2267,68 +2539,95 @@
         "http": [],
         "dialogi_natywne": []
       },
-      "problemy_ukladu": 0,
+      "problemy_ukladu": 6,
       "naruszenia_axe": [],
       "kroki": [
         {
           "nr": 1,
-          "nazwa": "Sprawa po kroku 1 — Nadano w kafelku",
+          "nazwa": "Wpis w toku z rejestru — Dokończ, Nadano w kafelku",
           "adres": "/#/sprawy/2",
-          "zrzut": "zrzuty/zmiana-tresci/01-sprawa-po-kroku-1-nadano-w-kafelku-390.png",
-          "klikniecia": 1,
+          "zrzut": "zrzuty/zmiana-tresci/01-wpis-w-toku-z-rejestru-dokończ-nadano-w--390.png",
+          "klikniecia": 2,
           "pola_wypelnione": 0,
           "zaznaczenia": 0,
-          "pola_widoczne": 0,
+          "pola_widoczne": 8,
           "wybor_widoczne": 3,
-          "przejscia": 1,
-          "czas_ms": 877,
+          "przejscia": 2,
+          "czas_ms": 1158,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
-          "uklad": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000651–1000400 350”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–650 50z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            }
+          ],
           "axe": [],
           "wyjatek": null,
           "stan_ekranu": null
         },
         {
           "nr": 2,
-          "nazwa": "Więcej — Zmień treść",
+          "nazwa": "Zmień treść — ostrzeżenie o wysłanym powiadomieniu",
           "adres": "/#/sprawy/2",
-          "zrzut": "zrzuty/zmiana-tresci/02-więcej-zmień-treść-390.png",
+          "zrzut": "zrzuty/zmiana-tresci/02-zmień-treść-ostrzeżenie-o-wysłanym-powia-390.png",
           "klikniecia": 2,
           "pola_wypelnione": 2,
           "zaznaczenia": 0,
           "pola_widoczne": 8,
-          "wybor_widoczne": 0,
+          "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 185,
+          "czas_ms": 1192,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
-          "uklad": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000641–1000400 360”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–640 40z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            }
+          ],
           "axe": [],
           "wyjatek": null,
           "stan_ekranu": null
         },
         {
           "nr": 3,
-          "nazwa": "Dalej — nowe powiadomienie",
+          "nazwa": "Przygotuj powiadomienia — nowe powiadomienie",
           "adres": "/#/sprawy/2",
-          "zrzut": "zrzuty/zmiana-tresci/03-dalej-nowe-powiadomienie-390.png",
+          "zrzut": "zrzuty/zmiana-tresci/03-przygotuj-powiadomienia-nowe-powiadomien-390.png",
           "klikniecia": 1,
           "pola_wypelnione": 1,
           "zaznaczenia": 0,
-          "pola_widoczne": 0,
+          "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 127,
+          "czas_ms": 90,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
           "dialogi_natywne": [],
-          "uklad": [],
+          "uklad": [
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–1000641–1000400 360”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            },
+            {
+              "selektor": "div.pakiet.pakiet-zmiana „A601–640 40z chwilą wpisu”",
+              "problem": "poza obszarem treści karty (29–361 vs 41–349)"
+            }
+          ],
           "axe": [],
           "wyjatek": null,
           "stan_ekranu": null
@@ -2336,255 +2635,5 @@
       ]
     }
   ],
-  "malpa": [
-    {
-      "malpa": true,
-      "ekran": "błędne dane",
-      "adres": "—",
-      "elementy": 3,
-      "problemy": [],
-      "sprawdzone": [
-        {
-          "gdzie": "kartoteka — nowa osoba",
-          "pole": "PESEL",
-          "wartosc": "85031502484 (zła suma)",
-          "odrzucone": true,
-          "ostrzezenie": false
-        },
-        {
-          "gdzie": "sprawa — Treść",
-          "pole": "Data wpływu żądania",
-          "wartosc": "2026-12-11 (przyszłość)",
-          "odrzucone": true,
-          "ostrzezenie": false
-        },
-        {
-          "gdzie": "kokpit",
-          "pole": "Stan na dzień",
-          "wartosc": "2026-12-11 (przyszłość)",
-          "odrzucone": true,
-          "ostrzezenie": false
-        }
-      ]
-    },
-    {
-      "malpa": true,
-      "ekran": "k-kokpit",
-      "adres": "/#/spolki/1",
-      "elementy": 20,
-      "problemy": [
-        {
-          "element": "Sprawy2",
-          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
-        },
-        {
-          "element": "Historia zmian danych1",
-          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
-        }
-      ]
-    },
-    {
-      "malpa": true,
-      "ekran": "k-korespondencja",
-      "adres": "/#/korespondencja",
-      "elementy": 11,
-      "problemy": [
-        {
-          "element": "Alfa Testowa P.S.A.",
-          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
-        }
-      ]
-    },
-    {
-      "malpa": true,
-      "ekran": "k-oplaty",
-      "adres": "/#/oplaty",
-      "elementy": 10,
-      "problemy": [
-        {
-          "element": "Alfa Testowa P.S.A.",
-          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
-        },
-        {
-          "element": "Opłacona",
-          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
-        },
-        {
-          "element": "Więcej",
-          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
-        }
-      ]
-    },
-    {
-      "malpa": true,
-      "ekran": "k-osoba",
-      "adres": "/#/osoby/1",
-      "elementy": 8,
-      "problemy": [
-        {
-          "element": "Historia zmian1",
-          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
-        }
-      ]
-    },
-    {
-      "malpa": true,
-      "ekran": "k-osoby",
-      "adres": "/#/osoby",
-      "elementy": 6,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "k-pulpit",
-      "adres": "/#/",
-      "elementy": 15,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "k-spolki",
-      "adres": "/#/spolki",
-      "elementy": 3,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "k-sprawa-krok2",
-      "adres": "/#/sprawy/2",
-      "elementy": 21,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "k-sprawa-wpisana",
-      "adres": "/#/sprawy/1",
-      "elementy": 2,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "k-sprawy",
-      "adres": "/#/sprawy",
-      "elementy": 4,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "k-ustawienia",
-      "adres": "/#/ustawienia",
-      "elementy": 5,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "k-wniosek-przejecie",
-      "adres": "/#/wnioski/3",
-      "elementy": 13,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "k-wniosek",
-      "adres": "/#/wnioski/1",
-      "elementy": 13,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "k-wnioski",
-      "adres": "/#/wnioski",
-      "elementy": 8,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "p-informacja",
-      "adres": "/portal.html#/informacja",
-      "elementy": 0,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "p-konto",
-      "adres": "/portal.html#/konto",
-      "elementy": 5,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "p-logowanie",
-      "adres": "/portal.html#/",
-      "elementy": 7,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "p-platnosci",
-      "adres": "/portal.html#/platnosci",
-      "elementy": 1,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "p-pomoc",
-      "adres": "/portal.html#/pomoc",
-      "elementy": 0,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "p-sprawy",
-      "adres": "/portal.html#/sprawy",
-      "elementy": 2,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "p-start-akcjonariusz",
-      "adres": "/portal.html#/",
-      "elementy": 2,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "p-start-zarzad",
-      "adres": "/portal.html#/",
-      "elementy": 11,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "p-wniosek-dokumenty",
-      "adres": "/portal.html#/",
-      "elementy": 15,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "p-wniosek-formularz",
-      "adres": "/portal.html#/",
-      "elementy": 4,
-      "problemy": [
-        {
-          "element": "Raz w roku (1476 zł)",
-          "problem": "martwy przycisk (brak zmiany DOM, żądania, nawigacji w 2 s)"
-        }
-      ]
-    },
-    {
-      "malpa": true,
-      "ekran": "p-zglos",
-      "adres": "/portal.html#/zglos",
-      "elementy": 2,
-      "problemy": []
-    },
-    {
-      "malpa": true,
-      "ekran": "p-zmiana",
-      "adres": "/portal.html#/zmiana?spolka=1",
-      "elementy": 1,
-      "problemy": []
-    }
-  ]
+  "malpa": []
 }

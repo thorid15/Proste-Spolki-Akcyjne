@@ -63,7 +63,7 @@ test('zbycie: „Nowy wpis” przy akcjonariuszu, jedna strona; zbywca bez zgody
     await zapisano(page);
     await page.waitForURL(/#\/sprawy\/\d+/);
     adresSprawy = new URL(page.url()).hash;
-    await page.getByText('Po wpisie', { exact: true }).waitFor();
+    await page.getByRole('heading', { name: /Po wpisie/ }).waitFor();
     await akcjonariusz(page, 'Ewa Ułamkowa').getByText('951–1000').waitFor();
   });
   await krok(page, 'Przygotuj powiadomienia — list do zbywcy', async () => {

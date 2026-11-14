@@ -563,6 +563,10 @@ function Wpis({ p: poczatkowy, kontekstOsoba = null }) {
   const [proba, ustawProbe] = useState(false); // błędy przy polach pokazują się dopiero po próbie przejścia dalej
   const [dodawanie, ustawDodawanie] = useState(false);
   const c = useCzynnosc();
+  // Zaznaczenie checklisty i wybór opłaty widać od razu; zapis idzie w tle, a stan z serwera nadpisuje po odpowiedzi.
+  const [zaznaczone, ustawZaznaczone] = useState(() => ({ ...(s.checklista || {}) }));
+  const [oplata, ustawOplate] = useState(s.oplata);
+  useEffect(() => { ustawZaznaczone({ ...(s.checklista || {}) }); ustawOplate(s.oplata); }, [JSON.stringify(s.checklista || {}), s.oplata]);
 
   const przyZapisie = useCallback((nowy) => {
     ustawP((stary) => ({ ...stary, ...nowy }));
@@ -811,7 +815,7 @@ function Wpis({ p: poczatkowy, kontekstOsoba = null }) {
                 <div className="checklista">
                   {p.checklista.map((x) => (
                     <label key={x.klucz} className="chk">
-                      <input type="checkbox" checked={Boolean((s.checklista || {})[x.klucz])} onChange={(e) => zapisz({ checklista: { ...(s.checklista || {}), [x.klucz]: e.target.checked } })} />
+                      <input type="checkbox" checked={Boolean(zaznaczone[x.klucz])} onChange={(e) => { const nowe = { ...zaznaczone, [x.klucz]: e.target.checked }; ustawZaznaczone(nowe); zapisz({ checklista: nowe }); }} />
                       <span className="chk-tresc">{x.etykieta} <span className="podstawa-prawna">{x.podstawa}</span></span>
                     </label>
                   ))}
@@ -822,7 +826,7 @@ function Wpis({ p: poczatkowy, kontekstOsoba = null }) {
                     <h3 className="tytul-zmiany">Opłata za wpis</h3>
                     <div className="rzad" role="group" aria-label="Opłata za wpis">
                       {[['tak', 'Opłata 100 zł netto'], ['nie', 'Bez opłaty']].map(([v, n]) => (
-                        <button key={v} type="button" className={`btn ${s.oplata === v ? 'btn-wybrany' : ''}`} aria-pressed={s.oplata === v} onClick={() => zapisz({ oplata: v })}>{n}</button>
+                        <button key={v} type="button" className={`btn ${oplata === v ? 'btn-wybrany' : ''}`} aria-pressed={oplata === v} onClick={() => { ustawOplate(v); zapisz({ oplata: v }); }}>{n}</button>
                       ))}
                     </div>
                   </>
