@@ -1,6 +1,7 @@
-/* sprawy.js — lista spraw i ekran sprawy (= kreator wpisu, § 5): 1. Treść (zmiany, podstawa,
-   pliki; autozapis), 2. Sprawdzenie (stan przed i po, osoby do powiadomienia, checklista, opłata),
-   3. Pisma (powiadomienia o wpisie). Numery akcji zawsze wpisuje pracownik (U-26). */
+/* sprawy.js — lista spraw i strona wpisu (D-231). Wpis to jedna strona, od góry: 1. Co się zmienia →
+   2. Podstawa → 3. Przed wpisem (powiadomienie albo zgoda, checklista, opłata) → 4. Po wpisie (różnica) →
+   „Dokonaj wpisu”. Sprawa powstaje przy pierwszej zmianie w formularzu, nie przy jego otwarciu.
+   Numery akcji zawsze wpisuje pracownik (U-26); obok pól widać, co osoba posiada. */
 
 const FILTRY_SPRAW = [['otwarte', 'W toku'], ['zakonczone', 'Zakończone'], ['wszystkie', 'Wszystkie']];
 const STANY_FILTRA = { otwarte: 'w_toku,wstrzymana', zakonczone: 'wpisana,odmowa,wycofana', wszystkie: '' };
@@ -20,7 +21,7 @@ function EkranSpraw() {
       <Filtr opcje={FILTRY_SPRAW} wartosc={filtr} przyZmianie={ustawFiltr} />
       {blad && <Bledy blad={blad} />}
       {!dane && !blad && <Spinner />}
-      {dane && !dane.length && <Pusto tytul="Brak spraw" opis="Nową sprawę zakłada „Nowy wpis” w kokpicie spółki." />}
+      {dane && !dane.length && <Pusto tytul="Brak spraw" opis="Wpis zaczyna się w rejestrze spółki — „Nowy wpis” przy akcjonariuszu." />}
       {dane && dane.length > 0 && (
         <table className="tabela">
           <thead><tr><th>Nr</th><th>Spółka</th><th>Żądający</th><th>Wpływ</th><th>Termin</th><th>Stan</th></tr></thead>
@@ -128,10 +129,24 @@ function WyborAtrybutu({ op, zmien, b, atrybuty, rodzaje }) {
   );
 }
 
-function EdytorPrzeniesienia({ op, zmien, b }) {
+/** Co osoba ma w rejestrze — podpowiedź obok pól numerów. Niczego nie podstawia (D-232). */
+function Posiadanie({ kontekst, osobaId }) {
+  if (!kontekst || !osobaId) return null;
+  const pakiety = pakietyOsob(kontekst.widok).get(Number(osobaId));
+  if (!pakiety || !pakiety.size) return <p className="posiadanie">{nazwaOsoby(kontekst.osoby, osobaId)} nie ma akcji w rejestrze.</p>;
+  return (
+    <p className="posiadanie">
+      <span className="etykieta">{nazwaOsoby(kontekst.osoby, osobaId)} posiada</span>{' '}
+      {[...pakiety.values()].map((g) => `seria ${g.seria} nr ${numeryAkcji(g.zakresy)} (${liczbaPakietu(g)})`).join('; ')}
+    </p>
+  );
+}
+
+function EdytorPrzeniesienia({ op, zmien, b, kontekst }) {
   return (
     <>
       <Pole etykieta="Zbywca" blad={b('zbywca_osoba_id')}><WyborOsoby wartosc={op.zbywca_osoba_id} przyZmianie={(id) => zmien({ ...op, zbywca_osoba_id: id })} /></Pole>
+      <Posiadanie kontekst={kontekst} osobaId={op.zbywca_osoba_id} />
       {b('nabywcy') && <p className="pole-blad">{b('nabywcy')}</p>}
       <Lista
         elementy={op.nabywcy || []}
@@ -184,9 +199,10 @@ function EdytorEmisji({ op, zmien, b }) {
   );
 }
 
-function EdytorUmorzenia({ op, zmien, b }) {
+function EdytorUmorzenia({ op, zmien, b, kontekst }) {
   return (
     <>
+      <Posiadanie kontekst={kontekst} osobaId={kontekst && kontekst.osobaId} />
       <Pole etykieta="Podstawa" blad={b('podstawa')}>
         <DwaPrzyciski wartosc={op.podstawa} opcje={[['uchwala', 'Uchwała'], ['orzeczenie', 'Orzeczenie sądu']]} przyZmianie={(v) => zmien({ ...op, podstawa: v })} />
       </Pole>
@@ -195,10 +211,11 @@ function EdytorUmorzenia({ op, zmien, b }) {
   );
 }
 
-function EdytorObciazenia({ op, zmien, b, atrybuty }) {
+function EdytorObciazenia({ op, zmien, b, atrybuty, kontekst }) {
   const ustanowienie = op.operacja === 'ustanowienie';
   return (
     <>
+      {ustanowienie && <Posiadanie kontekst={kontekst} osobaId={kontekst && kontekst.osobaId} />}
       <Pole etykieta="Czynność" blad={b('operacja')}>
         <select value={op.operacja || ''} onChange={(e) => zmien({ ...op, operacja: e.target.value, atrybut: null })}>
           <option value="ustanowienie">ustanowienie</option>
@@ -238,9 +255,10 @@ function EdytorObciazenia({ op, zmien, b, atrybuty }) {
   );
 }
 
-function EdytorAdnotacji({ op, zmien, b, atrybuty }) {
+function EdytorAdnotacji({ op, zmien, b, atrybuty, kontekst }) {
   return (
     <>
+      {op.operacja === 'dodanie' && <Posiadanie kontekst={kontekst} osobaId={kontekst && kontekst.osobaId} />}
       <Pole etykieta="Czynność" blad={b('operacja')}>
         <select value={op.operacja || ''} onChange={(e) => zmien({ ...op, operacja: e.target.value, atrybut: null })}>
           <option value="dodanie">dodanie</option>
@@ -356,7 +374,7 @@ function EdytorOtwarcia({ op, zmien, b }) {
   );
 }
 
-function EdytorSprostowania({ op, zmien, b, atrybuty }) {
+function EdytorSprostowania({ op, zmien, b, atrybuty, kontekst }) {
   const Edytor = op.zamiast && EDYTORY[op.zamiast.typ];
   return (
     <>
@@ -367,7 +385,7 @@ function EdytorSprostowania({ op, zmien, b, atrybuty }) {
       {b('zamiast') && <p className="pole-blad">{b('zamiast')}</p>}
       {op.tryb === 'zastap' && Edytor && (
         <div className="podsekcja">
-          <Edytor op={op.zamiast} zmien={(z) => zmien({ ...op, zamiast: z })} b={(s) => b(`zamiast.${s}`)} atrybuty={atrybuty} />
+          <Edytor op={op.zamiast} zmien={(z) => zmien({ ...op, zamiast: z })} b={(s) => b(`zamiast.${s}`)} atrybuty={atrybuty} kontekst={kontekst} />
         </div>
       )}
     </>
@@ -385,134 +403,99 @@ const EDYTORY = {
   otwarcie: EdytorOtwarcia,
 };
 
-/* ── Krok 1: treść ── */
+/* ── Strona wpisu ── */
 
 const POLA_ROBOCZE = ['zadajacy', 'zadajacy_osoba_id', 'zadajacy_opis', 'data_wplywu', 'operacje', 'podstawa', 'podstawa_data'];
 const robocza = (s) => Object.fromEntries(POLA_ROBOCZE.map((k) => [k, s[k] ?? (k === 'operacje' ? [] : null)]));
 
-/** Autozapis treści sprawy (krok 1): zapis 600 ms po ostatniej zmianie, `teraz()` — przed „Dalej”. */
-function useZapisSprawy(id, tresc, przyZapisie) {
+const RODZAJE_WPISU = [
+  ['przeniesienie', 'Zbycie akcji'],
+  ['obciazenie', 'Zastaw, użytkowanie albo zajęcie'],
+  ['umorzenie', 'Umorzenie akcji'],
+  ['adnotacja', 'Ograniczenie, uprawnienie albo obowiązek'],
+  ['emisja', 'Nowa emisja'],
+];
+
+/** Zmiana wybranego rodzaju; przy zbyciu akcjonariusz z wiersza rejestru jest zbywcą. */
+function nowaZmiana(typ, osobaId) {
+  const op = NOWE_ZMIANY[typ]();
+  if (typ === 'przeniesienie' && osobaId) op.zbywca_osoba_id = osobaId;
+  return op;
+}
+
+/**
+ * Autozapis treści: 600 ms po ostatniej zmianie; `teraz()` — od razu (przed czynnością). Zapisy idą jeden po
+ * drugim. Sprawa powstaje przy pierwszym zapisie (`zaloz`) — otwarcie formularza niczego nie zakłada.
+ */
+function useZapisSprawy(idPoczatkowe, tresc, { zaloz, przyZapisie }) {
   const [stan, ustawStan] = useState({ stan: 'spoczynek', blad: null });
+  const id = useRef(idPoczatkowe);
   const ostatnia = useRef(JSON.stringify(tresc));
   const czekajacy = useRef(null);
-  const zapisz = useCallback(async (t) => {
-    const tekst = JSON.stringify(t);
-    if (tekst === ostatnia.current) return true;
-    ustawStan({ stan: 'zapisywanie', blad: null });
-    try {
-      const p = await API.put(`/api/psa/sprawy/${id}`, t);
-      ostatnia.current = tekst;
-      ustawStan({ stan: 'zapisano', blad: null });
-      przyZapisie(p);
-      return true;
-    } catch (e) {
-      ustawStan({ stan: 'blad', blad: e });
-      return false;
-    }
-  }, [id, przyZapisie]);
+  const kolejka = useRef(Promise.resolve(true));
+  const zapisz = useCallback((t, wymus = false) => {
+    kolejka.current = kolejka.current.then(async () => {
+      const tekst = JSON.stringify(t);
+      if (tekst === ostatnia.current && (id.current || !wymus)) return true;
+      ustawStan({ stan: 'zapisywanie', blad: null });
+      try {
+        let p;
+        if (!id.current) {
+          p = await zaloz(t);
+          id.current = p.sprawa.id;
+        } else p = await API.put(`/api/psa/sprawy/${id.current}`, t);
+        ostatnia.current = tekst;
+        ustawStan({ stan: 'zapisano', blad: null });
+        przyZapisie(p);
+        return true;
+      } catch (e) {
+        ustawStan({ stan: 'blad', blad: e });
+        return false;
+      }
+    });
+    return kolejka.current;
+  }, [zaloz, przyZapisie]);
   useEffect(() => {
     if (JSON.stringify(tresc) === ostatnia.current) return undefined;
     clearTimeout(czekajacy.current);
     czekajacy.current = setTimeout(() => zapisz(tresc), 600);
     return () => clearTimeout(czekajacy.current);
   }, [tresc, zapisz]);
-  return { ...stan, teraz: () => { clearTimeout(czekajacy.current); return zapisz(tresc); } };
+  return {
+    ...stan,
+    id: () => id.current,
+    teraz: (wymus = false) => { clearTimeout(czekajacy.current); return zapisz(tresc, wymus); },
+    /** Treść przyjęta z serwera (np. po „Zmień treść”) — nie jest zmianą do zapisania. */
+    przyjmij: (t) => { ostatnia.current = JSON.stringify(t); },
+  };
 }
 
-function KrokTresci({ p, tresc, ustawTresc, edycja, pola, odswiez }) {
-  const z = (k) => (v) => ustawTresc({ ...tresc, [k]: v });
-  const atrybuty = p.stan_przed ? p.stan_przed.atrybuty : [];
-  const zmienOp = (i) => (op) => ustawTresc({ ...tresc, operacje: tresc.operacje.map((x, j) => (j === i ? op : x)) });
-  const samodzielna = tresc.operacje.some((o) => ['otwarcie', 'sprostowanie', 'zamkniecie'].includes(o.typ));
-  return (
-    <fieldset className="krok-tresci" disabled={!edycja}>
-      <Karta tytul="Żądający">
-        <div className="siatka-2">
-          <Pole etykieta="Kto żąda wpisu" blad={pola.zadajacy}>
-            <select value={tresc.zadajacy || ''} onChange={(e) => z('zadajacy')(e.target.value)}>
-              <option value="spolka">spółka</option>
-              <option value="osoba">osoba z kartoteki</option>
-              <option value="organ">organ (zajęcie)</option>
-              <option value="brak">bez żądającego (sprostowanie z inicjatywy kancelarii)</option>
-            </select>
-          </Pole>
-          <Pole etykieta="Data wpływu żądania" blad={pola.data_wplywu}>
-            <PoleDaty wartosc={tresc.data_wplywu || ''} przyZmianie={z('data_wplywu')} max={fmt.dzisIso()} />
-          </Pole>
-        </div>
-        {tresc.zadajacy === 'osoba' && (
-          <Pole etykieta="Osoba żądająca" blad={pola.zadajacy_osoba_id}><WyborOsoby wartosc={tresc.zadajacy_osoba_id} przyZmianie={z('zadajacy_osoba_id')} /></Pole>
-        )}
-        {tresc.zadajacy === 'organ' && (
-          <Pole etykieta="Organ i sygnatura" blad={pola.zadajacy_opis}><input type="text" value={tresc.zadajacy_opis || ''} onChange={(e) => z('zadajacy_opis')(e.target.value)} /></Pole>
-        )}
-      </Karta>
-
-      <Karta tytul="Zmiany">
-        {pola.operacje && <p className="pole-blad">{pola.operacje}</p>}
-        {tresc.operacje.map((op, i) => {
-          const Edytor = EDYTORY[op.typ];
-          const b = (s) => pola[`operacje.${i}${s ? `.${s}` : ''}`];
-          return (
-            <div className="zmiana" key={i}>
-              <div className="rzad-rozdzielony">
-                <h3 className="tytul-sekcji">{i + 1}. {NAZWY_TYPOW[op.typ] || op.typ}</h3>
-                {edycja && <button type="button" className="btn btn-maly btn-cichy" onClick={() => ustawTresc({ ...tresc, operacje: tresc.operacje.filter((_, j) => j !== i) })}>Usuń zmianę</button>}
-              </div>
-              {b('typ') && <p className="pole-blad">{b('typ')}</p>}
-              {Edytor ? <Edytor op={op} zmien={zmienOp(i)} b={b} atrybuty={atrybuty} /> : <p>Nieznany rodzaj zmiany.</p>}
-            </div>
-          );
-        })}
-        {edycja && !samodzielna && (
-          <div className="dodaj-zmiane rzad">
-            <span className="male drugorzedny">Dodaj zmianę:</span>
-            {[['przeniesienie', 'Przeniesienie'], ['emisja', 'Emisja'], ['umorzenie', 'Umorzenie'], ['obciazenie', 'Obciążenie'], ['adnotacja', 'Informacja o akcjach']].map(([typ, nazwa]) => (
-              <button key={typ} type="button" className="btn btn-maly" onClick={() => ustawTresc({ ...tresc, operacje: [...tresc.operacje, NOWE_ZMIANY[typ]()] })}>{nazwa}</button>
-            ))}
-          </div>
-        )}
-      </Karta>
-
-      <Karta tytul="Podstawa wpisu">
-        <Pole etykieta="Opis dokumentu" opcjonalne podpowiedz="np. umowa sprzedaży akcji z 3.11.2026" blad={pola.podstawa}>
-          <textarea rows={2} value={tresc.podstawa || ''} onChange={(e) => z('podstawa')(e.target.value)} />
-        </Pole>
-        <Pole etykieta="Data dokumentu" opcjonalne blad={pola.podstawa_data}><PoleDaty wartosc={tresc.podstawa_data || ''} przyZmianie={z('podstawa_data')} max={fmt.dzisIso()} /></Pole>
-        <ListaPlikow pliki={p.pliki} />
-        <DodajPlik adres={`/api/psa/sprawy/${p.sprawa.id}/pliki`} przyDodaniu={odswiez} />
-      </Karta>
-    </fieldset>
-  );
-}
-
-/* ── Krok 2: sprawdzenie ── */
-
+/** Osoba do powiadomienia przed wpisem: powiadomienie o zamierzonym wpisie albo zgoda (art. 300³⁴ § 3 KSH). */
 function KafelOsoby({ o, sprawa, pliki, zapisz, odswiez }) {
   const [zgoda, ustawZgode] = useState(null);
   const pow = o.powiadomienie;
-  const linia = o.zgoda ? `Zgoda na wpis (${fmt.data(o.zgoda.data)})`
-    : pow && pow.stan === 'wyslane' ? `Wysłano ${fmt.data(pow.wyslano)}`
+  const linia = o.zgoda ? `Zgoda na wpis z ${fmt.data(o.zgoda.data)}`
+    : pow && pow.stan === 'wyslane' ? `Powiadomienie wysłane ${fmt.data(pow.wyslano)}`
       : pow && pow.stan === 'blad' ? 'Błąd wysyłki powiadomienia'
-        : pow ? `Powiadomienie — ${KANALY[pow.kanal] || pow.kanal}` : 'Powiadomienie powstanie po „Dalej”';
+        : pow ? `Powiadomienie gotowe — ${KANALY[pow.kanal] || pow.kanal}` : 'Traci uprawnienia — przed wpisem trzeba ją powiadomić albo mieć jej zgodę.';
   const zapiszZgode = () => zapisz({ zgody: [...(sprawa.zgody || []), { osoba_id: o.osoba_id, dopuszczalna: zgoda.dopuszczalna, data: zgoda.data, plik_id: zgoda.plik_id || null }] }).then((ok) => ok && ustawZgode(null));
   return (
     <div className="kafel-osoby">
       <div className="rzad-rozdzielony">
         <a href={`#/osoby/${o.osoba_id}`}><strong>{o.nazwa}</strong></a>
-        {o.dopisana && !pow && <button type="button" className="btn btn-maly btn-cichy" onClick={() => zapisz({ dopisane: (sprawa.dopisane || []).filter((x) => x !== o.osoba_id) })}>Usuń</button>}
+        {o.dopisana && !pow && <button type="button" className="btn btn-maly" onClick={() => zapisz({ dopisane: (sprawa.dopisane || []).filter((x) => x !== o.osoba_id) })}>Usuń</button>}
       </div>
       <div className="kafel-osoby-stan">{linia}</div>
       <div className="rzad">
         {pow && !o.zgoda && pow.stan !== 'wyslane' && <CzynnosciPisma p={pow} poZmianie={odswiez} />}
-        {pow && <button type="button" className="btn btn-maly btn-cichy" onClick={() => window.open(adresPdf(pow.id), '_blank', 'noopener')}>Podgląd</button>}
+        {pow && <a className="btn btn-maly" href={adresPdf(pow.id)} target="_blank" rel="noopener">Podgląd</a>}
         {!o.zgoda && !zgoda && <button type="button" className="btn btn-maly" onClick={() => ustawZgode({ data: fmt.dzisIso(), dopuszczalna: false, plik_id: '' })}>Odnotuj zgodę na wpis</button>}
-        {o.zgoda && <button type="button" className="btn btn-maly btn-cichy" onClick={() => zapisz({ zgody: (sprawa.zgody || []).filter((z) => z.osoba_id !== o.osoba_id) })}>Cofnij zgodę</button>}
+        {o.zgoda && <button type="button" className="btn btn-maly" onClick={() => zapisz({ zgody: (sprawa.zgody || []).filter((z) => z.osoba_id !== o.osoba_id) })}>Cofnij zgodę</button>}
       </div>
       {zgoda && (
         <div className="podsekcja">
           <Pole etykieta="Data zgody"><PoleDaty wartosc={zgoda.data} przyZmianie={(d) => ustawZgode({ ...zgoda, data: d })} max={fmt.dzisIso()} /></Pole>
-          <label className="chk"><input type="checkbox" checked={zgoda.dopuszczalna} onChange={(e) => ustawZgode({ ...zgoda, dopuszczalna: e.target.checked })} /> Zgoda w dopuszczalnej formie</label>
+          <label className="chk"><input type="checkbox" checked={zgoda.dopuszczalna} onChange={(e) => ustawZgode({ ...zgoda, dopuszczalna: e.target.checked })} /> <span className="chk-tresc">Zgoda w dopuszczalnej formie (podpis poświadczony, złożony w kancelarii, kwalifikowany, zaufany albo osobisty)</span></label>
           {pliki.length > 0 && (
             <Pole etykieta="Plik zgody" opcjonalne>
               <select value={zgoda.plik_id} onChange={(e) => ustawZgode({ ...zgoda, plik_id: e.target.value ? Number(e.target.value) : '' })}>
@@ -531,158 +514,170 @@ function KafelOsoby({ o, sprawa, pliki, zapisz, odswiez }) {
   );
 }
 
-function KrokSprawdzenia({ p, zapisz, odswiez, edycja }) {
-  const s = p.sprawa;
-  const [dopisz, ustawDopisz] = useState(false);
-  // Zaznaczenie widać od razu; zapis idzie w tle (stan z serwera nadpisuje po odpowiedzi).
-  const [zaznaczone, ustawZaznaczone] = useState(() => ({ ...(s.checklista || {}) }));
-  useEffect(() => { ustawZaznaczone({ ...(s.checklista || {}) }); }, [JSON.stringify(s.checklista || {})]);
-  const zaznacz = (klucz, wartosc) => {
-    const nowe = { ...zaznaczone, [klucz]: wartosc };
-    ustawZaznaczone(nowe);
-    zapisz({ checklista: nowe });
-  };
+function SekcjaWpisu({ numer, tytul, akcje, children }) {
   return (
-    <>
-      <Karta tytul="Stan przed i po wpisie">
-        <h4>Przed</h4>
-        <TabelaAkcjonariuszy widok={p.stan_przed} osoby={p.nazwy} />
-        <h4>Po</h4>
-        {p.stan_po ? <TabelaAkcjonariuszy widok={p.stan_po} osoby={p.nazwy} /> : <p className="male drugorzedny">—</p>}
-        {p.stan_po && p.stan_po.atrybuty.length > 0 && <><h4>Obciążenia i adnotacje po wpisie</h4><TabelaAtrybutow widok={p.stan_po} osoby={p.nazwy} /></>}
-      </Karta>
-
-      <Karta tytul="Osoby do powiadomienia">
-        {!p.osoby.length && <p className="male drugorzedny">Wpis nie wymaga powiadomień.</p>}
-        <div className="kafle-osob">
-          {p.osoby.map((o) => <KafelOsoby key={o.osoba_id} o={o} sprawa={s} pliki={p.pliki} zapisz={zapisz} odswiez={odswiez} />)}
-        </div>
-        {edycja && (dopisz ? (
-          <Pole etykieta="Dopisz osobę do powiadomienia">
-            <WyborOsoby wartosc={null} wyklucz={p.osoby.map((o) => o.osoba_id)} przyZmianie={(id) => id && zapisz({ dopisane: [...(s.dopisane || []), id] }).then(() => ustawDopisz(false))} />
-          </Pole>
-        ) : <button type="button" className="btn btn-maly btn-cichy" onClick={() => ustawDopisz(true)}>+ Dopisz osobę</button>)}
-      </Karta>
-
-      <Karta tytul="Checklista">
-        <div className="checklista">
-          {p.checklista.map((c) => (
-            <label key={c.klucz} className="chk">
-              <input type="checkbox" checked={Boolean(zaznaczone[c.klucz])} disabled={!edycja} onChange={(e) => zaznacz(c.klucz, e.target.checked)} />
-              <span className="chk-tresc">{c.etykieta} <span className="podstawa-prawna">{c.podstawa}</span></span>
-            </label>
-          ))}
-        </div>
-      </Karta>
-
-      {p.oplata.wymagana && (
-        <Karta tytul="Opłata za wpis">
-          <DwaPrzyciski wartosc={s.oplata} opcje={[['tak', 'Opłata 100 zł netto'], ['nie', 'Bez opłaty']]} przyZmianie={(v) => edycja && zapisz({ oplata: v })} />
-        </Karta>
-      )}
-    </>
+    <section className="karta sekcja-wpisu">
+      <div className="rzad-rozdzielony sekcja-wpisu-naglowek">
+        <h2 className="karta-tytul"><span className="numer-sekcji">{numer}.</span> {tytul}</h2>
+        {akcje}
+      </div>
+      {children}
+    </section>
   );
 }
 
-/* ── Ekran sprawy ── */
-
-function EkranSprawy({ sprawaId }) {
-  const { dane, blad, odswiez } = useDane(`/api/psa/sprawy/${sprawaId}`);
-  const [p, ustawP] = useState(null);
-  useEffect(() => { if (dane) ustawP(dane); }, [dane]);
+/** Nowy wpis z rejestru spółki: formularz bez sprawy — sprawa powstanie przy pierwszej zmianie. */
+function EkranNowegoWpisu({ spolkaId }) {
+  const { dane, blad } = useDane(`/api/psa/spolki/${spolkaId}`);
+  const [parametry] = useState(() => biezacaTrasa().zapytanie);
   if (blad) return <Bledy blad={blad} />;
-  if (!p) return <Spinner />;
-  return <Sprawa key={p.sprawa.id} p={p} ustawP={ustawP} odswiez={odswiez} />;
+  if (!dane) return <Spinner />;
+  const otwarty = Boolean(dane.spolka.data_otwarcia) && !dane.spolka.data_zamkniecia;
+  if (!otwarty) return <Karta><Pusto tytul="Rejestr nie jest otwarty" opis="Wpisów dokonuje się w otwartym rejestrze." akcja={<a className="btn" href={`#/spolki/${spolkaId}`}>Wróć do rejestru</a>} /></Karta>;
+  const typ = parametry.get('typ');
+  const osobaId = Number(parametry.get('osoba')) || null;
+  const p = {
+    sprawa: { id: null, stan: 'w_toku', zadajacy: 'spolka', zadajacy_osoba_id: null, zadajacy_opis: null, data_wplywu: fmt.dzisIso(), operacje: typ && NOWE_ZMIANY[typ] ? [nowaZmiana(typ, osobaId)] : [], podstawa: null, podstawa_data: null, checklista: {}, zgody: [], dopisane: [], oplata: null },
+    spolka: { id: dane.spolka.id, nazwa: dane.spolka.nazwa, krs: dane.spolka.krs },
+    krok: 1, termin: null, pisma: [], pliki: [], bledy: [], opis: null,
+    stan_przed: dane.rejestr, stan_po: null, nazwy: dane.osoby, osoby: [], checklista: [], oplata: { wymagana: false }, przeszkody_wpisu: [],
+  };
+  return <Wpis p={p} kontekstOsoba={osobaId} />;
 }
 
-function Sprawa({ p, ustawP, odswiez }) {
+function EkranSprawy({ sprawaId }) {
+  const { dane, blad } = useDane(`/api/psa/sprawy/${sprawaId}`);
+  if (blad) return <Bledy blad={blad} />;
+  if (!dane) return <Spinner />;
+  return <Wpis key={dane.sprawa.id} p={dane} />;
+}
+
+function Wpis({ p: poczatkowy, kontekstOsoba = null }) {
+  const [p, ustawP] = useState(poczatkowy);
   const s = p.sprawa;
   const otwarta = ['w_toku', 'wstrzymana'].includes(s.stan);
+  const zatwierdzona = p.krok >= 2;
   const [tresc, ustawTresc] = useState(() => robocza(s));
   const [panel, ustawPanel] = useState(null);
   const [pole, ustawPole] = useState('');
+  const [proba, ustawProbe] = useState(false); // błędy przy polach pokazują się dopiero po próbie przejścia dalej
+  const [dodawanie, ustawDodawanie] = useState(false);
   const c = useCzynnosc();
-  const przyZapisie = useCallback((nowy) => ustawP(nowy), [ustawP]);
-  const zapis = useZapisSprawy(s.id, tresc, przyZapisie);
-  const krok = p.krok;
-  const edycjaTresci = otwarta && krok === 1;
 
-  const pola = { ...bledyApi({ bledy: krok === 1 ? p.bledy || [] : [] }).pola, ...bledyApi(zapis.blad).pola, ...bledyApi(c.blad).pola };
+  const przyZapisie = useCallback((nowy) => {
+    ustawP((stary) => ({ ...stary, ...nowy }));
+    // Adres bez przeładowania ekranu: formularz zostaje, a odświeżenie strony wróci do tej samej sprawy.
+    if (nowy.sprawa && !biezacaTrasa().sciezka.startsWith('/sprawy/')) window.history.replaceState(window.history.state, '', `#/sprawy/${nowy.sprawa.id}`);
+  }, []);
+  const klucz = useRef(`${p.spolka.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const zaloz = useCallback((t) => API.post('/api/psa/sprawy', { spolka_id: p.spolka.id, klucz_idempotencji: klucz.current, ...t }), [p.spolka.id]);
+  const zapis = useZapisSprawy(s.id, tresc, { zaloz, przyZapisie });
 
-  const zmienStan = (stan, dane = {}) => c.wykonaj(async () => { ustawP(await API.post(`/api/psa/sprawy/${s.id}/stan`, { stan, ...dane })); ustawPanel(null); ustawPole(''); });
-  const krokNa = (k) => c.wykonaj(async () => {
-    if (k === 2 && !(await zapis.teraz())) return;
-    const nowy = await API.post(`/api/psa/sprawy/${s.id}/krok`, { krok: k });
+  /** Sprawa musi istnieć przed czynnością, która zapisuje coś poza treścią (plik, checklista, zgoda). */
+  const idSprawy = async () => ((await zapis.teraz(true)) ? zapis.id() : Promise.reject(new Error('Nie udało się zapisać wpisu.')));
+  const przeladuj = async () => { const id = zapis.id(); if (id) ustawP(await API.get(`/api/psa/sprawy/${id}`)); };
+  const zapisz = (zmiany) => c.wykonaj(async () => { ustawP(await API.put(`/api/psa/sprawy/${await idSprawy()}`, zmiany)); return true; });
+  const zmienStan = (stan, dane = {}) => c.wykonaj(async () => { ustawP(await API.post(`/api/psa/sprawy/${await idSprawy()}/stan`, { stan, ...dane })); ustawPanel(null); ustawPole(''); });
+  const krokNa = async (k) => {
+    const nowy = await API.post(`/api/psa/sprawy/${await idSprawy()}/krok`, { krok: k });
     ustawP(nowy);
-    if (k === 1) ustawTresc(robocza(nowy.sprawa));
-  });
-  const zapisz = (zmiany) => c.wykonaj(async () => { ustawP(await API.put(`/api/psa/sprawy/${s.id}`, zmiany)); return true; });
-  const przeladuj = () => API.get(`/api/psa/sprawy/${s.id}`).then(ustawP);
+    if (k === 1) { const t = robocza(nowy.sprawa); zapis.przyjmij(t); ustawTresc(t); }
+    return nowy;
+  };
 
+  const bledyTresci = p.bledy || [];
+  const pola = proba ? { ...bledyApi({ bledy: bledyTresci }).pola, ...bledyApi(zapis.blad).pola, ...bledyApi(c.blad).pola } : { ...bledyApi(c.blad).pola };
+  const komunikat = (x) => (typeof x === 'object' ? x.komunikat : x);
+  const braki = !tresc.operacje.length ? ['Wybierz rodzaj wpisu i uzupełnij dane.']
+    : !s.id ? []
+      : [...new Set((bledyTresci.length ? bledyTresci : p.przeszkody_wpisu || []).map(komunikat))];
+  const bezZgody = (p.osoby || []).filter((o) => !o.zgoda);
+  const doPrzygotowania = !zatwierdzona && bezZgody.length > 0 && !bledyTresci.length;
+  const brakiPozaPowiadomieniem = (p.przeszkody_wpisu || []).filter((x) => !(typeof x === 'object' && x.pole === 'osoby'));
+
+  const naGore = () => window.scrollTo({ top: 0, behavior: 'smooth' });
   async function wpisz() {
-    const tak = await potwierdz({ tytul: 'Dokonać wpisu?', tresc: 'Wpisu nie można cofnąć — poprawia się go wyłącznie sprostowaniem.', akcja: 'Dokonaj wpisu' });
-    if (tak) zmienStan('wpisana');
+    if (!(await zapis.teraz(true))) { ustawProbe(true); return; }
+    const aktualny = await API.get(`/api/psa/sprawy/${zapis.id()}`);
+    ustawP(aktualny);
+    const przeszkody = aktualny.bledy.length ? aktualny.bledy : aktualny.przeszkody_wpisu || [];
+    if (przeszkody.length) { ustawProbe(true); if (aktualny.bledy.length) naGore(); return; }
+    const tak = await potwierdz({ tytul: 'Dokonać wpisu?', tresc: `${aktualny.opis || ''} Wpisu nie można cofnąć — pomyłkę poprawia sprostowanie.`.trim(), akcja: 'Dokonaj wpisu' });
+    if (!tak) return;
+    await c.wykonaj(async () => {
+      if (aktualny.krok < 2) await krokNa(2);
+      ustawP(await API.post(`/api/psa/sprawy/${zapis.id()}/stan`, { stan: 'wpisana' }));
+    });
   }
+  const przygotuj = () => c.wykonaj(async () => {
+    if (!(await zapis.teraz(true))) { ustawProbe(true); return; }
+    const aktualny = await API.get(`/api/psa/sprawy/${zapis.id()}`);
+    if (aktualny.bledy.length) { ustawP(aktualny); ustawProbe(true); naGore(); return; }
+    await krokNa(2);
+  });
   async function wycofaj() {
-    const tak = await potwierdz({ tytul: 'Wycofać sprawę?', tresc: 'Sprawa zostanie zakończona bez wpisu.', akcja: 'Wycofaj sprawę', niebezpieczna: true });
+    const tak = await potwierdz({ tytul: 'Wycofać żądanie wpisu?', tresc: 'Sprawa zostanie zakończona bez wpisu.', akcja: 'Wycofaj', niebezpieczna: true });
     if (tak) zmienStan('wycofana');
+  }
+  async function zmienTresc() {
+    const wyslane = (p.osoby || []).some((o) => o.powiadomienie && o.powiadomienie.stan === 'wyslane');
+    const tak = !wyslane || await potwierdz({ tytul: 'Zmienić treść wpisu?', tresc: 'Wysłane powiadomienia o zamierzonym wpisie stracą ważność — po zmianie trzeba je wysłać ponownie.', akcja: 'Zmień treść' });
+    if (tak) c.wykonaj(() => krokNa(1));
   }
 
   const zNazwa = (x) => ({ ...x, pismo: NAZWY_PISM[x.typ], adresat_nazwa: (x.kontekst || {}).adresat_nazwa });
   const pismaWpisu = p.pisma.filter((x) => x.typ === 'powiadomienie_wpis').map(zNazwa);
-  // Powiadomienia o zamierzonym wpisie otwartej sprawy są w kafelkach osób (krok 2).
   const pozostale = p.pisma.filter((x) => x.typ !== 'powiadomienie_wpis' && !(otwarta && x.typ === 'powiadomienie_zamierzony')).map(zNazwa);
   const doWyslania = pismaWpisu.filter((x) => x.kanal === 'email' && x.stan !== 'wyslane');
   const wyslijPisma = () => c.wykonaj(async () => {
     for (const x of doWyslania) await API.post(`/api/psa/korespondencja/${x.id}/wyslij`);
     await przeladuj();
   });
-  const pierwszy = (l) => { const x = (l || [])[0]; return x ? (typeof x === 'object' ? x.komunikat : x) : null; };
+
+  const typy = [...new Set(tresc.operacje.map((o) => o.typ))];
+  const tytul = !tresc.operacje.length ? 'Nowy wpis' : typy.length === 1 ? (RODZAJE_WPISU.find(([t]) => t === typy[0]) || [null, NAZWY_TYPOW[typy[0]] || 'Wpis'])[1] : 'Wpis — kilka zmian';
+  const samodzielna = tresc.operacje.some((o) => ['otwarcie', 'sprostowanie', 'zamkniecie'].includes(o.typ));
+  const kontekst = { widok: p.stan_przed, osoby: p.nazwy, osobaId: kontekstOsoba };
+  const atrybuty = p.stan_przed ? p.stan_przed.atrybuty : [];
+  const z = (k) => (v) => ustawTresc({ ...tresc, [k]: v });
+  const zmienOp = (i) => (op) => ustawTresc({ ...tresc, operacje: tresc.operacje.map((x, j) => (j === i ? op : x)) });
+  const dodajZmiane = (typ) => { ustawTresc({ ...tresc, operacje: [...tresc.operacje, nowaZmiana(typ, kontekstOsoba)] }); ustawDodawanie(false); };
+  const zmianaObciazen = p.stan_po && JSON.stringify(p.stan_po.atrybuty) !== JSON.stringify(p.stan_przed.atrybuty);
 
   let glowny = null;
   if (s.stan === 'wstrzymana') glowny = { etykieta: 'Wznów', przyKlik: () => ustawPanel('wznow') };
-  else if (otwarta && krok === 1) glowny = { etykieta: 'Dalej', przyKlik: () => krokNa(2), powod: (p.bledy || []).length ? 'Popraw błędy w treści sprawy.' : null };
-  else if (otwarta && krok === 2) glowny = { etykieta: 'Dokonaj wpisu', przyKlik: wpisz, powod: (p.przeszkody_wpisu || []).length ? 'Najpierw załatw punkty „Przed wpisem”.' : null };
-  else if (s.stan === 'wpisana' && pismaWpisu.some((x) => x.stan !== 'wyslane')) {
-    glowny = { etykieta: 'Wyślij pisma', przyKlik: wyslijPisma, powod: doWyslania.length ? null : 'Listy: wydrukuj i kliknij „Nadano” przy piśmie.' };
-  }
-
-  const zadajacy = s.zadajacy === 'spolka' ? 'spółka' : s.zadajacy === 'osoba' ? (p.zadajacy_osoba || {}).nazwa : s.zadajacy === 'organ' ? s.zadajacy_opis : 'z inicjatywy kancelarii';
-  const biezacy = s.stan === 'wpisana' ? 2 : Math.max(0, Math.min(krok, 3) - 1);
+  else if (otwarta && doPrzygotowania) glowny = { etykieta: 'Przygotuj powiadomienia', przyKlik: przygotuj };
+  else if (otwarta) glowny = { etykieta: 'Dokonaj wpisu', przyKlik: wpisz };
 
   return (
-    <div className="ekran-sprawy">
+    <div className="ekran-wpisu">
       <NaglowekStrony
-        tytul={`Sprawa nr ${s.id}`}
+        tytul={tytul}
         kontekst={(
           <span className="rzad">
             <a href={`#/spolki/${p.spolka.id}`}>{p.spolka.nazwa}</a>
-            <span>żądający: {zadajacy || '—'}</span>
+            {s.id && <span>sprawa nr {s.id}</span>}
             {p.termin && <span className={p.termin.po_terminie || p.termin.pilny ? 'pilne' : ''}>{opisTerminu(p.termin)}</span>}
-            <Pigulka odmiana={ODMIANY_STANU_SPRAWY[s.stan]}>{STANY_SPRAWY[s.stan]}</Pigulka>
+            {s.id && s.stan !== 'w_toku' && <Pigulka odmiana={ODMIANY_STANU_SPRAWY[s.stan]}>{STANY_SPRAWY[s.stan]}</Pigulka>}
           </span>
         )}
         akcje={(
           <span className="rzad">
-            {glowny && <PrzyciskGlowny {...glowny} trwa={c.trwa} />}
+            {!s.id && <a className="btn" href={`#/spolki/${p.spolka.id}`}>Anuluj</a>}
             <Wiecej akcje={[
-              otwarta && krok === 2 && { etykieta: 'Zmień treść', przyKlik: () => krokNa(1) },
-              s.stan === 'w_toku' && { etykieta: 'Wstrzymaj', przyKlik: () => ustawPanel('wstrzymaj') },
-              otwarta && { etykieta: 'Odmów', przyKlik: () => ustawPanel('odmow'), niebezpieczna: true },
-              otwarta && { etykieta: 'Wycofaj', przyKlik: wycofaj, niebezpieczna: true },
+              s.id && s.stan === 'w_toku' && { etykieta: 'Wstrzymaj — wezwij do uzupełnienia', przyKlik: () => ustawPanel('wstrzymaj') },
+              s.id && otwarta && { etykieta: 'Odmów wpisu', przyKlik: () => ustawPanel('odmow'), niebezpieczna: true },
+              s.id && otwarta && { etykieta: 'Wycofaj żądanie', przyKlik: wycofaj, niebezpieczna: true },
             ]}
             />
           </span>
         )}
       />
-      {otwarta && <Kroki kroki={['Treść', 'Sprawdzenie', 'Pisma']} biezacy={biezacy} />}
-      {krok === 1 && otwarta && <StanZapisu stan={zapis.stan === 'blad' ? { stan: 'blad', blad: pierwszy(bledyApi(zapis.blad).lista) } : zapis} />}
       <Bledy blad={c.blad} />
-      {zapis.blad && !Object.keys(bledyApi(zapis.blad).pola).length && <Bledy blad={zapis.blad} />}
 
       {panel === 'wstrzymaj' && (
-        <Karta tytul="Wstrzymaj sprawę — wezwanie do uzupełnienia">
-          <Pole etykieta="Treść wezwania" blad={pola.tresc_wezwania}><textarea rows={3} value={pole} onChange={(e) => ustawPole(e.target.value)} /></Pole>
+        <Karta tytul="Wstrzymaj — wezwanie do uzupełnienia">
+          <Pole etykieta="Treść wezwania" blad={bledyApi(c.blad).pola.tresc_wezwania}><textarea rows={3} value={pole} onChange={(e) => ustawPole(e.target.value)} /></Pole>
           <div className="rzad">
             <button type="button" className="btn btn-glowny" onClick={() => zmienStan('wstrzymana', { tresc_wezwania: pole })} disabled={c.trwa}>Wstrzymaj i przygotuj wezwanie</button>
             <button type="button" className="btn" onClick={() => ustawPanel(null)}>Anuluj</button>
@@ -690,8 +685,8 @@ function Sprawa({ p, ustawP, odswiez }) {
         </Karta>
       )}
       {panel === 'wznow' && (
-        <Karta tytul="Wznów sprawę">
-          <Pole etykieta="Data usunięcia przeszkody" opcjonalne podpowiedz="Domyślnie dzień ostatniego pliku w sprawie." blad={pola.data_usuniecia_przeszkody}>
+        <Karta tytul="Wznów">
+          <Pole etykieta="Data usunięcia przeszkody" opcjonalne podpowiedz="Domyślnie dzień ostatniego pliku w sprawie." blad={bledyApi(c.blad).pola.data_usuniecia_przeszkody}>
             <PoleDaty wartosc={pole} przyZmianie={ustawPole} max={fmt.dzisIso()} />
           </Pole>
           <div className="rzad">
@@ -711,42 +706,180 @@ function Sprawa({ p, ustawP, odswiez }) {
             </>
           )}
         >
-          <Pole etykieta="Przyczyna odmowy" blad={pola.przyczyna}><textarea rows={3} value={pole} onChange={(e) => ustawPole(e.target.value)} /></Pole>
+          <Pole etykieta="Przyczyna odmowy" blad={bledyApi(c.blad).pola.przyczyna}><textarea rows={3} value={pole} onChange={(e) => ustawPole(e.target.value)} /></Pole>
           <p className="male drugorzedny">Odmowy nie można cofnąć. Powiadomienie o odmowie trafi do Korespondencji.</p>
         </Modal>
       )}
 
-      {s.stan === 'wstrzymana' && <Komunikat odmiana="uwaga" tresc={`Sprawa wstrzymana od ${fmt.data(s.wstrzymana_od)} — termin nie biegnie.`} />}
+      {s.stan === 'wstrzymana' && <Komunikat odmiana="uwaga" tresc={`Wstrzymano ${fmt.data(s.wstrzymana_od)} — termin nie biegnie do usunięcia przeszkody.`} />}
       {s.stan === 'odmowa' && <Komunikat odmiana="uwaga" tytul="Odmowa wpisu" tresc={s.przyczyna_odmowy} />}
-      {s.stan === 'wycofana' && <Komunikat tresc="Sprawa wycofana — bez wpisu." />}
+      {s.stan === 'wycofana' && <Komunikat tresc="Żądanie wycofane — bez wpisu." />}
+      {s.stan === 'wpisana' && <Komunikat odmiana="rejestr" tytul="Wpisano do rejestru" tresc={p.opis || ''} />}
 
-      {otwarta && krok === 1 && <KrokTresci p={p} tresc={tresc} ustawTresc={ustawTresc} edycja={edycjaTresci} pola={pola} odswiez={przeladuj} />}
-      {otwarta && krok === 2 && (
+      {otwarta && (
         <>
-          <KrokSprawdzenia p={p} zapisz={zapisz} odswiez={przeladuj} edycja={otwarta} />
-          {(p.przeszkody_wpisu || []).length > 0 && <Komunikat odmiana="uwaga" tytul="Przed wpisem" lista={p.przeszkody_wpisu.map((x) => (typeof x === 'object' ? x.komunikat : x))} />}
+          <SekcjaWpisu
+            numer={1}
+            tytul="Co się zmienia"
+            akcje={zatwierdzona && <button type="button" className="btn btn-maly" disabled={c.trwa} onClick={zmienTresc}>Zmień treść</button>}
+          >
+            {zatwierdzona && <p className="male drugorzedny">Treść jest zatwierdzona — powiadomienia powstały z tej treści.</p>}
+            {pola.operacje && <p className="pole-blad">{pola.operacje}</p>}
+            <fieldset className="pola-wpisu" disabled={zatwierdzona}>
+              {!tresc.operacje.length && (
+                <div className="wybor-rodzaju" role="group" aria-label="Rodzaj wpisu">
+                  {RODZAJE_WPISU.map(([typ, nazwa]) => <button key={typ} type="button" className="btn" onClick={() => dodajZmiane(typ)}>{nazwa}</button>)}
+                </div>
+              )}
+              {tresc.operacje.map((op, i) => {
+                const Edytor = EDYTORY[op.typ];
+                const b = (sciezka) => pola[`operacje.${i}${sciezka ? `.${sciezka}` : ''}`];
+                return (
+                  <div className="zmiana" key={i}>
+                    {tresc.operacje.length > 1 && (
+                      <div className="rzad-rozdzielony">
+                        <h3 className="tytul-zmiany">{i + 1}. {NAZWY_TYPOW[op.typ] || op.typ}</h3>
+                        {!zatwierdzona && <button type="button" className="btn btn-maly" onClick={() => ustawTresc({ ...tresc, operacje: tresc.operacje.filter((_, j) => j !== i) })}>Usuń zmianę</button>}
+                      </div>
+                    )}
+                    {b('typ') && <p className="pole-blad">{b('typ')}</p>}
+                    {Edytor ? <Edytor op={op} zmien={zmienOp(i)} b={b} atrybuty={atrybuty} kontekst={kontekst} /> : <p>Nieznany rodzaj zmiany.</p>}
+                  </div>
+                );
+              })}
+              {tresc.operacje.length > 0 && !samodzielna && !zatwierdzona && (dodawanie ? (
+                <div className="wybor-rodzaju" role="group" aria-label="Kolejna zmiana">
+                  {RODZAJE_WPISU.map(([typ, nazwa]) => <button key={typ} type="button" className="btn btn-maly" onClick={() => dodajZmiane(typ)}>{nazwa}</button>)}
+                  <button type="button" className="btn btn-maly" onClick={() => ustawDodawanie(false)}>Anuluj</button>
+                </div>
+              ) : (
+                <div className="rzad">
+                  <button type="button" className="btn btn-maly" onClick={() => ustawDodawanie(true)}>+ Kolejna zmiana w tym wpisie</button>
+                  {tresc.operacje.length === 1 && !s.id && <button type="button" className="btn btn-maly" onClick={() => ustawTresc({ ...tresc, operacje: [] })}>Zmień rodzaj wpisu</button>}
+                </div>
+              ))}
+            </fieldset>
+          </SekcjaWpisu>
+
+          <SekcjaWpisu numer={2} tytul="Podstawa">
+            <fieldset className="pola-wpisu" disabled={zatwierdzona}>
+              <div className="siatka-2">
+                <Pole etykieta="Dokument" opcjonalne podpowiedz="np. umowa sprzedaży akcji z 3.11.2026" blad={pola.podstawa}>
+                  <input type="text" value={tresc.podstawa || ''} onChange={(e) => z('podstawa')(e.target.value)} />
+                </Pole>
+                <Pole etykieta="Data dokumentu" opcjonalne blad={pola.podstawa_data}><PoleDaty wartosc={tresc.podstawa_data || ''} przyZmianie={z('podstawa_data')} max={fmt.dzisIso()} /></Pole>
+                <Pole etykieta="Kto żąda wpisu" blad={pola.zadajacy}>
+                  <select value={tresc.zadajacy || ''} onChange={(e) => z('zadajacy')(e.target.value)}>
+                    <option value="spolka">spółka</option>
+                    <option value="osoba">osoba z kartoteki</option>
+                    <option value="organ">organ (zajęcie)</option>
+                    <option value="brak">bez żądającego (sprostowanie z inicjatywy kancelarii)</option>
+                  </select>
+                </Pole>
+                <Pole etykieta="Żądanie wpłynęło" blad={pola.data_wplywu} podpowiedz="Od tego dnia biegnie 7 dni na wpis.">
+                  <PoleDaty wartosc={tresc.data_wplywu || ''} przyZmianie={z('data_wplywu')} max={fmt.dzisIso()} />
+                </Pole>
+              </div>
+              {tresc.zadajacy === 'osoba' && (
+                <Pole etykieta="Osoba żądająca" blad={pola.zadajacy_osoba_id}><WyborOsoby wartosc={tresc.zadajacy_osoba_id} przyZmianie={z('zadajacy_osoba_id')} /></Pole>
+              )}
+              {tresc.zadajacy === 'organ' && (
+                <Pole etykieta="Organ i sygnatura" blad={pola.zadajacy_opis}><input type="text" value={tresc.zadajacy_opis || ''} onChange={(e) => z('zadajacy_opis')(e.target.value)} /></Pole>
+              )}
+            </fieldset>
+            <ListaPlikow pliki={p.pliki} />
+            <DodajPlik adres={async () => `/api/psa/sprawy/${await idSprawy()}/pliki`} przyDodaniu={przeladuj} />
+          </SekcjaWpisu>
+
+          <SekcjaWpisu numer={3} tytul="Przed wpisem">
+            {!s.id || !p.stan_po ? (
+              <p className="male drugorzedny">Po uzupełnieniu danych wpisu pojawią się tu osoby do powiadomienia, lista do sprawdzenia i opłata.</p>
+            ) : (
+              <>
+                <h3 className="tytul-zmiany">Powiadomienie o zamierzonym wpisie</h3>
+                {!p.osoby.length && <p className="male drugorzedny">Ten wpis nikomu nie odbiera uprawnień — powiadomienie nie jest potrzebne.</p>}
+                <div className="kafle-osob">
+                  {p.osoby.map((o) => <KafelOsoby key={o.osoba_id} o={o} sprawa={s} pliki={p.pliki} zapisz={zapisz} odswiez={przeladuj} />)}
+                </div>
+                {dodawanie === 'osoba' ? (
+                  <Pole etykieta="Dopisz osobę do powiadomienia">
+                    <WyborOsoby wartosc={null} wyklucz={p.osoby.map((o) => o.osoba_id)} przyZmianie={(id) => id && zapisz({ dopisane: [...(s.dopisane || []), id] }).then(() => ustawDodawanie(false))} />
+                  </Pole>
+                ) : <button type="button" className="btn btn-maly" onClick={() => ustawDodawanie('osoba')}>+ Dopisz osobę do powiadomienia</button>}
+
+                <h3 className="tytul-zmiany">Sprawdzone</h3>
+                <div className="checklista">
+                  {p.checklista.map((x) => (
+                    <label key={x.klucz} className="chk">
+                      <input type="checkbox" checked={Boolean((s.checklista || {})[x.klucz])} onChange={(e) => zapisz({ checklista: { ...(s.checklista || {}), [x.klucz]: e.target.checked } })} />
+                      <span className="chk-tresc">{x.etykieta} <span className="podstawa-prawna">{x.podstawa}</span></span>
+                    </label>
+                  ))}
+                </div>
+
+                {p.oplata.wymagana && (
+                  <>
+                    <h3 className="tytul-zmiany">Opłata za wpis</h3>
+                    <div className="rzad" role="group" aria-label="Opłata za wpis">
+                      {[['tak', 'Opłata 100 zł netto'], ['nie', 'Bez opłaty']].map(([v, n]) => (
+                        <button key={v} type="button" className={`btn ${s.oplata === v ? 'btn-wybrany' : ''}`} aria-pressed={s.oplata === v} onClick={() => zapisz({ oplata: v })}>{n}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </SekcjaWpisu>
+
+          <SekcjaWpisu numer={4} tytul={p.stan_po ? 'Po wpisie' : 'Stan rejestru przed wpisem'}>
+            <TabelaAkcjonariuszy widok={p.stan_po || p.stan_przed} przed={p.stan_po ? p.stan_przed : null} osoby={p.nazwy} />
+            {zmianaObciazen && (
+              <>
+                <h3 className="tytul-zmiany">Obciążenia, ograniczenia, obowiązki po wpisie</h3>
+                <TabelaAtrybutow widok={p.stan_po} osoby={p.nazwy} />
+              </>
+            )}
+          </SekcjaWpisu>
+
+          <div className="pasek-wpisu">
+            <div className="pasek-wpisu-braki" aria-live="polite">
+              {braki.length > 0 ? (
+                <>
+                  <strong>Zostało do zrobienia</strong>
+                  <ul>{braki.map((b) => <li key={b}>{b}</li>)}</ul>
+                </>
+              ) : s.id && !doPrzygotowania && !brakiPozaPowiadomieniem.length ? <span>Wszystko gotowe do wpisu.</span> : null}
+              {zapis.blad && <p className="pole-blad">{komunikat((bledyApi(zapis.blad).lista || [])[0]) || 'Nie udało się zapisać zmian.'}</p>}
+            </div>
+            <div className="rzad">
+              <StanZapisu stan={zapis.stan === 'blad' ? null : zapis} />
+              {glowny && <button type="button" className="btn btn-glowny btn-duzy" onClick={glowny.przyKlik} disabled={c.trwa}>{c.trwa ? 'Chwileczkę…' : glowny.etykieta}</button>}
+            </div>
+          </div>
         </>
       )}
+
       {s.stan === 'wpisana' && (
-        <Karta tytul="Powiadomienia o wpisie">
+        <Karta
+          tytul="Powiadomienia o wpisie"
+          akcje={doWyslania.length > 0 && <button type="button" className="btn btn-glowny" disabled={c.trwa} onClick={wyslijPisma}>Wyślij e-maile ({doWyslania.length})</button>}
+        >
           <TabelaPism pisma={pismaWpisu} poZmianie={przeladuj} />
         </Karta>
       )}
-      {pozostale.length > 0 && (
-        <Karta tytul="Pozostałe pisma sprawy">
-          <TabelaPism pisma={pozostale} poZmianie={przeladuj} />
-        </Karta>
-      )}
+      {!otwarta && p.opis && s.stan !== 'wpisana' && <Karta tytul="Treść żądania"><p>{p.opis}</p></Karta>}
+      {pozostale.length > 0 && <Karta tytul="Pozostałe pisma"><TabelaPism pisma={pozostale} poZmianie={przeladuj} /></Karta>}
       {!otwarta && <Karta tytul="Pliki"><ListaPlikow pliki={p.pliki} /></Karta>}
+      {!otwarta && <p><a className="btn" href={`#/spolki/${p.spolka.id}`}>Wróć do rejestru</a></p>}
     </div>
   );
 }
 
-/** „Nowy wpis” i czynności z kokpitu: zakłada sprawę (idempotentnie) i otwiera jej ekran. */
+/** Czynność z gotową treścią (wykreślenie, zmiana prawa głosu, sprostowanie, zamknięcie): zakłada sprawę i otwiera stronę wpisu. */
 async function zalozSprawe(spolkaId, dane = {}) {
   const klucz = `${spolkaId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const p = await API.post('/api/psa/sprawy', { spolka_id: spolkaId, zadajacy: 'spolka', operacje: [], klucz_idempotencji: klucz, ...dane });
   idz(`/sprawy/${p.sprawa.id}`);
 }
 
-Object.assign(window, { EkranSpraw, EkranSprawy, zalozSprawe, numeryDoPola });
+Object.assign(window, { EkranSpraw, EkranSprawy, EkranNowegoWpisu, zalozSprawe, numeryDoPola });

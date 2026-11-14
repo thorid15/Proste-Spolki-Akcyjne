@@ -1,24 +1,25 @@
-/* app.js — powłoka aplikacji kancelarii i router (§ 5).
-   Menu: Pulpit · Sprawy · Spółki · Osoby · Wnioski · Korespondencja · Opłaty.
-   Ustawienia — w menu konta, tylko administrator. */
+/* app.js — powłoka aplikacji kancelarii i router (D-235).
+   Menu: Pulpit · Rejestry · Osoby · Korespondencja · Opłaty. Otwarte wpisy są na Pulpicie i w rejestrze spółki,
+   wnioski — na liście „Rejestry”. Ustawienia — w menu konta, tylko administrator. Bez pasa marki i bez stopki. */
 
 const KANCELARIA_ZAPASOWA = { nazwa: 'Kancelaria Notarialna', www: '', www_psa: '' };
 
 const MENU = [
   { sciezka: '/', nazwa: 'Pulpit', ikona: 'pulpit' },
-  { sciezka: '/sprawy', nazwa: 'Sprawy', ikona: 'sprawy' },
-  { sciezka: '/spolki', nazwa: 'Spółki', ikona: 'spolki' },
+  { sciezka: '/spolki', nazwa: 'Rejestry', ikona: 'spolki', takze: ['/sprawy', '/wnioski'] },
   { sciezka: '/osoby', nazwa: 'Osoby', ikona: 'osoby' },
-  { sciezka: '/wnioski', nazwa: 'Wnioski', ikona: 'dokument' },
   { sciezka: '/korespondencja', nazwa: 'Korespondencja', ikona: 'koperta' },
   { sciezka: '/oplaty', nazwa: 'Opłaty', ikona: 'oplaty' },
 ];
 
 const TYTULY = {
-  '': 'Pulpit', sprawy: 'Sprawy', spolki: 'Spółki', osoby: 'Osoby', wnioski: 'Wnioski', korespondencja: 'Korespondencja', oplaty: 'Opłaty', ustawienia: 'Ustawienia', haslo: 'Zmień hasło',
+  '': 'Pulpit', sprawy: 'Wpisy', spolki: 'Rejestry', osoby: 'Osoby', wnioski: 'Wnioski', korespondencja: 'Korespondencja', oplaty: 'Opłaty', ustawienia: 'Ustawienia', haslo: 'Zmień hasło',
 };
 
-const aktywna = (poz, sciezka) => (poz.sciezka === '/' ? sciezka === '/' : sciezka.startsWith(poz.sciezka));
+/** Ekran szczegółu ma własny nagłówek — pasek u góry niesie wtedy tylko powrót do listy. */
+const POWROT = { spolki: ['Rejestry', '/spolki'], sprawy: ['Rejestry', '/spolki'], wnioski: ['Rejestry', '/spolki'], osoby: ['Osoby', '/osoby'] };
+
+const aktywna = (poz, sciezka) => (poz.sciezka === '/' ? sciezka === '/' : [poz.sciezka, ...(poz.takze || [])].some((x) => sciezka.startsWith(x)));
 
 function Menu({ sciezka, klasa, klasaPozycji }) {
   return (
@@ -137,7 +138,7 @@ function Aplikacja() {
     if (drugi !== undefined && !Number.isInteger(id)) return <NieZnaleziono />;
     switch (glowny) {
       case 'sprawy': return drugi ? <EkranSprawy sprawaId={id} /> : <EkranSpraw />;
-      case 'spolki': return drugi ? <EkranKokpitu spolkaId={id} /> : <EkranSpolek />;
+      case 'spolki': return !drugi ? <EkranSpolek /> : segmenty[2] === 'wpis' ? <EkranNowegoWpisu spolkaId={id} /> : <EkranKokpitu spolkaId={id} />;
       case 'osoby': return drugi ? <EkranOsoby osobaId={id} /> : <EkranOsob />;
       case 'wnioski': return drugi ? <EkranWnioskuKancelarii wniosekId={id} /> : <EkranWnioskow />;
       case 'korespondencja': return <EkranKorespondencji />;
@@ -153,22 +154,36 @@ function Aplikacja() {
   if (dokumentPrawny) return <StronaPrawna>{dokumentPrawny}</StronaPrawna>;
   if (!sesja.zalogowany) return <EkranLogowania przyZalogowaniu={() => sesja.odswiez()} />;
 
-  // Ekrany szczegółu mają własny nagłówek (h1) — topbar zostaje wtedy zwykłym tekstem.
+  // Hasło tymczasowe administratora: do zmiany przed pierwszą czynnością (audyt S7).
+  if (sesja.uzytkownik.zmien_haslo) {
+    return (
+      <div className="powloka powloka-kancelaria powloka-bez-szyny">
+        <div className="obszar">
+          <main className="tresc tresc-waska" id="tresc" tabIndex={-1}>
+            <Komunikat odmiana="uwaga" tresc="Logujesz się hasłem tymczasowym. Ustaw własne hasło, żeby przejść dalej." />
+            <EkranHasla />
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // Ekran szczegółu ma własny nagłówek (h1) — pasek u góry pokazuje wtedy tylko powrót do listy.
   const szczegol = segmenty.length >= 2;
-  const Tytul = szczegol ? 'div' : 'h1';
+  const powrot = szczegol ? POWROT[segmenty[0]] : null;
   return (
-    <div className="powloka">
+    <div className="powloka powloka-kancelaria">
       <a className="przeskocz-do-tresci" href="#tresc" onClick={(z) => { z.preventDefault(); document.getElementById('tresc').focus(); }}>Przejdź do treści</a>
-      <div className="marka-pasek bez-druku" role="banner"><div className="marka-pasek-nazwa">{kancelaria.nazwa}</div></div>
       <Menu sciezka={sciezka} klasa="szyna" klasaPozycji="szyna-poz" />
       <div className="obszar">
         <div className="topbar bez-druku" role="region" aria-label="Tytuł ekranu">
-          <Tytul className="topbar-tytul">{TYTULY[segmenty[0] || ''] || 'Rejestr akcjonariuszy'}</Tytul>
+          {szczegol
+            ? (powrot ? <a className="topbar-powrot" href={`#${powrot[1]}`}><Ikona nazwa="strzalkaLewo" rozmiar={14} /> {powrot[0]}</a> : <span />)
+            : <h1 className="topbar-tytul">{TYTULY[segmenty[0] || ''] || 'Rejestr akcjonariuszy'}</h1>}
           <div className="topbar-narzedzia"><Konto uzytkownik={sesja.uzytkownik} przyWylogowaniu={() => sesja.odswiez()} /></div>
         </div>
         <Menu sciezka={sciezka} klasa="topbar-nawigacja" klasaPozycji="topbar-nawigacja-poz" />
         <main className="tresc" id="tresc" tabIndex={-1}>{ekran()}</main>
-        <StopkaKancelarii kancelaria={kancelaria} />
       </div>
     </div>
   );

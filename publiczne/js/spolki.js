@@ -1,47 +1,65 @@
-/* spolki.js — lista spółek i kokpit spółki (§ 5): „stan na” dzień, dane spółki („Edytuj” w miejscu,
-   U-25), akcjonariusze, akcje z obciążeniami i adnotacjami („Zmień” / „Wykreśl” — nowa sprawa),
-   historia wpisów („Sprostuj”), akta, opłaty. Przycisk główny „Nowy wpis”, obok „Informacja z rejestru”. */
+/* spolki.js — lista rejestrów i rejestr spółki (D-230). Ekran spółki ma układ informacji z rejestru:
+   I. Spółka → II. Akcje („Nowa emisja”) → III. Akcjonariusze („Nowy wpis” przy osobie) → IV. Obciążenia,
+   ograniczenia, obowiązki („Zmień prawo głosu”, „Wykreśl”) → Historia wpisów („Sprostuj”). Otwarte sprawy
+   spółki stoją na górze jako „W toku”. Przycisk główny: „Informacja z rejestru”. */
 
 function EkranSpolek() {
   const [q, ustawQ] = useParametrAdresu('q', '');
   const [nowa, ustawNowa] = useState(false);
   const { dane, blad } = useDane(`/api/psa/spolki?q=${encodeURIComponent(q)}`);
+  const { dane: wnioski } = useDane('/api/psa/wnioski?stan=roboczy,zlozony');
   return (
     <>
-    {nowa && <NowaSpolka przyAnulowaniu={() => ustawNowa(false)} />}
-    <Karta akcje={!nowa && <button type="button" className="btn btn-glowny" onClick={() => ustawNowa(true)}>Nowa spółka</button>}>
-      <Szukajka wartosc={q} przyZmianie={ustawQ} placeholder="Firma albo KRS…" />
-      {blad && <Bledy blad={blad} />}
-      {!dane && !blad && <Spinner />}
-      {dane && !dane.length && <Pusto tytul="Brak spółek" opis={q ? 'Żadna spółka nie pasuje do wyszukiwania.' : 'Spółki pojawią się po otwarciu rejestru z wniosku.'} />}
-      {dane && dane.length > 0 && (
-        <table className="tabela">
-          <thead><tr><th>Firma</th><th>KRS</th><th>Siedziba</th><th>Rejestr</th></tr></thead>
-          <tbody>
-            {dane.map((s) => (
-              <tr key={s.id} className="klikalna" onClick={() => idz(`/spolki/${s.id}`)}>
-                <td><a href={`#/spolki/${s.id}`}>{s.nazwa}</a></td>
-                <td>{s.krs}</td>
-                <td>{s.siedziba}</td>
-                <td>{s.data_zamkniecia ? `zamknięty ${fmt.data(s.data_zamkniecia)}` : s.data_otwarcia ? `otwarty ${fmt.data(s.data_otwarcia)}` : 'nieotwarty'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {nowa && <NowaSpolka przyAnulowaniu={() => ustawNowa(false)} />}
+      {wnioski && wnioski.length > 0 && (
+        <Karta tytul="W przygotowaniu">
+          <table className="tabela">
+            <thead><tr><th>Firma</th><th>KRS</th><th>Stan</th><th>Zmiana</th></tr></thead>
+            <tbody>
+              {wnioski.map((w) => (
+                <tr key={w.id} className="klikalna" onClick={() => idz(`/wnioski/${w.id}`)}>
+                  <td><a href={`#/wnioski/${w.id}`}>{w.firma || `Wniosek KRS ${w.krs}`}</a>{w.przejecie ? <div className="male drugorzedny">przejęcie rejestru</div> : null}</td>
+                  <td className="dane">{w.krs}</td>
+                  <td><Pigulka odmiana={ODMIANY_WNIOSKU[w.stan]}>{w.stan === 'zlozony' ? 'Do rozpatrzenia' : 'W trakcie wypełniania'}</Pigulka></td>
+                  <td>{fmt.data(w.zmieniono)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Karta>
       )}
-    </Karta>
+      <Karta tytul="Rejestry" akcje={!nowa && <button type="button" className="btn btn-glowny" onClick={() => ustawNowa(true)}>Nowa spółka</button>}>
+        <Szukajka wartosc={q} przyZmianie={ustawQ} placeholder="Firma albo KRS…" />
+        {blad && <Bledy blad={blad} />}
+        {!dane && !blad && <Spinner />}
+        {dane && !dane.length && <Pusto tytul="Brak rejestrów" opis={q ? 'Żadna spółka nie pasuje do wyszukiwania.' : 'Rejestr pojawi się tu po otwarciu.'} />}
+        {dane && dane.length > 0 && (
+          <table className="tabela">
+            <thead><tr><th>Firma</th><th>KRS</th><th>Siedziba</th><th>Rejestr</th></tr></thead>
+            <tbody>
+              {dane.map((s) => (
+                <tr key={s.id} className="klikalna" onClick={() => idz(`/spolki/${s.id}`)}>
+                  <td><a href={`#/spolki/${s.id}`}>{s.nazwa}</a></td>
+                  <td className="dane">{s.krs}</td>
+                  <td>{s.siedziba}</td>
+                  <td>{s.data_zamkniecia ? `zamknięty ${fmt.data(s.data_zamkniecia)}` : s.data_otwarcia ? `otwarty ${fmt.data(s.data_otwarcia)}` : 'nieotwarty'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Karta>
     </>
   );
 }
 
-const POLA_SPOLKI = [
-  ['nazwa', 'Firma'], ['krs', 'KRS', true], ['siedziba', 'Siedziba'], ['adres', 'Adres'], ['sad_rejestrowy', 'Sąd rejestrowy'],
-  ['data_rejestracji', 'Data rejestracji spółki'], ['nip', 'NIP (do faktur)'], ['email', 'E-mail spółki (korespondencja)'],
-  ['umowe_zawarl', 'Umowę zawarł'], ['platnosc', 'Opłata za prowadzenie'],
-];
+/* Dane rejestru (art. 300³³ § 1 pkt 1–3 KSH) i — osobno — dane do rozliczeń i korespondencji. */
+const POLA_REJESTRU = [['nazwa', 'Firma'], ['siedziba', 'Siedziba'], ['adres', 'Adres'], ['sad_rejestrowy', 'Sąd rejestrowy'], ['krs', 'Numer KRS', true], ['data_rejestracji', 'Data rejestracji spółki']];
+const POLA_ROZLICZEN = [['nip', 'NIP (do faktur)'], ['email', 'E-mail spółki (korespondencja)'], ['umowe_zawarl', 'Umowę zawarł'], ['platnosc', 'Opłata za prowadzenie']];
+const POLA_SPOLKI = [...POLA_REJESTRU, ...POLA_ROZLICZEN];
 const PLATNOSC = { roczna: 'raz w roku', miesieczna: 'co miesiąc' };
 
-function DaneSpolki({ spolka, poZapisie }) {
+function DaneSpolki({ spolka, poZapisie, edycjaDozwolona }) {
   const [edycja, ustawEdycje] = useState(null);
   const c = useCzynnosc();
   const { pola } = bledyApi(c.blad);
@@ -51,15 +69,21 @@ function DaneSpolki({ spolka, poZapisie }) {
     ustawEdycje(null);
     poZapisie();
   });
+  const wartosc = (k) => (k === 'data_rejestracji' ? fmt.data(spolka[k]) : k === 'platnosc' ? PLATNOSC[spolka[k]] : spolka[k]) || '—';
+  const tytul = <><span className="numer-sekcji">I.</span> Spółka</>;
   if (!edycja) {
     return (
-      <Karta tytul="Dane spółki" akcje={<button type="button" className="btn btn-maly" onClick={() => ustawEdycje({ ...spolka })}>Edytuj</button>}>
-        <ListaDanych pary={POLA_SPOLKI.map(([k, nazwa]) => [nazwa, k === 'data_rejestracji' ? fmt.data(spolka[k]) : k === 'platnosc' ? PLATNOSC[spolka[k]] : spolka[k]])} />
+      <Karta tytul={tytul} akcje={edycjaDozwolona && <button type="button" className="btn btn-maly" onClick={() => ustawEdycje({ ...spolka })}>Zmień dane</button>}>
+        <ListaDanych pary={POLA_REJESTRU.map(([k, nazwa]) => [nazwa, wartosc(k)])} />
+        <div className="dane-pomocnicze">
+          <div className="etykieta">Rozliczenia i korespondencja — poza rejestrem</div>
+          <ListaDanych pary={POLA_ROZLICZEN.map(([k, nazwa]) => [nazwa, wartosc(k)])} />
+        </div>
       </Karta>
     );
   }
   return (
-    <Karta tytul="Dane spółki">
+    <Karta tytul={tytul}>
       <div className="siatka-2">
         {POLA_SPOLKI.filter(([, , staly]) => !staly).map(([k, nazwa]) => (
           <Pole key={k} etykieta={nazwa} blad={pola[k]} opcjonalne={['nip', 'email', 'umowe_zawarl'].includes(k)}>
@@ -74,6 +98,7 @@ function DaneSpolki({ spolka, poZapisie }) {
         ))}
       </div>
       {c.blad && !Object.keys(pola).length && <Bledy blad={c.blad} />}
+      <p className="male drugorzedny">Zmiana danych nie jest wpisem — zapisuje się w historii zmian danych.</p>
       <div className="rzad">
         <button type="button" className="btn btn-glowny" onClick={zapisz} disabled={c.trwa}>Zapisz</button>
         <button type="button" className="btn" onClick={() => ustawEdycje(null)}>Anuluj</button>
@@ -82,21 +107,23 @@ function DaneSpolki({ spolka, poZapisie }) {
   );
 }
 
-/** „Informacja z rejestru” (§ 4, U-24): odbiorca, dzień (także dziś), opłata 50 zł albo bez (organ — bez). */
-function FormularzInformacji({ spolka, osoby, przyZamknieciu }) {
+/** „Informacja z rejestru” (U-24): odbiorca, dzień (także dziś), opłata 50 zł albo bez (organ — bez). */
+function FormularzInformacji({ spolka, widok, osoby, przyZamknieciu }) {
   const [f, ustawF] = useState({ odbiorca: 'spolka', osoba_id: null, organ: '', sygnatura: '', dzien: fmt.dzisIso(), oplata: null });
   const [wynik, ustawWynik] = useState(null);
   const c = useCzynnosc();
   const { pola } = bledyApi(c.blad);
-  const akcjonariusze = [...new Set(Object.keys(osoby || {}).map(Number))];
+  // Odbiorcą może być akcjonariusz — nie uprawniony z obciążenia (zastawnik, użytkownik).
+  const akcjonariusze = [...new Set(((widok && widok.akcjonariusze) || []).map((p) => p.osoba_id))];
   const wydaj = () => c.wykonaj(async () => ustawWynik(await API.post(`/api/psa/spolki/${spolka.id}/informacja`, f)));
   return (
     <Karta tytul="Informacja z rejestru">
       {wynik ? (
         <>
-          <Komunikat odmiana="rejestr" tresc={`Wydano informację ${wynik.numer}. Pismo jest w Korespondencji.`} />
+          <Komunikat odmiana="rejestr" tresc={`Wydano informację ${wynik.numer}. Wysyłka — w Korespondencji.`} />
           <div className="rzad">
             <a className="btn btn-glowny" href={adresPdf(wynik.pismo_id)} target="_blank" rel="noopener">Pobierz PDF</a>
+            <a className="btn" href="#/korespondencja">Korespondencja</a>
             <button type="button" className="btn" onClick={przyZamknieciu}>Zamknij</button>
           </div>
         </>
@@ -132,7 +159,7 @@ function FormularzInformacji({ spolka, osoby, przyZamknieciu }) {
             <Pole etykieta="Opłata" blad={pola.oplata}>
               <div className="rzad" role="group">
                 {[['tak', 'Opłata 50 zł netto'], ['nie', 'Bez opłaty']].map(([v, n]) => (
-                  <button key={v} type="button" className={`btn btn-maly ${f.oplata === v ? 'btn-glowny' : ''}`} aria-pressed={f.oplata === v} onClick={() => ustawF({ ...f, oplata: v })}>{n}</button>
+                  <button key={v} type="button" className={`btn ${f.oplata === v ? 'btn-wybrany' : ''}`} aria-pressed={f.oplata === v} onClick={() => ustawF({ ...f, oplata: v })}>{n}</button>
                 ))}
               </div>
             </Pole>
@@ -160,6 +187,8 @@ function zmianaAtrybutu(a, operacja) {
   };
 }
 
+const POWODY_ZAMKNIECIA = [['przekazanie', 'przekazanie rejestru innemu podmiotowi'], ['wykreslenie_spolki', 'wykreślenie spółki z KRS'], ['rozwiazanie_umowy', 'rozwiązanie umowy']];
+
 function EkranKokpitu({ spolkaId }) {
   const [dzien, ustawDzien] = useParametrAdresu('dzien', '');
   const { dane, blad, odswiez } = useDane(`/api/psa/spolki/${spolkaId}${dzien ? `?dzien=${dzien}` : ''}`);
@@ -171,31 +200,43 @@ function EkranKokpitu({ spolkaId }) {
   if (!dane) return <Spinner />;
   const { spolka, rejestr: w, osoby } = dane;
   const otwarty = Boolean(spolka.data_otwarcia) && !spolka.data_zamkniecia;
+  // Czynności tylko w stanie bieżącym otwartego rejestru — „stan na dzień” w przeszłości jest do czytania.
+  const czynny = otwarty && !dzien;
   const nowa = (d) => c.wykonaj(() => zalozSprawe(spolka.id, d));
+  const liczbaAkcji = w.serie.reduce((s, x) => s + x.liczba - x.umorzone.reduce((u, z) => u + z.nr_do - z.nr_od + 1, 0), 0);
+  const liczbaOsob = new Set(w.akcjonariusze.map((p) => p.osoba_id)).size;
+  const stanRejestru = spolka.data_zamkniecia ? `rejestr zamknięty ${fmt.data(spolka.data_zamkniecia)}` : spolka.data_otwarcia ? `rejestr otwarty ${fmt.data(spolka.data_otwarcia)}` : 'rejestr nieotwarty';
+  const wToku = dzien ? [] : dane.w_toku || [];
 
   return (
-    <div className="ekran-kokpitu">
+    <div className="ekran-rejestru">
       <NaglowekStrony
         tytul={spolka.nazwa}
         kontekst={(
           <span className="rzad">
-            <span>KRS {spolka.krs}</span>
-            <span>{spolka.data_zamkniecia ? `rejestr zamknięty ${fmt.data(spolka.data_zamkniecia)}` : spolka.data_otwarcia ? `rejestr otwarty ${fmt.data(spolka.data_otwarcia)}` : 'rejestr nieotwarty'}</span>
+            <span>KRS <span className="dane">{spolka.krs}</span></span>
+            <span>{stanRejestru}</span>
+            {spolka.data_otwarcia && <span>{fmt.AKCJE(liczbaAkcji)} · {fmt.liczba(w.serie.length)} {fmt.odmien(w.serie.length, 'seria', 'serie', 'serii')}</span>}
+            {spolka.data_otwarcia && <span>{fmt.liczba(liczbaOsob)} {fmt.odmien(liczbaOsob, 'akcjonariusz', 'akcjonariuszy', 'akcjonariuszy')}</span>}
           </span>
         )}
         akcje={(
           <span className="rzad">
-            <button type="button" className="btn" onClick={() => ustawInformacje(true)} disabled={!spolka.data_otwarcia}>Informacja z rejestru</button>
-            <PrzyciskGlowny etykieta="Nowy wpis" przyKlik={() => nowa({})} powod={otwarty ? null : 'Rejestr nie jest otwarty.'} trwa={c.trwa} />
+            <label className="stan-na">
+              <span>Stan na dzień</span>
+              <PoleDaty wartosc={dzien} przyZmianie={ustawDzien} max={fmt.dzisIso()} />
+            </label>
+            <button type="button" className="btn btn-glowny" onClick={() => ustawInformacje(true)} disabled={!spolka.data_otwarcia}>Informacja z rejestru</button>
             <Wiecej akcje={[
               { etykieta: 'Eksport rejestru (ZIP)', przyKlik: () => { window.location.href = `/api/psa/spolki/${spolka.id}/eksport`; } },
-              otwarty && { etykieta: 'Zamknij rejestr', przyKlik: () => ustawZamkniecie(true), niebezpieczna: true },
+              czynny && { etykieta: 'Zamknij rejestr', przyKlik: () => ustawZamkniecie(true), niebezpieczna: true },
             ]}
             />
           </span>
         )}
       />
       <Bledy blad={c.blad} />
+      {dzien && <Komunikat tresc={`Stan rejestru na koniec dnia ${fmt.data(dzien)} — tylko do odczytu.`} />}
       {dane.zawiadomienie_sadu && !dane.zawiadomienie_sadu.zawiadomiono && (
         <div className="komunikat komunikat-uwaga rzad-rozdzielony">
           <span>Zawiadom sąd rejestrowy (system KRS) o rozwiązaniu umowy — termin {fmt.data(dane.zawiadomienie_sadu.termin)}.</span>
@@ -209,66 +250,119 @@ function EkranKokpitu({ spolkaId }) {
           stopka={(
             <>
               <button type="button" className="btn" onClick={() => ustawZamkniecie(false)}>Anuluj</button>
-              <button type="button" className="btn btn-danger" disabled={!powod || c.trwa} onClick={() => nowa({ zadajacy: 'spolka', operacje: [{ typ: 'zamkniecie', powod }] })}>Załóż sprawę zamknięcia</button>
+              <button type="button" className="btn btn-danger" disabled={!powod || c.trwa} onClick={() => nowa({ zadajacy: 'spolka', operacje: [{ typ: 'zamkniecie', powod }] })}>Przygotuj wpis zamknięcia</button>
             </>
           )}
         >
           <Pole etykieta="Powód">
             <select value={powod} onChange={(e) => ustawPowod(e.target.value)}>
               <option value="">— wybierz —</option>
-              <option value="przekazanie">przekazanie rejestru innemu podmiotowi</option>
-              <option value="wykreslenie_spolki">wykreślenie spółki z KRS</option>
-              <option value="rozwiazanie_umowy">rozwiązanie umowy</option>
+              {POWODY_ZAMKNIECIA.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
             </select>
           </Pole>
-          <p className="male drugorzedny">Zamknięcie jest wpisem — przejdzie przez sprawę (checklista, „Dokonaj wpisu”).</p>
+          <p className="male drugorzedny">Zamknięcie jest wpisem — na następnym ekranie sprawdzisz je i dokonasz wpisu.</p>
         </Modal>
       )}
-      {informacja && <FormularzInformacji spolka={spolka} osoby={osoby} przyZamknieciu={() => ustawInformacje(false)} />}
+      {informacja && <FormularzInformacji spolka={spolka} widok={w} osoby={osoby} przyZamknieciu={() => ustawInformacje(false)} />}
 
-      <div className="stan-na-dzien">
-        <Pole etykieta="Stan na dzień" podpowiedz={dzien ? undefined : 'Puste — stan bieżący.'}>
-          <PoleDaty wartosc={dzien} przyZmianie={ustawDzien} max={fmt.dzisIso()} />
-        </Pole>
-      </div>
+      {!spolka.data_otwarcia && (
+        <div className="komunikat komunikat-uwaga rzad-rozdzielony">
+          <span>Rejestr nie jest jeszcze otwarty — pierwszym wpisem jest otwarcie ze stanem początkowym.</span>
+          <button
+            type="button"
+            className="btn btn-glowny"
+            disabled={c.trwa}
+            onClick={() => nowa({ operacje: [{ typ: 'otwarcie', zrodlo: 'zalozenie', serie: [{ seria: 'A', numery: '', liczba: '', data_wpisu_krs: spolka.data_rejestracji }], akcjonariusze: [{ osoba_id: null, akcje: [{ seria: 'A', numery: '', liczba: '' }] }], atrybuty: [], umorzone: [] }] })}
+          >
+            Otwórz rejestr
+          </button>
+        </div>
+      )}
 
-      <Karta tytul="Akcjonariusze"><TabelaAkcjonariuszy widok={w} osoby={osoby} /></Karta>
-      <Karta tytul="Akcje">
+      {wToku.length > 0 && (
+        <section className="w-toku" aria-label="Wpisy w toku">
+          <div className="etykieta">W toku · {wToku.length}</div>
+          {wToku.map((s) => (
+            <div className="w-toku-wiersz" key={s.id}>
+              <div className="w-toku-opis">
+                <strong>{s.opis}</strong>
+                <div className="male">
+                  {s.stan === 'wstrzymana' ? 'Wstrzymana — czeka na uzupełnienie.' : s.braki.length ? `Zostało: ${s.braki[0]}` : 'Gotowe do wpisu.'}
+                  {s.termin && !s.termin.zamrozony ? ` Termin wpisu: ${fmt.data(s.termin.termin_do)}.` : ''}
+                </div>
+              </div>
+              <a className="btn" href={`#/sprawy/${s.id}`}>Dokończ</a>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <DaneSpolki spolka={spolka} poZapisie={odswiez} edycjaDozwolona={!dzien} />
+
+      <Karta
+        tytul={<><span className="numer-sekcji">II.</span> Akcje</>}
+        akcje={czynny && <a className="btn btn-maly" href={`#/spolki/${spolka.id}/wpis?typ=emisja`}>Nowa emisja</a>}
+      >
         <TabelaSerii widok={w} />
-        <h4>Obciążenia i adnotacje</h4>
+      </Karta>
+
+      <Karta tytul={<><span className="numer-sekcji">III.</span> Akcjonariusze</>}>
+        <TabelaAkcjonariuszy
+          widok={w}
+          osoby={osoby}
+          akcja={czynny ? (id) => <a className="btn btn-maly" href={`#/spolki/${spolka.id}/wpis?osoba=${id}`}>Nowy wpis</a> : null}
+        />
+      </Karta>
+
+      <Karta tytul={<><span className="numer-sekcji">IV.</span> Obciążenia, ograniczenia, obowiązki</>}>
         <TabelaAtrybutow
           widok={w}
           osoby={osoby}
-          akcje={otwarty && !dzien ? (a) => (
+          akcje={czynny ? (a) => (
             <>
-              {['zastaw', 'uzytkowanie'].includes(a.rodzaj) && <button type="button" className="btn btn-maly btn-cichy" onClick={() => nowa({ operacje: [zmianaAtrybutu(a, 'zmiana_prawa_glosu')] })}>Zmień</button>}
-              <button type="button" className="btn btn-maly btn-cichy" onClick={() => nowa({ zadajacy: a.rodzaj === 'zajecie' ? 'organ' : 'spolka', operacje: [zmianaAtrybutu(a, 'wykreslenie')] })}>Wykreśl</button>
+              {['zastaw', 'uzytkowanie'].includes(a.rodzaj) && <button type="button" className="btn btn-maly" disabled={c.trwa} onClick={() => nowa({ operacje: [zmianaAtrybutu(a, 'zmiana_prawa_glosu')] })}>Zmień prawo głosu</button>}
+              <button type="button" className="btn btn-maly" disabled={c.trwa} onClick={() => nowa({ zadajacy: a.rodzaj === 'zajecie' ? 'organ' : 'spolka', operacje: [zmianaAtrybutu(a, 'wykreslenie')] })}>Wykreśl</button>
             </>
           ) : null}
         />
       </Karta>
-      <DaneSpolki spolka={spolka} poZapisie={odswiez} />
-      <DzialajaZaSpolke spolkaId={spolka.id} osoby={dane.reprezentanci} poZmianie={odswiez} />
 
-      <Sekcja tytul="Historia wpisów" licznik={dane.wpisy.length}>
-        <table className="tabela">
-          <thead><tr><th>Nr</th><th>Wpis</th><th>Data</th><th>Sprawa</th><th><span className="sr-only">Czynności</span></th></tr></thead>
-          <tbody>
-            {[...dane.wpisy].reverse().map((z) => (
-              <tr key={z.id}>
-                <td>{z.id}</td>
-                <td>{NAZWY_TYPOW[z.typ] || z.typ}{z.wycofany ? ' (wycofany)' : z.sprostowany ? ' (sprostowany)' : ''}</td>
-                <td>{fmt.data(z.data_wpisu)}</td>
-                <td>{z.sprawa_id ? <a href={`#/sprawy/${z.sprawa_id}`}>{z.sprawa_id}</a> : '—'}</td>
-                <td>{otwarty && !['sprostowanie', 'zamkniecie'].includes(z.typ) && !z.wycofany && (
-                  <button type="button" className="btn btn-maly btn-cichy" onClick={() => nowa({ zadajacy: 'brak', operacje: [{ typ: 'sprostowanie', zdarzenie_id: z.id, tryb: 'zastap' }] })}>Sprostuj</button>
-                )}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <Karta tytul="Historia wpisów" akcje={<span className="male drugorzedny">Wpisów nie usuwa się — błąd poprawia sprostowanie.</span>}>
+        {!dane.wpisy.length && <p className="male drugorzedny">Brak wpisów.</p>}
+        <ol className="historia-wpisow">
+          {[...dane.wpisy].reverse().map((z) => (
+            <li key={z.id} className={z.wycofany ? 'wycofany' : ''}>
+              <div className="historia-kiedy">
+                <div>{fmt.data(z.data_wpisu)}</div>
+                <div className="dane">wpis nr {z.id}</div>
+              </div>
+              <div className="historia-co">
+                <div>{z.opis || NAZWY_TYPOW[z.typ] || z.typ}</div>
+                <div className="male drugorzedny">
+                  {z.wycofany ? `Wycofany wpisem nr ${z.wycofany}. ` : z.sprostowany ? `Sprostowany wpisem nr ${z.sprostowany}. ` : ''}
+                  {z.podstawa ? `Podstawa: ${z.podstawa.replace(/\.+$/, '')}. ` : ''}
+                  {z.sprawa_id ? <a href={`#/sprawy/${z.sprawa_id}`}>dokumenty i pisma</a> : null}
+                </div>
+              </div>
+              {czynny && !['sprostowanie', 'zamkniecie'].includes(z.typ) && !z.wycofany && (
+                <button type="button" className="btn btn-maly" disabled={c.trwa} onClick={() => nowa({ zadajacy: 'brak', operacje: [{ typ: 'sprostowanie', zdarzenie_id: z.id, tryb: 'zastap' }] })}>Sprostuj</button>
+              )}
+            </li>
+          ))}
+        </ol>
+      </Karta>
+
+      <Sekcja tytul="Dostęp klienta do portalu" licznik={dane.reprezentanci.length}>
+        <DzialajaZaSpolke spolkaId={spolka.id} osoby={dane.reprezentanci} poZmianie={odswiez} />
       </Sekcja>
-      <Sekcja tytul="Sprawy" licznik={dane.sprawy.length}>
+      <Sekcja tytul="Dokumenty i pisma" licznik={dane.pliki.length + dane.pisma.length}>
+        <ListaPlikow pliki={dane.pliki} />
+        <TabelaPism pisma={dane.pisma.map((x) => ({ ...x, pismo: NAZWY_PISM[x.typ], adresat_nazwa: (x.kontekst || {}).adresat_nazwa }))} poZmianie={odswiez} />
+      </Sekcja>
+      <Sekcja tytul="Opłaty" licznik={dane.oplaty.length}>
+        <TabelaOplat oplaty={dane.oplaty} poZmianie={odswiez} />
+      </Sekcja>
+      <Sekcja tytul="Żądania wpisu" licznik={dane.sprawy.length}>
         <table className="tabela">
           <thead><tr><th>Nr</th><th>Wpływ</th><th>Stan</th></tr></thead>
           <tbody>
@@ -277,13 +371,6 @@ function EkranKokpitu({ spolkaId }) {
             ))}
           </tbody>
         </table>
-      </Sekcja>
-      <Sekcja tytul="Akta — pliki i pisma" licznik={dane.pliki.length + dane.pisma.length}>
-        <ListaPlikow pliki={dane.pliki} />
-        <TabelaPism pisma={dane.pisma.map((x) => ({ ...x, pismo: NAZWY_PISM[x.typ], adresat_nazwa: (x.kontekst || {}).adresat_nazwa }))} poZmianie={odswiez} />
-      </Sekcja>
-      <Sekcja tytul="Opłaty" licznik={dane.oplaty.length}>
-        <TabelaOplat oplaty={dane.oplaty} poZmianie={odswiez} />
       </Sekcja>
       <Sekcja tytul="Historia zmian danych" licznik={dane.historia.length}>
         <HistoriaZmian historia={dane.historia} />
@@ -299,22 +386,22 @@ function DzialajaZaSpolke({ spolkaId, osoby, poZmianie }) {
   const zmien = (fn) => c.wykonaj(async () => { await fn(); ustawDodaj(false); poZmianie(); });
   const adres = `/api/psa/spolki/${spolkaId}/reprezentanci`;
   return (
-    <Karta tytul="Działają za spółkę" akcje={!dodaj && <button type="button" className="btn btn-maly" onClick={() => ustawDodaj(true)}>Dodaj</button>}>
+    <div className="dostep-klienta">
       {!osoby.length && <p className="male drugorzedny">Nikt nie działa za spółkę w portalu.</p>}
       {osoby.map((o) => (
         <div key={o.id} className="rzad-rozdzielony">
           <span><a href={`#/osoby/${o.id}`}>{o.nazwa}</a> <span className="male drugorzedny">{o.konto_aktywne === 1 ? 'konto w portalu' : o.konto_aktywne === 0 ? 'zaproszona' : 'bez konta'}</span></span>
-          <button type="button" className="btn btn-maly btn-cichy" disabled={c.trwa} onClick={() => zmien(() => API.delete(`${adres}/${o.id}`))}>Usuń</button>
+          <button type="button" className="btn btn-maly" disabled={c.trwa} onClick={() => zmien(() => API.delete(`${adres}/${o.id}`))}>Odbierz dostęp</button>
         </div>
       ))}
-      {dodaj && (
+      {dodaj ? (
         <Pole etykieta="Osoba z kartoteki albo nowa">
           <WyborOsoby wartosc={null} wyklucz={osoby.map((o) => o.id)} przyZmianie={(id) => id && zmien(() => API.post(adres, { osoba_id: id }))} />
         </Pole>
-      )}
+      ) : <button type="button" className="btn btn-maly" onClick={() => ustawDodaj(true)}>Dodaj osobę</button>}
       <Bledy blad={c.blad} />
-      <p className="male drugorzedny">Usunięcie (np. po odwołaniu z zarządu) od razu zamyka tej osobie dostęp do spółki w portalu.</p>
-    </Karta>
+      <p className="male drugorzedny">Odebranie dostępu (np. po odwołaniu z zarządu) działa od razu.</p>
+    </div>
   );
 }
 

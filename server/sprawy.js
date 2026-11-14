@@ -260,7 +260,17 @@ function zaloz(db, we, kto) {
     .immediate();
 }
 
-/** Ekran sprawy: treść, termin, stan przed i po, osoby z R2, checklista, opłata, pisma, pliki. */
+/** Zmiany sprawy zdaniem — z treści sprawdzonej, a gdy jej nie ma (sprawa zakończona albo niepełna) — z roboczej. */
+function opisTresci(db, sprawa, sym = null) {
+  const operacje = (sym && sym.operacje) || sprawa.operacje || [];
+  try {
+    return operacje.map((op) => pisma.opisOperacji(db, op)).join(' ') || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Strona wpisu: treść, termin, stan przed i po, osoby z R2, checklista, opłata, braki, pisma, pliki. */
 function podglad(db, id) {
   const sprawa = daneSprawy.wczytaj(db, id);
   if (!sprawa) return null;
@@ -274,9 +284,10 @@ function podglad(db, id) {
     pisma: pisma.lista(db, { sprawaId: sprawa.id }),
     pliki: danePliki.lista(db, { sprawaId: sprawa.id }),
   };
-  if (!sprawyLogika.otwarta(sprawa)) return wynik;
+  if (!sprawyLogika.otwarta(sprawa)) return { ...wynik, opis: opisTresci(db, sprawa) };
 
   const sym = rejestr.symuluj(db, sprawa);
+  wynik.opis = sym.operacje ? opisTresci(db, sprawa, sym) : null;
   const osoby = rejestr.doPowiadomienia(sprawa, sym);
   wynik.bledy = sym.bledy;
   wynik.stan_przed = stanLogika.widok(sym.przed);
@@ -296,8 +307,8 @@ function podglad(db, id) {
     ? stanLogika.checklista(sym.operacje, sym.przed).map((p) => ({ ...p, zaznaczona: Boolean((sprawa.checklista || {})[p.klucz]) }))
     : [];
   wynik.oplata = { wymagana: Boolean(sym.operacje && sym.operacje.some((op) => typy.odplatna(op))), wybor: sprawa.oplata };
-  wynik.przeszkody_wpisu =
-    wynik.krok === 2 ? (sym.bledy.length > 0 ? sym.bledy : rejestr.wymaganiaWpisu(db, sprawa, sym)) : null;
+  // Braki przed wpisem — od początku (strona wpisu nie ma kroków, D-231); przy błędach treści — same błędy.
+  wynik.przeszkody_wpisu = sym.bledy.length > 0 ? sym.bledy : rejestr.wymaganiaWpisu(db, sprawa, sym);
   return wynik;
 }
 
@@ -306,7 +317,7 @@ function skrot(db, sprawa) {
   const sym = rejestr.symuluj(db, sprawa);
   const robocze = sprawa.operacje || [];
   let opis = 'Wpis bez treści';
-  if (sym.operacje) opis = sym.operacje.map((op) => pisma.opisOperacji(db, op)).join(' ');
+  if (sym.operacje) opis = opisTresci(db, sprawa, sym);
   else if (robocze.length > 0) opis = `${robocze.map((op) => (typy.TYPY[op && op.typ] || { etykieta: 'Wpis' }).etykieta).join(', ')} — treść do uzupełnienia`;
   const braki = sym.bledy.length > 0 || !sym.operacje ? sym.bledy : rejestr.wymaganiaWpisu(db, sprawa, sym);
   return {

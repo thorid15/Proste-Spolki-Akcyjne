@@ -2684,3 +2684,115 @@ input.rozni-sie { border-color: var(--mosiadz, #8A6531); background: #fbf6ee; }
 .ekran-wniosku > .karta, .formularz-wniosku > .karta { margin-bottom: var(--od-16); }
 /* Formularz tylko do odczytu (fieldset disabled): bez przycisków edycji i kalendarza; zostaje wybrana opcja. */
 fieldset:disabled .btn:not([aria-pressed="true"]), fieldset:disabled .pole-daty-ikona { display: none; }
+
+/* ═════════════════════════════════════════════════════
+   WARSTWA 12.11.2026 — rejestr jako dokument roboczy (D-230–D-235)
+   Jedna warstwa bazowa (odnośnik, przyciski, tabela w karcie) i style nowych ekranów:
+   rejestr spółki, strona wpisu, nowy rejestr. Stoi na końcu pliku, więc wygrywa z regułami wyżej.
+   ═════════════════════════════════════════════════════ */
+
+/* ── Baza: odnośniki ── */
+a { color: var(--rejestr); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible { outline: 2px solid var(--rejestr); outline-offset: 2px; border-radius: 2px; }
+a.btn:hover { text-decoration: none; }
+
+/* ── Baza: przyciski — dwa rozmiary, oba czytelne i z widoczną ramką ── */
+.btn { min-height: 40px; border-color: #D5D9D1; }
+.btn-maly { min-height: 32px; padding: var(--od-4) var(--od-12); font-size: var(--st-13); }
+.btn-cichy { background: var(--karta); border-color: #D5D9D1; }
+.btn-cichy:hover:not(:disabled) { background: var(--papier); border-color: var(--atrament-3); }
+.btn-wybrany, .btn[aria-pressed="true"]:not(.btn-glowny) { background: var(--rejestr-tlo); border-color: var(--rejestr); color: var(--rejestr); font-weight: 600; }
+.btn-duzy { min-height: 48px; }
+.btn-danger { color: var(--sygnal); }
+
+/* ── Baza: tabela w karcie — bez wcięcia względem tytułu karty, ciaśniej ── */
+.karta .tabela th, .karta .tabela td { padding-left: var(--od-12); padding-right: var(--od-12); }
+.karta .tabela th:first-child, .karta .tabela td:first-child { padding-left: 0; }
+.karta .tabela th:last-child, .karta .tabela td:last-child { padding-right: 0; }
+.karta .tabela th { position: static; border-bottom-color: var(--atrament); color: var(--atrament-2); padding-top: var(--od-8); padding-bottom: var(--od-8); }
+.tabela td.liczba, .tabela th.liczba { text-align: right; font-variant-numeric: tabular-nums; }
+.tabela td.dane { font-family: var(--font-dane); }
+.komorka-akcji { width: 1%; white-space: nowrap; }
+.komorka-akcji .rzad { flex-wrap: nowrap; justify-content: flex-end; }
+.karta-tytul { margin: 0; }
+.numer-sekcji { color: var(--atrament-3); margin-right: 2px; }
+.lista-danych { grid-template-columns: minmax(7rem, 220px) minmax(0, 1fr); }
+
+/* ── Powłoka kancelarii: szyna po lewej, bez pasa marki i bez stopki (D-235) ── */
+.powloka-kancelaria { grid-template-rows: minmax(0, 1fr); }
+.powloka-kancelaria .szyna { height: calc(100vh - var(--od-16) * 2); }
+.powloka-bez-szyny { grid-template-columns: minmax(0, 1fr); }
+.powloka-kancelaria .topbar { min-height: 56px; padding-top: var(--od-8); padding-bottom: var(--od-8); }
+.powloka-kancelaria .topbar-tytul { margin: 0; font-weight: 500; }
+.topbar-powrot { display: inline-flex; align-items: center; gap: var(--od-4); font-size: var(--st-13); color: var(--atrament-2); }
+.powloka-kancelaria .tresc { padding-top: var(--od-24); }
+@media (max-width: 900px) {
+  .powloka-kancelaria .szyna { height: auto; }
+  .powloka-kancelaria .tresc { padding-left: var(--od-16); padding-right: var(--od-16); }
+}
+
+/* ── Nagłówek ekranu szczegółu ── */
+.naglowek-strony { align-items: flex-end; flex-wrap: wrap; gap: var(--od-12) var(--od-24); margin-bottom: var(--od-16); }
+.naglowek-strony .tytul-ekranu { margin: 0; font-size: 34px; line-height: 1.15; }
+.naglowek-strony-kontekst .rzad { gap: var(--od-4) var(--od-16); }
+.naglowek-strony-akcje { flex-wrap: wrap; align-items: center; }
+.stan-na { display: inline-flex; align-items: center; gap: var(--od-8); font-size: var(--st-13); color: var(--atrament-2); }
+.stan-na .pole-daty { width: 9.75rem; }
+
+/* ── Rejestr spółki ── */
+.ekran-rejestru > .karta, .ekran-wpisu > .karta, .ekran-rejestru > .sekcja { margin-bottom: var(--od-16); }
+.dane-pomocnicze { margin-top: var(--od-16); padding-top: var(--od-12); border-top: 1px solid var(--linia-2); }
+.dane-pomocnicze .etykieta { margin-bottom: var(--od-8); }
+.dane-pomocnicze .lista-danych { font-size: var(--st-13); }
+
+.w-toku { background: var(--mosiadz-tlo); border: 1px solid #E8D9BF; border-radius: var(--r); padding: var(--od-12) var(--od-16); margin-bottom: var(--od-16); }
+.w-toku .etykieta { color: #6B4B1F; margin-bottom: var(--od-4); }
+.w-toku-wiersz { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--od-8) var(--od-16); padding: var(--od-8) 0; }
+.w-toku-wiersz + .w-toku-wiersz { border-top: 1px solid #E8D9BF; }
+.w-toku-opis { flex: 1 1 320px; min-width: 0; }
+.w-toku-opis .male { color: #5A4A30; }
+
+.akcjonariusze { min-width: 0; }
+.pakiet { display: grid; grid-template-columns: 56px minmax(0, 1fr) 110px 110px; gap: var(--od-12); align-items: center; min-height: 36px; padding: var(--od-4) 0; font-size: var(--st-13); }
+.pakiet-naglowek { min-height: 0; padding: var(--od-8) 0; border-bottom: 1px solid var(--atrament); font-size: var(--st-11); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--atrament-2); }
+.pakiet .liczba { text-align: right; }
+.pakiet-numery { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-4) var(--od-8); min-width: 0; }
+.pakiet-zmiana { background: var(--rejestr-tlo); margin: 2px calc(var(--od-12) * -1); padding-left: var(--od-12); padding-right: var(--od-12); border-radius: var(--r-sm); }
+.akcjonariusz { padding: var(--od-12) 0 var(--od-8); border-bottom: 1px solid var(--linia); }
+.akcjonariusz:last-child { border-bottom: none; padding-bottom: 0; }
+.akcjonariusz-naglowek { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--od-4) var(--od-16); margin-bottom: var(--od-4); }
+.akcjonariusz-kto { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--od-4) var(--od-8); min-width: 0; }
+.akcjonariusz-nazwa { font-weight: 600; font-size: var(--st-15); color: var(--atrament); }
+.akcjonariusz-razem { display: inline-flex; align-items: center; gap: var(--od-8); white-space: nowrap; }
+.bedzie { color: var(--rejestr); font-weight: 600; }
+.akcjonariusze s, .akcjonariusz-razem s { color: var(--atrament-2); }
+.znacznik { display: inline-block; padding: 1px var(--od-8); border-radius: var(--r-pigulka); background: var(--mosiadz-tlo); color: #6B4B1F; font-size: 12px; font-weight: 500; white-space: nowrap; }
+@media (max-width: 640px) {
+  .pakiet { grid-template-columns: 40px minmax(0, 1fr) 72px; }
+  .pakiet > :nth-child(4) { display: none; }
+}
+
+.historia-wpisow { list-style: none; margin: 0; padding: 0; }
+.historia-wpisow li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--od-8) var(--od-16); padding: var(--od-12) 0; border-bottom: 1px solid var(--linia-2); }
+.historia-wpisow li:last-child { border-bottom: none; padding-bottom: 0; }
+.historia-kiedy { width: 104px; flex-shrink: 0; font-size: var(--st-13); color: var(--atrament-2); }
+.historia-kiedy .dane { font-size: 12px; }
+.historia-co { flex: 1 1 320px; min-width: 0; }
+.historia-wpisow li.wycofany .historia-co > div:first-child { text-decoration: line-through; color: var(--atrament-2); }
+.dostep-klienta .rzad-rozdzielony { padding: var(--od-8) 0; }
+
+/* ── Strona wpisu ── */
+.sekcja-wpisu-naglowek { margin-bottom: var(--od-12); }
+.pola-wpisu { border: none; padding: 0; margin: 0; min-width: 0; }
+.wybor-rodzaju { display: flex; flex-wrap: wrap; gap: var(--od-8); }
+.tytul-zmiany { margin: var(--od-16) 0 var(--od-8); font-size: var(--st-13); font-weight: 600; }
+.sekcja-wpisu .tytul-zmiany:first-of-type { margin-top: 0; }
+.posiadanie { margin: calc(var(--od-8) * -1) 0 var(--od-12); padding: var(--od-8) var(--od-12); background: var(--papier); border-radius: var(--r-sm); font-size: var(--st-13); }
+.posiadanie .etykieta { color: var(--atrament-2); }
+.pasek-wpisu { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--od-12) var(--od-24); padding: var(--od-16) var(--od-24); background: var(--karta); border: 1px solid var(--rejestr); border-radius: var(--r-lg); margin-bottom: var(--od-16); }
+.pasek-wpisu-braki { flex: 1 1 320px; min-width: 0; font-size: var(--st-13); }
+.pasek-wpisu-braki ul { margin: var(--od-4) 0 0; padding-left: 1.2em; color: var(--atrament-2); }
+.wiersz-akcji .pole-etykieta { white-space: nowrap; }
+.wiersz-akcji .pole:has(input.krotkie) { flex: 0 1 7.5rem; }
+.element-listy > .btn, .zmiana .btn-maly { margin-top: var(--od-4); }

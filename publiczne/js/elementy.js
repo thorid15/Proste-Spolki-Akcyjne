@@ -73,7 +73,7 @@ function Filtr({ opcje, wartosc, przyZmianie, etykieta = 'Filtr' }) {
 }
 
 /** Menu „Więcej” — czynności drugorzędne; niedostępne są ukryte (§ 5). */
-function Wiecej({ akcje }) {
+function Wiecej({ akcje, etykieta = 'Więcej', klasa = 'btn' }) {
   const [otwarte, ustawOtwarte] = useState(false);
   const widoczne = (akcje || []).filter(Boolean);
   useEffect(() => {
@@ -85,8 +85,8 @@ function Wiecej({ akcje }) {
   if (!widoczne.length) return null;
   return (
     <div className="wiecej" onClick={(z) => z.stopPropagation()}>
-      <button type="button" className="btn" aria-expanded={otwarte} aria-haspopup="menu" onClick={() => ustawOtwarte((o) => !o)}>
-        Więcej <Ikona nazwa="strzalkaDol" rozmiar={14} />
+      <button type="button" className={klasa} aria-expanded={otwarte} aria-haspopup="menu" onClick={() => ustawOtwarte((o) => !o)}>
+        {etykieta} <Ikona nazwa="strzalkaDol" rozmiar={14} />
       </button>
       {otwarte && (
         <div className="wiecej-menu" role="menu">
@@ -132,7 +132,7 @@ function DodajPlik({ adres, przyDodaniu, etykieta = 'Dodaj plik', pola = {} }) {
   const c = useCzynnosc();
   const wyslij = (pliki) => c.wykonaj(async () => {
     for (const p of pliki) {
-      const w = await wgrajPlik(adres, p, pola);
+      const w = await wgrajPlik(typeof adres === 'function' ? await adres() : adres, p, pola);
       if (przyDodaniu) przyDodaniu(w);
     }
   });
@@ -326,18 +326,27 @@ function nazwaOsoby(osoby, id) {
   return o ? o.nazwa : `osoba #${id}`;
 }
 
+/** Rodzaj akcji serii: uprzywilejowane (z numerami, gdy nie cała seria) albo zwykłe — jak w informacji z rejestru. */
+function rodzajSerii(s) {
+  if (!s.uprzywilejowane || !s.uprzywilejowane.length) return 'zwykłe';
+  const cala = numeryAkcji(s.uprzywilejowane) === numeryAkcji(s.zakresy);
+  return cala ? 'uprzywilejowane' : `uprzywilejowane nr ${numeryAkcji(s.uprzywilejowane)}`;
+}
+
 function TabelaSerii({ widok }) {
   if (!widok || !widok.serie.length) return <p className="male drugorzedny">Brak akcji w rejestrze.</p>;
+  const umorzone = widok.serie.some((s) => s.umorzone.length);
   return (
     <table className="tabela">
-      <thead><tr><th>Seria</th><th>Numery</th><th className="liczba">Liczba</th><th>Umorzone</th><th>Wpis do KRS</th></tr></thead>
+      <thead><tr><th>Seria</th><th>Numery</th><th className="liczba">Liczba</th><th>Rodzaj</th>{umorzone && <th>Umorzone</th>}<th>Rejestracja emisji</th></tr></thead>
       <tbody>
         {widok.serie.map((s) => (
           <tr key={s.seria}>
-            <td>{s.seria}</td>
-            <td>{numeryAkcji(s.zakresy)}</td>
+            <td><strong>{s.seria}</strong></td>
+            <td className="dane">{numeryAkcji(s.zakresy)}</td>
             <td className="liczba">{fmt.liczba(s.liczba)}</td>
-            <td>{numeryAkcji(s.umorzone) || '—'}</td>
+            <td>{rodzajSerii(s)}</td>
+            {umorzone && <td className="dane">{numeryAkcji(s.umorzone) || '—'}</td>}
             <td>{fmt.data(s.data_wpisu_krs)}</td>
           </tr>
         ))}
@@ -346,43 +355,152 @@ function TabelaSerii({ widok }) {
   );
 }
 
-function TabelaAkcjonariuszy({ widok, osoby }) {
-  if (!widok || !widok.akcjonariusze.length) return <p className="male drugorzedny">Brak akcjonariuszy.</p>;
+/* Akcjonariusze: osoba raz, pod nią pakiety (seria, numery, liczba albo ułamek). */
+
+const nwd = (a, b) => (b ? nwd(b, a % b) : a);
+
+/** Suma pozycji osoby: całe akcje i ułamki → „600 1/2”. */
+function sumaAkcji(pozycje) {
+  let cale = 0;
+  let l = 0;
+  let m = 1;
+  for (const p of pozycje) {
+    if (!p.czesc) { cale += p.liczba; continue; }
+    l = l * p.czesc.mianownik + p.czesc.licznik * m;
+    m *= p.czesc.mianownik;
+    const d = nwd(l, m);
+    l /= d;
+    m /= d;
+  }
+  cale += Math.floor(l / m);
+  l %= m;
+  if (!l) return fmt.liczba(cale);
+  return cale ? `${fmt.liczba(cale)} ${l}/${m}` : `${l}/${m}`;
+}
+
+/** Pozycje widoku według osoby i serii (bez podziału na dni wpisu); ułamek — osobno dla numeru akcji. */
+function pakietyOsob(widok) {
+  const osoby = new Map();
+  for (const p of (widok && widok.akcjonariusze) || []) {
+    if (!osoby.has(p.osoba_id)) osoby.set(p.osoba_id, new Map());
+    const klucz = p.czesc ? `${p.seria}|u${p.zakresy[0].nr_od}` : p.seria;
+    const pakiety = osoby.get(p.osoba_id);
+    if (!pakiety.has(klucz)) pakiety.set(klucz, { klucz, seria: p.seria, czesc: p.czesc, zakresy: [], liczba: 0, pokryte: true, data_wpisu: p.data_wpisu });
+    const g = pakiety.get(klucz);
+    g.zakresy.push(...p.zakresy);
+    g.liczba += p.liczba;
+    g.pokryte = g.pokryte && p.pokryte;
+    if (p.data_wpisu > g.data_wpisu) g.data_wpisu = p.data_wpisu;
+  }
+  for (const pakiety of osoby.values()) for (const g of pakiety.values()) g.zakresy.sort((a, b) => a.nr_od - b.nr_od);
+  return osoby;
+}
+
+const liczbaPakietu = (g) => (g.czesc ? `${g.czesc.licznik}/${g.czesc.mianownik}` : fmt.liczba(g.liczba));
+
+/** Część wspólna zakresów numerów (do znaczników obciążeń przy pakiecie). */
+function wspolneNumery(a, b) {
+  const wynik = [];
+  for (const x of a) for (const y of b) {
+    const od = Math.max(x.nr_od, y.nr_od);
+    const dokad = Math.min(x.nr_do, y.nr_do);
+    if (od <= dokad) wynik.push({ nr_od: od, nr_do: dokad });
+  }
+  return wynik;
+}
+
+/**
+ * Akcjonariusze pogrupowani po osobie. `osoby` — mapa id → osoba (nazwa; z danymi kartoteki pokazuje identyfikator
+ * i adres). `przed` — widok sprzed wpisu: tabela pokazuje różnicę (było przekreślone, będzie wyróżnione).
+ * `akcja(osobaId)` — przycisk przy osobie.
+ */
+function TabelaAkcjonariuszy({ widok, osoby, przed, akcja }) {
+  const po = pakietyOsob(widok);
+  const bylo = przed ? pakietyOsob(przed) : null;
+  const kolejnosc = [...new Set([...(bylo ? bylo.keys() : []), ...po.keys()])];
+  if (!kolejnosc.length) return <p className="male drugorzedny">Brak akcjonariuszy.</p>;
+  const atrybuty = (widok && widok.atrybuty) || [];
   return (
-    <table className="tabela">
-      <thead><tr><th>Akcjonariusz</th><th>Seria</th><th>Numery</th><th className="liczba">Liczba</th><th>Pokryte</th><th>Wpis</th></tr></thead>
-      <tbody>
-        {widok.akcjonariusze.map((p, i) => (
-          <tr key={`${p.osoba_id}-${p.seria}-${i}`}>
-            <td><a href={`#/osoby/${p.osoba_id}`}>{nazwaOsoby(osoby, p.osoba_id)}</a></td>
-            <td>{p.seria}</td>
-            <td>{numeryAkcji(p.zakresy)}</td>
-            <td className="liczba">{p.czesc ? `${p.czesc.licznik}/${p.czesc.mianownik}` : fmt.liczba(p.liczba)}</td>
-            <td>{p.pokryte ? 'tak' : 'nie'}</td>
-            <td>{fmt.data(p.data_wpisu)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="akcjonariusze" role="list">
+      <div className="pakiet pakiet-naglowek" aria-hidden="true">
+        <span>Seria</span><span>Numery</span><span className="liczba">Liczba</span><span>{przed ? '' : 'Wpisane'}</span>
+      </div>
+      {kolejnosc.map((id) => {
+        const nowe = po.get(id) || new Map();
+        const stare = bylo ? bylo.get(id) || new Map() : nowe;
+        const klucze = [...new Set([...stare.keys(), ...nowe.keys()])].sort((a, b) => a.localeCompare(b, 'pl'));
+        const o = (osoby && osoby[id]) || {};
+        const razemPo = sumaAkcji([...nowe.values()]);
+        const razemPrzed = bylo ? sumaAkcji([...stare.values()]) : razemPo;
+        const nowaOsoba = Boolean(bylo) && !bylo.has(id);
+        return (
+          <div className="akcjonariusz" role="listitem" key={id}>
+            <div className="akcjonariusz-naglowek">
+              <div className="akcjonariusz-kto">
+                <a className="akcjonariusz-nazwa" href={`#/osoby/${id}`}>{nazwaOsoby(osoby, id)}</a>
+                {nowaOsoba && <Pigulka odmiana="rejestr">nowy akcjonariusz</Pigulka>}
+                {!przed && o.adres && <span className="male drugorzedny">{opisOsoby(o)}{o.zgoda_email && o.email ? ` · ${o.email}` : ''}</span>}
+              </div>
+              <div className="akcjonariusz-razem">
+                <span className="male drugorzedny">razem </span>
+                {razemPrzed !== razemPo && <s>{razemPrzed}</s>} <strong className={razemPrzed !== razemPo ? 'bedzie' : ''}>{razemPo}</strong>
+                {akcja && akcja(id)}
+              </div>
+            </div>
+            {klucze.map((k) => {
+              const b = stare.get(k);
+              const n = nowe.get(k);
+              const g = n || b;
+              const numeryB = b ? numeryAkcji(b.zakresy) : '';
+              const numeryN = n ? numeryAkcji(n.zakresy) : '';
+              const zmiana = Boolean(bylo) && (numeryB !== numeryN || (b && n && liczbaPakietu(b) !== liczbaPakietu(n)));
+              const znaczniki = przed ? [] : atrybuty
+                .filter((a) => a.seria === g.seria)
+                .map((a) => ({ a, czesc: wspolneNumery(a.zakresy, g.zakresy) }))
+                .filter((x) => x.czesc.length);
+              return (
+                <div className={`pakiet ${zmiana ? 'pakiet-zmiana' : ''}`} key={k}>
+                  <span><strong>{g.seria}</strong></span>
+                  <span className="pakiet-numery">
+                    {zmiana && b && <s className="dane">{numeryB}</s>}
+                    {n ? <span className={`dane ${zmiana ? 'bedzie' : ''}`}>{numeryN}</span> : <span className="male drugorzedny">—</span>}
+                    {znaczniki.map(({ a, czesc }) => (
+                      <span className="znacznik" key={`${a.zdarzenie_id}-${a.pozycja}`}>{(NAZWY_ATRYBUTOW[a.rodzaj] || a.rodzaj).toLowerCase()}{numeryAkcji(czesc) === numeryN ? '' : ` na nr ${numeryAkcji(czesc)}`}</span>
+                    ))}
+                    {!przed && !g.pokryte && !znaczniki.some((x) => x.a.rodzaj === 'niepokryte') && <span className="znacznik">niepokryte</span>}
+                  </span>
+                  <span className="liczba">
+                    {zmiana && b && <s>{liczbaPakietu(b)}</s>} {n ? <span className={zmiana ? 'bedzie' : ''}>{liczbaPakietu(n)}</span> : '—'}
+                  </span>
+                  <span className="male drugorzedny">{przed ? (zmiana ? (n && !b ? 'z chwilą wpisu' : '') : 'bez zmian') : fmt.data(g.data_wpisu)}</span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-/** Obciążenia i adnotacje; `akcje(a)` — opcjonalne przyciski w wierszu („Zmień”, „Wykreśl”). */
+/** Obciążenia, ograniczenia, obowiązki; `akcje(a)` — przyciski w wierszu. */
 function TabelaAtrybutow({ widok, osoby, akcje }) {
-  if (!widok || !widok.atrybuty.length) return <p className="male drugorzedny">Brak obciążeń i adnotacji.</p>;
+  if (!widok || !widok.atrybuty.length) return <p className="male drugorzedny">Brak obciążeń, ograniczeń i obowiązków.</p>;
   return (
     <table className="tabela">
-      <thead><tr><th>Rodzaj</th><th>Akcje</th><th>Treść</th><th>Uprawniony</th><th>Prawo głosu</th><th>Wpis</th>{akcje && <th><span className="sr-only">Czynności</span></th>}</tr></thead>
+      <thead><tr><th>Rodzaj</th><th>Akcje</th><th>Uprawniony i treść</th><th>Prawo głosu</th><th>Wpisane</th>{akcje && <th><span className="sr-only">Czynności</span></th>}</tr></thead>
       <tbody>
         {widok.atrybuty.map((a) => (
           <tr key={`${a.zdarzenie_id}-${a.pozycja}-${a.seria}`}>
-            <td>{NAZWY_ATRYBUTOW[a.rodzaj] || a.rodzaj}</td>
-            <td>{a.seria} {numeryAkcji(a.zakresy)}</td>
-            <td>{a.tresc || '—'}</td>
-            <td>{a.osoba_id ? nazwaOsoby(osoby, a.osoba_id) : '—'}</td>
-            <td>{['zastaw', 'uzytkowanie'].includes(a.rodzaj) ? (a.prawo_glosu ? 'tak' : 'nie') : '—'}</td>
+            <td><strong>{NAZWY_ATRYBUTOW[a.rodzaj] || a.rodzaj}</strong></td>
+            <td className="dane">{a.seria} {numeryAkcji(a.zakresy)}</td>
+            <td>
+              {a.osoba_id ? <div>{nazwaOsoby(osoby, a.osoba_id)}</div> : null}
+              {a.tresc ? <div className={a.osoba_id ? 'male drugorzedny' : ''}>{a.tresc}</div> : (!a.osoba_id && '—')}
+            </td>
+            <td>{['zastaw', 'uzytkowanie'].includes(a.rodzaj) ? (a.prawo_glosu ? 'uprawniony' : 'akcjonariusz') : '—'}</td>
             <td>{fmt.data(a.data_wpisu)}</td>
-            {akcje && <td><span className="rzad">{akcje(a)}</span></td>}
+            {akcje && <td className="komorka-akcji"><span className="rzad">{akcje(a)}</span></td>}
           </tr>
         ))}
       </tbody>
@@ -393,5 +511,5 @@ function TabelaAtrybutow({ widok, osoby, akcje }) {
 Object.assign(window, {
   STANY_SPRAWY, ODMIANY_STANU_SPRAWY, STANY_PISMA, KANALY, NAZWY_TYPOW, NAZWY_ATRYBUTOW, numeryAkcji, bledyApi, Bledy, useCzynnosc,
   Filtr, Wiecej, PrzyciskGlowny, wgrajPlik, DodajPlik, ListaPlikow, PUSTA_OSOBA, opisOsoby, PolaOsoby, NowaOsoba, WyborOsoby,
-  TabelaSerii, TabelaAkcjonariuszy, TabelaAtrybutow, nazwaOsoby,
+  TabelaSerii, TabelaAkcjonariuszy, TabelaAtrybutow, nazwaOsoby, pakietyOsob, liczbaPakietu, sumaAkcji,
 });

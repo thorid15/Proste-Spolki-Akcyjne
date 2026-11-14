@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Kancelaria — ekrany z § 5 (Faza 3), każdy scenariusz przy 1440 i 390 px. Dane: `test:seed` — Alfa Testowa P.S.A.
+ * Kancelaria — rejestr spółki i wpis na jednej stronie (D-230, D-231), każdy scenariusz przy 1440 i 390 px. Dane: `test:seed` — Alfa Testowa P.S.A.
  * (e-mail spółki), Anna Testowa (zgoda e-mail), Jan Bezzgody (bez zgody, akcje A 601–1000), Ewa Ułamkowa;
  * sprawa nr 2 — zbycie Jan → Ewa (A 601–650) po kroku 1, powiadomienie listem czeka na „Nadano”.
  */
@@ -17,43 +17,58 @@ async function start(page, testInfo, scenariusz, proces) {
   await zaloguj(page, 'notariusz@example.com', 'kancelaria');
 }
 
-/** Czeka, aż autozapis treści sprawy skończy, a „Dalej” będzie aktywne. */
-async function dalej(page) {
+/** Czeka, aż autozapis treści wpisu skończy (sprawa powstaje przy pierwszym zapisie — D-231). */
+async function zapisano(page) {
   await page.getByText('Zapisano', { exact: true }).first().waitFor({ timeout: 10000 });
-  const b = page.getByRole('button', { name: 'Dalej', exact: true });
-  await expect(b).toBeEnabled({ timeout: 10000 });
-  await b.click();
-  await ui.gotowe(page, 'Osoby do powiadomienia');
+  await page.waitForLoadState('networkidle').catch(() => {});
 }
 
 const kafel = (page, nazwa) => page.locator('.kafel-osoby').filter({ hasText: nazwa });
 const wiersz = (page, tekst) => page.getByRole('row').filter({ hasText: tekst });
+const akcjonariusz = (page, nazwa) => page.locator('.akcjonariusz').filter({ hasText: nazwa });
+const liczbaSpraw = async (page) => (await api(page, 'GET', '/api/psa/sprawy')).length;
 
-test('zbycie: zbywca bez zgody na e-mail — list w Korespondencji, „Nadano”, wpis, powiadomienia o wpisie, wysyłka', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'zbycie-list', 'Sprawa: zbycie akcji');
+async function dokonajWpisu(page) {
+  await ui.przycisk(page, 'Dokonaj wpisu');
+  await page.getByRole('dialog').getByRole('button', { name: 'Dokonaj wpisu' }).click();
+  await ui.gotowe(page, 'Wpisano do rejestru');
+}
+
+test('zbycie: „Nowy wpis” przy akcjonariuszu, jedna strona; zbywca bez zgody na e-mail — list, „Nadano”, wpis, powiadomienia o wpisie', async ({ page }, testInfo) => {
+  await start(page, testInfo, 'zbycie-list', 'Wpis: zbycie akcji');
   let adresSprawy = null;
   let numerListu = null;
-  await krok(page, 'Kokpit — Nowy wpis', async () => {
+  await krok(page, 'Rejestr — Nowy wpis przy akcjonariuszu; sam formularz nie zakłada sprawy', async () => {
+    const przed = await liczbaSpraw(page);
     await page.goto('/#/spolki/1');
     await ui.gotowe(page, 'Akcjonariusze');
-    await page.getByRole('button', { name: 'Nowy wpis' }).click();
-    await ui.gotowe(page, 'Dodaj zmianę');
-    adresSprawy = new URL(page.url()).hash;
+    await akcjonariusz(page, 'Jan Bezzgody').getByRole('link', { name: 'Nowy wpis' }).click();
+    await ui.gotowe(page, 'Co się zmienia');
+    await ui.przycisk(page, 'Zbycie akcji');
+    await page.getByText('Jan Bezzgody posiada').waitFor();
+    await ui.przycisk(page, 'Zmień rodzaj wpisu');
+    await page.waitForTimeout(1200);
+    if ((await liczbaSpraw(page)) !== przed) throw new Error('otwarcie formularza i wybór rodzaju założyły sprawę');
   });
-  await krok(page, 'Krok 1 — żądający, zmiana, podstawa', async () => {
-    await ui.wybierz(page, 'Kto żąda wpisu', 'osoba z kartoteki');
-    await ui.wybierzZKartoteki(page, 'Osoba żądająca', 'Ułamkowa');
-    await ui.przycisk(page, 'Przeniesienie');
-    await ui.wybierzZKartoteki(page, 'Zbywca', 'Bezzgody');
+  await krok(page, 'Dane wpisu i podstawa — zbywca z wiersza rejestru, numery wpisuje pracownik', async () => {
+    await ui.przycisk(page, 'Zbycie akcji');
+    await ui.pole(page, 'Zbywca').getByText('Jan Bezzgody').waitFor();
     await ui.wybierzZKartoteki(page, 'Nabywca 1', 'Ułamkowa');
     await ui.wpisz(page, 'Seria', 'A');
     await ui.wpisz(page, 'Numery', '951-1000');
     await ui.wpisz(page, 'Liczba', '50');
-    await ui.wpisz(page, 'Opis dokumentu', 'Umowa sprzedaży akcji (dane testowe)');
+    await ui.wpisz(page, 'Dokument', 'Umowa sprzedaży akcji (dane testowe)');
+    await ui.wybierz(page, 'Kto żąda wpisu', 'osoba z kartoteki');
+    await ui.wybierzZKartoteki(page, 'Osoba żądająca', 'Ułamkowa');
+    await zapisano(page);
+    await page.waitForURL(/#\/sprawy\/\d+/);
+    adresSprawy = new URL(page.url()).hash;
+    await page.getByText('Po wpisie', { exact: true }).waitFor();
+    await akcjonariusz(page, 'Ewa Ułamkowa').getByText('951–1000').waitFor();
   });
-  await krok(page, 'Dalej — powiadomienie listem', async () => {
-    await dalej(page);
-    await kafel(page, 'Jan Bezzgody').getByText('Powiadomienie — list').waitFor();
+  await krok(page, 'Przygotuj powiadomienia — list do zbywcy', async () => {
+    await ui.przycisk(page, 'Przygotuj powiadomienia');
+    await kafel(page, 'Jan Bezzgody').getByText('Powiadomienie gotowe — list').waitFor();
     const p = await api(page, 'GET', `/api/psa/sprawy/${adresSprawy.split('/').pop()}`);
     numerListu = p.osoby[0].powiadomienie.numer;
   });
@@ -64,52 +79,93 @@ test('zbycie: zbywca bez zgody na e-mail — list w Korespondencji, „Nadano”
     await w.getByRole('button', { name: 'Nadano' }).click();
     await expect(w).toHaveCount(0, { timeout: 10000 });
   });
-  await krok(page, 'Sprawdzenie — checklista, opłata', async () => {
+  await krok(page, 'Przed wpisem — sprawdzone, opłata', async () => {
     await page.goto(`/${adresSprawy}`);
-    await ui.gotowe(page, 'Osoby do powiadomienia');
-    await kafel(page, 'Jan Bezzgody').getByText(/^Wysłano /).waitFor();
+    await ui.gotowe(page, 'Przed wpisem');
+    await kafel(page, 'Jan Bezzgody').getByText(/^Powiadomienie wysłane /).waitFor();
     await ui.checklista(page);
     await ui.przycisk(page, 'Bez opłaty');
-    await expect(page.getByRole('button', { name: 'Dokonaj wpisu' })).toBeEnabled({ timeout: 10000 });
+    await page.getByText('Wszystko gotowe do wpisu.').waitFor({ timeout: 10000 });
   });
-  await krok(page, 'Dokonaj wpisu', async () => {
+  await krok(page, 'Dokonaj wpisu — potwierdzenie z treścią wpisu', async () => {
     await ui.przycisk(page, 'Dokonaj wpisu');
+    await page.getByRole('dialog').getByText('Przeniesienie akcji z Jan Bezzgody na Ewa Ułamkowa').waitFor();
     await page.getByRole('dialog').getByRole('button', { name: 'Dokonaj wpisu' }).click();
-    await ui.gotowe(page, 'Powiadomienia o wpisie');
+    await ui.gotowe(page, 'Wpisano do rejestru');
     await wiersz(page, 'Alfa Testowa').filter({ hasText: 'e-mail' }).waitFor();
     await wiersz(page, 'Ewa Ułamkowa').filter({ hasText: 'list' }).waitFor();
   });
-  await krok(page, 'Wyślij pisma', async () => {
-    await ui.przycisk(page, 'Wyślij pisma');
+  await krok(page, 'Wyślij e-maile', async () => {
+    await page.getByRole('button', { name: /^Wyślij e-maile/ }).click();
     await wiersz(page, 'Alfa Testowa').getByText('Wysłane').waitFor({ timeout: 10000 });
   });
-  await krok(page, 'Korespondencja — wysłane', async () => {
-    await page.goto('/#/korespondencja?filtr=wyslane');
-    await wiersz(page, 'Alfa Testowa').filter({ hasText: 'Powiadomienie o wpisie' }).first().waitFor();
+  await krok(page, 'Rejestr po wpisie — historia z opisem zdaniem', async () => {
+    await ui.przycisk(page, 'Wróć do rejestru', { exact: false }).catch(() => page.getByRole('link', { name: 'Wróć do rejestru' }).click());
+    await ui.gotowe(page, 'Historia wpisów');
+    await page.locator('.historia-wpisow').getByText('Przeniesienie akcji z Jan Bezzgody na Ewa Ułamkowa: seria A nr 951–1000').waitFor();
   });
   await zakoncz(page);
 });
 
-test('zmiana treści po kroku 1: niewysłane powiadomienie znika, wysłane traci ważność — powstaje nowe', async ({ page }, testInfo) => {
-  await start(page, testInfo, 'zmiana-tresci', 'Sprawa: Zmień treść (R2)');
+test('zastaw: akcjonariuszka ze zgodą na e-mail — powiadomienie e-mailem z tej samej strony, wpis, znacznik w rejestrze', async ({ page }, testInfo) => {
+  await start(page, testInfo, 'zastaw-email', 'Wpis: zastaw');
+  await krok(page, 'Rejestr — Nowy wpis przy akcjonariuszce, zastaw', async () => {
+    await page.goto('/#/spolki/1');
+    await ui.gotowe(page, 'Akcjonariusze');
+    await akcjonariusz(page, 'Anna Testowa').getByRole('link', { name: 'Nowy wpis' }).click();
+    await ui.gotowe(page, 'Co się zmienia');
+    await ui.przycisk(page, 'Zastaw, użytkowanie albo zajęcie');
+    await page.getByText('Anna Testowa posiada').waitFor();
+    await ui.wybierzZKartoteki(page, 'Uprawniony', 'Bank');
+    await ui.wpisz(page, 'Seria', 'A');
+    await ui.wpisz(page, 'Numery', '201-300');
+    await ui.wpisz(page, 'Liczba', '100');
+    await ui.wpisz(page, 'Dokument', 'Umowa zastawu (dane testowe)');
+    await zapisano(page);
+  });
+  await krok(page, 'Przygotuj powiadomienia — e-mail, Wyślij', async () => {
+    await ui.przycisk(page, 'Przygotuj powiadomienia');
+    await kafel(page, 'Anna Testowa').getByText('Powiadomienie gotowe — e-mail').waitFor();
+    await kafel(page, 'Anna Testowa').getByRole('button', { name: 'Wyślij' }).click();
+    await kafel(page, 'Anna Testowa').getByText(/^Powiadomienie wysłane /).waitFor({ timeout: 10000 });
+  });
+  await krok(page, 'Sprawdzone, opłata, wpis', async () => {
+    await ui.checklista(page);
+    await ui.przycisk(page, 'Opłata 100 zł netto');
+    await page.getByText('Wszystko gotowe do wpisu.').waitFor({ timeout: 10000 });
+    await dokonajWpisu(page);
+  });
+  await krok(page, 'Rejestr — znacznik zastawu przy pakiecie', async () => {
+    await page.goto('/#/spolki/1');
+    await ui.gotowe(page, 'Akcjonariusze');
+    await akcjonariusz(page, 'Anna Testowa').getByText('zastaw na nr 201–300').waitFor();
+  });
+  await zakoncz(page);
+});
+
+test('zmiana treści po przygotowaniu powiadomień: wysłane traci ważność — powstaje nowe (R2)', async ({ page }, testInfo) => {
+  await start(page, testInfo, 'zmiana-tresci', 'Wpis: Zmień treść (R2)');
   const przed = await api(page, 'GET', '/api/psa/sprawy/2');
   const stare = przed.osoby[0].powiadomienie;
-  await krok(page, 'Sprawa po kroku 1 — Nadano w kafelku', async () => {
-    await page.goto('/#/sprawy/2');
-    await ui.gotowe(page, 'Osoby do powiadomienia');
+  await krok(page, 'Wpis w toku z rejestru — Dokończ, Nadano w kafelku', async () => {
+    await page.goto('/#/spolki/1');
+    await ui.gotowe(page, 'W toku');
+    await page.getByRole('link', { name: 'Dokończ' }).click();
+    await ui.gotowe(page, 'Przed wpisem');
     await kafel(page, 'Jan Bezzgody').getByRole('button', { name: 'Nadano' }).click();
-    await kafel(page, 'Jan Bezzgody').getByText(/^Wysłano /).waitFor();
+    await kafel(page, 'Jan Bezzgody').getByText(/^Powiadomienie wysłane /).waitFor();
   });
-  await krok(page, 'Więcej — Zmień treść', async () => {
-    await ui.przycisk(page, 'Więcej');
-    await page.getByRole('menuitem', { name: 'Zmień treść' }).click();
-    await ui.gotowe(page, 'Dodaj zmianę');
+  await krok(page, 'Zmień treść — ostrzeżenie o wysłanym powiadomieniu', async () => {
+    await ui.przycisk(page, 'Zmień treść');
+    await page.getByRole('dialog').getByRole('button', { name: 'Zmień treść' }).click();
+    await page.getByRole('button', { name: 'Przygotuj powiadomienia' }).waitFor({ timeout: 10000 });
     await ui.wpisz(page, 'Numery', '601-640');
     await ui.wpisz(page, 'Liczba', '40');
+    await zapisano(page);
   });
-  await krok(page, 'Dalej — nowe powiadomienie', async () => {
-    await dalej(page);
-    await kafel(page, 'Jan Bezzgody').getByText('Powiadomienie — list').waitFor();
+  await krok(page, 'Przygotuj powiadomienia — nowe powiadomienie', async () => {
+    await ui.przycisk(page, 'Przygotuj powiadomienia');
+    await kafel(page, 'Jan Bezzgody').getByText('Powiadomienie gotowe — list').waitFor();
     const po = await api(page, 'GET', '/api/psa/sprawy/2');
     const nowe = po.osoby[0].powiadomienie;
     if (!nowe || nowe.id === stare.id || nowe.stan !== 'do_wyslania') throw new Error(`oczekiwano nowego powiadomienia, jest ${JSON.stringify(nowe)}`);
@@ -152,20 +208,23 @@ test('pola dat: pełny format DD.MM.RRRR widoczny bez ucięcia', async ({ page }
     if (!/^\d{2}\.\d{2}\.\d{4}$/.test(wartosc)) throw new Error(`${etykieta}: wartość „${wartosc}”`);
     if (uciete) throw new Error(`${etykieta}: data ucięta przy ${szer(testInfo)} px`);
   };
-  await krok(page, 'Kokpit — Stan na dzień', async () => {
+  await krok(page, 'Rejestr — Stan na dzień', async () => {
     await page.goto('/#/spolki/1');
     await ui.gotowe(page, 'Akcjonariusze');
-    await ui.wpiszDate(page, 'Stan na dzień', '2026-03-31');
-    await sprawdz('Stan na dzień');
+    const pole = page.locator('.stan-na .pole-daty-wejscie');
+    await pole.fill('31.03.2026');
+    const { wartosc, uciete } = await pole.evaluate((e) => ({ wartosc: e.value, uciete: e.scrollWidth > e.clientWidth }));
+    if (wartosc !== '31.03.2026' || uciete) throw new Error(`Stan na dzień: „${wartosc}”, ucięte: ${uciete}`);
+    await page.getByText('tylko do odczytu').waitFor();
   });
-  await krok(page, 'Sprawa — Data wpływu żądania (kropki wstawiają się same)', async () => {
-    await page.getByRole('button', { name: 'Nowy wpis' }).click();
-    await ui.gotowe(page, 'Dodaj zmianę');
-    const pole = ui.pole(page, 'Data wpływu żądania').locator('.pole-daty-wejscie');
+  await krok(page, 'Wpis — Żądanie wpłynęło (kropki wstawiają się same)', async () => {
+    await page.goto('/#/spolki/1/wpis');
+    await ui.gotowe(page, 'Co się zmienia');
+    const pole = ui.pole(page, 'Żądanie wpłynęło').locator('.pole-daty-wejscie');
     await pole.fill('');
     await pole.pressSequentially('01112026');
     await expect(pole).toHaveValue('01.11.2026');
-    await sprawdz('Data wpływu żądania');
+    await sprawdz('Żądanie wpłynęło');
   });
   await zakoncz(page);
 });

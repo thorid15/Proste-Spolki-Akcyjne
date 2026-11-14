@@ -58,8 +58,7 @@ async function gotowe(page, tekst) {
 
 /** Checklista sprawy (R5): odhacza wszystkie pozycje i czeka na zapis. */
 async function checklista(page) {
-  const karta = page.locator('.karta').filter({ has: page.getByText('Checklista', { exact: true }) });
-  const pola = karta.locator('input[type="checkbox"]');
+  const pola = page.locator('.checklista input[type="checkbox"]');
   for (let i = 0; i < await pola.count(); i += 1) {
     if (!(await pola.nth(i).isChecked())) {
       await pola.nth(i).check();
