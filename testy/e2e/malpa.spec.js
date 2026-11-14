@@ -26,6 +26,7 @@ const EKRANY = [
   { nazwa: 'k-sprawa-wpisana', konto: K, app: 'kancelaria', adres: '/#/sprawy/1' },
   { nazwa: 'k-spolki', konto: K, app: 'kancelaria', adres: '/#/spolki' },
   { nazwa: 'k-kokpit', konto: K, app: 'kancelaria', adres: '/#/spolki/1' },
+  { nazwa: 'k-nowy-wpis', konto: K, app: 'kancelaria', adres: '/#/spolki/1/wpis?osoba=2' },
   { nazwa: 'k-osoby', konto: K, app: 'kancelaria', adres: '/#/osoby' },
   { nazwa: 'k-osoba', konto: K, app: 'kancelaria', adres: '/#/osoby/1' },
   { nazwa: 'k-korespondencja', konto: K, app: 'kancelaria', adres: '/#/korespondencja' },

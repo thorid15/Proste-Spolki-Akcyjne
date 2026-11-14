@@ -85,3 +85,10 @@ test('S2: nieznane konto zuzywa tyle czasu co znane — porownanie na skrocie-at
   assert.equal(await hasla.zweryfikuj('cokolwiek', null), false);
   assert.ok(Date.now() - start >= 50, `porownanie trwalo ${Date.now() - start} ms`);
 });
+
+test('S3: limit dzienny — kolejne wywołanie ponad limit jest odrzucane, inny klucz liczy osobno', () => {
+  const klucz = `test-${Date.now()}`;
+  for (let i = 0; i < 3; i += 1) limiter.sprawdzDzienny(klucz, 3, 'limit');
+  assert.throws(() => limiter.sprawdzDzienny(klucz, 3, 'Dzienny limit wyczerpany.'), { name: 'BladOgraniczenia', message: 'Dzienny limit wyczerpany.' });
+  assert.doesNotThrow(() => limiter.sprawdzDzienny(`${klucz}-inny`, 3, 'limit'));
+});

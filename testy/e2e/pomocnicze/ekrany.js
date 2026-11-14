@@ -14,7 +14,9 @@ async function zaloguj(page, email, aplikacja) {
 const K = 'notariusz@example.com';
 const EKRANY = [
   { nazwa: 'kancelaria-pulpit', konto: K, aplikacja: 'kancelaria', adres: '/#/', czekaj: 'text=Do zrobienia' },
-  { nazwa: 'kancelaria-sprawa', konto: K, aplikacja: 'kancelaria', adres: '/#/sprawy/2', czekaj: 'text=Osoby do powiadomienia' },
+  { nazwa: 'kancelaria-sprawa', konto: K, aplikacja: 'kancelaria', adres: '/#/sprawy/2', czekaj: 'text=Przed wpisem' },
+  { nazwa: 'kancelaria-nowy-wpis', konto: K, aplikacja: 'kancelaria', adres: '/#/spolki/1/wpis?osoba=2', czekaj: 'text=Co się zmienia' },
+  { nazwa: 'kancelaria-rejestry', konto: K, aplikacja: 'kancelaria', adres: '/#/spolki', czekaj: 'text=W przygotowaniu' },
   { nazwa: 'kancelaria-kokpit', konto: K, aplikacja: 'kancelaria', adres: '/#/spolki/1', czekaj: 'text=Akcjonariusze' },
   { nazwa: 'kancelaria-osoba', konto: K, aplikacja: 'kancelaria', adres: '/#/osoby/2', czekaj: '.karta' },
   { nazwa: 'kancelaria-korespondencja', konto: K, aplikacja: 'kancelaria', adres: '/#/korespondencja', czekaj: '.karta' },
@@ -30,7 +32,7 @@ const EKRANY = [
   { nazwa: 'portal-informacja', konto: 'alfa.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/informacja', czekaj: 'text=Wydane informacje' },
   { nazwa: 'portal-pomoc', konto: 'alfa.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/pomoc', czekaj: 'text=Kontakt z kancelarią' },
   { nazwa: 'portal-wniosek-formularz', konto: 'epsilon.zarzad@example.com', aplikacja: 'portal', adres: '/portal.html#/', czekaj: 'text=Podsumowanie' },
-  { nazwa: 'kancelaria-wniosek-przejecie', konto: K, aplikacja: 'kancelaria', adres: '/#/wnioski/3', czekaj: 'text=Decyzja' },
+  { nazwa: 'kancelaria-wniosek-przejecie', konto: K, aplikacja: 'kancelaria', adres: '/#/wnioski/3', czekaj: 'text=Otwarcie rejestru' },
 ];
 
 module.exports = { zaloguj, EKRANY, HASLO };

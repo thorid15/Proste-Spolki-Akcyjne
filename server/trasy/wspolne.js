@@ -15,12 +15,16 @@ const ustawienia = require('../logika/ustawienia');
 const { db } = require('../baza');
 const { asy } = require('../pomocnicze/odpowiedzi');
 
+const POLA_PUBLICZNE = ['nazwa', 'adres', 'miejscowosc', 'email', 'telefon', 'www', 'www_psa'];
+
 const router = express.Router();
 
 router.get(
   '/kancelaria',
   asy((zad, odp) => {
-    odp.json({ kancelaria: ustawienia.kancelaria(db()) });
+    // Audyt N2: trasa jest publiczna — oddaje tylko to, co stoi w stopce i nagłówku (bez NIP, osób zawierających umowy itd.).
+    const k = ustawienia.kancelaria(db());
+    odp.json({ kancelaria: Object.fromEntries(POLA_PUBLICZNE.map((pole) => [pole, k[pole] ?? ''])) });
   })
 );
 

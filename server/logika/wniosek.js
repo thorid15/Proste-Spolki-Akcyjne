@@ -65,7 +65,11 @@ const naOsobe = (o, typ = 'fizyczna') => ({
  * Normalizuje dane wniosku i zwraca błędy przy polach (kompletność — przy złożeniu). Wejście z portalu
  * i z kancelarii idzie przez tę samą funkcję.
  */
-function sprawdzDane(we = {}, { przejecie = false, dotychczasowyPodmiot = null } = {}) {
+function sprawdzDane(wejscie = {}, { przejecie = false, dotychczasowyPodmiot = null } = {}) {
+  // Audyt N1: `null`, tablica albo pozycje listy niebędące obiektami nie mogą wywrócić serwera.
+  const obiekt = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+  const we = { ...obiekt(wejscie), spolka: obiekt(obiekt(wejscie).spolka), reprezentant: obiekt(obiekt(wejscie).reprezentant) };
+  we.akcjonariusze = (Array.isArray(obiekt(wejscie).akcjonariusze) ? obiekt(wejscie).akcjonariusze : []).filter((a) => a && typeof a === 'object' && !Array.isArray(a)).slice(0, 500);
   const p = PUSTE();
   const s = { ...p.spolka, ...Object.fromEntries(Object.entries(we.spolka || {}).map(([k, v]) => [k, tekst(v)])) };
   const r0 = we.reprezentant || {};

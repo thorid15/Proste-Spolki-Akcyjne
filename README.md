@@ -21,14 +21,16 @@ akcyjnych (art. 300³⁰ i nast. KSH) i portal klienta dla spółek i akcjonariu
 
 ```bash
 npm install
-cp .env.przyklad .env        # sekret sesji, ADMIN_EMAIL, SMTP, tpay, URL_PORTALU
+cp .env.przyklad .env        # SESJA_SEKRET (openssl rand -hex 32), ADMIN_EMAIL, KANCELARIA_ADRESY, SMTP, tpay, URL_PORTALU
 npm start                    # buduje front i startuje serwer: http://localhost:3005
 ```
 
-- **Kancelaria:** `http://localhost:3005/` (pracownicy, logowanie e-mailem i hasłem).
+- **Kancelaria:** `http://localhost:3005/` (pracownicy, logowanie e-mailem i hasłem). Menu: Pulpit · Rejestry · Osoby ·
+  Korespondencja · Opłaty. Rejestr spółki jest ekranem roboczym: „Nowy wpis” przy akcjonariuszu, „Nowa emisja” przy akcjach;
+  nowy rejestr — „Nowa spółka” na liście „Rejestry” albo wniosek klienta z portalu.
   **Portal klienta:** `/portal` (gdy `PORTAL_WLACZONY=true`).
 - **Pierwszy start:** przy pustej tabeli pracowników serwer zakłada administratora `ADMIN_EMAIL` z hasłem
-  tymczasowym wypisanym raz w logu. Potem **Ustawienia** (menu konta): dane kancelarii do pism, osoby
+  tymczasowym wypisanym raz w logu — przy pierwszym logowaniu trzeba je zmienić. Potem **Ustawienia** (menu konta): dane kancelarii do pism, osoby
   zawierające umowy, użytkownicy, „Sprawdź integralność rejestru”. Dane kancelarii są wyłącznie tam, nie w `.env`.
 - **Schemat bazy** zakłada się sam (jedna migracja bazowa). Migracja odmawia działania, jeśli zakładanie od nowa
   skasowałoby wpisy rejestru w bazie nieoznaczonej jako testowa.

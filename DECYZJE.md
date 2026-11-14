@@ -1836,6 +1836,60 @@
   4. **D-228** Wniosek w kancelarii (także „Nowa spółka”) w 4 krokach: Dane spółki (różnice wobec KRS, reprezentacja według KRS, przejęcie) → Akcjonariusze (osoby już w kartotece: istniejąca albo nowa) → Dokumenty → Decyzja (przed przyjęciem, checklista, notatka); przycisk główny w nagłówku na każdym kroku. Ekran otwiera się na kroku właściwym dla stanu wniosku.
   5. **D-229** `test:seed`: konta `epsilon.zarzad@example.com` (wniosek w toku — formularz) i `theta.zarzad@example.com` (wniosek z przejęciem, złożony, dzień przejęcia = dzień seeda); atrapa KRS 0000990005–0000990006.
 
+### D-230–D-239 — Rejestr jako dokument roboczy; bezpieczeństwo przed startem (Łukasz, 12.11.2026)
+
+- Obszar: ekrany kancelarii, nowy rejestr, bezpieczeństwo, wdrożenie. Źródło: `docs/superpowers/specs/2026-11-12-rejestr-roboczy-design.md`.
+  Punkt wyjścia: audyt ekranów (zbycie akcji — 6 ekranów i 15 kliknięć, nowa spółka — 10 ekranów i 34 kliknięcia) i audyt
+  bezpieczeństwa z 12.11.2026.
+- Decyzje:
+  1. **D-230** Ekran spółki jest rejestrem w układzie informacji z rejestru: I. Spółka → II. Akcje (tu „Nowa emisja”) →
+     III. Akcjonariusze (jeden przycisk „Nowy wpis” przy akcjonariuszu) → IV. Obciążenia, ograniczenia, obowiązki → Historia wpisów.
+  2. **D-231** Wpis na jednej stronie, od góry: dane wpisu → podstawa → przed wpisem (powiadomienie albo zgoda, checklista, opłata) →
+     podgląd po wpisie → „Dokonaj wpisu”. Bez paska kroków; sprawa zostaje w danych jako ślad żądania (art. 300³⁴ KSH).
+  3. **D-232** Numery akcji zawsze wpisuje pracownik (U-26 bez zmian). Formularz pokazuje obok, co akcjonariusz posiada — niczego nie podstawia.
+  4. **D-233** Nowy rejestr: klient składa wniosek w portalu (kreator bez zmian — D-227); kilka pierwszych spółek wprowadzi pracownik
+     („Nowa spółka”). W kancelarii wniosek to jedna strona: Spółka → Akcje i akcjonariusze → Dokumenty → Otwarcie rejestru.
+     „Otwórz rejestr” przyjmuje wniosek i dokonuje wpisu otwarcia jedną czynnością. Zastępuje kroki z D-228 i osobne „Przyjmij”.
+  5. **D-234** Informacja z rejestru bez zmian (wygląd i treść z D-181, U-27); bez podpisu notariusza i bez dodatkowych zdań.
+  6. **D-235** Menu kancelarii po lewej: Pulpit · Rejestry · Osoby · Korespondencja · Opłaty. „Sprawy” i „Wnioski” nie są pozycjami menu.
+     Aplikacja kancelarii bez stopki i bez zielonego pasa; portal klienta zachowuje stopkę kancelarii.
+  7. **D-236** Portal klienta działa publicznie od pierwszego dnia. Serwer: Ubuntu w kancelarii, nginx (`docs/WDROZENIE.md`).
+  8. **D-237** Przed startem — poprawki z audytu bezpieczeństwa. Nagłówka `Cache-Control: no-store` nie wprowadzamy.
+     Drugi składnik logowania pracowników — później.
+  9. **D-238** Powiadomienia tpay (ITN) przychodzą i księgują się automatycznie; w produkcji bez podpisu JWS są odrzucane.
+  10. **D-239** Podpisy elektroniczne przez zewnętrznego dostawcę (Autenti, Certum i in.) — rozpoznanie możliwości; wdrożenie po decyzji.
+
+### D-240–D-249 — Rejestr roboczy i bezpieczeństwo: rozstrzygnięcia wykonawcze (12–14.11.2026)
+
+- Obszar: wykonanie D-230–D-238. Decyzje podjęte przy wykonaniu — do akceptacji Łukasza.
+- Decyzje:
+  1. **D-240** Sprawa powstaje przy pierwszej zmianie w formularzu wpisu (albo od razu, gdy czynność niesie gotową treść: wykreślenie,
+     zmiana prawa głosu, sprostowanie, zamknięcie). Otwarcie formularza i wybór rodzaju wpisu niczego nie zakładają.
+  2. **D-241** Przycisk główny strony wpisu: „Przygotuj powiadomienia”, gdy ktoś wymaga powiadomienia i nie ma zgody (zatwierdza treść — R2),
+     w pozostałych przypadkach „Dokonaj wpisu” (zatwierdza treść i wpisuje). Potwierdzenie wpisu pokazuje treść wpisu zdaniem.
+     Błędy przy polach pokazują się dopiero po próbie przejścia dalej; lista „Zostało do zrobienia” stoi przy przycisku.
+  3. **D-242** Wgrywanie plików (audyt W1): formularz niesie wyłącznie plik — pól tekstowych serwer nie przyjmuje (`fields: 0`),
+     a parametry (którego dokumentu dotyczy plik, kto zawarł umowę) idą w adresie. Powód: parser nazw pól zawiesza proces na nazwach
+     w rodzaju `a[4294967294][0]` także w `multer` 2.x — samo podbicie wersji nie wystarcza. W portalu sesja jest sprawdzana przed
+     odczytem pliku.
+  4. **D-243** Sieć kancelarii (audyt W2): `HOST` (domyślnie `127.0.0.1`) i `KANCELARIA_ADRESY` — trasy pracowników odpowiadają tylko
+     adresom z listy, niezależnie od nginx i zapory; błędny wpis na liście zatrzymuje start.
+  5. **D-244** Sekret sesji (audyt K1): serwer nie startuje z wartością z `.env.przyklad`, krótszą niż 32 znaki ani — w produkcji — bez sekretu.
+  6. **D-245** Limit plików (audyt W3): 30 plików i 100 MB na wniosek i na sprawę. Odstępstwo od planu: nowy plik dokumentu nie usuwa
+     poprzedniego (odrzucone podpisy zostają jako ślad) — limit i tak zamyka zapełnienie dysku.
+  7. **D-246** „Otwórz rejestr” (D-233): projekt wpisu otwarcia zapisuje się przy wniosku (`psa_wnioski.otwarcie_json`, migracja nr 2);
+     przyjęcie i wpis idą w jednej transakcji — błąd numerów cofa także przyjęcie i wraca przy polu projektu. Trasy `POST …/stan`
+     (`przyjety`) i `POST …/otworz` zostają dla zgodności; ekran ich nie używa.
+  8. **D-247** Konto wnioskodawcy a osoba z kartoteki (audyt S6): gdy reprezentantem ma być osoba z kartoteki, która nie ma konta,
+     a ma dostęp do innych spółek, przyjęcie wymaga potwierdzenia pracownika (z nazwami tych spółek). Gdy osoba ma własne konto,
+     zostaje tamto — potwierdzenie nie jest potrzebne.
+  9. **D-248** Hasło tymczasowe (audyt S7): pierwszy administrator musi je zmienić, zanim odpowie mu jakakolwiek trasa pracownika
+     (`psa_uzytkownicy.zmien_haslo`). Konta zakładane przez administratora i reset hasła — bez wymuszenia (do decyzji).
+  10. **D-249** Pozostałe z audytu: licznik prób logowania na konto (20 na kwadrans, niezależnie od adresu), stały czas odpowiedzi
+      logowania, dzienny limit zgłoszeń publicznych (200) i „Zgłoś zmianę” (10 na konto), `GET /api/wspolne/kancelaria` tylko z polami
+      stopki, CSV w eksporcie ZIP bez formuł, treść żądania ponad limit — 413. Liczniki są w pamięci procesu (restart je zeruje).
+      Niewykonane: niezaktywowane konto wniosku nadal blokuje „Zaproś do portalu” dla tego samego adresu (audyt S3, część).
+
 ---
 
 ## Decyzje otwarte

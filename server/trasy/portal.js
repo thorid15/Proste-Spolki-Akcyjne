@@ -22,11 +22,15 @@ const { asy, nieAutoryzowany, nieZnaleziono, dalejPoUploadzie } = require('../po
 
 const router = express.Router();
 const email = (v) => String(v || '').trim().toLowerCase();
+const LIMIT_ZGLOSZEN_DZIENNIE = 200;
+const LIMIT_ZMIAN_DZIENNIE = 10;
 
 /** Formularz publiczny: zawsze ta sama odpowiedź — nie ujawnia, czy prowadzimy rejestr spółki (D-079). */
 router.post('/zgloszenie', asy(async (zad, odp) => {
   limiter.sprawdz(zad.ip, `zgloszenie:${email((zad.body || {}).email)}`);
   limiter.zanotujNieudana(zad.ip, `zgloszenie:${email((zad.body || {}).email)}`);
+  // Audyt S3: każde zgłoszenie to wniosek, konto, e-mail i zapytanie do KRS — dzienny limit dla całego formularza.
+  limiter.sprawdzDzienny('zgloszenia', LIMIT_ZGLOSZEN_DZIENNIE, 'Formularz jest chwilowo niedostępny. Spróbuj jutro albo skontaktuj się z kancelarią.');
   await wnioski.zglos(db(), zad.body || {});
   odp.status(202).json({ komunikat: 'Jeśli dane są poprawne, na podany adres wysłaliśmy link do dokończenia zgłoszenia.' });
 }));
@@ -115,6 +119,7 @@ router.get('/start', asy((zad, odp) => odp.json(portal.start(db(), konto(zad), z
 /** „Zgłoś zmianę”: opis → sprawa; pliki dochodzą osobno (`/sprawy/:id/pliki`). */
 router.post('/sprawy', asy((zad, odp) => {
   const b = zad.body || {};
+  limiter.sprawdzDzienny(`zmiany:${konto(zad).id}`, LIMIT_ZMIAN_DZIENNIE, 'Dzienny limit zgłoszeń został wyczerpany. Skontaktuj się z kancelarią.');
   odp.status(201).json({ id: portal.zglosZmiane(db(), konto(zad), { spolka_id: b.spolka_id, opis: b.opis, klucz: b.klucz }) });
 }));
 

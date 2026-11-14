@@ -119,4 +119,22 @@ function wyczyscPoUdanej(ip, identyfikator) {
   proby.delete(klucz(ip, identyfikator));
 }
 
-module.exports = { sprawdz, zanotujNieudana, zanotujProbe, wyczyscPoUdanej, LIMIT, LIMIT_IP };
+/**
+ * Limit dzienny czynności (audyt S3): liczy każde wywołanie w dobie kalendarzowej (UTC). Formularz publiczny —
+ * łącznie dla wszystkich; „Zgłoś zmianę” — na konto. Licznik w pamięci: restart go zeruje, co przy limicie
+ * nadużyć jest dopuszczalne.
+ */
+const dzienne = new Map(); // klucz -> { dzien, liczba }
+function sprawdzDzienny(kluczLimitu, limit, komunikat) {
+  const dzien = new Date().toISOString().slice(0, 10);
+  const wpis = dzienne.get(kluczLimitu);
+  const liczba = wpis && wpis.dzien === dzien ? wpis.liczba : 0;
+  if (liczba >= limit) {
+    const blad = new Error(komunikat);
+    blad.name = 'BladOgraniczenia';
+    throw blad;
+  }
+  dzienne.set(kluczLimitu, { dzien, liczba: liczba + 1 });
+}
+
+module.exports = { sprawdz, sprawdzDzienny, zanotujNieudana, zanotujProbe, wyczyscPoUdanej, LIMIT, LIMIT_IP };

@@ -156,6 +156,20 @@ test('W2: trasy pracowników spoza sieci kancelarii — 403; portal, dane do sto
   }
 });
 
+test('N1–N3: publiczne dane kancelarii tylko do stopki; błędne wejście wniosku nie wywraca serwera; CSV eksportu bez formuł', async () => {
+  const k = (await (await fetch(`${ADRES}/api/wspolne/kancelaria`)).json()).kancelaria;
+  assert.deepEqual(Object.keys(k).sort(), ['adres', 'email', 'miejscowosc', 'nazwa', 'telefon', 'www', 'www_psa']);
+  const W = require('../server/logika/wniosek');
+  for (const zle of [null, [], 'tekst', { akcjonariusze: [null, 5, []] }, { spolka: null, reprezentant: 'x' }]) {
+    assert.doesNotThrow(() => W.sprawdzDane(zle), JSON.stringify(zle));
+  }
+  assert.deepEqual(W.sprawdzDane({ akcjonariusze: [null, { nazwa: 'A' }] }).dane.akcjonariusze.map((a) => a.nazwa), ['A']);
+  const zaDuze = await fetch(`${ADRES}/api/psa/portal/zgloszenie`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ADRES }, body: JSON.stringify({ krs: 'x'.repeat(1100000) }) });
+  assert.equal(zaDuze.status, 413);
+  const zrodlo = fs.readFileSync(path.join(KORZEN, 'server', 'eksport.js'), 'utf8');
+  assert.match(zrodlo, /\^\[=\+\\-@/, 'pole CSV eksportu neutralizuje formuły');
+});
+
 test('PORTAL_WLACZONY=false — cały portal 503', async () => {
   konfiguracja.PORTAL_WLACZONY = false;
   try {

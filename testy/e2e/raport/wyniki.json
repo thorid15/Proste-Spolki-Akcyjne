@@ -1,5 +1,5 @@
 {
-  "wygenerowano": "2026-11-14T12:33:50.498Z",
+  "wygenerowano": "2026-11-14T12:38:05.448Z",
   "scenariusze": [
     {
       "scenariusz": "karta-osoby",
@@ -15,7 +15,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 0,
         "przejscia": 3,
-        "czas_ms": 1584
+        "czas_ms": 1745
       },
       "bledy": {
         "js": [],
@@ -37,7 +37,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 918,
+          "czas_ms": 1068,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -58,7 +58,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 48,
+          "czas_ms": 51,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -79,7 +79,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 618,
+          "czas_ms": 626,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -105,7 +105,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 0,
         "przejscia": 3,
-        "czas_ms": 1376
+        "czas_ms": 1438
       },
       "bledy": {
         "js": [],
@@ -127,7 +127,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 838,
+          "czas_ms": 909,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -148,7 +148,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 51,
+          "czas_ms": 52,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -169,7 +169,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 487,
+          "czas_ms": 477,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -195,7 +195,7 @@
         "zaznaczenia": 7,
         "pola_widoczne_max": 13,
         "przejscia": 9,
-        "czas_ms": 6094
+        "czas_ms": 6240
       },
       "bledy": {
         "js": [],
@@ -217,7 +217,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 769,
+          "czas_ms": 790,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -259,7 +259,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 563,
+          "czas_ms": 635,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -280,7 +280,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 181,
+          "czas_ms": 167,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -301,7 +301,7 @@
           "pola_widoczne": 13,
           "wybor_widoczne": 5,
           "przejscia": 2,
-          "czas_ms": 1081,
+          "czas_ms": 1136,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -322,7 +322,7 @@
           "pola_widoczne": 13,
           "wybor_widoczne": 5,
           "przejscia": 0,
-          "czas_ms": 51,
+          "czas_ms": 46,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -343,7 +343,7 @@
           "pola_widoczne": 13,
           "wybor_widoczne": 5,
           "przejscia": 0,
-          "czas_ms": 173,
+          "czas_ms": 166,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -364,7 +364,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 1283,
+          "czas_ms": 1272,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -385,7 +385,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 878,
+          "czas_ms": 913,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -411,7 +411,7 @@
         "zaznaczenia": 7,
         "pola_widoczne_max": 13,
         "przejscia": 9,
-        "czas_ms": 5795
+        "czas_ms": 5923
       },
       "bledy": {
         "js": [],
@@ -433,7 +433,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 773,
+          "czas_ms": 754,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -454,7 +454,7 @@
           "pola_widoczne": 7,
           "wybor_widoczne": 0,
           "przejscia": 4,
-          "czas_ms": 1073,
+          "czas_ms": 1127,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -475,7 +475,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 499,
+          "czas_ms": 477,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -496,7 +496,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 161,
+          "czas_ms": 169,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -517,7 +517,7 @@
           "pola_widoczne": 13,
           "wybor_widoczne": 5,
           "przejscia": 2,
-          "czas_ms": 969,
+          "czas_ms": 1051,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -538,7 +538,7 @@
           "pola_widoczne": 13,
           "wybor_widoczne": 5,
           "przejscia": 0,
-          "czas_ms": 39,
+          "czas_ms": 31,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -559,7 +559,7 @@
           "pola_widoczne": 13,
           "wybor_widoczne": 5,
           "przejscia": 0,
-          "czas_ms": 180,
+          "czas_ms": 196,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -580,7 +580,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 1238,
+          "czas_ms": 1255,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -627,7 +627,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 4,
         "przejscia": 4,
-        "czas_ms": 1138
+        "czas_ms": 1113
       },
       "bledy": {
         "js": [],
@@ -649,7 +649,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 922,
+          "czas_ms": 842,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -670,7 +670,7 @@
           "pola_widoczne": 4,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 216,
+          "czas_ms": 271,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -696,7 +696,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 4,
         "przejscia": 4,
-        "czas_ms": 945
+        "czas_ms": 1026
       },
       "bledy": {
         "js": [],
@@ -718,7 +718,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 777,
+          "czas_ms": 825,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -739,7 +739,7 @@
           "pola_widoczne": 4,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 168,
+          "czas_ms": 201,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -765,7 +765,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 2,
         "przejscia": 9,
-        "czas_ms": 5155
+        "czas_ms": 5198
       },
       "bledy": {
         "js": [],
@@ -789,7 +789,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 4,
-          "czas_ms": 1508,
+          "czas_ms": 1571,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -831,7 +831,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 1489,
+          "czas_ms": 1461,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -860,7 +860,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 635,
+          "czas_ms": 651,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -881,7 +881,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 1416,
+          "czas_ms": 1408,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -907,7 +907,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 2,
         "przejscia": 9,
-        "czas_ms": 4945
+        "czas_ms": 4888
       },
       "bledy": {
         "js": [],
@@ -931,7 +931,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 4,
-          "czas_ms": 1527,
+          "czas_ms": 1464,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -952,7 +952,7 @@
           "pola_widoczne": 2,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 121,
+          "czas_ms": 107,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -973,7 +973,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 1327,
+          "czas_ms": 1355,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1011,7 +1011,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 599,
+          "czas_ms": 588,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1032,7 +1032,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 1371,
+          "czas_ms": 1374,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1058,7 +1058,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 1,
         "przejscia": 7,
-        "czas_ms": 3437
+        "czas_ms": 3533
       },
       "bledy": {
         "js": [],
@@ -1080,7 +1080,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 742,
+          "czas_ms": 705,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1101,7 +1101,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 614,
+          "czas_ms": 599,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1114,7 +1114,7 @@
         {
           "nr": 3,
           "nazwa": "Zakładka Informacja — dzień (domyślnie wczoraj), „Zapłać 61,50 zł”",
-          "adres": "/test/tpay/kasa/TR-ATRAPA-mwgdz5f6-1",
+          "adres": "/test/tpay/kasa/TR-ATRAPA-mwge4l77-1",
           "zrzut": "zrzuty/portal-zarzad/03-zakładka-informacja-dzień-domyślnie-wczo-1440.png",
           "klikniecia": 2,
           "pola_wypelnione": 0,
@@ -1122,7 +1122,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 501,
+          "czas_ms": 623,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1143,7 +1143,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 674,
+          "czas_ms": 685,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1164,7 +1164,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 906,
+          "czas_ms": 921,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1190,7 +1190,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 1,
         "przejscia": 7,
-        "czas_ms": 3178
+        "czas_ms": 3299
       },
       "bledy": {
         "js": [],
@@ -1212,7 +1212,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 716,
+          "czas_ms": 707,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1233,7 +1233,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 480,
+          "czas_ms": 483,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1246,7 +1246,7 @@
         {
           "nr": 3,
           "nazwa": "Zakładka Informacja — dzień (domyślnie wczoraj), „Zapłać 61,50 zł”",
-          "adres": "/test/tpay/kasa/TR-ATRAPA-mwgdzu1d-1",
+          "adres": "/test/tpay/kasa/TR-ATRAPA-mwge5b3o-1",
           "zrzut": "zrzuty/portal-zarzad/03-zakładka-informacja-dzień-domyślnie-wczo-390.png",
           "klikniecia": 2,
           "pola_wypelnione": 0,
@@ -1254,7 +1254,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 425,
+          "czas_ms": 552,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1275,7 +1275,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 655,
+          "czas_ms": 665,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1296,7 +1296,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 902,
+          "czas_ms": 892,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1322,7 +1322,7 @@
         "zaznaczenia": 9,
         "pola_widoczne_max": 19,
         "przejscia": 3,
-        "czas_ms": 4772
+        "czas_ms": 4751
       },
       "bledy": {
         "js": [],
@@ -1344,7 +1344,7 @@
           "pola_widoczne": 19,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 854,
+          "czas_ms": 907,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1365,7 +1365,7 @@
           "pola_widoczne": 15,
           "wybor_widoczne": 7,
           "przejscia": 0,
-          "czas_ms": 1368,
+          "czas_ms": 1282,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1386,7 +1386,7 @@
           "pola_widoczne": 15,
           "wybor_widoczne": 7,
           "przejscia": 0,
-          "czas_ms": 326,
+          "czas_ms": 315,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1407,7 +1407,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 2224,
+          "czas_ms": 2247,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1433,7 +1433,7 @@
         "zaznaczenia": 9,
         "pola_widoczne_max": 19,
         "przejscia": 3,
-        "czas_ms": 4596
+        "czas_ms": 4579
       },
       "bledy": {
         "js": [],
@@ -1455,7 +1455,7 @@
           "pola_widoczne": 19,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 803,
+          "czas_ms": 895,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1476,7 +1476,7 @@
           "pola_widoczne": 15,
           "wybor_widoczne": 7,
           "przejscia": 0,
-          "czas_ms": 1409,
+          "czas_ms": 1244,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1497,7 +1497,7 @@
           "pola_widoczne": 15,
           "wybor_widoczne": 7,
           "przejscia": 0,
-          "czas_ms": 275,
+          "czas_ms": 284,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1518,7 +1518,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 2109,
+          "czas_ms": 2156,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1544,7 +1544,7 @@
         "zaznaczenia": 3,
         "pola_widoczne_max": 10,
         "przejscia": 4,
-        "czas_ms": 3893
+        "czas_ms": 3852
       },
       "bledy": {
         "js": [],
@@ -1566,7 +1566,7 @@
           "pola_widoczne": 10,
           "wybor_widoczne": 4,
           "przejscia": 3,
-          "czas_ms": 2554,
+          "czas_ms": 2460,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1587,7 +1587,7 @@
           "pola_widoczne": 10,
           "wybor_widoczne": 4,
           "przejscia": 0,
-          "czas_ms": 492,
+          "czas_ms": 545,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1608,7 +1608,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 736,
+          "czas_ms": 782,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1629,7 +1629,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 111,
+          "czas_ms": 65,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1655,7 +1655,7 @@
         "zaznaczenia": 3,
         "pola_widoczne_max": 10,
         "przejscia": 4,
-        "czas_ms": 3651
+        "czas_ms": 4195
       },
       "bledy": {
         "js": [],
@@ -1677,7 +1677,7 @@
           "pola_widoczne": 10,
           "wybor_widoczne": 4,
           "przejscia": 3,
-          "czas_ms": 2458,
+          "czas_ms": 2436,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1698,7 +1698,7 @@
           "pola_widoczne": 10,
           "wybor_widoczne": 4,
           "przejscia": 0,
-          "czas_ms": 457,
+          "czas_ms": 1027,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1719,7 +1719,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 637,
+          "czas_ms": 610,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1740,7 +1740,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 99,
+          "czas_ms": 122,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1783,7 +1783,7 @@
         "zaznaczenia": 3,
         "pola_widoczne_max": 8,
         "przejscia": 7,
-        "czas_ms": 21716
+        "czas_ms": 21602
       },
       "bledy": {
         "js": [],
@@ -1805,7 +1805,7 @@
           "pola_widoczne": 4,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 2648,
+          "czas_ms": 2548,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1826,7 +1826,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 1,
-          "czas_ms": 1742,
+          "czas_ms": 1804,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1856,7 +1856,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 206,
+          "czas_ms": 126,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1886,7 +1886,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 609,
+          "czas_ms": 522,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1907,7 +1907,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 1,
-          "czas_ms": 698,
+          "czas_ms": 643,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1937,7 +1937,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 352,
+          "czas_ms": 363,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1958,7 +1958,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 328,
+          "czas_ms": 355,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -1979,7 +1979,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 15133,
+          "czas_ms": 15241,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2005,7 +2005,7 @@
         "zaznaczenia": 3,
         "pola_widoczne_max": 8,
         "przejscia": 7,
-        "czas_ms": 21279
+        "czas_ms": 21674
       },
       "bledy": {
         "js": [],
@@ -2027,7 +2027,7 @@
           "pola_widoczne": 4,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 2454,
+          "czas_ms": 2496,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2048,7 +2048,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 1,
-          "czas_ms": 1804,
+          "czas_ms": 1730,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2078,7 +2078,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 108,
+          "czas_ms": 139,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2108,7 +2108,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 540,
+          "czas_ms": 506,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2129,7 +2129,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 1,
-          "czas_ms": 568,
+          "czas_ms": 537,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2159,7 +2159,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 395,
+          "czas_ms": 290,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2180,7 +2180,7 @@
           "pola_widoczne": 0,
           "wybor_widoczne": 0,
           "przejscia": 0,
-          "czas_ms": 303,
+          "czas_ms": 838,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2201,7 +2201,7 @@
           "pola_widoczne": 1,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 15107,
+          "czas_ms": 15138,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2258,7 +2258,7 @@
           "pola_widoczne": 2,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 831,
+          "czas_ms": 851,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2279,7 +2279,7 @@
           "pola_widoczne": 2,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 1039,
+          "czas_ms": 1019,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2305,7 +2305,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 2,
         "przejscia": 3,
-        "czas_ms": 1763
+        "czas_ms": 1804
       },
       "bledy": {
         "js": [],
@@ -2327,7 +2327,7 @@
           "pola_widoczne": 2,
           "wybor_widoczne": 0,
           "przejscia": 2,
-          "czas_ms": 775,
+          "czas_ms": 804,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2348,7 +2348,7 @@
           "pola_widoczne": 2,
           "wybor_widoczne": 0,
           "przejscia": 1,
-          "czas_ms": 988,
+          "czas_ms": 1000,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2374,7 +2374,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 8,
         "przejscia": 2,
-        "czas_ms": 2694
+        "czas_ms": 2740
       },
       "bledy": {
         "js": [],
@@ -2396,7 +2396,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 2,
-          "czas_ms": 1391,
+          "czas_ms": 1372,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2426,7 +2426,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 1183,
+          "czas_ms": 1246,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2456,7 +2456,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 120,
+          "czas_ms": 122,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2491,7 +2491,7 @@
         "zaznaczenia": 0,
         "pola_widoczne_max": 8,
         "przejscia": 2,
-        "czas_ms": 2537
+        "czas_ms": 2615
       },
       "bledy": {
         "js": [],
@@ -2513,7 +2513,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 2,
-          "czas_ms": 1204,
+          "czas_ms": 1255,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2543,7 +2543,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 1210,
+          "czas_ms": 1270,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2573,7 +2573,7 @@
           "pola_widoczne": 8,
           "wybor_widoczne": 3,
           "przejscia": 0,
-          "czas_ms": 123,
+          "czas_ms": 90,
           "bledy_konsoli": [],
           "bledy_js": [],
           "http": [],
@@ -2595,5 +2595,279 @@
       ]
     }
   ],
-  "malpa": []
+  "malpa": [
+    {
+      "malpa": true,
+      "ekran": "błędne dane",
+      "adres": "—",
+      "elementy": 4,
+      "problemy": [],
+      "sprawdzone": [
+        {
+          "gdzie": "kartoteka — nowa osoba",
+          "pole": "PESEL",
+          "wartosc": "85031502484 (zła suma)",
+          "odrzucone": true,
+          "ostrzezenie": false
+        },
+        {
+          "gdzie": "przygotowanie",
+          "uwaga": "locator.click: Timeout 15000ms exceeded."
+        },
+        {
+          "gdzie": "sprawa — Treść",
+          "pole": "Data wpływu żądania",
+          "wartosc": "2026-12-14 (przyszłość)",
+          "odrzucone": null,
+          "uwaga": "nie sprawdzono: locator.fill: Timeout 15000ms exceeded."
+        },
+        {
+          "gdzie": "kokpit",
+          "pole": "Stan na dzień",
+          "wartosc": "2026-12-14 (przyszłość)",
+          "odrzucone": null,
+          "uwaga": "nie sprawdzono: locator.fill: Timeout 15000ms exceeded."
+        }
+      ]
+    },
+    {
+      "malpa": true,
+      "ekran": "k-kokpit",
+      "adres": "/#/spolki/1",
+      "elementy": 21,
+      "problemy": [
+        {
+          "element": "Żądania wpisu2",
+          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
+        }
+      ]
+    },
+    {
+      "malpa": true,
+      "ekran": "k-korespondencja",
+      "adres": "/#/korespondencja",
+      "elementy": 11,
+      "problemy": [
+        {
+          "element": "Alfa Testowa P.S.A.",
+          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
+        }
+      ]
+    },
+    {
+      "malpa": true,
+      "ekran": "k-nowy-wpis",
+      "adres": "/#/spolki/1/wpis?osoba=2",
+      "elementy": 14,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "k-oplaty",
+      "adres": "/#/oplaty",
+      "elementy": 10,
+      "problemy": [
+        {
+          "element": "Alfa Testowa P.S.A.",
+          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
+        },
+        {
+          "element": "Opłacona",
+          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
+        },
+        {
+          "element": "Więcej",
+          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
+        }
+      ]
+    },
+    {
+      "malpa": true,
+      "ekran": "k-osoba",
+      "adres": "/#/osoby/1",
+      "elementy": 8,
+      "problemy": [
+        {
+          "element": "Historia zmian1",
+          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
+        }
+      ]
+    },
+    {
+      "malpa": true,
+      "ekran": "k-osoby",
+      "adres": "/#/osoby",
+      "elementy": 6,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "k-pulpit",
+      "adres": "/#/",
+      "elementy": 9,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "k-spolki",
+      "adres": "/#/spolki",
+      "elementy": 6,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "k-sprawa-krok2",
+      "adres": "/#/sprawy/2",
+      "elementy": 16,
+      "problemy": [
+        {
+          "element": "Drukuj",
+          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
+        },
+        {
+          "element": "Nadano",
+          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
+        },
+        {
+          "element": "Podgląd",
+          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
+        },
+        {
+          "element": "Dokonaj wpisu",
+          "problem": "nie odnaleziono po przeładowaniu (lista zależy od stanu)"
+        }
+      ]
+    },
+    {
+      "malpa": true,
+      "ekran": "k-sprawa-wpisana",
+      "adres": "/#/sprawy/1",
+      "elementy": 3,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "k-sprawy",
+      "adres": "/#/sprawy",
+      "elementy": 4,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "k-ustawienia",
+      "adres": "/#/ustawienia",
+      "elementy": 5,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "k-wniosek-przejecie",
+      "adres": "/#/wnioski/3",
+      "elementy": 14,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "k-wniosek",
+      "adres": "/#/wnioski/1",
+      "elementy": 13,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "k-wnioski",
+      "adres": "/#/wnioski",
+      "elementy": 8,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "p-informacja",
+      "adres": "/portal.html#/informacja",
+      "elementy": 0,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "p-konto",
+      "adres": "/portal.html#/konto",
+      "elementy": 5,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "p-logowanie",
+      "adres": "/portal.html#/",
+      "elementy": 7,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "p-platnosci",
+      "adres": "/portal.html#/platnosci",
+      "elementy": 1,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "p-pomoc",
+      "adres": "/portal.html#/pomoc",
+      "elementy": 0,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "p-sprawy",
+      "adres": "/portal.html#/sprawy",
+      "elementy": 2,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "p-start-akcjonariusz",
+      "adres": "/portal.html#/",
+      "elementy": 2,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "p-start-zarzad",
+      "adres": "/portal.html#/",
+      "elementy": 11,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "p-wniosek-dokumenty",
+      "adres": "/portal.html#/",
+      "elementy": 15,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "p-wniosek-formularz",
+      "adres": "/portal.html#/",
+      "elementy": 4,
+      "problemy": [
+        {
+          "element": "Raz w roku (1476 zł)",
+          "problem": "martwy przycisk (brak zmiany DOM, żądania, nawigacji w 2 s)"
+        }
+      ]
+    },
+    {
+      "malpa": true,
+      "ekran": "p-zglos",
+      "adres": "/portal.html#/zglos",
+      "elementy": 2,
+      "problemy": []
+    },
+    {
+      "malpa": true,
+      "ekran": "p-zmiana",
+      "adres": "/portal.html#/zmiana?spolka=1",
+      "elementy": 1,
+      "problemy": []
+    }
+  ]
 }

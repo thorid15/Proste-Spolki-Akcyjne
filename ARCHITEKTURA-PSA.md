@@ -1,6 +1,6 @@
 # ARCHITEKTURA-PSA — rejestr akcjonariuszy P.S.A.
 
-Stan po uproszczeniu (Fazy 0–6, listopad 2026). Źródło prawne: `PRZEPISY-PSA.md`; rozstrzygnięcia: `DECYZJE.md`
+Stan po uproszczeniu (Fazy 0–6) i przebudowie ekranów kancelarii (D-230–D-249, listopad 2026). Źródło prawne: `PRZEPISY-PSA.md`; rozstrzygnięcia: `DECYZJE.md`
 (U-01…U-30, D-xxx). Ten plik opisuje to, co jest w kodzie — przy zmianie zachowania aktualizuj go razem z kodem.
 
 ## 1. Zasady
@@ -54,8 +54,8 @@ Stan po uproszczeniu (Fazy 0–6, listopad 2026). Źródło prawne: `PRZEPISY-PS
 | `psa_ustawienia` | dane kancelarii i osoby zawierające umowy — jedyne źródło |
 | `psa_migracje`, `psa_baza_testowa` | wersja schematu; oznaczenie bazy testowej i symulowana data |
 
-Pełny schemat: `docs/schemat-bazy.txt`. Zmiana schematu przed pierwszymi prawdziwymi wpisami — edycja migracji
-bazowej (U-01); po nich — nowa migracja.
+Pełny schemat: `docs/schemat-bazy.txt`. Schemat bazowy jest zamrożony (D-155) — zmiany tylko kolejnymi migracjami.
+Migracja 2: `psa_wnioski.otwarcie_json` (projekt wpisu otwarcia — D-246) i `psa_uzytkownicy.zmien_haslo` (D-248).
 
 ## 4. Reguły domenowe (nie zmieniać bez decyzji notariusza)
 
@@ -105,17 +105,26 @@ Rodzaj akcji jest wyliczany: uprzywilejowana, gdy ma adnotację „uprawnienie�
 
 ## 6. Sprawa — jedyna droga wpisu (R1)
 
-**Ekran sprawy ma trzy kroki:**
-1. **Treść:** zmiany i podstawa.
-2. **Sprawdzenie:** stan przed i po, osoby do powiadomienia, checklista, opłata.
-3. **Pisma:** powiadomienia o wpisie.
+**Wpis to jedna strona (D-231), od góry:**
+1. **Co się zmienia** — edytor rodzaju wpisu; przy zbyciu akcjonariusz z wiersza rejestru jest zbywcą; obok pól
+   numerów podpowiedź „posiada: seria A nr …” (numery wpisuje pracownik — U-26, D-232).
+2. **Podstawa** — dokument, pliki, żądający, data wpływu żądania.
+3. **Przed wpisem** — osoby do powiadomienia (powiadomienie albo zgoda), checklista, opłata.
+4. **Po wpisie** — akcjonariusze z zaznaczoną różnicą (było / będzie).
+5. Lista „Zostało do zrobienia” i przycisk główny: „Przygotuj powiadomienia” (zatwierdza treść — R2), potem
+   „Dokonaj wpisu”; gdy powiadomienia nie są potrzebne — od razu „Dokonaj wpisu”.
+
+Wejścia: „Nowy wpis” przy akcjonariuszu i „Nowa emisja” przy akcjach w rejestrze spółki (formularz bez sprawy — sprawa
+powstaje przy pierwszej zmianie, D-240); czynności wiersza obciążenia, „Sprostuj” i „Zamknij rejestr” zakładają sprawę
+z gotową treścią. Otwarte sprawy spółki stoją w rejestrze jako „W toku”.
 
 „Dokonaj wpisu” wykonuje jedną transakcję: walidacje → zdarzenia → odtworzenie stanu → opłata → pisma → `wpisana`.
+W danych sprawa ma nadal dwa etapy — treść roboczą i zatwierdzoną (`tresc_zatwierdzona`); ekran nie pokazuje ich jako kroków.
 
 - **R2 Kogo powiadomić** — `stan.ktoTraci(przed, po)`: każdy, komu ubywa akcji; akcjonariusz, którego akcje obciążono;
   uprawniony z wykreślanego obciążenia lub tracący prawo głosu; akcjonariusz tracący „uprawnienie”.
   - Pracownik może dopisać osobę, ale nie może usunąć wyliczonej.
-  - Powiadomienia o zamierzonym wpisie powstają po kroku 1.
+  - Powiadomienia o zamierzonym wpisie powstają przy „Przygotuj powiadomienia” (zatwierdzenie treści).
   - Wpis jest zablokowany, dopóki każda wyliczona osoba nie ma wysłanego powiadomienia albo odnotowanej zgody na wpis.
   - „Zmień treść” usuwa niewysłane powiadomienia, a wysłane unieważnia.
 - **R5 Checklista** — trzy pozycje stałe (żądający uprawniony; dokumenty zbadane; identyfikacja i AML) oraz pozycje
@@ -165,18 +174,19 @@ Rodzaj akcji jest wyliczany: uprzywilejowana, gdy ma adnotację „uprawnienie�
 1. **Formularz publiczny (U-08):** KRS, e-mail i „przenoszę rejestr”. Zakłada wniosek i konto z linkiem
    aktywacyjnym (7 dni, w bazie tylko skrót tokenu). Odpowiedź jest zawsze ta sama (D-079).
 2. **Wniosek** — jeden schemat danych (`logika/wniosek.js`) dla portalu i kancelarii („Nowa spółka”). Portal: kreator
-   Spółka → Reprezentant → Akcjonariusze → Podsumowanie („Złóż wniosek”). Kancelaria: kroki Dane spółki (z wartościami
-   z KRS) → Akcjonariusze (osoby już w kartotece) → Dokumenty → Decyzja (checklista, notatka) — D-227, D-228.
-   „Złóż” tworzy dokumenty (U-03):
+   Spółka → Reprezentant → Akcjonariusze → Podsumowanie („Złóż wniosek”) — D-227. „Złóż” tworzy dokumenty (U-03):
    - umowę — w niej § 12 ust. 3: obowiązek zawiadamiania o odwołaniu osoby działającej za spółkę;
    - uchwałę — „100% akcji”, podpisy wszystkich akcjonariuszy;
    - zgody akcjonariuszy bez konta.
 3. **Podpisy:** wgrany plik przechodzi podstawowy test podpisu (D-086); resztę sprawdza pracownik.
    Na umowie pracownik wgrywa podpis notariusza.
-4. **„Przyjmij”** zakłada spółkę i osoby (przy powtórzonym PESEL/KRS — wybór istniejąca albo nowa), zgody do
-   historii i reprezentanta jako osobę działającą za spółkę. Konto wnioskodawcy przechodzi na jego osobę.
-5. **„Otwórz rejestr”** zakłada sprawę z wpisem `otwarcie` — numery akcji wpisuje pracownik. Przy przejęciu
-   działa dopiero od dnia przejęcia (U-07). Wpis otwarcia nalicza pierwszą opłatę za prowadzenie.
+4. **Kancelaria — jedna strona (D-233):** Spółka (dane z KRS, różnice podświetlone) → Akcje i akcjonariusze (serie
+   i pakiety wpisuje pracownik — projekt wpisu otwarcia przy wniosku) → Dokumenty → Otwarcie rejestru (jedna checklista,
+   wybór „istniejąca / nowa” przy osobach z kartoteki, lista braków).
+5. **„Otwórz rejestr”** (`wnioski.otworzRejestr`) w jednej transakcji: zakłada spółkę i osoby, zgody do historii,
+   reprezentanta jako osobę działającą za spółkę, przenosi konto wnioskodawcy na jego osobę (z potwierdzeniem — D-247)
+   i dokonuje wpisu `otwarcie` z projektu; nalicza pierwszą opłatę za prowadzenie. Błąd cofa wszystko. Przy przejęciu
+   działa dopiero od dnia przejęcia (U-07).
 
 ## 10. Portal i konta (U-23)
 
@@ -243,7 +253,13 @@ przy **każdym** żądaniu:
     - moduły wczytywane tylko przy fladze;
     - odmowa startu przy `NODE_ENV=production` albo na bazie nieoznaczonej.
 11. **Dziennik dostępu:** wydanie informacji, eksport, pobranie pliku, zmiana ustawień, przypomnienia (w trybie testowym także logowania) — tylko dopisywanie, 5 lat.
-12. **Poza kodem:**
+12. **Start i sieć (D-242–D-244):** serwer nie startuje ze słabym albo przykładowym `SESJA_SEKRET`; nasłuchuje na
+    `HOST` (domyślnie `127.0.0.1`); trasy pracowników odpowiadają tylko adresom z `KANCELARIA_ADRESY`. Formularz
+    wgrania pliku nie przyjmuje pól tekstowych (parametry w adresie); limit 30 plików i 100 MB na wniosek i sprawę.
+13. **Konta (D-247–D-249):** hasło tymczasowe pierwszego administratora do zmiany przed pierwszą czynnością; licznik prób
+    logowania także na konto; stały czas odpowiedzi logowania; dzienne limity formularza publicznego i „Zgłoś zmianę”;
+    powiadomienie tpay bez podpisu JWS w produkcji nie księguje.
+14. **Poza kodem:**
     - aplikacja kancelarii dostępna tylko z adresów kancelarii (zapora);
     - szyfrowany dysk serwera i szyfrowane kopie zapasowe (dane osobowe w bazie są jawne).
 
@@ -252,5 +268,5 @@ przy **każdym** żądaniu:
 | Rodzaj | Zakres |
 |---|---|
 | `npm test` | jednostkowe i HTTP (`node:test`) — reguły R1–R10, statusy, pisma i wzory, informacja i maskowanie, opłaty i tpay, wniosek, portal (izolacja), bezpieczeństwo |
-| `npm run e2e` | scenariusze kancelarii, wniosku i portalu przy 1440 i 390 px; zbiera błędy JS i HTTP, naruszenia axe, problemy układu |
+| `npm run e2e` | 10 scenariuszy przy 1440 i 390 px: zbycie, zastaw, zmiana treści, nowy rejestr z portalu, przejęcie, portal; zbiera błędy JS i HTTP, naruszenia axe, problemy układu |
 | `npm run e2e:malpa` | „małpa” — klika każdy aktywny element ekranów kancelarii i portalu, test błędnych danych |

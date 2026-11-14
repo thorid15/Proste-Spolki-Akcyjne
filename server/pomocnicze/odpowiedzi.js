@@ -82,6 +82,10 @@ function posrednikBledow(blad, zad, odp, dalej) {
   if (blad.code === 'SQLITE_CONSTRAINT_UNIQUE') {
     return odp.status(409).json({ blad: 'Rekord o tych danych już istnieje.' });
   }
+  // Audyt N1: treść żądania ponad limit to błąd klienta (413), nie awaria serwera.
+  if (blad.type === 'entity.too.large' || blad.status === 413) {
+    return odp.status(413).json({ blad: 'Treść żądania jest za duża.' });
+  }
   if (blad.name === 'BladOgraniczenia') {
     return odp.status(429).json({ blad: blad.message });
   }

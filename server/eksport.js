@@ -17,8 +17,10 @@ const danePliki = require('./dane/pliki');
 const daneRejestr = require('./dane/rejestr');
 const danePisma = require('./dane/pisma');
 
+/** Pole CSV; tekst zaczynający się od =, +, -, @ dostaje apostrof — arkusz nie uruchomi go jako formuły (audyt N3). */
 function poleCsv(v) {
-  const t = v == null ? '' : String(v);
+  let t = v == null ? '' : String(v);
+  if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
   return /[",;\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 }
 
