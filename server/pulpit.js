@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Pulpit (§ 5): jedna lista „Do zrobienia” według pilności — sprawy po terminie albo z terminem
- * do 2 dni, nowe zgłoszenia z portalu (krok 1), nowe pliki w sprawach wstrzymanych, pisma do wysłania i błędy wysyłki, wnioski złożone
+ * Pulpit (§ 5): jedna lista „Do zrobienia” według pilności — wszystkie otwarte wpisy (D-235; po terminie albo
+ * z terminem do 2 dni — na górze), nowe zgłoszenia z portalu, nowe pliki w sprawach wstrzymanych, pisma do wysłania i błędy wysyłki, wnioski złożone
  * i podpisy do sprawdzenia, przejęcia, w których nadszedł dzień przejęcia, zawiadomienie sądu rejestrowego
  * po zamknięciu rejestru (art. 300³² § 3). Wiersz wskazuje ekran,
  * który go załatwia.
@@ -37,7 +37,18 @@ function doZrobienia(db) {
       const nowy = danePliki.ostatniDzienPlikuSprawy(db, s.id, (t && t.wstrzymana_od) || dzis);
       if (nowy) {
         pozycje.push({ rodzaj: 'plik', pilnosc: 1, tytul: `Sprawa nr ${s.id} — ${s.spolka}`, opis: `nowy plik ${dataPl(nowy)} w sprawie wstrzymanej`, sciezka: `/sprawy/${s.id}` });
+      } else {
+        pozycje.push({ rodzaj: 'sprawa', pilnosc: 9, tytul: `Sprawa nr ${s.id} — ${s.spolka}`, opis: 'wstrzymana — czeka na uzupełnienie', sciezka: `/sprawy/${s.id}` });
       }
+    } else if (s.stan === 'w_toku') {
+      // D-235: „Sprawy” nie są pozycją menu — każdy otwarty wpis stoi na Pulpicie, pilne na górze.
+      pozycje.push({
+        rodzaj: 'sprawa',
+        pilnosc: t ? t.dni_pozostale : PROG_DNI + 5,
+        tytul: `Sprawa nr ${s.id} — ${s.spolka}`,
+        opis: t ? `wpis w toku — termin ${dataPl(t.termin_do)}` : 'wpis w toku',
+        sciezka: `/sprawy/${s.id}`,
+      });
     }
   }
   for (const [filtr, opis, pilnosc] of [['bledy', 'błąd wysyłki', 0], ['do_wyslania', 'do wysłania', 2]]) {

@@ -28,8 +28,11 @@ test('Do zrobienia: pilne sprawy przed pismami, sprawa z dalekim terminem pomini
   let lista = pulpit.doZrobienia(db);
   const sciezki = lista.map((p) => p.sciezka);
   assert.ok(sciezki.includes(`/sprawy/${stara}`), 'sprawa z terminem jutro');
-  assert.ok(!sciezki.includes(`/sprawy/${nowa}`), 'sprawa z terminem za 7 dni — jeszcze nie');
+  // D-235: każdy otwarty wpis stoi na Pulpicie; pilny na górze, ten z terminem za 7 dni — niżej i bez znacznika pilności.
+  assert.ok(sciezki.includes(`/sprawy/${nowa}`), 'sprawa z terminem za 7 dni — też na liście');
   assert.equal(lista[0].sciezka, `/sprawy/${stara}`);
+  assert.ok(sciezki.indexOf(`/sprawy/${nowa}`) > sciezki.indexOf(`/sprawy/${stara}`));
+  assert.ok(lista.find((p) => p.sciezka === `/sprawy/${nowa}`).pilnosc > 2);
   const pismo = lista.find((p) => p.rodzaj === 'pismo');
   assert.ok(pismo && /do wysłania/.test(pismo.opis), 'powiadomienie o otwarciu do wysłania');
 
