@@ -24,8 +24,23 @@ async function wgraj(wiersz) {
   await wiersz.page().waitForLoadState('networkidle');
 }
 
-const karta = (page, t) => page.locator('.karta').filter({ has: page.getByText(t, { exact: true }) });
+// Karta formularza o danym tytule — najgłębsza (strona nowego rejestru ma karty formularza wewnątrz sekcji).
+const karta = (page, t) => page.locator('.karta').filter({ has: page.getByText(t, { exact: true }) }).last();
 const krokWniosku = (page, nazwa) => page.locator('.kroki').getByRole('button', { name: new RegExp(nazwa) }).click();
+const sekcja = (page, tytul) => page.locator('.sekcja-wpisu').filter({ has: page.getByRole('heading', { name: tytul }) });
+
+/** Nowy rejestr w kancelarii (D-233): serie i pakiety wpisuje pracownik, potem jedna checklista. */
+async function wpiszAkcjeISprawdz(page) {
+  const akcje = sekcja(page, /Akcje i akcjonariusze/);
+  const numery = akcje.getByLabel('Numery', { exact: true });
+  const liczby = akcje.getByLabel('Liczba', { exact: true });
+  await numery.nth(0).fill('1-100'); await liczby.nth(0).fill('100');
+  await numery.nth(1).fill('1-70'); await liczby.nth(1).fill('70');
+  await numery.nth(2).fill('71-100'); await liczby.nth(2).fill('30');
+  await akcje.getByText('rozdzielono 100 z 100').waitFor();
+  await ui.checklista(page);
+  await page.getByText('Zapisano', { exact: true }).first().waitFor({ timeout: 10000 });
+}
 
 /** Formularz wniosku: osoba podpisująca umowę. */
 async function wypelnijReprezentanta(page, email) {
@@ -46,7 +61,7 @@ async function wypelnijAkcjonariuszy(page, email) {
   await ui.wpisz(pierwszy, 'PESEL', '44051401359');
   await ui.wpisz(pierwszy, 'Adres', 'ul. Zarządowa 1, 80-001 Gdańsk');
   await ui.wpisz(pierwszy, 'E-mail', email || 'barbara@example.com');
-  await pierwszy.getByText('To ja').click();
+  await pierwszy.getByText(/To ja|To osoba podpisująca/).click();
   const drugi = a.locator('.element-listy').nth(1);
   await ui.wpisz(drugi, 'Imię i nazwisko', 'Cezary Wspólnik');
   await ui.wpiszDate(drugi, 'Data urodzenia', '1980-03-03');
@@ -54,7 +69,7 @@ async function wypelnijAkcjonariuszy(page, email) {
   await ui.wpisz(drugi, 'E-mail', 'cezary@example.com');
 }
 
-test('portal: zgłoszenie → dokumenty → podpisy; kancelaria: przyjęcie → otwarcie rejestru', async ({ page }, testInfo) => {
+test('portal: zgłoszenie → dokumenty → podpisy; kancelaria: jedna strona → „Otwórz rejestr”', async ({ page }, testInfo) => {
   rozpocznij(page, testInfo, { scenariusz: 'nowa-spolka', proces: 'Wniosek: zgłoszenie → otwarcie', szerokosc: szer(testInfo), persona: 'zarząd spółki → notariusz' });
   await krok(page, 'Portal — zgłoś spółkę', async () => {
     await page.goto('/portal.html#/zglos');
@@ -101,52 +116,27 @@ test('portal: zgłoszenie → dokumenty → podpisy; kancelaria: przyjęcie → 
     await page.getByRole('link', { name: /Wniosek KRS 0000990004/ }).click();
     await ui.gotowe(page, 'Pobierz dokument');
   });
-  await krok(page, 'Kroki wniosku: dane z KRS, akcjonariusze', async () => {
-    await krokWniosku(page, 'Dane spółki');
-    await ui.gotowe(page, 'Kto podpisuje umowę za spółkę');
-    await krokWniosku(page, 'Akcjonariusze');
-    await expect(karta(page, 'Akcjonariusze').locator('.element-listy')).toHaveCount(2);
-    await krokWniosku(page, 'Dokumenty');
+  await krok(page, 'Jedna strona: spółka, akcjonariusze z wniosku, dokumenty, otwarcie', async () => {
+    for (const tytul of [/Spółka/, /Akcje i akcjonariusze/, /Dokumenty/, /Otwarcie rejestru/]) await sekcja(page, tytul).first().waitFor();
+    await expect(sekcja(page, /Akcje i akcjonariusze/).locator('.zmiana')).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Otwórz rejestr' })).toBeDisabled();
   });
-  await krok(page, 'Podpisy, podpis notariusza, checklista', async () => {
+  await krok(page, 'Podpisy, podpis notariusza', async () => {
     for (const nazwa of ['Umowa o prowadzenie', 'Cezary Wspólnik']) {
       await dokument(page, nazwa).getByRole('button', { name: 'Potwierdź podpis' }).click();
       await expect(dokument(page, nazwa).getByText('podpisany')).toBeVisible();
     }
     await dokument(page, 'Umowa o prowadzenie').locator('.podsekcja input[type="file"]').setInputFiles(PDF);
     await dokument(page, 'Umowa o prowadzenie').getByText('Umowa z podpisem notariusza').waitFor();
-    await krokWniosku(page, 'Decyzja');
-    const lista = page.locator('.karta').filter({ has: page.getByText('Checklista', { exact: true }) }).locator('input[type="checkbox"]');
-    for (let i = 0; i < await lista.count(); i += 1) {
-      await lista.nth(i).check();
-      await page.waitForLoadState('networkidle');
-    }
-    await expect(page.getByRole('button', { name: 'Przyjmij' })).toBeEnabled({ timeout: 10000 });
   });
-  await krok(page, 'Przyjmij → Otwórz rejestr', async () => {
-    await ui.przycisk(page, 'Przyjmij');
+  await krok(page, 'Numery akcji, sprawdzone — „Otwórz rejestr” przyjmuje wniosek i dokonuje wpisu otwarcia', async () => {
+    await wpiszAkcjeISprawdz(page);
+    await expect(page.getByRole('button', { name: 'Otwórz rejestr' })).toBeEnabled({ timeout: 10000 });
     await ui.przycisk(page, 'Otwórz rejestr');
-    await ui.gotowe(page, '1. Otwarcie rejestru');
-  });
-  await krok(page, 'Sprawa otwarcia — numery akcji, wpis', async () => {
-    const numery = page.getByLabel('Numery', { exact: true });
-    const liczby = page.getByLabel('Liczba', { exact: true });
-    await numery.nth(0).fill('1-100'); await liczby.nth(0).fill('100');
-    await numery.nth(1).fill('1-70'); await liczby.nth(1).fill('70');
-    await numery.nth(2).fill('71-100'); await liczby.nth(2).fill('30');
-    await page.getByText('Zapisano', { exact: true }).first().waitFor({ timeout: 10000 });
-    await expect(page.getByRole('button', { name: 'Dalej', exact: true })).toBeEnabled({ timeout: 10000 });
-    await ui.przycisk(page, 'Dalej');
-    await ui.gotowe(page, 'Checklista');
-    await ui.checklista(page);
-    await ui.przycisk(page, 'Dokonaj wpisu');
-    await page.getByRole('dialog').getByRole('button', { name: 'Dokonaj wpisu' }).click();
-    await page.getByText('Wpisana').first().waitFor();
-  });
-  await krok(page, 'Kokpit — rejestr otwarty', async () => {
-    await page.getByRole('link', { name: /DELTA/ }).first().click();
+    await page.waitForURL(/#\/spolki\/\d+/);
     await ui.gotowe(page, 'rejestr otwarty');
     await page.getByRole('link', { name: 'Cezary Wspólnik' }).first().waitFor();
+    await page.locator('.historia-wpisow').getByText('Otwarcie rejestru akcjonariuszy: seria A nr 1–100').waitFor();
   });
   await krok(page, 'Portal po przyjęciu — Start zamiast ekranów wniosku', async () => {
     await page.context().clearCookies();
@@ -170,18 +160,16 @@ test('kancelaria: nowa spółka z przejęciem — „Otwórz rejestr” dopiero 
     await ui.przycisk(page, 'Załóż wniosek');
     await ui.gotowe(page, 'Przeniesienie rejestru od innej firmy');
   });
-  await krok(page, 'Krok „Dane spółki” (z przejęciem) → krok „Akcjonariusze”', async () => {
+  await krok(page, 'Dane spółki z przejęciem i akcjonariusze — na jednej stronie; Złóż', async () => {
     await wypelnijReprezentanta(page, 'rep@example.com');
     await ui.wpisz(page, 'Kto dotąd prowadził rejestr', 'Dom Maklerski Testowy S.A.');
     await ui.wpiszDate(page, 'Od kiedy mamy prowadzić rejestr', jutro());
-    await ui.przycisk(page, 'Dalej');
     await wypelnijAkcjonariuszy(page, 'rep@example.com');
     await page.getByText('Zapisano', { exact: true }).first().waitFor({ timeout: 10000 });
-    await expect(page.getByRole('button', { name: 'Złóż — przygotuj dokumenty' })).toBeEnabled({ timeout: 10000 });
     await ui.przycisk(page, 'Złóż — przygotuj dokumenty');
     await ui.gotowe(page, 'Pobierz dokument');
   });
-  await krok(page, 'Dokumenty z poczty, podpisy, notariusz, checklista', async () => {
+  await krok(page, 'Dokumenty z poczty, podpisy, notariusz', async () => {
     await wgraj(dokument(page, 'Umowa spółki'));
     for (const nazwa of ['Umowa o prowadzenie', 'Uchwała']) {
       await wgraj(dokument(page, nazwa));
@@ -190,28 +178,17 @@ test('kancelaria: nowa spółka z przejęciem — „Otwórz rejestr” dopiero 
     }
     await dokument(page, 'Umowa o prowadzenie').locator('.podsekcja input[type="file"]').setInputFiles(PDF);
     await dokument(page, 'Umowa o prowadzenie').getByText('Umowa z podpisem notariusza').waitFor();
-    await krokWniosku(page, 'Decyzja');
-    const lista = page.locator('.karta').filter({ has: page.getByText('Checklista', { exact: true }) }).locator('input[type="checkbox"]');
-    for (let i = 0; i < await lista.count(); i += 1) {
-      await lista.nth(i).check();
-      await page.waitForLoadState('networkidle');
-    }
   });
-  await krok(page, 'Przyjmij', async () => {
-    await expect(page.getByRole('button', { name: 'Przyjmij' })).toBeEnabled({ timeout: 10000 });
-    await ui.przycisk(page, 'Przyjmij');
-    await page.getByText('Przyjęty').first().waitFor();
-  });
-  await krok(page, 'Otwórz rejestr — dopiero od dnia przejęcia', async () => {
-    await expect(page.getByRole('button', { name: 'Otwórz rejestr' })).toBeDisabled();
+  await krok(page, 'Numery akcji, sprawdzone; „Otwórz rejestr” dopiero od dnia przejęcia', async () => {
+    await wpiszAkcjeISprawdz(page);
     await page.getByText(/Dostępne od/).first().waitFor();
-    await krokWniosku(page, 'Dane spółki');
-    await ui.wpiszDate(page, 'Data przejęcia', dzis());
-    await page.getByText('Zapisano', { exact: true }).first().waitFor({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'Otwórz rejestr' })).toBeDisabled();
+    await ui.wpiszDate(page, 'Dzień przejęcia', dzis());
     await expect(page.getByRole('button', { name: 'Otwórz rejestr' })).toBeEnabled({ timeout: 10000 });
     await ui.przycisk(page, 'Otwórz rejestr');
-    await ui.gotowe(page, '1. Otwarcie rejestru');
-    await expect(ui.pole(page, 'Źródło').locator('select')).toHaveValue('przejecie');
+    await page.waitForURL(/#\/spolki\/\d+/);
+    await ui.gotowe(page, 'rejestr otwarty');
+    await page.locator('.historia-wpisow').getByText('przejęcie od dotychczasowego podmiotu').waitFor();
   });
   await zakoncz(page);
 });

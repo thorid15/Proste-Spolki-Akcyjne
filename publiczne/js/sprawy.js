@@ -295,6 +295,76 @@ function EdytorZamkniecia({ op, zmien, b }) {
   );
 }
 
+/* Części stanu początkowego rejestru — wspólne dla wpisu otwarcia (sprawa) i projektu przy wniosku (D-233). */
+
+function SerieOtwarcia({ serie, przyZmianie, b }) {
+  return (
+    <Lista
+      elementy={serie || []}
+      przyZmianie={przyZmianie}
+      nowy={() => ({ seria: '', numery: '', liczba: '', data_wpisu_krs: '' })}
+      etykietaDodania="Seria"
+      render={(s, zm, i) => (
+        <div className="wiersz-akcji">
+          <Pole etykieta="Seria" blad={b(`serie.${i}.seria`)}><input type="text" className="krotkie" value={s.seria || ''} onChange={(e) => zm({ ...s, seria: e.target.value })} /></Pole>
+          <Pole etykieta="Numery" blad={b(`serie.${i}.numery`)} podpowiedz="jeden zakres, np. 1-1000"><input type="text" value={s.numery || ''} onChange={(e) => zm({ ...s, numery: e.target.value })} /></Pole>
+          <Pole etykieta="Liczba" blad={b(`serie.${i}.liczba`)}><input type="text" inputMode="numeric" className="krotkie" value={s.liczba ?? ''} onChange={(e) => zm({ ...s, liczba: e.target.value })} /></Pole>
+          <Pole etykieta="Wpis emisji do KRS" blad={b(`serie.${i}.data_wpisu_krs`)}><PoleDaty wartosc={s.data_wpisu_krs || ''} przyZmianie={(d) => zm({ ...s, data_wpisu_krs: d })} max={fmt.dzisIso()} /></Pole>
+        </div>
+      )}
+    />
+  );
+}
+
+function AtrybutyOtwarcia({ atrybuty, przyZmianie, b }) {
+  return (
+    <Lista
+      elementy={atrybuty || []}
+      minimum={0}
+      przyZmianie={przyZmianie}
+      nowy={() => ({ rodzaj: 'ograniczenie', akcje: [NOWA_AKCJA()], tresc: '', osoba_id: null, prawo_glosu: false })}
+      etykietaDodania="Obciążenie, ograniczenie albo uprawnienie"
+      render={(t, zm, i) => (
+        <>
+          <Pole etykieta="Rodzaj" blad={b(`atrybuty.${i}.rodzaj`)}>
+            <select value={t.rodzaj} onChange={(e) => zm({ ...t, rodzaj: e.target.value })}>
+              {Object.entries(NAZWY_ATRYBUTOW).map(([k, n]) => <option key={k} value={k}>{n.toLowerCase()}</option>)}
+            </select>
+          </Pole>
+          {['zastaw', 'uzytkowanie'].includes(t.rodzaj) && (
+            <>
+              <Pole etykieta="Uprawniony" blad={b(`atrybuty.${i}.osoba_id`)}><WyborOsoby wartosc={t.osoba_id} przyZmianie={(id) => zm({ ...t, osoba_id: id })} /></Pole>
+              <label className="chk"><input type="checkbox" checked={Boolean(t.prawo_glosu)} onChange={(e) => zm({ ...t, prawo_glosu: e.target.checked })} /> Prawo głosu przysługuje uprawnionemu</label>
+            </>
+          )}
+          <Pole etykieta="Treść" opcjonalne blad={b(`atrybuty.${i}.tresc`)}><input type="text" value={t.tresc || ''} onChange={(e) => zm({ ...t, tresc: e.target.value })} /></Pole>
+          <EdytorAkcji akcje={t.akcje} przyZmianie={(akcje) => zm({ ...t, akcje })} b={(s) => b(`atrybuty.${i}.akcje${s ? `.${s}` : ''}`)} />
+        </>
+      )}
+    />
+  );
+}
+
+function UmorzoneOtwarcia({ umorzone, przyZmianie, b }) {
+  return (
+    <Lista
+      elementy={umorzone || []}
+      minimum={0}
+      przyZmianie={przyZmianie}
+      nowy={() => ({ ...NOWA_AKCJA(), podstawa: 'uchwala' })}
+      etykietaDodania="Akcje umorzone"
+      render={(m, zm, i) => (
+        <div className="wiersz-akcji">
+          <Pole etykieta="Seria" blad={b(`umorzone.${i}.seria`)}><input type="text" className="krotkie" value={m.seria || ''} onChange={(e) => zm({ ...m, seria: e.target.value })} /></Pole>
+          <Pole etykieta="Numery" blad={b(`umorzone.${i}.numery`)}><input type="text" value={m.numery || ''} onChange={(e) => zm({ ...m, numery: e.target.value })} /></Pole>
+          <Pole etykieta="Liczba" blad={b(`umorzone.${i}.liczba`)}><input type="text" className="krotkie" value={m.liczba ?? ''} onChange={(e) => zm({ ...m, liczba: e.target.value })} /></Pole>
+          <Pole etykieta="Podstawa"><select value={m.podstawa} onChange={(e) => zm({ ...m, podstawa: e.target.value })}><option value="uchwala">uchwała</option><option value="orzeczenie">orzeczenie sądu</option></select></Pole>
+        </div>
+      )}
+    />
+  );
+}
+
 function EdytorOtwarcia({ op, zmien, b }) {
   return (
     <>
@@ -305,20 +375,7 @@ function EdytorOtwarcia({ op, zmien, b }) {
         </select>
       </Pole>
       <h4>Serie</h4>
-      <Lista
-        elementy={op.serie || []}
-        przyZmianie={(serie) => zmien({ ...op, serie })}
-        nowy={() => ({ seria: '', numery: '', liczba: '', data_wpisu_krs: '' })}
-        etykietaDodania="Seria"
-        render={(s, zm, i) => (
-          <div className="wiersz-akcji">
-            <Pole etykieta="Seria" blad={b(`serie.${i}.seria`)}><input type="text" className="krotkie" value={s.seria || ''} onChange={(e) => zm({ ...s, seria: e.target.value })} /></Pole>
-            <Pole etykieta="Numery" blad={b(`serie.${i}.numery`)}><input type="text" value={s.numery || ''} onChange={(e) => zm({ ...s, numery: e.target.value })} /></Pole>
-            <Pole etykieta="Liczba" blad={b(`serie.${i}.liczba`)}><input type="text" className="krotkie" value={s.liczba ?? ''} onChange={(e) => zm({ ...s, liczba: e.target.value })} /></Pole>
-            <Pole etykieta="Wpis do KRS" blad={b(`serie.${i}.data_wpisu_krs`)}><PoleDaty wartosc={s.data_wpisu_krs || ''} przyZmianie={(d) => zm({ ...s, data_wpisu_krs: d })} /></Pole>
-          </div>
-        )}
-      />
+      <SerieOtwarcia serie={op.serie} przyZmianie={(serie) => zmien({ ...op, serie })} b={b} />
       <h4>Akcjonariusze</h4>
       <Lista
         elementy={op.akcjonariusze || []}
@@ -332,44 +389,10 @@ function EdytorOtwarcia({ op, zmien, b }) {
           </>
         )}
       />
-      <h4>Obciążenia i adnotacje</h4>
-      <Lista
-        elementy={op.atrybuty || []}
-        minimum={0}
-        przyZmianie={(atrybuty) => zmien({ ...op, atrybuty })}
-        nowy={() => ({ rodzaj: 'ograniczenie', akcje: [NOWA_AKCJA()], tresc: '', osoba_id: null, prawo_glosu: false })}
-        etykietaDodania="Obciążenie albo adnotacja"
-        render={(t, zm, i) => (
-          <>
-            <Pole etykieta="Rodzaj" blad={b(`atrybuty.${i}.rodzaj`)}>
-              <select value={t.rodzaj} onChange={(e) => zm({ ...t, rodzaj: e.target.value })}>
-                {Object.entries(NAZWY_ATRYBUTOW).map(([k, n]) => <option key={k} value={k}>{n.toLowerCase()}</option>)}
-              </select>
-            </Pole>
-            {['zastaw', 'uzytkowanie'].includes(t.rodzaj) && (
-              <Pole etykieta="Uprawniony" blad={b(`atrybuty.${i}.osoba_id`)}><WyborOsoby wartosc={t.osoba_id} przyZmianie={(id) => zm({ ...t, osoba_id: id })} /></Pole>
-            )}
-            <Pole etykieta="Treść" opcjonalne><input type="text" value={t.tresc || ''} onChange={(e) => zm({ ...t, tresc: e.target.value })} /></Pole>
-            <EdytorAkcji akcje={t.akcje} przyZmianie={(akcje) => zm({ ...t, akcje })} b={(s) => b(`atrybuty.${i}.akcje${s ? `.${s}` : ''}`)} />
-          </>
-        )}
-      />
+      <h4>Obciążenia, ograniczenia, uprawnienia</h4>
+      <AtrybutyOtwarcia atrybuty={op.atrybuty} przyZmianie={(atrybuty) => zmien({ ...op, atrybuty })} b={b} />
       <h4>Akcje umorzone</h4>
-      <Lista
-        elementy={op.umorzone || []}
-        minimum={0}
-        przyZmianie={(umorzone) => zmien({ ...op, umorzone })}
-        nowy={() => ({ ...NOWA_AKCJA(), podstawa: 'uchwala' })}
-        etykietaDodania="Akcje umorzone"
-        render={(m, zm, i) => (
-          <div className="wiersz-akcji">
-            <Pole etykieta="Seria" blad={b(`umorzone.${i}.seria`)}><input type="text" className="krotkie" value={m.seria || ''} onChange={(e) => zm({ ...m, seria: e.target.value })} /></Pole>
-            <Pole etykieta="Numery" blad={b(`umorzone.${i}.numery`)}><input type="text" value={m.numery || ''} onChange={(e) => zm({ ...m, numery: e.target.value })} /></Pole>
-            <Pole etykieta="Liczba" blad={b(`umorzone.${i}.liczba`)}><input type="text" className="krotkie" value={m.liczba ?? ''} onChange={(e) => zm({ ...m, liczba: e.target.value })} /></Pole>
-            <Pole etykieta="Podstawa"><select value={m.podstawa} onChange={(e) => zm({ ...m, podstawa: e.target.value })}><option value="uchwala">uchwała</option><option value="orzeczenie">orzeczenie sądu</option></select></Pole>
-          </div>
-        )}
-      />
+      <UmorzoneOtwarcia umorzone={op.umorzone} przyZmianie={(umorzone) => zmien({ ...op, umorzone })} b={b} />
     </>
   );
 }
@@ -886,4 +909,4 @@ async function zalozSprawe(spolkaId, dane = {}) {
   idz(`/sprawy/${p.sprawa.id}`);
 }
 
-Object.assign(window, { EkranSpraw, EkranSprawy, EkranNowegoWpisu, zalozSprawe, numeryDoPola });
+Object.assign(window, { EkranSpraw, EkranSprawy, EkranNowegoWpisu, zalozSprawe, numeryDoPola, SerieOtwarcia, AtrybutyOtwarcia, UmorzoneOtwarcia, EdytorAkcji, NOWA_AKCJA });

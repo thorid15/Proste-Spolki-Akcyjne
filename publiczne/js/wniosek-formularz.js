@@ -24,7 +24,11 @@ const SEKCJE_WNIOSKU = ['spolka', 'platnosc', 'przejecie', 'reprezentant', 'akcj
  * `kwoty` — brutto opłat za prowadzenie (grosze); `krs` — wartości z KRS różne od wpisanych (kancelaria);
  * `sekcje` — które części pokazać (domyślnie wszystkie).
  */
-function FormularzWniosku({ dane, ustawDane, pola = {}, przejecie, kwoty, krs = {}, sekcje = SEKCJE_WNIOSKU }) {
+function FormularzWniosku({ dane, ustawDane, pola = {}, przejecie, kwoty, krs = {}, sekcje = SEKCJE_WNIOSKU, kancelaria = false }) {
+  // Portal mówi do klienta („To ja”), kancelaria — o kliencie.
+  const T = kancelaria
+    ? { pep: 'Zajmuje wysokie stanowisko publiczne albo jest bliską osobą kogoś na takim stanowisku', toJa: 'To osoba podpisująca umowę za spółkę', zgoda: 'Zgodziła się na korespondencję e-mail (także powiadomienia z rejestru)' }
+    : { pep: 'Zajmuję wysokie stanowisko publiczne albo jestem bliską osobą kogoś na takim stanowisku', toJa: 'To ja (podpisuję umowę za spółkę)', zgoda: 'Zgadzam się na korespondencję e-mail (także powiadomienia z rejestru)' };
   const jest = (k) => sekcje.includes(k);
   const s = dane.spolka;
   const r = dane.reprezentant;
@@ -63,7 +67,7 @@ function FormularzWniosku({ dane, ustawDane, pola = {}, przejecie, kwoty, krs = 
         <Przelacznik
           wlaczony={Boolean(r.pep)}
           przyZmianie={(w) => ustawDane({ ...dane, reprezentant: { ...r, pep: w } })}
-          etykieta="Zajmuję wysokie stanowisko publiczne albo jestem bliską osobą kogoś na takim stanowisku"
+          etykieta={T.pep}
           opis="Np. poseł, minister, sędzia, prezes spółki państwowej — także członek rodziny albo bliski współpracownik takiej osoby."
           dzieci={<PoleTekstu etykieta="Jakie stanowisko" wartosc={r.pep_opis} przyZmianie={zr('pep_opis')} blad={pola['reprezentant.pep_opis']} />}
         />
@@ -76,14 +80,23 @@ function FormularzWniosku({ dane, ustawDane, pola = {}, przejecie, kwoty, krs = 
             <PolaOsoby osoba={a} przyZmianie={(o) => ustawAkcj(akcj.map((x, j) => (j === i ? o : x)))} bledy={bledyPod(pola, `akcjonariusze.${i}`)} />
             {a.typ !== 'prawna' && (
               <label className="chk">
-                <input type="checkbox" checked={Boolean(a.to_ja)} onChange={(e) => ustawAkcj(akcj.map((x, j) => (j === i ? { ...x, to_ja: e.target.checked, zgoda_email: e.target.checked } : { ...x, to_ja: e.target.checked ? false : x.to_ja })))} />
-                To ja (podpisuję umowę za spółkę)
+                <input
+                  type="checkbox"
+                  checked={Boolean(a.to_ja)}
+                  onChange={(e) => ustawAkcj(akcj.map((x, j) => {
+                    if (j !== i) return { ...x, to_ja: e.target.checked ? false : x.to_ja };
+                    // Ta sama osoba co podpisujący umowę — jej dane przepisują się same (puste pola zostają do uzupełnienia).
+                    const zReprezentanta = e.target.checked ? Object.fromEntries(['nazwa', 'pesel', 'data_urodzenia', 'adres', 'email'].filter((k) => r[k]).map((k) => [k, r[k]])) : {};
+                    return { ...x, ...zReprezentanta, to_ja: e.target.checked, zgoda_email: e.target.checked };
+                  }))}
+                />
+                {T.toJa}
               </label>
             )}
             {a.to_ja && (
               <label className="chk">
                 <input type="checkbox" checked={Boolean(a.zgoda_email)} onChange={(e) => ustawAkcj(akcj.map((x, j) => (j === i ? { ...x, zgoda_email: e.target.checked } : x)))} />
-                Zgadzam się na korespondencję e-mail (także powiadomienia z rejestru)
+                {T.zgoda}
               </label>
             )}
             <button type="button" className="btn btn-maly btn-cichy" onClick={() => ustawAkcj(akcj.filter((_, j) => j !== i))}>Usuń akcjonariusza</button>

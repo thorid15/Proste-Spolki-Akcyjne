@@ -56,7 +56,7 @@ test('portal: osoba działająca za spółkę — zgłoszenie zmiany, informacja
   await zakoncz(page);
 });
 
-test('portal: akcjonariuszka — tylko swoje; Konto; obie role po „Dodaj” w kokpicie, z powrotem po „Usuń”', async ({ page }, testInfo) => {
+test('portal: akcjonariuszka — tylko swoje; Konto; obie role po „Dodaj osobę” w rejestrze, z powrotem po „Odbierz dostęp”', async ({ page }, testInfo) => {
   rozpocznij(page, testInfo, { scenariusz: 'portal-akcjonariusz', proces: 'Portal: zakres konta (U-23)', szerokosc: szer(testInfo), persona: 'akcjonariuszka → notariusz' });
   await zaloguj(page, 'anna.zgoda@example.com', 'portal');
   await krok(page, 'Akcjonariuszka — Start, Płatności (kwota na przycisku), Sprawy bez spraw spółki, Pomoc', async () => {
@@ -74,23 +74,31 @@ test('portal: akcjonariuszka — tylko swoje; Konto; obie role po „Dodaj” w 
     await ui.gotowe(page, 'Zgoda na korespondencję e-mail');
     await expect(page.getByText('anna.zgoda@example.com')).toBeVisible();
   });
-  await krok(page, 'Kancelaria — „Działają za spółkę” → Dodaj Annę', async () => {
+  const dostep = async () => {
+    const sekcja = page.locator('.sekcja').filter({ hasText: 'Dostęp klienta do portalu' });
+    await sekcja.getByRole('button', { name: /Dostęp klienta do portalu/ }).click();
+    await sekcja.locator('.dostep-klienta').waitFor();
+    return sekcja;
+  };
+  await krok(page, 'Kancelaria — rejestr, „Dostęp klienta do portalu” → Dodaj osobę: Anna', async () => {
     await zaloguj(page, 'notariusz@example.com', 'kancelaria');
     await page.goto('/#/spolki/1');
-    const karta = page.locator('.karta').filter({ has: page.getByText('Działają za spółkę', { exact: true }) });
-    await karta.getByRole('button', { name: 'Dodaj' }).click();
-    await ui.wybierzZKartoteki(karta, 'Osoba z kartoteki albo nowa', 'Anna');
-    await expect(karta.getByRole('link', { name: 'Anna Testowa' })).toBeVisible();
+    await ui.gotowe(page, 'Akcjonariusze');
+    const sekcja = await dostep();
+    await sekcja.getByRole('button', { name: 'Dodaj osobę' }).click();
+    await ui.wybierzZKartoteki(sekcja, 'Osoba z kartoteki albo nowa', 'Anna');
+    await expect(sekcja.getByRole('link', { name: 'Anna Testowa' })).toBeVisible();
   });
   await krok(page, 'Portal — obie role: sprawy spółki widoczne', async () => {
     await page.goto('/portal.html#/sprawy');
     await ui.gotowe(page, 'Alfa Testowa P.S.A.');
     await expect(page.getByText(/Sprawa nr \d+/).first()).toBeVisible();
   });
-  await krok(page, 'Kancelaria — Usuń; portal — znów tylko akcjonariuszka', async () => {
+  await krok(page, 'Kancelaria — Odbierz dostęp; portal — znów tylko akcjonariuszka', async () => {
     await page.goto('/#/spolki/1');
-    const wiersz = page.locator('.karta').filter({ has: page.getByText('Działają za spółkę', { exact: true }) }).locator('.rzad-rozdzielony').filter({ hasText: 'Anna Testowa' });
-    await wiersz.getByRole('button', { name: 'Usuń' }).click();
+    await ui.gotowe(page, 'Akcjonariusze');
+    const wiersz = (await dostep()).locator('.rzad-rozdzielony').filter({ hasText: 'Anna Testowa' });
+    await wiersz.getByRole('button', { name: 'Odbierz dostęp' }).click();
     await expect(wiersz).toHaveCount(0);
     await page.goto('/portal.html#/sprawy');
     await ui.gotowe(page, 'Alfa Testowa P.S.A.');

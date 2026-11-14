@@ -146,7 +146,7 @@ function zmien(db, id, we, { przez = 'klient', kto = przez } = {}) {
       if (we.notatka !== undefined) pola.notatka = String(we.notatka || '').trim() || null;
       if (we.umowe_zawarl !== undefined) pola.umowe_zawarl = String(we.umowe_zawarl || '').trim() || null;
       if (we.otwarcie !== undefined) {
-        if (!['roboczy', 'zlozony'].includes(w.stan)) throw new BladWalidacji(['Wniosek jest zamknięty.']);
+        if (!['roboczy', 'zlozony', 'przyjety'].includes(w.stan)) throw new BladWalidacji(['Wniosek jest zamknięty.']);
         pola.otwarcie = W.projektOtwarcia(we.otwarcie);
       }
     }
