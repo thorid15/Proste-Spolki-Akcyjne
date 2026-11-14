@@ -225,6 +225,7 @@ test('przejęcie: „Otwórz rejestr” dopiero od dnia przejęcia; zwrot do uzu
   const przyjecie = await zadanie('POST', `/api/psa/wnioski/${id}/stan`, { stan: 'przyjety' });
   assert.equal(przyjecie.status, 422, 'osoby z tym samym PESEL/KRS — wybór istniejąca czy nowa');
   const wybory = Object.fromEntries(przyjecie.dane.bledy.map((b) => [b.pole.split('.')[1], 'nowa']));
+
   w = (await zadanie('POST', `/api/psa/wnioski/${id}/stan`, { stan: 'przyjety', osoby: wybory })).dane;
   assert.equal(w.wniosek.stan, 'przyjety');
   assert.match(w.otwarcie.powod, /Dostępne od/);
@@ -275,4 +276,74 @@ test('odrzucenie: powiadomienie o odmowie zawarcia umowy listem; wniosek pracown
   } finally {
     Object.assign(pliki.LIMITY, { liczba, megabajty });
   }
+});
+
+test('„Otwórz rejestr” jedną czynnością: błąd numerów nie zostawia niczego; poprawny projekt — przyjęcie i wpis otwarcia; drugi raz nic', async () => {
+  const nowy = await zadanie('POST', '/api/psa/wnioski', { krs: '0000777010' });
+  const id = nowy.dane.wniosek.id;
+  await zadanie('PUT', `/api/psa/wnioski/${id}`, { dane: { ...DANE('nowy@example.com'), spolka: { ...DANE('x').spolka, nazwa: 'Kappa P.S.A.' } } });
+  let w = (await zadanie('POST', `/api/psa/wnioski/${id}/stan`, { stan: 'zlozony' })).dane;
+  assert.deepEqual(w.projekt.akcjonariusze.map((a) => a.klucz), ['reprezentant', 'b']);
+  await zadanie('POST', `/api/psa/wnioski/${id}/pliki`, undefined, { plik: { tresc: PDF_TESTOWY, nazwa: 'umowa-spolki.pdf' }, pola: { dokument: 'umowa_spolki' } });
+  for (const klucz of ['umowa', 'uchwala']) await zadanie('POST', `/api/psa/wnioski/${id}/pliki`, undefined, { plik: { tresc: PDF_TESTOWY, nazwa: `${klucz}-papier.pdf` }, pola: { dokument: klucz } });
+  for (const d of (await zadanie('GET', `/api/psa/wnioski/${id}`)).dane.dokumenty.filter((x) => x.stan === 'do_sprawdzenia')) {
+    await zadanie('POST', `/api/psa/wnioski/${id}/pliki/${d.plik.id}`, { stan: 'potwierdzony' });
+  }
+  await zadanie('POST', `/api/psa/wnioski/${id}/pliki`, undefined, { plik: { tresc: PDF_TESTOWY, nazwa: 'umowa-qes.pdf' }, pola: { dokument: 'umowa_notariusz', umowe_zawarl: 'Anna Przykładowa — notariusz' } });
+  const seria = [{ seria: 'A', numery: '1-100', liczba: '100', data_wpisu_krs: '2026-01-10' }];
+  const projekt = (b) => ({ serie: seria, akcje: { reprezentant: [{ seria: 'A', numery: '1-60', liczba: '60' }], b: [b] }, checklista: { dokumenty: true, identyfikacja: true } });
+  w = (await zadanie('PUT', `/api/psa/wnioski/${id}`, { checklista: { reprezentacja: true, uchwala: true, zgody: true }, otwarcie: { ...projekt({ seria: 'A', numery: '61-90', liczba: '30' }), checklista: {} } })).dane;
+  assert.deepEqual(w.przeszkody, []);
+  assert.equal(w.projekt.akcje.b[0].numery, '61-90');
+  const osoby = Object.fromEntries(w.osoby.filter((o) => o.pasujace.length).map((o) => [o.klucz, 'nowa']));
+  const ile = () => ({
+    spolki: db().prepare("SELECT COUNT(*) AS n FROM psa_spolki WHERE krs = '0000777010'").get().n,
+    osoby: db().prepare('SELECT COUNT(*) AS n FROM psa_osoby').get().n,
+    sprawy: db().prepare('SELECT COUNT(*) AS n FROM psa_sprawy').get().n,
+    wpisy: db().prepare('SELECT COUNT(*) AS n FROM psa_zdarzenia').get().n,
+  });
+  const przed = ile();
+
+  const bezChecklisty = await zadanie('POST', `/api/psa/wnioski/${id}/otworz-rejestr`, { osoby });
+  assert.equal(bezChecklisty.status, 422);
+  assert.deepEqual(bezChecklisty.dane.bledy.map((b) => b.pole), ['otwarcie.checklista']);
+
+  await zadanie('PUT', `/api/psa/wnioski/${id}`, { otwarcie: projekt({ seria: 'A', numery: '61-90', liczba: '30' }) });
+  const zle = await zadanie('POST', `/api/psa/wnioski/${id}/otworz-rejestr`, { osoby });
+  assert.equal(zle.status, 422, 'akcje 91–100 bez akcjonariusza');
+  assert.deepEqual(ile(), przed, 'błąd cofa przyjęcie: brak spółki, osób, sprawy i wpisu');
+  assert.equal((await zadanie('GET', `/api/psa/wnioski/${id}`)).dane.wniosek.stan, 'zlozony');
+
+  await zadanie('PUT', `/api/psa/wnioski/${id}`, { otwarcie: projekt({ seria: 'A', numery: '61-100', liczba: '41' }) });
+  const zlaLiczba = await zadanie('POST', `/api/psa/wnioski/${id}/otworz-rejestr`, { osoby });
+  assert.equal(zlaLiczba.status, 422);
+  assert.ok(zlaLiczba.dane.bledy.some((b) => b.pole === 'otwarcie.akcje.b.0.liczba'), `błąd przy polu projektu: ${JSON.stringify(zlaLiczba.dane.bledy)}`);
+  assert.deepEqual(ile(), przed);
+
+  await zadanie('PUT', `/api/psa/wnioski/${id}`, { otwarcie: projekt({ seria: 'A', numery: '61-100', liczba: '40' }) });
+  const ok = await zadanie('POST', `/api/psa/wnioski/${id}/otworz-rejestr`, { osoby });
+  assert.equal(ok.status, 201, JSON.stringify(ok.dane));
+  const rejestr = (await zadanie('GET', `/api/psa/spolki/${ok.dane.spolka_id}`)).dane;
+  assert.ok(rejestr.spolka.data_otwarcia, 'rejestr otwarty');
+  assert.deepEqual(rejestr.rejestr.akcjonariusze.map((p) => p.liczba), [60, 40]);
+  assert.equal(rejestr.wpisy.length, 1);
+  assert.equal(rejestr.oplaty.filter((o) => o.typ === 'prowadzenie').length, 1, 'pierwsza opłata za prowadzenie');
+  assert.equal((await zadanie('GET', `/api/psa/wnioski/${id}`)).dane.wniosek.stan, 'przyjety');
+
+  const po = ile();
+  const drugi = await zadanie('POST', `/api/psa/wnioski/${id}/otworz-rejestr`, { osoby });
+  assert.equal(drugi.status, 422);
+  assert.match(JSON.stringify(drugi.dane), /Rejestr jest otwarty/);
+  assert.deepEqual(ile(), po, 'drugie kliknięcie niczego nie dopisuje');
+
+  // Audyt S6: konto wnioskodawcy przechodzi na osobę reprezentanta. Gdy pracownik wybiera osobę z kartoteki, która
+  // nie ma konta, a ma dostęp do innej spółki (tu: reprezentant Kappy), przyjęcie wymaga potwierdzenia.
+  const wnioski = require('../server/wnioski');
+  const reprezentantKappy = db().prepare('SELECT osoba_id FROM psa_reprezentanci WHERE spolka_id = ?').get(ok.dane.spolka_id).osoba_id;
+  await zglosIAktywuj('sigma', '0000777011');
+  const wniosekSigmy = db().prepare("SELECT wniosek_id FROM psa_konta WHERE email = 'sigma@example.com'").get().wniosek_id;
+  assert.match(wnioski.ostrzezenieKonta(db(), wniosekSigmy, reprezentantKappy), /sigma@example\.com.*Kappa P\.S\.A\./);
+  const zKontem = db().prepare('SELECT osoba_id FROM psa_konta WHERE osoba_id IS NOT NULL LIMIT 1').get().osoba_id;
+  assert.equal(wnioski.ostrzezenieKonta(db(), wniosekSigmy, zKontem), null, 'osoba ma własne konto — konto wniosku nie przechodzi na nią');
+  assert.equal(wnioski.ostrzezenieKonta(db(), id, reprezentantKappy), null, 'wniosek pracownika nie ma konta');
 });

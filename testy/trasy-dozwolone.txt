@@ -64,6 +64,7 @@ POST /api/psa/wnioski pracownik
 GET /api/psa/wnioski/:id pracownik
 PUT /api/psa/wnioski/:id pracownik
 POST /api/psa/wnioski/:id/stan pracownik
+POST /api/psa/wnioski/:id/otworz-rejestr pracownik
 POST /api/psa/wnioski/:id/otworz pracownik
 POST /api/psa/wnioski/:id/pliki pracownik
 POST /api/psa/wnioski/:id/pliki/:plik pracownik

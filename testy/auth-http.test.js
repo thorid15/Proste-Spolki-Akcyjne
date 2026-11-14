@@ -25,6 +25,7 @@ const auth = require('../server/trasy/auth');
 let serwer;
 let baza;
 let hasloAdmina;
+let znacznikPoZalozeniu;
 
 test.before(async () => {
   await auth.zapewnijAdmina(db(), process.env.ADMIN_EMAIL);
@@ -33,7 +34,10 @@ test.before(async () => {
   const hasla = require('../server/logika/hasla');
   hasloAdmina = 'HasloAdmina123';
   const hash = await hasla.hashuj(hasloAdmina);
-  db().prepare(`UPDATE psa_uzytkownicy SET hash_hasla = ? WHERE email = ?`).run(hash, process.env.ADMIN_EMAIL);
+  // Konto z `zapewnijAdmina` ma hasło tymczasowe do zmiany (audyt S7) — znacznik zapamiętujemy do testu S7
+  // i zdejmujemy, bo pozostałe testy używają tego konta do zwykłej pracy.
+  znacznikPoZalozeniu = db().prepare('SELECT zmien_haslo FROM psa_uzytkownicy WHERE email = ?').get(process.env.ADMIN_EMAIL).zmien_haslo;
+  db().prepare(`UPDATE psa_uzytkownicy SET hash_hasla = ?, zmien_haslo = 0 WHERE email = ?`).run(hash, process.env.ADMIN_EMAIL);
 
   serwer = app.listen(0);
   baza = `http://localhost:${serwer.address().port}`;
@@ -268,4 +272,28 @@ test('zmiana hasla uniewaznia WSZYSTKIE dotychczasowe tokeny konta, nie tylko to
     false,
     'token innego, rownolegle zalogowanego urzadzenia musi przestac dzialac natychmiast po zmianie hasla'
   );
+});
+
+test('S7: konto z hasłem tymczasowym — do zmiany hasła nie odpowiada żadna trasa pracownika; po zmianie zwykła praca', async () => {
+  assert.equal(znacznikPoZalozeniu, 1, 'pierwszy administrator dostaje hasło tymczasowe do zmiany');
+  db().prepare('UPDATE psa_uzytkownicy SET zmien_haslo = 1 WHERE email = ?').run(process.env.ADMIN_EMAIL);
+  const zaloguj = async (haslo) => ciasteczkoZOdpowiedzi(await fetch(`${baza}/api/psa/auth/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: process.env.ADMIN_EMAIL, haslo }),
+  }));
+  const ciastko = await zaloguj(hasloAdmina);
+  const kto = await (await fetch(`${baza}/api/psa/auth/whoami`, { headers: { Cookie: ciastko } })).json();
+  assert.equal(kto.uzytkownik.zmien_haslo, true);
+  for (const sciezka of ['/api/psa/spolki', '/api/psa/pulpit', '/api/psa/auth/uzytkownicy']) {
+    const odp = await fetch(`${baza}${sciezka}`, { headers: { Cookie: ciastko } });
+    assert.equal(odp.status, 403, sciezka);
+    assert.equal((await odp.json()).blad, 'Najpierw zmień hasło tymczasowe.');
+  }
+  const zmiana = await fetch(`${baza}/api/psa/auth/zmiana-hasla`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: ciastko }, body: JSON.stringify({ haslo_obecne: hasloAdmina, haslo_nowe: 'WlasneHasloAdmina2026' }),
+  });
+  assert.equal(zmiana.status, 200);
+  hasloAdmina = 'WlasneHasloAdmina2026';
+  const nowe = await zaloguj(hasloAdmina);
+  assert.equal((await (await fetch(`${baza}/api/psa/auth/whoami`, { headers: { Cookie: nowe } })).json()).uzytkownik.zmien_haslo, false);
+  assert.equal((await fetch(`${baza}/api/psa/spolki`, { headers: { Cookie: nowe } })).status, 200);
 });

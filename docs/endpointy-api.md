@@ -3,7 +3,7 @@
 > Wygenerowane przez `npm run dokumentacja` (introspekcja routerów). Rola: `pracownik`, `admin` — sesja kancelarii;
 > `portal` — sesja konta, zakres z `zakresKonta()` (cudze dane — 404); `publiczna` — bez sesji.
 
-Razem: 73 tras (portal: 17).
+Razem: 75 tras (portal: 17).
 
 | Metoda | Ścieżka | Rola |
 |---|---|---|
@@ -39,6 +39,7 @@ Razem: 73 tras (portal: 17).
 | PUT | `/api/psa/spolki/:id` | pracownik |
 | POST | `/api/psa/spolki/:id/reprezentanci` | pracownik |
 | DELETE | `/api/psa/spolki/:id/reprezentanci/:osobaId` | pracownik |
+| POST | `/api/psa/spolki/:id/zawiadomienie-sadu` | pracownik |
 | POST | `/api/psa/spolki/:id/informacja` | pracownik |
 | GET | `/api/psa/spolki/:id/eksport` | pracownik |
 | GET | `/api/psa/osoby` | pracownik |
@@ -71,6 +72,7 @@ Razem: 73 tras (portal: 17).
 | GET | `/api/psa/wnioski/:id` | pracownik |
 | PUT | `/api/psa/wnioski/:id` | pracownik |
 | POST | `/api/psa/wnioski/:id/stan` | pracownik |
+| POST | `/api/psa/wnioski/:id/otworz-rejestr` | pracownik |
 | POST | `/api/psa/wnioski/:id/otworz` | pracownik |
 | POST | `/api/psa/wnioski/:id/pliki` | pracownik |
 | POST | `/api/psa/wnioski/:id/pliki/:plik` | pracownik |

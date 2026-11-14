@@ -145,6 +145,10 @@ function zmien(db, id, we, { przez = 'klient', kto = przez } = {}) {
       if (we.checklista !== undefined) pola.checklista = Object.fromEntries(Object.entries(we.checklista || {}).map(([k, v]) => [k, Boolean(v)]));
       if (we.notatka !== undefined) pola.notatka = String(we.notatka || '').trim() || null;
       if (we.umowe_zawarl !== undefined) pola.umowe_zawarl = String(we.umowe_zawarl || '').trim() || null;
+      if (we.otwarcie !== undefined) {
+        if (!['roboczy', 'zlozony'].includes(w.stan)) throw new BladWalidacji(['Wniosek jest zamknięty.']);
+        pola.otwarcie = W.projektOtwarcia(we.otwarcie);
+      }
     }
     if (Object.keys(pola).length) daneWnioski.zapisz(db, id, pola);
     // Uchwała do podpisu wybrana po złożeniu — dokument powstaje od razu.
@@ -305,7 +309,7 @@ function dopasowania(db, w) {
  * historii, reprezentant jako osoba działająca za spółkę, konto wnioskodawcy powiązane z jego osobą,
  * pliki i pisma wniosku do akt spółki. `wybory`: { klucz: osoba_id | 'nowa' }.
  */
-function przyjmij(db, id, wybory = {}, kto) {
+function przyjmij(db, id, wybory = {}, kto, { potwierdzKonto = false } = {}) {
   return db.transaction(() => {
     const w = wczytaj(db, id);
     const pliki = danePliki.wniosku(db, id);
@@ -333,6 +337,85 @@ function przyjmij(db, id, wybory = {}, kto) {
       else idOsob[o.klucz] = daneOsoby.dodaj(db, osoba);
     }
     if (bledy.length) throw new BladWalidacji(bledy);
+
+    // Audyt S6: wybrano reprezentanta z kartoteki — konto wnioskodawcy mogłoby dostać jego dostęp do innych spółek.
+    if (wybory.reprezentant !== undefined && wybory.reprezentant !== 'nowa' && !potwierdzKonto) {
+      const ostrzezenie = ostrzezenieKonta(db, id, idOsob.reprezentant);
+      if (ostrzezenie) throw new BladWalidacji([{ pole: 'potwierdz_konto', komunikat: ostrzezenie }]);
+    }
+
+    const s = w.dane.spolka;
+    pisma.utworz(db, 'powiadomienie_odmowa', {
+      wniosek_id: w.id,
+      adresat: 'wnioskodawca',
+      kanal: 'list',
+      kontekst: { przyczyna: p, data_wniosku: pisma.dataPl(w.utworzono.slice(0, 10)), adresat_nazwa: s.nazwa, adresat_adres: s.adres, spolka_firma: s.nazwa, spolka_krs: w.krs, spolka_siedziba: s.siedziba, spolka_sad: s.sad_rejestrowy },
+      autor: kto,
+    });
+    daneWnioski.zapisz(db, id, { stan: 'odrzucony', notatka: p });
+    return wczytaj(db, id);
+  }).immediate();
+}
+
+/** Osoby wniosku: reprezentant i akcjonariusze; „to ja” = ta sama osoba co reprezentant. */
+function osobyWniosku(w) {
+  const d = w.dane;
+  const ja = d.akcjonariusze.find((a) => a.to_ja);
+  const lista = [{ klucz: 'reprezentant', ...W.naOsobe(ja || d.reprezentant), rola: ja ? 'reprezentant i akcjonariusz' : 'reprezentant', pep: d.reprezentant.pep, pep_opis: d.reprezentant.pep_opis }];
+  for (const a of d.akcjonariusze.filter((x) => !x.to_ja)) lista.push({ klucz: a.klucz, ...W.naOsobe(a), rola: 'akcjonariusz' });
+  return lista;
+}
+
+/** Osoby z kartoteki o tym samym PESEL-u albo numerze w rejestrze — wybór: istniejąca czy nowa. */
+function dopasowania(db, w) {
+  return Object.fromEntries(osobyWniosku(w).map((o) => [o.klucz, daneOsoby.takieSame(db, { pesel: o.typ === 'fizyczna' ? o.pesel || null : null, numer_rejestru: o.numer_rejestru || null })]));
+}
+
+/**
+ * „Przyjmij” (złożony → przyjęty): spółka, osoby (wybór przy powtórzonym PESEL/KRS), zgody na e-mail do
+ * historii, reprezentant jako osoba działająca za spółkę, konto wnioskodawcy powiązane z jego osobą,
+ * pliki i pisma wniosku do akt spółki. `wybory`: { klucz: osoba_id | 'nowa' }.
+ */
+function przyjmij(db, id, wybory = {}, kto, { potwierdzKonto = false } = {}) {
+  return db.transaction(() => {
+    const w = wczytaj(db, id);
+    const pliki = danePliki.wniosku(db, id);
+    const doks = W.dokumenty(w, danePisma.wniosku(db, id), pliki);
+    const przeszkody = W.przeszkodyPrzyjecia(w, doks, W.checklista(w, doks));
+    if (przeszkody.length) throw new BladWalidacji(przeszkody);
+    if (db.prepare('SELECT 1 FROM psa_spolki WHERE krs = ?').get(w.krs)) throw new BladWalidacji(['Spółka o tym numerze KRS jest już w rejestrze kancelarii.']);
+
+    const pasujace = dopasowania(db, w);
+    const bledy = [];
+    const idOsob = {};
+    for (const o of osobyWniosku(w)) {
+      const wybor = wybory[o.klucz];
+      if (pasujace[o.klucz].length && wybor === undefined) {
+        bledy.push({ pole: `osoby.${o.klucz}`, komunikat: `${o.nazwa}: w kartotece jest osoba z tym numerem — wybierz istniejącą albo nową.` });
+        continue;
+      }
+      if (wybor !== undefined && wybor !== 'nowa') {
+        if (!pasujace[o.klucz].some((x) => x.id === Number(wybor))) bledy.push({ pole: `osoby.${o.klucz}`, komunikat: `${o.nazwa}: wybierz osobę z listy.` });
+        else idOsob[o.klucz] = Number(wybor);
+        continue;
+      }
+      const { osoba, bledy: b } = osobyLogika.sprawdz({ ...W.naOsobe(o), pep: o.pep, pep_opis: o.pep_opis });
+      if (b.length) bledy.push(...b.map((x) => ({ pole: `osoby.${o.klucz}.${x.pole}`, komunikat: `${o.nazwa}: ${x.komunikat}` })));
+      else idOsob[o.klucz] = daneOsoby.dodaj(db, osoba);
+    }
+    if (bledy.length) throw new BladWalidacji(bledy);
+
+    // Audyt S6: konto wnioskodawcy przechodzi na osobę reprezentanta. Gdy wybrano osobę już obecną w kartotece,
+    // która ma dostęp do innych spółek, konto dostałoby ten dostęp — wymaga to świadomego potwierdzenia.
+    const kontoWniosku = db.prepare('SELECT id, email FROM psa_konta WHERE wniosek_id = ?').get(id);
+    const wyborReprezentanta = wybory.reprezentant;
+    if (kontoWniosku && wyborReprezentanta !== undefined && wyborReprezentanta !== 'nowa' && !potwierdzKonto) {
+      const spolki = spolkiOsoby(db, idOsob.reprezentant);
+      const maKonto = db.prepare('SELECT 1 FROM psa_konta WHERE osoba_id = ?').get(idOsob.reprezentant);
+      if (spolki.length && !maKonto) {
+        throw new BladWalidacji([{ pole: 'potwierdz_konto', komunikat: `Konto wnioskodawcy (${kontoWniosku.email}) dostanie w portalu dostęp tej osoby do: ${spolki.join(', ')}. Potwierdź, że to ta sama osoba.` }]);
+      }
+    }
 
     const s = w.dane.spolka;
     const spolkaId = daneSpolki.dodaj(db, {
@@ -364,6 +447,92 @@ function przyjmij(db, id, wybory = {}, kto) {
     }
     daneWnioski.zapisz(db, id, { stan: 'przyjety', spolka_id: spolkaId, dane: { ...w.dane, osoby: idOsob } });
     return wczytaj(db, id);
+  }).immediate();
+}
+
+/** Spółki, do których osoba ma dziś dostęp w portalu: działa za nie albo ma w nich akcje (audyt S6). */
+function spolkiOsoby(db, osobaId) {
+  return db
+    .prepare(
+      `SELECT DISTINCT s.nazwa FROM psa_spolki s
+        WHERE s.id IN (SELECT spolka_id FROM psa_reprezentanci WHERE osoba_id = ?)
+           OR s.id IN (SELECT spolka_id FROM psa_stan_akcji WHERE osoba_id = ? AND data_do IS NULL)
+        ORDER BY s.nazwa`
+    )
+    .all(Number(osobaId), Number(osobaId))
+    .map((w) => w.nazwa);
+}
+
+/**
+ * Audyt S6: konto założone dla wniosku przechodzi przy przyjęciu na osobę reprezentanta. Jeśli tą osobą ma być ktoś
+ * już obecny w kartotece, kto nie ma konta, a ma dostęp do innych spółek — konto wnioskodawcy dostałoby ten dostęp.
+ * Zwraca treść ostrzeżenia do potwierdzenia przez pracownika albo null (gdy osoba ma własne konto, zostaje tamto).
+ */
+function ostrzezenieKonta(db, wniosekId, osobaId) {
+  const konto = db.prepare('SELECT email FROM psa_konta WHERE wniosek_id = ?').get(Number(wniosekId));
+  if (!konto || db.prepare('SELECT 1 FROM psa_konta WHERE osoba_id = ?').get(Number(osobaId))) return null;
+  const spolki = spolkiOsoby(db, osobaId);
+  if (!spolki.length) return null;
+  return `Konto wnioskodawcy (${konto.email}) dostanie w portalu dostęp tej osoby do: ${spolki.join(', ')}. Potwierdź, że to ta sama osoba.`;
+}
+
+/** Dzień, od którego można otworzyć rejestr przy przejęciu (U-07) — komunikat albo null. */
+function przeszkodaPrzejecia(w) {
+  if (!w.przejecie) return null;
+  if (!w.data_przejecia) return 'Uzupełnij datę przejęcia.';
+  if (w.data_przejecia > czas.dzisIso()) {
+    const [r, m, d] = w.data_przejecia.split('-');
+    return `Dostępne od ${d}.${m}.${r} (dzień przejęcia).`;
+  }
+  return null;
+}
+
+/** Błąd pola operacji otwarcia (`operacje.0.…`) → pole projektu przy wniosku (`otwarcie.…`). */
+function poleProjektu(pole, klucze) {
+  const m = /^operacje\.0\.akcjonariusze\.(\d+)\.akcje(.*)$/.exec(pole);
+  if (m) return `otwarcie.akcje.${klucze[Number(m[1])]}${m[2]}`;
+  return pole.replace(/^operacje\.0\./, 'otwarcie.');
+}
+
+/**
+ * „Otwórz rejestr” jedną czynnością (D-233): przyjęcie wniosku (gdy jeszcze nieprzyjęty) i wpis otwarcia
+ * z projektu przy wniosku — w jednej transakcji. Błąd w dowolnym miejscu cofa wszystko: nie zostaje ani
+ * spółka, ani osoby, ani sprawa. Drugi raz — „Rejestr jest otwarty.”.
+ */
+function otworzRejestr(db, id, { osoby = {}, potwierdzKonto = false } = {}, kto) {
+  return db.transaction(() => {
+    const w0 = wczytaj(db, id);
+    if (w0.stan === 'przyjety' && daneSpolki.wczytaj(db, w0.spolka_id).data_otwarcia) throw new BladWalidacji(['Rejestr jest otwarty.']);
+    const przeszkoda = przeszkodaPrzejecia(w0);
+    if (przeszkoda) throw new BladWalidacji([przeszkoda]);
+    const projekt = W.projektOtwarcia(w0.otwarcie);
+    const brak = [!projekt.checklista.dokumenty && 'dokumenty zbadane co do treści i formy', !projekt.checklista.identyfikacja && 'identyfikacja osób i AML'].filter(Boolean);
+    if (brak.length) throw new BladWalidacji([{ pole: 'otwarcie.checklista', komunikat: `Odhacz: ${brak.join('; ')}.` }]);
+
+    const w = w0.stan === 'przyjety' ? w0 : przyjmij(db, id, osoby, kto, { potwierdzKonto });
+    const klucze = w.dane.akcjonariusze.map(W.kluczAkcjonariusza);
+    try {
+      const wynik = sprawy.zaloz(db, {
+        spolka_id: w.spolka_id,
+        zadajacy: 'spolka',
+        klucz_idempotencji: `otwarcie-wniosku-${w.id}`,
+        podstawa: w.przejecie ? `Rejestr i dokumenty od dotychczasowego podmiotu (${w.dotychczasowy_podmiot}).` : 'Umowa spółki i dokumenty wniosku.',
+        checklista: { zadajacy: true, dokumenty: true, identyfikacja: true },
+        wpisz: true,
+        operacje: [{
+          typ: 'otwarcie',
+          zrodlo: w.przejecie ? 'przejecie' : 'zalozenie',
+          serie: projekt.serie,
+          akcjonariusze: klucze.map((k) => ({ osoba_id: w.dane.osoby[k], akcje: projekt.akcje[k] || [] })),
+          atrybuty: projekt.atrybuty,
+          umorzone: projekt.umorzone,
+        }],
+      }, kto);
+      return { spolka_id: w.spolka_id, sprawa_id: wynik.id };
+    } catch (e) {
+      if (e.name !== 'BladWalidacji') throw e;
+      throw new BladWalidacji((e.bledy || []).map((b) => (b && typeof b === 'object' && b.pole ? { ...b, pole: poleProjektu(b.pole, klucze) } : b)));
+    }
   }).immediate();
 }
 
@@ -430,7 +599,18 @@ function widok(db, id) {
     dokumenty: doks,
     checklista: lista,
     przeszkody: w.stan === 'zlozony' ? W.przeszkodyPrzyjecia(w, doks, lista) : [],
-    osoby: w.stan === 'zlozony' ? osobyWniosku(w).map((o) => ({ klucz: o.klucz, nazwa: o.nazwa, rola: o.rola, pasujace: dopasowania(db, w)[o.klucz] })) : [],
+    osoby: w.stan === 'zlozony' ? osobyWniosku(w).map((o) => ({
+      klucz: o.klucz,
+      nazwa: o.nazwa,
+      rola: o.rola,
+      pasujace: dopasowania(db, w)[o.klucz].map((x) => ({ ...x, ostrzezenie: o.klucz === 'reprezentant' ? ostrzezenieKonta(db, id, x.id) : null })),
+    })) : [],
+    // Projekt wpisu otwarcia: akcjonariusze wniosku z kluczami i to, co pracownik już wpisał (D-233).
+    projekt: {
+      ...W.projektOtwarcia(w.otwarcie),
+      akcjonariusze: (w.dane.akcjonariusze || []).map((a) => ({ klucz: W.kluczAkcjonariusza(a), nazwa: a.nazwa, opis: [a.pesel ? `PESEL ${a.pesel}` : a.numer_rejestru ? `nr w rejestrze ${a.numer_rejestru}` : null, a.adres].filter(Boolean).join(' · ') })),
+      przeszkoda: przeszkodaPrzejecia(w),
+    },
     pisma: pismaW.map((p) => ({ id: p.id, typ: p.typ, numer: p.numer, kanal: p.kanal, stan: p.stan, adresat_opis: p.adresat_opis })),
     konto: db.prepare('SELECT email, aktywne FROM psa_konta WHERE wniosek_id = ?').get(id) || null,
     spolka_w_rejestrze: Boolean(db.prepare('SELECT 1 FROM psa_spolki WHERE krs = ? AND id IS NOT ?').get(w.krs, w.spolka_id)),
@@ -458,6 +638,8 @@ function widokPortalu(db, id) {
 }
 
 module.exports = {
+  otworzRejestr,
+  ostrzezenieKonta,
   zglos, aktywuj, nowyLinkAktywacji, zalozPrzezPracownika, zmien, zloz, pismoWniosku, wgraj, ocenPlik, zwroc, odrzuc, przyjmij, otworz, widok, widokPortalu,
   lista: (db, f) => daneWnioski.lista(db, f),
   wczytaj,

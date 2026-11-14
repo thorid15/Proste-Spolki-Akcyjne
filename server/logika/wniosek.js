@@ -215,4 +215,26 @@ function kontekstDokumentu(w, typ, akcjonariusz = null) {
   };
 }
 
-module.exports = { PRZEJSCIA, sprawdzPrzejscie, PUSTE, zKrs, naOsobe, sprawdzDane, dokumenty, checklista, przeszkodyPrzyjecia, kontekstDokumentu };
+/** Klucz akcjonariusza w projekcie otwarcia: „to ja” = reprezentant, pozostali — własny klucz z wniosku. */
+const kluczAkcjonariusza = (a) => (a.to_ja ? 'reprezentant' : a.klucz);
+
+/**
+ * Projekt wpisu otwarcia przy wniosku (D-233): serie i pakiety akcjonariuszy wpisane przez pracownika (U-26),
+ * obciążenia i adnotacje, akcje umorzone oraz dwie pozycje checklisty wpisu. Tu tylko kształt — treść sprawdza
+ * przy „Otwórz rejestr” ta sama walidacja co każdy wpis.
+ */
+function projektOtwarcia(we) {
+  const o = we && typeof we === 'object' && !Array.isArray(we) ? we : {};
+  const lista = (v, limit = 100) => (Array.isArray(v) ? v.slice(0, limit).filter((x) => x && typeof x === 'object') : []);
+  const akcje = (v) => lista(v, 50).map((a) => ({ seria: tekst(a.seria), numery: tekst(a.numery), liczba: tekst(a.liczba), ...(tekst(a.ulamek) ? { ulamek: tekst(a.ulamek) } : {}) }));
+  const pakiety = o.akcje && typeof o.akcje === 'object' && !Array.isArray(o.akcje) ? o.akcje : {};
+  return {
+    serie: lista(o.serie, 50).map((s) => ({ seria: tekst(s.seria), numery: tekst(s.numery), liczba: tekst(s.liczba), data_wpisu_krs: tekst(s.data_wpisu_krs) })),
+    akcje: Object.fromEntries(Object.keys(pakiety).slice(0, 500).map((k) => [String(k), akcje(pakiety[k])])),
+    atrybuty: lista(o.atrybuty, 50),
+    umorzone: lista(o.umorzone, 50),
+    checklista: { dokumenty: Boolean(o.checklista && o.checklista.dokumenty), identyfikacja: Boolean(o.checklista && o.checklista.identyfikacja) },
+  };
+}
+
+module.exports = { PRZEJSCIA, sprawdzPrzejscie, PUSTE, zKrs, naOsobe, sprawdzDane, dokumenty, checklista, przeszkodyPrzyjecia, kontekstDokumentu, kluczAkcjonariusza, projektOtwarcia };

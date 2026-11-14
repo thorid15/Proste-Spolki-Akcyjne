@@ -4,7 +4,7 @@
 
 const czas = require('../pomocnicze/czas');
 
-const zWiersza = (w) => w && { ...w, przejecie: Boolean(w.przejecie), dane: JSON.parse(w.dane_json), krs_dane: JSON.parse(w.krs_json), checklista: JSON.parse(w.checklista_json) };
+const zWiersza = (w) => w && { ...w, przejecie: Boolean(w.przejecie), dane: JSON.parse(w.dane_json), krs_dane: JSON.parse(w.krs_json), checklista: JSON.parse(w.checklista_json), otwarcie: JSON.parse(w.otwarcie_json || '{}') };
 
 function wczytaj(db, id) {
   return zWiersza(db.prepare('SELECT * FROM psa_wnioski WHERE id = ?').get(Number(id)));
@@ -27,7 +27,7 @@ function dodaj(db, { krs, przejecie = false, dane = {}, krsDane = {} }) {
   );
 }
 
-const KOLUMNY = { dane: 'dane_json', checklista: 'checklista_json' };
+const KOLUMNY = { dane: 'dane_json', checklista: 'checklista_json', otwarcie: 'otwarcie_json' };
 
 /** Zapis pól wniosku; `dane` i `checklista` jako obiekty. Każdy zapis odnawia `zmieniono` (U-19). */
 function zapisz(db, id, pola) {
@@ -61,7 +61,7 @@ function usunDaneKlienta(db, id) {
     ...db.prepare('SELECT sciezka AS plik FROM psa_pliki WHERE wniosek_id = ?').all(id),
     ...db.prepare("SELECT plik FROM psa_pisma WHERE wniosek_id = ? AND stan <> 'wyslane' AND plik IS NOT NULL").all(id),
   ].map((w) => w.plik);
-  db.prepare("UPDATE psa_wnioski SET dane_json = '{}', checklista_json = '{}', notatka = NULL, dotychczasowy_podmiot = NULL WHERE id = ?").run(id);
+  db.prepare("UPDATE psa_wnioski SET dane_json = '{}', checklista_json = '{}', otwarcie_json = '{}', notatka = NULL, dotychczasowy_podmiot = NULL WHERE id = ?").run(id);
   db.prepare('DELETE FROM psa_pliki WHERE wniosek_id = ?').run(id);
   db.prepare("DELETE FROM psa_pisma WHERE wniosek_id = ? AND stan <> 'wyslane'").run(id);
   db.prepare('DELETE FROM psa_konta WHERE wniosek_id = ? AND osoba_id IS NULL').run(id);

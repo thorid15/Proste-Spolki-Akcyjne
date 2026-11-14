@@ -38,9 +38,15 @@ router.post('/:id/stan', asy(async (zad, odp) => {
   if (b.stan === 'zlozony') wnioski.zloz(db(), id, autor(zad));
   else if (b.stan === 'roboczy') await wnioski.zwroc(db(), id, b.notatka);
   else if (b.stan === 'odrzucony') wnioski.odrzuc(db(), id, b.przyczyna, autor(zad));
-  else if (b.stan === 'przyjety') wnioski.przyjmij(db(), id, b.osoby || {}, autor(zad));
+  else if (b.stan === 'przyjety') wnioski.przyjmij(db(), id, b.osoby || {}, autor(zad), { potwierdzKonto: b.potwierdz_konto === true });
   else throw bledneZadanie('Nieznany stan wniosku.');
   odp.json(wnioski.widok(db(), id));
+}));
+
+/** „Otwórz rejestr” (D-233): przyjęcie wniosku i wpis otwarcia jedną czynnością. */
+router.post('/:id/otworz-rejestr', asy((zad, odp) => {
+  const b = zad.body || {};
+  odp.status(201).json(wnioski.otworzRejestr(db(), zad.params.id, { osoby: b.osoby || {}, potwierdzKonto: b.potwierdz_konto === true }, autor(zad)));
 }));
 
 router.post('/:id/otworz', asy((zad, odp) => odp.status(201).json({ sprawa_id: wnioski.otworz(db(), zad.params.id, autor(zad)) })));

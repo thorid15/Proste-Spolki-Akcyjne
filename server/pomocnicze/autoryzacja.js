@@ -127,15 +127,22 @@ function wczytajSesje(zad, odp, dalej) {
   dalej();
 }
 
+/** Audyt S7: z hasłem tymczasowym wolno tylko zmienić hasło — żadna inna trasa pracownika nie odpowiada. */
+function hasloTymczasowe(zad) {
+  return Boolean(zad.uzytkownik && zad.uzytkownik.zmien_haslo) && zad.originalUrl.split('?')[0] !== '/api/psa/auth/zmiana-hasla';
+}
+
 /** Wymaga zalogowanego, aktywnego pracownika kancelarii. */
 function wymagajPracownika(zad, odp, dalej) {
   if (!zad.uzytkownik) return dalej(nieAutoryzowany('Ta operacja wymaga zalogowania.'));
+  if (hasloTymczasowe(zad)) return dalej(new BladZadania(403, 'Najpierw zmień hasło tymczasowe.'));
   dalej();
 }
 
 /** Wymaga roli `admin`. */
 function wymagajAdmina(zad, odp, dalej) {
   if (!zad.uzytkownik) return dalej(nieAutoryzowany('Ta operacja wymaga zalogowania.'));
+  if (hasloTymczasowe(zad)) return dalej(new BladZadania(403, 'Najpierw zmień hasło tymczasowe.'));
   if (zad.uzytkownik.rola !== 'admin') {
     const blad = new BladZadania(403, 'Ta operacja jest dostępna wyłącznie dla administratora.');
     return dalej(blad);

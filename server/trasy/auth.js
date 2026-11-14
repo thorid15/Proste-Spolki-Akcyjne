@@ -28,6 +28,8 @@ function widokUzytkownika(u) {
     aktywny: Boolean(u.aktywny),
     ostatnie_logowanie: u.ostatnie_logowanie,
     utworzono: u.utworzono,
+    // Audyt S7: konto z hasłem tymczasowym (pierwszy administrator) — do zmiany przed pierwszą czynnością.
+    zmien_haslo: Boolean(u.zmien_haslo),
   };
 }
 
@@ -103,7 +105,7 @@ router.post(
     if (!ocena.ok) throw bledneZadanie(ocena.powod);
 
     const nowyHash = await hasla.hashuj(haslo_nowe);
-    db().prepare('UPDATE psa_uzytkownicy SET hash_hasla = ? WHERE id = ?').run(nowyHash, zad.uzytkownik.id);
+    db().prepare('UPDATE psa_uzytkownicy SET hash_hasla = ?, zmien_haslo = 0 WHERE id = ?').run(nowyHash, zad.uzytkownik.id);
     // Zmiana hasla uniewaznia WSZYSTKIE dotychczasowe tokeny tego konta,
     // na kazdym urzadzeniu, natychmiast (Z-251) — wlacznie z tym, ktorym
     // zostalo wlasnie wywolane to zadanie (uzytkownik zaloguje sie ponownie).
@@ -235,8 +237,8 @@ async function zapewnijAdmina(baza, adminEmail) {
   const hash = await hasla.hashuj(hasloTymczasowe);
   baza
     .prepare(
-      `INSERT INTO psa_uzytkownicy (imie, email, hash_hasla, rola, aktywny, utworzono)
-       VALUES ('Administrator', ?, ?, 'admin', 1, ?)`
+      `INSERT INTO psa_uzytkownicy (imie, email, hash_hasla, rola, aktywny, utworzono, zmien_haslo)
+       VALUES ('Administrator', ?, ?, 'admin', 1, ?, 1)`
     )
     .run(znormalizujEmail(adminEmail), hash, czas.terazIso());
 

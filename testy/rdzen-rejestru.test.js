@@ -76,7 +76,7 @@ test('U-01: zakładanie schematu od nowa odmawia, gdy rejestr ma wpisy, a baza n
   assert.equal(db.prepare('SELECT COUNT(*) AS ile FROM psa_zdarzenia').get().ile, 1);
 
   db.prepare("INSERT INTO psa_baza_testowa (id, oznaczono, opis) VALUES (1, '2026-11-07', 'test')").run();
-  assert.deepEqual(migracje.uruchom(db), [1]);
+  assert.deepEqual(migracje.uruchom(db), [1, 2]);
   assert.equal(db.prepare('SELECT COUNT(*) AS ile FROM psa_zdarzenia').get().ile, 0);
   assert.ok(db.prepare('SELECT 1 FROM psa_baza_testowa WHERE id = 1').get(), 'oznaczenie bazy testowej zostaje');
 });

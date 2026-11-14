@@ -397,7 +397,19 @@ const SQL_SCHEMAT = `
 
 const SKROT_SCHEMATU = crypto.createHash('sha256').update(SQL_SCHEMAT).digest('hex').slice(0, 12);
 
-const MIGRACJE = [{ wersja: 1, nazwa: `schemat bazowy (U-01) ${SKROT_SCHEMATU}`, sql: SQL_SCHEMAT }];
+/**
+ * Migracja 2 (12.11.2026): projekt wpisu otwarcia przy wniosku (D-233) i znacznik hasła tymczasowego pracownika
+ * (audyt S7). Schemat bazowy jest zamrożony od końca Fazy 6 (D-155) — zmiany tylko kolejnymi migracjami.
+ */
+const SQL_MIGRACJA_2 = `
+  ALTER TABLE psa_wnioski ADD COLUMN otwarcie_json TEXT NOT NULL DEFAULT '{}';
+  ALTER TABLE psa_uzytkownicy ADD COLUMN zmien_haslo INTEGER NOT NULL DEFAULT 0;
+`;
+
+const MIGRACJE = [
+  { wersja: 1, nazwa: `schemat bazowy (U-01) ${SKROT_SCHEMATU}`, sql: SQL_SCHEMAT },
+  { wersja: 2, nazwa: 'projekt otwarcia przy wniosku; hasło tymczasowe do zmiany', sql: SQL_MIGRACJA_2 },
+];
 
 /** Tabele, które przetrwają założenie schematu od nowa. */
 const ZACHOWANE = new Set(['psa_migracje', 'psa_baza_testowa']);

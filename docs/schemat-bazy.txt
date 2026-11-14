@@ -221,6 +221,7 @@
   - ostatnie_logowanie TEXT
   - utworzono TEXT NOT NULL
   - tokeny_wersja INTEGER NOT NULL DEFAULT 0
+  - zmien_haslo INTEGER NOT NULL DEFAULT 0
 ### psa_wnioski
   - id INTEGER PK
   - stan TEXT NOT NULL DEFAULT 'roboczy'
@@ -236,6 +237,7 @@
   - spolka_id INTEGER
   - utworzono TEXT NOT NULL
   - zmieniono TEXT NOT NULL
+  - otwarcie_json TEXT NOT NULL DEFAULT '{}'
 ### psa_zdarzenia
   - id INTEGER PK
   - spolka_id INTEGER NOT NULL
